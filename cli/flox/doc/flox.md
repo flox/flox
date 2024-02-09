@@ -1,4 +1,4 @@
-% FLOX(1) flox User Manuals
+% FLOX(1) Flox User Manuals
 
 # NAME
 
@@ -77,6 +77,11 @@ set -px XDG_DATA_DIRS "/nix/var/nix/profiles/default"
 ```{.include}
 ./include/general-options.md
 ```
+
+## flox Options
+
+`--version`
+:   Print `flox` version.
 
 # COMMANDS
 

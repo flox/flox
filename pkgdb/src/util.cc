@@ -19,6 +19,7 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <sqlite3pp.hh>
 
 #include "flox/core/exceptions.hh"
 #include "flox/core/types.hh"
@@ -67,6 +68,21 @@ isSQLiteDb( const std::string & dbPath )
   std::fclose( filep );  // NOLINT
   return std::string_view( &buffer[0] )
          == std::string_view( &expectedMagic[0] );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+bool
+isSQLError( int rcode )
+{
+  switch ( rcode )
+    {
+      case SQLITE_OK:
+      case SQLITE_ROW:
+      case SQLITE_DONE: return false; break;
+      default: return true; break;
+    }
 }
 
 
@@ -323,45 +339,6 @@ displayableGlobbedPath( const flox::AttrPathGlob & attrs )
                                    globbed[0],
                                    fold );
   return s;
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-void
-printLog( const nix::Verbosity & lvl, const std::string & msg )
-{
-  nix::logger->log( lvl, msg );
-}
-
-void
-traceLog( const std::string & msg )
-{
-  printLog( nix::Verbosity::lvlVomit, msg );
-}
-
-void
-debugLog( const std::string & msg )
-{
-  printLog( nix::Verbosity::lvlDebug, msg );
-}
-
-void
-infoLog( const std::string & msg )
-{
-  printLog( nix::Verbosity::lvlInfo, msg );
-}
-
-void
-warningLog( const std::string & msg )
-{
-  printLog( nix::Verbosity::lvlWarn, msg );
-}
-
-void
-errorLog( const std::string & msg )
-{
-  printLog( nix::Verbosity::lvlError, msg );
 }
 
 

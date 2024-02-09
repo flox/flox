@@ -98,7 +98,7 @@ impl PathEnvironment {
 
         let env_path = dot_flox_path.join(ENV_DIR_NAME);
         if !env_path.exists() {
-            Err(EnvironmentError2::EnvNotFound)?;
+            Err(EnvironmentError2::EnvDirNotFound)?;
         }
 
         if !env_path.join(MANIFEST_FILENAME).exists() {
@@ -343,7 +343,7 @@ impl PathEnvironment {
     ) -> Result<Self, EnvironmentError2> {
         let system: &str = system.as_ref();
         match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
-            Err(EnvironmentError2::EnvNotFound) => {},
+            Err(EnvironmentError2::DotFloxNotFound) => {},
             Err(e) => Err(e)?,
             Ok(_) => Err(EnvironmentError2::EnvironmentExists(
                 dot_flox_parent_path.as_ref().to_path_buf(),
@@ -452,7 +452,7 @@ mod tests {
         );
 
         assert!(
-            matches!(before, Err(EnvironmentError2::EnvNotFound)),
+            matches!(before, Err(EnvironmentError2::EnvDirNotFound)),
             "{before:?}"
         );
 

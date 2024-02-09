@@ -49,9 +49,6 @@ use flox_rust_sdk::models::lockfile::{
 };
 use flox_rust_sdk::models::manifest::{self, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
-use flox_rust_sdk::nix::command::StoreGc;
-use flox_rust_sdk::nix::command_line::NixCommandLine;
-use flox_rust_sdk::nix::Run;
 use indexmap::IndexSet;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -74,13 +71,7 @@ use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::{format_core_error, format_locked_manifest_error};
 use crate::{subcommand_metric, utils};
 
-#[derive(Bpaf, Clone)]
-pub struct EnvironmentArgs {
-    #[bpaf(short, long, argument("SYSTEM"))]
-    pub system: Option<String>,
-}
-
-/// Edit declarative environment configuration
+// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
 pub struct Edit {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -89,8 +80,6 @@ pub struct Edit {
     #[bpaf(external(edit_action), fallback(EditAction::EditManifest{file: None}))]
     action: EditAction,
 }
-
-/// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
 pub enum EditAction {
     EditManifest {
@@ -189,7 +178,10 @@ impl Edit {
         // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
         // method because the temporary manifest needs to stick around in case the user wants
         // or needs to make successive edits without starting over each time.
-        let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
+        let tmp_manifest = tempfile::Builder::new()
+            .prefix("manifest.")
+            .suffix(".toml")
+            .tempfile_in(&flox.temp_dir)?;
         std::fs::write(&tmp_manifest, environment.manifest_content(flox)?)?;
         let should_continue = Dialog {
             message: "Continue editing?",
@@ -290,7 +282,7 @@ impl Edit {
     }
 }
 
-/// Delete an environment
+// Delete an environment
 #[derive(Bpaf, Clone)]
 pub struct Delete {
     #[allow(dead_code)] // not yet handled in impl
@@ -344,8 +336,6 @@ impl Delete {
     }
 }
 
-/// Activate an environment
-///
 /// When called with no arguments `flox activate` will look for a `.flox` directory
 /// in the current directory. Calling `flox activate` in your home directory will
 /// activate a default environment. Environments in other directories and remote
@@ -355,13 +345,13 @@ pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// Trust the a remote environment temporarily for this activation
+    /// Trust a remote environment temporarily for this activation
     #[bpaf(long, short)]
     trust: bool,
 
     /// Print an activation script to stdout instead of spawning a subshell
-    #[bpaf(long("in-place"), short, hide)]
-    in_place: bool,
+    #[bpaf(long("print-script"), short, hide)]
+    print_script: bool,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
@@ -450,7 +440,7 @@ impl Activate {
 
         let environment = concrete_environment.dyn_environment_ref_mut();
 
-        let in_place = self.in_place || (!stdout().is_tty() && self.run_args.is_empty());
+        let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         // Don't spin in bashrcs and similar contexts
         let activation_path_result = if in_place {
             environment.activation_path(&flox)
@@ -524,7 +514,7 @@ impl Activate {
             return Ok(());
         }
 
-        // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
+        // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
         flox_active_environments.set_last_active(now_active.clone());
 
         // Prepend the new environment to the list of active environments
@@ -1204,7 +1194,7 @@ impl Install {
     }
 }
 
-/// Uninstall installed packages from an environment
+// Uninstall installed packages from an environment
 #[derive(Bpaf, Clone)]
 pub struct Uninstall {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -1245,50 +1235,22 @@ impl Uninstall {
     }
 }
 
-/// delete builds of non-current versions of an environment
+// Delete builds of non-current versions of an environment
 #[derive(Bpaf, Clone)]
 pub struct WipeHistory {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
+    _environment: EnvironmentSelect,
 }
 
 impl WipeHistory {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("wipe-history");
 
-        let env = self
-            .environment
-            .detect_concrete_environment(&flox, "wipe history of")?
-            .into_dyn_environment();
-
-        if env.delete_symlinks()? {
-            // The flox nix instance is created with `--quiet --quiet`
-            // because nix logs are passed to stderr unfiltered.
-            // nix store gc logs are more useful,
-            // thus we use 3 `--verbose` to have them appear.
-            let nix = flox.nix::<NixCommandLine>(vec![
-                "--verbose".to_string(),
-                "--verbose".to_string(),
-                "--verbose".to_string(),
-            ]);
-            let store_gc_command = StoreGc {
-                ..StoreGc::default()
-            };
-
-            info!("Running garbage collection. This may take a while...");
-            store_gc_command.run(&nix, &Default::default()).await?;
-        } else {
-            info!("No old generations found to clean up.")
-        }
-        Ok(())
+        todo!("this command is planned for a future release");
     }
 }
 
-/// list environment generations with contents
+// List environment generations with contents
 #[derive(Bpaf, Clone)]
 pub struct Generations {
     #[allow(dead_code)] // not yet handled in impl
@@ -1308,7 +1270,7 @@ impl Generations {
     }
 }
 
-/// show all versions of an environment
+// Show all versions of an environment
 #[derive(Bpaf, Clone)]
 pub struct History {
     #[allow(dead_code)] // not yet handled in impl
@@ -1328,7 +1290,7 @@ impl History {
     }
 }
 
-/// Send environment to floxhub
+// Send environment to FloxHub
 #[derive(Bpaf, Clone)]
 pub struct Push {
     /// Directory to push the environment from (default: current directory)
@@ -1508,20 +1470,20 @@ impl Push {
 
 #[derive(Debug, Clone, Bpaf)]
 enum PullSelect {
-    Existing {
-        /// Forceably overwrite the local copy of the environment
-        #[bpaf(long, short)]
-        force: bool,
-    },
     New {
         /// ID of the environment to pull
-        #[bpaf(long, short, argument("owner/name"))]
+        #[bpaf(long, short, argument("owner>/<name"))]
         remote: EnvironmentRef,
     },
     NewAbbreviated {
         /// ID of the environment to pull
-        #[bpaf(positional("owner/name"))]
+        #[bpaf(positional("owner>/<name"))]
         remote: EnvironmentRef,
+    },
+    Existing {
+        /// Forceably overwrite the local copy of the environment
+        #[bpaf(long, short)]
+        force: bool,
     },
 }
 
@@ -1533,16 +1495,16 @@ impl Default for PullSelect {
     }
 }
 
-/// Pull environment from floxhub
+// Pull environment from FloxHub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
-    /// Forceably add current systems to the environment, even if incompatible
-    #[bpaf(long("add-system"), short)]
-    add_system: bool,
-
-    /// Directory containing the environment (default: current directory)
+    /// Directory in which to create a managed environment, or directory that already contains a managed environment (default: current directory)
     #[bpaf(long, short, argument("path"))]
     dir: Option<PathBuf>,
+
+    /// Forceably add current system to the environment, even if incompatible
+    #[bpaf(long("add-system"), short)]
+    add_system: bool,
 
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
@@ -1855,7 +1817,7 @@ impl Pull {
     }
 }
 
-/// rollback to the previous generation of an environment
+// Rollback to the previous generation of an environment
 #[derive(Bpaf, Clone)]
 pub struct Rollback {
     #[bpaf(long, short, argument("ENV"))]
@@ -1877,7 +1839,7 @@ impl Rollback {
     }
 }
 
-/// switch to a specific generation of an environment
+// Switch to a specific generation of an environment
 #[derive(Bpaf, Clone)]
 pub struct SwitchGeneration {
     #[allow(unused)] // Command currently forwarded
@@ -1899,10 +1861,10 @@ impl SwitchGeneration {
 
 #[derive(Debug, Bpaf, Clone)]
 pub enum EnvironmentOrGlobalSelect {
-    Environment(#[bpaf(external(environment_select))] EnvironmentSelect),
-    /// Update inputs used by 'search' and 'show' outside of an environment
+    /// Update the global base catalog
     #[bpaf(long("global"))]
     Global,
+    Environment(#[bpaf(external(environment_select))] EnvironmentSelect),
 }
 
 impl Default for EnvironmentOrGlobalSelect {
@@ -1911,13 +1873,13 @@ impl Default for EnvironmentOrGlobalSelect {
     }
 }
 
-/// Update an environment's inputs
+// Update the global base catalog or an environment's base catalog
 #[derive(Bpaf, Clone)]
 pub struct Update {
     #[bpaf(external(environment_or_global_select), fallback(Default::default()))]
     environment_or_global: EnvironmentOrGlobalSelect,
 
-    #[bpaf(positional("inputs"))]
+    #[bpaf(positional("inputs"), hide)]
     inputs: Vec<String>,
 }
 impl Update {
@@ -2065,6 +2027,7 @@ impl Update {
     }
 }
 
+// Upgrade packages in an environment
 #[derive(Bpaf, Clone)]
 pub struct Upgrade {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -2109,6 +2072,7 @@ impl Upgrade {
     }
 }
 
+// Containerize an environment
 #[derive(Bpaf, Clone, Debug)]
 pub struct Containerize {
     #[bpaf(external(environment_select), fallback(Default::default()))]

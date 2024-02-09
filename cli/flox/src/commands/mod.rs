@@ -32,6 +32,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use toml_edit::Key;
+use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
@@ -79,13 +80,14 @@ fn vec_not_empty<T>(x: Vec<T>) -> bool {
 #[derive(Bpaf, Clone, Debug)]
 pub enum Verbosity {
     Verbose(
-        /// Verbose mode
+        /// Increase logging verbosity
         ///
         /// Invoke multiple times for increasing detail.
         #[bpaf(short('v'), long("verbose"), req_flag(()), many, map(vec_len))]
         usize,
     ),
 
+    /// Silence logs except for errors
     #[bpaf(short, long)]
     Quiet,
 }
@@ -177,25 +179,35 @@ impl FloxArgs {
             env::set_var("FLOX_DISABLE_METRICS", "true");
         }
 
-        let access_tokens = init_access_tokens(&config.nix.access_tokens)?;
+        let access_tokens = init_access_tokens(
+            config
+                .nix
+                .as_ref()
+                .map(|nix_config| &nix_config.access_tokens),
+        )?;
 
         let netrc_file = dirs::home_dir()
             .expect("User must have a home directory")
             .join(".netrc");
 
-        let mut floxhub = Floxhub::new(
+        let git_url_override = {
+            if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
+                warn!("Using {env_set_host} as floxhub host");
+                warn!("`$_FLOX_FLOXHUB_GIT_URL` is used for testing purposes only, alternative floxhub hosts are not yet supported!");
+                Some(Url::parse(&env_set_host)?)
+            } else {
+                None
+            }
+        };
+
+        let floxhub = Floxhub::new(
             config
                 .flox
                 .floxhub_url
                 .clone()
                 .unwrap_or_else(|| DEFAULT_FLOXHUB_URL.clone()),
-        );
-
-        if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
-            warn!("Using {env_set_host} as floxhub host");
-            warn!("`$_FLOX_FLOXHUB_GIT_URL` is used for testing purposes only, alternative floxhub hosts are not yet supported!");
-            floxhub.set_git_url_override(env_set_host.parse()?);
-        }
+            git_url_override,
+        )?;
 
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
@@ -330,7 +342,7 @@ enum SharingCommands {
     #[bpaf(command)]
     Push(#[bpaf(external(environment::push))] environment::Push),
     #[bpaf(command)]
-    /// Pull environment from floxhub
+    /// Pull environment from FloxHub
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
     /// Containerize an environment
     #[bpaf(command, hide)]
@@ -353,25 +365,31 @@ enum AdditionalCommands {
     Documentation(
         #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
     ),
+    /// Update the global base catalog or an environment's base catalog
     #[bpaf(command, hide)]
     Update(#[bpaf(external(environment::update))] environment::Update),
     #[bpaf(command, hide, header(indoc! {"
         When no arguments are specified, all packages in the environment are upgraded.\n\n
 
-        Packages to upgrade can be specified by either group name or, if a package is
+        Packages to upgrade can be specified by either group name, or, if a package is
         not in a group with any other packages, it may be specified by ID. If the
-        specified argument is both a group name and a package ID, only the group is
+        specified argument is both a group name and a package ID, the group is
         upgraded.\n\n
 
-        Packages without a specified group in the manifest can be upgraded by passing
-        'toplevel' as the group name.
+        Packages without a specified group in the manifest are placed in a group
+        named 'toplevel'.
+        The packages in that group can be upgraded without updating any other
+        groups by passing 'toplevel' as the group name.
     "}))]
     /// Upgrade packages in an environment
     Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
+    /// View and set configuration options
     #[bpaf(command, hide)]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
+    /// Delete builds of non-current versions of an environment
     #[bpaf(command("wipe-history"), hide)]
     WipeHistory(#[bpaf(external(environment::wipe_history))] environment::WipeHistory),
+    /// Show all versions of an environment
     #[bpaf(command, hide)]
     History(#[bpaf(external(environment::history))] environment::History),
 }
@@ -408,16 +426,21 @@ impl AdditionalCommandsDocumentation {
 #[derive(Bpaf, Clone)]
 #[bpaf(hide)]
 enum InternalCommands {
+    /// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
     #[bpaf(command("reset-metrics"))]
     ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
+    /// List environment generations with contents
     #[bpaf(command)]
     Generations(#[bpaf(external(environment::generations))] environment::Generations),
+    /// Switch to a specific generation of an environment
     #[bpaf(command("switch-generation"))]
     SwitchGeneration(
         #[bpaf(external(environment::switch_generation))] environment::SwitchGeneration,
     ),
+    /// Rollback to the previous generation of an environment
     #[bpaf(command)]
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
+    /// FloxHub authentication commands
     #[bpaf(command)]
     Auth(#[bpaf(external(auth::auth))] auth::Auth),
 }
@@ -487,8 +510,8 @@ pub enum EnvironmentSelect {
         PathBuf,
     ),
     Remote(
-        /// A remote environment on floxhub
-        #[bpaf(long("remote"), short('r'), argument("owner/name"))]
+        /// A remote environment on FloxHub
+        #[bpaf(long("remote"), short('r'), argument("owner>/<name"))]
         environment_ref::EnvironmentRef,
     ),
     #[default]
@@ -850,7 +873,7 @@ fn activated_environments() -> ActiveEnvironments {
         Ok(active_environments) => active_environments,
         Err(e) => {
             error!(
-                "Could not parse FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
+                "Could not parse _FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
                 e
             );
             ActiveEnvironments::default()

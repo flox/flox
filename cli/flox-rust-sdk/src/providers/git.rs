@@ -1305,11 +1305,7 @@ pub mod tests {
 
         assert!(matches!(
             repo_2.fetch_ref("origin", "does-not-exist"),
-            Err(GitRemoteCommandError::Command(GitCommandError::BadExit(
-                128,
-                _,
-                _
-            )))
+            Err(GitRemoteCommandError::RefNotFound(_))
         ));
     }
 

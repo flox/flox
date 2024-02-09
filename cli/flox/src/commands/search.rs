@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -11,11 +12,12 @@ use flox_rust_sdk::models::search::{
     SearchParams,
     SearchResult,
     SearchResults,
+    SearchStrategy,
     ShowError,
     Subtree,
 };
 use indoc::formatdoc;
-use log::{debug, info};
+use log::debug;
 
 use crate::config::features::Features;
 use crate::config::Config;
@@ -36,26 +38,22 @@ const FLOX_SHOW_HINT: &str = "Use 'flox show <package>' to see available version
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
 
-/// Search for packages to install
+// Search for packages to install
 #[derive(Bpaf, Clone)]
 pub struct Search {
     /// print search as JSON
     #[bpaf(long)]
     pub json: bool,
 
-    /// force update of catalogs from remote sources before searching
-    #[bpaf(long)]
-    pub refresh: bool,
-
     /// Print all search results
     #[bpaf(short, long)]
     pub all: bool,
 
-    /// query string of the form `<REGEX>[@<SEMVER-RANGE>]` used to filter
-    /// match against package names/descriptions, and semantic version.
-    /// Regex pattern is `PCRE` style, and semver ranges use the
-    /// `node-semver` syntax.
-    /// Exs: `(hello|coreutils)`, `node@>=16`, `coreutils@9.1`
+    /// The package to search for in the format '<pkg>[@<semver-range>]' using 'node-semver' syntax.
+    ///
+    /// ex.) python310Packages.pip
+    ///
+    /// ex.) 'node@>=16' # quotes needed to prevent '>' redirection
     #[bpaf(positional("search-term"))]
     pub search_term: String,
 }
@@ -129,6 +127,7 @@ impl Search {
                         {message}
 
                         {suggestion}
+
                         {FLOX_SHOW_HINT}
                     "};
                 }
@@ -138,18 +137,22 @@ impl Search {
             let results = DisplaySearchResults::from_search_results(&self.search_term, results)?;
             println!("{results}");
 
-            info!("");
+            let mut hints = String::new();
 
             if let Some(hint) = results.hint() {
-                info!("{hint}");
+                writeln!(&mut hints)?;
+                writeln!(&mut hints, "{hint}")?;
             }
 
-            info!("{FLOX_SHOW_HINT}");
+            writeln!(&mut hints)?;
+            writeln!(&mut hints, "{FLOX_SHOW_HINT}")?;
 
             if suggestion.has_suggestions() {
-                eprintln!();
-                eprintln!("{suggestion}");
+                writeln!(&mut hints)?;
+                writeln!(&mut hints, "{suggestion}")?;
             };
+
+            eprintln!("{hints}");
         }
         Ok(())
     }
@@ -161,7 +164,7 @@ fn render_search_results_json(search_results: SearchResults) -> Result<()> {
     Ok(())
 }
 
-/// Show detailed package information
+// Show detailed package information
 #[derive(Bpaf, Clone)]
 pub struct Show {
     /// Whether to show all available package versions

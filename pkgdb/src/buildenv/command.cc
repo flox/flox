@@ -77,7 +77,7 @@ int
 BuildEnvCommand::run()
 {
 
-  flox::debugLog( "lockfile: " + this->lockfileContent.dump( 2 ) );
+  debugLog( "lockfile: " + this->lockfileContent.dump( 2 ) );
 
   resolver::LockfileRaw lockfileRaw = this->lockfileContent;
   auto lockfile = resolver::Lockfile( std::move( lockfileRaw ) );

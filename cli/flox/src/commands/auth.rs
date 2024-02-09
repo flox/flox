@@ -164,14 +164,14 @@ fn calculate_expiry(expires_in: i64) -> String {
     expiry.to_rfc3339()
 }
 
-/// floxHub authentication commands
+// FloxHub authentication commands
 #[derive(Clone, Debug, Bpaf)]
 pub enum Auth {
-    /// Login to floxhub (requires an existing github account)
+    /// Login to FloxHub (requires an existing GitHub account)
     #[bpaf(command)]
     Login,
 
-    /// Logout from floxhub
+    /// Logout from FloxHub
     #[bpaf(command)]
     Logout,
 

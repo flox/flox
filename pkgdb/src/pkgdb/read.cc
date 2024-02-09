@@ -26,21 +26,6 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
-bool
-isSQLError( int rcode )
-{
-  switch ( rcode )
-    {
-      case SQLITE_OK:
-      case SQLITE_ROW:
-      case SQLITE_DONE: return false; break;
-      default: return true; break;
-    }
-}
-
-
-/* -------------------------------------------------------------------------- */
-
 std::ostream &
 operator<<( std::ostream & oss, const SqlVersions & versions )
 {
@@ -102,10 +87,7 @@ void
 PkgDbReadOnly::connect()
 {
   this->db.connect( this->dbPath.string().c_str(), SQLITE_OPEN_READONLY );
-  /* Just try to execute any query to see if it blocks, which would mean that
-   * someone else has the database lock. */
-  std::string qry = "select * from DbVersions";
-  RETRY_WHILE_BUSY( this->db.execute( qry ) );
+  this->db.set_busy_timeout( DB_BUSY_TIMEOUT );
 }
 
 

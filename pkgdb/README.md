@@ -282,3 +282,4 @@ This is implemented on [flox::pkgdb::PkgDb::scrape()](./src/pkgdb/write.cc).
 - [Manifests](./docs/manifests.md)
 - [Lockfiles](./docs/lockfile.md)
 - [Garbage Collection](./docs/garbage-collection.md)
+- [Memory Profiling with Valgrind](./docs/valgrind.md)

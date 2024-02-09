@@ -1,7 +1,7 @@
 ---
 title: FLOX-DELETE
 section: 1
-header: "flox User Manuals"
+header: "Flox User Manuals"
 ...
 
 
