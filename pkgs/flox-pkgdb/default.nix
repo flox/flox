@@ -173,14 +173,6 @@ in
         runHook postConfigure;
       '';
 
-      # The ld-floxlib.so library only requires libc, which is guaranteed
-      # to either be already loaded or available by way of a default provided
-      # by the linker itself, so to avoid loading a different libc than the
-      # one already loaded we remove RPATH/RUNPATH from the shared library.
-      postFixup = lib.optionalString stdenv.isLinux ''
-        patchelf --remove-rpath $out/lib/ld-floxlib.so
-      '';
-
       # Checks require internet
       doCheck = false;
       doInstallCheck = false;

@@ -612,7 +612,8 @@ $(BINS): %: $(SRCS:.cc=.o)
 
 lib/ld-floxlib.so: src/ld-floxlib.c
 	$(MKDIR_P) $(@D);
-	$(CC) $(CFLAGS) -shared -fPIC $< -o $@ -ldl;
+	$(CC) -shared -fPIC $< -o $@;
+	patchelf --remove-rpath $@;
 
 
 # ---------------------------------------------------------------------------- #
