@@ -1,4 +1,4 @@
-use std::io::BufRead;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
 
@@ -305,6 +305,11 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
     debug!("running search command {:?}", pkgdb_command);
     let mut pkgdb_process = pkgdb_command.spawn().map_err(SearchError::PkgDbCall)?;
     let stdout = pkgdb_process.stdout.take();
+    let stderr = pkgdb_process.stderr.take().unwrap();
+    let stderr_lines = BufReader::new(stderr).lines();
+    for line in stderr_lines {
+        eprintln!("{}", line.unwrap());
+    }
     if stdout.is_none() {
         pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
         return Err(SearchError::PkgDbStdout);
