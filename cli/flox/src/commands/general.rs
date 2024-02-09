@@ -6,13 +6,13 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use fslock::LockFile;
 use indoc::indoc;
-use log::info;
 use serde::Serialize;
 use tokio::fs;
 use toml_edit::Key;
 
 use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
 use crate::subcommand_metric;
+use crate::utils::message;
 use crate::utils::metrics::{
     METRICS_EVENTS_FILE_NAME,
     METRICS_LOCK_FILE_NAME,
@@ -56,7 +56,7 @@ impl ResetMetrics {
                 system-wide: update /etc/flox.toml as described in flox(1)
         "};
 
-        info!("{notice}");
+        message::plain(notice);
         Ok(())
     }
 }

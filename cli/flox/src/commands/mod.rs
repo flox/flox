@@ -27,7 +27,7 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use indoc::{formatdoc, indoc};
-use log::{debug, error, info, warn};
+use log::{debug, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
@@ -43,6 +43,7 @@ use crate::utils::init::{
     init_uuid,
     telemetry_opt_out_needs_migration,
 };
+use crate::utils::message;
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;
 
 static FLOX_DESCRIPTION: &'_ str = indoc! {"
@@ -192,8 +193,11 @@ impl FloxArgs {
 
         let git_url_override = {
             if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
-                warn!("Using {env_set_host} as floxhub host");
-                warn!("`$_FLOX_FLOXHUB_GIT_URL` is used for testing purposes only, alternative floxhub hosts are not yet supported!");
+                message::warning(formatdoc! {"
+                    Using {env_set_host} as floxhub host
+                    '$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
+                    alternative floxhub hosts are not yet supported!
+                "});
                 Some(Url::parse(&env_set_host)?)
             } else {
                 None
@@ -277,11 +281,12 @@ impl Help {
         let mut args = Vec::from_iter(self.cmd.as_deref());
         args.push("--help");
 
+        // todo: just `run()` this -- we might not need the expl;icit error handling anymore
         match flox_cli().run_inner(&*args) {
             Ok(_) => unreachable!(),
             Err(ParseFailure::Completion(comp)) => print!("{comp}"),
-            Err(ParseFailure::Stdout(doc, _)) => info!("{doc}"),
-            Err(ParseFailure::Stderr(err)) => error!("{err}"),
+            Err(ParseFailure::Stdout(doc, _)) => message::plain(doc),
+            Err(ParseFailure::Stderr(err)) => message::error(err),
         }
     }
 }
@@ -872,10 +877,10 @@ fn activated_environments() -> ActiveEnvironments {
     match ActiveEnvironments::from_str(&flox_active_environments_var) {
         Ok(active_environments) => active_environments,
         Err(e) => {
-            error!(
+            message::error(format!(
                 "Could not parse _FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
                 e
-            );
+            ));
             ActiveEnvironments::default()
         },
     }
@@ -948,7 +953,7 @@ pub(super) async fn ensure_environment_trust(
         Thus, environments need to be trusted to be activated."};
 
     if Dialog::can_prompt() {
-        info!("{message}");
+        message::warning(message);
     } else {
         bail!("{message}")
     }

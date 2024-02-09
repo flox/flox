@@ -52,8 +52,7 @@ use flox_rust_sdk::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use log::{debug, error, info, warn};
-use tempfile::NamedTempFile;
+use log::debug;
 use toml_edit::Document;
 use url::Url;
 
@@ -69,6 +68,7 @@ use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::{format_core_error, format_locked_manifest_error};
+use crate::utils::message;
 use crate::{subcommand_metric, utils};
 
 // Edit declarative environment configuration
@@ -114,7 +114,7 @@ impl Edit {
                         bail!("environment already named {name}");
                     }
                     environment.rename(name.clone())?;
-                    info!("✅  renamed environment {old_name} to {name}");
+                    message::updated(format!("renamed environment {old_name} to {name}"));
                 } else {
                     // todo: handle remote environments in the future
                     bail!("Cannot rename environments on floxhub");
@@ -152,19 +152,15 @@ impl Edit {
 
         match result {
             EditResult::Unchanged => {
-                println!("⚠️  No changes made to environment.");
+                message::warning("No changes made to environment.");
             },
             EditResult::ReActivateRequired
                 if activated_environments().is_active(&active_environment) =>
             {
-                eprintln!("⚠️ {reactivate_required_note}");
+                message::warning(reactivate_required_note)
             },
-            EditResult::ReActivateRequired => {
-                eprintln!("✅ Environment successfully updated.")
-            },
-            EditResult::Success => {
-                eprintln!("✅ Environment successfully updated.")
-            },
+            EditResult::ReActivateRequired => message::updated("Environment successfully updated."),
+            EditResult::Success => message::updated("Environment successfully updated."),
         }
         Ok(())
     }
@@ -211,7 +207,7 @@ impl Edit {
 
             match result {
                 Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(e))) => {
-                    error!("{}", format_locked_manifest_error(&e));
+                    message::error(format_locked_manifest_error(&e));
 
                     if !Dialog::can_prompt() {
                         bail!("Can't prompt to continue editing in non-interactive context");
@@ -332,7 +328,7 @@ impl Delete {
             ConcreteEnvironment::Remote(environment) => environment.delete(&flox),
         }?;
 
-        eprintln!("🗑️  environment {description} deleted");
+        message::deleted(format!("environment {description} deleted"));
 
         Ok(())
     }
@@ -688,9 +684,9 @@ impl Activate {
         debug!("running activation command: {:?}", command);
 
         let message = formatdoc! {"
-                ✅  You are now using the environment {now_active}.
+                You are now using the environment {now_active}.
                 To stop using this environment, type 'exit'"};
-        info!("{message}");
+        message::updated(message);
 
         // exec should never return
         command.exec().into()
@@ -897,18 +893,17 @@ impl Init {
             &flox.system,
         )?;
 
-        println!(
-            indoc::indoc! {"
-            ✨ Created environment {name} ({system})
+        message::created(formatdoc! {"
+            Created environment {name} ({system})
 
             Next:
               $ flox search <package>    <- Search for a package
               $ flox install <package>   <- Install a package into an environment
               $ flox activate            <- Enter the environment
-            "},
+            ",
             name = env.name(),
             system = flox.system
-        );
+        });
         Ok(())
     }
 }
@@ -1136,20 +1131,23 @@ impl Install {
             // Print which new packages were installed
             for pkg in packages.iter() {
                 if let Some(false) = installation.already_installed.get(&pkg.id) {
-                    info!("✅ '{}' installed to environment {description}", pkg.id);
-                } else {
-                    info!(
-                        "⚠️  Package with id '{}' already installed to environment {description}",
+                    message::updated(format!(
+                        "'{}' installed to environment {description}",
                         pkg.id
-                    );
+                    ));
+                } else {
+                    message::warning(format!(
+                        "Package with id '{}' already installed to environment {description}",
+                        pkg.id
+                    ));
                 }
             }
         } else {
             for pkg in packages.iter() {
-                info!(
-                    "⚠️  Package with id '{}' already installed to environment {description}",
+                message::warning(format!(
+                    "Package with id '{}' already installed to environment {description}",
                     pkg.id
-                );
+                ));
             }
         }
         Ok(())
@@ -1173,13 +1171,13 @@ impl Install {
 
                 if packages.len() > 1 {
                     break 'error anyhow!(formatdoc! {"
-                        ❌  Could not install {paths}.
+                        Could not install {paths}.
                         One or more of the packages you are trying to install does not exist.
                     "});
                 }
                 let path = packages[0].path.clone();
 
-                let head = format!("❌  Could not find package {path}.");
+                let head = format!("Could not find package {path}.");
 
                 let suggestion = DidYouMean::<InstallSuggestion>::new(flox, environment, &path);
                 if !suggestion.has_suggestions() {
@@ -1230,9 +1228,9 @@ impl Uninstall {
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.
-        self.packages
-            .iter()
-            .for_each(|p| info!("🗑️  '{p}' uninstalled from environment {description}"));
+        self.packages.iter().for_each(|p| {
+            message::deleted(format!("'{p}' uninstalled from environment {description}"))
+        });
         Ok(())
     }
 }
@@ -1327,7 +1325,7 @@ impl Push {
                 bail!(message);
             }
 
-            info!("You are not logged in to floxhub. Logging in...");
+            message::plain("You are not logged in to floxhub. Logging in...");
 
             auth::login_flox(&mut flox).await?;
         }
@@ -1341,7 +1339,7 @@ impl Push {
                 // todo add spinner
                 Self::push_managed_env(&flox, managed_pointer, dir, self.force)?;
 
-                info!("{message}");
+                message::updated(message);
             },
 
             EnvironmentPointer::Path(path_pointer) => {
@@ -1360,7 +1358,7 @@ impl Push {
                 // todo add spinner
                 let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)?;
 
-                info!("{}", Self::push_new_message(env.pointer(), self.force));
+                message::updated(Self::push_new_message(env.pointer(), self.force));
             },
         }
         Ok(())
@@ -1447,7 +1445,7 @@ impl Push {
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            ✅  Updates to {name} successfully pushed to floxhub{suffix}
+            Updates to {name} successfully pushed to floxhub{suffix}
 
             Use 'flox pull {owner}/{name}' to get this environment in any other location.
         "}
@@ -1463,7 +1461,7 @@ impl Push {
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            ✅  {name} successfully pushed to floxhub{suffix}
+            {name} successfully pushed to floxhub{suffix}
 
             Use 'flox pull {owner}/{name}' to get this environment in any other location.
         "}
@@ -1533,7 +1531,7 @@ impl Pull {
                     &start,
                 )?;
 
-                info!("{complete}");
+                message::updated(complete);
             },
             PullSelect::Existing { force } => {
                 let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
@@ -1548,19 +1546,34 @@ impl Pull {
                     }
                 };
 
-                let (start, complete) = Self::pull_existing_messages(&pointer, force);
-                info!("{start}");
+                let start_message = format!(
+                    "⬇️  Remote: pulling and building {owner}/{name} from {floxhub_host}",
+                    owner = pointer.owner,
+                    name = pointer.name,
+                    floxhub_host = flox.floxhub.base_url()
+                );
 
                 Dialog {
-                    message: &start,
+                    message: &start_message,
                     help_message: None,
                     typed: Spinner::new(|| {
-                        Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer, force)
+                        Self::pull_existing_environment(
+                            &flox,
+                            dir.join(DOT_FLOX),
+                            pointer.clone(),
+                            force,
+                        )
                     }),
                 }
                 .spin()?;
 
-                info!("{complete}");
+                let complete_message = formatdoc! {"
+                    Pulled {owner}/{name} from {floxhub_host}{suffix}
+
+                    You can activate this environment with 'flox activate'
+                ", owner = pointer.owner, name = pointer.name, floxhub_host = flox.floxhub.base_url(), suffix = if force { " (forced)" } else { "" }};
+
+                message::created(complete_message);
             },
         }
 
@@ -1657,7 +1670,7 @@ impl Pull {
                     || match Self::query_add_system(&flox.system)? {
                         Some(false) => {
                             // prompt available, user chose to abort
-                            info!("{hint}");
+                            message::plain(hint);
                             fs::remove_dir_all(&dot_flox_path)
                                 .context("Could not clean up .flox/ directory")?;
                             bail!("Did not pull the environment.");
@@ -1678,7 +1691,7 @@ impl Pull {
 
                 let doc = Self::amend_current_system(&env, flox)?;
                 if let Err(broken_error) = env.edit_unsafe(flox, doc.to_string())? {
-                    warn!("{}", formatdoc! {"
+                    message::warning(formatdoc! {"
                         {err:#}
 
                         Could not build modified environment, build errors need to be resolved manually.",
@@ -1711,29 +1724,7 @@ impl Pull {
         };
 
         let complete_message = formatdoc! {"
-            ✨  Pulled {env_ref} from {floxhub_host}
-
-            You can activate this environment with 'flox activate'
-        "};
-
-        (start_message, complete_message)
-    }
-
-    /// construct a message for pulling an existing environment
-    ///
-    /// todo: add floxhub base url when it's available
-    fn pull_existing_messages(pointer: &ManagedPointer, force: bool) -> (String, String) {
-        let owner = &pointer.owner;
-        let name = &pointer.name;
-        let floxhub_host = &pointer.floxhub_url;
-
-        let start_message =
-            format!("⬇️  Remote: pulling and building {owner}/{name} from {floxhub_host}");
-
-        let suffix: &str = if force { " (forced)" } else { "" };
-
-        let complete_message = formatdoc! {"
-            ✨  Pulled {owner}/{name} from {floxhub_host}{suffix}
+            Pulled {env_ref} from {floxhub_host}
 
             You can activate this environment with 'flox activate'
         "};
@@ -1786,11 +1777,11 @@ impl Pull {
     fn handle_error(flox: &Flox, err: ManagedEnvironmentError) -> anyhow::Error {
         match err {
             ManagedEnvironmentError::AccessDenied => {
-                let message = "❌  You do not have permission to pull this environment";
+                let message = "You do not have permission to pull this environment";
                 anyhow::Error::msg(message)
             },
             ManagedEnvironmentError::Diverged => {
-                let message = "❌  The environment has diverged from the remote version";
+                let message = "The environment has diverged from the remote version";
                 anyhow::Error::msg(message)
             },
             ManagedEnvironmentError::UpstreamNotFound(env_ref, _) => {
@@ -1922,12 +1913,12 @@ impl Update {
         if let Some(ref old_lockfile) = old_lockfile {
             if new_lockfile.registry().inputs == old_lockfile.registry().inputs {
                 if global {
-                    info!("ℹ️  All global inputs are up-to-date.");
+                    message::plain("ℹ️  All global inputs are up-to-date.");
                 } else {
-                    info!(
+                    message::plain(format!(
                         "ℹ️  All inputs are up-to-date in environment {}.",
                         description.as_ref().unwrap()
-                    );
+                    ));
                 }
 
                 return Ok(());
@@ -1944,19 +1935,23 @@ impl Update {
                 // unchanged input
                 Some(old_input) if old_input == new_input => continue, // dont need to scrape
                 // updated input
-                Some(_) if global => info!("⬆️  Updated global input '{}'.", input_name),
-                Some(_) => info!(
+                Some(_) if global => {
+                    message::plain(format!("⬆️  Updated global input '{}'.", input_name))
+                },
+                Some(_) => message::plain(format!(
                     "⬆️  Updated input '{}' in environment {}.",
                     input_name,
                     description.as_ref().unwrap()
-                ),
+                )),
                 // new input
-                None if global => info!("🔒️  Locked global input '{}'.", input_name),
-                None => info!(
+                None if global => {
+                    message::plain(format!("🔒️  Locked global input '{}'.", input_name))
+                },
+                None => message::plain(format!(
                     "🔒️  Locked input '{}' in environment {}.",
                     input_name,
                     description.as_ref().unwrap(),
-                ),
+                )),
             }
             inputs_to_scrape.push(new_input);
         }
@@ -1965,16 +1960,16 @@ impl Update {
             for input_name in old_lockfile.registry().inputs.keys() {
                 if !new_lockfile.registry().inputs.contains_key(input_name) {
                     if global {
-                        info!(
-                            "🗑️  Removed unused input '{}' from global lockfile.",
+                        message::deleted(format!(
+                            "Removed unused input '{}' from global lockfile.",
                             input_name
-                        );
+                        ));
                     } else {
-                        info!(
-                            "🗑️  Removed unused input '{}' from lockfile for environment {}.",
+                        message::deleted(format!(
+                            "Removed unused input '{}' from lockfile for environment {}.",
                             input_name,
                             description.as_ref().unwrap()
-                        );
+                        ));
                     }
                 }
             }
@@ -2059,15 +2054,19 @@ impl Upgrade {
 
         if upgraded.is_empty() {
             if self.groups_or_iids.is_empty() {
-                info!("ℹ️  No packages need to be upgraded in environment {description}.");
+                message::plain(format!(
+                    "ℹ️  No packages need to be upgraded in environment {description}."
+                ));
             } else {
-                info!(
+                message::plain(format!(
                     "ℹ️  The specified packages do not need to be upgraded in environment {description}."
-                );
+                 ) );
             }
         } else {
             for package in upgraded {
-                info!("⬆️  Upgraded '{package}' in environment {description}.");
+                message::plain(format!(
+                    "⬆️  Upgraded '{package}' in environment {description}."
+                ));
             }
         }
 
@@ -2133,7 +2132,7 @@ impl Containerize {
         }
         .spin()?;
 
-        info!("✨  Container written to '{output_name}'");
+        message::created(format!("Container written to '{output_name}'"));
         Ok(())
     }
 }

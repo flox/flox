@@ -23,6 +23,7 @@ use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
+use crate::utils::message;
 use crate::utils::search::{
     construct_search_params,
     manifest_and_lockfile,
@@ -151,7 +152,7 @@ impl Search {
                 writeln!(&mut hints, "{suggestion}")?;
             };
 
-            eprintln!("{hints}");
+            message::plain(hints);
         }
         Ok(())
     }
