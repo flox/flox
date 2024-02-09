@@ -60,6 +60,7 @@ impl LockedManifest {
             .args(["manifest", "lock"])
             .arg("--ga-registry")
             .arg("--global-manifest")
+            .arg("-vvvv")
             .arg(global_manifest_path)
             .arg("--manifest")
             .arg(canonical_manifest_path)

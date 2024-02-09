@@ -46,6 +46,7 @@ pub enum CallPkgDbError {
 /// Error JSON is parsed into a [CallPkgDbError::PkgDbError].
 pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
     let output = pkgdb_cmd.output().map_err(CallPkgDbError::PkgDbCall)?;
+    eprintln!("{}", String::from_utf8(output.stderr).unwrap());
     // If command fails, try to parse stdout as a PkgDbError
     if !output.status.success() {
         match serde_json::from_slice::<PkgDbError>(&output.stdout) {
