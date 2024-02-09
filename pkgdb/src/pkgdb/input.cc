@@ -137,7 +137,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   // close the db if we have anything open in preparation for the child to take
   // over.
   this->closeDbReadWrite();
-  this->dbRO = nullptr;
   this->freeFlake();
 
   bool         scrapingComplete = false;
@@ -172,7 +171,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
                   debugLog( nix::fmt(
                     "scrapePrefix: Child reports all pages complete" ) );
                   scrapingComplete = true;
-                  this->init();
                 }
               else if ( WEXITSTATUS( status ) == EXIT_CHILD_INCOMPLETE )
                 {
@@ -212,7 +210,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         }
       else
         {
-          this->init();
           /* Open a read/write connection. */
           auto chunkDbRW = this->getDbReadWrite();
 
