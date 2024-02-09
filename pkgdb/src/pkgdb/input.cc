@@ -141,7 +141,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   this->freeFlake();
 
   bool         scrapingComplete = false;
-  const size_t pageSize         = 1000;
+  const size_t pageSize         = 5000;
   size_t       pageIdx          = 0;
 
   do {

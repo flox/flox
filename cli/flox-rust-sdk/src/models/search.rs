@@ -298,6 +298,7 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
         .arg("search")
         .arg("--quiet")
         .arg("--ga-registry")
+        .arg("-vvvv")
         .arg(json)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
