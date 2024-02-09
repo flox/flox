@@ -19,7 +19,7 @@ use crate::utils::metrics::{
     METRICS_UUID_FILE_NAME,
 };
 
-/// reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
+// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
 #[derive(Bpaf, Clone)]
 pub struct ResetMetrics {}
 impl ResetMetrics {

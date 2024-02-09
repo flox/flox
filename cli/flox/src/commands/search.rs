@@ -6,7 +6,15 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::global_manifest_path;
 use flox_rust_sdk::models::search::{
-    do_search, PathOrJson, Query, SearchParams, SearchResult, SearchResults, SearchStrategy, ShowError, Subtree
+    do_search,
+    PathOrJson,
+    Query,
+    SearchParams,
+    SearchResult,
+    SearchResults,
+    SearchStrategy,
+    ShowError,
+    Subtree,
 };
 use indoc::formatdoc;
 use log::debug;
@@ -30,7 +38,7 @@ const FLOX_SHOW_HINT: &str = "Use 'flox show <package>' to see available version
 #[derive(Bpaf, Clone)]
 pub struct ChannelArgs {}
 
-/// Search for packages to install
+// Search for packages to install
 #[derive(Bpaf, Clone)]
 pub struct Search {
     /// print search as JSON
@@ -156,7 +164,7 @@ fn render_search_results_json(search_results: SearchResults) -> Result<()> {
     Ok(())
 }
 
-/// Show detailed package information
+// Show detailed package information
 #[derive(Bpaf, Clone)]
 pub struct Show {
     /// Whether to show all available package versions
