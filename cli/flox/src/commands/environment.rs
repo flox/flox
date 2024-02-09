@@ -50,6 +50,7 @@ use flox_rust_sdk::models::lockfile::{
 use flox_rust_sdk::models::manifest::{self, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::{
     call_pkgdb,
+    error_codes,
     CallPkgDbError,
     ContextMsgError,
     PkgDbError,
@@ -73,8 +74,8 @@ use crate::commands::{
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
-use crate::utils::message;
 use crate::utils::errors::{display_chain, format_core_error, format_locked_manifest_error};
+use crate::utils::message;
 use crate::{subcommand_metric, utils};
 
 // Edit declarative environment configuration
@@ -460,7 +461,7 @@ impl Activate {
         let activation_path = match activation_path_result {
             Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: 123,
+                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
                     ..
                 })),
             ))) => {
@@ -1172,7 +1173,7 @@ impl Install {
                 LockedManifestError::LockManifest(
                     flox_rust_sdk::models::pkgdb::CallPkgDbError::PkgDbError(pkgdberr),
                 ),
-            )) if pkgdberr.exit_code == 120 => 'error: {
+            )) if pkgdberr.exit_code == error_codes::RESOLUTION_FAILURE => 'error: {
                 let paths = packages.iter().map(|p| p.path.clone()).join(", ");
 
                 if packages.len() > 1 {
@@ -1666,7 +1667,7 @@ impl Pull {
             Ok(_) => {},
             Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: 123,
+                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
                     ..
                 })),
             ))) => {
@@ -1709,7 +1710,7 @@ impl Pull {
             Err(
                 ref e @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                     LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                        exit_code: exit_code @ 124..=126, // rust syntax is fun sometimes
+                        exit_code,
                         context_message:
                             Some(ContextMsgError {
                                 ref message,
@@ -1718,17 +1719,23 @@ impl Pull {
                         ..
                     })),
                 )),
-            ) => {
+            ) if [
+                error_codes::PACKAGE_BUILD_FAILURE,
+                error_codes::PACKAGE_EVAL_FAILURE,
+                error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+            ]
+            .contains(&exit_code) =>
+            {
                 debug!(
                     "environment contains package incompatible with the current system: {err}",
                     err = display_chain(e)
                 );
 
                 let mut pkgdb_error = message.to_string();
-                if exit_code != 124 && caught.is_some() {
+                if exit_code != error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM && caught.is_some() {
                     write!(
                         &mut pkgdb_error,
-                        "\n{caught}",
+                        "{caught}",
                         caught = caught.as_ref().unwrap()
                     )?;
                 }

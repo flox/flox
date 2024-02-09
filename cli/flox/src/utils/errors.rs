@@ -10,7 +10,7 @@ use flox_rust_sdk::models::environment::{
     ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::lockfile::LockedManifestError;
-use flox_rust_sdk::models::pkgdb::{CallPkgDbError, ContextMsgError, PkgDbError};
+use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, ContextMsgError, PkgDbError};
 use indoc::formatdoc;
 use log::trace;
 
@@ -531,7 +531,7 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         // 105: invalid lockfile, just print the error message
         // https://github.com/flox/flox/issues/852
         LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: 105,
+            exit_code: error_codes::INVALID_MANIFEST_FILE,
             context_message: Some(ContextMsgError { message, .. }),
             ..
         })) => formatdoc! {"
@@ -541,7 +541,7 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         // 116: toml parsing error, just print the error message
         // https://github.com/flox/flox/issues/852
         LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: 116,
+            exit_code: error_codes::TOML_TO_JSON,
             context_message:
                 Some(ContextMsgError {
                     caught: Some(caught),
@@ -562,26 +562,33 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         // catch package conflict error:
         // https://github.com/flox/flox/issues/857
         LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: 122,
+            exit_code: error_codes::BUILDENV_CONFLICT,
             context_message: Some(ContextMsgError { message, .. }),
             ..
         })) => message.to_string(),
         // catch package eval error: unsupported system:
         LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: 124,
+            exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
             context_message: Some(ContextMsgError { message, .. }),
             ..
         })) => message.to_string(),
         // catch package eval and build errors
         LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: 124..=125,
+            exit_code,
             context_message:
                 Some(ContextMsgError {
                     message,
                     caught: Some(caught),
                 }),
             ..
-        })) => format!("{message}: {caught}"),
+        })) if [
+            error_codes::PACKAGE_EVAL_FAILURE,
+            error_codes::PACKAGE_BUILD_FAILURE,
+        ]
+        .contains(exit_code) =>
+        {
+            format!("{message}: {caught}")
+        },
         LockedManifestError::BuildEnv(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to build environment.")
         },
