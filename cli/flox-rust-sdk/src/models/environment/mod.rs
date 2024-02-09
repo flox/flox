@@ -332,6 +332,7 @@ pub enum EnvironmentError2 {
     // * three distinct errors map to this
     #[error("could not initialize environment")]
     InitEnv(#[source] std::io::Error),
+    /// .flox exists but .flox/env does not
     #[error("could not find environment definition directory")]
     EnvDirNotFound,
     #[error("could not find environment pointer file")]

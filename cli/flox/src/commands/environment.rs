@@ -68,6 +68,7 @@ use crate::commands::{
     auth,
     ensure_environment_trust,
     ConcreteEnvironment,
+    EnvironmentSelectError,
     UninitializedEnvironment,
 };
 use crate::config::Config;
@@ -1116,9 +1117,20 @@ impl Install {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = self
+        let concrete_environment = match self
             .environment
-            .detect_concrete_environment(&flox, "install to")?;
+            .detect_concrete_environment(&flox, "install to")
+        {
+            Ok(concrete_environment) => concrete_environment,
+            Err(EnvironmentSelectError::Environment(EnvironmentError2::DotFloxNotFound)) => {
+                bail!(formatdoc! {"
+                Did not find an environment in the current directory.
+
+                Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
+                self.packages.join(" ")})
+            },
+            Err(e) => Err(e)?,
+        };
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
         let mut packages = self
@@ -1231,9 +1243,20 @@ impl Uninstall {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = self
+        let concrete_environment = match self
             .environment
-            .detect_concrete_environment(&flox, "uninstall from")?;
+            .detect_concrete_environment(&flox, "uninstall from")
+        {
+            Ok(concrete_environment) => concrete_environment,
+            Err(EnvironmentSelectError::Environment(EnvironmentError2::DotFloxNotFound)) => {
+                bail!(formatdoc! {"
+                Did not find an environment in the current directory.
+
+                Create an environment with 'flox init' or uninstall packages from an environment found elsewhere with 'flox uninstall {} --dir <path>'",
+                self.packages.join(" ")})
+            },
+            Err(e) => Err(e)?,
+        };
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
 
