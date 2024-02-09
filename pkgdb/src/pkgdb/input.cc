@@ -212,12 +212,12 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
       else
         {
           /* Open a read/write connection. */
-          auto        chunkDbRW = this->getDbReadWrite();
+          auto chunkDbRW = this->getDbReadWrite();
 
           /* Start a transaction */
           chunkDbRW->execute( "BEGIN TRANSACTION" );
-          row_id      chunkRow  = chunkDbRW->addOrGetAttrSetId( prefix );
-          MaybeCursor root      = this->getFlake()->maybeOpenCursor( prefix );
+          row_id      chunkRow = chunkDbRW->addOrGetAttrSetId( prefix );
+          MaybeCursor root     = this->getFlake()->maybeOpenCursor( prefix );
 
           Target rootTarget
             = std::make_tuple( prefix,
