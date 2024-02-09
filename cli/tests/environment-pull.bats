@@ -403,7 +403,7 @@ function add_insecure_package() {
 # bats test_tags=pull:eval-failure
 # pulling an environment with a package that fails to evaluate
 # should fail with an error
-@test "pull environment with package not available for the current platform fails" {
+@test "pull environment with insecure package fails to evaluate" {
   update_dummy_env "owner" "name"
   add_insecure_package "owner" "name"
 
@@ -414,10 +414,10 @@ function add_insecure_package() {
 }
 
 # bats test_tags=pull:eval-failure:prompt-fail
-# pulling an environment with a package that fails to evaluate
+# pulling an environment with an insecure package that fails to evaluate
 # should prompt to ignore the error and pull the environment anyway.
 # When answering no, an error should be shown and the environment should not be pulled.
-@test "pull environment with package not available for the current platform prompts to abort or ignore -- aborts cleanly" {
+@test "pull environment with insecure package prompts to abort or ignore -- aborts cleanly" {
   update_dummy_env "owner" "name"
   add_insecure_package "owner" "name"
 
@@ -432,7 +432,7 @@ function add_insecure_package() {
 # pulling an environment with a package that fails to evaluate
 # should prompt to ignore the error and pull the environment anyway.
 # When answering yes, the environment should be pulled in a potentially broken state.
-@test "pull environment with package not available for the current platform prompts to abort or ignore -- ingores" {
+@test "pull environment with insecure package prompts to abort or ignore -- ignores" {
   update_dummy_env "owner" "name"
   add_insecure_package "owner" "name"
 
