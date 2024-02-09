@@ -365,6 +365,7 @@ enum AdditionalCommands {
     Documentation(
         #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
     ),
+    /// Update the global base catalog or an environment's base catalog
     #[bpaf(command, hide)]
     Update(#[bpaf(external(environment::update))] environment::Update),
     #[bpaf(command, hide, header(indoc! {"
@@ -385,8 +386,10 @@ enum AdditionalCommands {
     /// View and set configuration options
     #[bpaf(command, hide)]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
+    /// Delete builds of non-current versions of an environment
     #[bpaf(command("wipe-history"), hide)]
     WipeHistory(#[bpaf(external(environment::wipe_history))] environment::WipeHistory),
+    /// Show all versions of an environment
     #[bpaf(command, hide)]
     History(#[bpaf(external(environment::history))] environment::History),
 }
@@ -423,16 +426,21 @@ impl AdditionalCommandsDocumentation {
 #[derive(Bpaf, Clone)]
 #[bpaf(hide)]
 enum InternalCommands {
+    /// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
     #[bpaf(command("reset-metrics"))]
     ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
+    /// List environment generations with contents
     #[bpaf(command)]
     Generations(#[bpaf(external(environment::generations))] environment::Generations),
+    /// Switch to a specific generation of an environment
     #[bpaf(command("switch-generation"))]
     SwitchGeneration(
         #[bpaf(external(environment::switch_generation))] environment::SwitchGeneration,
     ),
+    /// Rollback to the previous generation of an environment
     #[bpaf(command)]
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
+    /// FloxHub authentication commands
     #[bpaf(command)]
     Auth(#[bpaf(external(auth::auth))] auth::Auth),
 }

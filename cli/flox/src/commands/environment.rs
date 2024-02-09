@@ -71,7 +71,7 @@ use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::{format_core_error, format_locked_manifest_error};
 use crate::{subcommand_metric, utils};
 
-/// Edit declarative environment configuration
+// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
 pub struct Edit {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -80,8 +80,6 @@ pub struct Edit {
     #[bpaf(external(edit_action), fallback(EditAction::EditManifest{file: None}))]
     action: EditAction,
 }
-
-/// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
 pub enum EditAction {
     EditManifest {
@@ -284,7 +282,7 @@ impl Edit {
     }
 }
 
-/// Delete an environment
+// Delete an environment
 #[derive(Bpaf, Clone)]
 pub struct Delete {
     #[allow(dead_code)] // not yet handled in impl
@@ -338,8 +336,6 @@ impl Delete {
     }
 }
 
-/// Activate an environment
-///
 /// When called with no arguments `flox activate` will look for a `.flox` directory
 /// in the current directory. Calling `flox activate` in your home directory will
 /// activate a default environment. Environments in other directories and remote
@@ -1198,7 +1194,7 @@ impl Install {
     }
 }
 
-/// Uninstall installed packages from an environment
+// Uninstall installed packages from an environment
 #[derive(Bpaf, Clone)]
 pub struct Uninstall {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -1239,7 +1235,7 @@ impl Uninstall {
     }
 }
 
-/// delete builds of non-current versions of an environment
+// Delete builds of non-current versions of an environment
 #[derive(Bpaf, Clone)]
 pub struct WipeHistory {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -1254,7 +1250,7 @@ impl WipeHistory {
     }
 }
 
-/// list environment generations with contents
+// List environment generations with contents
 #[derive(Bpaf, Clone)]
 pub struct Generations {
     #[allow(dead_code)] // not yet handled in impl
@@ -1274,7 +1270,7 @@ impl Generations {
     }
 }
 
-/// show all versions of an environment
+// Show all versions of an environment
 #[derive(Bpaf, Clone)]
 pub struct History {
     #[allow(dead_code)] // not yet handled in impl
@@ -1294,7 +1290,7 @@ impl History {
     }
 }
 
-/// Send environment to floxhub
+// Send environment to FloxHub
 #[derive(Bpaf, Clone)]
 pub struct Push {
     /// Directory to push the environment from (default: current directory)
@@ -1499,7 +1495,7 @@ impl Default for PullSelect {
     }
 }
 
-/// Pull environment from FloxHub
+// Pull environment from FloxHub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
     /// Directory in which to create a managed environment, or directory that already contains a managed environment (default: current directory)
@@ -1821,7 +1817,7 @@ impl Pull {
     }
 }
 
-/// rollback to the previous generation of an environment
+// Rollback to the previous generation of an environment
 #[derive(Bpaf, Clone)]
 pub struct Rollback {
     #[bpaf(long, short, argument("ENV"))]
@@ -1843,7 +1839,7 @@ impl Rollback {
     }
 }
 
-/// switch to a specific generation of an environment
+// Switch to a specific generation of an environment
 #[derive(Bpaf, Clone)]
 pub struct SwitchGeneration {
     #[allow(unused)] // Command currently forwarded
@@ -1877,7 +1873,7 @@ impl Default for EnvironmentOrGlobalSelect {
     }
 }
 
-/// Update the global base catalog or an environment's base catalog
+// Update the global base catalog or an environment's base catalog
 #[derive(Bpaf, Clone)]
 pub struct Update {
     #[bpaf(external(environment_or_global_select), fallback(Default::default()))]
@@ -2031,6 +2027,7 @@ impl Update {
     }
 }
 
+// Upgrade packages in an environment
 #[derive(Bpaf, Clone)]
 pub struct Upgrade {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -2075,6 +2072,7 @@ impl Upgrade {
     }
 }
 
+// Containerize an environment
 #[derive(Bpaf, Clone, Debug)]
 pub struct Containerize {
     #[bpaf(external(environment_select), fallback(Default::default()))]
