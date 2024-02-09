@@ -136,6 +136,29 @@ function add_incompatible_package() {
   rm -rf "$PROJECT_DIR/floxmeta"
 }
 
+# make the environment with specified owner and name incompatible with the current system
+# by adding a package that fails nix evaluation due to being on an unsupported system.
+function add_insecure_package() {
+  OWNER="$1"
+  shift
+  ENV_NAME="$1"
+  shift
+
+  git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
+  pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
+  git checkout "$ENV_NAME"
+  tomlq --in-place --toml-output '.install.extra.path = ["python2"]' 2/env/manifest.toml
+  git add .
+  git \
+    -c "user.name=test" \
+    -c "user.email=test@email.address" \
+    commit \
+    -m "add failing package"
+  git push
+  popd > /dev/null || return
+  rm -rf "$PROJECT_DIR/floxmeta"
+}
+
 # ---------------------------------------------------------------------------- #
 # bats test_tags=pull,pull:logged-out
 @test "l1: pull login: running flox pull without login succeeds" {
@@ -368,6 +391,54 @@ function add_incompatible_package() {
   run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" yes
   assert_success
   assert_line --partial "package 'extra' is not available for this system ('$NIX_SYSTEM')"
+  assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"
+
+  run "$FLOX_BIN" list
+  assert_success
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=pull:eval-failure
+# pulling an environment with a package that fails to evaluate
+# should fail with an error
+@test "pull environment with package not available for the current platform fails" {
+  update_dummy_env "owner" "name"
+  add_insecure_package "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name
+
+  assert_failure
+  assert_line --partial "package 'extra' failed to evaluate:"
+}
+
+# bats test_tags=pull:eval-failure:prompt-fail
+# pulling an environment with a package that fails to evaluate
+# should prompt to ignore the error and pull the environment anyway.
+# When answering no, an error should be shown and the environment should not be pulled.
+@test "pull environment with package not available for the current platform prompts to abort or ignore -- aborts cleanly" {
+  update_dummy_env "owner" "name"
+  add_insecure_package "owner" "name"
+
+  run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" no
+  assert_success
+  assert_line --partial "package 'extra' failed to evaluate: "
+  assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"
+  assert_line --partial "Did not pull the environment."
+}
+
+# bats test_tags=pull:eval-failure:prompt-success
+# pulling an environment with a package that fails to evaluate
+# should prompt to ignore the error and pull the environment anyway.
+# When answering yes, the environment should be pulled in a potentially broken state.
+@test "pull environment with package not available for the current platform prompts to abort or ignore -- ingores" {
+  update_dummy_env "owner" "name"
+  add_insecure_package "owner" "name"
+
+  run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" yes
+  assert_success
+  assert_line --partial "package 'extra' failed to evaluate: "
   assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"
 
   run "$FLOX_BIN" list
