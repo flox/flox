@@ -13,7 +13,3 @@ be specified _before_ the subcommand.
 `-q`, `--quiet`
 :   Silence logs except for errors.
 
-`--debug`
-:   Debug mode.
-
-
