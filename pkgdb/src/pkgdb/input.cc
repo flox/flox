@@ -137,7 +137,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   // close the db if we have anything open in preparation for the child to take
   // over.
   this->closeDbReadWrite();
-
   this->freeFlake();
 
   bool         scrapingComplete = false;

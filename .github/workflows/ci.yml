@@ -150,7 +150,14 @@ jobs:
       - name: "CLI Tests"
         env:
           RUST_BACKTRACE: 1
-        run: nix develop -L --no-update-lock-file --command just test-cli
+        run: |
+          pushd cli;
+          nix develop -L --no-update-lock-file --command cargo test  \
+                      -F "impure-unit-tests" --workspace             \
+                      build_flox_environment_and_links               \
+                      -- --nocapture;
+          popd;
+          nix develop -L --no-update-lock-file --command just test-cli
 
       - name: "Functional Tests"
         if: ${{ github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
