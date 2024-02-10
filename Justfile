@@ -129,6 +129,7 @@ test-all: test-pkgdb impure-tests integ-tests functional-tests
      cargo metadata --format-version 1              \
        |jq -r '.packages[]|[.name,.license]|@csv';
 
+
 # ---------------------------------------------------------------------------- #
 
 # Run a `flox` command
@@ -139,6 +140,15 @@ test-all: test-pkgdb impure-tests integ-tests functional-tests
 # Run a `pkgdb` command
 @pkgdb +args="": build-pkgdb
     pkgdb/bin/pkgdb {{args}}
+
+
+# ---------------------------------------------------------------------------- #
+
+# Clean ( remove ) built artifacts
+@clean:
+    pushd cli; cargo clean;
+    make -C pkgdb clean;
+
 
 # ---------------------------------------------------------------------------- #
 #
