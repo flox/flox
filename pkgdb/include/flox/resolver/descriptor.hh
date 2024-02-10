@@ -96,7 +96,7 @@ public:
 
   // TODO: Not implemented.
   /** Named _group_ that the package is a member of. */
-  std::optional<GroupName> packageGroup;
+  std::optional<GroupName> pkgGroup;
 
   // TODO: Not implemented.
   /** Force resolution is the named input or _flake reference_. */

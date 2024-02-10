@@ -69,7 +69,7 @@ test_parseManifestDescriptor0()
     "name": "foo"
   , "version": "4.2.0"
   , "optional": true
-  , "package-group": "blue"
+  , "pkg-group": "blue"
   } )"_json;
 
   flox::resolver::ManifestDescriptor descriptor( raw );
@@ -353,7 +353,7 @@ test_serialize_manifest0()
     "version": "4.2.0",
     "abspath": ["legacyPackages", "x86_64-linux", "hello"],
     "optional": true,
-    "package-group": "blue",
+    "pkg-group": "blue",
     "package-repository": {
       "type": "github",
       "owner": "NixOS",
