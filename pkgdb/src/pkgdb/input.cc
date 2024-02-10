@@ -140,7 +140,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   this->freeFlake();
 
   bool         scrapingComplete = false;
-  const size_t pageSize         = 5000;
+  const size_t pageSize         = 25000;
   size_t       pageIdx          = 0;
 
   do {
@@ -202,9 +202,12 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           else
             {
               scrapingComplete = true;
-              throw PkgDbException(
-                nix::fmt( "scraping failed: abnormal child exit, signal:%d",
-                          WTERMSIG( status ) ) );
+              if ( WTERMSIG( status ) != SIGTERM )
+                {
+                  throw PkgDbException(
+                    nix::fmt( "scraping failed: abnormal child exit, signal:%d",
+                              WTERMSIG( status ) ) );
+                }
             }
         }
       else
@@ -237,26 +240,34 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
             }
           catch ( const nix::EvalError & err )
             {
-              this->closeDbReadWrite();
-              this->freeFlake();
               debugLog(
                 nix::fmt( "scrapePrefix(child): caught nix::EvalError: %s",
                           err.msg().c_str() ) );
               chunkDbRW->execute( "ROLLBACK TRANSACTION" );
+              debugLog( nix::fmt(
+                "scrapePrefix(child): eval error, closing db and flake" ) );
+              this->closeDbReadWrite();
+              this->freeFlake();
               exit( EXIT_FAILURE_NIX_EVAL );
             }
 
+          debugLog( nix::fmt(
+            "scrapePrefix(child): done scraping, commiting transaction" ) );
+
           /* Close the transaction. */
           chunkDbRW->execute( "COMMIT TRANSACTION" );
+          debugLog(
+            nix::fmt( "scrapePrefix(child): done scraping, closing db" ) );
           this->closeDbReadWrite();
+          debugLog(
+            nix::fmt( "scrapePrefix(child): done scraping, freeing flake" ) );
           this->freeFlake();
-          int status;
-          wait( &status );
 
           debugLog( nix::fmt(
             "scrapePrefix(child): scraping page %d complete, lastPage:%d",
             pageIdx,
             targetComplete ) );
+          raise( SIGTERM );
           exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
         }
     }

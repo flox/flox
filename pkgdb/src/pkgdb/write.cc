@@ -544,6 +544,8 @@ PkgDb::scrape( nix::SymbolTable & syms,
         }
     }
 
+  debugLog(
+    nix::fmt( "scrape(child): done scraping, setting final prefix done" ) );
   if ( lastPage ) { this->setPrefixDone( prefix, true ); }
   return lastPage;
   ;
