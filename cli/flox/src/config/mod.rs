@@ -147,7 +147,7 @@ impl Config {
                 .set_default("data_dir", data_dir.to_str().unwrap())?
                 // Config dir is added to the config for completeness;
                 // the config file cannot change the config dir.
-                .set_default("config_dir", config_dir.to_str().unwrap())?;
+                .set_override("config_dir", config_dir.to_str().unwrap())?;
 
             // read from /etc
             builder = builder.add_source(
