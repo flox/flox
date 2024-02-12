@@ -140,7 +140,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   this->freeFlake();
 
   bool         scrapingComplete = false;
-  const size_t pageSize         = 100;
+  const size_t pageSize         = 1000;
   size_t       pageIdx          = 0;
 
   do {
@@ -212,8 +212,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         }
       else
         {
-          // setenv( "GC_DONT_GC", "1", 1 );
-
           /* Open a read/write connection. */
           auto chunkDbRW = this->getDbReadWrite();
 
