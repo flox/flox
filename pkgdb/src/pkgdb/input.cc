@@ -238,12 +238,12 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
             }
           catch ( const nix::EvalError & err )
             {
-              this->closeDbReadWrite();
-              this->freeFlake();
               debugLog(
                 nix::fmt( "scrapePrefix(child): caught nix::EvalError: %s",
                           err.msg().c_str() ) );
               chunkDbRW->execute( "ROLLBACK TRANSACTION" );
+              this->closeDbReadWrite();
+              this->freeFlake();
               exit( EXIT_FAILURE_NIX_EVAL );
             }
 
@@ -251,9 +251,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           chunkDbRW->execute( "COMMIT TRANSACTION" );
           this->closeDbReadWrite();
           this->freeFlake();
-          int status;
-          wait( &status );
-
           debugLog( nix::fmt(
             "scrapePrefix(child): scraping page %d complete, lastPage:%d",
             pageIdx,
