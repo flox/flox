@@ -49,8 +49,15 @@ pub enum RemoteEnvironmentError {
     #[error("could not create temporary environment")]
     CreateTempDotFlox(#[source] std::io::Error),
 
-    #[error("could not update out link ({1})")]
-    UpdateOutLink(#[source] std::io::Error, String),
+    /// the internal [ManagedEnvironment::activation_path] returned an invalid path
+    #[error("could not determine location of new install prefix")]
+    ReadInternalOutLink(#[source] std::io::Error),
+
+    #[error("could not remove the existing install prefix")]
+    DeleteOldOutLink(#[source] std::io::Error),
+
+    #[error("could not set a new install prefix")]
+    WriteNewOutlink(#[source] std::io::Error),
 }
 
 #[derive(Debug)]
@@ -146,22 +153,17 @@ impl RemoteEnvironment {
         out_link: &Path,
         inner: &mut ManagedEnvironment,
     ) -> Result<(), EnvironmentError2> {
-        let new_link_path = inner.activation_path(flox)?.read_link().map_err(|e| {
-            RemoteEnvironmentError::UpdateOutLink(
-                e,
-                "reading out link of managed environment".to_string(),
-            )
-        })?;
+        let new_link_path = inner
+            .activation_path(flox)?
+            .read_link()
+            .map_err(RemoteEnvironmentError::ReadInternalOutLink)?;
 
         if out_link.read_link().is_ok() {
-            fs::remove_file(out_link).map_err(|e| {
-                RemoteEnvironmentError::UpdateOutLink(e, "removing existing out link".to_string())
-            })?;
+            fs::remove_file(out_link).map_err(RemoteEnvironmentError::DeleteOldOutLink)?;
         }
 
-        std::os::unix::fs::symlink(new_link_path, out_link).map_err(|e| {
-            RemoteEnvironmentError::UpdateOutLink(e, "creating new out link".to_string())
-        })?;
+        std::os::unix::fs::symlink(new_link_path, out_link)
+            .map_err(RemoteEnvironmentError::WriteNewOutlink)?;
 
         Ok(())
     }
