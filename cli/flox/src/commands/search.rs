@@ -12,7 +12,6 @@ use flox_rust_sdk::models::search::{
     SearchParams,
     SearchResult,
     SearchResults,
-    SearchStrategy,
     ShowError,
     Subtree,
 };
@@ -24,6 +23,7 @@ use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
+use crate::utils::message;
 use crate::utils::search::{
     construct_search_params,
     manifest_and_lockfile,
@@ -139,7 +139,7 @@ impl Search {
 
             let mut hints = String::new();
 
-            if let Some(hint) = results.hint() {
+            if let Some(hint) = results.search_results_truncated_hint() {
                 writeln!(&mut hints)?;
                 writeln!(&mut hints, "{hint}")?;
             }
@@ -152,7 +152,7 @@ impl Search {
                 writeln!(&mut hints, "{suggestion}")?;
             };
 
-            eprintln!("{hints}");
+            message::plain(hints);
         }
         Ok(())
     }

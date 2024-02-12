@@ -6,8 +6,8 @@ use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_rust_sdk::flox::{Flox, FloxhubToken};
-use indoc::{eprintdoc, formatdoc};
-use log::{debug, info};
+use indoc::formatdoc;
+use log::debug;
 use oauth2::basic::BasicClient;
 use oauth2::{
     AuthUrl,
@@ -27,6 +27,7 @@ use crate::commands::general::update_config;
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Checkpoint, Dialog};
+use crate::utils::message;
 use crate::utils::openers::Browser;
 
 #[derive(Debug, Default, Clone, Serialize)]
@@ -114,20 +115,22 @@ pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credent
             command.arg(url);
 
             if command.spawn().is_err() {
-                info!("Could not open browser. Please open the following URL manually: {url}");
+                message::warning(format!(
+                    "Could not open browser. Please open the following URL manually: {url}"
+                ));
             }
         },
         Err(e) => {
             debug!("Unable to open browser: {e}");
 
-            eprintdoc! {"
+            message::plain(formatdoc! {"
             Go to {url} in your browser
 
             Then enter your one-time code: {code}
             ",
                 url = details.verification_uri().url(),
                 code = details.user_code().secret()
-            };
+            });
         },
     }
 
@@ -193,14 +196,14 @@ impl Auth {
                 create_oauth_client()?;
 
                 if config.flox.floxhub_token.is_none() {
-                    info!("You are not logged in");
+                    message::warning("You are not logged in");
                     return Ok(());
                 }
 
                 update_config::<String>(&flox.config_dir, &flox.temp_dir, "floxhub_token", None)
                     .context("Could not remove token from user config")?;
 
-                info!("Logout successful");
+                message::updated("Logout successful");
 
                 Ok(())
             },
@@ -240,8 +243,8 @@ pub async fn login_flox(flox: &mut Flox) -> Result<()> {
     )
     .context("Could not write token to config")?;
 
-    info!("✅  Authentication complete");
-    info!("✅  Logged in as {handle}");
+    message::updated("Authentication complete");
+    message::updated(format!("Logged in as {handle}"));
 
     Ok(())
 }

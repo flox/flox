@@ -9,8 +9,9 @@ use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::{init_global_manifest, EnvironmentError2};
-use log::{debug, error, warn};
+use log::{debug, warn};
 use utils::init::init_logger;
+use utils::message;
 
 use crate::utils::errors::{format_error, format_managed_error, format_remote_error};
 
@@ -67,6 +68,7 @@ async fn main() -> ExitCode {
     // to work with the shell completion frontends
     //
     // Pass through Stdout failure; This represents `--help`
+    // todo: just `run()` the parser? Unless we still need to control which std{err/out} to use
     let args = commands::flox_cli().run_inner(Args::current_args());
 
     if let Some(parse_err) = args.as_ref().err() {
@@ -76,7 +78,7 @@ async fn main() -> ExitCode {
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {
-                error!("{m}");
+                message::error(m);
                 return ExitCode::from(1);
             },
             bpaf::ParseFailure::Completion(c) => {
@@ -103,17 +105,17 @@ async fn main() -> ExitCode {
             }
 
             if let Some(e) = e.downcast_ref::<EnvironmentError2>() {
-                eprintln!("{}", format_error(e));
+                message::error(format_error(e));
                 return ExitCode::from(1);
             }
 
             if let Some(e) = e.downcast_ref::<ManagedEnvironmentError>() {
-                eprintln!("{}", format_managed_error(e));
+                message::error(format_managed_error(e));
                 return ExitCode::from(1);
             }
 
             if let Some(e) = e.downcast_ref::<RemoteEnvironmentError>() {
-                eprintln!("{}", format_remote_error(e));
+                message::error(format_remote_error(e));
                 return ExitCode::from(1);
             }
 
@@ -122,7 +124,7 @@ async fn main() -> ExitCode {
                 .skip(1)
                 .fold(e.to_string(), |acc, cause| format!("{}: {}", acc, cause));
 
-            error!("{err_str}");
+            message::error(err_str);
 
             ExitCode::from(1)
         },
