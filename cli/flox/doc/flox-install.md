@@ -42,11 +42,11 @@ with long names such as `python310Packages.pip`.
 Install IDs also provide a way to give packages more semantically meaningful,
 convenient, or aesthetically pleasing names in the manifest
 (e.g. `node21` instead of `nodejs_21`).
-When not explicitly provided, the install ID is inferred based on the path.
+When not explicitly provided, the install ID is inferred based on the pkg-path.
 For pkg-paths that consist of a single attribute (e.g. `ripgrep`) the install
 ID is set to that attribute.
 For pkg-paths that consist of multiple attributes (e.g. `python310Packages.pip`)
-the install ID is set to the last attribute in the path (e.g. `pip`).
+the install ID is set to the last attribute in the pkg-path (e.g. `pip`).
 
 You may also specify packages to be installed via
 [`flox-edit(1)`](./flox-edit.md),
