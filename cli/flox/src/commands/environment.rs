@@ -863,6 +863,37 @@ mod activate_tests {
     }
 }
 
+#[derive(Bpaf, Clone)]
+pub struct ListActive {
+    #[bpaf(long)]
+    json: bool,
+}
+
+impl ListActive {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
+        subcommand_metric!("envs");
+        let active_environments = activated_environments();
+
+        if self.json {
+            println!("{}", serde_json::to_string(&active_environments)?);
+            return Ok(());
+        }
+
+        if active_environments.last_active().is_none() {
+            message::plain("No environments are currently active.");
+            return Ok(());
+        }
+
+        message::plain("Currently active environments (most recent to least recent):");
+
+        for env in active_environments.iter() {
+            println!("{env}")
+        }
+
+        Ok(())
+    }
+}
+
 // Create an environment in the current directory
 #[derive(Bpaf, Clone)]
 pub struct Init {

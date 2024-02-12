@@ -312,6 +312,9 @@ enum LocalDevelopmentCommands {
         footer("Run 'man flox-activate' for more details.")
     )]
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
+    /// List all active environments
+    #[bpaf(command, hide)]
+    Envs(#[bpaf(external(environment::list_active))] environment::ListActive),
     /// Search for system or library packages to install
     #[bpaf(command, footer("Run 'man flox-search' for more details."))]
     Search(#[bpaf(external(search::search))] search::Search),
@@ -353,6 +356,7 @@ impl LocalDevelopmentCommands {
         match self {
             LocalDevelopmentCommands::Init(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Activate(args) => args.handle(config, flox).await?,
+            LocalDevelopmentCommands::Envs(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Edit(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Install(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Uninstall(args) => args.handle(flox).await?,
@@ -859,6 +863,14 @@ impl ActiveEnvironments {
 
     pub fn is_active(&self, env: &UninitializedEnvironment) -> bool {
         self.0.contains(env)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &UninitializedEnvironment> {
+        self.0.iter()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
