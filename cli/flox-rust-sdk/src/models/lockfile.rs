@@ -65,10 +65,10 @@ impl LockedManifest {
             .arg("--manifest")
             .arg(canonical_manifest_path)
             .arg("--lockfile")
-            .arg(existing_lockfile_path)
-            .env("GC_DONT_GC", "1")
-            .env("GC_NPROCS", "1")
-            .env("GC_MARKERS", "1");
+            .arg(existing_lockfile_path);
+        // .env("GC_DONT_GC", "1")
+        // .env("GC_NPROCS", "1")
+        // .env("GC_MARKERS", "1");
 
         debug!("locking manifest with command: {pkgdb_cmd:?}");
         call_pkgdb(pkgdb_cmd)
