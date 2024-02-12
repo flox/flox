@@ -200,12 +200,9 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           else
             {
               scrapingComplete = true;
-              if ( WTERMSIG( status ) != SIGTERM )
-                {
-                  throw PkgDbException(
-                    nix::fmt( "scraping failed: abnormal child exit, signal:%d",
-                              WTERMSIG( status ) ) );
-                }
+              throw PkgDbException(
+                nix::fmt( "scraping failed: abnormal child exit, signal:%d",
+                          WTERMSIG( status ) ) );
             }
         }
       else
@@ -265,7 +262,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
             "scrapePrefix(child): scraping page %d complete, lastPage:%d",
             pageIdx,
             targetComplete ) );
-          raise( SIGTERM );
           exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
         }
     }
