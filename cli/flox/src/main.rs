@@ -30,8 +30,38 @@ async fn run(args: FloxArgs) -> Result<()> {
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
+fn main() -> ExitCode{
+
+    let sentry_dns = std::env::var("SENTRY_DSN");
+    let _sentry;
+
+    print!("SENTRY_DSN: {:?}\n", sentry_dns);
+    if sentry_dns.is_ok() {
+        println!("Sentry is enabled");
+        _sentry = sentry::init((sentry_dns.unwrap(), sentry::ClientOptions {
+            // TODO
+            release: sentry::release_name!(),
+
+            // Enable debug mode when needed
+            //debug: true,
+
+            ..Default::default()
+        }));
+    }
+
+    let exit_code = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async {
+            amain().await
+        });
+
+    return exit_code;
+}
+
+//#[tokio::main]
+async fn amain() -> ExitCode {
     // initialize logger with "best guess" defaults
     // updating the logger conf is cheap, so we reinitialize whenever we get more information
     init_logger(None);
