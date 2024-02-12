@@ -80,14 +80,14 @@ floxtest_gitforge_setup() {
   # gitforge. This obviously won't be recognised as a valid token by the
   # GitHub API, but that's OK because we've hard-coded this identity both
   # in flox-gh and on our gitforge proxy.
-  mkdir -p $FLOX_CONFIG_HOME/gh
-  cat > $FLOX_CONFIG_HOME/gh/hosts.yml << EOF
+  mkdir -p $FLOX_CONFIG_DIR/gh
+  cat > $FLOX_CONFIG_DIR/gh/hosts.yml << EOF
 github.com:
     oauth_token: flox_testOAuthToken
     user: floxtest
     git_protocol: https
 EOF
-  chmod 600 $FLOX_CONFIG_HOME/gh/hosts.yml
+  chmod 600 $FLOX_CONFIG_DIR/gh/hosts.yml
   export __FT_RAN_FLOXTEST_GITFORGE_SETUP=:
 }
 
@@ -387,14 +387,14 @@ pkgdb_vars_setup() {
 flox_vars_setup() {
   xdg_vars_setup
   export FLOX_CACHE_HOME="$XDG_CACHE_HOME/flox"
-  export FLOX_CONFIG_HOME="$XDG_CONFIG_HOME/flox"
+  export FLOX_CONFIG_DIR="$XDG_CONFIG_HOME/flox"
   export FLOX_DATA_HOME="$XDG_DATA_HOME/flox"
   export FLOX_STATE_HOME="$XDG_STATE_HOME/flox"
   export FLOX_META="$FLOX_CACHE_HOME/meta"
   export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments"
   export USER="flox-test"
   export HOME="${FLOX_TEST_HOME:-$HOME}"
-  export GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_HOME/global-manifest.lock"
+  export GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_DIR/global-manifest.lock"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -463,7 +463,7 @@ common_suite_setup() {
     print_var XDG_DATA_HOME
     print_var XDG_STATE_HOME
     print_var FLOX_CACHE_HOME
-    print_var FLOX_CONFIG_HOME
+    print_var FLOX_CONFIG_DIR
     print_var FLOX_DATA_HOME
     print_var FLOX_STATE_HOME
     print_var FLOX_META
