@@ -14,7 +14,7 @@ flox-list - list packages installed in an environment
 ```
 flox [<general-options>] list
      [-d=<path> | -r=<owner/name>]
-     [-c | -n | -e | -a]
+     [-e | -c | -n | -a]
 ```
 
 # DESCRIPTION
@@ -27,14 +27,14 @@ the output.
 
 ## List Options
 
+`-e`, `--extended`
+:   Show the install ID, pkg-path, and version of each package (default).
+
 `-c`, `--config`
 :   Show the raw contents of the manifest.
 
 `-n`, `--name`
 :   Show only the install ID of each package.
-
-`-e`, `--extended`
-:   Show the install ID, pkg-path, and version of each package (default).
 
 `-a`, `--all`
 :   Show all available package information including priority and license.

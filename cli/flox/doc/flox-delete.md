@@ -21,8 +21,7 @@ flox [<general options>] delete
 
 Deletes all data pertaining to an environment.
 By default only the environment in the current directory is deleted,
-but environments on FloxHub or in other directories may be deleted via the
-`-r` and `-d` flags respectively.
+but environments in other directories may be deleted via the `-d` flag.
 
 By default you will be prompted for a confirmation before deleting the
 environment.

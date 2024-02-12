@@ -12,13 +12,11 @@ flox-uninstall - remove packages from an environment
 # SYNOPSIS
 
 ```
-flox [<general options>] uninstall
+flox [<general options>] (uninstall|rm)
      [-d=<path> | -r=<owner/name>]
      <packages>
 
 ```
-flox [ `<general-options>` ] remove [ `<options>` ] `<package>` [ `<package>` ... ]
-flox [ `<general-options>` ] rm [ `<options>` ] `<package>` [ `<package>` ... ]
 
 # DESCRIPTION
 

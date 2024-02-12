@@ -7,7 +7,7 @@ header: "Flox User Manuals"
 
 # NAME
 
-flox-edit - edit declarative environment configuration
+flox-edit - edit the declarative environment configuration
 
 # SYNOPSIS
 
@@ -23,15 +23,20 @@ Transactionally edit the environment manifest.
 By default invokes an editor with a copy of the local manifest for the user to
 interactively edit.
 The editor is found by querying `$EDITOR`, `$VISUAL`,
-and then by looking in `$PATH` for a list of common editors.
-An environment's manifest that exists on FloxHub or in a different directory
-can be edited via the `-r` a `-d` flags respectively.
+and then by looking for common editors in `$PATH`.
+The manifest of an environment on FloxHub or in a different directory
+can be edited via the `-r` or `-d` flags respectively.
+See [`manifest.toml(1)`](./manifest.toml.md) for more details on the manifest
+format.
 
 Once the editor is closed the environment is built in order to validate the
 edit.
-The edit is discarded if the build fails.
+If the build fails you are given a change to continue editing the manifest,
+and if you decline, the edit is discarded.
 This transactional editing prevents an edit from leaving the environment in a
 broken state.
+One exception is the `-n` flag,
+which renames a local environment but does not rebuild it.
 
 The environment can be edited non-interactively via the `-f` flag,
 which replaces the contents of the manifest with those of the provided file.
@@ -42,9 +47,11 @@ which replaces the contents of the manifest with those of the provided file.
 
 `-f`, `--file`
 :   Replace environment manifest with that in `<file>`.
+    If `<file>` is `-`, reads from stdin.
 
 `-n`, `--name`
 :   Rename the environment to `<name>`.
+    Only works for local environments.
 
 [ (\--file|-f) `<file>` ]
 :   Replace environment declaration with that in `<file>`.

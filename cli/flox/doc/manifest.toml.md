@@ -15,19 +15,20 @@ The `manifest.toml` file is a declarative format for specifying the packages
 installed in an environment,
 environment variables to make available to the environment,
 a shell script to run upon activation of the environment,
-and other options for how the environment should behave.
+and other options to change the behavior of the environment.
 
 # DESCRIPTION
 
-Flox environments come with a declarative manifest in TOML format.
-An environment can be reproduced from this one file.
+Flox environments come with a declarative manifest in
+[TOML format](https://toml.io/en/v1.0.0).
+An environment can be defined entirely by this one file.
 The file is divided into just a few sections that are represented as TOML
 tables:
 
-- `[install]`
-- `[vars]`
-- `[hook]`
-- `[options]`
+- [`[install]`](#install)
+- [`[vars]`](#vars)
+- [`[hook]`](#hook)
+- [`[options]`](#options)
 
 ## `[install]`
 
@@ -41,11 +42,19 @@ ripgrep.pkg-path = "ripgrep"
 pip.pkg-path = "python310Packages.pip"
 ```
 
-Since this is TOML, an equivalent way of writing this would be
+Since this is TOML, equivalent ways of writing this would be
 ```toml
 [install]
 ripgrep = { pkg-path = "ripgrep" }
 pip = { pkg-path = "python310Packages.pip" }
+```
+or
+```
+[install.ripgrep]
+pkg-path = "ripgrep"
+
+[install.pip]
+pkg-path = "python310Packages.pip"
 ```
 Flox will use the first format by default when automatically editing
 the manifest.
@@ -63,7 +72,7 @@ and represents the name by which you will refer to a particular package e.g.
 if you wanted to uninstall or upgrade the package.
 Install IDs are inferred from the last attribute in the pkg-path,
 but may also be specified either at install-time via the `-i` option
-or interactively via `flox edit`.
+or interactively via [`flox-edit(1)`](./flox-edit.md).
 
 The value in the key-value pair is called a "package descriptor".
 A package is specified by a number of available options which are separate
@@ -92,12 +101,10 @@ Descriptor ::= {
 None of these options are required,
 and leaving them unset instructs Flox to simply find the best match for the
 package name and latest version given the install ID.
-In order to leave all options unset,
-simply use an empty package descriptor:
-
-```
-ripgrep = {}
-```
+If you omit all options,
+setting `package = {}`,
+the install ID will be used as the pkg-path.
+This behavior is subject to change and is not recommended.
 
 By specifying some of these options you create a set of requirements that the
 installed program must satisfy,
@@ -116,13 +123,13 @@ Each option is described below:
     `pkg-path` option.
 
 `optional`
-:   Marks this package as only an optional requirement for the environment.
+:   Marks this package as an optional requirement for the environment.
     By default an environment will fail to build if a specified package can't
     be found in the catalog.
     However, some packages are platform specific and will never be found in the
     catalog for some systems.
     Thus, the way you mark a package as platform specific is by setting
-    `opitonal = true` and using the `systems` option to list the systems on
+    `optional = true` or using the `systems` option to list the systems on
     which the package is required.
 
 `pkg-group`
@@ -165,8 +172,8 @@ Each option is described below:
 
 `systems`
 :   A list of systems on which to install this package.
-    When omitted this defaults to the same systems that the environment
-    specifies that it supports.
+    When omitted this defaults to the same systems that the manifest
+    specifies that it supports via `options.systems`.
 
 `pkg-path`
 :   The abbreviated location of a package within a catalog.
@@ -189,29 +196,35 @@ Each option is described below:
     system this would be `legacyPackages.x86_64-linux.ripgrep`.
     Note that "legacyPackages" has nothing to do packages being out of date,
     and instead has to do with internal Flox implementation details.
+    The abs-path can be specified for all systems by using `*` or `null` as
+    the system.
+    
     You should rarely ever need this option and should instead prefer the
     `pkg-path` option.
 
 `priority`
-:   A priority used to resolve file conflicts
-    The `/bin`, `/man`, `/include`, etc directories from all packages in the
+:   A priority used to resolve file conflicts where lower values indicate
+    higher priority.
+
+    Each package internally has `/bin`, `/man`, `/include`,
+    and other directories for the files they provide.
+    These directories from all packages in the
     environment are merged when building the environment.
-    Packages that provide the exact same file e.g. `/bin/foo` cause a file
-    conflict that prevents the environment from building since it's ambiguous
-    which of the packages should eventually provide the `/bin/foo` binary.
-    In order to resolve this conflict Flox provides a `priority` option which
-    users can specify in order to specify which package should provide the
-    file.
+    Two packages that provide the same `/bin/foo` file cause a conflict,
+    and it's ambiguous which file should ultimately be placed into the
+    environment.
+    Such conflicts can be resolved by assigning different priorities
+    to the conflicting packages.
 
     The default priority is 5.
-    Packages with a higher priority take precedence over packages with lower
-    priorities.
+    Packages with a lower `priority` value will take precedence over packages
+    with higher `priority` values.
 
 ## `[vars]`
 
-The `[vars]` section allows you to set environment variables for your
+The `[vars]` section allows you to define environment variables for your
 environment that are set during environment activation.
-The environment variables specified here should not reference one another.
+The environment variables specified here cannot reference one another.
 The names and values of the environment variables are copied verbatim into the
 activation script,
 so capitalization will be preserved.
@@ -219,7 +232,7 @@ so capitalization will be preserved.
 Example:
 ```toml
 [vars]
-DB_URL = ":memory:"
+DB_URL = "http://localhost:2000"
 SERVER_PORT = "3000"
 ```
 
@@ -251,7 +264,7 @@ The `[options]` section of the manifest details settings for the environment
 itself.
 
 The most common option to set is `systems`,
-which specifies which systems that the environment supports.
+which specifies which systems the environment supports.
 A user that attempts to pull an environment from FloxHub when their environment
 isn't explicitly supported will be prompted whether to automatically add their
 system to this list.
