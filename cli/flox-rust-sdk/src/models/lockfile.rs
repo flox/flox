@@ -58,7 +58,7 @@ impl LockedManifest {
         let mut pkgdb_cmd = Command::new(pkgdb);
         pkgdb_cmd
             .args(["manifest", "lock"])
-            .arg("-vvv")
+            .arg("-vv")
             .arg("--ga-registry")
             .arg("--global-manifest")
             .arg(global_manifest_path)
