@@ -124,7 +124,7 @@ function add_incompatible_package() {
   git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
   pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
   git checkout "$ENV_NAME"
-  tomlq --in-place --toml-output ".install.extra.path = $package" 2/env/manifest.toml
+  tomlq --in-place --toml-output ".install.extra.\"pkg-path\" = $package" 2/env/manifest.toml
   git add .
   git \
     -c "user.name=test" \
@@ -147,7 +147,7 @@ function add_insecure_package() {
   git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
   pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
   git checkout "$ENV_NAME"
-  tomlq --in-place --toml-output '.install.extra.path = ["python2"]' 2/env/manifest.toml
+  tomlq --in-place --toml-output '.install.extra.\"pkg-path\" = ["python2"]' 2/env/manifest.toml
   git add .
   git \
     -c "user.name=test" \
