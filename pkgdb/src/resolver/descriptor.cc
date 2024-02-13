@@ -47,7 +47,7 @@ ManifestDescriptorRaw::clear()
 {
   this->name              = std::nullopt;
   this->version           = std::nullopt;
-  this->path              = std::nullopt;
+  this->pkgPath           = std::nullopt;
   this->absPath           = std::nullopt;
   this->systems           = std::nullopt;
   this->optional          = std::nullopt;
@@ -81,7 +81,7 @@ ManifestDescriptorRaw::check( std::string iid ) const
             + ".abspath' must have a subtree as its first element" );
         }
 
-      if ( this->path.has_value() )
+      if ( this->pkgPath.has_value() )
         {
           for ( auto part = glob.begin() + 2; part != glob.end(); part++ )
             {
@@ -229,7 +229,7 @@ initManifestDescriptorAbsPath( ManifestDescriptor &          desc,
     }
   desc.subtree = Subtree( *first );
 
-  desc.path = AttrPath {};
+  desc.pkgPath = AttrPath {};
   for ( auto itr = glob.begin() + 2; itr != glob.end(); ++itr )
     {
       const auto & elem = *itr;
@@ -238,7 +238,7 @@ initManifestDescriptorAbsPath( ManifestDescriptor &          desc,
           throw InvalidManifestDescriptorException(
             "'abspath' may only have a glob as its second element" );
         }
-      desc.path = AttrPath {};
+      desc.pkgPath = AttrPath {};
       for ( auto itr = glob.begin() + 3; itr != glob.end(); ++itr )
         {
           const auto & elem = *itr;
@@ -247,11 +247,11 @@ initManifestDescriptorAbsPath( ManifestDescriptor &          desc,
               throw InvalidManifestDescriptorException(
                 "'abspath' may only have a glob as its second element" );
             }
-          desc.path->emplace_back( *elem );
+          desc.pkgPath->emplace_back( *elem );
         }
     }
 
-  desc.path = AttrPath {};
+  desc.pkgPath = AttrPath {};
   for ( auto itr = glob.begin() + 2; itr != glob.end(); ++itr )
     {
       const auto & elem = *itr;
@@ -260,7 +260,7 @@ initManifestDescriptorAbsPath( ManifestDescriptor &          desc,
           throw InvalidManifestDescriptorException(
             "'abspath' may only have a glob as its second element" );
         }
-      desc.path->emplace_back( *elem );
+      desc.pkgPath->emplace_back( *elem );
     }
 
   const auto & second = glob.at( 1 );
@@ -320,16 +320,16 @@ from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
                 flox::extract_json_errmsg( e ) );
             }
         }
-      else if ( key == "path" )
+      else if ( key == "pkg-path" )
         {
           try
             {
-              value.get_to( descriptor.path );
+              value.get_to( descriptor.pkgPath );
             }
           catch ( nlohmann::json::exception & e )
             {
               throw ParseManifestDescriptorRawException(
-                "couldn't interpret field 'path'",
+                "couldn't interpret field 'pkg-path'",
                 flox::extract_json_errmsg( e ) );
             }
         }
@@ -428,7 +428,10 @@ to_json( nlohmann::json & jto, const ManifestDescriptorRaw & descriptor )
     {
       jto["version"] = *descriptor.version;
     }
-  if ( descriptor.path.has_value() ) { jto["path"] = *descriptor.path; }
+  if ( descriptor.pkgPath.has_value() )
+    {
+      jto["pkg-path"] = *descriptor.pkgPath;
+    }
   if ( descriptor.absPath.has_value() )
     {
       jto["abspath"] = *descriptor.absPath;
@@ -510,8 +513,8 @@ ManifestDescriptorRaw::ManifestDescriptorRaw(
         break;
       case 2:
         // We were definitely given a relative path
-        this->path = validatedRelativePath( attrsWithHandledGlobs,
-                                            attrsMaybeContainingGlobs );
+        this->pkgPath = validatedRelativePath( attrsWithHandledGlobs,
+                                               attrsMaybeContainingGlobs );
         break;
       default:
         // Could be a relative or absolute path depending on the prefix
@@ -521,8 +524,8 @@ ManifestDescriptorRaw::ManifestDescriptorRaw(
           }
         else
           {
-            this->path = validatedRelativePath( attrsWithHandledGlobs,
-                                                attrsMaybeContainingGlobs );
+            this->pkgPath = validatedRelativePath( attrsWithHandledGlobs,
+                                                   attrsMaybeContainingGlobs );
           }
         break;
     }
@@ -643,25 +646,25 @@ ManifestDescriptor::ManifestDescriptor( const ManifestDescriptorRaw & raw )
       this->systems = *raw.systems;
     }
 
-  if ( raw.path.has_value() )
+  if ( raw.pkgPath.has_value() )
     {
       /* Split relative path */
-      flox::AttrPath path;
-      if ( std::holds_alternative<std::string>( *raw.path ) )
+      flox::AttrPath pkgPath;
+      if ( std::holds_alternative<std::string>( *raw.pkgPath ) )
         {
-          path = splitAttrPath( std::get<std::string>( *raw.path ) );
+          pkgPath = splitAttrPath( std::get<std::string>( *raw.pkgPath ) );
         }
-      else { path = std::get<AttrPath>( *raw.path ); }
+      else { pkgPath = std::get<AttrPath>( *raw.pkgPath ); }
 
-      if ( this->path.has_value() )
+      if ( this->pkgPath.has_value() )
         {
-          if ( this->path != path )
+          if ( this->pkgPath != pkgPath )
             {
               throw InvalidManifestDescriptorException(
-                "'path' conflicts with with 'abspath'" );
+                "'pkg-path' conflicts with with 'abspath'" );
             }
         }
-      else { this->path = path; }
+      else { this->pkgPath = pkgPath; }
     }
 
   if ( raw.packageRepository.has_value() )
@@ -694,7 +697,7 @@ ManifestDescriptor::clear()
   this->semver   = std::nullopt;
   this->subtree  = std::nullopt;
   this->systems  = std::nullopt;
-  this->path     = std::nullopt;
+  this->pkgPath  = std::nullopt;
   this->input    = std::nullopt;
   this->priority = 5;
 }
@@ -729,7 +732,7 @@ ManifestDescriptor::fillPkgQueryArgs( pkgdb::PkgQueryArgs & pqa ) const
 
   if ( this->systems.has_value() ) { pqa.systems = *this->systems; }
 
-  pqa.relPath = this->path;
+  pqa.relPath = this->pkgPath;
 
   return pqa;
 }
@@ -744,7 +747,7 @@ to_json( nlohmann::json & jto, const ManifestDescriptor & descriptor )
     { "name", descriptor.name },       { "optional", descriptor.optional },
     { "group", descriptor.group },     { "version", descriptor.version },
     { "semver", descriptor.semver },   { "subtree", descriptor.subtree },
-    { "systems", descriptor.systems }, { "path", descriptor.path },
+    { "systems", descriptor.systems }, { "pkg-path", descriptor.pkgPath },
     { "input", descriptor.input },     { "priority", descriptor.priority }
   };
 }

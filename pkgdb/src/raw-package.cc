@@ -29,7 +29,7 @@ from_json( const nlohmann::json & jfrom, RawPackage & pkg )
   assertIsJSONObject<flox::pkgdb::PkgDbException>( jfrom, "package" );
   for ( const auto & [key, value] : jfrom.items() )
     {
-      if ( key == "path" )
+      if ( key == "pkg-path" )
         {
           try
             {
@@ -38,7 +38,7 @@ from_json( const nlohmann::json & jfrom, RawPackage & pkg )
           catch ( nlohmann::json::exception & e )
             {
               throw flox::pkgdb::PkgDbException(
-                "couldn't interpret field 'path'",
+                "couldn't interpret field 'pkg-path'",
                 flox::extract_json_errmsg( e ) );
             }
         }
@@ -186,7 +186,7 @@ from_json( const nlohmann::json & jfrom, RawPackage & pkg )
 void
 to_json( nlohmann::json & jto, const flox::RawPackage & pkg )
 {
-  jto = { { "path", pkg.path },
+  jto = { { "pkg-path", pkg.path },
           {
             "name",
             pkg.name,

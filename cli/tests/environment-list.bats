@@ -110,8 +110,8 @@ EOF
     [options]
     systems = [ "$NIX_SYSTEM" ]
     [install]
-    hello.path = "hello"
-    htop = { path = "htop", systems = [] }
+    hello.pkg-path = "hello"
+    htop = { pkg-path = "htop", systems = [] }
 EOF
 
   )"

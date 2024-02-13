@@ -226,8 +226,8 @@ test_parseManifestDescriptor_path0()
   EXPECT( descriptor.subtree.has_value() );
   EXPECT_EQ( *descriptor.subtree, flox::ST_LEGACY );
   EXPECT( ! descriptor.systems.has_value() );
-  EXPECT( descriptor.path.has_value() );
-  EXPECT( ( *descriptor.path ) == ( flox::AttrPath { "hello" } ) );
+  EXPECT( descriptor.pkgPath.has_value() );
+  EXPECT( ( *descriptor.pkgPath ) == ( flox::AttrPath { "hello" } ) );
 
   return true;
 }
@@ -249,8 +249,8 @@ test_parseManifestDescriptor_path1()
   EXPECT( descriptor.subtree.has_value() );
   EXPECT_EQ( *descriptor.subtree, flox::ST_LEGACY );
   EXPECT( ! descriptor.systems.has_value() );
-  EXPECT( descriptor.path.has_value() );
-  EXPECT( ( *descriptor.path ) == ( flox::AttrPath { "hello" } ) );
+  EXPECT( descriptor.pkgPath.has_value() );
+  EXPECT( ( *descriptor.pkgPath ) == ( flox::AttrPath { "hello" } ) );
 
   return true;
 }
@@ -272,8 +272,8 @@ test_parseManifestDescriptor_path2()
   EXPECT( descriptor.subtree.has_value() );
   EXPECT_EQ( *descriptor.subtree, flox::ST_LEGACY );
   EXPECT( ! descriptor.systems.has_value() );
-  EXPECT( descriptor.path.has_value() );
-  EXPECT( ( *descriptor.path ) == ( flox::AttrPath { "hello" } ) );
+  EXPECT( descriptor.pkgPath.has_value() );
+  EXPECT( ( *descriptor.pkgPath ) == ( flox::AttrPath { "hello" } ) );
 
   return true;
 }
@@ -295,8 +295,8 @@ test_parseManifestDescriptor_path3()
   EXPECT( descriptor.subtree.has_value() );
   EXPECT_EQ( *descriptor.subtree, flox::ST_LEGACY );
   EXPECT( ! descriptor.systems.has_value() );
-  EXPECT( descriptor.path.has_value() );
-  EXPECT( ( *descriptor.path ) == ( flox::AttrPath { "hello" } ) );
+  EXPECT( descriptor.pkgPath.has_value() );
+  EXPECT( ( *descriptor.pkgPath ) == ( flox::AttrPath { "hello" } ) );
 
   return true;
 }
@@ -320,8 +320,8 @@ test_parseManifestDescriptor_path4()
   EXPECT( descriptor.systems.has_value() );
   EXPECT( ( *descriptor.systems )
           == ( std::vector<std::string> { "x86_64-linux" } ) );
-  EXPECT( descriptor.path.has_value() );
-  EXPECT( ( *descriptor.path ) == ( flox::AttrPath { "hello" } ) );
+  EXPECT( descriptor.pkgPath.has_value() );
+  EXPECT( ( *descriptor.pkgPath ) == ( flox::AttrPath { "hello" } ) );
 
   return true;
 }

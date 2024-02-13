@@ -1128,7 +1128,7 @@ impl Install {
             .collect::<Result<Vec<_>, _>>()?;
         packages.extend(self.id.iter().map(|p| PackageToInstall {
             id: p.id.clone(),
-            path: p.path.clone(),
+            pkg_path: p.path.clone(),
             version: None,
             input: None,
         }));
@@ -1184,7 +1184,7 @@ impl Install {
                     flox_rust_sdk::models::pkgdb::CallPkgDbError::PkgDbError(pkgdberr),
                 ),
             )) if pkgdberr.exit_code == error_codes::RESOLUTION_FAILURE => 'error: {
-                let paths = packages.iter().map(|p| p.path.clone()).join(", ");
+                let paths = packages.iter().map(|p| p.pkg_path.clone()).join(", ");
 
                 if packages.len() > 1 {
                     break 'error anyhow!(formatdoc! {"
@@ -1192,7 +1192,7 @@ impl Install {
                         One or more of the packages you are trying to install does not exist.
                     "});
                 }
-                let path = packages[0].path.clone();
+                let path = packages[0].pkg_path.clone();
 
                 let head = format!("Could not find package {path}.");
 
