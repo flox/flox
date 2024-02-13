@@ -225,7 +225,7 @@ setup_file() {
   assert_output "$NODEJS_VERSION"
 
   # `$OTHER_REV'
-  run --separate-stderr sh -c "$PKGDB_BIN search --ga-registry '{
+  run --separate-stderr sh -c "$PKGDB_BIN search -vvvv --ga-registry '{
       \"manifest\": \"$PROJ1/manifest.toml\",
       \"lockfile\": \"$PROJ1/manifest_old.lock\",
       \"query\": { \"match-name\": \"nodejs\" }
