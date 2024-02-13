@@ -2098,8 +2098,8 @@ pub struct Upgrade {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// ID of a package or group name to upgrade
-    #[bpaf(positional("package or group"))]
+    /// ID of a package or pkg-group name to upgrade
+    #[bpaf(positional("package or pkg-group"))]
     groups_or_iids: Vec<String>,
 }
 impl Upgrade {
