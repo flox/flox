@@ -131,7 +131,7 @@ pub struct FloxCli(#[bpaf(external(flox_args))] pub FloxArgs);
 /// and allows to be composed with other parsers.
 ///
 /// To parse the flox CLI, use [`FloxCli`] instead using [`flox_cli()`].
-#[derive(Bpaf)]
+#[derive(Debug, Bpaf)]
 #[bpaf(ignore_rustdoc)] // we don't want this struct to be interpreted as a group
 pub struct FloxArgs {
     /// Verbose mode
@@ -151,6 +151,12 @@ pub struct FloxArgs {
 
     #[bpaf(external(commands), optional)]
     command: Option<Commands>,
+}
+
+impl fmt::Debug for Commands {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Command")
+    }
 }
 
 impl FloxArgs {

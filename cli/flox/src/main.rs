@@ -10,6 +10,7 @@ use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentE
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::{init_global_manifest, EnvironmentError2};
 use log::{debug, warn};
+use tracing;
 use utils::init::init_logger;
 use utils::message;
 
@@ -20,6 +21,7 @@ mod commands;
 mod config;
 mod utils;
 
+#[tracing::instrument]
 async fn run(args: FloxArgs) -> Result<()> {
     init_logger(Some(args.verbosity.clone()));
     set_user()?;
@@ -35,19 +37,40 @@ fn main() -> ExitCode{
     let sentry_dns = std::env::var("SENTRY_DSN");
     let _sentry;
 
-    print!("SENTRY_DSN: {:?}\n", sentry_dns);
     if sentry_dns.is_ok() {
-        println!("Sentry is enabled");
         _sentry = sentry::init((sentry_dns.unwrap(), sentry::ClientOptions {
-            // TODO
+
+            // https://docs.sentry.io/platforms/rust/configuration/releases/
+            // TODO: should we maybe just use commit hash
             release: sentry::release_name!(),
 
+            // https://docs.sentry.io/platforms/rust/configuration/environments/
+            // TODO: need to set this to respective channel: nightly, ...
+            // eg. environment: std::env::var("SENTRY_ENV").unwrap_or_default("development").into(),
+            environment: Some("development".into()),
+
+            // certain personally identifiable information (PII) are added
+            send_default_pii: true,
+
             // Enable debug mode when needed
-            //debug: true,
+            debug: true,
+
+            // To set a uniform sample rate
+            // https://docs.sentry.io/platforms/rust/performance/
+            traces_sample_rate: 1.0,
 
             ..Default::default()
         }));
     }
+
+    // TODO: configure user
+    //sentry::configure_scope(|scope| {
+    //    scope.set_user(Some(sentry::User {
+    //        email: Some("jane.doe@example.com".to_owned()),
+    //        ..Default::default()
+    //    }));
+    //});
+
 
     let exit_code = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

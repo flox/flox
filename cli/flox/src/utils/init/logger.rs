@@ -2,6 +2,7 @@ use std::io::Write;
 
 use log::{debug, error};
 use once_cell::sync::OnceCell;
+use sentry::integrations::tracing::layer as sentry_layer;
 use tracing_subscriber::prelude::*;
 
 use crate::commands::Verbosity;
@@ -89,6 +90,7 @@ pub fn init_logger(verbosity: Option<Verbosity>) {
         tracing_subscriber::registry()
             .with(MetricsLayer::new())
             .with(fmt_filtered)
+            .with(sentry_layer())
             .init();
 
         (filter_reload_handle, fmt_reload_handle)
