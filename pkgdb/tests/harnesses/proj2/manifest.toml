@@ -39,7 +39,7 @@ rev = "ab5fd150146dcfe41fda501134e6503932cc8dfd"
 
 # ---------------------------------------------------------------------------- #
 #
-# Without `package-group' declarations the default resolution strategy tries to
+# Without `pkg-group' declarations the default resolution strategy tries to
 # put all packages who do not declare a group into a _default group_.
 # This would cause the following requests to fail, since you cannot resolve all
 # three of these descriptors in any single revision.
@@ -54,7 +54,7 @@ rev = "ab5fd150146dcfe41fda501134e6503932cc8dfd"
 # Normally resolves in _stable_ revision
 nodejsOld.name          = "nodejs"
 nodejsOld.version       = "^18 <18.16"
-nodejsOld.package-group = "old"
+nodejsOld.pkg-group = "old"
 
 # Normally resolves in _staging_ revision
 nodejs.name    = "nodejs"
@@ -63,7 +63,7 @@ nodejs.version = ">=18.15.0 <19.0.0"
 # Normally resolves in _unstable_ revision
 nodejsNew.name          = "nodejs"
 nodejsNew.version       = "^18.17"
-nodejsNew.package-group = "new"
+nodejsNew.pkg-group = "new"
 
 
 # ---------------------------------------------------------------------------- #

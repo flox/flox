@@ -570,7 +570,7 @@ Environment::tryResolveGroupIn( const InstallDescriptors & group,
 
 /**
  * @brief Extract the name of a group from a set of descriptors, or "default"
- *        if no descriptors declare a `packageGroup`.
+ *        if no descriptors declare a `pkgGroup`.
  */
 [[nodiscard]] static inline const std::string &
 getGroupName( const InstallDescriptors & group )

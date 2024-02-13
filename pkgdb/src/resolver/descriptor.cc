@@ -51,7 +51,7 @@ ManifestDescriptorRaw::clear()
   this->absPath           = std::nullopt;
   this->systems           = std::nullopt;
   this->optional          = std::nullopt;
-  this->packageGroup      = std::nullopt;
+  this->pkgGroup          = std::nullopt;
   this->packageRepository = std::nullopt;
   this->priority          = std::nullopt;
 }
@@ -372,16 +372,16 @@ from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
                 flox::extract_json_errmsg( e ) );
             }
         }
-      else if ( key == "package-group" )
+      else if ( key == "pkg-group" )
         {
           try
             {
-              value.get_to( descriptor.packageGroup );
+              value.get_to( descriptor.pkgGroup );
             }
           catch ( nlohmann::json::exception & e )
             {
               throw ParseManifestDescriptorRawException(
-                "couldn't interpret field 'package-group'",
+                "couldn't interpret field 'pkg-group'",
                 flox::extract_json_errmsg( e ) );
             }
         }
@@ -441,9 +441,9 @@ to_json( nlohmann::json & jto, const ManifestDescriptorRaw & descriptor )
     {
       jto["optional"] = *descriptor.optional;
     }
-  if ( descriptor.packageGroup.has_value() )
+  if ( descriptor.pkgGroup.has_value() )
     {
-      jto["package-group"] = *descriptor.packageGroup;
+      jto["pkg-group"] = *descriptor.pkgGroup;
     }
   if ( descriptor.packageRepository.has_value() )
     {
@@ -620,7 +620,7 @@ isAbsolutePath( const AttrPathGlob & attrs )
 ManifestDescriptor::ManifestDescriptor( const ManifestDescriptorRaw & raw )
   : name( raw.name )
   , optional( raw.optional.value_or( false ) )
-  , group( raw.packageGroup )
+  , group( raw.pkgGroup )
 {
   /* Determine if `version' was a range or not.
    * NOTE: The string "4.2.0" is not a range, but "4.2" is!
