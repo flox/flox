@@ -329,52 +329,6 @@ FloxFlakeInput::getLockedInput()
 
   ensureFlakeIsDownloaded( getFlake );
   return { this->getSubtrees(), this->getFlake()->lockedFlake.flake.lockedRef };
-  // pid_t pid = fork();
-  // if ( pid == -1 )
-  //   {
-  //     // WML - TODO - better error handling here!
-  //     errorLog(
-  //       nix::fmt( "getLockedInput: faild to fork for flake downlod!" ) );
-  //     exit( -1 );
-  //   }
-  // if ( 0 < pid )
-  //   {
-  //     debugLog( nix::fmt( "getLockedInput: waiting for child:%d", pid ) );
-  //     int status = 0;
-  //     waitpid( pid, &status, 0 );
-  //     debugLog(
-  //       nix::fmt( "getLockedInput: child is finished, exitcode:%d", status )
-  //       );
-
-  //     if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
-  //       {
-  //         // The flake should be downloaded and cached locally now
-  //         return { this->getSubtrees(),
-  //                  this->getFlake()->lockedFlake.flake.lockedRef };
-  //       }
-  //     else
-  //       {
-  //         // what to do here?  The error has already been reported via the
-  //         // child!
-  //         exit( WEXITSTATUS( status ) );
-  //       }
-  //   }
-  // else
-  //   {
-  //     // just getFlake to ensure it's downloaded.
-  //     auto unusedFlake = this->getFlake();
-  //     try
-  //       {
-  //         exit( EXIT_SUCCESS );
-  //       }
-  //     catch ( const std::exception & err )
-  //       {
-  //         debugLog(
-  //           nix::fmt( "scrapePrefix(child): caught exception on exit: %s",
-  //                     err.what() ) );
-  //         exit( EXIT_SUCCESS );
-  //       }
-  //   }
 }
 
 

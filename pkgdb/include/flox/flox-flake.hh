@@ -132,59 +132,21 @@ FLOX_DEFINE_EXCEPTION( LockFlakeException,
                        "error locking flake" )
 /** @} */
 
-void
-ensureFlakeIsDownloaded( auto && lambda )
-{
-  pid_t pid = fork();
-  if ( pid == -1 )
-    {
-      // WML - TODO - better error handling here!
-      errorLog( nix::fmt(
-        "ensureFlakeIsDownloaded: faild to fork for flake downlod!" ) );
-      exit( -1 );
-    }
-  if ( 0 < pid )
-    {
-      debugLog(
-        nix::fmt( "ensureFlakeIsDownloaded: waiting for child:%d", pid ) );
-      int status = 0;
-      waitpid( pid, &status, 0 );
-      debugLog(
-        nix::fmt( "ensureFlakeIsDownloaded: child is finished, exitcode:%d",
-                  status ) );
-
-      if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
-        {
-          // The flake should be downloaded and cached locally now
-          return;
-        }
-      else
-        {
-          // what to do here?  The error has already been reported via the
-          // child!
-          exit( WEXITSTATUS( status ) );
-        }
-    }
-  else
-    {
-      lambda();
-      try
-        {
-          debugLog(
-            nix::fmt( "ensureFlakeIsDownloaded(child): finished, exiting" ) );
-          exit( EXIT_SUCCESS );
-        }
-      catch ( const std::exception & err )
-        {
-          debugLog( nix::fmt(
-            "ensureFlakeIsDownloaded(child): caught exception on exit: %s",
-            err.what() ) );
-          exit( EXIT_SUCCESS );
-        }
-    }
-}
-
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Helper function to execute @param lambda in a child process in anticipation
+ * of it triggering a download via nix.  If this occurs, the nix static global
+ * curlFileTransfer object will trigger a worker thread.  Later forks (for
+ * scraping) will then try to cleanup those threads but will fail.  This keeps
+ * the thread creation and cleanup in the same child process.  After calling
+ * this, the lambda should be called from the parent to actually get the parent
+ * in the desired state, but the download will already be cached.  There is room
+ * for optimization here for sure.
+ */
+void
+ensureFlakeIsDownloaded( std::function<void()> && lambda );
+
 
 }  // namespace flox
 
