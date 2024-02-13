@@ -358,7 +358,17 @@ FloxFlakeInput::getLockedInput()
     {
       // just getFlake to ensure it's downloaded.
       auto unusedFlake = this->getFlake();
-      exit( EXIT_SUCCESS );
+      try
+        {
+          exit( EXIT_SUCCESS );
+        }
+      catch ( const std::exception & err )
+        {
+          debugLog(
+            nix::fmt( "scrapePrefix(child): caught exception on exit: %s",
+                      err.what() ) );
+          exit( EXIT_SUCCESS );
+        }
     }
 }
 
