@@ -255,7 +255,17 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
             "scrapePrefix(child): scraping page %d complete, lastPage:%d",
             pageIdx,
             targetComplete ) );
-          exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+          try
+            {
+              exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+            }
+          catch ( const std::exception & err )
+            {
+              debugLog(
+                nix::fmt( "scrapePrefix(child): caught exception on exit: %s",
+                          err.what() ) );
+              exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+            }
         }
     }
   while ( ! scrapingComplete );
