@@ -956,7 +956,7 @@ impl List {
 
         if packages.is_empty() {
             let message = formatdoc! {"
-                No packages are installed for tour current system ('{system}').
+                No packages are installed for your current system ('{system}').
 
                 You can see the whole manifest with 'flox list --config'.
             "};
