@@ -932,7 +932,7 @@ pub struct List {
     list_mode: ListMode,
 }
 
-#[derive(Bpaf, Clone)]
+#[derive(Bpaf, Clone, PartialEq, Debug)]
 pub enum ListMode {
     /// Show the raw contents of the manifest
     #[bpaf(long, short)]
@@ -960,24 +960,38 @@ impl List {
             .into_dyn_environment();
 
         let manifest_contents = env.manifest_content(&flox)?;
+        if self.list_mode == ListMode::Config {
+            println!("{}", manifest_contents);
+            return Ok(());
+        }
+
+        let system = &flox.system;
+        let lockfile = Self::get_lockfile(&flox, &mut *env)?;
+        let packages = lockfile.list_packages(system);
+
+        if packages.is_empty() {
+            let message = formatdoc! {"
+                No packages are installed for your current system ('{system}').
+
+                You can see the whole manifest with 'flox list --config'.
+            "};
+            message::warning(message);
+            return Ok(());
+        }
+
         match self.list_mode {
-            ListMode::Config => println!("{}", manifest_contents),
-            ListMode::NameOnly => self.print_name_only(&flox, &mut *env)?,
-            ListMode::Extended => self.print_extended(&flox, &mut *env)?,
-            ListMode::All => self.print_detail(&flox, &mut *env)?,
+            ListMode::NameOnly => Self::print_name_only(&packages),
+            ListMode::Extended => Self::print_extended(&packages),
+            ListMode::All => Self::print_detail(&packages),
+            ListMode::Config => unreachable!(),
         }
 
         Ok(())
     }
 
     /// print package ids only
-    fn print_name_only(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
-        let lockfile = Self::get_lockfile(flox, env)?;
-        lockfile
-            .list_packages(&flox.system)
-            .into_iter()
-            .for_each(|p| println!("{}", p.name));
-        Ok(())
+    fn print_name_only(packages: &[InstalledPackage]) {
+        packages.iter().for_each(|p| println!("{}", p.name));
     }
 
     /// print package ids, as well as path and version
@@ -985,26 +999,19 @@ impl List {
     /// e.g. `pip: python3Packages.pip (20.3.4)`
     ///
     /// This is the default mode
-    fn print_extended(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
-        let lockfile = Self::get_lockfile(flox, env)?;
-        lockfile
-            .list_packages(&flox.system)
-            .into_iter()
-            .for_each(|p| {
-                println!(
-                    "{id}: {path} ({version})",
-                    id = p.name,
-                    path = p.rel_path,
-                    version = p.info.version
-                )
-            });
-        Ok(())
+    fn print_extended(packages: &[InstalledPackage]) {
+        packages.iter().for_each(|p| {
+            println!(
+                "{id}: {path} ({version})",
+                id = p.name,
+                path = p.rel_path,
+                version = p.info.version
+            )
+        });
     }
 
     /// print package ids, as well as extended detailed information
-    fn print_detail(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
-        let lockfile = Self::get_lockfile(flox, env)?;
-
+    fn print_detail(packages: &[InstalledPackage]) {
         for InstalledPackage {
             name,
             rel_path,
@@ -1018,10 +1025,7 @@ impl List {
                     description,
                 },
             priority,
-        } in lockfile
-            .list_packages(&flox.system)
-            .into_iter()
-            .sorted_by_key(|p| p.priority)
+        } in packages.iter().sorted_by_key(|p| p.priority)
         {
             let message = formatdoc! {"
                 {name}: ({pname})
@@ -1033,14 +1037,12 @@ impl List {
                   Unfree:   {unfree}
                   Broken:   {broken}
                 ",
-                description = description.unwrap_or_else(|| "N/A".to_string()),
-                license = license.unwrap_or_else(|| "N/A".to_string()),
+                description = description.as_deref().unwrap_or("N/A"),
+                license = license.as_deref().unwrap_or("N/A"),
             };
 
             println!("{message}");
         }
-
-        Ok(())
     }
 
     /// Read existing lockfile or resolve to create a new [LockedManifest].
