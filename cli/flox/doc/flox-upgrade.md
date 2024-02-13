@@ -14,7 +14,7 @@ flox-upgrade - upgrade packages in an environment
 ```
 flox [<general-options>] upgrade
      [-d=<path> | -r=<owner>/<name>]
-     [<package or group>]...
+     [<package or pkg-group>]...
 ```
 
 # DESCRIPTION
@@ -27,25 +27,25 @@ An upgrade should usually be run after updating an environment's base catalog wi
 
 When no arguments are specified, all packages in the environment are upgraded.
 
-Packages to upgrade can be specified by either group name,
-or, if a package is not in a group with any other packages, it may be specified
-by ID.
-If the specified argument is both a group name and a package ID, the group is
-upgraded.
+Packages to upgrade can be specified by either pkg-group name,
+or, if a package is not in a pkg-group with any other packages,
+it may be specified by ID.
+If the specified argument is both a pkg-group name and a package ID,
+the pkg-group is upgraded.
 
-Packages without a specified group in the manifest are placed in a group named
-'toplevel'.
-The packages in that group can be upgraded without updating any other groups by
-passing 'toplevel' as the group name.
+Packages without a specified pkg-group in the manifest are placed in a
+pkg-group named 'toplevel'.
+The packages in that pkg-group can be upgraded without updating any other
+pkg-groups by passing 'toplevel' as the pkg-group name.
 
-See [`manifest.toml(1)`](./manifest.toml.md) for more on using package groups.
+See [`manifest.toml(1)`](./manifest.toml.md) for more on using pkg-groups.
 
 # OPTIONS
 
 ## Upgrade Options
 
-`<package or group>`
-:   Package ID or group name of package to upgrade.
+`<package or pkg-group>`
+:   Install ID or pkg-group to upgrade.
 
 ```{.include}
 ./include/environment-options.md
