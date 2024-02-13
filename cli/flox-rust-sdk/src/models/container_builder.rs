@@ -59,6 +59,17 @@ mod tests {
 
     use super::*;
 
+    /// OS error 26 is "Text file busy",
+    /// which can happen when executing a script
+    /// that is has been written to immediately before.
+    /// We typically see this in tests, where we write
+    /// a new script and immediately execute it.
+    /// In production use, this should not happen as the script
+    /// will be written by a different process (`pkgdb`).
+    ///
+    /// <https://github.com/rust-lang/rust/issues/114554>
+    const ERR_TEXT_FILE_BUSY: i32 = 26;
+
     const TEST_BUILDER: &str = indoc! {r#"
         #!/usr/bin/env bash
         echo "hello world"
@@ -78,7 +89,23 @@ mod tests {
         let container_builder = ContainerBuilder::new(test_script);
 
         let mut buf = Vec::new();
-        container_builder.stream_container(&mut buf).unwrap();
+
+        let mut tries = 0;
+        loop {
+            if tries >= 3 {
+                panic!("Calling the container builder script failed too many times: with 'Text file busy'")
+            }
+            match container_builder.stream_container(&mut buf) {
+                Err(ContainerBuilderError::CallContainerBuilder(e))
+                    if e.raw_os_error() == Some(ERR_TEXT_FILE_BUSY) =>
+                {
+                    dbg!("Text file busy -- ignored");
+                    tries += 1;
+                    continue;
+                },
+                result => break result.unwrap(),
+            }
+        }
         assert_eq!(buf, b"hello world\n");
     }
 
@@ -88,11 +115,27 @@ mod tests {
         let output_path = tempdir.path().join("output");
 
         let container_builder = ContainerBuilder::new(test_script);
+        let mut file = File::create(&output_path).unwrap();
 
-        {
-            let mut file = File::create(&output_path).unwrap();
-            container_builder.stream_container(&mut file).unwrap();
+        // looping to ignore "Text file busy" errors
+        // see the comment on `ERR_TEXT_FILE_BUSY` for more information
+        let mut tries = 0;
+        loop {
+            if tries >= 3 {
+                panic!("Calling the container builder script failed too many times: with 'Text file busy'")
+            }
+            match container_builder.stream_container(&mut file) {
+                Err(ContainerBuilderError::CallContainerBuilder(e))
+                    if e.raw_os_error() == Some(ERR_TEXT_FILE_BUSY) =>
+                {
+                    dbg!("Text file busy -- ignored");
+                    tries += 1;
+                    continue;
+                },
+                result => break result.unwrap(),
+            }
         }
+        drop(file);
 
         let output = fs::read_to_string(&output_path).unwrap();
         assert_eq!(output, "hello world\n");
