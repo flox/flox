@@ -297,7 +297,7 @@ enum LocalDevelopmentCommands {
     /// Create an environment in the current directory
     #[bpaf(command, long("create"))]
     Init(#[bpaf(external(environment::init))] environment::Init),
-    /// Enter the environment, type `exit` to leave
+    /// Enter the environment, type 'exit' to leave
     #[bpaf(command, long("develop"))]
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
     /// Search for system or library packages to install
@@ -306,7 +306,7 @@ enum LocalDevelopmentCommands {
     /// Show details about a single package
     #[bpaf(command, long("show"))]
     Show(#[bpaf(external(search::show))] search::Show),
-    /// Install a package into an environment
+    /// Install packages into an environment
     #[bpaf(command, short('i'))]
     Install(#[bpaf(external(environment::install))] environment::Install),
     /// Uninstall installed packages from an environment
@@ -343,11 +343,11 @@ impl LocalDevelopmentCommands {
 /// Sharing Commands
 #[derive(Bpaf, Clone)]
 enum SharingCommands {
-    /// Send environment to floxhub
+    /// Send an environment to FloxHub
     #[bpaf(command)]
     Push(#[bpaf(external(environment::push))] environment::Push),
     #[bpaf(command)]
-    /// Pull environment from FloxHub
+    /// Pull an environment from FloxHub
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
     /// Containerize an environment
     #[bpaf(command, hide)]
@@ -370,7 +370,7 @@ enum AdditionalCommands {
     Documentation(
         #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
     ),
-    /// Update the global base catalog or an environment's base catalog
+    /// Update environment's base catalog or the global base catalog
     #[bpaf(command, hide)]
     Update(#[bpaf(external(environment::update))] environment::Update),
     #[bpaf(command, hide, header(indoc! {"

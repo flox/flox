@@ -41,7 +41,7 @@ pub struct ChannelArgs {}
 // Search for packages to install
 #[derive(Bpaf, Clone)]
 pub struct Search {
-    /// print search as JSON
+    /// Display search results as a JSON array
     #[bpaf(long)]
     pub json: bool,
 
@@ -49,7 +49,7 @@ pub struct Search {
     #[bpaf(short, long)]
     pub all: bool,
 
-    /// The package to search for in the format '<pkg>[@<semver-range>]' using 'node-semver' syntax.
+    /// The package to search for in the format '<pkg-path>[@<semver-range>]' using 'node-semver' syntax.
     ///
     /// ex.) python310Packages.pip
     ///
@@ -172,7 +172,7 @@ pub struct Show {
     pub all: bool,
 
     /// The package to show detailed information about. Must be an exact match
-    /// for a package name e.g. something copy-pasted from the output of `flox search`.
+    /// for a pkg-path e.g. something copy-pasted from the output of `flox search`.
     #[bpaf(positional("search-term"))]
     pub search_term: String,
 }

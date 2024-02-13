@@ -345,10 +345,10 @@ impl Delete {
     }
 }
 
-/// When called with no arguments `flox activate` will look for a `.flox` directory
-/// in the current directory. Calling `flox activate` in your home directory will
+/// When called with no arguments 'flox activate' will look for a '.flox' directory
+/// in the current directory. Calling 'flox activate' in your home directory will
 /// activate a default environment. Environments in other directories and remote
-/// environments are activated with the `-d` and `-r` flags respectively.
+/// environments are activated with the '-d' and '-r' flags respectively.
 #[derive(Bpaf, Clone)]
 pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -863,7 +863,7 @@ mod activate_tests {
     }
 }
 
-/// Create an environment in the current directory
+// Create an environment in the current directory
 #[derive(Bpaf, Clone)]
 pub struct Init {
     /// Directory to create the environment in (default: current directory)
@@ -919,7 +919,7 @@ impl Init {
     }
 }
 
-/// List packages installed in an environment
+// List packages installed in an environment
 #[derive(Bpaf, Clone)]
 pub struct List {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -939,7 +939,7 @@ pub enum ListMode {
     #[bpaf(long("name"), short)]
     NameOnly,
 
-    /// Show the name, path, and version of each package (default)
+    /// Show the name, pkg-path, and version of each package (default)
     #[bpaf(long, short)]
     Extended,
 
@@ -1076,7 +1076,7 @@ fn environment_description(environment: &ConcreteEnvironment) -> Result<String> 
     Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
 }
 
-/// Install a package into an environment
+// Install a package into an environment
 #[derive(Bpaf, Clone)]
 pub struct Install {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -1319,7 +1319,7 @@ pub struct Push {
     #[bpaf(long, short, argument("owner"))]
     owner: Option<EnvironmentOwner>,
 
-    /// forceably overwrite the remote copy of the environment
+    /// Forceably overwrite the remote copy of the environment
     #[bpaf(long, short)]
     force: bool,
 }
@@ -1343,7 +1343,7 @@ impl Push {
                 bail!(message);
             }
 
-            message::plain("You are not logged in to floxhub. Logging in...");
+            message::plain("You are not logged in to FloxHub. Logging in...");
 
             auth::login_flox(&mut flox).await?;
         }
