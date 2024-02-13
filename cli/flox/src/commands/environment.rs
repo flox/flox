@@ -89,7 +89,7 @@ pub struct Edit {
 #[derive(Bpaf, Clone)]
 pub enum EditAction {
     EditManifest {
-        /// Replace environment declaration with that in <file>
+        /// Replace environment manifest with that in <file>
         #[bpaf(long, short, argument("file"))]
         file: Option<PathBuf>,
     },
@@ -293,13 +293,9 @@ impl Edit {
 // Delete an environment
 #[derive(Bpaf, Clone)]
 pub struct Delete {
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(short, long, hide)]
+    /// Delete an environment without confirmation.
+    #[bpaf(short, long)]
     force: bool,
-
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(short, long, hide)]
-    origin: bool,
 
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
@@ -928,6 +924,7 @@ impl Init {
 pub struct List {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
+
     #[bpaf(external(list_mode), fallback(ListMode::Extended))]
     list_mode: ListMode,
 }
@@ -937,15 +934,16 @@ pub enum ListMode {
     /// Show the raw contents of the manifest
     #[bpaf(long, short)]
     Config,
-    /// Show only names
+
+    /// Show only the name of each package
     #[bpaf(long("name"), short)]
     NameOnly,
 
-    /// Show names, paths, and versions (default)
+    /// Show the name, path, and version of each package (default)
     #[bpaf(long, short)]
     Extended,
 
-    /// Detailed information such as priority and license
+    /// Show all available package information including priority and license
     #[bpaf(long, short)]
     All,
 }
@@ -1099,10 +1097,12 @@ pub struct PkgWithIdOption {
     /// Install a package and assign an explicit ID
     #[bpaf(long("id"), short('i'))]
     _option: (),
+
     /// ID of the package to install
     #[bpaf(positional("id"))]
     pub id: String,
-    /// Path to the package to install as shown by `flox search`
+
+    /// Name or relative path of the package to install as shown by 'flox search'
     #[bpaf(positional("package"))]
     pub path: String,
 }
@@ -1217,6 +1217,7 @@ pub struct Uninstall {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
+    /// The install IDs of the packages to remove
     #[bpaf(positional("packages"), some("Must specify at least one package"))]
     packages: Vec<String>,
 }
