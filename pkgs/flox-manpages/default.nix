@@ -18,7 +18,7 @@ runCommand "flox-manpages" {
   mkdir "$buildDir"
   pushd "$src"
 
-  fd ".*\.md" ./ -x \
+  fd ".*\.md" -d 1 ./ -x \
     pandoc -t man \
       -L ${./pandoc-filters/include-files.lua} \
       --standalone \
