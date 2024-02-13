@@ -314,6 +314,15 @@ impl Delete {
 
         let description = environment_description(&environment)?;
 
+        if matches!(environment, ConcreteEnvironment::Remote(_)) {
+            let message = formatdoc! {"
+                Environment {description} was not deleted.
+
+                Remote environments on FloxHub can not yet be deleted.
+            "};
+            bail!("{message}")
+        }
+
         let comfirm = Dialog {
             message: &format!(
                 "You are about to delete your environment {description}. Are you sure?"
@@ -331,7 +340,7 @@ impl Delete {
         match environment {
             ConcreteEnvironment::Path(environment) => environment.delete(&flox),
             ConcreteEnvironment::Managed(environment) => environment.delete(&flox),
-            ConcreteEnvironment::Remote(environment) => environment.delete(&flox),
+            ConcreteEnvironment::Remote(_) => unreachable!(),
         }?;
 
         message::deleted(format!("environment {description} deleted"));
