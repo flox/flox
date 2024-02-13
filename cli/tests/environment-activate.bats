@@ -413,7 +413,7 @@ env_is_activated() {
   # on macos activating an already activated environment using
   # `eval "$(flox activate [--print-script])"
   # will only fix the PATH
-  if [[ -e  /usr/libexec/path_helper ]]; then
+  if [[ -e /usr/libexec/path_helper ]]; then
     assert_output --regexp "^(export PATH=.+)$"
   else
     # on linux reactivation is ignored
@@ -426,4 +426,41 @@ env_is_activated() {
   run "$FLOX_BIN" activate --print-script
   assert_success
   refute_output --regexp "^(export PATH=.+)$"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:python-detects-installed-python
+@test "'flox activate' sets python vars if python is installed" {
+  # unset pyhton vars if any
+  unset PYTHONPATH
+  unset PIP_CONFIG_FILE
+
+  # install python and pip
+  "$FLOX_BIN" install python311Packages.pip
+
+  run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
+  assert_success
+  assert_line "PYTHONPATH is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/lib/python3.11/site-packages"
+
+  run -- "$FLOX_BIN" activate -- echo PIP_CONFIG_FILE is '$PIP_CONFIG_FILE'
+  assert_success
+  assert_line "PIP_CONFIG_FILE is $(realpath $PROJECT_DIR)/.flox/pip.ini"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:python-retains-existing-python-vars
+@test "'flox activate' retains existing python vars if python is not installed" {
+  # set python vars
+  export PYTHONPATH="/some/other/pythonpath"
+  export PIP_CONFIG_FILE="/some/other/pip.ini"
+
+  run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
+  assert_success
+  assert_line "PYTHONPATH is /some/other/pythonpath"
+
+  run -- "$FLOX_BIN" activate -- echo PIP_CONFIG_FILE is '$PIP_CONFIG_FILE'
+  assert_success
+  assert_line "PIP_CONFIG_FILE is /some/other/pip.ini"
 }
