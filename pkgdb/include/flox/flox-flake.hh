@@ -13,6 +13,7 @@
 #include <memory>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
+#include <sys/wait.h>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -20,6 +21,7 @@
 #include "flox/core/exceptions.hh"
 #include "flox/core/nix-state.hh"
 #include "flox/core/types.hh"
+#include "flox/core/util.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -130,6 +132,55 @@ FLOX_DEFINE_EXCEPTION( LockFlakeException,
                        "error locking flake" )
 /** @} */
 
+void
+ensureFlakeIsDownloaded( auto && lambda )
+{
+  pid_t pid = fork();
+  if ( pid == -1 )
+    {
+      // WML - TODO - better error handling here!
+      errorLog( nix::fmt(
+        "ensureFlakeIsDownloaded: faild to fork for flake downlod!" ) );
+      exit( -1 );
+    }
+  if ( 0 < pid )
+    {
+      debugLog(
+        nix::fmt( "ensureFlakeIsDownloaded: waiting for child:%d", pid ) );
+      int status = 0;
+      waitpid( pid, &status, 0 );
+      debugLog(
+        nix::fmt( "ensureFlakeIsDownloaded: child is finished, exitcode:%d",
+                  status ) );
+
+      if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
+        {
+          // The flake should be downloaded and cached locally now
+          return;
+        }
+      else
+        {
+          // what to do here?  The error has already been reported via the
+          // child!
+          exit( WEXITSTATUS( status ) );
+        }
+    }
+  else
+    {
+      lambda();
+      try
+        {
+          exit( EXIT_SUCCESS );
+        }
+      catch ( const std::exception & err )
+        {
+          debugLog( nix::fmt(
+            "ensureFlakeIsDownloaded(child): caught exception on exit: %s",
+            err.what() ) );
+          exit( EXIT_SUCCESS );
+        }
+    }
+}
 
 /* -------------------------------------------------------------------------- */
 
