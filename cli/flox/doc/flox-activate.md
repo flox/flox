@@ -80,10 +80,10 @@ hook was defined.
 
 # ENVIRONMENT VARIABLES
 
-## `$_FLOX_ACTIVE_ENVIRONMENTS`
-A JSON array containing one object per active environment.
-This is currently an implementation detail
-and its contents are subject to change.
+`$_FLOX_ACTIVE_ENVIRONMENTS`
+:   A JSON array containing one object per active environment.
+    This is currently an implementation detail
+    and its contents are subject to change.
 
 # EXAMPLES:
 
