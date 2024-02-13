@@ -93,7 +93,7 @@ mod tests {
         let mut tries = 0;
         loop {
             if tries >= 3 {
-                panic!("Calling the container builder script failed too many times: with 'Text file busy'")
+                panic!("Test flaked with 'Text file busy' and can be re-run")
             }
             match container_builder.stream_container(&mut buf) {
                 Err(ContainerBuilderError::CallContainerBuilder(e))
@@ -122,7 +122,7 @@ mod tests {
         let mut tries = 0;
         loop {
             if tries >= 3 {
-                panic!("Calling the container builder script failed too many times: with 'Text file busy'")
+                panic!("Test flaked with 'Text file busy' and can be re-run")
             }
             match container_builder.stream_container(&mut file) {
                 Err(ContainerBuilderError::CallContainerBuilder(e))
