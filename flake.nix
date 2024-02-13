@@ -36,6 +36,7 @@
   # This is needed to be able to calculate `git describe` format version of flox
   # without running `git describe`
   inputs.flox-latest.url = "git+ssh://git@github.com/flox/flox?ref=latest";
+  inputs.flox-latest.flake = false;
 
   # -------------------------------------------------------------------------- #
 
