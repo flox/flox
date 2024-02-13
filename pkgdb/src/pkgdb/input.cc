@@ -249,14 +249,14 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
           /* Close the transaction. */
           chunkDbRW->execute( "COMMIT TRANSACTION" );
-          this->closeDbReadWrite();
-          this->freeFlake();
           debugLog( nix::fmt(
             "scrapePrefix(child): scraping page %d complete, lastPage:%d",
             pageIdx,
             targetComplete ) );
           try
             {
+              this->closeDbReadWrite();
+              this->freeFlake();
               exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
             }
           catch ( const std::exception & err )
