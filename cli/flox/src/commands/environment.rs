@@ -48,7 +48,13 @@ use flox_rust_sdk::models::lockfile::{
     TypedLockedManifest,
 };
 use flox_rust_sdk::models::manifest::{self, PackageToInstall};
-use flox_rust_sdk::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
+use flox_rust_sdk::models::pkgdb::{
+    call_pkgdb,
+    error_codes,
+    CallPkgDbError,
+    PkgDbError,
+    PKGDB_BIN,
+};
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
@@ -67,7 +73,7 @@ use crate::commands::{
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
-use crate::utils::errors::{format_core_error, format_locked_manifest_error};
+use crate::utils::errors::{display_chain, format_core_error, format_locked_manifest_error};
 use crate::utils::message;
 use crate::{subcommand_metric, utils};
 
@@ -308,6 +314,15 @@ impl Delete {
 
         let description = environment_description(&environment)?;
 
+        if matches!(environment, ConcreteEnvironment::Remote(_)) {
+            let message = formatdoc! {"
+                Environment {description} was not deleted.
+
+                Remote environments on FloxHub can not yet be deleted.
+            "};
+            bail!("{message}")
+        }
+
         let comfirm = Dialog {
             message: &format!(
                 "You are about to delete your environment {description}. Are you sure?"
@@ -325,7 +340,7 @@ impl Delete {
         match environment {
             ConcreteEnvironment::Path(environment) => environment.delete(&flox),
             ConcreteEnvironment::Managed(environment) => environment.delete(&flox),
-            ConcreteEnvironment::Remote(environment) => environment.delete(&flox),
+            ConcreteEnvironment::Remote(_) => unreachable!(),
         }?;
 
         message::deleted(format!("environment {description} deleted"));
@@ -454,7 +469,7 @@ impl Activate {
         let activation_path = match activation_path_result {
             Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: 123,
+                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
                     ..
                 })),
             ))) => {
@@ -466,7 +481,7 @@ impl Activate {
                 if let ConcreteEnvironment::Remote(remote) = &concrete_environment {
                     message.push_str("\n\n");
                     message.push_str(&format!(
-                    "Use 'flox pull --add-system {}/{}' to update and verify this environment on your system.",
+                    "Use 'flox pull --force {}/{}' to update and verify this environment on your system.",
                     remote.owner(),
                     remote.name()));
                 }
@@ -917,7 +932,7 @@ pub struct List {
     list_mode: ListMode,
 }
 
-#[derive(Bpaf, Clone)]
+#[derive(Bpaf, Clone, PartialEq, Debug)]
 pub enum ListMode {
     /// Show the raw contents of the manifest
     #[bpaf(long, short)]
@@ -945,24 +960,38 @@ impl List {
             .into_dyn_environment();
 
         let manifest_contents = env.manifest_content(&flox)?;
+        if self.list_mode == ListMode::Config {
+            println!("{}", manifest_contents);
+            return Ok(());
+        }
+
+        let system = &flox.system;
+        let lockfile = Self::get_lockfile(&flox, &mut *env)?;
+        let packages = lockfile.list_packages(system);
+
+        if packages.is_empty() {
+            let message = formatdoc! {"
+                No packages are installed for your current system ('{system}').
+
+                You can see the whole manifest with 'flox list --config'.
+            "};
+            message::warning(message);
+            return Ok(());
+        }
+
         match self.list_mode {
-            ListMode::Config => println!("{}", manifest_contents),
-            ListMode::NameOnly => self.print_name_only(&flox, &mut *env)?,
-            ListMode::Extended => self.print_extended(&flox, &mut *env)?,
-            ListMode::All => self.print_detail(&flox, &mut *env)?,
+            ListMode::NameOnly => Self::print_name_only(&packages),
+            ListMode::Extended => Self::print_extended(&packages),
+            ListMode::All => Self::print_detail(&packages),
+            ListMode::Config => unreachable!(),
         }
 
         Ok(())
     }
 
     /// print package ids only
-    fn print_name_only(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
-        let lockfile = Self::get_lockfile(flox, env)?;
-        lockfile
-            .list_packages(&flox.system)
-            .into_iter()
-            .for_each(|p| println!("{}", p.name));
-        Ok(())
+    fn print_name_only(packages: &[InstalledPackage]) {
+        packages.iter().for_each(|p| println!("{}", p.name));
     }
 
     /// print package ids, as well as path and version
@@ -970,26 +999,19 @@ impl List {
     /// e.g. `pip: python3Packages.pip (20.3.4)`
     ///
     /// This is the default mode
-    fn print_extended(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
-        let lockfile = Self::get_lockfile(flox, env)?;
-        lockfile
-            .list_packages(&flox.system)
-            .into_iter()
-            .for_each(|p| {
-                println!(
-                    "{id}: {path} ({version})",
-                    id = p.name,
-                    path = p.rel_path,
-                    version = p.info.version
-                )
-            });
-        Ok(())
+    fn print_extended(packages: &[InstalledPackage]) {
+        packages.iter().for_each(|p| {
+            println!(
+                "{id}: {path} ({version})",
+                id = p.name,
+                path = p.rel_path,
+                version = p.info.version
+            )
+        });
     }
 
     /// print package ids, as well as extended detailed information
-    fn print_detail(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
-        let lockfile = Self::get_lockfile(flox, env)?;
-
+    fn print_detail(packages: &[InstalledPackage]) {
         for InstalledPackage {
             name,
             rel_path,
@@ -1003,10 +1025,7 @@ impl List {
                     description,
                 },
             priority,
-        } in lockfile
-            .list_packages(&flox.system)
-            .into_iter()
-            .sorted_by_key(|p| p.priority)
+        } in packages.iter().sorted_by_key(|p| p.priority)
         {
             let message = formatdoc! {"
                 {name}: ({pname})
@@ -1018,14 +1037,12 @@ impl List {
                   Unfree:   {unfree}
                   Broken:   {broken}
                 ",
-                description = description.unwrap_or_else(|| "N/A".to_string()),
-                license = license.unwrap_or_else(|| "N/A".to_string()),
+                description = description.as_deref().unwrap_or("N/A"),
+                license = license.as_deref().unwrap_or("N/A"),
             };
 
             println!("{message}");
         }
-
-        Ok(())
     }
 
     /// Read existing lockfile or resolve to create a new [LockedManifest].
@@ -1166,7 +1183,7 @@ impl Install {
                 LockedManifestError::LockManifest(
                     flox_rust_sdk::models::pkgdb::CallPkgDbError::PkgDbError(pkgdberr),
                 ),
-            )) if pkgdberr.exit_code == 120 => 'error: {
+            )) if pkgdberr.exit_code == error_codes::RESOLUTION_FAILURE => 'error: {
                 let paths = packages.iter().map(|p| p.path.clone()).join(", ");
 
                 if packages.len() > 1 {
@@ -1480,18 +1497,12 @@ enum PullSelect {
         #[bpaf(positional("owner>/<name"))]
         remote: EnvironmentRef,
     },
-    Existing {
-        /// Forceably overwrite the local copy of the environment
-        #[bpaf(long, short)]
-        force: bool,
-    },
+    Existing {},
 }
 
 impl Default for PullSelect {
     fn default() -> Self {
-        PullSelect::Existing {
-            force: Default::default(),
-        }
+        PullSelect::Existing {}
     }
 }
 
@@ -1502,9 +1513,12 @@ pub struct Pull {
     #[bpaf(long, short, argument("path"))]
     dir: Option<PathBuf>,
 
-    /// Forceably add current system to the environment, even if incompatible
-    #[bpaf(long("add-system"), short)]
-    add_system: bool,
+    /// Forceably pull the environment
+    /// When pulling a new environment, adds the system to the manifest if the lockfile is incompatible
+    /// and ignores eval and build errors.
+    /// When pulling an existing environment, overrides local changes.
+    #[bpaf(long, short)]
+    force: bool,
 
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
@@ -1523,17 +1537,11 @@ impl Pull {
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
 
-                Self::pull_new_environment(
-                    &flox,
-                    dir.join(DOT_FLOX),
-                    remote,
-                    self.add_system,
-                    &start,
-                )?;
+                Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote, self.force, &start)?;
 
                 message::updated(complete);
             },
-            PullSelect::Existing { force } => {
+            PullSelect::Existing {} => {
                 let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
@@ -1561,7 +1569,7 @@ impl Pull {
                             &flox,
                             dir.join(DOT_FLOX),
                             pointer.clone(),
-                            force,
+                            self.force,
                         )
                     }),
                 }
@@ -1571,7 +1579,11 @@ impl Pull {
                     Pulled {owner}/{name} from {floxhub_host}{suffix}
 
                     You can activate this environment with 'flox activate'
-                ", owner = pointer.owner, name = pointer.name, floxhub_host = flox.floxhub.base_url(), suffix = if force { " (forced)" } else { "" }};
+                    ",
+                    owner = pointer.owner, name = pointer.name,
+                    floxhub_host = flox.floxhub.base_url(),
+                    suffix = if self.force { " (forced)" } else { "" }
+                };
 
                 message::created(complete_message);
             },
@@ -1609,23 +1621,23 @@ impl Pull {
         flox: &Flox,
         dot_flox_path: PathBuf,
         env_ref: EnvironmentRef,
-        add_systems: bool,
+        force: bool,
         message: &str,
     ) -> Result<()> {
         if dot_flox_path.exists() {
             bail!("Cannot pull a new environment into an existing one")
         }
+
+        // region: write pointer
         let pointer = ManagedPointer::new(
             env_ref.owner().clone(),
             env_ref.name().clone(),
             &flox.floxhub,
         );
-
         let pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
 
         fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
-
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
@@ -1647,6 +1659,7 @@ impl Pull {
                 Ok(env) => env,
             }
         };
+        // endregion
 
         let result = Dialog {
             message,
@@ -1659,34 +1672,29 @@ impl Pull {
             Ok(_) => {},
             Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: 123,
+                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
                     ..
                 })),
             ))) => {
-                let hint = "Use 'flox pull --add-system' to add your system to the manifest.";
-
-                // will return OK if the user chose to abort the pull
-                let add_systems = add_systems
-                    || match Self::query_add_system(&flox.system)? {
-                        Some(false) => {
-                            // prompt available, user chose to abort
-                            message::plain(hint);
-                            fs::remove_dir_all(&dot_flox_path)
-                                .context("Could not clean up .flox/ directory")?;
-                            bail!("Did not pull the environment.");
-                        },
-                        Some(true) => true, // prompt available, user chose to add system
-                        None => false,      // no prompt available
-                    };
-
-                if !add_systems {
+                let hint = "Use 'flox pull --force' to add your system to the manifest.";
+                if !force && !Dialog::can_prompt() {
                     fs::remove_dir_all(&dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
                     bail!("{}", formatdoc! {"
-                        This environment is not yet compatible with your system ({system}).
+                            This environment is not yet compatible with your system ({system}).
 
-                        {hint}"
+                            {hint}"
                     , system = flox.system});
+                }
+
+                // will return OK if the user chose to abort the pull
+                let force = force || Self::query_add_system(&flox.system)?;
+                if !force {
+                    // prompt available, user chose to abort
+                    message::plain(hint);
+                    fs::remove_dir_all(&dot_flox_path)
+                        .context("Could not clean up .flox/ directory")?;
+                    bail!("Did not pull the environment.");
                 }
 
                 let doc = Self::amend_current_system(&env, flox)?;
@@ -1698,6 +1706,42 @@ impl Pull {
                         err = anyhow!(broken_error)
                     });
                 };
+            },
+            Err(
+                ref e @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+                    ref builder_error @ LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(
+                        PkgDbError { exit_code, .. },
+                    )),
+                )),
+            ) if [
+                error_codes::PACKAGE_BUILD_FAILURE,
+                error_codes::PACKAGE_EVAL_FAILURE,
+                error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+            ]
+            .contains(&exit_code) =>
+            {
+                debug!(
+                    "environment contains package incompatible with the current system: {err}",
+                    err = display_chain(e)
+                );
+
+                let pkgdb_error = format_locked_manifest_error(builder_error);
+
+                if !force && !Dialog::can_prompt() {
+                    fs::remove_dir_all(&dot_flox_path)
+                        .context("Could not clean up .flox/ directory")?;
+                    bail!("{pkgdb_error}");
+                }
+
+                message::error(pkgdb_error);
+
+                if force || Self::query_ignore_build_errors()? {
+                    message::warning("Ignoring build errors and pulling the environment anyway.");
+                } else {
+                    fs::remove_dir_all(&dot_flox_path)
+                        .context("Could not clean up .flox/ directory")?;
+                    bail!("Did not pull the environment.");
+                }
             },
             Err(e) => {
                 fs::remove_dir_all(&dot_flox_path)
@@ -1737,15 +1781,12 @@ impl Pull {
     /// returns [Ok(None)]` if the user can't be prompted
     /// returns `[Ok(bool)]` depending on the users choice
     /// returns `[Err]` if the prompt failed or was cancelled
-    fn query_add_system(system: &str) -> Result<Option<bool>> {
-        if !Dialog::can_prompt() {
-            return Ok(None);
-        }
-
+    fn query_add_system(system: &str) -> Result<bool> {
         let message = format!(
             "The environment you are trying to pull is not yet compatible with your system ({system})."
         );
-        let help = "Use 'flox pull --add-system' to automatically add your system to the list of compatible systems";
+
+        let help = "Use 'flox pull --force' to automatically add your system to the list of compatible systems";
 
         let reject_choice = "Don't pull this environment.";
         let confirm_choice = format!(
@@ -1762,7 +1803,7 @@ impl Pull {
 
         let (choice, _) = dialog.raw_prompt()?;
 
-        Ok(Some(choice == 1))
+        Ok(choice == 1)
     }
 
     /// add the current system to the manifest of the given environment
@@ -1772,6 +1813,31 @@ impl Pull {
     ) -> Result<Document, anyhow::Error> {
         manifest::add_system(&env.manifest_content(flox)?, &flox.system)
             .context("Could not add system to manifest")
+    }
+
+    /// Ask the user if they want to ignore build errors and pull a broken environment
+    fn query_ignore_build_errors() -> Result<bool> {
+        if !Dialog::can_prompt() {
+            return Ok(false);
+        }
+
+        let message = "The environment you are trying to pull could not be built locally.";
+        let help_message = Some("Use 'flox pull --force' to pull the environment anyway.");
+
+        let reject_choice = "Don't pull this environment.";
+        let confirm_choice = "Pull this environment anyway, 'flox edit' to address issues.";
+
+        let dialog = Dialog {
+            message,
+            help_message,
+            typed: Select {
+                options: [reject_choice, confirm_choice].to_vec(),
+            },
+        };
+
+        let (choice, _) = dialog.raw_prompt()?;
+
+        Ok(choice == 1)
     }
 
     fn handle_error(flox: &Flox, err: ManagedEnvironmentError) -> anyhow::Error {

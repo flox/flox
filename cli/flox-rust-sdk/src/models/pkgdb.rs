@@ -13,6 +13,29 @@ use thiserror::Error;
 pub static PKGDB_BIN: Lazy<String> =
     Lazy::new(|| env::var("PKGDB_BIN").unwrap_or(env!("PKGDB_BIN").to_string()));
 
+/// Error codes emitted by pkgdb
+/// matching the definitions in `pkgdb/include/flox/core/exceptions.hh`
+/// for brevity, only the ones we expliticly match are included here.
+/// TODO: find a way to _share_ these constants between the Rust and C++ code.
+pub mod error_codes {
+    /// Manifest file has invalid format
+    pub const INVALID_MANIFEST_FILE: u64 = 105;
+    /// Parsing of the manifest.toml file failed
+    pub const TOML_TO_JSON: u64 = 116;
+    /// The package is not found in the package database
+    pub const RESOLUTION_FAILURE: u64 = 120;
+    /// Conflict between two packages
+    pub const BUILDENV_CONFLICT: u64 = 122;
+    /// The environment is not compatible with the current system
+    pub const LOCKFILE_INCOMPATIBLE_SYSTEM: u64 = 123;
+    /// The package is not compatible with the current system
+    pub const PACKAGE_EVAL_INCOMPATIBLE_SYSTEM: u64 = 124;
+    /// The package failed to evaluate
+    pub const PACKAGE_EVAL_FAILURE: u64 = 125;
+    /// The package failed to build
+    pub const PACKAGE_BUILD_FAILURE: u64 = 126;
+}
+
 /// The JSON output of a `pkgdb upgrade` call
 #[derive(Deserialize)]
 pub struct UpgradeResultJSON {
