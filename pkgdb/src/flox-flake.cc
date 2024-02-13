@@ -41,7 +41,14 @@ namespace flox {
 FloxFlake::FloxFlake( const nix::ref<nix::EvalState> & state,
                       const nix::FlakeRef &            ref )
 try : state( state ),
-  lockedFlake( nix::flake::lockFlake( *this->state, ref, defaultLockFlags ) )
+  lockedFlake(
+    [&]()
+    {
+      auto getFlake = [&]()
+      { nix::flake::lockFlake( *this->state, ref, defaultLockFlags ); };
+      ensureFlakeIsDownloaded( getFlake );
+      return nix::flake::lockFlake( *this->state, ref, defaultLockFlags );
+    }() )
   {}
 catch ( ... )
   {

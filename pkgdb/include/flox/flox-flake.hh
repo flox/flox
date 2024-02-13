@@ -170,6 +170,8 @@ ensureFlakeIsDownloaded( auto && lambda )
       lambda();
       try
         {
+          debugLog(
+            nix::fmt( "ensureFlakeIsDownloaded(child): finished, exiting" ) );
           exit( EXIT_SUCCESS );
         }
       catch ( const std::exception & err )
