@@ -100,7 +100,7 @@ teardown() {
 
   name="created-on-$pull_system"
 
-  "$FLOX_BIN" pull "$OWNER/$name" --add-system
+  "$FLOX_BIN" pull "$OWNER/$name" --force
   # Close fd 3 because of
   # https://bats-core.readthedocs.io/en/stable/writing-tests.html#file-descriptor-3-read-this-if-bats-hangs
   run "$FLOX_BIN" activate -- hello 3>&-
