@@ -64,12 +64,13 @@ ensureFlakeIsDownloaded( std::function<void()> && lambda )
           if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
             {
               // The flake should be downloaded and cached locally now
+              // return to the caller.
               return;
             }
           else
             {
-              // what to do here?  The error has already been reported via the
-              // child!
+              // The error has already been reported via the child, just pass
+              // along the exit code.
               exit( WEXITSTATUS( status ) );
             }
         }

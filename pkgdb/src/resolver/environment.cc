@@ -123,10 +123,9 @@ Environment::getPkgDbRegistry()
 {
   if ( this->dbs == nullptr )
     {
-      nix::ref<nix::Store> store = this->getStore();
-
-      auto factory = pkgdb::PkgDbInputFactory( store );
-      this->dbs    = std::make_shared<Registry<pkgdb::PkgDbInputFactory>>(
+      nix::ref<nix::Store> store   = this->getStore();
+      auto                 factory = pkgdb::PkgDbInputFactory( store );
+      this->dbs = std::make_shared<Registry<pkgdb::PkgDbInputFactory>>(
         this->getCombinedRegistryRaw(),
         factory );
       /* Scrape if needed. */
