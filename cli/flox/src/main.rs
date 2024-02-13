@@ -32,14 +32,12 @@ async fn run(args: FloxArgs) -> Result<()> {
     Ok(())
 }
 
-fn main() -> ExitCode{
-
+fn main() -> ExitCode {
     let sentry_dns = std::env::var("SENTRY_DSN");
     let _sentry;
 
     if sentry_dns.is_ok() {
         _sentry = sentry::init((sentry_dns.unwrap(), sentry::ClientOptions {
-
             // https://docs.sentry.io/platforms/rust/configuration/releases/
             // TODO: should we maybe just use commit hash
             release: sentry::release_name!(),
@@ -71,14 +69,11 @@ fn main() -> ExitCode{
     //    }));
     //});
 
-
     let exit_code = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap()
-        .block_on(async {
-            amain().await
-        });
+        .block_on(async { amain().await });
 
     return exit_code;
 }
