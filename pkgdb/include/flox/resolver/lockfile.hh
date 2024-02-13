@@ -253,7 +253,7 @@ private:
 
   /**
    * @brief Check the lockfile's `packages.**` locked inputs align with the
-   *        requested groups in `manifest.install.<INSTALL-ID>.packageGroup`,
+   *        requested groups in `manifest.install.<INSTALL-ID>.pkgGroup`,
    *        Throws an exception if two packages in the same group use
    *        different inputs.
    */

@@ -12,6 +12,7 @@
 
 #include <nix/command.hh>
 #include <nix/derivations.hh>
+#include <nix/derived-path.hh>
 #include <nix/eval-inline.hh>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
@@ -250,12 +251,34 @@ createFloxEnv( nix::EvalState &     state,
 
       if ( ! package_drv.has_value() )
         {
-          throw FloxException( "Failed to get derivation for package '"
-                               + nlohmann::json( package ).dump() + "'" );
+          throw PackageEvalFailure( "Failed to get derivation for package '"
+                                    + nlohmann::json( package ).dump() + "'" );
         }
 
-      auto packagePath
-        = state.store->printStorePath( package_drv->queryOutPath() );
+      std::string packagePath;
+      try
+        {
+          packagePath
+            = state.store->printStorePath( package_drv->queryOutPath() );
+        }
+      catch ( const nix::Error & e )
+        {
+
+          if ( e.info().msg.str().find(
+                 "is not available on the requested hostPlatform:" )
+               != std::string::npos )
+            {
+              throw PackageUnsupportedSystem(
+                "package '" + pId + "' is not available for this system ('"
+                  + system + "')",
+                nix::filterANSIEscapes( e.what(), true ) );
+            }
+
+          // rethrow the original root cause without the nix trace
+          throw PackageEvalFailure( "package '" + pId + "' failed to evaluate",
+                                    e.info().msg.str() );
+        };
+
 
       /* Collect all outputs to include in the environment.
        *
@@ -282,14 +305,23 @@ createFloxEnv( nix::EvalState &     state,
       /* Collect drvs that may yet need to be built. */
       if ( auto drvPath = package_drv->queryDrvPath() )
         {
-          drvsToBuild.push_back( nix::StorePathWithOutputs { *drvPath, {} } );
+          /* Build derivation of pacakge in environment,
+           * rethrow errors as PackageBuildFailure. */
+          try
+            {
+              auto storePathWithOutputs
+                = nix::StorePathWithOutputs { *drvPath, {} };
+              state.store->buildPaths(
+                nix::toDerivedPaths( { storePathWithOutputs } ) );
+            }
+          catch ( const nix::Error & e )
+            {
+              throw PackageBuildFailure(
+                "Failed to build package '" + pId + "'",
+                nix::filterANSIEscapes( e.what(), true ) );
+            }
         }
     }
-
-  // TODO: check if this builds `outputsToInstall` only
-  // TODO: do we need to honor repair flag? state.repair ? bmRepair : bmNormal
-  /* Build derivations that make up the environment */
-  state.store->buildPaths( nix::toDerivedPaths( drvsToBuild ) );
 
   /* verbatim content of the activate script common to all shells */
   std::stringstream commonActivate;

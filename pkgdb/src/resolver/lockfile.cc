@@ -477,9 +477,11 @@ Lockfile::removeUnusedInputs()
       if ( ( ! inManifestRegistry( elem->first ) )
            && ( ! inPackagesRegistry( elem->second.from->to_string() ) ) )
         {
-          std::remove( this->lockfileRaw.registry.priority.begin(),
-                       this->lockfileRaw.registry.priority.end(),
-                       elem->first );
+          lockfileRaw.registry.priority.erase(
+            std::remove( this->lockfileRaw.registry.priority.begin(),
+                         this->lockfileRaw.registry.priority.end(),
+                         elem->first ),
+            this->lockfileRaw.registry.priority.end() );
           this->lockfileRaw.registry.inputs.erase( elem->first );
           ++count;
         }

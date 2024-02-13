@@ -372,7 +372,7 @@ test_groupIsLocked3()
 
   /* Move hello to the `red' group. */
   ManifestRaw    modifiedManifestRaw( manifestRaw );
-  nlohmann::json helloJSON = { { "package-group", "red" } };
+  nlohmann::json helloJSON = { { "pkg-group", "red" } };
   modifiedManifestRaw.install->at( "hello" )
     = ManifestDescriptorRaw( helloJSON );
   EnvironmentManifest manifest( modifiedManifestRaw );
@@ -447,7 +447,7 @@ test_groupIsLocked5()
 
   /* Add curl to a separate group in the manifest, but not the lockfile */
   ManifestRaw    modifiedManifestRaw( manifestRaw );
-  nlohmann::json curlJSON                  = { { "package-group", "blue" } };
+  nlohmann::json curlJSON                  = { { "pkg-group", "blue" } };
   ( *modifiedManifestRaw.install )["curl"] = ManifestDescriptorRaw( curlJSON );
   EnvironmentManifest manifest( manifestRaw );
 
@@ -478,7 +478,7 @@ test_groupIsLocked6()
 {
   /* Create manifest with hello and curl */
   ManifestRaw    manifestRaw;
-  nlohmann::json curlJSON = { { "package-group", "blue" } };
+  nlohmann::json curlJSON = { { "pkg-group", "blue" } };
   manifestRaw.install     = { { "hello", std::nullopt }, { "curl", curlJSON } };
   manifestRaw.options     = Options {};
   manifestRaw.options->systems = { _system };
@@ -601,7 +601,7 @@ test_getGroupInput0()
 
   /* Name the group hello is in. */
   ManifestRaw    modifiedManifestRaw( manifestRaw );
-  nlohmann::json helloJSON = { { "package-group", "blue" } };
+  nlohmann::json helloJSON = { { "pkg-group", "blue" } };
   modifiedManifestRaw.install->at( "hello" )
     = ManifestDescriptorRaw( helloJSON );
   EnvironmentManifest manifest( modifiedManifestRaw );
@@ -629,7 +629,7 @@ test_getGroupInput1()
 {
   /* Create manifest with hello and curl in separate group */
   ManifestRaw           manifestRaw;
-  nlohmann::json        curlJSON = { { "package-group", "blue" } };
+  nlohmann::json        curlJSON = { { "pkg-group", "blue" } };
   ManifestDescriptorRaw curl( curlJSON );
   manifestRaw.install = { { "hello", std::nullopt }, { "curl", curl } };
   manifestRaw.options = Options {};
@@ -650,7 +650,7 @@ test_getGroupInput1()
 
   /* Move hello to the same group as curl. */
   ManifestRaw    modifiedManifestRaw( manifestRaw );
-  nlohmann::json helloJSON = { { "package-group", "blue" } };
+  nlohmann::json helloJSON = { { "pkg-group", "blue" } };
   modifiedManifestRaw.install->at( "hello" )
     = ManifestDescriptorRaw( helloJSON );
   EnvironmentManifest manifest( modifiedManifestRaw );
@@ -680,7 +680,7 @@ test_getGroupInput2()
 {
   /* Create manifest with hello and curl in separate group */
   ManifestRaw           manifestRaw;
-  nlohmann::json        curlJSON = { { "package-group", "blue" } };
+  nlohmann::json        curlJSON = { { "pkg-group", "blue" } };
   ManifestDescriptorRaw curl( curlJSON );
   manifestRaw.install = { { "hello", std::nullopt }, { "curl", curl } };
   manifestRaw.options = Options {};
@@ -701,10 +701,10 @@ test_getGroupInput2()
 
   /* Move hello and curl to a new group. */
   ManifestRaw    modifiedManifestRaw( manifestRaw );
-  nlohmann::json helloJSON = { { "package-group", "new-blue" } };
+  nlohmann::json helloJSON = { { "pkg-group", "new-blue" } };
   modifiedManifestRaw.install->at( "hello" )
     = ManifestDescriptorRaw( helloJSON );
-  nlohmann::json modifiedCurlJSON = { { "package-group", "new-blue" } };
+  nlohmann::json modifiedCurlJSON = { { "pkg-group", "new-blue" } };
   modifiedManifestRaw.install->at( "curl" )
     = ManifestDescriptorRaw( modifiedCurlJSON );
   EnvironmentManifest manifest( modifiedManifestRaw );
@@ -838,7 +838,7 @@ test_createLockfile_both()
 {
   /* Create manifest with hello and curl in separate group */
   ManifestRaw           manifestRaw;
-  nlohmann::json        curlJSON = { { "package-group", "blue" } };
+  nlohmann::json        curlJSON = { { "pkg-group", "blue" } };
   ManifestDescriptorRaw curl( curlJSON );
   manifestRaw.install = { { "hello", std::nullopt }, { "curl", curl } };
   manifestRaw.options = Options {};
