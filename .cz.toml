@@ -1,9 +1,9 @@
 [tool]
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.3.7"
+version = "1.0.0"
 tag_format = "v$version"
-version_files = ["./crates/flox/Cargo.toml:version"]
+version_files = ["./cli/flox/Cargo.toml:version"]
 changelog_incremental = true
 major_version_zero = true
 annotated_tag = true
