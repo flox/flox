@@ -141,9 +141,11 @@ Each option is described below:
     Packages are marked as belonging to a group simply by setting this option
     to the name of the group.
 
-    Packages that are marked as belonging to the same group will always be
-    installed from the same revision of the catalog.
-    Multiple package groups may resolve to the same catalog revision.
+    Adding packages to a pkg-group ensures all packages in the pkg-group share
+    the same libraries and dependencies,
+    which ensures maximum compatibility and minimizes the size of the
+    environment.
+    Multiple package groups may resolve to the same version of the catalog.
     Package groups may be upgraded as a unit,
     ensuring that the group continues to work together.
     See [`flox-upgrade(1)`](./flox-upgrade.md) for more details on how groups
