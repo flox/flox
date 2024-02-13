@@ -43,13 +43,6 @@ FloxFlake::FloxFlake( const nix::ref<nix::EvalState> & state,
 try : state( state ),
   lockedFlake( nix::flake::lockFlake( *this->state, ref, defaultLockFlags ) )
   {}
-catch ( const std::exception & err )
-  {
-
-    throw LockFlakeException( "failed to lock flake \"" + ref.to_string()
-                                + "\"",
-                              nix::filterANSIEscapes( err.what(), true ) );
-  }
 catch ( ... )
   {
 
