@@ -7,7 +7,8 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include "sys/wait.h"
+#include <sys/wait.h>
+
 #include <nix/flake/flakeref.hh>
 
 #include "flox/core/util.hh"
@@ -316,15 +317,16 @@ FloxFlakeInput::getSubtrees()
 RegistryInput
 FloxFlakeInput::getLockedInput()
 {
-  /* getFlake *may* result in a download internal to nix (see curlFileTransfer
-   * in nix code) which is a static member function to enable connection
-   * sharing. Since we fork later in `scrape`, if we perform a download hear,
-   * when the child of the later fork exits, it tries to cleanup that file
-   * transfer object in the call to `exit()`.  That dies exceptionally well
-   * since it's in a different process at that point.  For now, we'll fork here
-   * to contain the downloads within a child, and hopefully avoid that
-   * situation. */
-
+  /* `nix::getFlake` *may* result in a download internal to nix
+   * ( see `nix::curlFileTransfer` in nix code ) which is a static member
+   * function to enable connection sharing.
+   * Since we fork later in `scrape`, if we perform a download hear, when the
+   * child of the later fork exits, it tries to cleanup that file transfer
+   * object in the call to `exit()`.
+   * That dies exceptionally well since it's in a different process at
+   * that point.
+   * For now, we'll fork here to contain the downloads within a child, and
+   * hopefully avoid that situation. */
   auto getFlake = [&]() { auto unusedFlake = this->getFlake(); };
 
   ensureFlakeIsDownloaded( getFlake );
