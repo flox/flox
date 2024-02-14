@@ -51,7 +51,7 @@ in
       wrapProgram "$out/bin/flox-gh"                                             \
         --run '# This should only be invoked by flox with $FLOX_*_HOME defined.' \
         --run 'set -eu'                                                          \
-        --run 'export XDG_CONFIG_HOME="$FLOX_CONFIG_HOME"'                       \
+        --run 'export XDG_CONFIG_HOME="$FLOX_CONFIG_DIR"'                       \
         --run 'export XDG_STATE_HOME="$FLOX_STATE_HOME"'                         \
         --run 'export XDG_DATA_HOME="$FLOX_DATA_HOME"'                           \
         --run '# Unset gh-related environment variables.'                        \

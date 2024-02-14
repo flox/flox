@@ -18,8 +18,9 @@ use xdg::BaseDirectories;
 use self::features::Features;
 
 /// Name of flox managed directories (config, data, cache)
-const FLOX_DIR_NAME: &'_ str = "flox";
-pub const FLOX_CONFIG_FILE: &'_ str = "flox.toml";
+const FLOX_DIR_NAME: &str = "flox";
+const FLOX_CONFIG_DIR_VAR: &str = "FLOX_CONFIG_DIR";
+pub const FLOX_CONFIG_FILE: &str = "flox.toml";
 
 #[derive(Clone, Debug, Deserialize, Default, Serialize)]
 pub struct Config {
@@ -121,22 +122,23 @@ impl Config {
 
             let cache_dir = flox_dirs.get_cache_home();
             let data_dir = flox_dirs.get_data_home();
-            let config_dir = match env::var("FLOX_CONFIG_HOME") {
+
+            let config_dir = match env::var(FLOX_CONFIG_DIR_VAR) {
                 Ok(v) => {
-                    debug!("`$FLOX_CONFIG_HOME` set: {v}");
+                    debug!("`${FLOX_CONFIG_DIR_VAR}` set: {v}");
                     fs::create_dir_all(&v)
                         .context(format!("Could not create config directory: {v:?}"))?;
                     v.into()
                 },
                 Err(_) => {
                     let config_dir = flox_dirs.get_config_home();
-                    debug!("`$FLOX_CONFIG_HOME` not set, using {config_dir:?}");
+                    debug!("`${FLOX_CONFIG_DIR_VAR}` not set, using {config_dir:?}");
                     fs::create_dir_all(&config_dir)
                         .context(format!("Could not create config directory: {config_dir:?}"))?;
                     let config_dir = config_dir
                         .canonicalize()
                         .context("Could not canonicalize config directory '{config_dir:?}'")?;
-                    env::set_var("FLOX_CONFIG_HOME", &config_dir);
+                    env::set_var(FLOX_CONFIG_DIR_VAR, &config_dir);
                     config_dir
                 },
             };
@@ -147,7 +149,7 @@ impl Config {
                 .set_default("data_dir", data_dir.to_str().unwrap())?
                 // Config dir is added to the config for completeness;
                 // the config file cannot change the config dir.
-                .set_default("config_dir", config_dir.to_str().unwrap())?;
+                .set_override("config_dir", config_dir.to_str().unwrap())?;
 
             // read from /etc
             builder = builder.add_source(
@@ -162,7 +164,7 @@ impl Config {
                     builder.add_source(config::File::from(file).format(config::FileFormat::Toml));
             }
 
-            // Add explicit FLOX_CONFIG_HOME file last
+            // Add explicit FLOX_CONFIG_DIR file last
             builder = builder.add_source(
                 config::File::from(config_dir.join(FLOX_CONFIG_FILE))
                     .format(config::FileFormat::Toml)
@@ -373,7 +375,7 @@ mod tests {
                     config.get(&Key::parse("floxhub_url").unwrap()).unwrap(),
                     "\"https://example.com/\"".to_string()
                 );
-                env::remove_var("FLOX_CONFIG_HOME");
+                env::remove_var(FLOX_CONFIG_DIR_VAR);
             },
         );
     }
