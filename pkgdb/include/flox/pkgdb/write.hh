@@ -24,7 +24,8 @@ namespace flox::pkgdb {
 /** @brief A set of arguments used by @a flox::pkgdb::PkgDb::scrape. */
 using Target = std::tuple<flox::AttrPath, flox::Cursor, row_id>;
 
-/** @brief A stack of @a flox::pkgdb::Target to be completed.
+/**
+ * @brief A stack of @a flox::pkgdb::Target to be completed.
  * A stack is used to promote depth-first processing.
  */
 using Todos = std::stack<Target, std::list<Target>>;

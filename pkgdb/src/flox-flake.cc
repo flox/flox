@@ -37,6 +37,7 @@
 namespace flox {
 
 /* -------------------------------------------------------------------------- */
+
 void
 ensureFlakeIsDownloaded( std::function<void()> && lambda )
 {
@@ -44,18 +45,17 @@ ensureFlakeIsDownloaded( std::function<void()> && lambda )
   if ( pid == -1 )
     {
       // WML - TODO - better error handling here!
-      errorLog( nix::fmt(
-        "ensureFlakeIsDownloaded: faild to fork for flake downlod!" ) );
-      exit( -1 );
+      errorLog( "ensureFlakeIsDownloaded: failed to fork for flake download!" );
+      exit( EXIT_FAILURE );
     }
   if ( 0 < pid )
     {
       debugLog(
-        nix::fmt( "ensureFlakeIsDownloaded: waiting for child:%d", pid ) );
+        nix::fmt( "ensureFlakeIsDownloaded: waiting for child: %d", pid ) );
       int status = 0;
       waitpid( pid, &status, 0 );
       debugLog( nix::fmt(
-        "ensureFlakeIsDownloaded: child is finished, exitcode:%d, signal: %d",
+        "ensureFlakeIsDownloaded: child is finished, exit code: %d, signal: %d",
         WEXITSTATUS( status ),
         WTERMSIG( status ) ) );
 
@@ -63,14 +63,14 @@ ensureFlakeIsDownloaded( std::function<void()> && lambda )
         {
           if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
             {
-              // The flake should be downloaded and cached locally now
-              // return to the caller.
+              /* The flake should be downloaded and cached locally now
+               * return to the caller. */
               return;
             }
           else
             {
-              // The error has already been reported via the child, just pass
-              // along the exit code.
+              /* The error has already been reported via the child, just pass
+               * along the exit code. */
               exit( WEXITSTATUS( status ) );
             }
         }
@@ -81,8 +81,7 @@ ensureFlakeIsDownloaded( std::function<void()> && lambda )
       lambda();
       try
         {
-          debugLog(
-            nix::fmt( "ensureFlakeIsDownloaded(child): finished, exiting" ) );
+          debugLog( "ensureFlakeIsDownloaded(child): finished, exiting" );
           exit( EXIT_SUCCESS );
         }
       catch ( const std::exception & err )

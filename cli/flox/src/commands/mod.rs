@@ -67,7 +67,7 @@ static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
 });
 
 const ADDITIONAL_COMMANDS: &str = indoc! {"
-    update, upgrade, config, wipe-history, history, auth
+    update, upgrade, config, auth
 "};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
@@ -398,7 +398,8 @@ enum AdditionalCommands {
     /// Update environment's base catalog or the global base catalog
     #[bpaf(command, hide, footer("Run 'man flox-update' for more details."))]
     Update(#[bpaf(external(environment::update))] environment::Update),
-    #[bpaf(command, hide, header(indoc! {"
+    /// Upgrade packages in an environment
+    #[bpaf(command, hide, footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
         When no arguments are specified, all packages in the environment are upgraded.\n\n
 
         Packages to upgrade can be specified by either group name, or, if a package is
@@ -411,8 +412,6 @@ enum AdditionalCommands {
         The packages in that group can be upgraded without updating any other
         groups by passing 'toplevel' as the group name.
     "}))]
-    /// Upgrade packages in an environment
-    #[bpaf(command, footer("Run 'man flox-upgrade' for more details."))]
     Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
     /// View and set configuration options
     #[bpaf(command, hide, footer("Run 'man flox-config' for more details."))]

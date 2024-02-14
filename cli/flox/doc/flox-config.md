@@ -104,3 +104,10 @@ flox config --set 'trusted_environments."owner/name"' trust
 :   Remote environments that are trusted for activation.
     Contains keys of the form `"<owner>/<name>"` that map to either `"trust"` or
     `"deny"`.
+
+# ENVIRONMENT VARIABLES
+
+`$FLOX_DISABLE_METRICS`
+:   Variable for disabling the collection/sending of metrics data.
+    If set to `true`, prevents Flox from submitting basic metrics information
+    such as a unique token and the subcommand issued.

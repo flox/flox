@@ -158,25 +158,24 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         {
           int status = 0;
           debugLog(
-            nix::fmt( "scrapePrefix: Waiting for forked process, pid:%d",
+            nix::fmt( "scrapePrefix: Waiting for forked process, pid: %d",
                       pid ) );
           waitpid( pid, &status, 0 );
           debugLog(
-            nix::fmt( "scrapePrefix: Forked process exited, exitcode:%d",
+            nix::fmt( "scrapePrefix: Forked process exited, exitcode: %d",
                       status ) );
 
           if ( WIFEXITED( status ) )
             {
               if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
                 {
-                  debugLog( nix::fmt(
-                    "scrapePrefix: Child reports all pages complete" ) );
+                  debugLog( "scrapePrefix: Child reports all pages complete" );
                   scrapingComplete = true;
                 }
               else if ( WEXITSTATUS( status ) == EXIT_CHILD_INCOMPLETE )
                 {
-                  debugLog( nix::fmt( "scrapePrefix: Child reports additional "
-                                      "pages to process" ) );
+                  debugLog( "scrapePrefix: Child reports additional "
+                            "pages to process" );
                   // Make sure to increment the pageIdx here (in the parent)
                   pageIdx++;
                   scrapingComplete = false;
@@ -184,13 +183,12 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
               else  // ( WEXITSTATUS( status ) != EXIT_SUCCESS )
                 {
                   scrapingComplete = true;
-                  debugLog( nix::fmt(
-                    "scrapePrefix: Child reports failure, aborting" ) );
+                  debugLog( "scrapePrefix: Child reports failure, aborting" );
                   if ( WEXITSTATUS( status ) == EXIT_FAILURE_NIX_EVAL )
                     {
                       throw PkgDbException(
-                        nix::fmt( "scraping failed: NixEvalException reported. "
-                                  "See child log for details." ) );
+                        "scraping failed: NixEvalException reported. "
+                        "See child log for details." );
                     }
                   else
                     {
@@ -204,7 +202,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
             {
               scrapingComplete = true;
               throw PkgDbException(
-                nix::fmt( "scraping failed: abnormal child exit, signal:%d",
+                nix::fmt( "scraping failed: abnormal child exit, signal: %d",
                           WTERMSIG( status ) ) );
             }
         }
@@ -226,10 +224,10 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
           try
             {
-              debugLog(
-                nix::fmt( "scrapePrefix(child): scraping page %d of %d attribs",
-                          pageIdx,
-                          pageSize ) );
+              debugLog( nix::fmt( "scrapePrefix(child): scraping page %d of "
+                                  "%d attributes",
+                                  pageIdx,
+                                  pageSize ) );
               targetComplete
                 = chunkDbRW->scrape( this->getFlake()->state->symbols,
                                      rootTarget,
@@ -250,7 +248,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
           /* Close the transaction. */
           chunkDbRW->execute( "COMMIT TRANSACTION" );
           debugLog( nix::fmt(
-            "scrapePrefix(child): scraping page %d complete, lastPage:%d",
+            "scrapePrefix(child): scraping page %d complete, lastPage: %d",
             pageIdx,
             targetComplete ) );
           try

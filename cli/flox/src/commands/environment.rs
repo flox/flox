@@ -1677,7 +1677,11 @@ impl Pull {
                     ..
                 })),
             ))) => {
-                let hint = "Use 'flox pull --force' to add your system to the manifest.";
+                let hint = formatdoc! {"
+                    Use 'flox pull --force' to add your system to the manifest.
+                    For more on managing systems for your environment, visit the documentation:
+                    https://flox.dev/docs/tutorials/multi-arch-environments
+                "};
                 if !force && !Dialog::can_prompt() {
                     fs::remove_dir_all(&dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
@@ -1692,10 +1696,13 @@ impl Pull {
                 let force = force || Self::query_add_system(&flox.system)?;
                 if !force {
                     // prompt available, user chose to abort
-                    message::plain(hint);
                     fs::remove_dir_all(&dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
-                    bail!("Did not pull the environment.");
+                    bail!(formatdoc! {"
+                        Did not pull the environment.
+
+                        {hint}
+                    "});
                 }
 
                 let doc = Self::amend_current_system(&env, flox)?;
