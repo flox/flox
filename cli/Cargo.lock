@@ -679,7 +679,7 @@ checksum = "25cbce373ec4653f1a01a31e8a5e5ec0c622dc27ff9c4e6606eefef5cbbed4a5"
 
 [[package]]
 name = "flox"
-version = "0.3.7"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2086,7 +2086,7 @@ dependencies = [
 [[package]]
 name = "runix"
 version = "0.2.0"
-source = "git+https://github.com/flox/runix#b7ee2d5adae241077331de0637fa783addc470c8"
+source = "git+https://github.com/flox/runix#0121048684b864b7ba055e8c8703a0186885ad1a"
 dependencies = [
  "async-trait",
  "chrono",

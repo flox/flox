@@ -18,9 +18,12 @@
   revCountDiff = self.revCount - inputs.flox-latest.revCount;
   suffix =
     if self ? revCount && self ? shortRev
-    then "${builtins.toString revCountDiff}-g${self.shortRev}"
-    else "dirty";
-  version = "${cargoToml.package.version}-${suffix}";
+    then
+      if revCountDiff == 0
+      then ""
+      else "-${builtins.toString revCountDiff}-g${self.shortRev}"
+    else "-dirty";
+  version = "${cargoToml.package.version}${suffix}";
 in
   symlinkJoin {
     name = "${flox-cli.pname}-${version}";
