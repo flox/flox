@@ -80,12 +80,11 @@ hook was defined.
 
 # ENVIRONMENT VARIABLES
 
-`$_FLOX_ACTIVE_ENVIRONMENTS`
-:   A JSON array containing one object per active environment.
-    This is currently an implementation detail
-    and its contents are subject to change.
-
 `$FLOX_PROMPT_ENVIRONMENTS`
+:   Contains a space-delimited list of the active environments,
+    e.g. `owner1/foo owner2/bar local_env`.
+
+`$_FLOX_ACTIVE_ENVIRONMENTS`
 :   A JSON array containing one object per active environment.
     This is currently an implementation detail
     and its contents are subject to change.
