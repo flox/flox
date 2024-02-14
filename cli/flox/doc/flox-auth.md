@@ -31,7 +31,6 @@ Authenticating also automatically trusts your personal environments.
 
 Prompts you to enter a one-time code at a specified URL.
 If called interactively it can open the browser for you if you press `<enter>`.
-Uses GitHub for identity but otherwise does not acquire any permissions.
 
 See also:
 [`flox-push(1)`](./flox-push.md),
