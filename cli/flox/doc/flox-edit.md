@@ -62,6 +62,11 @@ which replaces the contents of the manifest with those of the provided file.
 ./include/general-options.md
 ```
 
+# ENVIRONMENT VARIABLES
+
+`$EDITOR`, `$VISUAL`
+:   Override the default editor used for editing environment manifests and commit messages.
+
 # SEE ALSO
 [`flox-push(1)`](./flox-push.md),
 [`flox-pull(1)`](./flox-pull.md),

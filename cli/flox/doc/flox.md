@@ -6,7 +6,7 @@ header: "Flox User Manuals"
 
 # NAME
 
-flox - command-line interface (CLI)
+flox - developer environments you can take with you
 
 # SYNOPSIS
 
@@ -59,7 +59,7 @@ sharing environments, and administration.
 `show`
 :   Show details about a single package.
 
-`install`,
+`install`, `i`
 :   Install packages into an environment.
 
 `uninstall`
@@ -90,9 +90,6 @@ sharing environments, and administration.
 `upgrade`
 :   Upgrade packages in an environment.
 
-`containerize`
-:   Export a Flox environment as a container image.
-
 `config`
 :   View and set configuration options.
 
@@ -103,7 +100,7 @@ sharing environments, and administration.
 
 `$FLOX_PROMPT_ENVIRONMENTS`
 :   Contains a space-delimited list of the active environments,
-    e.g. 'owner1/foo owner2/bar local_env'.
+    e.g. `owner1/foo owner2/bar local_env`.
 
 `$_FLOX_ACTIVE_ENVIRONMENTS`
 :   A JSON array containing one object per active environment.
@@ -123,7 +120,7 @@ sharing environments, and administration.
 
 `$FLOX_DISABLE_METRICS`
 :   Variable for disabling the collection/sending of metrics data.
-    If set to "true", prevents Flox from submitting basic metrics information
+    If set to `true`, prevents Flox from submitting basic metrics information
     such as a unique token and the subcommand issued.
 
 `$EDITOR`, `$VISUAL`
@@ -134,7 +131,7 @@ sharing environments, and administration.
     Set `NIX_SSL_CERT_FILE` to only override packages built with Nix,
     and otherwise set `SSL_CERT_FILE` to override the value for all packages.
 
-    See also: https://nixos.org/manual/nix/stable/installation/env-variables.html#nix_ssl_cert_file
+    See also: [Nix environment variables - `NIX_SSL_CERT_FILE`](https://nixos.org/manual/nix/stable/installation/env-variables.html#nix_ssl_cert_file)
 
 # SEE ALSO
 
