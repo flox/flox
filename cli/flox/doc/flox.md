@@ -149,5 +149,4 @@ sharing environments, and administration.
 [`flox-push`(1)](./flox-push.md),
 [`flox-pull`(1)](./flox-pull.md),
 [`flox-delete`(1)](./flox-delete.md),
-[`flox-config`(1)](./flox-config.md),
-[`flox-containerize`(1)](./flox-containerize.md),
+[`flox-config`(1)](./flox-config.md)
