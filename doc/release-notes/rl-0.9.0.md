@@ -4,7 +4,7 @@ This release contains **breaking changes in the Flox CLI** and FloxHub service. 
 
  - Combined 'project environments' and 'managed environments' into a single 'environments' concept.
  - Flox stores environment definition in a `.flox` folder in the current working directory by default.
- - Flox enviornments support multiple architectures without having to create multiple environments. 
+ - Flox environments support multiple architectures without having to create multiple environments. 
  - The `--environment` or `-e` option for managed environments on many commands has been replaced with `-r` or `--remote` for FloxHub managed environments and `--dir` or `-d` to refer to local directory path environments.
  - Environments are now delcared in a `manifest.toml` file embedded inside the `.flox` folder. `flox edit` will allow edits and validate changes made.
  - The FloxHub service and its associated commands are more broadly available to anyone with a valid GitHub account. Try the commands to sign up-- `flox push`, `flox pull`, `flox auth login`.
