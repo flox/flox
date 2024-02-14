@@ -513,7 +513,7 @@ PkgDb::scrape( nix::SymbolTable & syms,
         {
           const std::string pathS
             = concatStringsSep( ".", prefix ) + "." + syms[aname];
-          traceLog( nix::fmt( "Processing attribute path: %s.", pathS ) );
+          traceLog( nix::fmt( "Processing attribute path: '%s'.", pathS ) );
         }
 
       if ( syms[aname] == "recurseForDerivations" ) { continue; }
@@ -521,9 +521,9 @@ PkgDb::scrape( nix::SymbolTable & syms,
       Todos        todo;
       flox::Cursor childCursor = cursor->getAttr( aname );
 
-      // Try processing this attribute.  If we are to recurse, todo will be
-      // loaded with the first target for us... we process this subtree
-      // completely using the todo stack.
+      /* Try processing this attribute.
+       * If we are to recurse, todo will be loaded with the first target for
+       * us... we process this subtree completely using the todo stack. */
       if ( processAttrib( childCursor, prefix, parentId, aname, todo ) )
         {
           const auto [parentPrefix, _a, _b] = todo.top();
