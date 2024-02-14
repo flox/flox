@@ -13,6 +13,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <sys/wait.h>
 #include <unordered_map>
 #include <utility>
 #include <vector>
