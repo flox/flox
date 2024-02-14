@@ -85,7 +85,7 @@ hook was defined.
     This is currently an implementation detail
     and its contents are subject to change.
 
-`$_FLOX_ACTIVE_ENVIRONMENTS`
+`$FLOX_PROMPT_ENVIRONMENTS`
 :   A JSON array containing one object per active environment.
     This is currently an implementation detail
     and its contents are subject to change.
