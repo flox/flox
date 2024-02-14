@@ -81,7 +81,7 @@ Descriptor ::= {
 , semver             = null | <STRING>
 , systems            = null | [<STRING>, ...]
 , path               = null | <STRING> | [<STRING>, ...]
-, abs-path           = null | <STRING> | [<STRING>, ...]
+, abspath           = null | <STRING> | [<STRING>, ...]
 , package-repository = null | <STRING> | FlakeAttrs
 , priority           = null | <INT>
 }
@@ -116,7 +116,7 @@ Fields:
   - `systems`: A list of systems on which to resolve this package.
     - When omitted or `null` only the current system is used for resolution.
   - `path`: Match a relative path within the registry input.
-  - `abs-path`: Match an exact path within the registry input.
+  - `abspath`: Match an exact path within the registry input.
   - `package-repository`: The named registry input or flake reference that this package should be resolved in.
   - `priority`: A priority used to resolve file conflicts.
     - When the attribute is missing or `null`, the package is assigned a priority of 5.

@@ -44,7 +44,7 @@ More specific information for a single package is available via the
 ## Fuzzy search
 When only given a package name,
 `flox search` uses a fuzzy search mechanism that tries to match either the
-package name itself or some portion of the relative path.
+package name itself or some portion of the pkg-path.
 
 The search query can also include a version filter following the
 familiar semver syntax (`@` between the package and version).

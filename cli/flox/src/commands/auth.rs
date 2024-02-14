@@ -170,7 +170,7 @@ fn calculate_expiry(expires_in: i64) -> String {
 // FloxHub authentication commands
 #[derive(Clone, Debug, Bpaf)]
 pub enum Auth {
-    /// Login to FloxHub (requires an existing GitHub account)
+    /// Login to FloxHub
     #[bpaf(command)]
     Login,
 

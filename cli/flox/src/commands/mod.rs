@@ -100,7 +100,11 @@ impl Default for Verbosity {
 }
 
 #[derive(Bpaf)]
-#[bpaf(options, descr(FLOX_DESCRIPTION))]
+#[bpaf(
+    options,
+    descr(FLOX_DESCRIPTION),
+    footer("Run 'man flox' for more details.")
+)]
 pub struct FloxCli(#[bpaf(external(flox_args))] pub FloxArgs);
 
 /// Main flox args parser
@@ -295,31 +299,52 @@ impl Help {
 #[derive(Bpaf, Clone)]
 enum LocalDevelopmentCommands {
     /// Create an environment in the current directory
-    #[bpaf(command, long("create"))]
+    #[bpaf(
+        command,
+        long("create"),
+        footer("Run 'man flox-init' for more details.")
+    )]
     Init(#[bpaf(external(environment::init))] environment::Init),
-    /// Enter the environment, type `exit` to leave
-    #[bpaf(command, long("develop"))]
+    /// Enter the environment, type 'exit' to leave
+    #[bpaf(
+        command,
+        long("develop"),
+        footer("Run 'man flox-activate' for more details.")
+    )]
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
     /// Search for system or library packages to install
-    #[bpaf(command)]
+    #[bpaf(command, footer("Run 'man flox-search' for more details."))]
     Search(#[bpaf(external(search::search))] search::Search),
     /// Show details about a single package
-    #[bpaf(command, long("show"))]
+    #[bpaf(command, long("show"), footer("Run 'man flox-show' for more details."))]
     Show(#[bpaf(external(search::show))] search::Show),
-    /// Install a package into an environment
-    #[bpaf(command, short('i'))]
+    /// Install packages into an environment
+    #[bpaf(
+        command,
+        short('i'),
+        footer("Run 'man flox-install' for more details.")
+    )]
     Install(#[bpaf(external(environment::install))] environment::Install),
     /// Uninstall installed packages from an environment
-    #[bpaf(command, long("remove"), long("rm"))]
+    #[bpaf(
+        command,
+        long("remove"),
+        long("rm"),
+        footer("Run 'man flox-uninstall' for more details.")
+    )]
     Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
     /// Edit declarative environment configuration file
-    #[bpaf(command)]
+    #[bpaf(command, footer("Run 'man flox-edit' for more details."))]
     Edit(#[bpaf(external(environment::edit))] environment::Edit),
     /// List packages installed in an environment
-    #[bpaf(command)]
+    #[bpaf(command, footer("Run 'man flox-list' for more details."))]
     List(#[bpaf(external(environment::list))] environment::List),
     /// Delete an environment
-    #[bpaf(command, long("destroy"))]
+    #[bpaf(
+        command,
+        long("destroy"),
+        footer("Run 'man flox-delete' for more details.")
+    )]
     Delete(#[bpaf(external(environment::delete))] environment::Delete),
 }
 
@@ -343,14 +368,14 @@ impl LocalDevelopmentCommands {
 /// Sharing Commands
 #[derive(Bpaf, Clone)]
 enum SharingCommands {
-    /// Send environment to floxhub
-    #[bpaf(command)]
+    /// Send an environment to FloxHub
+    #[bpaf(command, footer("Run 'man flox-push' for more details."))]
     Push(#[bpaf(external(environment::push))] environment::Push),
-    #[bpaf(command)]
-    /// Pull environment from FloxHub
+    /// Pull an environment from FloxHub
+    #[bpaf(command, footer("Run 'man flox-pull' for more details."))]
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
     /// Containerize an environment
-    #[bpaf(command, hide)]
+    #[bpaf(command, hide, footer("Run 'man flox-containerize' for more details."))]
     Containerize(#[bpaf(external(environment::containerize))] environment::Containerize),
 }
 impl SharingCommands {
@@ -370,8 +395,8 @@ enum AdditionalCommands {
     Documentation(
         #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
     ),
-    /// Update the global base catalog or an environment's base catalog
-    #[bpaf(command, hide)]
+    /// Update environment's base catalog or the global base catalog
+    #[bpaf(command, hide, footer("Run 'man flox-update' for more details."))]
     Update(#[bpaf(external(environment::update))] environment::Update),
     #[bpaf(command, hide, header(indoc! {"
         When no arguments are specified, all packages in the environment are upgraded.\n\n
@@ -387,9 +412,10 @@ enum AdditionalCommands {
         groups by passing 'toplevel' as the group name.
     "}))]
     /// Upgrade packages in an environment
+    #[bpaf(command, footer("Run 'man flox-upgrade' for more details."))]
     Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
     /// View and set configuration options
-    #[bpaf(command, hide)]
+    #[bpaf(command, hide, footer("Run 'man flox-config' for more details."))]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
     /// Delete builds of non-current versions of an environment
     #[bpaf(command("wipe-history"), hide)]
@@ -446,7 +472,7 @@ enum InternalCommands {
     #[bpaf(command)]
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
     /// FloxHub authentication commands
-    #[bpaf(command)]
+    #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
     Auth(#[bpaf(external(auth::auth))] auth::Auth),
 }
 

@@ -13,6 +13,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <sys/wait.h>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -225,7 +226,7 @@ Environment::groupIsLocked( const GroupName &          name,
 
           /* We ignore `priority' and handle `systems' below. */
           if ( ( descriptor.name != oldDescriptor.name )
-               || ( descriptor.path != oldDescriptor.path )
+               || ( descriptor.pkgPath != oldDescriptor.pkgPath )
                || ( descriptor.version != oldDescriptor.version )
                || ( descriptor.semver != oldDescriptor.semver )
                || ( descriptor.subtree != oldDescriptor.subtree )
@@ -371,9 +372,9 @@ Environment::tryResolveDescriptorIn( const ManifestDescriptor & descriptor,
                                      const System &             system )
 {
   std::string dPath;
-  if ( descriptor.path.has_value() )
+  if ( descriptor.pkgPath.has_value() )
     {
-      dPath = concatStringsSep( ".", *descriptor.path );
+      dPath = concatStringsSep( ".", *descriptor.pkgPath );
     }
   std::string dName;
   if ( descriptor.name.has_value() ) { dName = *descriptor.name; }
@@ -468,7 +469,7 @@ Environment::getGroupInput( const InstallDescriptors & group,
                    *   without effecting resolution.
                    * - `group' is handled below. */
                   if ( ( descriptor.name == oldDescriptor.name )
-                       && ( descriptor.path == oldDescriptor.path )
+                       && ( descriptor.pkgPath == oldDescriptor.pkgPath )
                        && ( descriptor.version == oldDescriptor.version )
                        && ( descriptor.semver == oldDescriptor.semver )
                        && ( descriptor.subtree == oldDescriptor.subtree )
