@@ -3,7 +3,7 @@
 This release contains **breaking changes in the Flox CLI** and FloxHub service. You are responsible for recreating environments created in 0.3.6 and prior versions. If you rely on a command that has been removed, we recommend that you wait to upgrade until support is added. We'd love to hear from you on our discourse forum if you have questions.
 
  - Combined 'project environments' and 'managed environments' into a single 'environments' concept.
- - Flox stores environment definition in a `.flox` folder in the current working directory by default.
+ - Flox now stores environment definition in a `.flox` folder in the current working directory by default.
  - Flox environments support multiple architectures without having to create multiple environments. 
  - The `--environment` or `-e` option for managed environments on many commands has been replaced with `-r` or `--remote` for FloxHub managed environments and `--dir` or `-d` to refer to local directory path environments.
  - Environments are now delcared in a `manifest.toml` file embedded inside the `.flox` folder. `flox edit` will allow edits and validate changes made.
