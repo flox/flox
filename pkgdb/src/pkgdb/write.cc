@@ -9,6 +9,7 @@
 
 #include <limits>
 #include <memory>
+#include <ranges>
 
 #include "flox/flake-package.hh"
 #include "flox/pkgdb/write.hh"
@@ -434,73 +435,118 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
  * of recursion is faster and consumes less memory.
  * Repeated runs against `nixpkgs-flox` come in at ~2m03s using recursion and
  * ~1m40s using a queue. */
-void
-PkgDb::scrape( nix::SymbolTable & syms, const Target & target, Todos & todo )
+bool
+PkgDb::scrape( nix::SymbolTable & syms,
+               const Target &     target,
+               std::size_t        pageSize,
+               std::size_t        pageIdx )
 {
   const auto & [prefix, cursor, parentId] = target;
 
   /* If it has previously been scraped then bail out. */
-  if ( this->completedAttrSet( parentId ) ) { return; }
+  if ( this->completedAttrSet( parentId ) ) { return true; }
 
   bool tryRecur = prefix.front() != "packages";
 
   debugLog( nix::fmt( "evaluating package set '%s'",
                       concatStringsSep( ".", prefix ) ) );
 
-  /* Scrape loop over attrs */
-  for ( nix::Symbol & aname : cursor->getAttrs() )
+  auto processAttrib
+    = [this, &syms, tryRecur]( const flox::Cursor &      childCursor,
+                               const flox::AttrPath &    prefix,
+                               const flox::pkgdb::row_id parentId,
+                               const nix::Symbol &       aname,
+                               Todos &                   todo ) -> bool
+  {
+    try
+      {
+        if ( childCursor->isDerivation() )
+          {
+            this->addPackage( parentId, syms[aname], childCursor );
+            return false;
+          }
+        else if ( ! tryRecur ) { return false; }
+        else if ( auto maybe
+                  = childCursor->maybeGetAttr( "recurseForDerivations" );
+                  ( ( maybe != nullptr ) && maybe->getBool() )
+                  /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
+                   *      due to a bug in `nixpkgs' which doesn't set
+                   *      `recurseForDerivations' attribute correctly. */
+                  || ( ( prefix.front() == "legacyPackages" )
+                       && ( syms[aname] == "darwin" ) ) )
+          {
+            flox::AttrPath path = prefix;
+            path.emplace_back( syms[aname] );
+            row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
+            todo.emplace( std::make_tuple( std::move( path ),
+                                           std::move( childCursor ),
+                                           childId ) );
+            return true;
+          }
+        else { return false; }
+      }
+    catch ( const nix::EvalError & err )
+      {
+        /* Ignore errors in `legacyPackages' */
+        if ( tryRecur )
+          {
+            /* Only print eval errors in "debug" mode. */
+            nix::ignoreException( nix::lvlDebug );
+            return false;
+          }
+        else { throw; }
+      }
+  };
+
+  auto   allAttribs   = cursor->getAttrs();
+  size_t startIdx     = pageIdx * pageSize;
+  size_t thisPageSize = startIdx + pageSize < allAttribs.size()
+                          ? pageSize
+                          : allAttribs.size() % pageSize;
+  bool   lastPage     = thisPageSize < pageSize;
+  auto   page
+    = std::views::counted( allAttribs.begin() + startIdx, thisPageSize );
+
+  for ( nix::Symbol & aname : page )
     {
+      if ( auto lvl = nix::lvlTalkative; lvl <= nix::verbosity )
+        {
+          const std::string pathS
+            = concatStringsSep( ".", prefix ) + "." + syms[aname];
+          traceLog( nix::fmt( "Processing attribute path: %s.", pathS ) );
+        }
+
       if ( syms[aname] == "recurseForDerivations" ) { continue; }
 
-      /* Used for logging, but can skip it at low verbosity levels. */
-      const std::string pathS
-        = ( nix::lvlTalkative <= nix::verbosity )
-            ? concatStringsSep( ".", prefix ) + "." + syms[aname]
-            : "";
+      Todos        todo;
+      flox::Cursor childCursor = cursor->getAttr( aname );
 
-      traceLog( "\tevaluating attribute '" + pathS + "'" );
-
-      try
+      // Try processing this attribute.  If we are to recurse, todo will be
+      // loaded with the first target for us... we process this subtree
+      // completely using the todo stack.
+      if ( processAttrib( childCursor, prefix, parentId, aname, todo ) )
         {
-          flox::Cursor child = cursor->getAttr( aname );
-          if ( child->isDerivation() )
-            {
-              this->addPackage( parentId, syms[aname], child );
-              continue;
-            }
-          if ( ! tryRecur ) { continue; }
-          if ( auto maybe = child->maybeGetAttr( "recurseForDerivations" );
-               ( ( maybe != nullptr ) && maybe->getBool() )
-               /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
-                *      due to a bug in `nixpkgs' which doesn't set
-                *      `recurseForDerivations' attribute correctly. */
-               || ( ( prefix.front() == "legacyPackages" )
-                    && ( syms[aname] == "darwin" ) ) )
-            {
-              flox::AttrPath path = prefix;
-              path.emplace_back( syms[aname] );
-              if ( nix::lvlTalkative <= nix::verbosity )
+          const auto [parentPrefix, _a, _b] = todo.top();
+          do {
+              const auto [prefix, cursor, parentId] = todo.top();
+              todo.pop();
+
+              for ( nix::Symbol & aname : cursor->getAttrs() )
                 {
-                  nix::logger->log( nix::lvlTalkative,
-                                    "\tpushing target '" + pathS + "'" );
+                  if ( syms[aname] == "recurseForDerivations" ) { continue; }
+                  flox::Cursor childCursor = cursor->getAttr( aname );
+                  processAttrib( childCursor, prefix, parentId, aname, todo );
                 }
-              row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
-              todo.emplace( std::make_tuple( std::move( path ),
-                                             std::move( child ),
-                                             childId ) );
             }
-        }
-      catch ( const nix::EvalError & err )
-        {
-          /* Ignore errors in `legacyPackages' */
-          if ( tryRecur )
-            {
-              /* Only print eval errors in "debug" mode. */
-              nix::ignoreException( nix::lvlDebug );
-            }
-          else { throw; }
+          while ( ! todo.empty() );
+
+          this->setPrefixDone( parentPrefix, true );
         }
     }
+
+  if ( lastPage ) { this->setPrefixDone( prefix, true ); }
+  return lastPage;
+  ;
 }
 
 

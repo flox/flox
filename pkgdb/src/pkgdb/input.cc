@@ -12,6 +12,7 @@
 #include <map>
 #include <optional>
 #include <ostream>
+#include <sys/wait.h>
 #include <tuple>
 
 #include <nix/error.hh>
@@ -131,45 +132,143 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 {
   if ( this->getDbReadOnly()->completedAttrSet( prefix ) ) { return; }
 
-  Todos       todo;
-  bool        wasRW = this->dbRW != nullptr;
-  MaybeCursor root  = this->getFlake()->maybeOpenCursor( prefix );
+  Todos todo;
 
-  if ( root == nullptr ) { return; }
+  // close the db if we have anything open in preparation for the child to take
+  // over.
+  this->closeDbReadWrite();
 
-  /* Open a read/write connection. */
-  auto   dbRW = this->getDbReadWrite();
-  row_id row  = dbRW->addOrGetAttrSetId( prefix );
+  this->freeFlake();
 
-  todo.emplace(
-    std::make_tuple( prefix, static_cast<flox::Cursor>( root ), row ) );
+  bool         scrapingComplete = false;
+  const size_t pageSize         = 5000;
+  size_t       pageIdx          = 0;
 
-  /* Start a transaction */
-  dbRW->db.execute( "BEGIN EXCLUSIVE TRANSACTION" );
-  try
-    {
-      while ( ! todo.empty() )
+  do {
+      const int EXIT_CHILD_INCOMPLETE = EXIT_SUCCESS + 1;
+      const int EXIT_FAILURE_NIX_EVAL
+        = 150;  // seems to not overlap with common posix codes
+
+      pid_t pid = fork();
+      if ( pid == -1 )
         {
-          dbRW->scrape( this->getFlake()->state->symbols, todo.front(), todo );
-          todo.pop();
+          throw PkgDbException( "fork to scrape attributes failed" );
         }
+      if ( 0 < pid )
+        {
+          int status = 0;
+          debugLog(
+            nix::fmt( "scrapePrefix: Waiting for forked process, pid:%d",
+                      pid ) );
+          waitpid( pid, &status, 0 );
+          debugLog(
+            nix::fmt( "scrapePrefix: Forked process exited, exitcode:%d",
+                      status ) );
 
-      /* Mark the prefix and its descendants as "done" */
-      dbRW->setPrefixDone( row, true );
+          if ( WIFEXITED( status ) )
+            {
+              if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
+                {
+                  debugLog( nix::fmt(
+                    "scrapePrefix: Child reports all pages complete" ) );
+                  scrapingComplete = true;
+                }
+              else if ( WEXITSTATUS( status ) == EXIT_CHILD_INCOMPLETE )
+                {
+                  debugLog( nix::fmt( "scrapePrefix: Child reports additional "
+                                      "pages to process" ) );
+                  // Make sure to increment the pageIdx here (in the parent)
+                  pageIdx++;
+                  scrapingComplete = false;
+                }
+              else  // ( WEXITSTATUS( status ) != EXIT_SUCCESS )
+                {
+                  scrapingComplete = true;
+                  debugLog( nix::fmt(
+                    "scrapePrefix: Child reports failure, aborting" ) );
+                  if ( WEXITSTATUS( status ) == EXIT_FAILURE_NIX_EVAL )
+                    {
+                      throw PkgDbException(
+                        nix::fmt( "scraping failed: NixEvalException reported. "
+                                  "See child log for details." ) );
+                    }
+                  else
+                    {
+                      throw PkgDbException(
+                        nix::fmt( "scraping failed: exit code %d",
+                                  WEXITSTATUS( status ) ) );
+                    }
+                }
+            }
+          else
+            {
+              scrapingComplete = true;
+              throw PkgDbException(
+                nix::fmt( "scraping failed: abnormal child exit, signal:%d",
+                          WTERMSIG( status ) ) );
+            }
+        }
+      else
+        {
+          /* Open a read/write connection. */
+          auto chunkDbRW = this->getDbReadWrite();
+
+          /* Start a transaction */
+          chunkDbRW->execute( "BEGIN TRANSACTION" );
+          row_id      chunkRow = chunkDbRW->addOrGetAttrSetId( prefix );
+          MaybeCursor root     = this->getFlake()->maybeOpenCursor( prefix );
+
+          Target rootTarget
+            = std::make_tuple( prefix,
+                               static_cast<flox::Cursor>( root ),
+                               chunkRow );
+          bool targetComplete = false;
+
+          try
+            {
+              debugLog(
+                nix::fmt( "scrapePrefix(child): scraping page %d of %d attribs",
+                          pageIdx,
+                          pageSize ) );
+              targetComplete
+                = chunkDbRW->scrape( this->getFlake()->state->symbols,
+                                     rootTarget,
+                                     pageSize,
+                                     pageIdx );
+            }
+          catch ( const nix::EvalError & err )
+            {
+              debugLog(
+                nix::fmt( "scrapePrefix(child): caught nix::EvalError: %s",
+                          err.msg().c_str() ) );
+              chunkDbRW->execute( "ROLLBACK TRANSACTION" );
+              this->closeDbReadWrite();
+              this->freeFlake();
+              exit( EXIT_FAILURE_NIX_EVAL );
+            }
+
+          /* Close the transaction. */
+          chunkDbRW->execute( "COMMIT TRANSACTION" );
+          debugLog( nix::fmt(
+            "scrapePrefix(child): scraping page %d complete, lastPage:%d",
+            pageIdx,
+            targetComplete ) );
+          try
+            {
+              this->closeDbReadWrite();
+              this->freeFlake();
+              exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+            }
+          catch ( const std::exception & err )
+            {
+              debugLog(
+                nix::fmt( "scrapePrefix(child): caught exception on exit: %s",
+                          err.what() ) );
+              exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+            }
+        }
     }
-  catch ( const nix::EvalError & err )
-    {
-      dbRW->db.execute( "ROLLBACK TRANSACTION" );
-      /* Close the r/w connection if we opened it. */
-      if ( ! wasRW ) { this->closeDbReadWrite(); }
-      throw NixEvalException( "error scraping flake", err );
-    }
-
-  /* Close the transaction. */
-  dbRW->db.execute( "COMMIT TRANSACTION" );
-
-  /* Close the r/w connection if we opened it. */
-  if ( ! wasRW ) { this->closeDbReadWrite(); }
+  while ( ! scrapingComplete );
 }
 
 

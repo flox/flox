@@ -37,11 +37,11 @@ setup_file() {
 systems = ["x86_64-linux", "x86_64-darwin"]
 
 [install.a]
-path = ["hello"]
+pkg-path = ["hello"]
 systems = ["x86_64-linux"]
 
 [install.b]
-path = ["hello"]
+pkg-path = ["hello"]
 systems = ["x86_64-darwin"]' > "$_MANIFEST";
 
   run sh -c "$PKGDB_BIN manifest lock --ga-registry --manifest '$_MANIFEST'  \

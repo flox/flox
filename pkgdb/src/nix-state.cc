@@ -35,6 +35,8 @@ initNix()
   // NOLINTNEXTLINE
   nix::setStackSize( ( std::size_t( 64 ) * 1024 ) * 1024 );
   nix::initNix();
+  /* Set the GC to handle forking properly */
+  GC_set_handle_fork( 1 );
   nix::initGC();
   /* Suppress benign warnings about `nix.conf'. */
   nix::Verbosity oldVerbosity = nix::verbosity;

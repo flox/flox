@@ -8,7 +8,7 @@ install:
   charasay:
     version: ^2
   pip:
-    path: python310Packages.pip
+    pkg-path: python310Packages.pip
   # Expect failure
   bad:
     optional: true

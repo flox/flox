@@ -8,7 +8,7 @@
 # the 'install' section
 
 [install]
-# hello.path = "hello"
+# hello.pkg-path = "hello"
 # nodejs = { version = "^18.4.2", path = "nodejs_18" }
 
 # Set an environment variable.

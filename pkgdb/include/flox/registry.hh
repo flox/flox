@@ -655,6 +655,8 @@ public:
   [[nodiscard]] nix::ref<FloxFlake>
   getFlake();
 
+  void
+  freeFlake();
 
   /**
    * @brief Get a list of enabled subtrees.
