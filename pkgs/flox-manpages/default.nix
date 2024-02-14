@@ -1,31 +1,54 @@
 # compiled manpages
 {
+  writeShellScript,
   runCommand,
   pandoc,
   fd,
   installShellFiles,
-}:
-runCommand "flox-manpages" {
-  src = builtins.path {
-    name = "flox-manpage-src";
-    path = "${./../../cli/flox/doc}";
-  };
-  buildInputs = [pandoc fd installShellFiles];
-} ''
-  buildDir=$(pwd)/__build
+}: let
+  compileManPageBin = writeShellScript "compile" ''
+    source="$1"
+    shift
+    dest="$1"
+    shift
 
-  mkdir "$out"
-  mkdir "$buildDir"
-  pushd "$src"
+    # tools
+    pandoc=${pandoc}/bin/pandoc
 
-  fd ".*\.md" -d 1 ./ -x \
-    pandoc -t man \
+    # Compile manpage
+    #
+    # Produe a standalone manpage with header and footer
+    # Apply custom filters:
+    # * `include-files.lua` to include other markdown files
+    # * `filter-links.lua` to mitigate against <https://github.com/jgm/pandoc/issues/9458>
+    $pandoc                       \
       -L ${./pandoc-filters/include-files.lua} \
-      --standalone \
-      -o "$buildDir/{/.}.1" \
-      {}
+      -L ${./pandoc-filters/filter-links.lua}  \
+      --standalone                             \
+      --strip-comments                         \
+      --from markdown                          \
+      --to man                                 \
+       $source                                 \
+    > "$dest"
+  '';
+in
+  runCommand "flox-manpages" {
+    src = builtins.path {
+      name = "flox-manpage-src";
+      path = "${./../../cli/flox/doc}";
+    };
+    buildInputs = [fd installShellFiles];
+  } ''
+    buildDir=$(pwd)/__build
+
+    mkdir "$out"
+    mkdir "$buildDir"
+    pushd "$src"
+
+
+    fd ".*\.md" -d 1 ./ -x ${compileManPageBin} {} $buildDir/{/.}.1
 
     ls $buildDir
 
     installManPage $buildDir/*;
-''
+  ''
