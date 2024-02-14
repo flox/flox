@@ -1122,9 +1122,9 @@ impl Install {
             .detect_concrete_environment(&flox, "install to")
         {
             Ok(concrete_environment) => concrete_environment,
-            Err(EnvironmentSelectError::Environment(EnvironmentError2::DotFloxNotFound)) => {
+            Err(EnvironmentSelectError::Environment(e @ EnvironmentError2::DotFloxNotFound)) => {
                 bail!(formatdoc! {"
-                Did not find an environment in the current directory.
+                {e}
 
                 Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
                 self.packages.join(" ")})
@@ -1248,9 +1248,9 @@ impl Uninstall {
             .detect_concrete_environment(&flox, "uninstall from")
         {
             Ok(concrete_environment) => concrete_environment,
-            Err(EnvironmentSelectError::Environment(EnvironmentError2::DotFloxNotFound)) => {
+            Err(EnvironmentSelectError::Environment(e @ EnvironmentError2::DotFloxNotFound)) => {
                 bail!(formatdoc! {"
-                Did not find an environment in the current directory.
+                {e}
 
                 Create an environment with 'flox init' or uninstall packages from an environment found elsewhere with 'flox uninstall {} --dir <path>'",
                 self.packages.join(" ")})

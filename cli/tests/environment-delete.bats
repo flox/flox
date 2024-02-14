@@ -64,5 +64,5 @@ dot_flox_exists() {
   assert_failure
   run "$FLOX_BIN" delete
   assert_failure
-  assert_output --partial "No environment found in \"$(pwd -P)\""
+  assert_output --partial "Did not find an environment in the current directory."
 }

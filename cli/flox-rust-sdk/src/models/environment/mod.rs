@@ -317,7 +317,7 @@ pub enum EnvironmentError2 {
     // todo: candidate for impl specific error
     // * only path and managed env are defined in .Flox
     // region: path env open
-    #[error(".flox directory not found")]
+    #[error("Did not find an environment in the current directory.")]
     DotFloxNotFound,
 
     #[error("could not locate the manifest for this environment")]
