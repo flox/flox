@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: 'Checkout'
-      - uses: 'actions/checkout@v3'
+        uses: 'actions/checkout@v3'
 
       # Create a list of target files.
       # If the workflow was triggered by a PR, only check changed files.
