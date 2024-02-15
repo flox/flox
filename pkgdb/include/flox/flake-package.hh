@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <nix/eval-cache.hh>
@@ -79,11 +80,9 @@ public:
 
   virtual ~FlakePackage() = default;
 
-  FlakePackage( const Cursor &   cursor,
-                const AttrPath & path,
-                bool             checkDrv = true )
+  FlakePackage( const Cursor & cursor, AttrPath path, bool checkDrv = true )
     : _cursor( cursor )
-    , _pathS( path )
+    , _pathS( std::move( path ) )
     , _fullName( cursor->getAttr( "name" )->getString() )
   {
     {
