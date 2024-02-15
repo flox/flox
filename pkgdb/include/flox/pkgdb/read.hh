@@ -383,7 +383,7 @@ public:
   nlohmann::json
   getPackage( const flox::AttrPath & path );
 
-  nix::FlakeRef
+  [[nodiscard]] nix::FlakeRef
   getLockedFlakeRef() const
   {
     return nix::FlakeRef::fromAttrs(

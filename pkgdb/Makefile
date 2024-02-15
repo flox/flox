@@ -543,8 +543,8 @@ FULLCLEANFILES += iwyu.log
 
 .PHONY: lint
 #: Run `clang-tidy' across entire project
-lint: compile_commands.json $(HEADERS) $(ALL_SRCS)
-	$(TIDY) $(filter-out compile_commands.json,$^);
+lint: ../compile_commands.json $(HEADERS) $(ALL_SRCS)
+	$(TIDY) $(filter-out ../compile_commands.json,$^);
 
 
 # ---------------------------------------------------------------------------- #

@@ -27,6 +27,10 @@ namespace flox::resolver {
 
 /* -------------------------------------------------------------------------- */
 
+const unsigned DEFAULT_PRIORITY = 5;
+
+/* -------------------------------------------------------------------------- */
+
 /** @brief A named group which a descriptor/package can be a member of. */
 using GroupName = std::string;
 
@@ -121,7 +125,7 @@ public:
    * `pkgPath` and/or `systems` fields if they are set.
    */
   void
-  check( const std::string iid = "*" ) const;
+  check( std::string iid = "*" ) const;
 
   /** @brief Reset to default/empty state. */
   void
@@ -255,7 +259,7 @@ public:
    * Packages with higher @a priority values will take precendence over those
    * with lower @a priority values.
    */
-  unsigned priority = 5;
+  unsigned priority = DEFAULT_PRIORITY;
 
 
   ManifestDescriptor() = default;

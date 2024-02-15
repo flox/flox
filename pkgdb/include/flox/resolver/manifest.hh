@@ -226,17 +226,17 @@ class GlobalManifestBase : public ManifestBase<RawType>
 
 public:
 
-  ~GlobalManifestBase() override                   = default;
-  GlobalManifestBase()                             = default;
-  GlobalManifestBase( const GlobalManifestBase & ) = default;
-  GlobalManifestBase( GlobalManifestBase && )      = default;
+  ~GlobalManifestBase() override                       = default;
+  GlobalManifestBase()                                 = default;
+  GlobalManifestBase( const GlobalManifestBase & )     = default;
+  GlobalManifestBase( GlobalManifestBase && ) noexcept = default;
 
   GlobalManifestBase &
   operator=( const GlobalManifestBase & )
     = default;
 
   GlobalManifestBase &
-  operator=( GlobalManifestBase && )
+  operator=( GlobalManifestBase && ) noexcept
     = default;
 
   explicit GlobalManifestBase( RawType raw )
@@ -361,10 +361,10 @@ private:
 
 public:
 
-  ~EnvironmentManifestBase() override                        = default;
-  EnvironmentManifestBase()                                  = default;
-  EnvironmentManifestBase( const EnvironmentManifestBase & ) = default;
-  EnvironmentManifestBase( EnvironmentManifestBase && )      = default;
+  ~EnvironmentManifestBase() override                            = default;
+  EnvironmentManifestBase()                                      = default;
+  EnvironmentManifestBase( const EnvironmentManifestBase & )     = default;
+  EnvironmentManifestBase( EnvironmentManifestBase && ) noexcept = default;
 
   explicit EnvironmentManifestBase( RawType raw )
     : ManifestBase<RawType>( std::move( raw ) )
@@ -383,7 +383,7 @@ public:
     = default;
 
   EnvironmentManifestBase &
-  operator=( EnvironmentManifestBase && )
+  operator=( EnvironmentManifestBase && ) noexcept
     = default;
 
   /** @brief Get _descriptors_ from the manifest's `install' field. */

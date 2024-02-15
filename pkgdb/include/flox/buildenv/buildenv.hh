@@ -10,6 +10,7 @@
  * -------------------------------------------------------------------------- */
 
 #include <optional>
+#include <utility>
 #include <vector>
 
 
@@ -21,9 +22,9 @@ namespace flox::buildenv {
 
 struct Priority
 {
-  unsigned                   priority;
+  unsigned                   priority {};
   std::optional<std::string> parentPath;
-  unsigned                   internalPriority;
+  unsigned                   internalPriority {};
 
   ~Priority()                  = default;
   Priority()                   = default;
@@ -34,7 +35,7 @@ struct Priority
                      std::optional<std::string> parentPath       = std::nullopt,
                      unsigned                   internalPriority = 0 )
     : priority( priority )
-    , parentPath( parentPath )
+    , parentPath( std::move( parentPath ) )
     , internalPriority( internalPriority )
   {}
 
@@ -53,7 +54,7 @@ struct Priority
 struct RealisedPackage
 {
   std::string path;
-  bool        active;
+  bool        active {};
   Priority    priority;
 
   ~RealisedPackage()                         = default;
@@ -64,7 +65,9 @@ struct RealisedPackage
   explicit RealisedPackage( std::string path,
                             bool        active   = false,
                             Priority    priority = {} )
-    : path( path ), active( active ), priority( priority )
+    : path( std::move( path ) )
+    , active( active )
+    , priority( std::move( priority ) )
   {}
 
   RealisedPackage &
@@ -93,12 +96,14 @@ class FileConflict : public std::exception
 
 public:
 
-  const std::string fileA;
-  const std::string fileB;
-  const int         priority;
+  std::string fileA;
+  std::string fileB;
+  int         priority;
 
-  FileConflict( const std::string fileA, const std::string fileB, int priority )
-    : fileA( fileA ), fileB( fileB ), priority( priority )
+  FileConflict( std::string fileA, std::string fileB, int priority )
+    : fileA( std::move( fileA ) )
+    , fileB( std::move( fileB ) )
+    , priority( priority )
   {}
 }; /* End class `FileConflict' */
 
@@ -112,8 +117,8 @@ public:
  * @param pkgs a list of packages to include in the build environment.
  */
 void
-buildEnvironment( const std::string &             out,
-                  std::vector<RealisedPackage> && pkgs );
+buildEnvironment( const std::string &            out,
+                  std::vector<RealisedPackage> & pkgs );
 
 /* -------------------------------------------------------------------------- */
 

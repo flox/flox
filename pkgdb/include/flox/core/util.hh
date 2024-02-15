@@ -466,7 +466,7 @@ concatStringsSep( const std::string_view sep, const Container & strings )
   rsl.reserve( size );
   for ( auto & idx : strings )
     {
-      if ( rsl.size() != 0 ) { rsl += sep; }
+      if ( ! rsl.empty() ) { rsl += sep; }
       rsl += idx;
     }
   return rsl;
@@ -484,7 +484,7 @@ concatStringsSep( const std::string_view sep, const Container & strings )
    * https://github.com/NixOS/nix/blob/09a6e8e7030170611a833612b9f40b9a10778c18/src/libutil/logging.cc#L64 \
    * for lvl to verbosity comparison                                                                       \
    */                                                                                                      \
-  if ( ! ( lvl > nix::verbosity ) ) { nix::logger->log( lvl, msg ); }
+  if ( ! ( ( lvl ) > nix::verbosity ) ) { nix::logger->log( lvl, msg ); }
 
 /** @brief Prints a log message to `stderr` when called with `-vvvv`. */
 #define traceLog( msg ) printLog( nix::Verbosity::lvlVomit, msg )
