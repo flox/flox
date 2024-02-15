@@ -221,8 +221,7 @@ createLinks( BuildEnvState &     state,
 /* -------------------------------------------------------------------------- */
 
 void
-buildEnvironment( const std::string &             out,
-                  std::vector<RealisedPackage> && pkgs )
+buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
 {
   BuildEnvState state;
 

@@ -117,8 +117,8 @@ public:
  * @param pkgs a list of packages to include in the build environment.
  */
 void
-buildEnvironment( const std::string &             out,
-                  std::vector<RealisedPackage> && pkgs );
+buildEnvironment( const std::string &            out,
+                  std::vector<RealisedPackage> & pkgs );
 
 /* -------------------------------------------------------------------------- */
 

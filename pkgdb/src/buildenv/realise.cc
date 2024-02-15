@@ -141,7 +141,7 @@ createEnvironmentStorePath(
   auto tempDir = nix::createTempDir();
   try
     {
-      buildenv::buildEnvironment( tempDir, std::move( pkgs ) );
+      buildenv::buildEnvironment( tempDir, pkgs );
     }
   catch ( buildenv::FileConflict & err )
     {
