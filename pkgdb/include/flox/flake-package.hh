@@ -79,7 +79,9 @@ public:
 
   virtual ~FlakePackage() = default;
 
-  FlakePackage( Cursor cursor, const AttrPath & path, bool checkDrv = true )
+  FlakePackage( const Cursor &   cursor,
+                const AttrPath & path,
+                bool             checkDrv = true )
     : _cursor( cursor )
     , _pathS( path )
     , _fullName( cursor->getAttr( "name" )->getString() )
@@ -93,7 +95,9 @@ public:
   }
 
 
-  FlakePackage( Cursor cursor, nix::SymbolTable * symtab, bool checkDrv = true )
+  FlakePackage( const Cursor &     cursor,
+                nix::SymbolTable * symtab,
+                bool               checkDrv = true )
     : _cursor( cursor ), _fullName( cursor->getAttr( "name" )->getString() )
   {
     {
