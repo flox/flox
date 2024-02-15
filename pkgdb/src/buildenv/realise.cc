@@ -174,7 +174,7 @@ extractAttrPath( nix::EvalState &       state,
   state.forceAttrs( vFlake, nix::noPos, "while parsing flake" );
 
 
-  auto output = vFlake.attrs->get( state.symbols.create( "outputs" ) );
+  auto * output = vFlake.attrs->get( state.symbols.create( "outputs" ) );
 
   for ( auto attrName : attrPath )
     {
