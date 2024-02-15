@@ -48,17 +48,18 @@ public:
   std::optional<bool>        unfree;
   std::optional<std::string> description;
 
-  RawPackage( AttrPath                         path             = {},
-              std::string_view                 name             = {},
-              std::string_view                 pname            = {},
-              std::optional<std::string>       version          = std::nullopt,
-              std::optional<std::string>       semver           = std::nullopt,
-              std::optional<std::string>       license          = std::nullopt,
-              const std::vector<std::string> & outputs          = { "out" },
-              const std::vector<std::string> & outputsToInstall = { "out" },
-              std::optional<bool>              broken           = std::nullopt,
-              std::optional<bool>              unfree           = std::nullopt,
-              std::optional<std::string>       description      = std::nullopt )
+  explicit RawPackage( AttrPath                         path    = {},
+                       std::string_view                 name    = {},
+                       std::string_view                 pname   = {},
+                       std::optional<std::string>       version = std::nullopt,
+                       std::optional<std::string>       semver  = std::nullopt,
+                       std::optional<std::string>       license = std::nullopt,
+                       const std::vector<std::string> & outputs = { "out" },
+                       const std::vector<std::string> & outputsToInstall
+                       = { "out" },
+                       std::optional<bool>        broken      = std::nullopt,
+                       std::optional<bool>        unfree      = std::nullopt,
+                       std::optional<std::string> description = std::nullopt )
     : path( std::move( path ) )
     , name( name )
     , pname( pname )
