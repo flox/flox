@@ -33,7 +33,7 @@ jobs:
         ref: ${{ github.event.merge_group.head_ref || github.ref }}
         filters: |
           pkgdb:
-            - ".github/workflows/**"
+            - ".github/workflows/ci.yml"
             - "pkgdb/**"
             - "pkgs/**"
             - "Justfile"
