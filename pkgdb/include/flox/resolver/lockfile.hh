@@ -189,7 +189,8 @@ struct LockfileRaw
   ~LockfileRaw()                     = default;
   LockfileRaw()                      = default;
   LockfileRaw( const LockfileRaw & ) = default;
-  LockfileRaw( LockfileRaw && )      = default;
+  // NOLINTNEXTLINE(bugprone-exception-escape)
+  LockfileRaw( LockfileRaw && ) = default;
   LockfileRaw &
   operator=( const LockfileRaw & )
     = default;
