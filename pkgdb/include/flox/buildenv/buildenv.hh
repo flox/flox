@@ -10,6 +10,7 @@
  * -------------------------------------------------------------------------- */
 
 #include <optional>
+#include <utility>
 #include <vector>
 
 
@@ -34,7 +35,7 @@ struct Priority
                      std::optional<std::string> parentPath       = std::nullopt,
                      unsigned                   internalPriority = 0 )
     : priority( priority )
-    , parentPath( parentPath )
+    , parentPath( std::move( parentPath ) )
     , internalPriority( internalPriority )
   {}
 
@@ -64,7 +65,9 @@ struct RealisedPackage
   explicit RealisedPackage( std::string path,
                             bool        active   = false,
                             Priority    priority = {} )
-    : path( path ), active( active ), priority( priority )
+    : path( std::move( path ) )
+    , active( active )
+    , priority( std::move( priority ) )
   {}
 
   RealisedPackage &
