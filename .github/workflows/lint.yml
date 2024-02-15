@@ -42,7 +42,7 @@ jobs:
         run: |
           git fetch origin main;
           echo "Checking changed sources" >&2;
-          ./pkgdb/build-aux/changed-sources > targets;
+          ./pkgdb/build-aux/changed-sources.sh > targets;
 
       - name: 'Create Target List ( Dispatch )'
         if: ${{ !github.event.pull_request }}
@@ -65,7 +65,7 @@ jobs:
           else
             git fetch origin main;
             echo "Checking changed sources" >&2;
-            ./pkgdb/build-aux/changed-sources > targets;
+            ./pkgdb/build-aux/changed-sources.sh > targets;
           fi
 
       # TODO: If target list is empty, terminate workflow here
