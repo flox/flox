@@ -94,7 +94,7 @@ fi
 
 /* -------------------------------------------------------------------------- */
 
-static const nix::StorePath
+static nix::StorePath
 addDirToStore( nix::EvalState &    state,
                std::string const & dir,
                nix::StorePathSet & references )
@@ -129,7 +129,7 @@ addDirToStore( nix::EvalState &    state,
 
 /* -------------------------------------------------------------------------- */
 
-const nix::StorePath
+nix::StorePath
 createEnvironmentStorePath(
   nix::EvalState &               state,
   std::vector<RealisedPackage> & pkgs,
