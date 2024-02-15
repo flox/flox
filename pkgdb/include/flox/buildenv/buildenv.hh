@@ -21,9 +21,9 @@ namespace flox::buildenv {
 
 struct Priority
 {
-  unsigned                   priority;
+  unsigned                   priority {};
   std::optional<std::string> parentPath;
-  unsigned                   internalPriority;
+  unsigned                   internalPriority {};
 
   ~Priority()                  = default;
   Priority()                   = default;
@@ -53,7 +53,7 @@ struct Priority
 struct RealisedPackage
 {
   std::string path;
-  bool        active;
+  bool        active {};
   Priority    priority;
 
   ~RealisedPackage()                         = default;
