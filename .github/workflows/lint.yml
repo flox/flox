@@ -40,7 +40,7 @@ jobs:
       - name: 'Create Target List ( PR )'
         if: ${{ github.event.pull_request }}
         run: |
-          git fetch origin main;
+          git fetch origin '${{ github.base_ref }}';
           echo "Checking changed sources" >&2;
           ./pkgdb/build-aux/changed-sources.sh > targets;
 
