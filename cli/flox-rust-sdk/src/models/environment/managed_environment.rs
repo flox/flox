@@ -23,7 +23,7 @@ use super::{
     UpdateResult,
     ENVIRONMENT_POINTER_FILENAME,
 };
-use crate::flox::Flox;
+use crate::flox::{EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmetav2::{floxmeta_git_options, FloxmetaV2, FloxmetaV2Error};
@@ -38,7 +38,7 @@ use crate::providers::git::{
 };
 use crate::utils::mtime_of;
 
-const GENERATION_LOCK_FILENAME: &str = "env.lock";
+pub const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
 #[derive(Debug)]
 pub struct ManagedEnvironment {
@@ -80,8 +80,7 @@ pub enum ManagedEnvironmentError {
     ReverseLink(std::io::Error),
     #[error("couldn't create links directory: {0}")]
     CreateLinksDir(std::io::Error),
-    #[error("attempted to open the empty path ''")]
-    EmptyPath,
+
     #[error("floxmeta branch name was malformed: {0}")]
     BadBranchName(String),
     #[error("project wasn't found at path {path}: {err}")]
@@ -90,6 +89,8 @@ pub enum ManagedEnvironmentError {
     Diverged,
     #[error("access to floxmeta repository was denied")]
     AccessDenied,
+    #[error("environment '{0}' does not exist at upstream '{1}'")]
+    UpstreamNotFound(EnvironmentRef, String),
     #[error("failed to push environment")]
     Push(#[source] GitRemoteCommandError),
     #[error("failed to delete local environment branch")]
@@ -124,8 +125,8 @@ pub enum ManagedEnvironmentError {
     #[error("could not commit generation")]
     CommitGeneration(#[source] GenerationsError),
 
-    #[error("could not link environment")]
-    Link(#[source] CoreEnvironmentError),
+    #[error("could not build environment")]
+    Build(#[source] CoreEnvironmentError),
 
     #[error("could not read manifest")]
     ReadManifest(#[source] GenerationsError),
@@ -142,6 +143,21 @@ pub struct GenerationLock {
     rev: String,
     local_rev: Option<String>,
     version: Version<1>,
+}
+
+impl GenerationLock {
+    fn read_maybe(path: impl AsRef<Path>) -> Result<Option<Self>, ManagedEnvironmentError> {
+        let lock_contents = match fs::read(path) {
+            Ok(contents) => contents,
+            Err(err) => match err.kind() {
+                io::ErrorKind::NotFound => return Ok(None),
+                _ => Err(ManagedEnvironmentError::ReadPointerLock(err))?,
+            },
+        };
+        serde_json::from_slice(&lock_contents)
+            .map(Some)
+            .map_err(ManagedEnvironmentError::InvalidLock)
+    }
 }
 
 impl Environment for ManagedEnvironment {
@@ -491,7 +507,6 @@ impl ManagedEnvironment {
     /// At some point, it may be useful to create a ManagedEnvironment without
     /// fetching or cloning. This would be more correct for commands like delete
     /// that don't need to fetch the environment.
-
     pub fn open(
         flox: &Flox,
         pointer: ManagedPointer,
@@ -502,6 +517,17 @@ impl ManagedEnvironment {
             Err(FloxmetaV2Error::NotFound(_)) => {
                 debug!("cloning floxmeta for {}", pointer.owner);
                 FloxmetaV2::clone(flox, &pointer).map_err(ManagedEnvironmentError::OpenFloxmeta)?
+            },
+            Err(FloxmetaV2Error::CloneBranch(GitRemoteCommandError::AccessDenied))
+            | Err(FloxmetaV2Error::FetchBranch(GitRemoteCommandError::AccessDenied)) => {
+                return Err(ManagedEnvironmentError::AccessDenied)
+            },
+            Err(FloxmetaV2Error::CloneBranch(GitRemoteCommandError::RefNotFound(_)))
+            | Err(FloxmetaV2Error::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
+                return Err(ManagedEnvironmentError::UpstreamNotFound(
+                    pointer.into(),
+                    flox.floxhub.base_url().to_string(),
+                ))
             },
             Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
         };
@@ -561,16 +587,7 @@ impl ManagedEnvironment {
         floxmeta: &FloxmetaV2,
     ) -> Result<GenerationLock, ManagedEnvironmentError> {
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
-        let maybe_lock: Option<GenerationLock> = match fs::read(&lock_path) {
-            Ok(lock_contents) => Some(
-                serde_json::from_slice(&lock_contents)
-                    .map_err(ManagedEnvironmentError::InvalidLock)?,
-            ),
-            Err(err) => match err.kind() {
-                io::ErrorKind::NotFound => None,
-                _ => Err(ManagedEnvironmentError::ReadPointerLock(err))?,
-            },
-        };
+        let maybe_lock = GenerationLock::read_maybe(&lock_path)?;
 
         Ok(match maybe_lock {
             // Use local_rev if we have it
@@ -709,10 +726,47 @@ impl ManagedEnvironment {
 
 /// Utility instance methods
 impl ManagedEnvironment {
+    /// Edit the environment without checking that it builds
+    ///
+    /// This is used to allow `flox pull` to work with environments
+    /// that don't specify the current system as supported.
+    pub fn edit_unsafe(
+        &mut self,
+        flox: &Flox,
+        contents: String,
+    ) -> Result<Result<EditResult, CoreEnvironmentError>, EnvironmentError2> {
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        let result = temporary.edit_unsafe(flox, contents)?;
+
+        if matches!(result, Ok(EditResult::Unchanged)) {
+            return Ok(result);
+        }
+
+        debug!("Environment changed, create and lock generation");
+
+        generations
+            .add_generation(&mut temporary, "manually edited".to_string())
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
+        self.lock_pointer()?;
+
+        // don't link, the environment may be broken
+
+        Ok(result)
+    }
+
     /// Lock the environment to the current revision
     fn lock_pointer(&self) -> Result<(), ManagedEnvironmentError> {
+        let lock_path = self.path.join(GENERATION_LOCK_FILENAME);
+
         write_pointer_lockfile(
-            self.path.join(GENERATION_LOCK_FILENAME),
+            lock_path,
             &self.floxmeta,
             remote_branch_name(&self.pointer),
             branch_name(&self.pointer, &self.path).into(),
@@ -811,6 +865,16 @@ fn write_pointer_lockfile(
         local_rev,
         version: Version::<1> {},
     };
+
+    {
+        let existing_lock = GenerationLock::read_maybe(&lock_path);
+
+        if matches!(existing_lock, Ok(Some(ref existing_lock)) if existing_lock == &lock) {
+            debug!("skip writing unchanged generation lock");
+            return Ok(lock);
+        }
+    }
+
     let lock_contents =
         serde_json::to_string_pretty(&lock).map_err(ManagedEnvironmentError::SerializeLock)?;
 
@@ -877,8 +941,17 @@ impl ManagedEnvironment {
     ) -> Result<Self, ManagedEnvironmentError> {
         // path of the original .flox directory
         let dot_flox_path = path_environment.path.clone();
+        let path_pointer = path_environment.pointer.clone();
+        let name = path_environment.name();
 
-        let pointer = ManagedPointer::new(owner, path_environment.name(), &flox.floxhub);
+        let mut core_environment = path_environment.into_core_environment();
+
+        // Ensure the environment builds before we push it
+        core_environment
+            .build(flox)
+            .map_err(ManagedEnvironmentError::Build)?;
+
+        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
 
         let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
         let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
@@ -886,19 +959,16 @@ impl ManagedEnvironment {
         // Caller decides whether to set token
         let token = flox.floxhub_token.as_ref();
 
-        let git_url = flox
-            .floxhub
-            .git_url()
-            .map_err(ManagedEnvironmentError::InvalidFloxhubBaseUrl)?;
+        let git_url = flox.floxhub.git_url();
 
-        let options = floxmeta_git_options(&git_url, &pointer.owner, token);
+        let options = floxmeta_git_options(git_url, &pointer.owner, token);
 
         let generations = Generations::init(
             options,
             checkedout_floxmeta_path,
             temp_floxmeta_path,
             remote_branch_name(&pointer),
-            &path_environment.pointer,
+            &path_pointer,
         )
         .map_err(ManagedEnvironmentError::InitializeFloxmeta)?;
 
@@ -909,10 +979,7 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         generations
-            .add_generation(
-                &mut path_environment.into_core_environment(),
-                "Add first generation".to_string(),
-            )
+            .add_generation(&mut core_environment, "Add first generation".to_string())
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         temp_floxmeta_git
@@ -949,9 +1016,22 @@ impl ManagedEnvironment {
         Ok(env)
     }
 
-    pub fn push(&mut self, force: bool) -> Result<(), ManagedEnvironmentError> {
+    pub fn push(&mut self, flox: &Flox, force: bool) -> Result<(), ManagedEnvironmentError> {
         let project_branch = branch_name(&self.pointer, &self.path);
         let sync_branch = remote_branch_name(&self.pointer);
+
+        // Ensure the environment builds before we push it
+        // Usually we don't create generations unless they build,
+        // but that is not always the case.
+        // If a user pulls an environment that is broken on their system, we may
+        // create a "broken" generation.
+        // That generation could have a divergent manifest and lock,
+        // or it could fail to build.
+        // So we have to verify we don't have a "broken" generation before pushing.
+        {
+            let mut env = self.get_current_generation(flox)?;
+            env.build(flox).map_err(ManagedEnvironmentError::Build)?;
+        }
 
         // Fetch the remote branch into sync branch
         self.floxmeta
@@ -1054,7 +1134,7 @@ mod test {
         ManagedPointer {
             owner: EnvironmentOwner::from_str("owner").unwrap(),
             name: EnvironmentName::from_str("name").unwrap(),
-            floxhub_url: Url::from_str("https://floxhub.com").unwrap(),
+            floxhub_url: Url::from_str("https://hub.flox.dev").unwrap(),
             floxhub_git_url_override: Some(Url::from_directory_path(remote_path).unwrap()),
             version: Version::<1> {},
         }

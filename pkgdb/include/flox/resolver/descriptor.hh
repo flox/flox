@@ -72,8 +72,8 @@ public:
 
   /** @brief A dot separated attribut path, or list representation. */
   using Path = std::variant<std::string, flox::AttrPath>;
-  /** Match a relative path. */
-  std::optional<Path> path;
+  /** Match a relative pkgPath. */
+  std::optional<Path> pkgPath;
 
   /**
    * @brief A dot separated attribut path, or list representation.
@@ -96,7 +96,7 @@ public:
 
   // TODO: Not implemented.
   /** Named _group_ that the package is a member of. */
-  std::optional<GroupName> packageGroup;
+  std::optional<GroupName> pkgGroup;
 
   // TODO: Not implemented.
   /** Force resolution is the named input or _flake reference_. */
@@ -118,7 +118,7 @@ public:
    *        throws an exception if the descriptor is invalid.
    *
    * This requires that the `abspath` field is valid, and consistent with
-   * `path` and/or `systems` fields if they are set.
+   * `pkgPath` and/or `systems` fields if they are set.
    */
   void
   check( const std::string iid = "*" ) const;
@@ -243,7 +243,7 @@ public:
   std::optional<std::vector<System>> systems;
 
   /** Match a relative attribute path. */
-  std::optional<flox::AttrPath> path;
+  std::optional<flox::AttrPath> pkgPath;
 
   /** Force resolution in a given input, _flake reference_. */
   std::optional<nix::FlakeRef> input;
@@ -269,9 +269,9 @@ public:
                                const ManifestDescriptorRaw & raw )
     : ManifestDescriptor( raw )
   {
-    if ( ( ! this->name.has_value() ) && ( ! this->path.has_value() ) )
+    if ( ( ! this->name.has_value() ) && ( ! this->pkgPath.has_value() ) )
       {
-        this->path = AttrPath { std::string( installID ) };
+        this->pkgPath = AttrPath { std::string( installID ) };
       }
   }
 

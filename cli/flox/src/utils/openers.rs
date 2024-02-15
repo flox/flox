@@ -80,6 +80,6 @@ where
     I::IntoIter: Clone,
 {
     path.into_iter()
-        .cartesian_product(candidates.into_iter())
+        .cartesian_product(candidates)
         .find(|(path, editor)| path.join(editor).exists())
 }

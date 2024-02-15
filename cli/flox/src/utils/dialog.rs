@@ -150,8 +150,7 @@ impl<'a, T: Display> Dialog<'a, Select<T>> {
                 Ok(x) => Ok((x.index, x.value)),
                 Err(err) => Err(err),
             }
-        }
-        .expect("Failed to join blocking dialog");
+        }?;
 
         Ok((raw_id, options.remove(id)))
     }
@@ -205,7 +204,7 @@ impl<'a, F: FnOnce() -> T + Send, T: Send> Dialog<'a, Spinner<F>> {
 impl Dialog<'_, ()> {
     /// True if stderr and stdin are ttys
     pub fn can_prompt() -> bool {
-        std::io::stderr().is_tty() && std::io::stdin().is_tty()
+        std::io::stderr().is_tty() && std::io::stdin().is_tty() && std::io::stdout().is_tty()
     }
 }
 

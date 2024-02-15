@@ -6,9 +6,14 @@ use anyhow::{Context, Result};
 use bpaf::{Args, Parser};
 use commands::{FloxArgs, FloxCli, Prefix, Version};
 use flox_rust_sdk::flox::FLOX_VERSION;
-use flox_rust_sdk::models::environment::init_global_manifest;
-use log::{error, warn};
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
+use flox_rust_sdk::models::environment::{init_global_manifest, EnvironmentError2};
+use log::{debug, warn};
 use utils::init::init_logger;
+use utils::message;
+
+use crate::utils::errors::{format_error, format_managed_error, format_remote_error};
 
 mod build;
 mod commands;
@@ -16,7 +21,7 @@ mod config;
 mod utils;
 
 async fn run(args: FloxArgs) -> Result<()> {
-    init_logger(Some(args.verbosity.clone()), Some(args.debug));
+    init_logger(Some(args.verbosity.clone()));
     set_user()?;
     set_parent_process_id();
     let config = config::Config::parse()?;
@@ -29,7 +34,7 @@ async fn run(args: FloxArgs) -> Result<()> {
 async fn main() -> ExitCode {
     // initialize logger with "best guess" defaults
     // updating the logger conf is cheap, so we reinitialize whenever we get more information
-    init_logger(None, None);
+    init_logger(None);
 
     // Quit early if `--prefix` is present
     if Prefix::check() {
@@ -44,7 +49,7 @@ async fn main() -> ExitCode {
     }
 
     // Parse verbosity flags to affect help message/parse errors
-    let (verbosity, debug) = {
+    let (verbosity, _debug) = {
         let verbosity_parser = commands::verbosity();
         let debug_parser = bpaf::long("debug").switch();
         let other_parser = bpaf::any("ANY", Some::<String>).many();
@@ -55,7 +60,7 @@ async fn main() -> ExitCode {
             .run_inner(Args::current_args())
             .unwrap_or_default()
     };
-    init_logger(Some(verbosity), Some(debug));
+    init_logger(Some(verbosity));
 
     // Run the argument parser
     //
@@ -63,6 +68,7 @@ async fn main() -> ExitCode {
     // to work with the shell completion frontends
     //
     // Pass through Stdout failure; This represents `--help`
+    // todo: just `run()` the parser? Unless we still need to control which std{err/out} to use
     let args = commands::flox_cli().run_inner(Args::current_args());
 
     if let Some(parse_err) = args.as_ref().err() {
@@ -72,7 +78,7 @@ async fn main() -> ExitCode {
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {
-                error!("{m}");
+                message::error(m);
                 return ExitCode::from(1);
             },
             bpaf::ParseFailure::Completion(c) => {
@@ -88,10 +94,29 @@ async fn main() -> ExitCode {
     // Run flox. Print errors and exit with status 1 on failure
     let exit_code = match run(args).await {
         Ok(()) => ExitCode::from(0),
+
         Err(e) => {
+            // todo: figure out how to deal with context, properly
+            debug!("{:#}", e);
+
             // Do not print any error if caused by wrapped flox (sh)
             if e.is::<FloxShellErrorCode>() {
                 return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;
+            }
+
+            if let Some(e) = e.downcast_ref::<EnvironmentError2>() {
+                message::error(format_error(e));
+                return ExitCode::from(1);
+            }
+
+            if let Some(e) = e.downcast_ref::<ManagedEnvironmentError>() {
+                message::error(format_managed_error(e));
+                return ExitCode::from(1);
+            }
+
+            if let Some(e) = e.downcast_ref::<RemoteEnvironmentError>() {
+                message::error(format_remote_error(e));
+                return ExitCode::from(1);
             }
 
             let err_str = e
@@ -99,7 +124,7 @@ async fn main() -> ExitCode {
                 .skip(1)
                 .fold(e.to_string(), |acc, cause| format!("{}: {}", acc, cause));
 
-            error!("{err_str}");
+            message::error(err_str);
 
             ExitCode::from(1)
         },

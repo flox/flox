@@ -1,6 +1,6 @@
 [package]
 name = "flox"
-version = "0.3.7"
+version = "0.9.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -51,6 +51,7 @@ url.workspace = true
 openssl.workspace = true
 chrono.workspace = true
 oauth2.workspace = true
+textwrap = {workspace = true, features = ["terminal_size"]}
 
 [dev-dependencies]
 temp-env = "0.3.2"

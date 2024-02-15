@@ -5,6 +5,8 @@ use derive_more::{AsRef, Deref, Display};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
+use super::environment::ManagedPointer;
+
 pub static DEFAULT_NAME: &str = "default";
 pub static DEFAULT_OWNER: &str = "local";
 
@@ -18,7 +20,7 @@ impl FromStr for EnvironmentOwner {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if [' ', '/'].iter().any(|c| s.contains(*c)) {
-            Err(EnvironmentRefError::InvalidOwner)?
+            Err(EnvironmentRefError::InvalidOwner(s.to_string()))?
         }
 
         Ok(EnvironmentOwner(s.to_string()))
@@ -35,7 +37,7 @@ impl FromStr for EnvironmentName {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if [' ', '/'].iter().any(|c| s.contains(*c)) {
-            Err(EnvironmentRefError::InvalidName)?
+            Err(EnvironmentRefError::InvalidName(s.to_string()))?
         }
 
         Ok(EnvironmentName(s.to_string()))
@@ -58,7 +60,9 @@ impl FromStr for EnvironmentRef {
     type Err = EnvironmentRefError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (owner, name) = s.split_once('/').ok_or(EnvironmentRefError::InvalidOwner)?;
+        let (owner, name) = s
+            .split_once('/')
+            .ok_or(EnvironmentRefError::InvalidOwner(s.to_string()))?;
         Ok(Self {
             owner: EnvironmentOwner::from_str(owner)?,
             name: EnvironmentName::from_str(name)?,
@@ -66,13 +70,22 @@ impl FromStr for EnvironmentRef {
     }
 }
 
+impl From<ManagedPointer> for EnvironmentRef {
+    fn from(pointer: ManagedPointer) -> Self {
+        Self {
+            owner: pointer.owner,
+            name: pointer.name,
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum EnvironmentRefError {
-    #[error("Name format is invalid")]
-    InvalidName,
+    #[error("Name '{0}' is invalid.\nEnvironment names may only contain alphanumeric characters, '.', '_', and '-'.")]
+    InvalidName(String),
 
-    #[error("Name format is invalid")]
-    InvalidOwner,
+    #[error("Owner '{0}' is invalid.\nEnvironment owners may only contain alphanumeric characters, '.', '_', and '-'.")]
+    InvalidOwner(String),
 }
 
 impl EnvironmentRef {

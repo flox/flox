@@ -62,7 +62,7 @@ setup_file() {
   query="packageset.hello@1.2"
   run "$PKGDB_BIN" parse descriptor --to manifest "$query"
   assert_success
-  assert_equal $(echo "$output" | jq -r -c '.path') '["packageset","hello"]'
+  assert_equal $(echo "$output" | jq -r -c '."pkg-path"') '["packageset","hello"]'
   assert_equal $(echo "$output" | jq -r '.semver') "1.2"
   unset output
   run "$PKGDB_BIN" parse descriptor --to query "$query"
@@ -75,7 +75,7 @@ setup_file() {
   query="legacyPackages.aarch64-darwin.hello@1.2"
   run "$PKGDB_BIN" parse descriptor --to manifest "$query"
   assert_success
-  assert_equal $(echo "$output" | jq -r -c '.path') '["hello"]'
+  assert_equal $(echo "$output" | jq -r -c '."pkg-path"') '["hello"]'
   assert_equal $(echo "$output" | jq -r '.subtree') "legacyPackages"
   assert_equal $(echo "$output" | jq -r '.semver') "1.2"
   unset output
@@ -90,7 +90,7 @@ setup_file() {
   query="legacyPackages.*.hello@1.2"
   run "$PKGDB_BIN" parse descriptor --to manifest "$query"
   assert_success
-  assert_equal $(echo "$output" | jq -r -c '.path') '["hello"]'
+  assert_equal $(echo "$output" | jq -r -c '."pkg-path"') '["hello"]'
   assert_equal $(echo "$output" | jq -r '.subtree') "legacyPackages"
   assert_equal $(echo "$output" | jq -r '.semver') "1.2"
   unset output
@@ -193,7 +193,7 @@ setup_file() {
 @test "parse descriptor 'nixpkgs:packageset.hello@1.2.3'" {
   run "$PKGDB_BIN" parse descriptor --to manifest "nixpkgs:packageset.hello@1.2.3"
   assert_success
-  assert_equal $(echo "$output" | jq -r -c '.path') '["packageset","hello"]'
+  assert_equal $(echo "$output" | jq -r -c '."pkg-path"') '["packageset","hello"]'
   assert_equal $(echo "$output" | jq -r '.input.id') "nixpkgs"
   assert_equal $(echo "$output" | jq -r '.version') "1.2.3"
   unset output
@@ -206,7 +206,7 @@ setup_file() {
 @test "parse descriptor 'nixpkgs:packageset.hello@=1.2.3'" {
   run "$PKGDB_BIN" parse descriptor --to manifest "nixpkgs:packageset.hello@=1.2.3"
   assert_success
-  assert_equal $(echo "$output" | jq -r -c '.path') '["packageset","hello"]'
+  assert_equal $(echo "$output" | jq -r -c '."pkg-path"') '["packageset","hello"]'
   assert_equal $(echo "$output" | jq -r '.input.id') "nixpkgs"
   assert_equal $(echo "$output" | jq -r '.version') "1.2.3"
   unset output
@@ -220,7 +220,7 @@ setup_file() {
   query="nixpkgs:legacyPackages.*.hello@1.2.3"
   run "$PKGDB_BIN" parse descriptor --to manifest "$query"
   assert_success
-  assert_equal $(echo "$output" | jq -r -c '.path') '["hello"]'
+  assert_equal $(echo "$output" | jq -r -c '."pkg-path"') '["hello"]'
   assert_equal $(echo "$output" | jq -r -c '.subtree') "legacyPackages"
   assert_equal $(echo "$output" | jq -r '.input.id') "nixpkgs"
   assert_equal $(echo "$output" | jq -r '.version') "1.2.3"
@@ -236,7 +236,7 @@ setup_file() {
   query="nixpkgs:legacyPackages.aarch64-darwin.hello@1.2"
   run "$PKGDB_BIN" parse descriptor --to manifest "$query"
   assert_success
-  assert_equal $(echo "$output" | jq -r -c '.path') '["hello"]'
+  assert_equal $(echo "$output" | jq -r -c '."pkg-path"') '["hello"]'
   assert_equal $(echo "$output" | jq -r -c '.subtree') "legacyPackages"
   assert_equal $(echo "$output" | jq -r '.input.id') "nixpkgs"
   assert_equal $(echo "$output" | jq -r '.semver') "1.2"
@@ -252,7 +252,7 @@ setup_file() {
   query="nixpkgs:legacyPackages.*.hello@1.2"
   run "$PKGDB_BIN" parse descriptor --to manifest "$query"
   assert_success
-  assert_equal $(echo "$output" | jq -r -c '.path') '["hello"]'
+  assert_equal $(echo "$output" | jq -r -c '."pkg-path"') '["hello"]'
   assert_equal $(echo "$output" | jq -r -c '.subtree') "legacyPackages"
   assert_equal $(echo "$output" | jq -r '.input.id') "nixpkgs"
   assert_equal $(echo "$output" | jq -r '.semver') "1.2"
@@ -268,7 +268,7 @@ setup_file() {
   query="myflake:packages.*.hello@1.2"
   run "$PKGDB_BIN" parse descriptor --to manifest "$query"
   assert_success
-  assert_equal $(echo "$output" | jq -r -c '.path') '["hello"]'
+  assert_equal $(echo "$output" | jq -r -c '."pkg-path"') '["hello"]'
   assert_equal $(echo "$output" | jq -r -c '.subtree') "packages"
   assert_equal $(echo "$output" | jq -r '.input.id') "myflake"
   assert_equal $(echo "$output" | jq -r '.semver') "1.2"
@@ -284,7 +284,7 @@ setup_file() {
   query="nixpkgs:legacyPackages.*.packageset.hello@1.2"
   run "$PKGDB_BIN" parse descriptor --to manifest "$query"
   assert_success
-  assert_equal $(echo "$output" | jq -r -c '.path') '["packageset","hello"]'
+  assert_equal $(echo "$output" | jq -r -c '."pkg-path"') '["packageset","hello"]'
   assert_equal $(echo "$output" | jq -r -c '.subtree') "legacyPackages"
   assert_equal $(echo "$output" | jq -r '.input.id') "nixpkgs"
   assert_equal $(echo "$output" | jq -r '.semver') "1.2"
@@ -302,7 +302,7 @@ setup_file() {
   query="nixpkgs:legacyPackages.*.linuxKernel.packages.linux_4_19@1.2"
   run "$PKGDB_BIN" parse descriptor --to manifest "$query"
   assert_success
-  assert_equal $(echo "$output" | jq -r -c '.path') '["linuxKernel","packages","linux_4_19"]'
+  assert_equal $(echo "$output" | jq -r -c '."pkg-path"') '["linuxKernel","packages","linux_4_19"]'
   assert_equal $(echo "$output" | jq -r -c '.subtree') "legacyPackages"
   assert_equal $(echo "$output" | jq -r '.input.id') "nixpkgs"
   assert_equal $(echo "$output" | jq -r '.semver') "1.2"

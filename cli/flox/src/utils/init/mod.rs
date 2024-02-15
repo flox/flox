@@ -13,7 +13,7 @@ pub use logger::*;
 pub use metrics::*;
 
 pub fn init_access_tokens(
-    config_tokens: &HashMap<String, String>,
+    config_tokens: Option<&HashMap<String, String>>,
 ) -> Result<Vec<(String, String)>> {
     use std::io::{BufRead, BufReader};
 
@@ -77,7 +77,9 @@ pub fn init_access_tokens(
 
     tokens.extend(nix_tokens);
     tokens.extend(gh_tokens);
-    tokens.extend(config_tokens.clone());
+    if let Some(config_tokens) = config_tokens {
+        tokens.extend(config_tokens.clone());
+    }
     tokens.dedup();
 
     Ok(tokens)

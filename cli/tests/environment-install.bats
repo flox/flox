@@ -20,6 +20,7 @@ project_setup() {
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
   export LOCKFILE_PATH="$PROJECT_DIR/.flox/env/manifest.lock"
+  export MANIFEST_PATH="$PROJECT_DIR/.flox/env/manifest.toml"
 }
 
 project_teardown() {
@@ -27,6 +28,7 @@ project_teardown() {
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
   unset LOCKFILE_PATH
+  unset MANIFEST_PATH
 }
 
 # ---------------------------------------------------------------------------- #
@@ -60,7 +62,7 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
-  run grep 'hello.path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml"
+  run grep 'hello.pkg-path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml"
   assert_success
 }
 
@@ -81,7 +83,7 @@ teardown() {
   run "$FLOX_BIN" install hello
   assert_success
   run "$FLOX_BIN" uninstall hello
-  run grep '^hello.path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml"
+  run grep '^hello.pkg-path = "hello"' "$PROJECT_DIR/.flox/env/manifest.toml"
   assert_failure
 }
 
@@ -89,7 +91,7 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install not-a-package
   assert_failure
-  assert_output --partial "could not install not-a-package"
+  assert_output --partial "Could not find package not-a-package. Try 'flox search' with a broader search term."
 }
 
 @test "'flox install' provides suggestions when package not found" {
@@ -98,6 +100,21 @@ teardown() {
   assert_failure
   assert_output --partial "Here are a few other similar options:"
   assert_output --partial "options with 'flox search package'"
+}
+
+@test "'flox install' doesn't provide duplicate suggestions for a multi-system environment" {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+
+  "$FLOX_BIN" init
+  # add a second system
+  tomlq -i -t ".options.systems += [ \"$(get_system_other_than_current)\" ]" "$MANIFEST_PATH"
+  run "$FLOX_BIN" install npm
+  assert_failure
+  # TODO: it would be less lazy to assert 3 distinct packages are returned
+  # rather than hardcoding package names.
+  assert_output --partial "flox install nodejs"
+  assert_output --partial "flox install elmPackages.nodejs"
+  assert_output --partial "flox install nodejs_21"
 }
 
 @test "'flox install' provides curated suggestions when package not found" {
@@ -114,7 +131,7 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install java make
   assert_failure
-  assert_output --partial "could not install java, make"
+  assert_output --partial "Could not install java, make"
 }
 
 @test "'flox uninstall' reports error when package not found" {
@@ -203,7 +220,7 @@ teardown() {
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
   # This also checks that it correctly infers the install ID
-  assert_regex "$manifest" 'hello\.path = "hello"'
+  assert_regex "$manifest" 'hello\.pkg-path = "hello"'
 }
 
 @test "'flox install' infers install ID" {
@@ -213,7 +230,7 @@ teardown() {
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
   # This also checks that it correctly infers the install ID
-  assert_regex "$manifest" 'rails\.path = "rubyPackages_3_2\.rails"'
+  assert_regex "$manifest" 'rails\.pkg-path = "rubyPackages_3_2\.rails"'
 }
 
 @test "'flox install' overrides install ID with '-i'" {
@@ -222,7 +239,7 @@ teardown() {
   run "$FLOX_BIN" install -i foo hello
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
-  assert_regex "$manifest" 'foo\.path = "hello"'
+  assert_regex "$manifest" 'foo\.pkg-path = "hello"'
 }
 
 @test "'flox install' overrides install ID with '--id'" {
@@ -231,7 +248,7 @@ teardown() {
   run "$FLOX_BIN" install --id foo hello
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
-  assert_regex "$manifest" 'foo\.path = "hello"'
+  assert_regex "$manifest" 'foo\.pkg-path = "hello"'
 }
 
 @test "'flox install' accepts mix of inferred and supplied install IDs" {
@@ -240,9 +257,9 @@ teardown() {
   run "$FLOX_BIN" install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
-  assert_regex "$manifest" 'foo\.path = "rubyPackages_3_2\.webmention"'
-  assert_regex "$manifest" 'ripgrep\.path = "ripgrep"'
-  assert_regex "$manifest" 'bar\.path = "rubyPackages_3_2\.rails"'
+  assert_regex "$manifest" 'foo\.pkg-path = "rubyPackages_3_2\.webmention"'
+  assert_regex "$manifest" 'ripgrep\.pkg-path = "ripgrep"'
+  assert_regex "$manifest" 'bar\.pkg-path = "rubyPackages_3_2\.rails"'
 }
 
 @test "'flox i' aliases to 'install'" {
@@ -251,7 +268,7 @@ teardown() {
   run "$FLOX_BIN" i hello
   assert_success
   manifest=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
-  assert_regex "$manifest" 'hello\.path = "hello"'
+  assert_regex "$manifest" 'hello\.pkg-path = "hello"'
 }
 
 @test "'flox install' creates global lock" {

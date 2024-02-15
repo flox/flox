@@ -150,6 +150,22 @@ common_test_teardown() {
 
 teardown() { common_test_teardown; }
 
+# Get a system different from the current one.
+get_system_other_than_current() {
+  # replace linux with darwin or darwin with linux
+  case "$NIX_SYSTEM" in
+    *-darwin)
+      extra_system="${NIX_SYSTEM%%-darwin}-linux"
+      ;;
+    *-linux)
+      extra_system="${NIX_SYSTEM%%-linux}-darwin"
+      ;;
+    *)
+      echo "Unsupported system: $NIX_SYSTEM"
+      return 1
+  esac
+  echo "$extra_system"
+}
 # ---------------------------------------------------------------------------- #
 #
 #

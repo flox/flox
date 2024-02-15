@@ -5,7 +5,6 @@ use std::{env, fs};
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
 use flox_rust_sdk::flox::{EnvironmentRef, FloxhubToken};
-use flox_types::stability::Stability;
 use itertools::{Either, Itertools};
 use log::{debug, trace};
 use once_cell::sync::OnceCell;
@@ -19,9 +18,9 @@ use xdg::BaseDirectories;
 use self::features::Features;
 
 /// Name of flox managed directories (config, data, cache)
-const FLOX_DIR_NAME: &'_ str = "flox";
-const FLOX_ETC_DIR: &'_ str = env!("FLOX_ETC_DIR");
-pub const FLOX_CONFIG_FILE: &'_ str = "flox.toml";
+const FLOX_DIR_NAME: &str = "flox";
+const FLOX_CONFIG_DIR_VAR: &str = "FLOX_CONFIG_DIR";
+pub const FLOX_CONFIG_FILE: &str = "flox.toml";
 
 #[derive(Clone, Debug, Deserialize, Default, Serialize)]
 pub struct Config {
@@ -31,50 +30,41 @@ pub struct Config {
 
     /// nix configuration options
     #[serde(default)]
-    pub nix: NixConfig,
-
-    /// github configuration options
-    #[serde(default)]
-    pub github: GithubConfig,
+    pub nix: Option<NixConfig>,
 
     #[serde(default)]
-    pub features: Features,
+    pub features: Option<Features>,
 }
 
 // TODO: move to flox_sdk?
 /// Describes the Configuration for the flox library
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct FloxConfig {
+    /// Disable collecting and sending usage metrics
     #[serde(default)]
     pub disable_metrics: bool,
+    /// Directory where flox should store ephemeral data (default:
+    /// `$XDG_CACHE_HOME/flox`)
     pub cache_dir: PathBuf,
+    /// Directory where flox should store persistent data (default:
+    /// `$XDG_DATA_HOME/flox`)
     pub data_dir: PathBuf,
+    /// Directory where flox should load its configuration file (default:
+    /// `$XDG_CONFIG_HOME/flox`)
     pub config_dir: PathBuf,
 
-    pub stability: Option<Stability>,
-
-    /// The url we push _to_
-    pub cache_url: Option<Url>,
-    /// The url we pull _from_
-    pub public_cache_url: Option<Url>,
-    /// Path to signing key
-    pub signing_key: Option<PathBuf>,
-
-    /// Token to authenticate on floxhub
+    /// Token to authenticate on FloxHub
     pub floxhub_token: Option<FloxhubToken>,
 
-    /// How many items `flox show` should show by default
+    /// How many items `flox search` should show by default
     pub search_limit: Option<u8>,
 
-    /// Environments trusted to run remotely
+    /// Remote environments that are trusted for activation
     #[serde(default)]
     pub trusted_environments: HashMap<EnvironmentRef, EnvironmentTrust>,
 
-    /// The url of the floxhub instance to use
+    /// The URL of the FloxHub instance to use
     pub floxhub_url: Option<Url>,
-
-    #[serde(flatten)]
-    pub instance: InstanceConfig,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -84,11 +74,6 @@ pub enum EnvironmentTrust {
     Deny,
 }
 
-#[derive(Deserialize, Serialize, Clone, Debug, Default)]
-pub struct InstanceConfig {
-    pub git_base_url: String, // Todo: use Url type?
-}
-
 // TODO: move to runix?
 /// Describes the nix config under flox
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
@@ -96,9 +81,6 @@ pub struct NixConfig {
     pub access_tokens: HashMap<String, String>,
 }
 
-/// Describes the github config under flox
-#[derive(Clone, Debug, Deserialize, Serialize, Default)]
-pub struct GithubConfig {}
 pub mod features;
 
 /// Error returned by [`Config::get()`]
@@ -140,45 +122,40 @@ impl Config {
 
             let cache_dir = flox_dirs.get_cache_home();
             let data_dir = flox_dirs.get_data_home();
-            let config_dir = match env::var("FLOX_CONFIG_HOME") {
+
+            let config_dir = match env::var(FLOX_CONFIG_DIR_VAR) {
                 Ok(v) => {
-                    debug!("`$FLOX_CONFIG_HOME` set: {v}");
+                    debug!("`${FLOX_CONFIG_DIR_VAR}` set: {v}");
                     fs::create_dir_all(&v)
                         .context(format!("Could not create config directory: {v:?}"))?;
                     v.into()
                 },
                 Err(_) => {
                     let config_dir = flox_dirs.get_config_home();
-                    debug!("`$FLOX_CONFIG_HOME` not set, using {config_dir:?}");
+                    debug!("`${FLOX_CONFIG_DIR_VAR}` not set, using {config_dir:?}");
                     fs::create_dir_all(&config_dir)
                         .context(format!("Could not create config directory: {config_dir:?}"))?;
                     let config_dir = config_dir
                         .canonicalize()
                         .context("Could not canonicalize config directory '{config_dir:?}'")?;
-                    env::set_var("FLOX_CONFIG_HOME", &config_dir);
+                    env::set_var(FLOX_CONFIG_DIR_VAR, &config_dir);
                     config_dir
                 },
             };
 
             let mut builder = HierarchicalConfig::builder()
                 .set_default("default_substituter", "https://cache.floxdev.com/")?
-                .set_default("git_base_url", "https://github.com/")?
                 .set_default("cache_dir", cache_dir.to_str().unwrap())?
                 .set_default("data_dir", data_dir.to_str().unwrap())?
-                // config dir is added to the config for completeness, the config file cannot chenge the config dir
-                .set_default("config_dir", config_dir.to_str().unwrap())?;
+                // Config dir is added to the config for completeness;
+                // the config file cannot change the config dir.
+                .set_override("config_dir", config_dir.to_str().unwrap())?;
 
-            // read from installation
+            // read from /etc
             builder = builder.add_source(
                 config::File::from(PathBuf::from("/etc").join(FLOX_CONFIG_FILE))
                     .format(config::FileFormat::Toml)
                     .required(false),
-            );
-
-            // read from installation
-            builder = builder.add_source(
-                config::File::from(PathBuf::from(FLOX_ETC_DIR).join(FLOX_CONFIG_FILE))
-                    .format(config::FileFormat::Toml),
             );
 
             // look for files in XDG_CONFIG_DIRS locations
@@ -187,7 +164,7 @@ impl Config {
                     builder.add_source(config::File::from(file).format(config::FileFormat::Toml));
             }
 
-            // Add explicit FLOX_CONFIG_HOME file last
+            // Add explicit FLOX_CONFIG_DIR file last
             builder = builder.add_source(
                 config::File::from(config_dir.join(FLOX_CONFIG_FILE))
                     .format(config::FileFormat::Toml)
@@ -371,20 +348,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_read_flattened() {
-        let mut config = Config::default();
-        config.flox.instance.git_base_url = "hello".to_string();
-        assert!(matches!(
-            config.get(&Key::parse("flox.instance.git_base_url").unwrap()),
-            Err(ReadWriteError::InvalidKey(_))
-        ));
-        assert_eq!(
-            config.get(&Key::parse("git_base_url").unwrap()).unwrap(),
-            "\"hello\"".to_string()
-        );
-    }
-
-    #[test]
     fn test_read_bool() {
         let mut config = Config::default();
         config.flox.disable_metrics = true;
@@ -403,63 +366,67 @@ mod tests {
                     "HOME",
                     Some(tempdir.path().as_os_str().to_string_lossy().as_ref()),
                 ),
-                ("FLOX_GIT_BASE_URL", Some("hello")),
+                ("FLOX_FLOXHUB_URL", Some("https://example.com")),
             ],
             || {
-                env::set_var("FLOX_GIT_BASE_URL", "hello");
+                env::set_var("FLOX_FLOXHUB_URL", "https://example.com");
                 let config = Config::parse().unwrap();
                 assert_eq!(
-                    config.get(&Key::parse("git_base_url").unwrap()).unwrap(),
-                    "\"hello\"".to_string()
+                    config.get(&Key::parse("floxhub_url").unwrap()).unwrap(),
+                    "\"https://example.com/\"".to_string()
                 );
-                env::remove_var("FLOX_CONFIG_HOME");
+                env::remove_var(FLOX_CONFIG_DIR_VAR);
             },
         );
     }
 
     #[test]
     fn test_writing_value() {
-        let config_content =
-            Config::write_to(None, &Key::parse("git_base_url").unwrap(), Some("hello")).unwrap();
+        let config_content = Config::write_to(
+            None,
+            &Key::parse("floxhub_url").unwrap(),
+            Some("https://example.com"),
+        )
+        .unwrap();
         assert_eq!(config_content, indoc! {"
-            git_base_url = \"hello\"
+            floxhub_url = \"https://example.com\"
             "})
     }
     #[test]
     fn test_appending_value() {
         let config_before = indoc! {"
-        git_base_url = \"hello\"
+        floxhub_url = \"hello\"
         "};
 
         let config_content = Config::write_to(
             Some(config_before.to_string()),
-            &Key::parse("stability").unwrap(),
-            Some("stable"),
+            &Key::parse("disable_metrics").unwrap(),
+            Some(true),
         )
         .unwrap();
         assert_eq!(config_content, indoc! {"
-        git_base_url = \"hello\"
-        stability = \"stable\"
+        floxhub_url = \"hello\"
+        disable_metrics = true
         "});
     }
 
     #[test]
     fn test_appending_value_keep_comment() {
         let config_before = indoc! {"
-        # my git base url is friendly, see:
-        git_base_url = \"hello\"
+        # my FloxHub url is friendly, see:
+        floxhub_url = \"hello\"
         "};
 
         let config_content = Config::write_to(
             Some(config_before.to_string()),
-            &Key::parse("stability").unwrap(),
-            Some("stable"),
+            &Key::parse("disable_metrics").unwrap(),
+            Some(true),
         )
         .unwrap();
         assert_eq!(config_content, indoc! {"
-        # my git base url is friendly, see:
-        git_base_url = \"hello\"
-        stability = \"stable\"
+        # my FloxHub url is friendly, see:
+        floxhub_url = \"hello\"
+        disable_metrics = true
         "});
     }
 

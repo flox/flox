@@ -33,6 +33,7 @@ jobs:
         ref: ${{ github.event.merge_group.head_ref || github.ref }}
         filters: |
           pkgdb:
+            - ".github/workflows/**"
             - "pkgdb/**"
             - "pkgs/**"
             - "Justfile"
@@ -41,9 +42,9 @@ jobs:
             - "shells/**"
 
   pkgdb-dev:
-    name: "Pkgdb Tests"
+    name: "Pkgdb"
     runs-on: ${{ matrix.os }}
-    if: ${{ needs.changes.outputs.pkgdb == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.pkgdb == 'true' }}
     needs:
       - "changes"
 
@@ -78,18 +79,10 @@ jobs:
           SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
 
       - name: "Build"
-        run: |
-          nix develop -L                 \
-            --command make -C pkgdb -j;
+        run: nix develop -L --no-update-lock-file --command just build-pkgdb
 
-      - name: "Test (pkgdb)"
-        run: |
-          nix develop -L                    \
-            --no-update-lock-file           \
-            --command make -C pkgdb tests;
-          nix develop -L                    \
-            --no-update-lock-file           \
-            --command make -C pkgdb check;
+      - name: "Test"
+        run: nix develop -L --no-update-lock-file --command just test-pkgdb
 
       - name: "Build Docs"
         run: |
@@ -112,7 +105,7 @@ jobs:
         uses: "actions/deploy-pages@v4"
 
   cli-dev:
-    name: "Flox Cargo Tests"
+    name: "Flox CLI Tests"
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -151,48 +144,20 @@ jobs:
           key: "cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}"
           restore-keys: "cargo-${{ runner.os }}-"
 
-      - name: "Build (pkgdb)"
-        run: |
-          nix develop -L                   \
-            --no-update-lock-file          \
-            '.#default'                    \
-              --command make -C pkgdb -j;
+      - name: "Build"
+        run: nix develop -L --no-update-lock-file --command just build-cli
 
-      - name: "Build (cli)"
-        run: |
-          pushd ./cli;
-          nix develop -L                                               \
-            --no-update-lock-file                                      \
-              --command sh -c                                          \
-                'PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb" cargo build;';
-          popd;
+      - name: "CLI Tests"
+        env:
+          RUST_BACKTRACE: 1
+        run: nix develop -L --no-update-lock-file --command just test-cli
 
-      - name: "Test (./cli: cargo test)"
-        run: |
-          pushd ./cli;
-          export RUST_BACKTRACE=1;
-          nix develop -L                                         \
-            --no-update-lock-file                                \
-              --command sh -c '
-                PKGDB_BIN="${PWD%/*}/pkgdb/bin/pkgdb"            \
-                cargo test --locked --workspace -F extra-tests;
-              ';
-          popd;
-
-      - name: "Test (./cli/tests)"
-        if: ${{ github.event_name == 'merge_group' }}
-        run: |
-          pushd ./cli;
-          nix develop -L                 \
-            --no-update-lock-file        \
-              --command flox-cli-tests;
-          popd;
-
-      - name: "Test (./tests)"
-        run: |
-          nix develop -L             \
-            --no-update-lock-file    \
-              --command flox-tests;
+      - name: "Functional Tests"
+        if: ${{ github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
+        env:
+          RUST_BACKTRACE: 1
+          FLOXEM_FLOXTEST_TOKEN: "${{ secrets.FLOXEM_FLOXTEST_TOKEN }}"
+        run: nix develop -L --no-update-lock-file --command just functional-tests
 
   nix-build:
     name: "Nix build"

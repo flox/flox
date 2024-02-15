@@ -167,11 +167,6 @@ env_is_activated() {
   # USER to REAL_USER.
   SHELL=bash USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is aliased to \`echo testing'"
-
-  SHELL=bash USER="$REAL_USER" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- type test_alias
-  assert_success
-  assert_output --partial "test_alias is aliased to \`echo testing'"
-
 }
 
 # ---------------------------------------------------------------------------- #
@@ -183,11 +178,6 @@ env_is_activated() {
   # USER to REAL_USER.
   SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect -d "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is an alias for echo testing"
-
-  SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- type test_alias
-  assert_success
-  assert_output --partial "test_alias is an alias for echo testing"
-
 }
 
 # ---------------------------------------------------------------------------- #
@@ -412,4 +402,65 @@ env_is_activated() {
   assert_line "Welcome to your flox environment!"
   assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
   assert_line "baz"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:inplace-reactivate
+@test "'flox activate' only patches PATH when already activated" {
+  run bash -c 'eval "$("$FLOX_BIN" activate --print-script)"; "$FLOX_BIN" activate --print-script'
+  assert_success
+  # on macos activating an already activated environment using
+  # `eval "$(flox activate [--print-script])"
+  # will only fix the PATH
+  if [[ -e /usr/libexec/path_helper ]]; then
+    assert_output --regexp "^(export PATH=.+)$"
+  else
+    # on linux reactivation is ignored
+    assert_output ""
+  fi
+}
+
+# bats test_tags=activate,activate:inplace-reactivate
+@test "'flox activate' does not patch PATH when not activated" {
+  run "$FLOX_BIN" activate --print-script
+  assert_success
+  refute_output --regexp "^(export PATH=.+)$"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:python-detects-installed-python
+@test "'flox activate' sets python vars if python is installed" {
+  # unset pyhton vars if any
+  unset PYTHONPATH
+  unset PIP_CONFIG_FILE
+
+  # install python and pip
+  "$FLOX_BIN" install python311Packages.pip
+
+  run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
+  assert_success
+  assert_line "PYTHONPATH is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/lib/python3.11/site-packages"
+
+  run -- "$FLOX_BIN" activate -- echo PIP_CONFIG_FILE is '$PIP_CONFIG_FILE'
+  assert_success
+  assert_line "PIP_CONFIG_FILE is $(realpath $PROJECT_DIR)/.flox/pip.ini"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:python-retains-existing-python-vars
+@test "'flox activate' retains existing python vars if python is not installed" {
+  # set python vars
+  export PYTHONPATH="/some/other/pythonpath"
+  export PIP_CONFIG_FILE="/some/other/pip.ini"
+
+  run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
+  assert_success
+  assert_line "PYTHONPATH is /some/other/pythonpath"
+
+  run -- "$FLOX_BIN" activate -- echo PIP_CONFIG_FILE is '$PIP_CONFIG_FILE'
+  assert_success
+  assert_line "PIP_CONFIG_FILE is /some/other/pip.ini"
 }

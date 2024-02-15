@@ -1,5 +1,5 @@
 [install]
-hello.path = "hello"
+hello.pkg-path = "hello"
 
 [vars]
 foo = "bar"

@@ -132,7 +132,7 @@ GCCommand::run()
       /* If the user explicitly gave a directory, throw an error. */
       if ( this->cacheDir.has_value() )
         {
-          throw FloxException( "no such cachedir: `" + cacheDir.string()
+          throw FloxException( "no such cachedir: '" + cacheDir.string()
                                + "'" );
           return EXIT_FAILURE;
         }

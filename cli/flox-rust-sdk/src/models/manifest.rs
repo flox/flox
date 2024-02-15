@@ -46,6 +46,10 @@ pub enum TomlEditError {
     /// Tried to uninstall a package that wasn't installed
     #[error("couldn't uninstall '{0}', wasn't previously installed")]
     PackageNotFound(String),
+    #[error("'options' must be a table, but found {0} instead")]
+    MalformedOptionsTable(String),
+    #[error("'options' must be an array, but found {0} instead")]
+    MalformedOptionsSystemsArray(String),
 }
 
 /// Records the result of trying to install a collection of packages to the
@@ -64,7 +68,7 @@ pub struct PackageInsertion {
 #[derive(Debug, PartialEq)]
 pub struct PackageToInstall {
     pub id: String,
-    pub path: String,
+    pub pkg_path: String,
     pub version: Option<String>,
     pub input: Option<String>,
 }
@@ -107,7 +111,10 @@ pub fn insert_packages(
     for pkg in pkgs {
         if !install_table.contains_key(&pkg.id) {
             let mut descriptor_table = InlineTable::new();
-            descriptor_table.insert("path", Value::String(Formatted::new(pkg.path.clone())));
+            descriptor_table.insert(
+                "pkg-path",
+                Value::String(Formatted::new(pkg.pkg_path.clone())),
+            );
             if let Some(ref version) = pkg.version {
                 descriptor_table.insert("version", Value::String(Formatted::new(version.clone())));
             }
@@ -117,7 +124,10 @@ pub fn insert_packages(
             descriptor_table.set_dotted(true);
             install_table.insert(&pkg.id, Item::Value(Value::InlineTable(descriptor_table)));
             already_installed.insert(pkg.id.clone(), false);
-            debug!("package newly installed: id={}, path={}", pkg.id, pkg.path);
+            debug!(
+                "package newly installed: id={}, pkg-path={}",
+                pkg.id, pkg.pkg_path
+            );
         } else {
             already_installed.insert(pkg.id.clone(), true);
             debug!("package already installed: id={}", pkg.id);
@@ -186,13 +196,57 @@ pub fn contains_package(toml: &Document, pkg_name: &str) -> Result<bool, TomlEdi
     }
 }
 
+/// Add a `system` to the `[options.systems]` array of a manifest
+pub fn add_system(toml: &str, system: &str) -> Result<Document, TomlEditError> {
+    let mut doc = toml
+        .parse::<Document>()
+        .map_err(TomlEditError::ParseManifest)?;
+
+    // extract the `[options]` table
+    let options_table = doc
+        .entry("options")
+        .or_insert(toml_edit::Item::Table(toml_edit::Table::default()));
+    let options_table_type = options_table.type_name().into();
+    let options_table = options_table
+        .as_table_like_mut()
+        .ok_or(TomlEditError::MalformedOptionsTable(options_table_type))?;
+
+    // extract the `options.systems` array
+    let systems_list = options_table
+        .entry("systems")
+        .or_insert(toml_edit::Item::Value(toml_edit::Value::Array(
+            toml_edit::Array::default(),
+        )));
+    let systems_list_type = systems_list.type_name().into();
+    let systems_list =
+        systems_list
+            .as_array_mut()
+            .ok_or(TomlEditError::MalformedOptionsSystemsArray(
+                systems_list_type,
+            ))?;
+
+    // sanity check that the current system is not already in the list
+    if systems_list
+        .iter()
+        .any(|s| s.as_str().map(|s| s == system).unwrap_or_default())
+    {
+        debug!("system '{system}' already in 'options.systems'");
+        return Ok(doc);
+    }
+
+    systems_list.push(system.to_string());
+
+    Ok(doc)
+}
+
 /// A parsed descriptor from `pkgdb parse descriptor --manifest`
 ///
 /// FIXME: this is currently a hack using a tool in `pkgdb` only meant for debugging.
 #[derive(Debug, Deserialize)]
 pub struct ParsedDescriptor {
     pub name: Option<String>,
-    pub path: Option<Vec<String>>,
+    #[serde(rename = "pkg-path")]
+    pub pkg_path: Option<Vec<String>>,
     pub input: Option<Input>,
     pub version: Option<String>,
     pub semver: Option<String>,
@@ -220,7 +274,7 @@ pub fn temporary_parse_descriptor(descriptor: &str) -> Result<PackageToInstall, 
         .map_err(ManifestError::PkgDbCall)?;
     let parsed: Result<ParsedDescriptor, _> = serde_json::from_slice(&output.stdout);
     if let Ok(parsed) = parsed {
-        let (id, path) = if let Some(mut path) = parsed.path {
+        let (id, path) = if let Some(mut path) = parsed.pkg_path {
             // Quote any path components that need quoting
             path.iter_mut().for_each(|attr| {
                 if attr.contains('.') || attr.contains('"') {
@@ -257,7 +311,7 @@ pub fn temporary_parse_descriptor(descriptor: &str) -> Result<PackageToInstall, 
         let input = parsed.input.map(|input| input.id);
         Ok(PackageToInstall {
             id,
-            path,
+            pkg_path: path,
             version,
             input,
         })
@@ -396,7 +450,7 @@ ripgrep = {}
         let inserted_path = new_toml
             .get("install")
             .and_then(|t| t.get("qux"))
-            .and_then(|d| d.get("path"))
+            .and_then(|d| d.get("pkg-path"))
             .and_then(|p| p.as_str())
             .unwrap();
         assert_eq!(inserted_path, r#"foo."bar.baz".qux"#);
@@ -408,28 +462,28 @@ ripgrep = {}
         let parsed = temporary_parse_descriptor("hello").unwrap();
         assert_eq!(parsed, PackageToInstall {
             id: "hello".to_string(),
-            path: "hello".to_string(),
+            pkg_path: "hello".to_string(),
             version: None,
             input: None,
         });
         let parsed = temporary_parse_descriptor("nixpkgs:foo.bar@=1.2.3").unwrap();
         assert_eq!(parsed, PackageToInstall {
             id: "bar".to_string(),
-            path: "foo.bar".to_string(),
+            pkg_path: "foo.bar".to_string(),
             version: Some("=1.2.3".to_string()),
             input: Some("nixpkgs".to_string())
         });
         let parsed = temporary_parse_descriptor("nixpkgs:foo.bar@23.11").unwrap();
         assert_eq!(parsed, PackageToInstall {
             id: "bar".to_string(),
-            path: "foo.bar".to_string(),
+            pkg_path: "foo.bar".to_string(),
             version: Some("23.11".to_string()),
             input: Some("nixpkgs".to_string())
         });
         let parsed = temporary_parse_descriptor("nixpkgs:rubyPackages.\"http_parser.rb\"").unwrap();
         assert_eq!(parsed, PackageToInstall {
             id: "\"http_parser.rb\"".to_string(),
-            path: "rubyPackages.\"http_parser.rb\"".to_string(),
+            pkg_path: "rubyPackages.\"http_parser.rb\"".to_string(),
             version: None,
             input: Some("nixpkgs".to_string())
         });

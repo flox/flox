@@ -79,7 +79,7 @@ DiffCommand::getManifestRaw()
         }
       if ( ! std::filesystem::exists( *this->manifestPath ) )
         {
-          throw InvalidManifestFileException( "manifest file `"
+          throw InvalidManifestFileException( "manifest file '"
                                               + this->manifestPath->string()
                                               + "'does not exist." );
         }
@@ -103,7 +103,7 @@ DiffCommand::getOldManifestRaw()
         }
       if ( ! std::filesystem::exists( *this->oldManifestPath ) )
         {
-          throw InvalidManifestFileException( "old manifest file `"
+          throw InvalidManifestFileException( "old manifest file '"
                                               + this->oldManifestPath->string()
                                               + "'does not exist." );
         }
@@ -191,7 +191,7 @@ UpdateCommand::run()
                   }
                 else
                   {
-                    throw FloxException( "input `" + inputName
+                    throw FloxException( "input '" + inputName
                                          + "' does not exist in manifest." );
                   }
               }
@@ -444,7 +444,7 @@ ManifestCommand::run()
       return this->cmdRegistry.run();
     }
   std::cerr << this->parser << std::endl;
-  throw flox::FloxException( "You must provide a valid `manifest' subcommand" );
+  throw flox::FloxException( "You must provide a valid 'manifest' subcommand" );
   return EXIT_FAILURE;
 }
 

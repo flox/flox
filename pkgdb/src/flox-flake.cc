@@ -12,6 +12,10 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
 #include <nix/attr-set.hh>
 #include <nix/config.hh>
 #include <nix/eval-cache.hh>
@@ -24,9 +28,6 @@
 #include <nix/symbol-table.hh>
 #include <nix/util.hh>
 #include <nix/value.hh>
-#include <optional>
-#include <string>
-#include <vector>
 
 #include "flox/core/types.hh"
 #include "flox/flox-flake.hh"
@@ -38,6 +39,65 @@ namespace flox {
 
 /* -------------------------------------------------------------------------- */
 
+void
+ensureFlakeIsDownloaded( std::function<void()> && lambda )
+{
+  pid_t pid = fork();
+  if ( pid == -1 )
+    {
+      // WML - TODO - better error handling here!
+      errorLog( "ensureFlakeIsDownloaded: failed to fork for flake download!" );
+      exit( EXIT_FAILURE );
+    }
+  if ( 0 < pid )
+    {
+      debugLog(
+        nix::fmt( "ensureFlakeIsDownloaded: waiting for child: %d", pid ) );
+      int status = 0;
+      waitpid( pid, &status, 0 );
+      debugLog( nix::fmt(
+        "ensureFlakeIsDownloaded: child is finished, exit code: %d, signal: %d",
+        WEXITSTATUS( status ),
+        WTERMSIG( status ) ) );
+
+      if ( WIFEXITED( status ) )
+        {
+          if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
+            {
+              /* The flake should be downloaded and cached locally now
+               * return to the caller. */
+              return;
+            }
+          else
+            {
+              /* The error has already been reported via the child, just pass
+               * along the exit code. */
+              exit( WEXITSTATUS( status ) );
+            }
+        }
+      else { throw LockFlakeException( "failed to lock flake" ); }
+    }
+  else
+    {
+      lambda();
+      try
+        {
+          debugLog( "ensureFlakeIsDownloaded(child): finished, exiting" );
+          exit( EXIT_SUCCESS );
+        }
+      catch ( const std::exception & err )
+        {
+          debugLog( nix::fmt(
+            "ensureFlakeIsDownloaded(child): caught exception on exit: %s",
+            err.what() ) );
+          exit( EXIT_SUCCESS );
+        }
+    }
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 nix::flake::LockedFlake
 lockFlake( nix::EvalState &              state,
            const nix::FlakeRef &         ref,
@@ -45,6 +105,14 @@ lockFlake( nix::EvalState &              state,
 {
   try
     {
+      /* Force fetching and population of `nix` _fetcher cache_ to occur
+       * in a child process.
+       * This allows us to safely `fork` elsewhere from the parent without
+       * leaving open file descriptors or various other connections. */
+      ensureFlakeIsDownloaded(
+        [&]() -> void { (void) nix::flake::lockFlake( state, ref, flags ); } );
+      /* Attempting to lock a second time will not trigger a fetch because the
+       * flake has already been downloaded and is present in our local cache. */
       return nix::flake::lockFlake( state, ref, flags );
     }
   catch ( const std::exception & err )
@@ -62,7 +130,6 @@ lockFlake( nix::EvalState &              state,
 
 
 /* -------------------------------------------------------------------------- */
-
 
 nix::Value *
 flakeLoader( nix::EvalState &                state,

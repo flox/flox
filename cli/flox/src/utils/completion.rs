@@ -39,9 +39,14 @@ impl FloxCompletionExt for Flox {
             },
         };
 
-        let access_tokens = init_access_tokens(&config.nix.access_tokens)
-            .map_err(|e| debug!("Failed to initialize access tokens: {e}"))
-            .unwrap_or_default();
+        let access_tokens = init_access_tokens(
+            config
+                .nix
+                .as_ref()
+                .map(|nix_config| &nix_config.access_tokens),
+        )
+        .map_err(|e| debug!("Failed to initialize access tokens: {e}"))
+        .unwrap_or_default();
 
         let netrc_file = dirs::home_dir()
             .expect("User must have a home directory")
@@ -57,7 +62,7 @@ impl FloxCompletionExt for Flox {
             access_tokens,
             uuid: uuid::Uuid::nil(),
             floxhub_token: config.flox.floxhub_token,
-            floxhub: Floxhub::new(DEFAULT_FLOXHUB_URL.clone()),
+            floxhub: Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None)?,
         })
     }
 }

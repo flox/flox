@@ -4,7 +4,6 @@ use std::{env, fs, io};
 
 use flox_types::version::Version;
 use log::debug;
-use runix::command_line::NixCommandLineRunJsonError;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -53,8 +52,9 @@ pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
-pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "FLOX_ACTIVE_ENVIRONMENTS";
+pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
+pub const FLOX_PATH_PATCHED_VAR: &str = "FLOX_PATH_PATCHED";
 pub const FLOX_SYSTEM_PLACEHOLDER: &str = "_FLOX_INIT_SYSTEM";
 
 pub type UpdateResult = (Option<LockedManifest>, LockedManifest);
@@ -75,9 +75,9 @@ pub struct CanonicalPath(PathBuf);
 #[derive(Debug, Error)]
 #[error("couldn't canonicalize path {path:?}: {err}")]
 pub struct CanonicalizeError {
-    path: PathBuf,
+    pub path: PathBuf,
     #[source]
-    err: std::io::Error,
+    pub err: std::io::Error,
 }
 
 impl CanonicalPath {
@@ -159,7 +159,7 @@ pub trait Environment: Send {
     /// Directory containing .flox
     ///
     /// For anything internal, path should be used instead. `parent_path` is
-    /// stored in FLOX_ACTIVE_ENVIRONMENTS and printed to users so that users
+    /// stored in _FLOX_ACTIVE_ENVIRONMENTS and printed to users so that users
     /// don't have to see the trailing .flox
     /// TODO: figure out what to store for remote environments
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2>;
@@ -267,13 +267,17 @@ impl EnvironmentPointer {
     /// on either [PathEnvironment] or [ManagedEnvironment].
     pub fn open(path: impl AsRef<Path>) -> Result<EnvironmentPointer, EnvironmentError2> {
         let dot_flox_path = path.as_ref().join(DOT_FLOX);
+        if !dot_flox_path.exists() {
+            debug!("couldn't find .flox at {}", dot_flox_path.display());
+            Err(EnvironmentError2::DotFloxNotFound)?
+        }
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         let pointer_contents = match fs::read(&pointer_path) {
             Ok(contents) => contents,
             Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => {
                     debug!("couldn't find env.json at {}", pointer_path.display());
-                    Err(EnvironmentError2::EnvNotFound)?
+                    Err(EnvironmentError2::EnvPointerNotFound)?
                 },
                 _ => Err(EnvironmentError2::ReadEnvironmentMetadata(err))?,
             },
@@ -319,12 +323,6 @@ pub enum EnvironmentError2 {
     #[error("could not locate the manifest for this environment")]
     ManifestNotFound,
 
-    #[error(transparent)]
-    Canonicalize(#[from] CanonicalizeError),
-
-    #[error("environment directory cannot be {0:?}")]
-    InvalidEnvironmentDirectory(PathBuf),
-
     // endregion
 
     // todo: candidate for impl specific error
@@ -335,23 +333,13 @@ pub enum EnvironmentError2 {
     #[error("could not initialize environment")]
     InitEnv(#[source] std::io::Error),
     #[error("could not find environment definition directory")]
-    EnvNotFound,
+    EnvDirNotFound,
+    #[error("could not find environment pointer file")]
+    EnvPointerNotFound,
     #[error("an environment already exists at {0:?}")]
     EnvironmentExists(PathBuf),
     #[error("could not write .gitignore file")]
     WriteGitignore(#[source] std::io::Error),
-    #[error("couldn't update manifest")]
-    ManifestEdit(#[source] std::io::Error),
-    // endregion
-
-    // todo: rmove with "catalog()" method
-    // region: catalog
-    #[error("EvalCatalog")]
-    EvalCatalog(#[source] NixCommandLineRunJsonError),
-    #[error("ParseCatalog")]
-    ParseCatalog(#[source] serde_json::Error),
-    #[error("WriteCatalog")]
-    WriteCatalog(#[source] std::io::Error),
     // endregion
 
     // todo: move pointer related errors somewhere else?
@@ -377,12 +365,8 @@ pub enum EnvironmentError2 {
 
     // region: find_dot_flox
     // todo: extract and reuse in other places where we need to canonicalize a path
-    #[error("provided path couldn't be canonicalized: {path}")]
-    CanonicalPath {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
+    #[error(transparent)]
+    StartDiscoveryDir(CanonicalizeError),
 
     // todo: reword?
     // * only occurs if "`.flox`" is `/`
@@ -393,7 +377,7 @@ pub enum EnvironmentError2 {
     InvalidDotFlox {
         path: PathBuf,
         #[source]
-        source: Box<EnvironmentError2>,
+        source: Box<dyn std::error::Error + Send + Sync>,
     },
 
     #[error("error checking if in a git repo")]
@@ -408,14 +392,13 @@ pub enum EnvironmentError2 {
     #[error(transparent)]
     RemoteEnvironment(#[from] RemoteEnvironmentError),
 
-    #[error("could not canonicalize path to environment")]
-    EnvCanonicalize(#[source] std::io::Error),
-
     #[error("could not delete environment")]
     DeleteEnvironment(#[source] std::io::Error),
 
     #[error("could not read manifest")]
     ReadManifest(#[source] std::io::Error),
+    #[error("couldn't write manifest")]
+    WriteManifest(#[source] std::io::Error),
 
     #[error("failed to create GC roots directory")]
     CreateGcRootDir(#[source] std::io::Error),
@@ -496,12 +479,8 @@ pub fn global_manifest_lockfile_path(flox: &Flox) -> PathBuf {
 /// The search first looks whether the current directory contains a `.flox` directory,
 /// and if not, it searches upwards, stopping at the root directory.
 pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentError2> {
-    let path = initial_dir
-        .canonicalize()
-        .map_err(|e| EnvironmentError2::CanonicalPath {
-            path: initial_dir.to_path_buf(),
-            source: e,
-        })?;
+    let path = CanonicalPath::new(initial_dir).map_err(EnvironmentError2::StartDiscoveryDir)?;
+
     let tentative_dot_flox = path.join(DOT_FLOX);
     debug!(
         "looking for .flox: starting_path={}",

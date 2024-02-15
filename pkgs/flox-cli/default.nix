@@ -16,12 +16,9 @@
   pkg-config,
   darwin,
   parser-util,
-  pandoc,
   cacert,
   glibcLocalesUtf8,
   installShellFiles,
-  runCommand,
-  fd,
   gnused,
   gitMinimal,
   nix,
@@ -50,7 +47,7 @@
 
   # build time environment variables
   envs = let
-    auth0BaseUrl = "https://dev-j4tiszdm1f0b70xf.us.auth0.com";
+    auth0BaseUrl = "https://flox.us.auth0.com";
   in
     {
       # 3rd party CLIs
@@ -62,8 +59,11 @@
         if flox-pkgdb == null
         then "pkgdb"
         else "${flox-pkgdb}/bin/pkgdb";
+      LD_FLOXLIB =
+        if flox-pkgdb == null
+        then "ld-floxlib.so"
+        else "${flox-pkgdb}/lib/ld-floxlib.so";
       PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
-      FLOX_ETC_DIR = ../../assets/etc;
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 
       # bundling of internally used nix scripts
@@ -76,7 +76,7 @@
       METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
 
       # oauth client id
-      OAUTH_CLIENT_ID = "s4BF6zGVcYh3gZUHwp6C4cGf3ey5Bwio";
+      OAUTH_CLIENT_ID = "fGrotHBfQr9X1PHGbFoifEWaDPyWZDmc";
       OAUTH_BASE_URL = "${auth0BaseUrl}";
       OAUTH_AUTH_URL = "${auth0BaseUrl}/authorize";
       OAUTH_TOKEN_URL = "${auth0BaseUrl}/oauth/token";
@@ -115,24 +115,6 @@
       LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
     };
 
-  # compiled manpages
-  manpages =
-    runCommand "flox-manpages" {
-      src = flox-src + "/flox/doc";
-      buildInputs = [pandoc fd];
-    } ''
-
-      mkdir $out
-      pushd $src
-
-      fd "flox.*.md" ./ -x \
-        pandoc -t man \
-          -L ${./pandoc-filters/include-files.lua} \
-          --standalone \
-          -o "$out/{/.}.1" \
-          {}
-    '';
-
   cargoToml = lib.importTOML (flox-src + "/flox/Cargo.toml");
 
   # incremental build of thrid party crates
@@ -168,9 +150,6 @@ in
 
       cargoArtifacts = cargoDepsArtifacts;
 
-      outputs = ["out" "man"];
-      outputsToInstall = ["out" "man"];
-
       # runtime dependencies
       buildInputs = cargoDepsArtifacts.buildInputs ++ [];
 
@@ -192,8 +171,6 @@ in
 
       # bundle manpages and completion scripts
       postInstall = ''
-        ln -s "${envs.FLOX_ETC_DIR}" "$out/etc"
-        installManPage ${manpages}/*;
         installShellCompletion --cmd flox                         \
           --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
           --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
@@ -213,7 +190,6 @@ in
       passthru = {
         inherit
           envs
-          manpages
           rustPlatform
           cargoDepsArtifacts
           pkgsFor

@@ -47,11 +47,11 @@ ManifestDescriptorRaw::clear()
 {
   this->name              = std::nullopt;
   this->version           = std::nullopt;
-  this->path              = std::nullopt;
+  this->pkgPath           = std::nullopt;
   this->absPath           = std::nullopt;
   this->systems           = std::nullopt;
   this->optional          = std::nullopt;
-  this->packageGroup      = std::nullopt;
+  this->pkgGroup          = std::nullopt;
   this->packageRepository = std::nullopt;
   this->priority          = std::nullopt;
 }
@@ -68,7 +68,7 @@ ManifestDescriptorRaw::check( std::string iid ) const
       if ( glob.size() < 3 )
         {
           throw InvalidManifestDescriptorException(
-            "`install." + iid + ".abspath' must have at least three parts." );
+            "'install." + iid + ".abspath' must have at least three parts." );
         }
       if ( ! glob.at( 0 ).has_value()
            || ( std::find( getDefaultSubtrees().begin(),
@@ -77,24 +77,24 @@ ManifestDescriptorRaw::check( std::string iid ) const
                 == getDefaultSubtrees().end() ) )
         {
           throw InvalidManifestDescriptorException(
-            "`install." + iid
+            "'install." + iid
             + ".abspath' must have a subtree as its first element" );
         }
 
-      if ( this->path.has_value() )
+      if ( this->pkgPath.has_value() )
         {
           for ( auto part = glob.begin() + 2; part != glob.end(); part++ )
             {
               if ( ! part->has_value() )
                 {
                   throw InvalidManifestDescriptorException(
-                    "`install." + iid
+                    "'install." + iid
                     + ".abspath' may only have a glob as its "
                       "second element" );
                 }
             }
           throw InvalidManifestDescriptorException(
-            "`install." + iid + ".path' conflicts with `install.*.abspath'" );
+            "'install." + iid + ".path' conflicts with 'install.*.abspath'" );
         }
 
       if ( this->systems.has_value() && glob.at( 1 ).has_value() )
@@ -105,8 +105,8 @@ ManifestDescriptorRaw::check( std::string iid ) const
                == this->systems->end() )
             {
               throw InvalidManifestDescriptorException(
-                "`install." + iid
-                + ".systems' list conflicts with `install.*.abspath' "
+                "'install." + iid
+                + ".systems' list conflicts with 'install.*.abspath' "
                   "system specification" );
             }
         }
@@ -178,7 +178,6 @@ maybeSplitAttrPathGlob( const ManifestDescriptorRaw::AbsPath & absPath )
     }
   AttrPathGlob   glob;
   flox::AttrPath path = splitAttrPath( std::get<std::string>( absPath ) );
-  size_t         idx  = 0;
   for ( const auto & part : path )
     {
       /* Treat `null' or `*' as a glob. */
@@ -189,7 +188,6 @@ maybeSplitAttrPathGlob( const ManifestDescriptorRaw::AbsPath & absPath )
           glob.emplace_back( std::nullopt );
         }
       else { glob.emplace_back( part ); }
-      ++idx;
     }
   return glob;
 }
@@ -210,8 +208,8 @@ initManifestDescriptorAbsPath( ManifestDescriptor &          desc,
   if ( ! raw.absPath.has_value() )
     {
       throw InvalidManifestDescriptorException(
-        "`abspath' must be set when calling "
-        "`flox::resolver::ManifestDescriptor::initManifestDescriptorAbsPath'" );
+        "'abspath' must be set when calling "
+        "'flox::resolver::ManifestDescriptor::initManifestDescriptorAbsPath'" );
     }
 
   /* You might need to parse a globbed attr path, so handle that first. */
@@ -220,49 +218,49 @@ initManifestDescriptorAbsPath( ManifestDescriptor &          desc,
   if ( glob.size() < 3 )
     {
       throw InvalidManifestDescriptorException(
-        "`abspath' must have at least three parts" );
+        "'abspath' must have at least three parts" );
     }
 
   const auto & first = glob.front();
   if ( ! first.has_value() )
     {
       throw InvalidManifestDescriptorException(
-        "`abspath' may only have a glob as its second element" );
+        "'abspath' may only have a glob as its second element" );
     }
   desc.subtree = Subtree( *first );
 
-  desc.path = AttrPath {};
+  desc.pkgPath = AttrPath {};
   for ( auto itr = glob.begin() + 2; itr != glob.end(); ++itr )
     {
       const auto & elem = *itr;
       if ( ! elem.has_value() )
         {
           throw InvalidManifestDescriptorException(
-            "`abspath' may only have a glob as its second element" );
+            "'abspath' may only have a glob as its second element" );
         }
-      desc.path = AttrPath {};
+      desc.pkgPath = AttrPath {};
       for ( auto itr = glob.begin() + 3; itr != glob.end(); ++itr )
         {
           const auto & elem = *itr;
           if ( ! elem.has_value() )
             {
               throw InvalidManifestDescriptorException(
-                "`abspath' may only have a glob as its second element" );
+                "'abspath' may only have a glob as its second element" );
             }
-          desc.path->emplace_back( *elem );
+          desc.pkgPath->emplace_back( *elem );
         }
     }
 
-  desc.path = AttrPath {};
+  desc.pkgPath = AttrPath {};
   for ( auto itr = glob.begin() + 2; itr != glob.end(); ++itr )
     {
       const auto & elem = *itr;
       if ( ! elem.has_value() )
         {
           throw InvalidManifestDescriptorException(
-            "`abspath' may only have a glob as its second element" );
+            "'abspath' may only have a glob as its second element" );
         }
-      desc.path->emplace_back( *elem );
+      desc.pkgPath->emplace_back( *elem );
     }
 
   const auto & second = glob.at( 1 );
@@ -273,7 +271,7 @@ initManifestDescriptorAbsPath( ManifestDescriptor &          desc,
       if ( raw.systems.has_value() && ( *raw.systems != *desc.systems ) )
         {
           throw InvalidManifestDescriptorException(
-            "`systems' list conflicts with `abspath' system specification" );
+            "'systems' list conflicts with 'abspath' system specification" );
         }
     }
 }
@@ -305,7 +303,7 @@ from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
           catch ( nlohmann::json::exception & e )
             {
               throw ParseManifestDescriptorRawException(
-                "couldn't interpret field `name'",
+                "couldn't interpret field 'name'",
                 flox::extract_json_errmsg( e ) );
             }
         }
@@ -318,20 +316,20 @@ from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
           catch ( nlohmann::json::exception & e )
             {
               throw ParseManifestDescriptorRawException(
-                "couldn't interpret field `version'",
+                "couldn't interpret field 'version'",
                 flox::extract_json_errmsg( e ) );
             }
         }
-      else if ( key == "path" )
+      else if ( key == "pkg-path" )
         {
           try
             {
-              value.get_to( descriptor.path );
+              value.get_to( descriptor.pkgPath );
             }
           catch ( nlohmann::json::exception & e )
             {
               throw ParseManifestDescriptorRawException(
-                "couldn't interpret field `path'",
+                "couldn't interpret field 'pkg-path'",
                 flox::extract_json_errmsg( e ) );
             }
         }
@@ -344,7 +342,7 @@ from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
           catch ( nlohmann::json::exception & e )
             {
               throw ParseManifestDescriptorRawException(
-                "couldn't interpret field `abspath'",
+                "couldn't interpret field 'abspath'",
                 flox::extract_json_errmsg( e ) );
             }
         }
@@ -357,7 +355,7 @@ from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
           catch ( nlohmann::json::exception & e )
             {
               throw ParseManifestDescriptorRawException(
-                "couldn't interpret field `systems'",
+                "couldn't interpret field 'systems'",
                 flox::extract_json_errmsg( e ) );
             }
         }
@@ -370,20 +368,20 @@ from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
           catch ( nlohmann::json::exception & e )
             {
               throw ParseManifestDescriptorRawException(
-                "couldn't interpret field `optional'",
+                "couldn't interpret field 'optional'",
                 flox::extract_json_errmsg( e ) );
             }
         }
-      else if ( key == "package-group" )
+      else if ( key == "pkg-group" )
         {
           try
             {
-              value.get_to( descriptor.packageGroup );
+              value.get_to( descriptor.pkgGroup );
             }
           catch ( nlohmann::json::exception & e )
             {
               throw ParseManifestDescriptorRawException(
-                "couldn't interpret field `package-group'",
+                "couldn't interpret field 'pkg-group'",
                 flox::extract_json_errmsg( e ) );
             }
         }
@@ -396,7 +394,7 @@ from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
           catch ( nlohmann::json::exception & e )
             {
               throw ParseManifestDescriptorRawException(
-                "couldn't interpret field `package-repository'",
+                "couldn't interpret field 'package-repository'",
                 flox::extract_json_errmsg( e ) );
             }
         }
@@ -409,14 +407,14 @@ from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
           catch ( nlohmann::json::exception & e )
             {
               throw ParseManifestDescriptorRawException(
-                "couldn't interpret field `priority'",
+                "couldn't interpret field 'priority'",
                 flox::extract_json_errmsg( e ) );
             }
         }
       else
         {
           throw ParseManifestDescriptorRawException(
-            "encountered unrecognized field `" + key
+            "encountered unrecognized field '" + key
             + "' while parsing manifest descriptor" );
         }
     }
@@ -430,7 +428,10 @@ to_json( nlohmann::json & jto, const ManifestDescriptorRaw & descriptor )
     {
       jto["version"] = *descriptor.version;
     }
-  if ( descriptor.path.has_value() ) { jto["path"] = *descriptor.path; }
+  if ( descriptor.pkgPath.has_value() )
+    {
+      jto["pkg-path"] = *descriptor.pkgPath;
+    }
   if ( descriptor.absPath.has_value() )
     {
       jto["abspath"] = *descriptor.absPath;
@@ -443,9 +444,9 @@ to_json( nlohmann::json & jto, const ManifestDescriptorRaw & descriptor )
     {
       jto["optional"] = *descriptor.optional;
     }
-  if ( descriptor.packageGroup.has_value() )
+  if ( descriptor.pkgGroup.has_value() )
     {
-      jto["package-group"] = *descriptor.packageGroup;
+      jto["pkg-group"] = *descriptor.pkgGroup;
     }
   if ( descriptor.packageRepository.has_value() )
     {
@@ -499,7 +500,7 @@ ManifestDescriptorRaw::ManifestDescriptorRaw(
       if ( attr.has_value() && attr.value().empty() )
         {
           throw InvalidManifestDescriptorException(
-            "descriptor attribute name was malformed: `"
+            "descriptor attribute name was malformed: '"
             + std::string( attrsSubstr ) + "'" );
         }
     }
@@ -512,8 +513,8 @@ ManifestDescriptorRaw::ManifestDescriptorRaw(
         break;
       case 2:
         // We were definitely given a relative path
-        this->path = validatedRelativePath( attrsWithHandledGlobs,
-                                            attrsMaybeContainingGlobs );
+        this->pkgPath = validatedRelativePath( attrsWithHandledGlobs,
+                                               attrsMaybeContainingGlobs );
         break;
       default:
         // Could be a relative or absolute path depending on the prefix
@@ -523,8 +524,8 @@ ManifestDescriptorRaw::ManifestDescriptorRaw(
           }
         else
           {
-            this->path = validatedRelativePath( attrsWithHandledGlobs,
-                                                attrsMaybeContainingGlobs );
+            this->pkgPath = validatedRelativePath( attrsWithHandledGlobs,
+                                                   attrsMaybeContainingGlobs );
           }
         break;
     }
@@ -542,7 +543,7 @@ validatedSingleAttr( const AttrPathGlob & attrs )
 {
   if ( attrs[0].has_value() ) { return attrs[0]; }
   throw InvalidManifestDescriptorException(
-    "globs are only allowed to replace entire system names: `"
+    "globs are only allowed to replace entire system names: '"
     + displayableGlobbedPath( attrs ) + "'" );
 }
 
@@ -572,13 +573,13 @@ validatedRelativePath( const AttrPathGlob &             attrs,
   if ( containsGlobbedAttr )
     {
       throw InvalidManifestDescriptorException(
-        "globs are only allowed to replace entire system names: `"
+        "globs are only allowed to replace entire system names: '"
         + displayableGlobbedPath( attrs ) + "'" );
     }
   else if ( globInAttrName( attrs ) )
     {
       throw InvalidManifestDescriptorException(
-        "globs are only allowed to replace entire system names: `"
+        "globs are only allowed to replace entire system names: '"
         + displayableGlobbedPath( attrs ) + "'" );
     }
   else if ( attrs.size() < 2 )
@@ -601,7 +602,7 @@ validatedAbsolutePath( const AttrPathGlob & attrs )
        || ( ( nGlobs == 1 ) && systemNotGlobbed ) )
     {
       throw InvalidManifestDescriptorException(
-        "globs are only allowed to replace entire system names: `"
+        "globs are only allowed to replace entire system names: '"
         + displayableGlobbedPath( attrs ) + "'" );
     }
   return attrs;
@@ -622,7 +623,7 @@ isAbsolutePath( const AttrPathGlob & attrs )
 ManifestDescriptor::ManifestDescriptor( const ManifestDescriptorRaw & raw )
   : name( raw.name )
   , optional( raw.optional.value_or( false ) )
-  , group( raw.packageGroup )
+  , group( raw.pkgGroup )
 {
   /* Determine if `version' was a range or not.
    * NOTE: The string "4.2.0" is not a range, but "4.2" is!
@@ -645,25 +646,25 @@ ManifestDescriptor::ManifestDescriptor( const ManifestDescriptorRaw & raw )
       this->systems = *raw.systems;
     }
 
-  if ( raw.path.has_value() )
+  if ( raw.pkgPath.has_value() )
     {
       /* Split relative path */
-      flox::AttrPath path;
-      if ( std::holds_alternative<std::string>( *raw.path ) )
+      flox::AttrPath pkgPath;
+      if ( std::holds_alternative<std::string>( *raw.pkgPath ) )
         {
-          path = splitAttrPath( std::get<std::string>( *raw.path ) );
+          pkgPath = splitAttrPath( std::get<std::string>( *raw.pkgPath ) );
         }
-      else { path = std::get<AttrPath>( *raw.path ); }
+      else { pkgPath = std::get<AttrPath>( *raw.pkgPath ); }
 
-      if ( this->path.has_value() )
+      if ( this->pkgPath.has_value() )
         {
-          if ( this->path != path )
+          if ( this->pkgPath != pkgPath )
             {
               throw InvalidManifestDescriptorException(
-                "`path' conflicts with with `abspath'" );
+                "'pkg-path' conflicts with with 'abspath'" );
             }
         }
-      else { this->path = path; }
+      else { this->pkgPath = pkgPath; }
     }
 
   if ( raw.packageRepository.has_value() )
@@ -696,7 +697,7 @@ ManifestDescriptor::clear()
   this->semver   = std::nullopt;
   this->subtree  = std::nullopt;
   this->systems  = std::nullopt;
-  this->path     = std::nullopt;
+  this->pkgPath  = std::nullopt;
   this->input    = std::nullopt;
   this->priority = 5;
 }
@@ -731,7 +732,7 @@ ManifestDescriptor::fillPkgQueryArgs( pkgdb::PkgQueryArgs & pqa ) const
 
   if ( this->systems.has_value() ) { pqa.systems = *this->systems; }
 
-  pqa.relPath = this->path;
+  pqa.relPath = this->pkgPath;
 
   return pqa;
 }
@@ -746,7 +747,7 @@ to_json( nlohmann::json & jto, const ManifestDescriptor & descriptor )
     { "name", descriptor.name },       { "optional", descriptor.optional },
     { "group", descriptor.group },     { "version", descriptor.version },
     { "semver", descriptor.semver },   { "subtree", descriptor.subtree },
-    { "systems", descriptor.systems }, { "path", descriptor.path },
+    { "systems", descriptor.systems }, { "pkg-path", descriptor.pkgPath },
     { "input", descriptor.input },     { "priority", descriptor.priority }
   };
 }

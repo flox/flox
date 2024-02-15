@@ -74,7 +74,7 @@ using InstallID = std::string;
 struct GroupingOptions {
 
   /**
-   * How to treat descriptors that do not set `packageGroup` explicitly.
+   * How to treat descriptors that do not set `pkgGroup` explicitly.
    *
    * - `singletons`: Each descriptor is its own group by default.
    * - `common`: Descriptors are added to a single _default_ group.

@@ -655,6 +655,9 @@ public:
   [[nodiscard]] nix::ref<FloxFlake>
   getFlake();
 
+  /** @brief Release @a flox::FloxFlakeInput::flake member. */
+  void
+  freeFlake();
 
   /**
    * @brief Get a list of enabled subtrees.

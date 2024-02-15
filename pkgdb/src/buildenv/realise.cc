@@ -12,6 +12,7 @@
 
 #include <nix/command.hh>
 #include <nix/derivations.hh>
+#include <nix/derived-path.hh>
 #include <nix/eval-inline.hh>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
@@ -142,26 +143,23 @@ createEnvironmentStorePath(
     {
       buildenv::buildEnvironment( tempDir, std::move( pkgs ) );
     }
-  catch ( buildenv::BuildEnvFileConflictError & err )
+  catch ( buildenv::FileConflict & err )
     {
-      auto [storePathA, filePath] = state.store->toStorePath( err.getFileA() );
-      auto [storePathB, _]        = state.store->toStorePath( err.getFileB() );
+      auto [storePathA, filePath] = state.store->toStorePath( err.fileA );
+      auto [storePathB, _]        = state.store->toStorePath( err.fileB );
 
       auto [nameA, packageA] = originalPackage.at( storePathA );
       auto [nameB, packageB] = originalPackage.at( storePathB );
 
 
-      throw FloxException(
-        "environment error",
-        "failed to build environment",
-        nix::fmt(
-          "file conflict between packages '%s' and '%s' at '%s'"
-          "\n\n\tresolve by setting the priority of the preferred package "
-          "to a value lower than '%d'",
-          nameA,
-          nameB,
-          filePath,
-          err.getPriority() ) );
+      throw PackageConflictException( nix::fmt(
+        "'%s' conflicts with '%s'. Both packages provide the file '%s'"
+        "\n\nResolve by setting the priority of the preferred package "
+        "to a value lower than '%d'",
+        nameA,
+        nameB,
+        filePath,
+        err.priority ) );
     }
   return addDirToStore( state, tempDir, references );
 }
@@ -190,7 +188,7 @@ extractAttrPath( nix::EvalState & state,
         {
           std::ostringstream str;
           output->value->print( state.symbols, str );
-          throw FloxException( "attribute `%s' not found in set `%s'",
+          throw FloxException( "attribute '%s' not found in set '%s'",
                                attrName,
                                str.str() );
         }
@@ -212,7 +210,8 @@ createFloxEnv( nix::EvalState &     state,
   if ( packages == lockfile.getLockfileRaw().packages.end() )
     {
       // TODO: throw structured exception
-      throw FloxException( "No packages found for system `" + system + "'" );
+      throw SystenNotSupportedByLockfile(
+        "'" + system + "' not supported by this environment" );
     }
 
   /* Extract all packages */
@@ -252,12 +251,34 @@ createFloxEnv( nix::EvalState &     state,
 
       if ( ! package_drv.has_value() )
         {
-          throw FloxException( "Failed to get derivation for package `"
-                               + nlohmann::json( package ).dump() + "'" );
+          throw PackageEvalFailure( "Failed to get derivation for package '"
+                                    + nlohmann::json( package ).dump() + "'" );
         }
 
-      auto packagePath
-        = state.store->printStorePath( package_drv->queryOutPath() );
+      std::string packagePath;
+      try
+        {
+          packagePath
+            = state.store->printStorePath( package_drv->queryOutPath() );
+        }
+      catch ( const nix::Error & e )
+        {
+
+          if ( e.info().msg.str().find(
+                 "is not available on the requested hostPlatform:" )
+               != std::string::npos )
+            {
+              throw PackageUnsupportedSystem(
+                "package '" + pId + "' is not available for this system ('"
+                  + system + "')",
+                nix::filterANSIEscapes( e.what(), true ) );
+            }
+
+          // rethrow the original root cause without the nix trace
+          throw PackageEvalFailure( "package '" + pId + "' failed to evaluate",
+                                    e.info().msg.str() );
+        };
+
 
       /* Collect all outputs to include in the environment.
        *
@@ -284,14 +305,23 @@ createFloxEnv( nix::EvalState &     state,
       /* Collect drvs that may yet need to be built. */
       if ( auto drvPath = package_drv->queryDrvPath() )
         {
-          drvsToBuild.push_back( nix::StorePathWithOutputs { *drvPath, {} } );
+          /* Build derivation of pacakge in environment,
+           * rethrow errors as PackageBuildFailure. */
+          try
+            {
+              auto storePathWithOutputs
+                = nix::StorePathWithOutputs { *drvPath, {} };
+              state.store->buildPaths(
+                nix::toDerivedPaths( { storePathWithOutputs } ) );
+            }
+          catch ( const nix::Error & e )
+            {
+              throw PackageBuildFailure(
+                "Failed to build package '" + pId + "'",
+                nix::filterANSIEscapes( e.what(), true ) );
+            }
         }
     }
-
-  // TODO: check if this builds `outputsToInstall` only
-  // TODO: do we need to honor repair flag? state.repair ? bmRepair : bmNormal
-  /* Build derivations that make up the environment */
-  state.store->buildPaths( nix::toDerivedPaths( drvsToBuild ) );
 
   /* verbatim content of the activate script common to all shells */
   std::stringstream commonActivate;
@@ -412,8 +442,15 @@ createContainerBuilder( nix::EvalState & state,
   static const nix::FlakeRef nixpkgsRef
     = nix::parseFlakeRef( COMMON_NIXPKGS_URL );
 
+  auto getFlake = [&]()
+  {
+    auto lockedNixpkgs
+      = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
+  };
+  ensureFlakeIsDownloaded( getFlake );
   auto lockedNixpkgs
     = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
+
   nix::Value vNixpkgsFlake;
   nix::flake::callFlake( state, lockedNixpkgs, vNixpkgsFlake );
 

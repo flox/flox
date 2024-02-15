@@ -13,6 +13,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <sys/wait.h>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -59,18 +60,17 @@ Environment::getCombinedRegistryRaw()
       if ( auto maybeGlobal = this->getGlobalManifest();
            maybeGlobal.has_value() )
         {
-          this->combinedRegistryRaw = maybeGlobal->getLockedRegistry();
+          this->combinedRegistryRaw = maybeGlobal->getRegistryRaw();
           this->combinedRegistryRaw->merge(
-            this->getManifest().getLockedRegistry() );
+            this->getManifest().getRegistryRaw() );
         }
-      else
-        {
-          this->combinedRegistryRaw = this->getManifest().getLockedRegistry();
-        }
+      else { this->combinedRegistryRaw = this->getManifest().getRegistryRaw(); }
 
       /* If there's a lockfile, use pinned inputs.
        * However, do not preserve any inputs that were removed from
        * the manifest. */
+      std::optional<nix::ref<nix::Store>>  store;
+      std::optional<FloxFlakeInputFactory> factory;
       if ( auto maybeLock = this->getOldLockfile(); maybeLock.has_value() )
         {
           auto lockedRegistry = maybeLock->getRegistryRaw();
@@ -82,7 +82,34 @@ Environment::getCombinedRegistryRaw()
                 {
                   input = locked->second;
                 }
+              /* Lock the input if it's not in the lock. */
+              else
+                {
+                  if ( ! store.has_value() )
+                    {
+                      store = NixStoreMixin().getStore();
+                    }
+                  if ( ! factory.has_value() )
+                    {
+                      factory = FloxFlakeInputFactory( *store );
+                    }
+                  auto flakeInput = factory->mkInput( name, input );
+                  input           = flakeInput->getLockedInput();
+                }
             }
+        }
+      /* Lock all inputs since we don't have a lock. */
+      else
+        {
+          store   = NixStoreMixin().getStore();
+          factory = FloxFlakeInputFactory( *store );
+          {
+            for ( auto & [name, input] : this->combinedRegistryRaw->inputs )
+              {
+                auto flakeInput = factory->mkInput( name, input );
+                input           = flakeInput->getLockedInput();
+              }
+          }
         }
     }
   return *this->combinedRegistryRaw;
@@ -199,7 +226,7 @@ Environment::groupIsLocked( const GroupName &          name,
 
           /* We ignore `priority' and handle `systems' below. */
           if ( ( descriptor.name != oldDescriptor.name )
-               || ( descriptor.path != oldDescriptor.path )
+               || ( descriptor.pkgPath != oldDescriptor.pkgPath )
                || ( descriptor.version != oldDescriptor.version )
                || ( descriptor.semver != oldDescriptor.semver )
                || ( descriptor.subtree != oldDescriptor.subtree )
@@ -345,9 +372,9 @@ Environment::tryResolveDescriptorIn( const ManifestDescriptor & descriptor,
                                      const System &             system )
 {
   std::string dPath;
-  if ( descriptor.path.has_value() )
+  if ( descriptor.pkgPath.has_value() )
     {
-      dPath = concatStringsSep( ".", *descriptor.path );
+      dPath = concatStringsSep( ".", *descriptor.pkgPath );
     }
   std::string dName;
   if ( descriptor.name.has_value() ) { dName = *descriptor.name; }
@@ -442,7 +469,7 @@ Environment::getGroupInput( const InstallDescriptors & group,
                    *   without effecting resolution.
                    * - `group' is handled below. */
                   if ( ( descriptor.name == oldDescriptor.name )
-                       && ( descriptor.path == oldDescriptor.path )
+                       && ( descriptor.pkgPath == oldDescriptor.pkgPath )
                        && ( descriptor.version == oldDescriptor.version )
                        && ( descriptor.semver == oldDescriptor.semver )
                        && ( descriptor.subtree == oldDescriptor.subtree )
@@ -544,7 +571,7 @@ Environment::tryResolveGroupIn( const InstallDescriptors & group,
 
 /**
  * @brief Extract the name of a group from a set of descriptors, or "default"
- *        if no descriptors declare a `packageGroup`.
+ *        if no descriptors declare a `pkgGroup`.
  */
 [[nodiscard]] static inline const std::string &
 getGroupName( const InstallDescriptors & group )
@@ -643,7 +670,7 @@ Environment::tryResolveGroup( const GroupName &          name,
                = std::get_if<SystemPackages>( &maybeResolved ) )
             {
               nix::logger->log( nix::lvlInfo,
-                                nix::fmt( "upgrading group `%s' to avoid "
+                                nix::fmt( "upgrading group '%s' to avoid "
                                           "resolution failure",
                                           getGroupName( group ) ) );
 
@@ -675,10 +702,10 @@ describeResolutionFailure( std::stringstream &       msg,
                            const GroupName &         name,
                            const ResolutionFailure & failure )
 {
-  msg << "  in `" << name << "': '" << std::endl;
+  msg << "  in '" << name << "': '" << std::endl;
   for ( const auto & [iid, url] : failure )
     {
-      msg << "    failed to resolve `" << iid << "' in input `" << url << '\'';
+      msg << "    failed to resolve '" << iid << "' in input '" << url << '\'';
     }
   return msg;
 }

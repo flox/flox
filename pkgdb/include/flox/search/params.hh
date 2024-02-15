@@ -47,6 +47,12 @@ struct SearchQuery
   std::optional<std::string> version; /**< Filter results by exact version. */
   std::optional<std::string> semver;  /**< Filter results by version range. */
   std::optional<uint8_t> limit; /**< Limit to a particular number of results. */
+  /**
+   * Return a single result for each package descriptor used by `search` and
+   * `install`. This is a bit hacky as pkgdb shouldn't really have knowledge of
+   * that format. But it's nicer to perform deduplication in SQL.
+   */
+  bool deduplicate = false;
 
   /** Filter results by partial match on pname, attrName, or description */
   std::optional<std::string> partialMatch;

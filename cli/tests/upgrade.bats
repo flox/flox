@@ -90,7 +90,7 @@ teardown() {
   "$FLOX_BIN" init
   cat << "EOF" > "$TMP_MANIFEST_PATH"
 [install]
-hello = { package-group = "blue" }
+hello = { pkg-group = "blue" }
 EOF
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \

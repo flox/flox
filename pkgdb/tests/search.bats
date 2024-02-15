@@ -418,7 +418,7 @@ genParamsNixpkgsFlox() {
   category_msg="$(echo "$output" | jq '.category_message')"
   context_msg="$(echo "$output" | jq -r '.context_message')"
   assert_equal "$category_msg" '"invalid lockfile"'
-  assert_equal "$context_msg" "encountered unexpected field \`foo' while parsing locked package"
+  assert_equal "$context_msg" "encountered unexpected field 'foo' while parsing locked package"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -466,15 +466,6 @@ genParamsNixpkgsFlox() {
 
 # bats tests_tags=search
 
-@test "'pkgdb search' with '%' in search term" {
-  params="$(genGMParams '.query.match="hello%" | .manifest.options.systems=["x86_64-linux"]')"
-  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
-  assert_success
-  assert_equal "${#lines[@]}" 9
-}
-
-# bats tests_tags=search
-
 @test "'pkgdb search' with ' in search term" {
   skip "FIXME: no results"
   params="$(genGMParams ".query.match=\"hello'\" | .manifest.options.systems=[\"x86_64-linux\"]")"
@@ -510,7 +501,7 @@ genParamsNixpkgsFlox() {
   params="$(genGMParams '.query.match="hello]" | .manifest.options.systems=["x86_64-linux"]')"
   run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
   assert_success
-  assert_equal "${#lines[@]}" 11
+  assert_equal "${#lines[@]}" 0
 }
 
 # bats tests_tags=search
@@ -520,7 +511,34 @@ genParamsNixpkgsFlox() {
   params="$(genGMParams '.query.match="hello*" | .manifest.options.systems=["x86_64-linux"]')"
   run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
   assert_success
-  assert_equal "${#lines[@]}" 11
+  assert_equal "${#lines[@]}" 0
+}
+
+# bats tests_tags=search
+
+@test "'pkgdb search' with '_' in search term (negative match)" {
+  params="$(genGMParams '.query.match="hello_" | .manifest.options.systems=["x86_64-linux"]')"
+  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
+  assert_success
+  assert_equal "${#lines[@]}" 0
+}
+
+# bats tests_tags=search
+
+@test "'pkgdb search' with '_' in search term (positive match)" {
+  params="$(genGMParams '.query.match="hell_" | .manifest.options.systems=["x86_64-linux"]')"
+  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
+  assert_success
+  assert_equal "${#lines[@]}" 4
+}
+
+# bats tests_tags=search
+
+@test "'pkgdb search' with '%' in search term" {
+  params="$(genGMParams '.query.match="hello%" | .manifest.options.systems=["x86_64-linux"]')"
+  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
+  assert_success
+  assert_equal "${#lines[@]}" 0
 }
 
 # ---------------------------------------------------------------------------- #
