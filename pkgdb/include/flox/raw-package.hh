@@ -48,7 +48,7 @@ public:
   std::optional<bool>        unfree;
   std::optional<std::string> description;
 
-  RawPackage( const AttrPath &                 path             = {},
+  RawPackage( AttrPath                         path             = {},
               std::string_view                 name             = {},
               std::string_view                 pname            = {},
               std::optional<std::string>       version          = std::nullopt,
@@ -59,17 +59,17 @@ public:
               std::optional<bool>              broken           = std::nullopt,
               std::optional<bool>              unfree           = std::nullopt,
               std::optional<std::string>       description      = std::nullopt )
-    : path( path )
+    : path( std::move( path ) )
     , name( name )
     , pname( pname )
-    , version( version )
-    , semver( semver )
-    , license( license )
+    , version( std::move( version ) )
+    , semver( std::move( semver ) )
+    , license( std::move( license ) )
     , outputs( outputs )
     , outputsToInstall( outputsToInstall )
     , broken( broken )
     , unfree( unfree )
-    , description( description )
+    , description( std::move( description ) )
   {}
 
 
