@@ -4,7 +4,7 @@
 #
 # ---------------------------------------------------------------------------- #
 
-name: 'Lint'
+name: 'Pkgdb Lint'
 on:
   # No need to run on `main` since we have `pull_request'.
   workflow_dispatch:
