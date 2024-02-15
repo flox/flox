@@ -381,7 +381,7 @@ struct ManifestRaw : public GlobalManifestRaw
    *
    * The _diff_ is represented as an [JSON patch](https://jsonpatch.com) object.
    */
-  nlohmann::json
+  [[nodiscard]] nlohmann::json
   diff( const ManifestRaw & old ) const;
 
   explicit operator ManifestRawGA() const;
@@ -564,7 +564,7 @@ struct ManifestRawGA : public GlobalManifestRawGA
    *
    * The _diff_ is represented as an [JSON patch](https://jsonpatch.com) object.
    */
-  nlohmann::json
+  [[nodiscard]] nlohmann::json
   diff( const ManifestRawGA & old ) const;
 
   explicit operator ManifestRaw() const
