@@ -72,9 +72,12 @@ jobs:
         id: set-has-targets
         run: |
           if [[ -s targets ]]; then
-            echo 'HAS_TARGETS=' >> "$GITHUB_OUTPUT";
-          else
             echo 'HAS_TARGETS=true' >> "$GITHUB_OUTPUT";
+            _changed="$( wc -l targets|cut -d' ' -f1; )";
+            echo "$_changed files require linting!" >> "$GITHUB_STEP_SUMMARY";
+          else
+            echo 'HAS_TARGETS=' >> "$GITHUB_OUTPUT";
+            echo "No files require linting!" >> "$GITHUB_STEP_SUMMARY";
           fi
 
       # TODO: If target list is empty, terminate workflow here
