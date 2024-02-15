@@ -24,7 +24,7 @@ namespace flox::buildenv {
 
 struct BuildEnvState
 {
-  std::map<std::string, Priority> priorities;
+  std::map<std::string, Priority> priorities {};
   unsigned long                   symlinks = 0;
 };
 
