@@ -167,9 +167,9 @@ createEnvironmentStorePath(
 /* -------------------------------------------------------------------------- */
 
 static nix::Attr
-extractAttrPath( nix::EvalState & state,
-                 nix::Value &     vFlake,
-                 flox::AttrPath   attrPath )
+extractAttrPath( nix::EvalState &       state,
+                 nix::Value &           vFlake,
+                 const flox::AttrPath & attrPath )
 {
   state.forceAttrs( vFlake, nix::noPos, "while parsing flake" );
 
@@ -435,9 +435,9 @@ createFloxEnv( nix::EvalState &     state,
 
 
 nix::StorePath
-createContainerBuilder( nix::EvalState & state,
-                        nix::StorePath   environmentStorePath,
-                        const System &   system )
+createContainerBuilder( nix::EvalState &       state,
+                        const nix::StorePath & environmentStorePath,
+                        const System &         system )
 {
   static const nix::FlakeRef nixpkgsRef
     = nix::parseFlakeRef( COMMON_NIXPKGS_URL );
