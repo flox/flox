@@ -462,17 +462,17 @@ createContainerBuilder( nix::EvalState &       state,
     state.parseExprFromFile( nix::CanonPath( CONTAINER_BUILDER_PATH ) ),
     vContainerBuilder );
 
-  nix::Value vEnvironmentStorePath;
+  nix::Value vEnvironmentStorePath {};
   auto       sStorePath = state.store->printStorePath( environmentStorePath );
   vEnvironmentStorePath.mkPath( sStorePath.c_str() );
 
-  nix::Value vSystem;
+  nix::Value vSystem {};
   vSystem.mkString( nix::nativeSystem );
 
-  nix::Value vContainerSystem;
+  nix::Value vContainerSystem {};
   vContainerSystem.mkString( system );
 
-  nix::Value vBindings;
+  nix::Value vBindings {};
   auto       bindings = state.buildBindings( 4 );
   bindings.push_back(
     { state.symbols.create( "nixpkgsFlake" ), &vNixpkgsFlake } );
@@ -484,7 +484,7 @@ createContainerBuilder( nix::EvalState &       state,
 
   vBindings.mkAttrs( bindings );
 
-  nix::Value vContainerBuilderDrv;
+  nix::Value vContainerBuilderDrv {};
   state.callFunction( vContainerBuilder,
                       vBindings,
                       vContainerBuilderDrv,
