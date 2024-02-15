@@ -309,7 +309,8 @@ buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
    */
   // TODO: consider making this optional?
   // TODO: include paths recursively?
-  auto priorityCounter = 1000u;
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+  auto priorityCounter = 1000U;
   while ( ! postponed.empty() )
     {
       std::set<std::string> pkgDirs;
