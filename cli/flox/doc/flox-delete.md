@@ -53,5 +53,6 @@ or the active environment that was last activated is used.
 ```
 
 # See Also
+[`flox-init(1)`](./flox-init.md)
 [`flox-push(1)`](./flox-push.md),
 [`flox-pull(1)`](./flox-pull.md)
