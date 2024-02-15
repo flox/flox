@@ -36,7 +36,7 @@ private:
 public:
 
   explicit VersionException( std::string_view msg ) : msg( msg ) {}
-  const char *
+  [[nodiscard]] const char *
   what() const noexcept override
   {
     return this->msg.c_str();
