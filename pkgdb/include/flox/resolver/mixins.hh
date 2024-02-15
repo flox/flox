@@ -377,7 +377,8 @@ protected:
 
 
 public:
-virtual ~GAEnvironmentMixin() = default;
+
+  ~GAEnvironmentMixin() override = default;
 
   /**
    * @brief Hard codes a manifest with only `github:NixOS/nixpkgs/release-23.05`
