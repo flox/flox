@@ -84,8 +84,8 @@ private:
 
 public:
 
-  nix::ref<nix::EvalState>      state;
-  const nix::flake::LockedFlake lockedFlake;
+  nix::ref<nix::EvalState>      state; // NOLINT(cppcoreguidelines-non-private-member-variables-in-classes)
+  const nix::flake::LockedFlake lockedFlake; // NOLINT(cppcoreguidelines-non-private-member-variables-in-classes)
 
   FloxFlake( const nix::ref<nix::EvalState> & state,
              const nix::FlakeRef &            ref );
