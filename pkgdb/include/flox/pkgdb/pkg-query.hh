@@ -170,7 +170,7 @@ struct PkgQueryArgs
  *              JSON object.
  */
 void
-to_json( nlohmann::json & jto, const PkgQueryArgs & descriptor );
+to_json( nlohmann::json & jto, const PkgQueryArgs & args );
 
 
 /* -------------------------------------------------------------------------- */

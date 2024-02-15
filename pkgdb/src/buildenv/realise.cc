@@ -94,7 +94,7 @@ fi
 
 /* -------------------------------------------------------------------------- */
 
-static const nix::StorePath
+static nix::StorePath
 addDirToStore( nix::EvalState &    state,
                std::string const & dir,
                nix::StorePathSet & references )
@@ -129,7 +129,7 @@ addDirToStore( nix::EvalState &    state,
 
 /* -------------------------------------------------------------------------- */
 
-const nix::StorePath
+nix::StorePath
 createEnvironmentStorePath(
   nix::EvalState &               state,
   std::vector<RealisedPackage> & pkgs,
@@ -141,7 +141,7 @@ createEnvironmentStorePath(
   auto tempDir = nix::createTempDir();
   try
     {
-      buildenv::buildEnvironment( tempDir, std::move( pkgs ) );
+      buildenv::buildEnvironment( tempDir, pkgs );
     }
   catch ( buildenv::FileConflict & err )
     {
@@ -167,14 +167,14 @@ createEnvironmentStorePath(
 /* -------------------------------------------------------------------------- */
 
 static nix::Attr
-extractAttrPath( nix::EvalState & state,
-                 nix::Value &     vFlake,
-                 flox::AttrPath   attrPath )
+extractAttrPath( nix::EvalState &       state,
+                 nix::Value &           vFlake,
+                 const flox::AttrPath & attrPath )
 {
   state.forceAttrs( vFlake, nix::noPos, "while parsing flake" );
 
 
-  auto output = vFlake.attrs->get( state.symbols.create( "outputs" ) );
+  auto * output = vFlake.attrs->get( state.symbols.create( "outputs" ) );
 
   for ( auto attrName : attrPath )
     {
@@ -435,9 +435,9 @@ createFloxEnv( nix::EvalState &     state,
 
 
 nix::StorePath
-createContainerBuilder( nix::EvalState & state,
-                        nix::StorePath   environmentStorePath,
-                        const System &   system )
+createContainerBuilder( nix::EvalState &       state,
+                        const nix::StorePath & environmentStorePath,
+                        const System &         system )
 {
   static const nix::FlakeRef nixpkgsRef
     = nix::parseFlakeRef( COMMON_NIXPKGS_URL );
@@ -457,22 +457,22 @@ createContainerBuilder( nix::EvalState & state,
   state.store->ensurePath(
     state.store->parseStorePath( CONTAINER_BUILDER_PATH ) );
 
-  nix::Value vContainerBuilder;
+  nix::Value vContainerBuilder {};
   state.eval(
     state.parseExprFromFile( nix::CanonPath( CONTAINER_BUILDER_PATH ) ),
     vContainerBuilder );
 
-  nix::Value vEnvironmentStorePath;
+  nix::Value vEnvironmentStorePath {};
   auto       sStorePath = state.store->printStorePath( environmentStorePath );
   vEnvironmentStorePath.mkPath( sStorePath.c_str() );
 
-  nix::Value vSystem;
+  nix::Value vSystem {};
   vSystem.mkString( nix::nativeSystem );
 
-  nix::Value vContainerSystem;
+  nix::Value vContainerSystem {};
   vContainerSystem.mkString( system );
 
-  nix::Value vBindings;
+  nix::Value vBindings {};
   auto       bindings = state.buildBindings( 4 );
   bindings.push_back(
     { state.symbols.create( "nixpkgsFlake" ), &vNixpkgsFlake } );
@@ -484,7 +484,7 @@ createContainerBuilder( nix::EvalState & state,
 
   vBindings.mkAttrs( bindings );
 
-  nix::Value vContainerBuilderDrv;
+  nix::Value vContainerBuilderDrv {};
   state.callFunction( vContainerBuilder,
                       vBindings,
                       vContainerBuilderDrv,

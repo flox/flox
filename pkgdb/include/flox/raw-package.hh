@@ -48,95 +48,96 @@ public:
   std::optional<bool>        unfree;
   std::optional<std::string> description;
 
-  RawPackage( const AttrPath &                 path             = {},
-              std::string_view                 name             = {},
-              std::string_view                 pname            = {},
-              std::optional<std::string>       version          = std::nullopt,
-              std::optional<std::string>       semver           = std::nullopt,
-              std::optional<std::string>       license          = std::nullopt,
-              const std::vector<std::string> & outputs          = { "out" },
-              const std::vector<std::string> & outputsToInstall = { "out" },
-              std::optional<bool>              broken           = std::nullopt,
-              std::optional<bool>              unfree           = std::nullopt,
-              std::optional<std::string>       description      = std::nullopt )
-    : path( path )
+  explicit RawPackage( AttrPath                         path    = {},
+                       std::string_view                 name    = {},
+                       std::string_view                 pname   = {},
+                       std::optional<std::string>       version = std::nullopt,
+                       std::optional<std::string>       semver  = std::nullopt,
+                       std::optional<std::string>       license = std::nullopt,
+                       const std::vector<std::string> & outputs = { "out" },
+                       const std::vector<std::string> & outputsToInstall
+                       = { "out" },
+                       std::optional<bool>        broken      = std::nullopt,
+                       std::optional<bool>        unfree      = std::nullopt,
+                       std::optional<std::string> description = std::nullopt )
+    : path( std::move( path ) )
     , name( name )
     , pname( pname )
-    , version( version )
-    , semver( semver )
-    , license( license )
+    , version( std::move( version ) )
+    , semver( std::move( semver ) )
+    , license( std::move( license ) )
     , outputs( outputs )
     , outputsToInstall( outputsToInstall )
     , broken( broken )
     , unfree( unfree )
-    , description( description )
+    , description( std::move( description ) )
   {}
 
 
   /* --------------------------------------------------------------------------
    */
 
-  AttrPath
+  [[nodiscard]] AttrPath
   getPathStrs() const override
   {
     return this->path;
   }
 
-  std::string
+  [[nodiscard]] std::string
   getFullName() const override
   {
     return this->name;
   }
 
-  std::string
+  [[nodiscard]] std::string
   getPname() const override
   {
     return this->pname;
   }
 
-  std::optional<std::string>
+  [[nodiscard]] std::optional<std::string>
   getVersion() const override
   {
     return this->version;
   }
 
-  std::optional<std::string>
+  [[nodiscard]] std::optional<std::string>
   getSemver() const override
   {
     return this->semver;
   }
 
-  std::optional<std::string>
+  [[nodiscard]] std::optional<std::string>
   getLicense() const override
   {
     return this->license;
   }
 
-  std::vector<std::string>
+  [[nodiscard]] std::vector<std::string>
   getOutputs() const override
   {
     return this->outputs;
   }
 
-  std::vector<std::string>
+  [[nodiscard]] std::vector<std::string>
   getOutputsToInstall() const override
   {
     return this->outputsToInstall;
   }
 
-  std::optional<bool>
+  [[nodiscard]] std::optional<bool>
   isBroken() const override
   {
     return this->broken;
   }
 
-  std::optional<bool>
+  [[nodiscard]] std::optional<bool>
   isUnfree() const override
   {
     return this->unfree;
   }
 
-  std::optional<std::string>
+  [[nodiscard]] std::optional<std::string>
   getDescription() const override
   {
     return this->description;

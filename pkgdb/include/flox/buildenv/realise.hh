@@ -133,9 +133,9 @@ createEnvironmentStorePath(
  * @return A @a nix::StorePath to a container builder.
  */
 nix::StorePath
-createContainerBuilder( nix::EvalState & state,
-                        nix::StorePath   environmentStorePath,
-                        const System &   system );
+createContainerBuilder( nix::EvalState &       state,
+                        const nix::StorePath & environmentStorePath,
+                        const System &         system );
 
 /* -------------------------------------------------------------------------- */
 

@@ -22,6 +22,7 @@
 
 /* Yeah, I know: "iT's IlLeGaL tO eXtEnD `std::*'".
  * This backports definitions exactly as written, so it's fine. */
+// NOLINTBEGIN(cert-dcl58-cpp)
 namespace std {
 
 /* -------------------------------------------------------------------------- */
@@ -78,6 +79,7 @@ concept derived_from
 /* -------------------------------------------------------------------------- */
 
 }  // namespace std
+// NOLINTEND(cert-dcl58-cpp)
 
 
 /* -------------------------------------------------------------------------- */

@@ -24,7 +24,7 @@ namespace flox::buildenv {
 
 struct BuildEnvState
 {
-  std::map<std::string, Priority> priorities;
+  std::map<std::string, Priority> priorities {};
   unsigned long                   symlinks = 0;
 };
 
@@ -221,8 +221,7 @@ createLinks( BuildEnvState &     state,
 /* -------------------------------------------------------------------------- */
 
 void
-buildEnvironment( const std::string &             out,
-                  std::vector<RealisedPackage> && pkgs )
+buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
 {
   BuildEnvState state;
 
@@ -275,24 +274,27 @@ buildEnvironment( const std::string &             out,
    * is performed in `buildenv::createLinks'. */
   std::sort( pkgs.begin(),
              pkgs.end(),
-             []( const RealisedPackage & a, const RealisedPackage & b )
+             []( const RealisedPackage & first, const RealisedPackage & second )
              {
-               auto aP = a.priority;
-               auto bP = b.priority;
+               auto firstP  = first.priority;
+               auto secondP = second.priority;
 
                // order by priority
-               if ( aP.priority < bP.priority ) { return true; }
-               if ( aP.priority > bP.priority ) { return false; }
+               if ( firstP.priority < secondP.priority ) { return true; }
+               if ( firstP.priority > secondP.priority ) { return false; }
 
                // ... then internal priority
-               if ( aP.internalPriority < bP.internalPriority ) { return true; }
-               if ( aP.internalPriority > bP.internalPriority )
+               if ( firstP.internalPriority < secondP.internalPriority )
+                 {
+                   return true;
+                 }
+               if ( firstP.internalPriority > secondP.internalPriority )
                  {
                    return false;
                  }
 
                // ... then (arbitrarily) by path
-               return a.path < b.path;
+               return first.path < second.path;
              } );
 
   for ( const auto & pkg : pkgs )
@@ -307,7 +309,8 @@ buildEnvironment( const std::string &             out,
    */
   // TODO: consider making this optional?
   // TODO: include paths recursively?
-  auto priorityCounter = 1000u;
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+  auto priorityCounter = 1000U;
   while ( ! postponed.empty() )
     {
       std::set<std::string> pkgDirs;
