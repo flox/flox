@@ -156,7 +156,7 @@ public:
   [[nodiscard]] nix::DrvName
   getParsedDrvName() const override
   {
-    return nix::DrvName( this->_fullName );
+    return { this->_fullName };
   }
 
   [[nodiscard]] std::optional<std::string>
