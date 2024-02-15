@@ -27,6 +27,7 @@
   git,
   coreutils,
   parallel,
+  ccacheWrapper,
   llvm, # for `llvm-symbolizer'
   gdb ? throw "`gdb' is required for debugging with `g++'",
   lldb ? throw "`lldb' is required for debugging with `clang++'",
@@ -203,6 +204,7 @@ in
           git
           sqlite
           parallel
+          ccacheWrapper
           # For docs
           doxygen
         ];
