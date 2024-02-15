@@ -75,21 +75,21 @@ public:
   }
 
   /** @return The `Packages.id` of the package. */
-  row_id
+  [[nodiscard]] row_id
   getPackageId() const
   {
     return this->pkgId;
   }
 
   /** @return The path to the database. */
-  std::filesystem::path
+  [[nodiscard]] std::filesystem::path
   getDbPath() const
   {
     return this->dbPath;
   }
 
   /** @return The locked _flake reference_ where the package is defined. */
-  nix::FlakeRef
+  [[nodiscard]] nix::FlakeRef
   getLockedFlakeRef() const
   {
     return PkgDbReadOnly( this->dbPath.string() ).getLockedFlakeRef();
