@@ -100,8 +100,10 @@ public:
   std::string fileB;
   int         priority;
 
-  FileConflict( const std::string fileA, const std::string fileB, int priority )
-    : fileA( fileA ), fileB( fileB ), priority( priority )
+  FileConflict( std::string fileA, std::string fileB, int priority )
+    : fileA( std::move( fileA ) )
+    , fileB( std::move( fileB ) )
+    , priority( priority )
   {}
 }; /* End class `FileConflict' */
 
