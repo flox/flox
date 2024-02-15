@@ -1122,7 +1122,16 @@ impl Install {
             .detect_concrete_environment(&flox, "install to")
         {
             Ok(concrete_environment) => concrete_environment,
-            Err(EnvironmentSelectError::Environment(e @ EnvironmentError2::DotFloxNotFound)) => {
+            Err(EnvironmentSelectError::Environment(
+                ref e @ EnvironmentError2::DotFloxNotFound(ref dir),
+            )) => {
+                bail!(formatdoc! {"
+                {e}
+
+                Create an environment with 'flox init --dir {}'", dir.to_string_lossy()
+                })
+            },
+            Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
                 bail!(formatdoc! {"
                 {e}
 
@@ -1248,7 +1257,16 @@ impl Uninstall {
             .detect_concrete_environment(&flox, "uninstall from")
         {
             Ok(concrete_environment) => concrete_environment,
-            Err(EnvironmentSelectError::Environment(e @ EnvironmentError2::DotFloxNotFound)) => {
+            Err(EnvironmentSelectError::Environment(
+                ref e @ EnvironmentError2::DotFloxNotFound(ref dir),
+            )) => {
+                bail!(formatdoc! {"
+                {e}
+
+                Create an environment with 'flox init --dir {}'", dir.to_string_lossy()
+                })
+            },
+            Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
                 bail!(formatdoc! {"
                 {e}
 

@@ -18,7 +18,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
     trace!("formatting environment_error: {err:?}");
 
     match err {
-        EnvironmentError2::DotFloxNotFound => display_chain(err),
+        EnvironmentError2::DotFloxNotFound(_) => display_chain(err),
 
         // todo: enrich with a path?
         EnvironmentError2::EnvDirNotFound => formatdoc! {"

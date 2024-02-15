@@ -530,6 +530,8 @@ pub enum EnvironmentSelect {
 pub enum EnvironmentSelectError {
     #[error(transparent)]
     Environment(#[from] EnvironmentError2),
+    #[error("Did not find an environment in the current directory.")]
+    EnvNotFoundInCurrentDirectory,
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
 }
@@ -556,7 +558,7 @@ impl EnvironmentSelect {
                         Ok(UninitializedEnvironment::DotFlox(found)
                             .into_concrete_environment(flox)?)
                     },
-                    None => Err(EnvironmentError2::DotFloxNotFound)?,
+                    None => Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory)?,
                 }
             },
             EnvironmentSelect::Remote(env_ref) => {
@@ -590,7 +592,7 @@ impl EnvironmentSelect {
             // directory.
             EnvironmentSelect::Unspecified => match detect_environment(message)? {
                 Some(env) => Ok(env.into_concrete_environment(flox)?),
-                None => Err(EnvironmentError2::DotFloxNotFound)?,
+                None => Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory)?,
             },
             EnvironmentSelect::Remote(env_ref) => {
                 let pointer = ManagedPointer::new(

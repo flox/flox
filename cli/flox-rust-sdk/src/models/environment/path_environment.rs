@@ -277,7 +277,9 @@ impl Environment for PathEnvironment {
         if Some(OsStr::new(".flox")) == dot_flox.file_name() {
             std::fs::remove_dir_all(dot_flox).map_err(EnvironmentError2::DeleteEnvironment)?;
         } else {
-            return Err(EnvironmentError2::DotFloxNotFound);
+            return Err(EnvironmentError2::DotFloxNotFound(
+                self.path.parent().unwrap_or(&self.path).to_path_buf(),
+            ));
         }
         Ok(())
     }
@@ -326,7 +328,9 @@ impl PathEnvironment {
         let dot_flox = dot_flox_path.as_ref();
         log::debug!("attempting to open .flox directory: {}", dot_flox.display());
         if !dot_flox.exists() {
-            Err(EnvironmentError2::DotFloxNotFound)?;
+            Err(EnvironmentError2::DotFloxNotFound(
+                dot_flox.parent().unwrap_or(dot_flox).to_path_buf(),
+            ))?;
         }
 
         PathEnvironment::new(dot_flox, pointer, temp_dir)
@@ -343,7 +347,7 @@ impl PathEnvironment {
     ) -> Result<Self, EnvironmentError2> {
         let system: &str = system.as_ref();
         match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
-            Err(EnvironmentError2::DotFloxNotFound) => {},
+            Err(EnvironmentError2::DotFloxNotFound(_)) => {},
             Err(e) => Err(e)?,
             Ok(_) => Err(EnvironmentError2::EnvironmentExists(
                 dot_flox_parent_path.as_ref().to_path_buf(),
