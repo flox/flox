@@ -34,6 +34,8 @@ private:
 
 public:
 
+  virtual ~LockCommand() = default;
+
   LockCommand();
 
   [[nodiscard]] command::VerboseParser &
@@ -113,6 +115,8 @@ private:
 
 public:
 
+  virtual ~UpdateCommand() = default;
+
   UpdateCommand();
 
   [[nodiscard]] command::VerboseParser &
@@ -147,6 +151,8 @@ private:
 
 public:
 
+  virtual ~UpgradeCommand() = default;
+
   UpgradeCommand();
 
   [[nodiscard]] command::VerboseParser &
@@ -178,6 +184,8 @@ private:
 
 
 public:
+
+  virtual ~RegistryCommand() = default;
 
   RegistryCommand();
 
