@@ -275,24 +275,27 @@ buildEnvironment( const std::string &             out,
    * is performed in `buildenv::createLinks'. */
   std::sort( pkgs.begin(),
              pkgs.end(),
-             []( const RealisedPackage & a, const RealisedPackage & b )
+             []( const RealisedPackage & first, const RealisedPackage & second )
              {
-               auto aP = a.priority;
-               auto bP = b.priority;
+               auto firstP  = first.priority;
+               auto secondP = second.priority;
 
                // order by priority
-               if ( aP.priority < bP.priority ) { return true; }
-               if ( aP.priority > bP.priority ) { return false; }
+               if ( firstP.priority < secondP.priority ) { return true; }
+               if ( firstP.priority > secondP.priority ) { return false; }
 
                // ... then internal priority
-               if ( aP.internalPriority < bP.internalPriority ) { return true; }
-               if ( aP.internalPriority > bP.internalPriority )
+               if ( firstP.internalPriority < secondP.internalPriority )
+                 {
+                   return true;
+                 }
+               if ( firstP.internalPriority > secondP.internalPriority )
                  {
                    return false;
                  }
 
                // ... then (arbitrarily) by path
-               return a.path < b.path;
+               return first.path < second.path;
              } );
 
   for ( const auto & pkg : pkgs )
