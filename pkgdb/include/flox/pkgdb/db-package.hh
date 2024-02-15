@@ -46,7 +46,9 @@ protected:
    *   std::optional<std::string>  description;
    */
 
-  row_id                pkgId;  /**< `Packages.id' in the database. */
+  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
+  row_id pkgId; /**< `Packages.id' in the database. */
+  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
   std::filesystem::path dbPath; /**< Path to the database. */
 
 private:
