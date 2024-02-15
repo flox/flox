@@ -34,7 +34,7 @@ private:
 
 public:
 
-  virtual ~LockCommand() = default;
+  ~LockCommand() override = default;
 
   LockCommand();
 
@@ -115,7 +115,7 @@ private:
 
 public:
 
-  virtual ~UpdateCommand() = default;
+  ~UpdateCommand() override = default;
 
   UpdateCommand();
 
@@ -151,7 +151,7 @@ private:
 
 public:
 
-  virtual ~UpgradeCommand() = default;
+  ~UpgradeCommand() override = default;
 
   UpgradeCommand();
 
@@ -185,7 +185,7 @@ private:
 
 public:
 
-  virtual ~RegistryCommand() = default;
+  ~RegistryCommand() override = default;
 
   RegistryCommand();
 
