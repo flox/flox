@@ -145,6 +145,22 @@ jobs:
           rm script.bash;
           exit "$TIDY_STATUS";
 
+      - name: 'Report'
+        if: always()
+        run: |
+          if [[ -s targets ]]; then
+            if [[ "${TIDY_STATUS?}" = 0 ]]; then
+              echo ":white_check_mark: PASS: linter has no recommendations"  \
+                >> "$GITHUB_STEP_SUMMARY";
+            else
+              echo ":x: FAIL: linter recommends changes"  \
+                >> "$GITHUB_STEP_SUMMARY";
+            fi
+          else
+            echo ":white_check_mark: PASS: no files were linted"  \
+              >> "$GITHUB_STEP_SUMMARY";
+          fi
+
 
 # ---------------------------------------------------------------------------- #
 #
