@@ -96,9 +96,9 @@ class FileConflict : public std::exception
 
 public:
 
-  const std::string fileA;
-  const std::string fileB;
-  const int         priority;
+  std::string fileA;
+  std::string fileB;
+  int         priority;
 
   FileConflict( const std::string fileA, const std::string fileB, int priority )
     : fileA( fileA ), fileB( fileB ), priority( priority )
