@@ -27,6 +27,7 @@
 in
   symlinkJoin {
     name = "${flox-cli.pname}-${version}";
+    inherit version;
 
     paths = [flox-cli flox-manpages];
     nativeBuildInputs = [makeBinaryWrapper];
