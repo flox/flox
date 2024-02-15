@@ -58,7 +58,8 @@ private:
 
 
 public:
-virtual ~SearchCommand() = default;
+
+  ~SearchCommand() override = default;
 
   SearchCommand();
 
