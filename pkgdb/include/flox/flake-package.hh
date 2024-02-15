@@ -78,7 +78,7 @@ private:
 
 public:
 
-  virtual ~FlakePackage() = default;
+  ~FlakePackage() override = default;
 
   FlakePackage( const Cursor & cursor, AttrPath path, bool checkDrv = true )
     : _cursor( cursor )
