@@ -466,7 +466,7 @@ concatStringsSep( const std::string_view sep, const Container & strings )
   rsl.reserve( size );
   for ( auto & idx : strings )
     {
-      if ( rsl.size() != 0 ) { rsl += sep; }
+      if ( ! rsl.empty() ) { rsl += sep; }
       rsl += idx;
     }
   return rsl;
