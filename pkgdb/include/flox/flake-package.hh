@@ -104,9 +104,9 @@ public:
       this->_pname   = dname.name;
       this->_version = dname.version;
     }
-    for ( auto & p : symtab->resolve( cursor->getAttrPath() ) )
+    for ( auto & path : symtab->resolve( cursor->getAttrPath() ) )
       {
-        this->_pathS.push_back( p );
+        this->_pathS.push_back( path );
       }
     this->init( checkDrv );
   }
@@ -182,21 +182,21 @@ public:
   [[nodiscard]] std::vector<std::string>
   getOutputs() const override
   {
-    MaybeCursor o = this->_cursor->maybeGetAttr( "outputs" );
-    if ( o == nullptr ) { return { "out" }; }
-    return o->getListOfStrings();
+    MaybeCursor output = this->_cursor->maybeGetAttr( "outputs" );
+    if ( output == nullptr ) { return { "out" }; }
+    return output->getListOfStrings();
   }
 
   [[nodiscard]] std::optional<std::string>
   getDescription() const override
   {
     if ( ! this->_hasMetaAttr ) { return std::nullopt; }
-    MaybeCursor l
+    MaybeCursor description
       = this->_cursor->getAttr( "meta" )->maybeGetAttr( "description" );
-    if ( l == nullptr ) { return std::nullopt; }
+    if ( description == nullptr ) { return std::nullopt; }
     try
       {
-        return l->getString();
+        return description->getString();
       }
     catch ( ... )
       {
