@@ -163,7 +163,7 @@ public:
   getVersion() const override
   {
     if ( this->_version.empty() ) { return std::nullopt; }
-    else { return this->_version; }
+    return this->_version;
   }
 
   [[nodiscard]] std::optional<std::string>
@@ -176,7 +176,7 @@ public:
   getLicense() const override
   {
     if ( this->_license.has_value() ) { return this->_license; }
-    else { return std::nullopt; }
+    return std::nullopt;
   }
 
   [[nodiscard]] std::vector<std::string>
@@ -184,7 +184,7 @@ public:
   {
     MaybeCursor o = this->_cursor->maybeGetAttr( "outputs" );
     if ( o == nullptr ) { return { "out" }; }
-    else { return o->getListOfStrings(); }
+    return o->getListOfStrings();
   }
 
   [[nodiscard]] std::optional<std::string>
