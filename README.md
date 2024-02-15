@@ -53,7 +53,7 @@ Install packages from [the biggest open source repository
 With `flox` you can:<br/>
 &rarr; [Create environments](https://flox.dev/docs/tutorials/creating-environments)<br/>
 &rarr; [Share your environments with others](https://flox.dev/docs/tutorials/sharing-environments)<br/>
-&rarr; [Build container images](docs/tutorials/sharing-environments/#sharing-with-containers)<br/>
+&rarr; [Build container images](https://flox.dev/docs/tutorials/sharing-environments/#sharing-with-containers)<br/>
 &rarr; [... and much more][docs]<br/>
 
 <div align="center">
