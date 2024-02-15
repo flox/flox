@@ -457,7 +457,7 @@ createContainerBuilder( nix::EvalState &       state,
   state.store->ensurePath(
     state.store->parseStorePath( CONTAINER_BUILDER_PATH ) );
 
-  nix::Value vContainerBuilder;
+  nix::Value vContainerBuilder {};
   state.eval(
     state.parseExprFromFile( nix::CanonPath( CONTAINER_BUILDER_PATH ) ),
     vContainerBuilder );
