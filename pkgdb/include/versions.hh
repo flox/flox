@@ -35,7 +35,7 @@ private:
 
 public:
 
-  VersionException( std::string_view msg ) : msg( msg ) {}
+  explicit VersionException( std::string_view msg ) : msg( msg ) {}
   const char *
   what() const noexcept override
   {
