@@ -572,9 +572,27 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         // catch package eval error: unsupported system:
         LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
             exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-            context_message: Some(ContextMsgError { message, .. }),
+            context_message,
             ..
-        })) => message.to_string(),
+        })) => {
+            if let Some(ctx_msg) = context_message {
+                formatdoc! {"
+                {}
+
+                For more on managing system-specific packages, visit the documentation:
+                https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+            ", ctx_msg}
+            } else {
+                // Unlikely to encounter an error where the context message is missing,
+                // but we would rather handle it with a vague message than a panic.
+                formatdoc! {"
+                    This package is not available for this system
+
+                    For more on managing system-specific packages, visit the documentation:
+                    https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+                "}
+            }
+        },
         // catch package eval and build errors
         LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
             exit_code,
