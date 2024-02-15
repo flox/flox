@@ -134,20 +134,19 @@ Each option is described below:
 
 `pkg-group`
 :   Marks a package as belonging to a pkg-group.
-    Some packages only work together correctly when they all come from the
-    same revision of the catalog.
-    One example is C/C++ projects that depend on specific versions of header
-    files.
-    Packages are marked as belonging to a pkg-group simply by setting this
-    option to the name of the pkg-group.
 
     Adding packages to a pkg-group ensures all packages in the pkg-group share
     the same libraries and dependencies,
     which ensures maximum compatibility and minimizes the size of the
     environment.
+    One example is C/C++ projects that depend on specific versions of header
+    files.
+    Packages are marked as belonging to a pkg-group simply by setting this
+    option to the name of the pkg-group.
+
     Multiple pkg-groups may resolve to the same version of the catalog.
-    Pkg-groups may be upgraded as a unit,
-    ensuring that the pkg-group continues to work together.
+    Pkg-groups are upgraded as a unit,
+    ensuring that the packages within the pkg-group continue to work together.
     See [`flox-upgrade(1)`](./flox-upgrade.md) for more details on how
     pkg-groups and packages interact during upgrades.
 
