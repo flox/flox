@@ -68,8 +68,18 @@ jobs:
             ./pkgdb/build-aux/changed-sources.sh > targets;
           fi
 
+      - name: 'Detect Empty Target List'
+        id: set-has-targets
+        run: |
+          if [[ -s targets ]]; then
+            echo 'HAS_TARGETS=' >> "$GITHUB_OUTPUT";
+          else
+            echo 'HAS_TARGETS=true' >> "$GITHUB_OUTPUT";
+          fi
+
       # TODO: If target list is empty, terminate workflow here
       - name: 'Setup Nix'
+        if: ${{ steps.set-has-targets.outputs.HAS_TARGETS }}
         uses: './.github/actions/common-setup'
         with:
           GITHUB_ACCESS_TOKEN:    "${{ secrets.NIX_GIT_TOKEN }}"
@@ -80,10 +90,12 @@ jobs:
           SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
 
       - name: 'Create compile_commands.json'
+        if: ${{ steps.set-has-targets.outputs.HAS_TARGETS }}
         run: |
           nix develop -L --no-update-lock-file --command make -C pkgdb -j8 cdb;
 
       - name: 'Create Tidy Log'
+        if: ${{ steps.set-has-targets.outputs.HAS_TARGETS }}
         run: |
           cat <<'EOF' > script.bash
             status=0;
