@@ -121,7 +121,7 @@ public:
    * `pkgPath` and/or `systems` fields if they are set.
    */
   void
-  check( const std::string iid = "*" ) const;
+  check( std::string iid = "*" ) const;
 
   /** @brief Reset to default/empty state. */
   void
