@@ -58,6 +58,7 @@ private:
 
 
 public:
+virtual ~SearchCommand() = default;
 
   SearchCommand();
 
