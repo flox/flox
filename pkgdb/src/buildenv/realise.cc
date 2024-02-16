@@ -59,7 +59,7 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-static const std::string BASH_ACTIVATE_SCRIPT = R"(
+const char * const BASH_ACTIVATE_SCRIPT = R"(
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
 if [ -f ~/.bashrc -a "${FLOX_SOURCED_FROM_SHELL_RC:-}" != 1 ]
@@ -80,7 +80,7 @@ fi
 
 
 // unlike bash, zsh activation calls this script from the user's shell rcfile
-static const std::string ZSH_ACTIVATE_SCRIPT = R"(
+const char * const ZSH_ACTIVATE_SCRIPT = R"(
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _prof_scripts;
   _prof_scripts=( $(
