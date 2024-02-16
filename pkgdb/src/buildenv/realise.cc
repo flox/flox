@@ -348,11 +348,11 @@ createFloxEnv( nix::EvalState &     state,
            * to disable these variables dynamically expanding at runtime.
            *
            * 'foo''\\''bar' is evaluated as  foo'bar  in bash/zsh*/
-          size_t i = 0;
-          while ( ( i = value.find( "'", i ) ) != std::string::npos )
+          size_t indexOfQuoteChar = 0;
+          while ( ( indexOfQuoteChar = value.find( "'", indexOfQuoteChar ) ) != std::string::npos )
             {
-              value.replace( i, 1, "'\\''" );
-              i += 4;
+              value.replace( indexOfQuoteChar, 1, "'\\''" );
+              indexOfQuoteChar += 4;
             }
 
           commonActivate << nix::fmt( "export %s='%s'", name, value )
