@@ -237,7 +237,8 @@ buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
 {
   BuildEnvState state;
 
-  std::set<std::string> done, postponed;
+  std::set<std::string> done;
+  std::set<std::string> postponed;
 
   auto addPkg = [&]( const std::string & pkgDir, const Priority & priority )
   {
