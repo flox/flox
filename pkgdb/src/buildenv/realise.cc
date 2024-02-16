@@ -455,7 +455,7 @@ createContainerBuilder( nix::EvalState &       state,
   auto lockedNixpkgs
     = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
 
-  nix::Value vNixpkgsFlake;
+  nix::Value vNixpkgsFlake {};
   nix::flake::callFlake( state, lockedNixpkgs, vNixpkgsFlake );
 
   state.store->ensurePath(
