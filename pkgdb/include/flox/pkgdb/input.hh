@@ -228,6 +228,13 @@ public:
                       const size_t     pageIdx,
                       const size_t     pageSize );
 
+  /**
+   * @brief Helper to identify the pageSize to use for scraping.
+   * @return pageSize in items
+   */
+  int
+  getScrapingPageSize();
+
   /** @brief Add/set a shortname for this input. */
   void
   setName( std::string_view name )

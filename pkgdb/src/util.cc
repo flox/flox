@@ -18,6 +18,8 @@
 #include <string_view>
 #include <vector>
 
+#include <sys/sysinfo.h>
+
 #include <nlohmann/json.hpp>
 #include <sqlite3pp.hh>
 
@@ -341,7 +343,23 @@ displayableGlobbedPath( const flox::AttrPathGlob & attrs )
   return s;
 }
 
+long
+getAvailableSystemMemory()
+{
+  struct sysinfo memInfo;
+  sysinfo( &memInfo );
 
+  long long totalPhysMem = memInfo.totalram;
+  long long freePhysMem  = memInfo.freeram;
+  long long bufMem       = memInfo.bufferram;
+  long long sharedMem    = memInfo.sharedram;
+  // Multiply in next statement to avoid int overflow on right hand side...
+  totalPhysMem *= memInfo.mem_unit;
+  freePhysMem *= memInfo.mem_unit;
+  bufMem *= memInfo.mem_unit;
+  sharedMem *= memInfo.mem_unit;
+  return ( freePhysMem + bufMem + sharedMem ) / 1024;
+}
 /* -------------------------------------------------------------------------- */
 
 }  // namespace flox

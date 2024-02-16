@@ -444,6 +444,9 @@ merge_vectors( const std::vector<T> & lower, const std::vector<T> & higher )
 [[nodiscard]] std::string
 displayableGlobbedPath( const AttrPathGlob & attrs );
 
+/** @brief Get available system memory in kb */
+[[nodiscard]] long
+getAvailableSystemMemory( void );
 
 /* -------------------------------------------------------------------------- */
 
@@ -493,6 +496,11 @@ concatStringsSep( const std::string_view sep, const Container & strings )
  * @brief Prints a log message to `stderr` when called with `--debug` or `-vvv`.
  */
 #define debugLog( msg ) printLog( nix::Verbosity::lvlDebug, msg )
+
+/**
+ * @brief Prints a log message to `stderr` when called with `--verbose` or `-v`.
+ */
+#define verboseLog( msg ) printLog( nix::Verbosity::lvlTalkative, msg )
 
 /** @brief Prints a log message to `stderr` at default verbosity. */
 #define infoLog( msg ) printLog( nix::Verbosity::lvlInfo, msg )
