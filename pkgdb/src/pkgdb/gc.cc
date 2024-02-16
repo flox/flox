@@ -106,7 +106,7 @@ GCCommand::GCCommand() : parser( "gc" )
     .help( "minimum age in days" )
     .metavar( "AGE" )
     .nargs( 1 )
-    .default_value( 30 )
+    .default_value( 30 )  // NOLINT(readability-magic-numbers)
     .action( [&]( const std::string & minAgeStr )
              { this->gcStaleAgeDays = stoi( minAgeStr ); } );
 
