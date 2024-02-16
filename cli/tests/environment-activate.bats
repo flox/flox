@@ -464,3 +464,30 @@ env_is_activated() {
   assert_success
   assert_line "PIP_CONFIG_FILE is /some/other/pip.ini"
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate:flox-uses-default-env
+@test "'flox *' uses local environment over 'default' environment" {
+  $FLOX_BIN delete
+
+  mkdir default
+  pushd default > /dev/null || return
+  "$FLOX_BIN" init
+  "$FLOX_BIN" install vim
+  popd > /dev/null || return
+
+  "$FLOX_BIN" init
+  "$FLOX_BIN" install emacs
+
+  # sanity check that flox list lists the local environment
+  run -- "$FLOX_BIN" list -n
+  assert_success
+  assert_line "emacs"
+
+  # Run flox list within the default environment.
+  # Flox should choose the local environment over the default environment.
+  run -- "$FLOX_BIN" activate --dir default -- "$FLOX_BIN" list -n
+  assert_success
+  assert_line "emacs"
+}
