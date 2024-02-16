@@ -20,7 +20,6 @@
 #include <nix/globals.hh>
 #include <nix/ref.hh>
 
-#include "compat/concepts.hh"
 #include "flox/core/nix-state.hh"
 #include "flox/core/types.hh"
 #include "flox/pkgdb/pkg-query.hh"
