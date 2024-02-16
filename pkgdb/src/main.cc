@@ -139,9 +139,9 @@ printAndReturnException( const flox::FloxException & err )
 {
   if ( ! isatty( STDOUT_FILENO ) )
     {
-      std::cout << nlohmann::json( err ).dump() << std::endl;
+      std::cout << nlohmann::json( err ).dump() << '\n';
     }
-  else { std::cerr << err.what() << std::endl; }
+  else { std::cerr << err.what() << '\n'; }
 
   return err.getErrorCode();
 }
