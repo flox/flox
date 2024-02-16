@@ -113,8 +113,9 @@ createLinks( BuildEnvState &     state,
       // Handle file type mismatches and conflicts with priority.
       if ( S_ISDIR( srcSt.st_mode ) )
         {
-          struct stat dstSt;
-          auto        res = lstat( dstFile.c_str(), &dstSt );
+          struct stat dstSt
+          {};
+          auto res = lstat( dstFile.c_str(), &dstSt );
           if ( res == 0 )
             {
               if ( S_ISDIR( dstSt.st_mode ) )
@@ -126,7 +127,8 @@ createLinks( BuildEnvState &     state,
               if ( S_ISLNK( dstSt.st_mode ) )
                 {
                   auto        target = nix::canonPath( dstFile, true );
-                  struct stat canonSt;
+                  struct stat canonSt
+                  {};
                   if ( lstat( target.c_str(), &canonSt ) != 0 )
                     {
                       throw nix::SysError( "getting status of '%1%'", target );
@@ -162,8 +164,9 @@ createLinks( BuildEnvState &     state,
         }
       else
         {
-          struct stat dstSt;
-          auto        res = lstat( dstFile.c_str(), &dstSt );
+          struct stat dstSt
+          {};
+          auto res = lstat( dstFile.c_str(), &dstSt );
           if ( res == 0 )
             {
               if ( S_ISLNK( dstSt.st_mode ) )
