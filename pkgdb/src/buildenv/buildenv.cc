@@ -144,7 +144,9 @@ createLinks( BuildEnvState &     state,
                     {
                       throw nix::SysError( "unlinking '%1%'", dstFile );
                     }
-                  if ( mkdir( dstFile.c_str(), 0755 ) == -1 )
+
+                  const auto dirPermissions = 0755;
+                  if ( mkdir( dstFile.c_str(), dirPermissions) == -1 )
                     {
                       throw nix::SysError( "creating directory '%1%'",
                                            dstFile );
