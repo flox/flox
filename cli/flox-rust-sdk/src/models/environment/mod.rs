@@ -269,7 +269,12 @@ impl EnvironmentPointer {
         let dot_flox_path = path.as_ref().join(DOT_FLOX);
         if !dot_flox_path.exists() {
             debug!("couldn't find .flox at {}", dot_flox_path.display());
-            Err(EnvironmentError2::DotFloxNotFound)?
+            Err(EnvironmentError2::DotFloxNotFound(
+                dot_flox_path
+                    .parent()
+                    .unwrap_or(&dot_flox_path)
+                    .to_path_buf(),
+            ))?
         }
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         let pointer_contents = match fs::read(&pointer_path) {
@@ -317,8 +322,8 @@ pub enum EnvironmentError2 {
     // todo: candidate for impl specific error
     // * only path and managed env are defined in .Flox
     // region: path env open
-    #[error(".flox directory not found")]
-    DotFloxNotFound,
+    #[error("Did not find an environment in '{0}'")]
+    DotFloxNotFound(PathBuf),
 
     #[error("could not locate the manifest for this environment")]
     ManifestNotFound,
@@ -332,6 +337,7 @@ pub enum EnvironmentError2 {
     // * three distinct errors map to this
     #[error("could not initialize environment")]
     InitEnv(#[source] std::io::Error),
+    /// .flox exists but .flox/env does not
     #[error("could not find environment definition directory")]
     EnvDirNotFound,
     #[error("could not find environment pointer file")]

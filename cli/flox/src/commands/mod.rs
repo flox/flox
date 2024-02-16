@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::{env, fmt, fs, mem};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
 use flox_rust_sdk::flox::{EnvironmentRef, Flox, Floxhub, DEFAULT_FLOXHUB_URL, FLOX_VERSION};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
@@ -19,6 +19,7 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     DotFlox,
     Environment,
+    EnvironmentError2,
     EnvironmentPointer,
     ManagedPointer,
     DOT_FLOX,
@@ -31,6 +32,7 @@ use log::{debug, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
+use thiserror::Error;
 use toml_edit::Key;
 use url::Url;
 
@@ -549,6 +551,16 @@ pub enum EnvironmentSelect {
     Unspecified,
 }
 
+#[derive(Debug, Error)]
+pub enum EnvironmentSelectError {
+    #[error(transparent)]
+    Environment(#[from] EnvironmentError2),
+    #[error("Did not find an environment in the current directory.")]
+    EnvNotFoundInCurrentDirectory,
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
+}
+
 impl EnvironmentSelect {
     /// Open a concrete environment, not detecting the currently active
     /// environment.
@@ -557,17 +569,21 @@ impl EnvironmentSelect {
     /// behavior based on whether an environment is already active. For example,
     /// `flox activate` should never re-activate the last activated environment;
     /// it should default to an environment in the current directory.
-    pub fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
+    pub fn to_concrete_environment(
+        &self,
+        flox: &Flox,
+    ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         match self {
-            EnvironmentSelect::Dir(path) => open_path(flox, path),
+            EnvironmentSelect::Dir(path) => Ok(open_path(flox, path)?),
             EnvironmentSelect::Unspecified => {
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_found_environment = find_dot_flox(&current_dir)?;
                 match maybe_found_environment {
                     Some(found) => {
-                        UninitializedEnvironment::DotFlox(found).into_concrete_environment(flox)
+                        Ok(UninitializedEnvironment::DotFlox(found)
+                            .into_concrete_environment(flox)?)
                     },
-                    None => Err(anyhow!(format!("No environment found in {current_dir:?}"))),
+                    None => Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory)?,
                 }
             },
             EnvironmentSelect::Remote(env_ref) => {
@@ -577,7 +593,7 @@ impl EnvironmentSelect {
                     &flox.floxhub,
                 );
 
-                let env = RemoteEnvironment::new(flox, pointer)?;
+                let env = RemoteEnvironment::new(flox, pointer).map_err(anyhow::Error::new)?;
                 Ok(ConcreteEnvironment::Remote(env))
             },
         }
@@ -593,20 +609,15 @@ impl EnvironmentSelect {
         &self,
         flox: &Flox,
         message: &str,
-    ) -> Result<ConcreteEnvironment> {
+    ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         match self {
-            EnvironmentSelect::Dir(path) => open_path(flox, path),
+            EnvironmentSelect::Dir(path) => Ok(open_path(flox, path)?),
             // If the user doesn't specify an environment, check if there's an
             // already activated environment or an environment in the current
             // directory.
             EnvironmentSelect::Unspecified => match detect_environment(message)? {
-                Some(env) => env.into_concrete_environment(flox),
-                // todo: remove: `detect_environment` already checked current dir
-                None => {
-                    let current_dir =
-                        env::current_dir().context("could not get current directory")?;
-                    Err(anyhow!(format!("No environment found in {current_dir:?}")))
-                },
+                Some(env) => Ok(env.into_concrete_environment(flox)?),
+                None => Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory)?,
             },
             EnvironmentSelect::Remote(env_ref) => {
                 let pointer = ManagedPointer::new(
@@ -615,7 +626,7 @@ impl EnvironmentSelect {
                     &flox.floxhub,
                 );
 
-                let env = RemoteEnvironment::new(flox, pointer)?;
+                let env = RemoteEnvironment::new(flox, pointer).map_err(anyhow::Error::new)?;
                 Ok(ConcreteEnvironment::Remote(env))
             },
         }
@@ -628,7 +639,9 @@ impl EnvironmentSelect {
 ///   inside a git repo.
 /// - Check if there's an already activated environment.
 /// - Prompt if both are true.
-pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironment>> {
+pub fn detect_environment(
+    message: &str,
+) -> Result<Option<UninitializedEnvironment>, EnvironmentSelectError> {
     let current_dir = env::current_dir().context("could not get current directory")?;
     let maybe_activated = last_activated_environment();
     let maybe_found_environment = find_dot_flox(&current_dir)?;
@@ -664,7 +677,7 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
                     ],
                 },
             };
-            let (index, _) = dialog.raw_prompt()?;
+            let (index, _) = dialog.raw_prompt().map_err(anyhow::Error::new)?;
             match index {
                 0 => Some(found),
                 1 => Some(activated_env),
@@ -679,9 +692,8 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
 }
 
 /// Open an environment defined in `{path}/.flox`
-fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment> {
+fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError2> {
     DotFlox::open(path)
-        .with_context(|| format!("No environment found in {path:?}"))
         .map(UninitializedEnvironment::DotFlox)?
         .into_concrete_environment(flox)
 }
@@ -763,7 +775,10 @@ impl UninitializedEnvironment {
     /// Open the contained environment and return a [ConcreteEnvironment]
     ///
     /// This function will fail if the contained environment is not available or invalid
-    pub fn into_concrete_environment(self, flox: &Flox) -> Result<ConcreteEnvironment> {
+    pub fn into_concrete_environment(
+        self,
+        flox: &Flox,
+    ) -> Result<ConcreteEnvironment, EnvironmentError2> {
         match self {
             UninitializedEnvironment::DotFlox(dot_flox) => {
                 let dot_flox_path = dot_flox.path.join(DOT_FLOX);
