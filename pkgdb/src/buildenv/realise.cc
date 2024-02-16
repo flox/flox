@@ -355,8 +355,7 @@ createFloxEnv( nix::EvalState &     state,
               indexOfQuoteChar += 4;
             }
 
-          commonActivate << nix::fmt( "export %s='%s'", name, value )
-                         << std::endl;
+          commonActivate << nix::fmt( "export %s='%s'\n", name, value );
         }
     }
 
@@ -391,8 +390,7 @@ createFloxEnv( nix::EvalState &     state,
           std::filesystem::permissions( tempDir / "activate" / "hook.sh",
                                         std::filesystem::perms::owner_exec,
                                         std::filesystem::perm_options::add );
-          commonActivate << "source \"$FLOX_ENV/activate/hook.sh\""
-                         << std::endl;
+          commonActivate << "source \"$FLOX_ENV/activate/hook.sh\"" << '\n';
         }
     }
 
