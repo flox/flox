@@ -30,7 +30,7 @@ namespace flox {
 static bool
 shouldANSI()
 {
-  return isatty( STDERR_FILENO )
+  return ( isatty( STDERR_FILENO ) != 0 )
          && ( nix::getEnv( "TERM" ).value_or( "dumb" ) != "dumb" )
          && ( ! ( nix::getEnv( "NO_COLOR" ).has_value()
                   || nix::getEnv( "NOCOLOR" ).has_value() ) );
@@ -93,7 +93,7 @@ public:
 
   FilteredLogger( bool printBuildLogs )
     : systemd( nix::getEnv( "IN_SYSTEMD" ) == "1" )
-    , tty( isatty( STDERR_FILENO ) )
+    , tty( isatty( STDERR_FILENO ) != 0 )
     , color( shouldANSI() )
     , printBuildLogs( printBuildLogs )
   {}
