@@ -223,7 +223,7 @@ createFloxEnv( nix::EvalState &     state,
     {
       if ( ! package.second.has_value() ) { continue; }
       auto const & locked_package = package.second.value();
-      locked_packages.push_back( { package.first, locked_package } );
+      locked_packages.emplace_back( package.first, locked_package );
     }
 
   /* Extract derivations */
