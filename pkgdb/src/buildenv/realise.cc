@@ -201,7 +201,8 @@ extractAttrPath( nix::EvalState &       state,
 
 
 /* -------------------------------------------------------------------------- */
-
+// TODO: this function is too long, break it up
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 nix::StorePath
 createFloxEnv( nix::EvalState &     state,
                resolver::Lockfile & lockfile,
@@ -436,6 +437,7 @@ createFloxEnv( nix::EvalState &     state,
 
   return createEnvironmentStorePath( state, pkgs, references, originalPackage );
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 
 nix::StorePath
