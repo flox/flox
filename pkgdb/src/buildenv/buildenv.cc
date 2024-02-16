@@ -146,7 +146,7 @@ createLinks( BuildEnvState &     state,
                     }
 
                   const auto dirPermissions = 0755;
-                  if ( mkdir( dstFile.c_str(), dirPermissions) == -1 )
+                  if ( mkdir( dstFile.c_str(), dirPermissions ) == -1 )
                     {
                       throw nix::SysError( "creating directory '%1%'",
                                            dstFile );
@@ -252,7 +252,7 @@ buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
                                + "/nix-support/propagated-user-env-packages" ),
                 " \n" ) )
           {
-            if ( done.count( path ) == 0 ) { postponed.insert( path ); }
+            if ( ! done.contains( path ) ) { postponed.insert( path ); }
           }
       }
     catch ( nix::SysError & e )
@@ -267,7 +267,7 @@ buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
                                + "/nix-support/propagated-build-inputs" ),
                 " \n" ) )
           {
-            if ( done.count( path ) == 0u ) { postponed.insert( path ); }
+            if ( ! done.contains( path ) ) { postponed.insert( path ); }
           }
       }
     catch ( nix::SysError & e )
