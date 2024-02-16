@@ -76,7 +76,7 @@ protected:
 
 
   /** @brief Detect ignored messages. */
-  bool
+  static bool
   shouldIgnoreMsg( std::string_view str )
   {
     (void) str;
