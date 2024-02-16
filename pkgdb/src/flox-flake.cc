@@ -67,12 +67,9 @@ ensureFlakeIsDownloaded( std::function<void()> && lambda )
                * return to the caller. */
               return;
             }
-          else
-            {
-              /* The error has already been reported via the child, just pass
-               * along the exit code. */
-              exit( WEXITSTATUS( status ) );
-            }
+          /* The error has already been reported via the child, just pass
+           * along the exit code. */
+          exit( WEXITSTATUS( status ) );
         }
       else { throw LockFlakeException( "failed to lock flake" ); }
     }
