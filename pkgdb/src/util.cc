@@ -18,7 +18,11 @@
 #include <string_view>
 #include <vector>
 
-#include <sys/sysinfo.h>
+#ifdef __APPLE__
+#  include <sys/sysctl.h>
+#else
+#  include <sys/sysinfo.h>
+#endif
 
 #include <nlohmann/json.hpp>
 #include <sqlite3pp.hh>
@@ -343,22 +347,47 @@ displayableGlobbedPath( const flox::AttrPathGlob & attrs )
   return s;
 }
 
+
+#ifdef __APPLE__
+// Sysctl is only used for darwin
+template<class T>
+T
+getSysCtlValue( const char * valueName )
+{
+  T      value;
+  size_t bufSz = sizeof( value );
+  int    res   = sysctlbyname( valueName, &value, &bufSz, nullptr, 0 );
+  if ( res == 0 ) { return value; }
+  else { return -1; }
+}
+#endif
+
 long
 getAvailableSystemMemory()
 {
+  long availableKb;
+
+#ifdef __APPLE__
+  int freePages     = getSysCtlValue<int>( "vm.page_free_count" );
+  int reusablePages = getSysCtlValue<int>( "vm.page_reusable_count" );
+  int pageSize      = getSysCtlValue<int>( "vm.pagesize" );
+  availableKb       = ( freePages + reusablePages ) / 1024;
+  availableKb *= pageSize;
+#else
   struct sysinfo memInfo;
   sysinfo( &memInfo );
 
-  long long totalPhysMem = memInfo.totalram;
-  long long freePhysMem  = memInfo.freeram;
-  long long bufMem       = memInfo.bufferram;
-  long long sharedMem    = memInfo.sharedram;
+  long long freePhysMem = memInfo.freeram;
+  long long bufMem      = memInfo.bufferram;
+  long long sharedMem   = memInfo.sharedram;
   // Multiply in next statement to avoid int overflow on right hand side...
-  totalPhysMem *= memInfo.mem_unit;
   freePhysMem *= memInfo.mem_unit;
   bufMem *= memInfo.mem_unit;
   sharedMem *= memInfo.mem_unit;
-  return ( freePhysMem + bufMem + sharedMem ) / 1024;
+  availableKb = ( freePhysMem + bufMem + sharedMem ) / 1024;
+#endif
+
+  return availableKb;
 }
 /* -------------------------------------------------------------------------- */
 
