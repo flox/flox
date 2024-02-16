@@ -290,6 +290,20 @@ impl EnvironmentPointer {
 
         serde_json::from_slice(&pointer_contents).map_err(EnvironmentError2::ParseEnvJson)
     }
+
+    pub fn name(&self) -> &EnvironmentName {
+        match self {
+            EnvironmentPointer::Managed(pointer) => &pointer.name,
+            EnvironmentPointer::Path(pointer) => &pointer.name,
+        }
+    }
+
+    pub fn owner(&self) -> Option<&EnvironmentOwner> {
+        match self {
+            EnvironmentPointer::Managed(pointer) => Some(&pointer.owner),
+            EnvironmentPointer::Path(_) => None,
+        }
+    }
 }
 
 /// Represents a `.flox` directory that contains an `env.json`.
