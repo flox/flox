@@ -163,7 +163,7 @@ public:
 
             /* Should not happen, and missing enum case is reported
              * by `-Werror=switch-enum' */
-            default: levelChar = '7'; break;
+            default: break;
           }
         prefix = std::string( "<" ) + levelChar + ">";
       }
