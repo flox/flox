@@ -96,11 +96,11 @@ class FileConflict : public std::exception
 
 public:
 
-  std::string fileA;
-  std::string fileB;
-  int         priority;
+  std::string  fileA;
+  std::string  fileB;
+  unsigned int priority;
 
-  FileConflict( std::string fileA, std::string fileB, int priority )
+  FileConflict( std::string fileA, std::string fileB, unsigned int priority )
     : fileA( std::move( fileA ) )
     , fileB( std::move( fileB ) )
     , priority( priority )

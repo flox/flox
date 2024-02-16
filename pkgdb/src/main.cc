@@ -137,11 +137,11 @@ run( int argc, char * argv[] )
 int
 printAndReturnException( const flox::FloxException & err )
 {
-  if ( ! isatty( STDOUT_FILENO ) )
+  if ( isatty( STDOUT_FILENO ) == 0 )
     {
-      std::cout << nlohmann::json( err ).dump() << std::endl;
+      std::cout << nlohmann::json( err ).dump() << '\n';
     }
-  else { std::cerr << err.what() << std::endl; }
+  else { std::cerr << err.what() << '\n'; }
 
   return err.getErrorCode();
 }
@@ -153,7 +153,7 @@ main( int argc, char * argv[] )
 {
   /* Allows you to run without catching which is useful for
    * `gdb'/`lldb' backtraces. */
-  auto maybeNC = std::getenv( "PKGDB_NO_CATCH" );
+  auto * maybeNC = std::getenv( "PKGDB_NO_CATCH" );
   if ( maybeNC != nullptr )
     {
       std::string noCatch = std::string( maybeNC );

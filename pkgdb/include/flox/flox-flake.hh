@@ -154,7 +154,7 @@ FLOX_DEFINE_EXCEPTION( LockFlakeException,
  * There is room for optimization here for sure.
  */
 void
-ensureFlakeIsDownloaded( std::function<void()> && lambda );
+ensureFlakeIsDownloaded( std::function<void()> lambda );
 
 
 }  // namespace flox

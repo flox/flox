@@ -33,6 +33,8 @@ struct BuildEnvState
 
 
 /* For each activated package, create symlinks */
+// todo: break this function up to reduce complexity
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 static void
 createLinks( BuildEnvState &     state,
              const std::string & srcDir,
@@ -68,7 +70,8 @@ createLinks( BuildEnvState &     state,
       auto srcFile = srcDir + "/" + ent.name;
       auto dstFile = dstDir + "/" + ent.name;
 
-      struct stat srcSt;
+      struct stat srcSt
+      {};
       try
         {
           if ( stat( srcFile.c_str(), &srcSt ) == -1 )
@@ -108,10 +111,11 @@ createLinks( BuildEnvState &     state,
       // if the directory already exists, create a directory
       // and recursively link the contents.
       // Handle file type mismatches and conflicts with priority.
-      else if ( S_ISDIR( srcSt.st_mode ) )
+      if ( S_ISDIR( srcSt.st_mode ) )
         {
-          struct stat dstSt;
-          auto        res = lstat( dstFile.c_str(), &dstSt );
+          struct stat dstSt
+          {};
+          auto res = lstat( dstFile.c_str(), &dstSt );
           if ( res == 0 )
             {
               if ( S_ISDIR( dstSt.st_mode ) )
@@ -119,10 +123,12 @@ createLinks( BuildEnvState &     state,
                   createLinks( state, srcFile, dstFile, priority );
                   continue;
                 }
-              else if ( S_ISLNK( dstSt.st_mode ) )
+
+              if ( S_ISLNK( dstSt.st_mode ) )
                 {
                   auto        target = nix::canonPath( dstFile, true );
-                  struct stat canonSt;
+                  struct stat canonSt
+                  {};
                   if ( lstat( target.c_str(), &canonSt ) != 0 )
                     {
                       throw nix::SysError( "getting status of '%1%'", target );
@@ -138,7 +144,9 @@ createLinks( BuildEnvState &     state,
                     {
                       throw nix::SysError( "unlinking '%1%'", dstFile );
                     }
-                  if ( mkdir( dstFile.c_str(), 0755 ) == -1 )
+
+                  const auto dirPermissions = 0755;
+                  if ( mkdir( dstFile.c_str(), dirPermissions ) == -1 )
                     {
                       throw nix::SysError( "creating directory '%1%'",
                                            dstFile );
@@ -158,8 +166,9 @@ createLinks( BuildEnvState &     state,
         }
       else
         {
-          struct stat dstSt;
-          auto        res = lstat( dstFile.c_str(), &dstSt );
+          struct stat dstSt
+          {};
+          auto res = lstat( dstFile.c_str(), &dstSt );
           if ( res == 0 )
             {
               if ( S_ISLNK( dstSt.st_mode ) )
@@ -216,16 +225,20 @@ createLinks( BuildEnvState &     state,
       state.symlinks++;
     }
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 
 /* -------------------------------------------------------------------------- */
 
+// todo: break this function up to reduce complexity
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 void
 buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
 {
   BuildEnvState state;
 
-  std::set<std::string> done, postponed;
+  std::set<std::string> done;
+  std::set<std::string> postponed;
 
   auto addPkg = [&]( const std::string & pkgDir, const Priority & priority )
   {
@@ -234,12 +247,12 @@ buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
 
     try
       {
-        for ( const auto & p : nix::tokenizeString<std::vector<std::string>>(
+        for ( const auto & path : nix::tokenizeString<std::vector<std::string>>(
                 nix::readFile( pkgDir
                                + "/nix-support/propagated-user-env-packages" ),
                 " \n" ) )
           {
-            if ( ! done.count( p ) ) { postponed.insert( p ); }
+            if ( ! done.contains( path ) ) { postponed.insert( path ); }
           }
       }
     catch ( nix::SysError & e )
@@ -249,12 +262,12 @@ buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
 
     try
       {
-        for ( const auto & p : nix::tokenizeString<std::vector<std::string>>(
+        for ( const auto & path : nix::tokenizeString<std::vector<std::string>>(
                 nix::readFile( pkgDir
                                + "/nix-support/propagated-build-inputs" ),
                 " \n" ) )
           {
-            if ( ! done.count( p ) ) { postponed.insert( p ); }
+            if ( ! done.contains( path ) ) { postponed.insert( path ); }
           }
       }
     catch ( nix::SysError & e )
@@ -328,6 +341,7 @@ buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
         nix::fmt( "created %d symlinks in user environment", state.symlinks ) );
     }
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 /* -------------------------------------------------------------------------- */
 

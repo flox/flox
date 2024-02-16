@@ -24,7 +24,6 @@
 #include <nix/globals.hh>
 #include <nlohmann/json.hpp>
 
-#include "compat/concepts.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/core/types.hh"
 

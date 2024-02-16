@@ -97,13 +97,13 @@ EvalCommand::EvalCommand() : parser( "eval" )
 int
 EvalCommand::run()
 {
-  auto state = this->getState();
-  auto value = state->allocValue();
+  auto   state = this->getState();
+  auto * value = state->allocValue();
   if ( this->file.has_value() )
     {
       if ( ( *this->file ) == "-" )
         {
-          auto expr = state->parseStdin();
+          auto * expr = state->parseStdin();
           state->eval( expr, *value );
         }
       else
@@ -120,7 +120,7 @@ EvalCommand::run()
           throw FloxException(
             "you must provide a file or expression to evaluate" );
         }
-      auto expr = state->parseExprFromString(
+      auto * expr = state->parseExprFromString(
         *this->expr,
         state->rootPath( nix::CanonPath::fromCwd() ) );
       state->eval( expr, *value );

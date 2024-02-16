@@ -22,7 +22,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include "compat/concepts.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/core/types.hh"
 #include "flox/pkgdb/pkg-query.hh"

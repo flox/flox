@@ -59,7 +59,7 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-static const std::string BASH_ACTIVATE_SCRIPT = R"(
+const char * const BASH_ACTIVATE_SCRIPT = R"(
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
 if [ -f ~/.bashrc -a "${FLOX_SOURCED_FROM_SHELL_RC:-}" != 1 ]
@@ -80,7 +80,7 @@ fi
 
 
 // unlike bash, zsh activation calls this script from the user's shell rcfile
-static const std::string ZSH_ACTIVATE_SCRIPT = R"(
+const char * const ZSH_ACTIVATE_SCRIPT = R"(
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _prof_scripts;
   _prof_scripts=( $(
@@ -182,9 +182,10 @@ extractAttrPath( nix::EvalState &       state,
                         output->pos,
                         "while parsing cached flake data" );
 
-      auto next = output->value->attrs->get( state.symbols.create( attrName ) );
+      auto * next
+        = output->value->attrs->get( state.symbols.create( attrName ) );
 
-      if ( ! next )
+      if ( next == nullptr )
         {
           std::ostringstream str;
           output->value->print( state.symbols, str );
@@ -200,7 +201,8 @@ extractAttrPath( nix::EvalState &       state,
 
 
 /* -------------------------------------------------------------------------- */
-
+// TODO: this function is too long, break it up
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 nix::StorePath
 createFloxEnv( nix::EvalState &     state,
                resolver::Lockfile & lockfile,
@@ -222,7 +224,7 @@ createFloxEnv( nix::EvalState &     state,
     {
       if ( ! package.second.has_value() ) { continue; }
       auto const & locked_package = package.second.value();
-      locked_packages.push_back( { package.first, locked_package } );
+      locked_packages.emplace_back( package.first, locked_package );
     }
 
   /* Extract derivations */
@@ -240,7 +242,7 @@ createFloxEnv( nix::EvalState &     state,
                                                  packageInputRef,
                                                  nix::flake::LockFlags {} );
 
-      auto vFlake = state.allocValue();
+      auto * vFlake = state.allocValue();
       nix::flake::callFlake( state, packageFlake, *vFlake );
 
       /* Get referenced output. */
@@ -269,14 +271,18 @@ createFloxEnv( nix::EvalState &     state,
                != std::string::npos )
             {
               throw PackageUnsupportedSystem(
-                "package '" + pId + "' is not available for this system ('"
-                  + system + "')",
+                nix::fmt(
+                  "package '%s' is not available for this system ('%s')",
+                  pId,
+                  system ),
+
                 nix::filterANSIEscapes( e.what(), true ) );
             }
 
           // rethrow the original root cause without the nix trace
-          throw PackageEvalFailure( "package '" + pId + "' failed to evaluate",
-                                    e.info().msg.str() );
+          throw PackageEvalFailure(
+            nix::fmt( "package '%s' failed to evaluate", pId ),
+            e.info().msg.str() );
         };
 
 
@@ -343,15 +349,15 @@ createFloxEnv( nix::EvalState &     state,
            * to disable these variables dynamically expanding at runtime.
            *
            * 'foo''\\''bar' is evaluated as  foo'bar  in bash/zsh*/
-          size_t i = 0;
-          while ( ( i = value.find( "'", i ) ) != std::string::npos )
+          size_t indexOfQuoteChar = 0;
+          while ( ( indexOfQuoteChar = value.find( '\'', indexOfQuoteChar ) )
+                  != std::string::npos )
             {
-              value.replace( i, 1, "'\\''" );
-              i += 4;
+              value.replace( indexOfQuoteChar, 1, "'\\''" );
+              indexOfQuoteChar += 4;
             }
 
-          commonActivate << nix::fmt( "export %s='%s'", name, value )
-                         << std::endl;
+          commonActivate << nix::fmt( "export %s='%s'\n", name, value );
         }
     }
 
@@ -386,8 +392,7 @@ createFloxEnv( nix::EvalState &     state,
           std::filesystem::permissions( tempDir / "activate" / "hook.sh",
                                         std::filesystem::perms::owner_exec,
                                         std::filesystem::perm_options::add );
-          commonActivate << "source \"$FLOX_ENV/activate/hook.sh\""
-                         << std::endl;
+          commonActivate << "source \"$FLOX_ENV/activate/hook.sh\"" << '\n';
         }
     }
 
@@ -432,6 +437,7 @@ createFloxEnv( nix::EvalState &     state,
 
   return createEnvironmentStorePath( state, pkgs, references, originalPackage );
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 
 nix::StorePath
@@ -451,7 +457,7 @@ createContainerBuilder( nix::EvalState &       state,
   auto lockedNixpkgs
     = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
 
-  nix::Value vNixpkgsFlake;
+  nix::Value vNixpkgsFlake {};
   nix::flake::callFlake( state, lockedNixpkgs, vNixpkgsFlake );
 
   state.store->ensurePath(
