@@ -20,6 +20,8 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
+    apply_doc_link_for_unsupported_packages,
+    is_unsupported_pkg_for_system_error,
     CanonicalPath,
     CoreEnvironmentError,
     EditResult,
@@ -1179,7 +1181,7 @@ impl Install {
         debug!("install error: {:?}", err);
 
         match err {
-            // For resolution failures try to make suggestions
+            // Try to make suggestions when a package isn't found
             EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::LockManifest(
                     flox_rust_sdk::models::pkgdb::CallPkgDbError::PkgDbError(pkgdberr),
@@ -1208,31 +1210,8 @@ impl Install {
                     {suggestion}
                 "})
             },
-            // If the package doesn't exist for this system, direct users to the docs
-            EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
-                LockedManifestError::BuildEnv(
-                    flox_rust_sdk::models::pkgdb::CallPkgDbError::PkgDbError(pkgdberr),
-                ),
-            )) if pkgdberr.exit_code == error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM => {
-                debug!("incompatible package, directing user to docs");
-                let msg = if let Some(ctx_msg) = pkgdberr.context_message {
-                    formatdoc! {"
-                    {}
-
-                    For more on managing system-specific packages, visit the documentation:
-                    https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
-                ", ctx_msg}
-                } else {
-                    // Unlikely to encounter an error where the context message is missing,
-                    // but we would rather handle it with a vague message than a panic.
-                    formatdoc! {"
-                        This package is not available for this system ('{}')
-
-                        For more on managing system-specific packages, visit the documentation:
-                        https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
-                    ", flox.system}
-                };
-                anyhow!(msg)
+            EnvironmentError2::Core(err) if is_unsupported_pkg_for_system_error(&err) => {
+                apply_doc_link_for_unsupported_packages(err).into()
             },
             _ => err.into(),
         }

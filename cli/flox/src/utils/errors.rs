@@ -569,12 +569,20 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
             context_message: Some(ContextMsgError { message, .. }),
             ..
         })) => message.to_string(),
-        // catch package eval error: unsupported system:
         LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
             exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-            context_message,
+            context_message: Some(ContextMsgError { message, .. }),
             ..
-        })) => {
+        })) => message.into(),
+        // We manually construct this error variant in cases where we want to add a link to the docs,
+        // otherwise it's the same as the basic PACKAGE_EVAL_INCOMPATIBLE_SYSTEM error.
+        LockedManifestError::UnsupportedPackageWithDocLink(CallPkgDbError::PkgDbError(
+            PkgDbError {
+                exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+                context_message,
+                ..
+            },
+        )) => {
             if let Some(ctx_msg) = context_message {
                 formatdoc! {"
                 {}
@@ -583,8 +591,8 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
                 https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
             ", ctx_msg}
             } else {
-                // Unlikely to encounter an error where the context message is missing,
-                // but we would rather handle it with a vague message than a panic.
+                // In this context it's an error to encounter an error (heh) where the context message is missing,
+                // but a vague error message is preferable to panicking.
                 formatdoc! {"
                     This package is not available for this system
 
@@ -592,6 +600,13 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
                     https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
                 "}
             }
+        },
+        // Since we manually construct the UnsupportedPackageWithDocLink variant we should *never* encounter
+        // a situation in which it contains the wrong kind of error. That said, we need some kind of error
+        // in case we've screwed up.
+        LockedManifestError::UnsupportedPackageWithDocLink(_) => {
+            // Could probably do with a better error message
+            "encountered an internal error".into()
         },
         // catch package eval and build errors
         LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {

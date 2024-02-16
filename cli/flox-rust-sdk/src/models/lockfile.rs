@@ -314,6 +314,8 @@ pub enum LockedManifestError {
     LockManifest(#[source] CallPkgDbError),
     #[error("failed to build environment")]
     BuildEnv(#[source] CallPkgDbError),
+    #[error("package is unsupported for this sytem")]
+    UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
     #[error("failed to build container builder")]
     CallContainerBuilder(#[source] std::io::Error),
     #[error("failed to write container builder to sink")]
