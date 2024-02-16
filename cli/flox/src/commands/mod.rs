@@ -1,6 +1,7 @@
 mod auth;
 mod environment;
 mod general;
+mod init;
 mod search;
 
 use std::collections::VecDeque;
@@ -306,7 +307,7 @@ enum LocalDevelopmentCommands {
         long("create"),
         footer("Run 'man flox-init' for more details.")
     )]
-    Init(#[bpaf(external(environment::init))] environment::Init),
+    Init(#[bpaf(external(init::init))] init::Init),
     /// Enter the environment, type 'exit' to leave
     #[bpaf(
         command,

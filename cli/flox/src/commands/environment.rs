@@ -18,7 +18,7 @@ use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
 };
-use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
+use flox_rust_sdk::models::environment::path_environment::{self};
 use flox_rust_sdk::models::environment::{
     CanonicalPath,
     CoreEnvironmentError,
@@ -869,62 +869,6 @@ mod activate_tests {
             "/flox/env/bin:/nix/store/some/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
             "PATH was not reordered correctly"
         );
-    }
-}
-
-// Create an environment in the current directory
-#[derive(Bpaf, Clone)]
-pub struct Init {
-    /// Directory to create the environment in (default: current directory)
-    #[bpaf(long, short, argument("path"))]
-    dir: Option<PathBuf>,
-
-    /// Name of the environment
-    ///
-    /// "$(basename $PWD)" or "default" if in $HOME
-    #[bpaf(long("name"), short('n'), argument("name"))]
-    env_name: Option<String>,
-}
-
-impl Init {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("init");
-
-        let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
-
-        let home_dir = dirs::home_dir().unwrap();
-
-        let env_name = if let Some(name) = self.env_name {
-            EnvironmentName::from_str(&name)?
-        } else if dir == home_dir {
-            EnvironmentName::from_str("default")?
-        } else {
-            let name = dir
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .context("Can't init in root")?;
-            EnvironmentName::from_str(&name)?
-        };
-
-        let env = PathEnvironment::init(
-            PathPointer::new(env_name),
-            &dir,
-            flox.temp_dir.clone(),
-            &flox.system,
-        )?;
-
-        message::created(formatdoc! {"
-            Created environment {name} ({system})
-
-            Next:
-              $ flox search <package>    <- Search for a package
-              $ flox install <package>   <- Install a package into an environment
-              $ flox activate            <- Enter the environment
-            ",
-            name = env.name(),
-            system = flox.system
-        });
-        Ok(())
     }
 }
 
