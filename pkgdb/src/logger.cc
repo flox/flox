@@ -58,7 +58,7 @@ protected:
    * handle them here.
    */
   bool
-  shouldIgnoreWarning( const std::string & str )
+  shouldIgnoreWarning( const std::string & str ) const
   {
     /* Ignore warnings about overrides for missing indirect inputs.
      * These can come up when an indirect input drops a dependendency
