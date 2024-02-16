@@ -349,7 +349,8 @@ createFloxEnv( nix::EvalState &     state,
            *
            * 'foo''\\''bar' is evaluated as  foo'bar  in bash/zsh*/
           size_t indexOfQuoteChar = 0;
-          while ( ( indexOfQuoteChar = value.find( "'", indexOfQuoteChar ) ) != std::string::npos )
+          while ( ( indexOfQuoteChar = value.find( '\'', indexOfQuoteChar ) )
+                  != std::string::npos )
             {
               value.replace( indexOfQuoteChar, 1, "'\\''" );
               indexOfQuoteChar += 4;
