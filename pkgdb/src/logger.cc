@@ -91,7 +91,7 @@ public:
   bool color;          /**< Whether we should emit colors in logs. */
   bool printBuildLogs; /**< Whether we should emit build logs. */
 
-  FilteredLogger( bool printBuildLogs )
+  explicit FilteredLogger( bool printBuildLogs )
     : systemd( nix::getEnv( "IN_SYSTEMD" ) == "1" )
     , tty( isatty( STDERR_FILENO ) != 0 )
     , color( shouldANSI() )
