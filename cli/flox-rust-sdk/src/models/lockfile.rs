@@ -74,7 +74,7 @@ impl LockedManifest {
 
     /// Build a locked manifest
     ///
-    /// if a gcroot_out_link_path is provided,
+    /// If a gcroot_out_link_path is provided,
     /// the environment will be linked to that path and a gcroot will be created
     pub fn build(
         &self,
@@ -314,6 +314,8 @@ pub enum LockedManifestError {
     LockManifest(#[source] CallPkgDbError),
     #[error("failed to build environment")]
     BuildEnv(#[source] CallPkgDbError),
+    #[error("package is unsupported for this sytem")]
+    UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
     #[error("failed to build container builder")]
     CallContainerBuilder(#[source] std::io::Error),
     #[error("failed to write container builder to sink")]

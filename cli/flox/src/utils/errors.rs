@@ -12,7 +12,34 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, ContextMsgError, PkgDbError};
 use indoc::formatdoc;
-use log::trace;
+use log::{debug, trace};
+
+/// Convert to an error variant that directs the user to the docs if the provided error is
+/// due to a package not being supported on the current system.
+pub fn apply_doc_link_for_unsupported_packages(err: EnvironmentError2) -> EnvironmentError2 {
+    if let EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+        LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+            category_message,
+            context_message,
+        })),
+    )) = err
+    {
+        debug!("incompatible package, directing user to docs");
+        EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+            LockedManifestError::UnsupportedPackageWithDocLink(CallPkgDbError::PkgDbError(
+                PkgDbError {
+                    exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+                    category_message,
+                    context_message,
+                },
+            )),
+        ))
+    } else {
+        // Not the type of error we're concerned with, just pass it through
+        err
+    }
+}
 
 pub fn format_error(err: &EnvironmentError2) -> String {
     trace!("formatting environment_error: {err:?}");
@@ -569,12 +596,45 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
             context_message: Some(ContextMsgError { message, .. }),
             ..
         })) => message.to_string(),
-        // catch package eval error: unsupported system:
         LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
             exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
             context_message: Some(ContextMsgError { message, .. }),
             ..
-        })) => message.to_string(),
+        })) => message.into(),
+        // We manually construct this error variant in cases where we want to add a link to the docs,
+        // otherwise it's the same as the basic PACKAGE_EVAL_INCOMPATIBLE_SYSTEM error.
+        LockedManifestError::UnsupportedPackageWithDocLink(CallPkgDbError::PkgDbError(
+            PkgDbError {
+                exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+                context_message,
+                ..
+            },
+        )) => {
+            if let Some(ctx_msg) = context_message {
+                formatdoc! {"
+                {}
+
+                For more on managing system-specific packages, visit the documentation:
+                https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+            ", ctx_msg}
+            } else {
+                // In this context it's an error to encounter an error (heh) where the context message is missing,
+                // but a vague error message is preferable to panicking.
+                formatdoc! {"
+                    This package is not available for this system
+
+                    For more on managing system-specific packages, visit the documentation:
+                    https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+                "}
+            }
+        },
+        // Since we manually construct the UnsupportedPackageWithDocLink variant we should *never* encounter
+        // a situation in which it contains the wrong kind of error. That said, we need some kind of error
+        // in case we've screwed up.
+        LockedManifestError::UnsupportedPackageWithDocLink(_) => {
+            // Could probably do with a better error message
+            "encountered an internal error".into()
+        },
         // catch package eval and build errors
         LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
             exit_code,
