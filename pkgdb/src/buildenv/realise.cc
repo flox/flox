@@ -182,7 +182,8 @@ extractAttrPath( nix::EvalState &       state,
                         output->pos,
                         "while parsing cached flake data" );
 
-      auto next = output->value->attrs->get( state.symbols.create( attrName ) );
+      auto * next
+        = output->value->attrs->get( state.symbols.create( attrName ) );
 
       if ( ! next )
         {
@@ -240,7 +241,7 @@ createFloxEnv( nix::EvalState &     state,
                                                  packageInputRef,
                                                  nix::flake::LockFlags {} );
 
-      auto vFlake = state.allocValue();
+      auto * vFlake = state.allocValue();
       nix::flake::callFlake( state, packageFlake, *vFlake );
 
       /* Get referenced output. */
