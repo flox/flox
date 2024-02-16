@@ -108,7 +108,7 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
 {
   if ( nix::fetchers::maybeGetStrAttr( attrs, "type" ) != "flox-nixpkgs" )
     {
-      return {};
+      return std::nullopt;
     }
 
   for ( auto & [name, value] : attrs )
@@ -134,6 +134,69 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
 
   nix::fetchers::Input input;
   input.attrs = attrs;
+  return input;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Parses an input from a URL with the schema
+ *        `flox-nixpkgs:v<RULES-VERSION>/<REV-OR-REF>`.
+ */
+std::optional<nix::fetchers::Input>
+WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
+{
+  if ( url.scheme != type() ) { return std::nullopt; }
+
+  nix::fetchers::Input input;
+
+  auto path = nix::tokenizeString<std::vector<std::string>>( url.path, "/" );
+
+  if ( path.size() != 2 )
+    {
+      throw nix::BadURL( "URL '%s' is invalid", url.url );
+    }
+
+  if ( path.size() != 2 )
+    {
+      throw nix::BadURL( "URL '%s' is invalid", url.url );
+    }
+
+  if ( ( path[0].front() == 'v' )
+       && ( std::find_if( path[0].begin() + 1,
+                          path[0].end(),
+                          []( unsigned char chr )
+                          { return ! std::isdigit( chr ); } )
+            == path[0].end() ) )
+    {
+      input.attrs["rulesVersion"]
+        = static_cast<uint64_t>( atoll( path[0].c_str() + 1 ) );
+    }
+  else
+    {
+      throw nix::BadURL(
+        "in URL '%s', '%s' is not a rules version tag like 'v<NUMBER>'",
+        url.url,
+        path[0] );
+    }
+
+  if ( std::regex_match( path[1], nix::revRegex ) )
+    {
+      input.attrs["rev"] = path[1];
+    }
+  else if ( std::regex_match( path[1], nix::refRegex ) )
+    {
+      input.attrs["ref"] = path[1];
+    }
+  else
+    {
+      throw nix::BadURL(
+        "in URL '%s', '%s' is not a commit hash or branch/tag name",
+        url.url,
+        path[1] );
+    }
+
   return input;
 }
 
