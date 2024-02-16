@@ -142,14 +142,14 @@ GCCommand::run()
 
   auto toDelete = findStaleDatabases( cacheDir, this->gcStaleAgeDays );
 
-  std::cout << "Found " << toDelete.size() << " stale databases." << std::endl;
+  std::cout << "Found " << toDelete.size() << " stale databases." << '\n';
   for ( const auto & path : toDelete )
     {
       std::cout << "deleting " << path;
-      if ( this->dryRun ) { std::cout << " (dry run)" << std::endl; }
+      if ( this->dryRun ) { std::cout << " (dry run)" << '\n'; }
       else
         {
-          std::cout << std::endl;
+          std::cout << '\n';
           std::filesystem::remove( path );
         }
     }
