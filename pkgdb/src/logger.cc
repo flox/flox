@@ -57,7 +57,7 @@ protected:
    * verbosity setting conditionals exist in external libs, we have to
    * handle them here.
    */
-  bool
+  [[nodiscard]] bool
   shouldIgnoreWarning( const std::string & str ) const
   {
     /* Ignore warnings about overrides for missing indirect inputs.
