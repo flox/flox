@@ -239,7 +239,7 @@ buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
                                + "/nix-support/propagated-user-env-packages" ),
                 " \n" ) )
           {
-            if ( ! done.count( p ) ) { postponed.insert( p ); }
+            if ( done.count( p ) == 0u ) { postponed.insert( p ); }
           }
       }
     catch ( nix::SysError & e )
@@ -254,7 +254,7 @@ buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
                                + "/nix-support/propagated-build-inputs" ),
                 " \n" ) )
           {
-            if ( ! done.count( p ) ) { postponed.insert( p ); }
+            if ( done.count( p ) == 0u ) { postponed.insert( p ); }
           }
       }
     catch ( nix::SysError & e )
