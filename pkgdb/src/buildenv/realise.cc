@@ -270,14 +270,18 @@ createFloxEnv( nix::EvalState &     state,
                != std::string::npos )
             {
               throw PackageUnsupportedSystem(
-                "package '" + pId + "' is not available for this system ('"
-                  + system + "')",
+                nix::fmt(
+                  "package '%s' is not available for this system ('%s')",
+                  pId,
+                  system ),
+
                 nix::filterANSIEscapes( e.what(), true ) );
             }
 
           // rethrow the original root cause without the nix trace
-          throw PackageEvalFailure( "package '" + pId + "' failed to evaluate",
-                                    e.info().msg.str() );
+          throw PackageEvalFailure(
+            nix::fmt( "package '%s' failed to evaluate", pId ),
+            e.info().msg.str() );
         };
 
 
