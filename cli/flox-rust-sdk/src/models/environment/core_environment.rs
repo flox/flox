@@ -16,13 +16,7 @@ use super::{
 };
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
-use crate::models::environment::{
-    apply_doc_link_for_unsupported_packages,
-    call_pkgdb,
-    global_manifest_path,
-    is_unsupported_pkg_for_system_error,
-    CanonicalPath,
-};
+use crate::models::environment::{call_pkgdb, global_manifest_path, CanonicalPath};
 use crate::models::lockfile::{LockedManifest, LockedManifestError};
 use crate::models::manifest::{
     insert_packages,
@@ -498,20 +492,7 @@ impl CoreEnvironment<ReadOnly> {
         temp_env.update_manifest(&manifest_contents)?;
 
         debug!("transaction: building environment");
-        let res = temp_env.build(flox);
-        match res {
-            // We don't care about the store path to built temp environment
-            Ok(_) => {},
-            // Convert to an error variant that will have a link to the docs applied
-            // if this is a particular type of error.
-            Err(err) if is_unsupported_pkg_for_system_error(&err) => {
-                return Err(apply_doc_link_for_unsupported_packages(err))
-            },
-            // Return all other error types like you normally would.
-            _ => {
-                return res.map(|_| ());
-            },
-        }
+        temp_env.build(flox)?;
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;

@@ -20,8 +20,6 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
-    apply_doc_link_for_unsupported_packages,
-    is_unsupported_pkg_for_system_error,
     CanonicalPath,
     CoreEnvironmentError,
     EditResult,
@@ -75,7 +73,12 @@ use crate::commands::{
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
-use crate::utils::errors::{display_chain, format_core_error, format_locked_manifest_error};
+use crate::utils::errors::{
+    apply_doc_link_for_unsupported_packages,
+    display_chain,
+    format_core_error,
+    format_locked_manifest_error,
+};
 use crate::utils::message;
 use crate::{subcommand_metric, utils};
 
@@ -145,7 +148,9 @@ impl Edit {
         let result = match Self::provided_manifest_contents(file)? {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
-            Some(new_manifest) => environment.edit(flox, new_manifest)?,
+            Some(new_manifest) => environment
+                .edit(flox, new_manifest)
+                .map_err(apply_doc_link_for_unsupported_packages)?,
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
             None => Self::interactive_edit(flox, environment.as_mut()).await?,
@@ -211,7 +216,8 @@ impl Edit {
                 help_message: None,
                 typed: Spinner::new(|| environment.edit(flox, new_manifest.clone())),
             }
-            .spin();
+            .spin()
+            .map_err(apply_doc_link_for_unsupported_packages);
 
             match result {
                 Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(e))) => {
@@ -1210,10 +1216,7 @@ impl Install {
                     {suggestion}
                 "})
             },
-            EnvironmentError2::Core(err) if is_unsupported_pkg_for_system_error(&err) => {
-                apply_doc_link_for_unsupported_packages(err).into()
-            },
-            _ => err.into(),
+            err => apply_doc_link_for_unsupported_packages(err).into(),
         }
     }
 }

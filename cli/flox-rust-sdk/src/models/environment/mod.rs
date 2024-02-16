@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
 use flox_types::version::Version;
-use log::{debug, warn};
+use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -15,10 +15,9 @@ use super::container_builder::ContainerBuilder;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::LockedManifest;
 use super::manifest::PackageToInstall;
-use super::pkgdb::{PkgDbError, UpgradeResult};
+use super::pkgdb::UpgradeResult;
 use crate::flox::{Flox, Floxhub};
-use crate::models::lockfile::LockedManifestError;
-use crate::models::pkgdb::{call_pkgdb, error_codes, CallPkgDbError};
+use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{
     GitCommandDiscoverError,
     GitCommandProvider,
@@ -534,45 +533,6 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
 /// Directory containing nix gc roots for (previous) builds of environments of a given owner
 pub(super) fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
     flox.cache_dir.join(GCROOTS_DIR_NAME).join(owner.as_str())
-}
-
-/// Detects whether the the provided error is regarding an unsupported package for the current system
-pub fn is_unsupported_pkg_for_system_error(err: &CoreEnvironmentError) -> bool {
-    matches!(
-        err,
-        CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
-            CallPkgDbError::PkgDbError(PkgDbError {
-                exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-                ..
-            })
-        ),)
-    )
-}
-
-/// Converts the provided error into a variant that will be wrapped in an error that provides the doc link
-pub fn apply_doc_link_for_unsupported_packages(err: CoreEnvironmentError) -> CoreEnvironmentError {
-    if let CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
-        CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-            category_message,
-            context_message,
-        }),
-    )) = err
-    {
-        debug!("incompatible package, directing user to docs");
-        CoreEnvironmentError::LockedManifest(LockedManifestError::UnsupportedPackageWithDocLink(
-            CallPkgDbError::PkgDbError(PkgDbError {
-                exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-                category_message,
-                context_message,
-            }),
-        ))
-    } else {
-        warn!("given an unexpected error variant for wrapping");
-        // This branch is only here to guard against misuse i.e. it should be unreachable when used
-        // correctly. Mistakenly not directing users to the docs is a better failure mode than a panic.
-        err
-    }
 }
 
 #[cfg(test)]

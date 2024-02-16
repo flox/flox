@@ -12,7 +12,34 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, ContextMsgError, PkgDbError};
 use indoc::formatdoc;
-use log::trace;
+use log::{debug, trace};
+
+/// Convert to an error variant that directs the user to the docs if the provided error is
+/// due to a package not being supported on the current system.
+pub fn apply_doc_link_for_unsupported_packages(err: EnvironmentError2) -> EnvironmentError2 {
+    if let EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+        LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+            category_message,
+            context_message,
+        })),
+    )) = err
+    {
+        debug!("incompatible package, directing user to docs");
+        EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+            LockedManifestError::UnsupportedPackageWithDocLink(CallPkgDbError::PkgDbError(
+                PkgDbError {
+                    exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+                    category_message,
+                    context_message,
+                },
+            )),
+        ))
+    } else {
+        // Not the type of error we're concerned with, just pass it through
+        err
+    }
+}
 
 pub fn format_error(err: &EnvironmentError2) -> String {
     trace!("formatting environment_error: {err:?}");
