@@ -33,6 +33,8 @@ struct BuildEnvState
 
 
 /* For each activated package, create symlinks */
+// todo: break this function up to reduce complexity
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 static void
 createLinks( BuildEnvState &     state,
              const std::string & srcDir,
@@ -217,10 +219,13 @@ createLinks( BuildEnvState &     state,
       state.symlinks++;
     }
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 
 /* -------------------------------------------------------------------------- */
 
+// todo: break this function up to reduce complexity
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 void
 buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
 {
@@ -329,6 +334,7 @@ buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
         nix::fmt( "created %d symlinks in user environment", state.symlinks ) );
     }
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 /* -------------------------------------------------------------------------- */
 
