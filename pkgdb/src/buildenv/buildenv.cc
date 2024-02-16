@@ -247,12 +247,12 @@ buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
 
     try
       {
-        for ( const auto & p : nix::tokenizeString<std::vector<std::string>>(
+        for ( const auto & path : nix::tokenizeString<std::vector<std::string>>(
                 nix::readFile( pkgDir
                                + "/nix-support/propagated-user-env-packages" ),
                 " \n" ) )
           {
-            if ( done.count( p ) == 0u ) { postponed.insert( p ); }
+            if ( done.count( path ) == 0 ) { postponed.insert( path ); }
           }
       }
     catch ( nix::SysError & e )
@@ -262,12 +262,12 @@ buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
 
     try
       {
-        for ( const auto & p : nix::tokenizeString<std::vector<std::string>>(
+        for ( const auto & path : nix::tokenizeString<std::vector<std::string>>(
                 nix::readFile( pkgDir
                                + "/nix-support/propagated-build-inputs" ),
                 " \n" ) )
           {
-            if ( done.count( p ) == 0u ) { postponed.insert( p ); }
+            if ( done.count( path ) == 0u ) { postponed.insert( path ); }
           }
       }
     catch ( nix::SysError & e )
