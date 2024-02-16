@@ -153,7 +153,7 @@ main( int argc, char * argv[] )
 {
   /* Allows you to run without catching which is useful for
    * `gdb'/`lldb' backtraces. */
-  auto maybeNC = std::getenv( "PKGDB_NO_CATCH" );
+  auto * maybeNC = std::getenv( "PKGDB_NO_CATCH" );
   if ( maybeNC != nullptr )
     {
       std::string noCatch = std::string( maybeNC );
