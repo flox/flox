@@ -135,7 +135,11 @@ public:
   void
   log( nix::Verbosity lvl, std::string_view str ) override
   {
-    if ( ( nix::verbosity < lvl ) || this->shouldIgnoreMsg( str ) ) { return; }
+    if ( ( nix::verbosity < lvl )
+         || flox::FilteredLogger::shouldIgnoreMsg( str ) )
+      {
+        return;
+      }
 
     /* Handle `systemd' style log level prefixes. */
     std::string prefix;
