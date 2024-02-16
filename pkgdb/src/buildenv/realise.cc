@@ -185,7 +185,7 @@ extractAttrPath( nix::EvalState &       state,
       auto * next
         = output->value->attrs->get( state.symbols.create( attrName ) );
 
-      if ( ! next )
+      if ( next == nullptr )
         {
           std::ostringstream str;
           output->value->print( state.symbols, str );
