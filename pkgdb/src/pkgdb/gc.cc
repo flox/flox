@@ -53,7 +53,8 @@ findStaleDatabases( const std::filesystem::path & cacheDir, int minAgeDays )
   for ( const auto & entry : std::filesystem::directory_iterator( cacheDir ) )
     {
 
-      struct stat result;
+      struct stat result
+      {};
 
       if ( stat( entry.path().c_str(), &result ) == 0 )
         {
@@ -80,7 +81,8 @@ findStaleDatabases( const std::filesystem::path & cacheDir, int minAgeDays )
               toDelete.push_back( entry.path() );
             }
 
-          struct utimbuf newTimes;
+          struct utimbuf newTimes
+          {};
           newTimes.actime = std::chrono::system_clock::to_time_t( accessTime );
           utime( entry.path().c_str(), &newTimes );
         }
