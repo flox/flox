@@ -1,3 +1,4 @@
+#if 0
 /* ========================================================================== *
  *
  * @file registry/floxpkgs.cc
@@ -9,23 +10,23 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include <fstream>
-#include <iostream>
-#include <optional>
-#include <regex>
-#include <string>
+#  include <fstream>
+#  include <iostream>
+#  include <optional>
+#  include <regex>
+#  include <string>
 
-#include <nix/archive.hh>
-#include <nix/cache.hh>
-#include <nix/eval.hh>
-#include <nix/fetch-settings.hh>
-#include <nix/fetchers.hh>
-#include <nix/store-api.hh>
-#include <nix/url-parts.hh>
+#  include <nix/archive.hh>
+#  include <nix/cache.hh>
+#  include <nix/eval.hh>
+#  include <nix/fetch-settings.hh>
+#  include <nix/fetchers.hh>
+#  include <nix/store-api.hh>
+#  include <nix/url-parts.hh>
 
-#include "flox/core/util.hh"
-#include "flox/flox-flake.hh"
-#include "flox/registry/floxpkgs.hh"
+#  include "flox/core/util.hh"
+#  include "flox/flox-flake.hh"
+#  include "flox/registry/floxpkgs.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -34,9 +35,9 @@ namespace flox {
 
 /* -------------------------------------------------------------------------- */
 
-#ifndef RULES_JSON
-#  error "RULES_JSON must be defined"
-#endif  // ifndef RULES_JSON
+#  ifndef RULES_JSON
+#    error "RULES_JSON must be defined"
+#  endif  // ifndef RULES_JSON
 
 static auto FloxFlakeInputScheme = nix::OnStartup(
   []
@@ -74,7 +75,7 @@ createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef )
   /* Fill out the template with the flake references and the rules file path. */
   std::ofstream            flakeOut( tmpDir / "flake.nix" );
   static const std::string flakeTemplate =
-#include "./floxpkgs/flake.nix.in.hh"
+#  include "./floxpkgs/flake.nix.in.hh"
     ;
   std::istringstream flakeIn( flakeTemplate );
   std::string        line;
@@ -620,7 +621,7 @@ std::string
 getRulesProcessorHash()
 {
   static const std::string flakeTemplate =
-#include "./floxpkgs/flake.nix.in.hh"
+#  include "./floxpkgs/flake.nix.in.hh"
     ;
   auto processorHash = nix::hashString( nix::htSHA256, flakeTemplate );
   return processorHash.to_string( nix::Base16, false );
@@ -699,3 +700,4 @@ fromGitHubAttrs( const nix::fetchers::Attrs &      _attrs,
  *
  *
  * ========================================================================== */
+#endif

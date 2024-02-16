@@ -122,7 +122,19 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
         }
     }
 
+  /* Type check the following fields if they exist. */
+  nix::fetchers::maybeGetStrAttr( attrs, "narHash" );
   nix::fetchers::maybeGetIntAttr( attrs, "rulesVersion" );
+  nix::fetchers::maybeGetIntAttr( attrs, "lastModified" );
+
+  /*  */
+  if ( auto ref = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
+    {
+      if ( std::regex_search( *ref, nix::revRegex ) )
+        {
+          throw nix::BadURL( "invalid Git commit hash '%s'", *ref );
+        }
+    }
 
   if ( auto ref = nix::fetchers::maybeGetStrAttr( attrs, "ref" ) )
     {
@@ -187,12 +199,19 @@ WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
     }
   else if ( std::regex_match( path[1], nix::refRegex ) )
     {
+      if ( std::regex_match( path[1], nix::badGitRefRegex ) )
+        {
+          throw nix::BadURL(
+            "in URL '%s', '%s' is not a valid Git branch/tag name",
+            url.url,
+            path[1] );
+        }
       input.attrs["ref"] = path[1];
     }
   else
     {
       throw nix::BadURL(
-        "in URL '%s', '%s' is not a commit hash or branch/tag name",
+        "in URL '%s', '%s' is not a Git commit hash or branch/tag name",
         url.url,
         path[1] );
     }
