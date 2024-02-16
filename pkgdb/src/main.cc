@@ -137,7 +137,7 @@ run( int argc, char * argv[] )
 int
 printAndReturnException( const flox::FloxException & err )
 {
-  if ( ! isatty( STDOUT_FILENO ) )
+  if ( isatty( STDOUT_FILENO ) == 0 )
     {
       std::cout << nlohmann::json( err ).dump() << '\n';
     }
