@@ -39,7 +39,7 @@ namespace flox {
 /* -------------------------------------------------------------------------- */
 
 void
-ensureFlakeIsDownloaded( std::function<void()> && lambda )
+ensureFlakeIsDownloaded( std::function<void()> lambda )
 {
   pid_t pid = fork();
   if ( pid == -1 )
