@@ -145,7 +145,7 @@ public:
     std::string prefix;
     if ( systemd )
       {
-        char levelChar;
+        char levelChar = 0;
         switch ( lvl )
           {
             case nix::lvlError: levelChar = '3'; break;
