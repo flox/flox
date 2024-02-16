@@ -810,6 +810,15 @@ impl UninitializedEnvironment {
             },
         }
     }
+
+    fn pointer(&self) -> EnvironmentPointer {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.clone(),
+            UninitializedEnvironment::Remote(pointer) => {
+                EnvironmentPointer::Managed(pointer.clone())
+            },
+        }
+    }
 }
 
 impl Display for UninitializedEnvironment {
