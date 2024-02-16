@@ -111,7 +111,7 @@ createLinks( BuildEnvState &     state,
       // if the directory already exists, create a directory
       // and recursively link the contents.
       // Handle file type mismatches and conflicts with priority.
-      else if ( S_ISDIR( srcSt.st_mode ) )
+      if ( S_ISDIR( srcSt.st_mode ) )
         {
           struct stat dstSt;
           auto        res = lstat( dstFile.c_str(), &dstSt );
@@ -122,7 +122,8 @@ createLinks( BuildEnvState &     state,
                   createLinks( state, srcFile, dstFile, priority );
                   continue;
                 }
-              else if ( S_ISLNK( dstSt.st_mode ) )
+
+              if ( S_ISLNK( dstSt.st_mode ) )
                 {
                   auto        target = nix::canonPath( dstFile, true );
                   struct stat canonSt;
