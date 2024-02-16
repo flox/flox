@@ -68,7 +68,8 @@ createLinks( BuildEnvState &     state,
       auto srcFile = srcDir + "/" + ent.name;
       auto dstFile = dstDir + "/" + ent.name;
 
-      struct stat srcSt;
+      struct stat srcSt
+      {};
       try
         {
           if ( stat( srcFile.c_str(), &srcSt ) == -1 )
