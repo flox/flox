@@ -53,10 +53,6 @@ which replaces the contents of the manifest with those of the provided file.
 :   Rename the environment to `<name>`.
     Only works for local environments.
 
-[ (\--file|-f) `<file>` ]
-:   Replace environment declaration with that in `<file>`.
-    If `<file>` is `-`, reads from stdin.
-
 ```{.include}
 ./include/environment-options.md
 ./include/general-options.md
