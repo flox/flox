@@ -656,6 +656,13 @@ pub fn detect_environment(
             Some(ref activated @ UninitializedEnvironment::DotFlox(DotFlox { ref path, .. })),
             Some(found),
         ) if path == &found.path => Some(activated.clone()),
+
+        // If both a 'default' environment is activated and an environment is
+        // found in the current directory or git repo, prefer the detected one.
+        (Some(activated), Some(detected)) if activated.pointer().name().as_ref() == "default" => {
+            Some(UninitializedEnvironment::DotFlox(detected))
+        },
+
         // If there's both an activated environment and an environment in the
         // current directory or git repo, prompt for which to use.
         (Some(activated_env), Some(found)) => {
