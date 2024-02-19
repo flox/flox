@@ -266,7 +266,7 @@ pub struct PackageInfo {
     pub license: Option<String>,
     pub pname: String,
     pub unfree: bool,
-    pub version: String,
+    pub version: Option<String>,
 }
 
 impl TryFrom<LockedManifest> for TypedLockedManifest {
@@ -340,4 +340,98 @@ pub enum LockedManifestError {
     SerializeGlobalLockfile(#[source] serde_json::Error),
     #[error("could not write global lockfile")]
     WriteGlobalLockfile(#[source] std::io::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    /// Validate that the parser for the locked manifest can handle null values
+    /// for the `version`, `license`, and `description` fields.
+    #[test]
+    fn locked_package_tolerates_null_values() {
+        let locked_packages =
+            serde_json::from_value::<HashMap<String, LockedPackage>>(serde_json::json!({
+                    "complete": {
+                        "info": {
+                            "description": "A package",
+                            "broken": false,
+                            "license": "MIT",
+                            "pname": "package1",
+                            "unfree": false,
+                            "version": "1.0.0"
+                        },
+                        "attr-path": ["package1"],
+                        "priority": 0
+                    },
+                    "missing_version": {
+                        "info": {
+                            "description": "Another package",
+                            "broken": false,
+                            "license": "MIT",
+                            "pname": "package2",
+                            "unfree": false,
+                            "version": null
+                        },
+                        "attr-path": ["package2"],
+                        "priority": 0
+                    },
+                    "missing_license": {
+                        "info": {
+                            "description": "Another package",
+                            "broken": false,
+                            "license": null,
+                            "pname": "package3",
+                            "unfree": false,
+                            "version": "1.0.0"
+                        },
+                        "attr-path": ["package3"],
+                        "priority": 0
+                    },
+                    "missing_description": {
+                        "info": {
+                            "description": null,
+                            "broken": false,
+                            "license": "MIT",
+                            "pname": "package4",
+                            "unfree": false,
+                            "version": "1.0.0"
+                        },
+                        "attr-path": ["package4"],
+                        "priority": 0
+                    },
+            }))
+            .unwrap();
+
+        assert_eq!(
+            locked_packages["complete"].info.version.as_deref(),
+            Some("1.0.0")
+        );
+        assert_eq!(
+            locked_packages["complete"].info.license.as_deref(),
+            Some("MIT")
+        );
+        assert_eq!(
+            locked_packages["complete"].info.description.as_deref(),
+            Some("A package")
+        );
+
+        assert_eq!(
+            locked_packages["missing_version"].info.version.as_deref(),
+            None
+        );
+        assert_eq!(
+            locked_packages["missing_license"].info.license.as_deref(),
+            None
+        );
+        assert_eq!(
+            locked_packages["missing_description"]
+                .info
+                .description
+                .as_deref(),
+            None
+        );
+    }
 }
