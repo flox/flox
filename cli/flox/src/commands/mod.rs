@@ -1057,3 +1057,7 @@ pub(super) async fn ensure_environment_trust(
         }
     }
 }
+
+pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
+    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
+}

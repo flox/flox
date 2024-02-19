@@ -32,6 +32,7 @@ use flox_rust_sdk::models::environment::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
+    FLOX_ENV_CACHE_VAR,
     FLOX_ENV_DIRS_VAR,
     FLOX_ENV_LIB_DIRS_VAR,
     FLOX_ENV_VAR,
@@ -67,6 +68,7 @@ use crate::commands::{
     activated_environments,
     auth,
     ensure_environment_trust,
+    environment_description,
     ConcreteEnvironment,
     EnvironmentSelectError,
     UninitializedEnvironment,
@@ -580,6 +582,10 @@ impl Activate {
                 FLOX_ENV_LIB_DIRS_VAR,
                 flox_env_lib_dirs_joined.to_string_lossy().to_string(),
             ),
+            (
+                FLOX_ENV_CACHE_VAR,
+                environment.cache_path()?.to_string_lossy().to_string(),
+            ),
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
         ]);
@@ -1025,10 +1031,6 @@ impl List {
     }
 }
 
-fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
-    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
-}
-
 // Install a package into an environment
 #[derive(Bpaf, Clone)]
 pub struct Install {
@@ -1121,10 +1123,7 @@ impl Install {
             // Print which new packages were installed
             for pkg in packages.iter() {
                 if let Some(false) = installation.already_installed.get(&pkg.id) {
-                    message::updated(format!(
-                        "'{}' installed to environment {description}",
-                        pkg.id
-                    ));
+                    message::package_installed(pkg, &description);
                 } else {
                     message::warning(format!(
                         "Package with id '{}' already installed to environment {description}",

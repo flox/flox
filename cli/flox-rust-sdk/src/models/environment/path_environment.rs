@@ -19,6 +19,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use flox_types::catalog::System;
+use indoc::{formatdoc, indoc};
 use log::debug;
 
 use super::core_environment::CoreEnvironment;
@@ -33,6 +34,7 @@ use super::{
     InstallationAttempt,
     PathPointer,
     UpdateResult,
+    CACHE_DIR_NAME,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     GCROOTS_DIR_NAME,
@@ -40,7 +42,13 @@ use super::{
 };
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
-use crate::models::environment::{ENV_DIR_NAME, FLOX_SYSTEM_PLACEHOLDER, MANIFEST_FILENAME};
+use crate::models::environment::{
+    ENV_DIR_NAME,
+    FLOX_HOOK_PLACEHOLDER,
+    FLOX_INSTALL_PLACEHOLDER,
+    FLOX_SYSTEM_PLACEHOLDER,
+    MANIFEST_FILENAME,
+};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
@@ -68,6 +76,13 @@ pub struct PathEnvironment {
     ///
     /// Used to identify the environment.
     pub pointer: PathPointer,
+}
+
+/// A hook or packages to install when initializing an environment
+#[derive(Debug, Eq, PartialEq)]
+pub struct InitCustomization {
+    pub hook: Option<String>,
+    pub packages: Option<Vec<PackageToInstall>>,
 }
 
 impl PartialEq for PathEnvironment {
@@ -294,6 +309,15 @@ impl Environment for PathEnvironment {
         Ok(out_link)
     }
 
+    /// Returns .flox/cache
+    fn cache_path(&self) -> Result<PathBuf, EnvironmentError2> {
+        let cache_dir = self.path.join(CACHE_DIR_NAME);
+        if !cache_dir.exists() {
+            std::fs::create_dir_all(&cache_dir).map_err(EnvironmentError2::CreateCacheDir)?;
+        }
+        Ok(cache_dir)
+    }
+
     /// Path to the environment's parent directory
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
         let mut path = self.path.to_path_buf();
@@ -344,6 +368,8 @@ impl PathEnvironment {
         dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
         system: impl AsRef<str>,
+        customization: &Option<InitCustomization>,
+        flox: &Flox,
     ) -> Result<Self, EnvironmentError2> {
         let system: &str = system.as_ref();
         match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
@@ -378,12 +404,9 @@ impl PathEnvironment {
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
             return Err(e);
         }
-        let contents = contents.unwrap();
-        let replaced = contents.replace(FLOX_SYSTEM_PLACEHOLDER, system);
-        debug!(
-            "manifest was updated successfully: {}",
-            contents != replaced
-        );
+
+        let replaced = Self::replace_placeholders(&contents.unwrap(), system, customization);
+
         let write_res =
             fs::write(&manifest_path, replaced).map_err(EnvironmentError2::WriteManifest);
         if let Err(e) = write_res {
@@ -401,11 +424,73 @@ impl PathEnvironment {
             Err(EnvironmentError2::WriteEnvJson(e))?;
         }
 
-        // write "run" >> .flox/.gitignore
-        fs::write(dot_flox_path.join(".gitignore"), "run/\n")
-            .map_err(EnvironmentError2::WriteGitignore)?;
+        // write "run" and "cache" to .flox/.gitignore
+        fs::write(dot_flox_path.join(".gitignore"), formatdoc! {"
+            {GCROOTS_DIR_NAME}/
+            {CACHE_DIR_NAME}/
+            "})
+        .map_err(EnvironmentError2::WriteGitignore)?;
 
-        Self::open(pointer, dot_flox_path, temp_dir)
+        let mut environment = Self::open(pointer, dot_flox_path, temp_dir)?;
+
+        if let Some(InitCustomization {
+            packages: Some(packages),
+            ..
+        }) = customization
+        {
+            // Ignore the result, because we know there can't be packages already installed
+            environment.install(packages, flox)?;
+        }
+
+        Ok(environment)
+    }
+
+    /// Replace all placeholders in the manifest file contents
+    ///
+    /// TODO: we should probably be using toml_edit
+    fn replace_placeholders(
+        contents: &String,
+        system: &str,
+        customization: &Option<InitCustomization>,
+    ) -> String {
+        // Replace system
+        let mut replaced = contents.replace(FLOX_SYSTEM_PLACEHOLDER, system);
+
+        // Don't add example packages if packages are being installed
+        let packages = match customization {
+            Some(InitCustomization {
+                packages: Some(_), ..
+            }) => "",
+            // The install method adds a newline, so add one here as well
+            _ => indoc! {r#"
+            # hello.pkg-path = "hello"
+            # nodejs = { version = "^18.4.2", path = "nodejs_18" }
+        "#},
+        };
+        replaced = replaced.replace(FLOX_INSTALL_PLACEHOLDER, packages);
+
+        // Replace hook
+        let hook = match customization {
+            Some(InitCustomization {
+                hook: Some(ref hook),
+                ..
+            }) => formatdoc! {r#"
+                script = """
+                {}
+                """"#, indent::indent_all_by(2, hook)},
+            _ => formatdoc! {r#"
+                    # script = """
+                    #   echo "it's gettin flox in here";
+                    # """"#},
+        };
+        replaced = replaced.replace(FLOX_HOOK_PLACEHOLDER, &hook);
+
+        debug!(
+            "manifest was updated successfully: {}",
+            contents != &replaced
+        );
+
+        replaced
     }
 
     /// Determine if the environment needs to be rebuilt
@@ -465,6 +550,8 @@ mod tests {
             environment_temp_dir.path(),
             temp_dir.path(),
             &flox.system,
+            &None,
+            &flox,
         )
         .unwrap();
 
@@ -497,6 +584,8 @@ mod tests {
             environment_temp_dir.path(),
             temp_dir.path(),
             &flox.system,
+            &None,
+            &flox,
         )
         .unwrap();
 

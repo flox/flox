@@ -217,6 +217,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
         EnvironmentError2::Core(core_error) => format_core_error(core_error),
         EnvironmentError2::ManagedEnvironment(managed_error) => format_managed_error(managed_error),
         EnvironmentError2::RemoteEnvironment(remote_error) => format_remote_error(remote_error),
+        _ => display_chain(err),
     }
 }
 

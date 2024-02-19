@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use log::debug;
+use tempfile::TempDir;
 use thiserror::Error;
 
 use super::managed_environment::{remote_branch_name, ManagedEnvironment, ManagedEnvironmentError};
@@ -266,6 +267,15 @@ impl Environment for RemoteEnvironment {
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
         Self::update_out_link(flox, &self.out_link, &mut self.inner)?;
         Ok(self.out_link.clone())
+    }
+
+    /// Return a path that environment hooks should use to store transient data.
+    ///
+    /// Remote environments shouldn't have state of any kind, so this just
+    /// returns a temporary directory.
+    fn cache_path(&self) -> Result<PathBuf, EnvironmentError2> {
+        let tempdir = TempDir::new().map_err(EnvironmentError2::CreateTempDir)?;
+        Ok(tempdir.into_path())
     }
 
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
