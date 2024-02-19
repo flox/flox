@@ -101,6 +101,8 @@ floxhub_setup() {
   mkdir -p "$FLOX_FLOXHUB_PATH"
   mkdir -p "$FLOXHUB_FLOXMETA_DIR"
   git -C "$FLOXHUB_FLOXMETA_DIR" init --bare
+  git -C "$FLOXHUB_FLOXMETA_DIR" config user.name "test"
+  git -C "$FLOXHUB_FLOXMETA_DIR" config user.email "test@email.address"
 
   export _FLOX_FLOXHUB_GIT_URL="file://$FLOX_FLOXHUB_PATH"
 }
