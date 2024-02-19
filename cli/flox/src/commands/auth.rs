@@ -178,7 +178,7 @@ pub enum Auth {
     #[bpaf(command)]
     Logout,
 
-    /// Get current username
+    /// Print your current login status
     #[bpaf(command)]
     Status,
 }
@@ -209,7 +209,7 @@ impl Auth {
             },
             Auth::Status => {
                 let Some(token) = flox.floxhub_token else {
-                    message::warning("You are not currently logged in to FloxHub");
+                    message::warning("You are not currently logged in to FloxHub.");
                     return Ok(());
                 };
 
