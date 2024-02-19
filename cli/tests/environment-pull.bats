@@ -29,7 +29,6 @@ project_teardown() {
 # ---------------------------------------------------------------------------- #
 
 setup() {
-  home_setup test
   common_test_setup
   project_setup
   floxhub_setup "owner"
