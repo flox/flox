@@ -73,12 +73,12 @@ check_manifest_updated() {
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
   cat << "EOF" > "$TMP_MANIFEST_PATH"
 [install]
-hello.path = "hello"
+hello.pkg-path = "hello"
 EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output --partial "✅  Environment successfully updated."
+  assert_output --partial "✅ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -101,7 +101,7 @@ EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output --partial "✅  Environment successfully updated."
+  assert_output --partial "✅ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #

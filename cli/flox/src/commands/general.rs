@@ -6,20 +6,20 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use fslock::LockFile;
 use indoc::indoc;
-use log::info;
 use serde::Serialize;
 use tokio::fs;
 use toml_edit::Key;
 
 use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
 use crate::subcommand_metric;
+use crate::utils::message;
 use crate::utils::metrics::{
     METRICS_EVENTS_FILE_NAME,
     METRICS_LOCK_FILE_NAME,
     METRICS_UUID_FILE_NAME,
 };
 
-/// reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
+// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
 #[derive(Bpaf, Clone)]
 pub struct ResetMetrics {}
 impl ResetMetrics {
@@ -45,18 +45,18 @@ impl ResetMetrics {
         }
 
         let notice = indoc! {"
-                    Sucessfully reset telemetry ID for this machine!
+            Sucessfully reset telemetry ID for this machine!
 
-                    A new ID will be assigned next time you use flox.
+            A new ID will be assigned next time you use flox.
 
-                    The collection of metrics can be disabled in the following ways:
+            The collection of metrics can be disabled in the following ways:
 
-                      environment: FLOX_DISABLE_METRICS=true
-                        user-wide: flox config --set-bool disable_metrics true
-                      system-wide: update /etc/flox.toml as described in flox(1)
-                "};
+                environment: FLOX_DISABLE_METRICS=true
+                user-wide: flox config --set-bool disable_metrics true
+                system-wide: update /etc/flox.toml as described in flox(1)
+        "};
 
-        info!("{notice}");
+        message::plain(notice);
         Ok(())
     }
 }
@@ -64,10 +64,10 @@ impl ResetMetrics {
 #[derive(Bpaf, Clone)]
 #[bpaf(fallback(ConfigArgs::List))]
 pub enum ConfigArgs {
-    /// List the current values of all configurable parameters
+    /// List the current values of all options
     #[bpaf(short, long)]
     List,
-    /// Reset all configurable parameters to their default values without further confirmation.
+    /// Reset all options to their default values without further confirmation
     #[bpaf(short, long)]
     Reset,
     /// Set a config value
@@ -114,14 +114,14 @@ impl ConfigArgs {
 #[derive(Debug, Clone, Bpaf)]
 #[bpaf(adjacent)]
 pub struct ConfigSet {
-    /// set <key> to <value>
+    /// set <key> to <string>
     #[allow(unused)]
     set: (),
     /// Configuration key
     #[bpaf(positional("key"))]
     key: String,
-    /// configuration Value
-    #[bpaf(positional("value"))]
+    /// Configuration value (string)
+    #[bpaf(positional("string"))]
     value: String,
 }
 
@@ -135,7 +135,7 @@ pub struct ConfigSetNumber {
     /// Configuration key
     #[bpaf(positional("key"))]
     key: String,
-    /// Configuration Value (i32)
+    /// Configuration value (i32)
     #[bpaf(positional("number"))]
     value: i32,
 }
@@ -150,7 +150,7 @@ pub struct ConfigSetBool {
     /// Configuration key
     #[bpaf(positional("key"))]
     key: String,
-    /// Configuration Value (bool)
+    /// Configuration value (bool)
     #[bpaf(positional("bool"))]
     value: bool,
 }
@@ -158,7 +158,7 @@ pub struct ConfigSetBool {
 #[derive(Debug, Clone, Bpaf)]
 #[allow(unused)]
 pub struct ConfigDelete {
-    /// Configuration key
+    /// Delete config key
     #[bpaf(long("delete"), argument("key"))]
     key: String,
 }

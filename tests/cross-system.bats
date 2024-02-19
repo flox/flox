@@ -23,7 +23,7 @@ load test_support.bash
 
 setup_file() {
   common_file_setup
-  "$FLOX_BIN" config --set floxhub_url "https://saas-dev-main.floxdev.com/"
+  "$FLOX_BIN" config --set floxhub_url "https://hub-dev.flox.dev/"
   if [ -z "${FLOXEM_FLOXTEST_TOKEN:-}" ]; then
     skip "FLOXEM_FLOXTEST_TOKEN is not set"
   fi
@@ -100,7 +100,7 @@ teardown() {
 
   name="created-on-$pull_system"
 
-  "$FLOX_BIN" pull "$OWNER/$name" --add-system
+  "$FLOX_BIN" pull "$OWNER/$name" --force
   # Close fd 3 because of
   # https://bats-core.readthedocs.io/en/stable/writing-tests.html#file-descriptor-3-read-this-if-bats-hangs
   run "$FLOX_BIN" activate -- hello 3>&-

@@ -61,21 +61,21 @@ void
 SearchCommand::addSearchQueryOptions( argparse::ArgumentParser & parser )
 {
   parser.add_argument( "--name" )
-    .help( "search for packages by exact `name' match." )
+    .help( "search for packages by exact 'name' match." )
     .metavar( "NAME" )
     .nargs( 1 )
     .action( [&]( const std::string & arg )
              { this->params.query.name = arg; } );
 
   parser.add_argument( "--pname" )
-    .help( "search for packages by exact `pname' match." )
+    .help( "search for packages by exact 'pname' match." )
     .metavar( "PNAME" )
     .nargs( 1 )
     .action( [&]( const std::string & arg )
              { this->params.query.pname = arg; } );
 
   parser.add_argument( "--version" )
-    .help( "search for packages by exact `version' match." )
+    .help( "search for packages by exact 'version' match." )
     .metavar( "VERSION" )
     .nargs( 1 )
     .action( [&]( const std::string & arg )
@@ -89,23 +89,23 @@ SearchCommand::addSearchQueryOptions( argparse::ArgumentParser & parser )
              { this->params.query.semver = arg; } );
 
   parser.add_argument( "--match" )
-    .help( "search for packages by partially matching `pname', "
-           "`description', or `attrName'." )
+    .help( "search for packages by partially matching 'pname', "
+           "'description', or 'attrName'." )
     .metavar( "MATCH" )
     .nargs( 1 )
     .action( [&]( const std::string & arg )
              { this->params.query.partialMatch = arg; } );
 
   parser.add_argument( "--match-name" )
-    .help( "search for packages by partially matching `pname' or `attrName'." )
+    .help( "search for packages by partially matching 'pname' or 'attrName'." )
     .metavar( "MATCH" )
     .nargs( 1 )
     .action( [&]( const std::string & arg )
              { this->params.query.partialNameMatch = arg; } );
 
   parser.add_argument( "--match-name-or-rel-path" )
-    .help( "search for packages by partially matching `pname' or '.' joined "
-           "`relPath'." )
+    .help( "search for packages by partially matching 'pname' or '.' joined "
+           "'relPath'." )
     .metavar( "MATCH" )
     .nargs( 1 )
     .action( [&]( const std::string & arg )

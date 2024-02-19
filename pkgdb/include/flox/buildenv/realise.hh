@@ -31,13 +31,60 @@
 namespace flox::buildenv {
 
 /**
- * @class flox::resolver::InvalidLockfileException
- * @brief An exception thrown when a lockfile is invalid.
+ * @class flox::buildenv::SystenNotSupportedByLockfile
+ * @brief An exception thrown when a lockfile is is missing a package.<system>
+ * entry fro the requested system.
  * @{
  */
 FLOX_DEFINE_EXCEPTION( SystenNotSupportedByLockfile,
                        EC_LOCKFILE_INCOMPATIBLE_SYSTEM,
                        "unsupported system" )
+/** @} */
+
+
+/**
+ * @class flox::buildenv::PackageConflictException
+ * @brief An exception thrown when two packages conflict.
+ * I.e. the same file path is found in two different packages with the same
+ * priority.
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( PackageConflictException,
+                       EC_BUILDENV_CONFLICT,
+                       "conflicting packages" )
+/** @} */
+
+
+/**
+ * @class flox::buildenv::PackageUnsupportedSystem
+ * @brief An exception thrown when a package fails to evaluate,
+ * because the system is not supported.
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( PackageUnsupportedSystem,
+                       EC_PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+                       "system unsupported by package" )
+/** @} */
+
+/**
+ * @class flox::buildenv::PackageEvalFailure
+ * @brief An exception thrown when a package fails to evaluate.
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( PackageEvalFailure,
+                       EC_PACKAGE_EVAL_FAILURE,
+                       "general package eval failure" )
+/** @} */
+
+
+/**
+ * @class flox::buildenv::PackageBuildFailure
+ * @brief An exception thrown when a package fails to build.
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( PackageBuildFailure,
+                       EC_PACKAGE_BUILD_FAILURE,
+                       "build failure" )
 /** @} */
 
 
@@ -86,9 +133,9 @@ createEnvironmentStorePath(
  * @return A @a nix::StorePath to a container builder.
  */
 nix::StorePath
-createContainerBuilder( nix::EvalState & state,
-                        nix::StorePath   environmentStorePath,
-                        const System &   system );
+createContainerBuilder( nix::EvalState &       state,
+                        const nix::StorePath & environmentStorePath,
+                        const System &         system );
 
 /* -------------------------------------------------------------------------- */
 

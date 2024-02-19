@@ -448,13 +448,10 @@ impl GitCommandProvider {
         repository: &str,
         branch: &str,
     ) -> Result<(), GitRemoteCommandError> {
-        GitCommandProvider::run_command(
-            self.new_command()
-                .arg("fetch")
-                .arg(repository)
-                .arg(format!("refs/heads/{branch}:refs/heads/{branch}")),
-        )?;
-        Ok(())
+        self.fetch_ref(
+            repository,
+            &format!("refs/heads/{branch}:refs/heads/{branch}"),
+        )
     }
 
     pub fn fetch_ref(&self, repository: &str, r#ref: &str) -> Result<(), GitRemoteCommandError> {
@@ -600,8 +597,11 @@ pub enum GitRemoteCommandError {
     AccessDenied,
     #[error("branches diverged")]
     Diverged,
+    #[error("ref not found")]
+    RefNotFound(String),
 }
 
+const REF_NOT_FOUND_ERR_PREFIX: &str = "fatal: couldn't find remote ref ";
 impl From<GitCommandError> for GitRemoteCommandError {
     fn from(err: GitCommandError) -> Self {
         match err {
@@ -616,6 +616,13 @@ impl From<GitCommandError> for GitRemoteCommandError {
             {
                 debug!("Branches diverged: {err}");
                 GitRemoteCommandError::Diverged
+            },
+            GitCommandError::BadExit(_, _, ref stderr)
+                if stderr.starts_with(REF_NOT_FOUND_ERR_PREFIX) =>
+            {
+                let ref_name = stderr.strip_prefix(REF_NOT_FOUND_ERR_PREFIX).unwrap();
+                debug!("Ref not found: {ref_name}");
+                GitRemoteCommandError::RefNotFound(ref_name.to_string())
             },
             e => GitRemoteCommandError::Command(e),
         }
@@ -1298,11 +1305,7 @@ pub mod tests {
 
         assert!(matches!(
             repo_2.fetch_ref("origin", "does-not-exist"),
-            Err(GitRemoteCommandError::Command(GitCommandError::BadExit(
-                128,
-                _,
-                _
-            )))
+            Err(GitRemoteCommandError::RefNotFound(_))
         ));
     }
 
@@ -1346,14 +1349,17 @@ pub mod tests {
         repo.add_remote("origin", "https://github.com/torvalds/linux")
             .unwrap();
 
-        repo.get_options_mut()
-            .add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
-        repo.get_options_mut()
-            .add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
-        repo.get_options_mut().add_config_flag(
-            "credential.helper",
-            r#"!f(){ echo "username="; echo "password="; }; f"#,
-        );
+        {
+            let options = repo.get_options_mut();
+            options.add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
+            options.add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
+            options.add_config_flag(
+                "credential.helper",
+                r#"!f(){ echo "username="; echo "password="; }; f"#,
+            );
+            options.add_config_flag("user.name", "testuser");
+            options.add_config_flag("user.email", "testuser@localhost");
+        }
 
         repo.checkout("branch_1", true).unwrap();
         commit_file(&repo, "dummy");

@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::fs::{self, File};
@@ -21,6 +20,7 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
+    CanonicalPath,
     CoreEnvironmentError,
     EditResult,
     Environment,
@@ -35,9 +35,9 @@ use flox_rust_sdk::models::environment::{
     FLOX_ENV_DIRS_VAR,
     FLOX_ENV_LIB_DIRS_VAR,
     FLOX_ENV_VAR,
+    FLOX_PATH_PATCHED_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
-use flox_rust_sdk::models::floxmetav2::FloxmetaV2Error;
 use flox_rust_sdk::models::lockfile::{
     FlakeRef,
     Input,
@@ -48,15 +48,17 @@ use flox_rust_sdk::models::lockfile::{
     TypedLockedManifest,
 };
 use flox_rust_sdk::models::manifest::{self, PackageToInstall};
-use flox_rust_sdk::models::pkgdb::{call_pkgdb, CallPkgDbError, PkgDbError, PKGDB_BIN};
-use flox_rust_sdk::nix::command::StoreGc;
-use flox_rust_sdk::nix::command_line::NixCommandLine;
-use flox_rust_sdk::nix::Run;
+use flox_rust_sdk::models::pkgdb::{
+    call_pkgdb,
+    error_codes,
+    CallPkgDbError,
+    PkgDbError,
+    PKGDB_BIN,
+};
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use log::{debug, error, info, warn};
-use tempfile::NamedTempFile;
+use log::debug;
 use toml_edit::Document;
 use url::Url;
 
@@ -66,20 +68,22 @@ use crate::commands::{
     auth,
     ensure_environment_trust,
     ConcreteEnvironment,
+    EnvironmentSelectError,
     UninitializedEnvironment,
 };
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
+use crate::utils::errors::{
+    apply_doc_link_for_unsupported_packages,
+    display_chain,
+    format_core_error,
+    format_locked_manifest_error,
+};
+use crate::utils::message;
 use crate::{subcommand_metric, utils};
 
-#[derive(Bpaf, Clone)]
-pub struct EnvironmentArgs {
-    #[bpaf(short, long, argument("SYSTEM"))]
-    pub system: Option<String>,
-}
-
-/// Edit declarative environment configuration
+// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
 pub struct Edit {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -88,12 +92,10 @@ pub struct Edit {
     #[bpaf(external(edit_action), fallback(EditAction::EditManifest{file: None}))]
     action: EditAction,
 }
-
-/// Edit declarative environment configuration
 #[derive(Bpaf, Clone)]
 pub enum EditAction {
     EditManifest {
-        /// Replace environment declaration with that in <file>
+        /// Replace environment manifest with that in <file>
         #[bpaf(long, short, argument("file"))]
         file: Option<PathBuf>,
     },
@@ -121,13 +123,13 @@ impl Edit {
                 if let ConcreteEnvironment::Path(mut environment) = detected_environment {
                     let old_name = environment.name();
                     if name == old_name {
-                        bail!("⚠️  environment already named {name}");
+                        bail!("environment already named {name}");
                     }
                     environment.rename(name.clone())?;
-                    info!("✅  renamed environment {old_name} to {name}");
+                    message::updated(format!("renamed environment {old_name} to {name}"));
                 } else {
                     // todo: handle remote environments in the future
-                    bail!("❌  Cannot rename environments on floxhub");
+                    bail!("Cannot rename environments on floxhub");
                 }
             },
         }
@@ -147,28 +149,32 @@ impl Edit {
         let result = match Self::provided_manifest_contents(file)? {
             // If provided with the contents of a manifest file, either via a path to a file or via
             // contents piped to stdin, use those contents to try building the environment.
-            Some(new_manifest) => environment.edit(flox, new_manifest)?,
+            Some(new_manifest) => environment
+                .edit(flox, new_manifest)
+                .map_err(apply_doc_link_for_unsupported_packages)?,
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
             None => Self::interactive_edit(flox, environment.as_mut()).await?,
         };
+
+        // outside the match to avoid rustfmt falling on its face
+        let reactivate_required_note = indoc! {"
+            Your manifest has changes that cannot be automatically applied to your current environment.
+
+            Please 'exit' the environment and run 'flox activate' to see these changes.
+       "};
+
         match result {
             EditResult::Unchanged => {
-                println!("⚠️  No changes made to environment.");
+                message::warning("No changes made to environment.");
             },
-            EditResult::ReActivateRequired => {
-                if activated_environments().is_active(&active_environment) {
-                    println!(indoc::indoc! {"
-                            Your manifest has changes that cannot be automatically applied to your current environment.
-
-                            Please `exit` the environment and run `flox activate` to see these changes."});
-                } else {
-                    println!("✅  Environment successfully updated.");
-                }
+            EditResult::ReActivateRequired
+                if activated_environments().is_active(&active_environment) =>
+            {
+                message::warning(reactivate_required_note)
             },
-            EditResult::Success => {
-                println!("✅  Environment successfully updated.");
-            },
+            EditResult::ReActivateRequired => message::updated("Environment successfully updated."),
+            EditResult::Success => message::updated("Environment successfully updated."),
         }
         Ok(())
     }
@@ -188,7 +194,10 @@ impl Edit {
         // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
         // method because the temporary manifest needs to stick around in case the user wants
         // or needs to make successive edits without starting over each time.
-        let tmp_manifest = NamedTempFile::new_in(&flox.temp_dir)?;
+        let tmp_manifest = tempfile::Builder::new()
+            .prefix("manifest.")
+            .suffix(".toml")
+            .tempfile_in(&flox.temp_dir)?;
         std::fs::write(&tmp_manifest, environment.manifest_content(flox)?)?;
         let should_continue = Dialog {
             message: "Continue editing?",
@@ -208,20 +217,22 @@ impl Edit {
                 help_message: None,
                 typed: Spinner::new(|| environment.edit(flox, new_manifest.clone())),
             }
-            .spin();
+            .spin()
+            .map_err(apply_doc_link_for_unsupported_packages);
 
             match result {
-                Err(e) => {
-                    error!(
-                        "Environment invalid; building resulted in an error: {}",
-                        anyhow!(e).chain().join(": ")
-                    );
+                Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(e))) => {
+                    message::error(format_locked_manifest_error(&e));
+
                     if !Dialog::can_prompt() {
                         bail!("Can't prompt to continue editing in non-interactive context");
                     }
                     if !should_continue.clone().prompt().await? {
                         bail!("Environment editing cancelled");
                     }
+                },
+                Err(e) => {
+                    bail!(e)
                 },
                 Ok(result) => {
                     return Ok(result);
@@ -288,16 +299,12 @@ impl Edit {
     }
 }
 
-/// Delete an environment
+// Delete an environment
 #[derive(Bpaf, Clone)]
 pub struct Delete {
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(short, long, hide)]
+    /// Delete an environment without confirmation.
+    #[bpaf(short, long)]
     force: bool,
-
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(short, long, hide)]
-    origin: bool,
 
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
@@ -311,6 +318,15 @@ impl Delete {
             .detect_concrete_environment(&flox, "delete")?;
 
         let description = environment_description(&environment)?;
+
+        if matches!(environment, ConcreteEnvironment::Remote(_)) {
+            let message = formatdoc! {"
+                Environment {description} was not deleted.
+
+                Remote environments on FloxHub can not yet be deleted.
+            "};
+            bail!("{message}")
+        }
 
         let comfirm = Dialog {
             message: &format!(
@@ -326,40 +342,34 @@ impl Delete {
             bail!("Environment deletion cancelled");
         }
 
-        let result = match environment {
+        match environment {
             ConcreteEnvironment::Path(environment) => environment.delete(&flox),
             ConcreteEnvironment::Managed(environment) => environment.delete(&flox),
-            ConcreteEnvironment::Remote(environment) => environment.delete(&flox),
-        };
+            ConcreteEnvironment::Remote(_) => unreachable!(),
+        }?;
 
-        match result {
-            Ok(_) => info!("🗑️  environment {description} deleted"),
-            Err(err) => Err(err)
-                .with_context(|| format!("⚠️  could not delete environment {description}"))?,
-        }
+        message::deleted(format!("environment {description} deleted"));
 
         Ok(())
     }
 }
 
-/// Activate an environment
-///
-/// When called with no arguments `flox activate` will look for a `.flox` directory
-/// in the current directory. Calling `flox activate` in your home directory will
+/// When called with no arguments 'flox activate' will look for a '.flox' directory
+/// in the current directory. Calling 'flox activate' in your home directory will
 /// activate a default environment. Environments in other directories and remote
-/// environments are activated with the `-d` and `-r` flags respectively.
+/// environments are activated with the '-d' and '-r' flags respectively.
 #[derive(Bpaf, Clone)]
 pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// Trust the a remote environment temporarily for this activation
+    /// Trust a remote environment temporarily for this activation
     #[bpaf(long, short)]
     trust: bool,
 
     /// Print an activation script to stdout instead of spawning a subshell
-    #[bpaf(long("in-place"), short, hide)]
-    in_place: bool,
+    #[bpaf(long("print-script"), short, hide)]
+    print_script: bool,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
@@ -448,7 +458,7 @@ impl Activate {
 
         let environment = concrete_environment.dyn_environment_ref_mut();
 
-        let in_place = self.in_place || (!stdout().is_tty() && self.run_args.is_empty());
+        let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         // Don't spin in bashrcs and similar contexts
         let activation_path_result = if in_place {
             environment.activation_path(&flox)
@@ -464,7 +474,7 @@ impl Activate {
         let activation_path = match activation_path_result {
             Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: 123,
+                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
                     ..
                 })),
             ))) => {
@@ -476,7 +486,7 @@ impl Activate {
                 if let ConcreteEnvironment::Remote(remote) = &concrete_environment {
                     message.push_str("\n\n");
                     message.push_str(&format!(
-                    "Use 'flox pull --add-system {}/{}' to update and verify this environment on your system.",
+                    "Use 'flox pull --force {}/{}' to update and verify this environment on your system.",
                     remote.owner(),
                     remote.name()));
                 }
@@ -496,6 +506,21 @@ impl Activate {
 
         let mut flox_active_environments = activated_environments();
 
+        // install prefixes of all active environments
+        let flox_env_install_prefixes = IndexSet::from_iter(env::split_paths(
+            &env::var(FLOX_ENV_DIRS_VAR).unwrap_or_default(),
+        ));
+
+        // on macos: patch the existing PATH
+        // If this is [Some] the path will be restored from `$FLOX_PATH_PATCHED`
+        // As part of running $FLOX_ENV/etc/profile.d/0100_common-paths.sh during activation.
+        //
+        // NOTE: this does _not_ include any additions to the PATH
+        // due to the newly activated environment.
+        // Amending the path is strictly implemented by the activation scripts!
+        let fixed_up_original_path_joined =
+            Self::fixup_path(&flox_env_install_prefixes).transpose()?;
+
         // Detect if the current environment is already active
         if flox_active_environments.is_active(&now_active) {
             if !in_place {
@@ -503,22 +528,26 @@ impl Activate {
                 bail!("Environment '{now_active}' is already active.");
             }
             debug!("Environment is already active: environment={now_active}. Ignoring activation (may patch PATH)");
-            Self::reactivate_non_interactive()?;
+            Self::reactivate_in_place(fixed_up_original_path_joined)?;
             return Ok(());
         }
 
-        // Add to FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
+        // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
         flox_active_environments.set_last_active(now_active.clone());
 
-        // Set FLOX_ENV_DIRS and FLOX_ENV_LIB_DIRS
-        let mut flox_env_dirs = IndexSet::from([activation_path.clone()]);
-        if let Ok(existing_environments) = env::var(FLOX_ENV_DIRS_VAR) {
-            flox_env_dirs.extend(env::split_paths(&existing_environments));
+        // Prepend the new environment to the list of active environments
+        let flox_env_install_prefixes = {
+            let mut set = IndexSet::from([activation_path.clone()]);
+            set.extend(flox_env_install_prefixes);
+            set
         };
-        let (flox_env_dirs_joined, flox_env_lib_dirs_joined) = {
-            let flox_env_lib_dirs = flox_env_dirs.iter().map(|p| p.join("lib"));
 
-            let flox_env_dirs = env::join_paths(&flox_env_dirs).context(
+        // Set FLOX_ENV_DIRS and FLOX_ENV_LIB_DIRS
+
+        let (flox_env_dirs_joined, flox_env_lib_dirs_joined) = {
+            let flox_env_lib_dirs = flox_env_install_prefixes.iter().map(|p| p.join("lib"));
+
+            let flox_env_dirs = env::join_paths(&flox_env_install_prefixes).context(
                 "Cannot activate environment because its path contains an invalid character",
             )?;
 
@@ -529,8 +558,6 @@ impl Activate {
             (flox_env_dirs, flox_env_lib_dirs)
         };
 
-        let fixed_up_path_joined = Self::fixup_path(flox_env_dirs).transpose()?;
-
         let shell = ShellType::detect()?;
 
         let prompt_color_1 = env::var("FLOX_PROMPT_COLOR_1")
@@ -538,7 +565,7 @@ impl Activate {
         let prompt_color_2 = env::var("FLOX_PROMPT_COLOR_2")
             .unwrap_or(utils::colors::DARK_PEACH.to_ansi256().to_string());
 
-        let exports = HashMap::from([
+        let mut exports = HashMap::from([
             (FLOX_ENV_VAR, activation_path.to_string_lossy().to_string()),
             (FLOX_PROMPT_ENVIRONMENTS_VAR, flox_prompt_environments),
             (
@@ -557,6 +584,13 @@ impl Activate {
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
         ]);
 
+        if let Some(fixed_up_original_path_joined) = fixed_up_original_path_joined {
+            exports.insert(
+                FLOX_PATH_PATCHED_VAR,
+                fixed_up_original_path_joined.to_string_lossy().to_string(),
+            );
+        }
+
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
         //
@@ -565,20 +599,53 @@ impl Activate {
         //
         //    eval "$(flox activate)"
         if in_place {
-            Self::activate_non_interactive(
-                &shell,
-                &exports,
-                fixed_up_path_joined,
-                &activation_path,
-            );
+            Self::activate_in_place(&shell, &exports, &activation_path);
 
             return Ok(());
         }
 
-        let activate_error =
-            Self::activate_interactive(self.run_args, shell, exports, activation_path, now_active);
+        let activate_error = if !self.run_args.is_empty() {
+            Self::activate_non_interactive(self.run_args, shell, exports, activation_path)
+        } else {
+            Self::activate_interactive(shell, exports, activation_path, now_active)
+        };
         // If we get here, exec failed!
         Err(activate_error)
+    }
+
+    /// Used for `flox activate -- run_args`
+    fn activate_non_interactive(
+        run_args: Vec<String>,
+        shell: ShellType,
+        exports: HashMap<&str, String>,
+        activation_path: PathBuf,
+    ) -> anyhow::Error {
+        let mut command = Command::new(shell.exe_path());
+
+        command.envs(exports);
+
+        let script = formatdoc! {"
+                # to avoid infinite recursion sourcing bashrc
+                export FLOX_SOURCED_FROM_SHELL_RC=1
+
+                # TODO: this script sets prompt, which isn't necessary
+                source {activation_path}/activate/{shell}
+
+                unset FLOX_SOURCED_FROM_SHELL_RC
+
+                {run_args}
+        ",
+            activation_path=shell_escape::escape(activation_path.to_string_lossy()),
+            run_args = run_args.join(" "),
+        };
+
+        command.arg("-c");
+        command.arg(script);
+
+        debug!("running activation command: {:?}", command);
+
+        // exec should never return
+        command.exec().into()
     }
 
     /// Activate the environment interactively by spawning a new shell
@@ -586,7 +653,6 @@ impl Activate {
     ///
     /// This function should never return as it replaces the current process
     fn activate_interactive(
-        run_args: Vec<String>,
         shell: ShellType,
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
@@ -635,20 +701,13 @@ impl Activate {
             },
         };
 
-        if !run_args.is_empty() {
-            command.arg("-i");
-            command.arg("-c");
-            command.arg(run_args.join(" "));
-        }
-
         debug!("running activation command: {:?}", command);
 
-        if run_args.is_empty() {
-            let message = formatdoc! {"
-                ✅  You are now using the environment {now_active}.
+        let message = formatdoc! {"
+                You are now using the environment {now_active}.
                 To stop using this environment, type 'exit'"};
-            info!("{message}");
-        }
+        message::updated(message);
+
         // exec should never return
         command.exec().into()
     }
@@ -693,7 +752,7 @@ impl Activate {
     /// The `PATH` is then reordered to put the flox environment and nix store paths first.
     /// The order within the two partitions is preserved.
     #[cfg_attr(not(target_os = "macos"), allow(unused_variables))] // on linux `flox_env_dirs` is not used
-    fn fixup_path(flox_env_dirs: IndexSet<PathBuf>) -> Option<Result<OsString>> {
+    fn fixup_path(flox_env_dirs: &IndexSet<PathBuf>) -> Option<Result<OsString>> {
         #[cfg(not(target_os = "macos"))]
         {
             None
@@ -717,7 +776,7 @@ impl Activate {
     /// See [Self::fixup_path] for more details.
     fn fixup_path_with(
         path_var: impl AsRef<OsStr>,
-        flox_env_dirs: IndexSet<PathBuf>,
+        flox_env_dirs: &IndexSet<PathBuf>,
     ) -> Vec<PathBuf> {
         let path_iter = env::split_paths(&path_var);
 
@@ -746,14 +805,8 @@ impl Activate {
     ///     eval "$(flox activate)" -> eval "export PATH=<flox_env_dirs>:$PATH"
     ///
     /// See [Self::fixup_path] for more details.
-    fn reactivate_non_interactive() -> Result<(), anyhow::Error> {
-        let flox_env_dirs = env::var(FLOX_ENV_DIRS_VAR)
-            .ok()
-            .as_ref()
-            .map(env::split_paths)
-            .map(IndexSet::from_iter)
-            .unwrap_or_default();
-        if let Some(fixed_up_path_joined) = Self::fixup_path(flox_env_dirs).transpose()? {
+    fn reactivate_in_place(fixed_up_path_joined: Option<OsString>) -> Result<(), anyhow::Error> {
+        if let Some(fixed_up_path_joined) = fixed_up_path_joined {
             debug!(
                 "Patching PATH to {}",
                 fixed_up_path_joined.to_string_lossy()
@@ -768,10 +821,10 @@ impl Activate {
         Ok(())
     }
 
-    fn activate_non_interactive(
+    /// Used for `eval "$(flox activate)"`
+    fn activate_in_place(
         shell: &ShellType,
         exports: &HashMap<&str, String>,
-        fixed_up_path_joined: Option<OsString>,
         activation_path: &Path,
     ) {
         let exports_rendered = exports
@@ -780,21 +833,9 @@ impl Activate {
             .map(|(key, value)| format!("export {key}={value}",))
             .join("\n");
 
-        let path_patch = if let Some(fixed_up_path_joined) = fixed_up_path_joined {
-            formatdoc! {"
-                    # Add flox environment to PATH
-                    export FLOX_PATH_PATCHED={fixed_up_path_joined}",
-                fixed_up_path_joined=shell_escape::escape(fixed_up_path_joined.to_string_lossy()),
-            }
-        } else {
-            "# No path patching needed".to_string()
-        };
-
         let script = formatdoc! {"
                 # Common flox environment variables
                 {exports_rendered}
-
-                {path_patch}
 
                 # to avoid infinite recursion sourcing bashrc
                 export FLOX_SOURCED_FROM_SHELL_RC=1
@@ -820,7 +861,7 @@ mod activate_tests {
     #[test]
     fn test_fixup_path() {
         let flox_env_dirs = IndexSet::from(["/flox/env"].map(PathBuf::from));
-        let fixed_up_path = Activate::fixup_path_with(PATH, flox_env_dirs);
+        let fixed_up_path = Activate::fixup_path_with(PATH, &flox_env_dirs);
         let joined = env::join_paths(fixed_up_path).unwrap();
 
         assert_eq!(
@@ -831,7 +872,7 @@ mod activate_tests {
     }
 }
 
-/// Create an environment in the current directory
+// Create an environment in the current directory
 #[derive(Bpaf, Clone)]
 pub struct Init {
     /// Directory to create the environment in (default: current directory)
@@ -842,7 +883,7 @@ pub struct Init {
     ///
     /// "$(basename $PWD)" or "default" if in $HOME
     #[bpaf(long("name"), short('n'), argument("name"))]
-    env_name: Option<EnvironmentName>,
+    env_name: Option<String>,
 }
 
 impl Init {
@@ -854,14 +895,15 @@ impl Init {
         let home_dir = dirs::home_dir().unwrap();
 
         let env_name = if let Some(name) = self.env_name {
-            name
+            EnvironmentName::from_str(&name)?
         } else if dir == home_dir {
-            "default".parse()?
+            EnvironmentName::from_str("default")?
         } else {
-            dir.file_name()
+            let name = dir
+                .file_name()
                 .map(|n| n.to_string_lossy().to_string())
-                .context("Can't init in root")?
-                .parse()?
+                .context("Can't init in root")?;
+            EnvironmentName::from_str(&name)?
         };
 
         let env = PathEnvironment::init(
@@ -871,45 +913,46 @@ impl Init {
             &flox.system,
         )?;
 
-        println!(
-            indoc::indoc! {"
-            ✨ Created environment {name} ({system})
+        message::created(formatdoc! {"
+            Created environment {name} ({system})
 
             Next:
               $ flox search <package>    <- Search for a package
               $ flox install <package>   <- Install a package into an environment
               $ flox activate            <- Enter the environment
-            "},
+            ",
             name = env.name(),
             system = flox.system
-        );
+        });
         Ok(())
     }
 }
 
-/// List packages installed in an environment
+// List packages installed in an environment
 #[derive(Bpaf, Clone)]
 pub struct List {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
+
     #[bpaf(external(list_mode), fallback(ListMode::Extended))]
     list_mode: ListMode,
 }
 
-#[derive(Bpaf, Clone)]
+#[derive(Bpaf, Clone, PartialEq, Debug)]
 pub enum ListMode {
     /// Show the raw contents of the manifest
     #[bpaf(long, short)]
     Config,
-    /// Show only names
+
+    /// Show only the name of each package
     #[bpaf(long("name"), short)]
     NameOnly,
 
-    /// Show names, paths, and versions (default)
+    /// Show the name, pkg-path, and version of each package (default)
     #[bpaf(long, short)]
     Extended,
 
-    /// Detailed information such as priority and license
+    /// Show all available package information including priority and license
     #[bpaf(long, short)]
     All,
 }
@@ -924,24 +967,38 @@ impl List {
             .into_dyn_environment();
 
         let manifest_contents = env.manifest_content(&flox)?;
+        if self.list_mode == ListMode::Config {
+            println!("{}", manifest_contents);
+            return Ok(());
+        }
+
+        let system = &flox.system;
+        let lockfile = Self::get_lockfile(&flox, &mut *env)?;
+        let packages = lockfile.list_packages(system);
+
+        if packages.is_empty() {
+            let message = formatdoc! {"
+                No packages are installed for your current system ('{system}').
+
+                You can see the whole manifest with 'flox list --config'.
+            "};
+            message::warning(message);
+            return Ok(());
+        }
+
         match self.list_mode {
-            ListMode::Config => println!("{}", manifest_contents),
-            ListMode::NameOnly => self.print_name_only(&flox, &mut *env)?,
-            ListMode::Extended => self.print_extended(&flox, &mut *env)?,
-            ListMode::All => self.print_detail(&flox, &mut *env)?,
+            ListMode::NameOnly => Self::print_name_only(&packages),
+            ListMode::Extended => Self::print_extended(&packages),
+            ListMode::All => Self::print_detail(&packages),
+            ListMode::Config => unreachable!(),
         }
 
         Ok(())
     }
 
     /// print package ids only
-    fn print_name_only(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
-        let lockfile = Self::get_lockfile(flox, env)?;
-        lockfile
-            .list_packages(&flox.system)
-            .into_iter()
-            .for_each(|p| println!("{}", p.name));
-        Ok(())
+    fn print_name_only(packages: &[InstalledPackage]) {
+        packages.iter().for_each(|p| println!("{}", p.name));
     }
 
     /// print package ids, as well as path and version
@@ -949,26 +1006,19 @@ impl List {
     /// e.g. `pip: python3Packages.pip (20.3.4)`
     ///
     /// This is the default mode
-    fn print_extended(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
-        let lockfile = Self::get_lockfile(flox, env)?;
-        lockfile
-            .list_packages(&flox.system)
-            .into_iter()
-            .for_each(|p| {
-                println!(
-                    "{id}: {path} ({version})",
-                    id = p.name,
-                    path = p.rel_path,
-                    version = p.info.version
-                )
-            });
-        Ok(())
+    fn print_extended(packages: &[InstalledPackage]) {
+        packages.iter().for_each(|p| {
+            println!(
+                "{id}: {path} ({version})",
+                id = p.name,
+                path = p.rel_path,
+                version = p.info.version
+            )
+        });
     }
 
     /// print package ids, as well as extended detailed information
-    fn print_detail(&self, flox: &Flox, env: &mut dyn Environment) -> Result<()> {
-        let lockfile = Self::get_lockfile(flox, env)?;
-
+    fn print_detail(packages: &[InstalledPackage]) {
         for InstalledPackage {
             name,
             rel_path,
@@ -982,10 +1032,7 @@ impl List {
                     description,
                 },
             priority,
-        } in lockfile
-            .list_packages(&flox.system)
-            .into_iter()
-            .sorted_by_key(|p| p.priority)
+        } in packages.iter().sorted_by_key(|p| p.priority)
         {
             let message = formatdoc! {"
                 {name}: ({pname})
@@ -997,14 +1044,12 @@ impl List {
                   Unfree:   {unfree}
                   Broken:   {broken}
                 ",
-                description = description.unwrap_or_else(|| "N/A".to_string()),
-                license = license.unwrap_or_else(|| "N/A".to_string()),
+                description = description.as_deref().unwrap_or("N/A"),
+                license = license.as_deref().unwrap_or("N/A"),
             };
 
             println!("{message}");
         }
-
-        Ok(())
     }
 
     /// Read existing lockfile or resolve to create a new [LockedManifest].
@@ -1017,17 +1062,18 @@ impl List {
             .context("Could not get lockfile path")?;
 
         let lockfile = if !lockfile_path.exists() {
+            debug!("No lockfile found, locking environment...");
             Dialog {
                 message: "No lockfile found for environment, building...",
                 help_message: None,
                 typed: Spinner::new(|| env.lock(flox)),
             }
-            .spin()
-            .context("Failed to build environment")?
+            .spin()?
         } else {
-            let lockfile_content =
-                fs::read_to_string(lockfile_path).context("Could not read lockfile")?;
-            serde_json::from_str(&lockfile_content)?
+            debug!("Using existing lockfile");
+            // we have already checked that the lockfile exists
+            let path = CanonicalPath::new(lockfile_path).unwrap();
+            LockedManifest::read_from_file(&path)?
         };
 
         let lockfile: TypedLockedManifest = lockfile.try_into()?;
@@ -1039,7 +1085,7 @@ fn environment_description(environment: &ConcreteEnvironment) -> Result<String> 
     Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
 }
 
-/// Install a package into an environment
+// Install a package into an environment
 #[derive(Bpaf, Clone)]
 pub struct Install {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -1060,10 +1106,12 @@ pub struct PkgWithIdOption {
     /// Install a package and assign an explicit ID
     #[bpaf(long("id"), short('i'))]
     _option: (),
+
     /// ID of the package to install
     #[bpaf(positional("id"))]
     pub id: String,
-    /// Path to the package to install as shown by `flox search`
+
+    /// Name or relative path of the package to install as shown by 'flox search'
     #[bpaf(positional("package"))]
     pub path: String,
 }
@@ -1077,9 +1125,29 @@ impl Install {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = self
+        let concrete_environment = match self
             .environment
-            .detect_concrete_environment(&flox, "install to")?;
+            .detect_concrete_environment(&flox, "install to")
+        {
+            Ok(concrete_environment) => concrete_environment,
+            Err(EnvironmentSelectError::Environment(
+                ref e @ EnvironmentError2::DotFloxNotFound(ref dir),
+            )) => {
+                bail!(formatdoc! {"
+                {e}
+
+                Create an environment with 'flox init --dir {}'", dir.to_string_lossy()
+                })
+            },
+            Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
+                bail!(formatdoc! {"
+                {e}
+
+                Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
+                self.packages.join(" ")})
+            },
+            Err(e) => Err(e)?,
+        };
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
         let mut packages = self
@@ -1089,7 +1157,7 @@ impl Install {
             .collect::<Result<Vec<_>, _>>()?;
         packages.extend(self.id.iter().map(|p| PackageToInstall {
             id: p.id.clone(),
-            path: p.path.clone(),
+            pkg_path: p.path.clone(),
             version: None,
             input: None,
         }));
@@ -1109,20 +1177,23 @@ impl Install {
             // Print which new packages were installed
             for pkg in packages.iter() {
                 if let Some(false) = installation.already_installed.get(&pkg.id) {
-                    info!("✅ '{}' installed to environment {description}", pkg.id);
-                } else {
-                    info!(
-                        "⚠️  Package with id '{}' already installed to environment {description}",
+                    message::updated(format!(
+                        "'{}' installed to environment {description}",
                         pkg.id
-                    );
+                    ));
+                } else {
+                    message::warning(format!(
+                        "Package with id '{}' already installed to environment {description}",
+                        pkg.id
+                    ));
                 }
             }
         } else {
             for pkg in packages.iter() {
-                info!(
-                    "⚠️  Package with id '{}' already installed to environment {description}",
+                message::warning(format!(
+                    "Package with id '{}' already installed to environment {description}",
                     pkg.id
-                );
+                ));
             }
         }
         Ok(())
@@ -1137,25 +1208,28 @@ impl Install {
         debug!("install error: {:?}", err);
 
         match err {
+            // Try to make suggestions when a package isn't found
             EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::LockManifest(
                     flox_rust_sdk::models::pkgdb::CallPkgDbError::PkgDbError(pkgdberr),
                 ),
-            )) if pkgdberr.exit_code == 120 => 'error: {
-                let paths = packages.iter().map(|p| p.path.clone()).join(", ");
-                let head = format!("❌  could not install {paths}");
+            )) if pkgdberr.exit_code == error_codes::RESOLUTION_FAILURE => 'error: {
+                debug!("attempting to make install suggestion");
+                let paths = packages.iter().map(|p| p.pkg_path.clone()).join(", ");
 
                 if packages.len() > 1 {
                     break 'error anyhow!(formatdoc! {"
-                        {head}
+                        Could not install {paths}.
                         One or more of the packages you are trying to install does not exist.
                     "});
                 }
-                let path = packages[0].path.clone();
+                let path = packages[0].pkg_path.clone();
+
+                let head = format!("Could not find package {path}.");
 
                 let suggestion = DidYouMean::<InstallSuggestion>::new(flox, environment, &path);
                 if !suggestion.has_suggestions() {
-                    break 'error anyhow!(head);
+                    break 'error anyhow!("{head} Try 'flox search' with a broader search term.");
                 }
 
                 anyhow!(formatdoc! {"
@@ -1163,17 +1237,18 @@ impl Install {
                     {suggestion}
                 "})
             },
-            _ => err.into(),
+            err => apply_doc_link_for_unsupported_packages(err).into(),
         }
     }
 }
 
-/// Uninstall installed packages from an environment
+// Uninstall installed packages from an environment
 #[derive(Bpaf, Clone)]
 pub struct Uninstall {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
+    /// The install IDs of the packages to remove
     #[bpaf(positional("packages"), some("Must specify at least one package"))]
     packages: Vec<String>,
 }
@@ -1187,9 +1262,29 @@ impl Uninstall {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = self
+        let concrete_environment = match self
             .environment
-            .detect_concrete_environment(&flox, "uninstall from")?;
+            .detect_concrete_environment(&flox, "uninstall from")
+        {
+            Ok(concrete_environment) => concrete_environment,
+            Err(EnvironmentSelectError::Environment(
+                ref e @ EnvironmentError2::DotFloxNotFound(ref dir),
+            )) => {
+                bail!(formatdoc! {"
+                {e}
+
+                Create an environment with 'flox init --dir {}'", dir.to_string_lossy()
+                })
+            },
+            Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
+                bail!(formatdoc! {"
+                {e}
+
+                Create an environment with 'flox init' or uninstall packages from an environment found elsewhere with 'flox uninstall {} --dir <path>'",
+                self.packages.join(" ")})
+            },
+            Err(e) => Err(e)?,
+        };
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
 
@@ -1202,57 +1297,29 @@ impl Uninstall {
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.
-        self.packages
-            .iter()
-            .for_each(|p| info!("🗑️  '{p}' uninstalled from environment {description}"));
+        self.packages.iter().for_each(|p| {
+            message::deleted(format!("'{p}' uninstalled from environment {description}"))
+        });
         Ok(())
     }
 }
 
-/// delete builds of non-current versions of an environment
+// Delete builds of non-current versions of an environment
 #[derive(Bpaf, Clone)]
 pub struct WipeHistory {
-    #[allow(dead_code)] // pending spec for `-e`, `--dir` behaviour
-    #[bpaf(external(environment_args), group_help("Environment Options"))]
-    environment_args: EnvironmentArgs,
-
     #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
+    _environment: EnvironmentSelect,
 }
 
 impl WipeHistory {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, _flox: Flox) -> Result<()> {
         subcommand_metric!("wipe-history");
 
-        let env = self
-            .environment
-            .detect_concrete_environment(&flox, "wipe history of")?
-            .into_dyn_environment();
-
-        if env.delete_symlinks()? {
-            // The flox nix instance is created with `--quiet --quiet`
-            // because nix logs are passed to stderr unfiltered.
-            // nix store gc logs are more useful,
-            // thus we use 3 `--verbose` to have them appear.
-            let nix = flox.nix::<NixCommandLine>(vec![
-                "--verbose".to_string(),
-                "--verbose".to_string(),
-                "--verbose".to_string(),
-            ]);
-            let store_gc_command = StoreGc {
-                ..StoreGc::default()
-            };
-
-            info!("Running garbage collection. This may take a while...");
-            store_gc_command.run(&nix, &Default::default()).await?;
-        } else {
-            info!("No old generations found to clean up.")
-        }
-        Ok(())
+        todo!("this command is planned for a future release");
     }
 }
 
-/// list environment generations with contents
+// List environment generations with contents
 #[derive(Bpaf, Clone)]
 pub struct Generations {
     #[allow(dead_code)] // not yet handled in impl
@@ -1272,7 +1339,7 @@ impl Generations {
     }
 }
 
-/// show all versions of an environment
+// Show all versions of an environment
 #[derive(Bpaf, Clone)]
 pub struct History {
     #[allow(dead_code)] // not yet handled in impl
@@ -1292,7 +1359,7 @@ impl History {
     }
 }
 
-/// Send environment to floxhub
+// Send environment to FloxHub
 #[derive(Bpaf, Clone)]
 pub struct Push {
     /// Directory to push the environment from (default: current directory)
@@ -1303,7 +1370,7 @@ pub struct Push {
     #[bpaf(long, short, argument("owner"))]
     owner: Option<EnvironmentOwner>,
 
-    /// forceably overwrite the remote copy of the environment
+    /// Forceably overwrite the remote copy of the environment
     #[bpaf(long, short)]
     force: bool,
 }
@@ -1327,7 +1394,7 @@ impl Push {
                 bail!(message);
             }
 
-            info!("You are not logged in to floxhub. Logging in...");
+            message::plain("You are not logged in to FloxHub. Logging in...");
 
             auth::login_flox(&mut flox).await?;
         }
@@ -1338,9 +1405,10 @@ impl Push {
             EnvironmentPointer::Managed(managed_pointer) => {
                 let message = Self::push_existing_message(&managed_pointer, self.force);
 
+                // todo add spinner
                 Self::push_managed_env(&flox, managed_pointer, dir, self.force)?;
 
-                info!("{message}");
+                message::updated(message);
             },
 
             EnvironmentPointer::Path(path_pointer) => {
@@ -1355,9 +1423,11 @@ impl Push {
                             .handle()?,
                     )?
                 };
+
+                // todo add spinner
                 let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)?;
 
-                info!("{}", Self::push_new_message(env.pointer(), self.force));
+                message::updated(Self::push_new_message(env.pointer(), self.force));
             },
         }
         Ok(())
@@ -1369,8 +1439,7 @@ impl Push {
         dir: PathBuf,
         force: bool,
     ) -> Result<()> {
-        let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dir.join(DOT_FLOX))
-            .context("Could not open environment")?;
+        let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dir.join(DOT_FLOX))?;
         env.push(flox, force)
             .map_err(|err| Self::convert_error(err, managed_pointer, false))?;
 
@@ -1405,21 +1474,12 @@ impl Push {
         let owner = &pointer.owner;
         let name = &pointer.name;
 
-        fn error_chain(mut e: &dyn Error) -> String {
-            let mut msg = e.to_string();
-            while let Some(source) = e.source() {
-                e = source;
-                msg.push_str(&format!(": {}", e));
-            }
-            msg
-        }
-
         let message = match err {
             ManagedEnvironmentError::AccessDenied => formatdoc! {"
-                ❌  You do not have permission to write to {owner}/{name}
+                You do not have permission to write to {owner}/{name}
             "}.into(),
             ManagedEnvironmentError::Diverged if create_remote => formatdoc! {"
-                ❌  An environment named {owner}/{name} already exists!
+                An environment named {owner}/{name} already exists!
 
                 To rename your environment: 'flox edit --name <new name>'
                 To pull and manually re-apply your changes: 'flox delete && flox pull -r {owner}/{name}'
@@ -1427,10 +1487,10 @@ impl Push {
             ManagedEnvironmentError::Build(ref err) => formatdoc! {"
                 {err}
 
-                ❌  Unable to push environment with build errors.
+                Unable to push environment with build errors.
 
                 Use 'flox edit' to resolve errors, test with 'flox activate', and 'flox push' again.",
-                err = error_chain(err)
+                err = format_core_error(err)
             }.into(),
             _ => None
         };
@@ -1454,7 +1514,7 @@ impl Push {
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            ✅  Updates to {name} successfully pushed to floxhub{suffix}
+            Updates to {name} successfully pushed to floxhub{suffix}
 
             Use 'flox pull {owner}/{name}' to get this environment in any other location.
         "}
@@ -1470,7 +1530,7 @@ impl Push {
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            ✅  {name} successfully pushed to floxhub{suffix}
+            {name} successfully pushed to floxhub{suffix}
 
             Use 'flox pull {owner}/{name}' to get this environment in any other location.
         "}
@@ -1479,41 +1539,38 @@ impl Push {
 
 #[derive(Debug, Clone, Bpaf)]
 enum PullSelect {
-    Existing {
-        /// Forceably overwrite the local copy of the environment
-        #[bpaf(long, short)]
-        force: bool,
-    },
     New {
         /// ID of the environment to pull
-        #[bpaf(long, short, argument("owner/name"))]
+        #[bpaf(long, short, argument("owner>/<name"))]
         remote: EnvironmentRef,
     },
     NewAbbreviated {
         /// ID of the environment to pull
-        #[bpaf(positional("owner/name"))]
+        #[bpaf(positional("owner>/<name"))]
         remote: EnvironmentRef,
     },
+    Existing {},
 }
 
 impl Default for PullSelect {
     fn default() -> Self {
-        PullSelect::Existing {
-            force: Default::default(),
-        }
+        PullSelect::Existing {}
     }
 }
 
-/// Pull environment from floxhub
+// Pull environment from FloxHub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
-    /// Forceably add current systems to the environment, even if incompatible
-    #[bpaf(long("add-system"), short)]
-    add_system: bool,
-
-    /// Directory containing the environment (default: current directory)
+    /// Directory in which to create a managed environment, or directory that already contains a managed environment (default: current directory)
     #[bpaf(long, short, argument("path"))]
     dir: Option<PathBuf>,
+
+    /// Forceably pull the environment
+    /// When pulling a new environment, adds the system to the manifest if the lockfile is incompatible
+    /// and ignores eval and build errors.
+    /// When pulling an existing environment, overrides local changes.
+    #[bpaf(long, short)]
+    force: bool,
 
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
@@ -1532,43 +1589,55 @@ impl Pull {
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
 
-                Self::pull_new_environment(
-                    &flox,
-                    dir.join(DOT_FLOX),
-                    remote,
-                    self.add_system,
-                    &start,
-                )?;
+                Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote, self.force, &start)?;
 
-                info!("{complete}");
+                message::updated(complete);
             },
-            PullSelect::Existing { force } => {
+            PullSelect::Existing {} => {
                 let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
 
                 let pointer = {
-                    let p = EnvironmentPointer::open(&dir)
-                        .with_context(|| format!("No environment found in {dir:?}"))?;
+                    let p = EnvironmentPointer::open(&dir)?;
                     match p {
                         EnvironmentPointer::Managed(managed_pointer) => managed_pointer,
                         EnvironmentPointer::Path(_) => bail!("Cannot pull into a path environment"),
                     }
                 };
 
-                let (start, complete) = Self::pull_existing_messages(&pointer, force);
-                info!("{start}");
+                let start_message = format!(
+                    "⬇️  Remote: pulling and building {owner}/{name} from {floxhub_host}",
+                    owner = pointer.owner,
+                    name = pointer.name,
+                    floxhub_host = flox.floxhub.base_url()
+                );
 
                 Dialog {
-                    message: &start,
+                    message: &start_message,
                     help_message: None,
                     typed: Spinner::new(|| {
-                        Self::pull_existing_environment(&flox, dir.join(DOT_FLOX), pointer, force)
+                        Self::pull_existing_environment(
+                            &flox,
+                            dir.join(DOT_FLOX),
+                            pointer.clone(),
+                            self.force,
+                        )
                     }),
                 }
                 .spin()?;
 
-                info!("{complete}");
+                let complete_message = formatdoc! {"
+                    Pulled {owner}/{name} from {floxhub_host}{suffix}
+
+                    You can activate this environment with 'flox activate'
+                    ",
+                    owner = pointer.owner, name = pointer.name,
+                    floxhub_host = flox.floxhub.base_url(),
+                    suffix = if self.force { " (forced)" } else { "" }
+                };
+
+                message::created(complete_message);
             },
         }
 
@@ -1587,8 +1656,8 @@ impl Pull {
     ) -> Result<()> {
         let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)
             .context("Could not open environment")?;
-        env.pull(force).context("Could not pull environment")?;
-        env.build(flox).context("Could not build environment")?;
+        env.pull(force)?; //.context("Could not pull environment")?;
+        env.build(flox)?; //.context("Could not build environment")?;
 
         Ok(())
     }
@@ -1604,23 +1673,23 @@ impl Pull {
         flox: &Flox,
         dot_flox_path: PathBuf,
         env_ref: EnvironmentRef,
-        add_systems: bool,
+        force: bool,
         message: &str,
     ) -> Result<()> {
         if dot_flox_path.exists() {
             bail!("Cannot pull a new environment into an existing one")
         }
+
+        // region: write pointer
         let pointer = ManagedPointer::new(
             env_ref.owner().clone(),
             env_ref.name().clone(),
             &flox.floxhub,
         );
-
         let pointer_content =
             serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
 
         fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
-
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
 
@@ -1631,7 +1700,7 @@ impl Pull {
                 typed: Spinner::new(|| ManagedEnvironment::open(flox, pointer, &dot_flox_path)),
             }
             .spin()
-            .map_err(Self::convert_error);
+            .map_err(|err| Self::handle_error(flox, err));
 
             match result {
                 Err(err) => {
@@ -1642,6 +1711,7 @@ impl Pull {
                 Ok(env) => env,
             }
         };
+        // endregion
 
         let result = Dialog {
             message,
@@ -1654,39 +1724,41 @@ impl Pull {
             Ok(_) => {},
             Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: 123,
+                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
                     ..
                 })),
             ))) => {
-                let hint = "Use 'flox pull --add-system' to add your system to the manifest.";
-
-                // will return OK if the user chose to abort the pull
-                let add_systems = add_systems
-                    || match Self::query_add_system(&flox.system)? {
-                        Some(false) => {
-                            // prompt available, user chose to abort
-                            info!("{hint}");
-                            fs::remove_dir_all(&dot_flox_path)
-                                .context("Could not clean up .flox/ directory")?;
-                            bail!("Did not pull the environment.");
-                        },
-                        Some(true) => true, // prompt available, user chose to add system
-                        None => false,      // no prompt available
-                    };
-
-                if !add_systems {
+                let hint = formatdoc! {"
+                    Use 'flox pull --force' to add your system to the manifest.
+                    For more on managing systems for your environment, visit the documentation:
+                    https://flox.dev/docs/tutorials/multi-arch-environments
+                "};
+                if !force && !Dialog::can_prompt() {
                     fs::remove_dir_all(&dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
                     bail!("{}", formatdoc! {"
-                        This environment is not yet compatible with your system ({system}).
+                            This environment is not yet compatible with your system ({system}).
 
-                        {hint}"
+                            {hint}"
                     , system = flox.system});
+                }
+
+                // will return OK if the user chose to abort the pull
+                let force = force || Self::query_add_system(&flox.system)?;
+                if !force {
+                    // prompt available, user chose to abort
+                    fs::remove_dir_all(&dot_flox_path)
+                        .context("Could not clean up .flox/ directory")?;
+                    bail!(formatdoc! {"
+                        Did not pull the environment.
+
+                        {hint}
+                    "});
                 }
 
                 let doc = Self::amend_current_system(&env, flox)?;
                 if let Err(broken_error) = env.edit_unsafe(flox, doc.to_string())? {
-                    warn!("{}", formatdoc! {"
+                    message::warning(formatdoc! {"
                         {err:#}
 
                         Could not build modified environment, build errors need to be resolved manually.",
@@ -1694,26 +1766,50 @@ impl Pull {
                     });
                 };
             },
+            Err(
+                ref e @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+                    ref builder_error @ LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(
+                        PkgDbError { exit_code, .. },
+                    )),
+                )),
+            ) if [
+                error_codes::PACKAGE_BUILD_FAILURE,
+                error_codes::PACKAGE_EVAL_FAILURE,
+                error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+            ]
+            .contains(&exit_code) =>
+            {
+                debug!(
+                    "environment contains package incompatible with the current system: {err}",
+                    err = display_chain(e)
+                );
+
+                let pkgdb_error = format_locked_manifest_error(builder_error);
+
+                if !force && !Dialog::can_prompt() {
+                    fs::remove_dir_all(&dot_flox_path)
+                        .context("Could not clean up .flox/ directory")?;
+                    bail!("{pkgdb_error}");
+                }
+
+                message::error(pkgdb_error);
+
+                if force || Self::query_ignore_build_errors()? {
+                    message::warning("Ignoring build errors and pulling the environment anyway.");
+                } else {
+                    fs::remove_dir_all(&dot_flox_path)
+                        .context("Could not clean up .flox/ directory")?;
+                    bail!("Did not pull the environment.");
+                }
+            },
             Err(e) => {
                 fs::remove_dir_all(&dot_flox_path)
                     .context("Could not clean up .flox/ directory")?;
-                Err(e)?
+                bail!(e)
             },
         }
 
         Ok(())
-    }
-
-    fn convert_error(err: ManagedEnvironmentError) -> anyhow::Error {
-        if let ManagedEnvironmentError::OpenFloxmeta(FloxmetaV2Error::LoggedOut) = err {
-            anyhow!(indoc! {"
-                Could not pull environment: not logged in to floxhub.
-
-                Please login to floxhub with `flox auth login`
-                "})
-        } else {
-            anyhow!(err)
-        }
     }
 
     /// construct a message for pulling a new environment
@@ -1731,29 +1827,7 @@ impl Pull {
         };
 
         let complete_message = formatdoc! {"
-            ✨  Pulled {env_ref} from {floxhub_host}
-
-            You can activate this environment with 'flox activate'
-        "};
-
-        (start_message, complete_message)
-    }
-
-    /// construct a message for pulling an existing environment
-    ///
-    /// todo: add floxhub base url when it's available
-    fn pull_existing_messages(pointer: &ManagedPointer, force: bool) -> (String, String) {
-        let owner = &pointer.owner;
-        let name = &pointer.name;
-        let floxhub_host = &pointer.floxhub_url;
-
-        let start_message =
-            format!("⬇️  Remote: pulling and building {owner}/{name} from {floxhub_host}",);
-
-        let suffix: &str = if force { " (forced)" } else { "" };
-
-        let complete_message = formatdoc! {"
-            ✨  Pulled {owner}/{name} from {floxhub_host}{suffix}
+            Pulled {env_ref} from {floxhub_host}
 
             You can activate this environment with 'flox activate'
         "};
@@ -1766,15 +1840,12 @@ impl Pull {
     /// returns [Ok(None)]` if the user can't be prompted
     /// returns `[Ok(bool)]` depending on the users choice
     /// returns `[Err]` if the prompt failed or was cancelled
-    fn query_add_system(system: &str) -> Result<Option<bool>> {
-        if !Dialog::can_prompt() {
-            return Ok(None);
-        }
-
+    fn query_add_system(system: &str) -> Result<bool> {
         let message = format!(
-        "The environment you are trying to pull is not yet compatible with your system ({system})."
-    );
-        let help = "Use 'flox pull --add-system' to automatically add your system to the list of compatible systems";
+            "The environment you are trying to pull is not yet compatible with your system ({system})."
+        );
+
+        let help = "Use 'flox pull --force' to automatically add your system to the list of compatible systems";
 
         let reject_choice = "Don't pull this environment.";
         let confirm_choice = format!(
@@ -1791,7 +1862,7 @@ impl Pull {
 
         let (choice, _) = dialog.raw_prompt()?;
 
-        Ok(Some(choice == 1))
+        Ok(choice == 1)
     }
 
     /// add the current system to the manifest of the given environment
@@ -1802,9 +1873,69 @@ impl Pull {
         manifest::add_system(&env.manifest_content(flox)?, &flox.system)
             .context("Could not add system to manifest")
     }
+
+    /// Ask the user if they want to ignore build errors and pull a broken environment
+    fn query_ignore_build_errors() -> Result<bool> {
+        if !Dialog::can_prompt() {
+            return Ok(false);
+        }
+
+        let message = "The environment you are trying to pull could not be built locally.";
+        let help_message = Some("Use 'flox pull --force' to pull the environment anyway.");
+
+        let reject_choice = "Don't pull this environment.";
+        let confirm_choice = "Pull this environment anyway, 'flox edit' to address issues.";
+
+        let dialog = Dialog {
+            message,
+            help_message,
+            typed: Select {
+                options: [reject_choice, confirm_choice].to_vec(),
+            },
+        };
+
+        let (choice, _) = dialog.raw_prompt()?;
+
+        Ok(choice == 1)
+    }
+
+    fn handle_error(flox: &Flox, err: ManagedEnvironmentError) -> anyhow::Error {
+        match err {
+            ManagedEnvironmentError::AccessDenied => {
+                let message = "You do not have permission to pull this environment";
+                anyhow::Error::msg(message)
+            },
+            ManagedEnvironmentError::Diverged => {
+                let message = "The environment has diverged from the remote version";
+                anyhow::Error::msg(message)
+            },
+            ManagedEnvironmentError::UpstreamNotFound(env_ref, _) => {
+                let by_current_user = flox
+                    .floxhub_token
+                    .as_ref()
+                    .and_then(|token| token.handle().ok())
+                    .map(|handle| handle == env_ref.owner().as_str())
+                    .unwrap_or_default();
+                let message = format!("The environment {env_ref} does not exist.");
+                if by_current_user {
+                    anyhow!(formatdoc! {"
+                        {message}
+
+                        Double check the name or create it with:
+
+                            $ flox init --name {name}
+                            $ flox push
+                    ", name = env_ref.name()})
+                } else {
+                    anyhow!(message)
+                }
+            },
+            _ => err.into(),
+        }
+    }
 }
 
-/// rollback to the previous generation of an environment
+// Rollback to the previous generation of an environment
 #[derive(Bpaf, Clone)]
 pub struct Rollback {
     #[bpaf(long, short, argument("ENV"))]
@@ -1826,7 +1957,7 @@ impl Rollback {
     }
 }
 
-/// switch to a specific generation of an environment
+// Switch to a specific generation of an environment
 #[derive(Bpaf, Clone)]
 pub struct SwitchGeneration {
     #[allow(unused)] // Command currently forwarded
@@ -1848,10 +1979,10 @@ impl SwitchGeneration {
 
 #[derive(Debug, Bpaf, Clone)]
 pub enum EnvironmentOrGlobalSelect {
-    Environment(#[bpaf(external(environment_select))] EnvironmentSelect),
-    /// Update inputs used by 'search' and 'show' outside of an environment
+    /// Update the global base catalog
     #[bpaf(long("global"))]
     Global,
+    Environment(#[bpaf(external(environment_select))] EnvironmentSelect),
 }
 
 impl Default for EnvironmentOrGlobalSelect {
@@ -1860,13 +1991,13 @@ impl Default for EnvironmentOrGlobalSelect {
     }
 }
 
-/// Update an environment's inputs
+// Update the global base catalog or an environment's base catalog
 #[derive(Bpaf, Clone)]
 pub struct Update {
     #[bpaf(external(environment_or_global_select), fallback(Default::default()))]
     environment_or_global: EnvironmentOrGlobalSelect,
 
-    #[bpaf(positional("inputs"))]
+    #[bpaf(positional("inputs"), hide)]
     inputs: Vec<String>,
 }
 impl Update {
@@ -1907,12 +2038,12 @@ impl Update {
         if let Some(ref old_lockfile) = old_lockfile {
             if new_lockfile.registry().inputs == old_lockfile.registry().inputs {
                 if global {
-                    info!("ℹ️  All global inputs are up-to-date.");
+                    message::plain("ℹ️  All global inputs are up-to-date.");
                 } else {
-                    info!(
+                    message::plain(format!(
                         "ℹ️  All inputs are up-to-date in environment {}.",
                         description.as_ref().unwrap()
-                    );
+                    ));
                 }
 
                 return Ok(());
@@ -1929,19 +2060,23 @@ impl Update {
                 // unchanged input
                 Some(old_input) if old_input == new_input => continue, // dont need to scrape
                 // updated input
-                Some(_) if global => info!("⬆️  Updated global input '{}'.", input_name),
-                Some(_) => info!(
+                Some(_) if global => {
+                    message::plain(format!("⬆️  Updated global input '{}'.", input_name))
+                },
+                Some(_) => message::plain(format!(
                     "⬆️  Updated input '{}' in environment {}.",
                     input_name,
                     description.as_ref().unwrap()
-                ),
+                )),
                 // new input
-                None if global => info!("🔒️  Locked global input '{}'.", input_name),
-                None => info!(
+                None if global => {
+                    message::plain(format!("🔒️  Locked global input '{}'.", input_name))
+                },
+                None => message::plain(format!(
                     "🔒️  Locked input '{}' in environment {}.",
                     input_name,
                     description.as_ref().unwrap(),
-                ),
+                )),
             }
             inputs_to_scrape.push(new_input);
         }
@@ -1950,16 +2085,16 @@ impl Update {
             for input_name in old_lockfile.registry().inputs.keys() {
                 if !new_lockfile.registry().inputs.contains_key(input_name) {
                     if global {
-                        info!(
-                            "🗑️  Removed unused input '{}' from global lockfile.",
+                        message::deleted(format!(
+                            "Removed unused input '{}' from global lockfile.",
                             input_name
-                        );
+                        ));
                     } else {
-                        info!(
-                            "🗑️  Removed unused input '{}' from lockfile for environment {}.",
+                        message::deleted(format!(
+                            "Removed unused input '{}' from lockfile for environment {}.",
                             input_name,
                             description.as_ref().unwrap()
-                        );
+                        ));
                     }
                 }
             }
@@ -1974,8 +2109,9 @@ impl Update {
             message: "Generating databases for updated inputs...",
             help_message: (inputs_to_scrape.len() > 1).then_some("This may take a while."),
             typed: Spinner::new(|| {
+                // TODO: rayon::par_iter
                 inputs_to_scrape
-                    .iter() // TODO: rayon::par_iter
+                    .iter()
                     .map(|input| Self::scrape_input(&input.from))
                     .collect()
             }),
@@ -1996,17 +2132,16 @@ impl Update {
     ) -> Result<UpdateResult> {
         let mut environment = concrete_environment.into_dyn_environment();
 
-        environment
-            .update(&flox, self.inputs.clone())
-            .context("updating environment failed")
+        Ok(environment.update(&flox, self.inputs.clone())?)
+        // .context("updating environment failed")
     }
 
     fn scrape_input(input: &FlakeRef) -> Result<()> {
         let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        // TODO: this works for nixpkgs, but it won't work for anything else that is not exposing "legacyPackages"
         pkgdb_cmd
             .args(["scrape"])
             .arg(serde_json::to_string(&input)?)
-            // TODO: this works for nixpkgs, but it won't work for anything else
             .arg("legacyPackages");
 
         debug!("scraping input: {pkgdb_cmd:?}");
@@ -2015,13 +2150,14 @@ impl Update {
     }
 }
 
+// Upgrade packages in an environment
 #[derive(Bpaf, Clone)]
 pub struct Upgrade {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// ID of a package or group name to upgrade
-    #[bpaf(positional("package or group"))]
+    /// ID of a package or pkg-group name to upgrade
+    #[bpaf(positional("package or pkg-group"))]
     groups_or_iids: Vec<String>,
 }
 impl Upgrade {
@@ -2037,21 +2173,25 @@ impl Upgrade {
         let mut environment = concrete_environment.into_dyn_environment();
 
         let upgraded = environment
-            .upgrade(&flox, &self.groups_or_iids)
-            .context("upgrading environment failed")?
+            .upgrade(&flox, &self.groups_or_iids)?
+            // .context("upgrading environment failed")?
             .0;
 
         if upgraded.is_empty() {
             if self.groups_or_iids.is_empty() {
-                info!("ℹ️  No packages need to be upgraded in environment {description}.");
+                message::plain(format!(
+                    "ℹ️  No packages need to be upgraded in environment {description}."
+                ));
             } else {
-                info!(
+                message::plain(format!(
                     "ℹ️  The specified packages do not need to be upgraded in environment {description}."
-                );
+                 ) );
             }
         } else {
             for package in upgraded {
-                info!("⬆️  Upgraded '{package}' in environment {description}.");
+                message::plain(format!(
+                    "⬆️  Upgraded '{package}' in environment {description}."
+                ));
             }
         }
 
@@ -2059,6 +2199,7 @@ impl Upgrade {
     }
 }
 
+// Containerize an environment
 #[derive(Bpaf, Clone, Debug)]
 pub struct Containerize {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -2084,38 +2225,39 @@ impl Containerize {
                 .join(format!("{}-container.tar.gz", env.name())),
         };
 
-        let (output, output_name): (Box<dyn Write>, String) = if output_path == Path::new("-") {
-            debug!("output=stdout");
+        let (output, output_name): (Box<dyn Write + Send>, String) =
+            if output_path == Path::new("-") {
+                debug!("output=stdout");
 
-            (Box::new(std::io::stdout()), "stdout".to_string())
-        } else {
-            debug!("output={}", output_path.display());
+                (Box::new(std::io::stdout()), "stdout".to_string())
+            } else {
+                debug!("output={}", output_path.display());
 
-            let file = fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(&output_path)
-                .context("Could not open output file")?;
+                let file = fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(&output_path)
+                    .context("Could not open output file")?;
 
-            (Box::new(file), output_path.display().to_string())
-        };
+                (Box::new(file), output_path.display().to_string())
+            };
 
         let builder = Dialog {
             message: &format!("Building container for environment {}...", env.name()),
             help_message: None,
             typed: Spinner::new(|| env.build_container(&flox)),
         }
-        .spin()
-        .context("could not create container builder")?;
+        .spin()?;
 
-        info!("Writing container to '{output_name}'");
+        Dialog {
+            message: &format!("Writing container to '{output_name}'"),
+            help_message: None,
+            typed: Spinner::new(|| builder.stream_container(output)),
+        }
+        .spin()?;
 
-        builder
-            .stream_container(output)
-            .context("could not write container to output")?;
-
-        info!("✨  Container written to '{output_name}'");
+        message::created(format!("Container written to '{output_name}'"));
         Ok(())
     }
 }

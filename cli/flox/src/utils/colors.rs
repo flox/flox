@@ -27,6 +27,7 @@ pub enum BasicColor {
 
 impl BasicColor {
     /// Create crossterm compatible types
+    #[allow(dead_code)] // todo: discuss how/where to integrate colors
     pub fn to_crossterm(&self) -> crossterm::style::Color {
         match self {
             BasicColor::Black => crossterm::style::Color::Black,
@@ -88,6 +89,7 @@ impl FloxColor {
         self.ansi256
     }
 
+    #[allow(dead_code)] // todo: discuss how/where to integrate colors
     pub fn to_crossterm(&self) -> Option<crossterm::style::Color> {
         match supports_color::on(supports_color::Stream::Stderr) {
             Some(supports_color::ColorLevel { has_16m: true, .. }) => {

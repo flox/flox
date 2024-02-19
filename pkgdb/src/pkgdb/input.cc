@@ -12,6 +12,7 @@
 #include <map>
 #include <optional>
 #include <ostream>
+#include <sys/wait.h>
 #include <tuple>
 
 #include <nix/error.hh>
@@ -55,30 +56,20 @@ PkgDbInput::init()
     }
 
   /* If the database exists we don't want to needlessly try to initialize it, so
-  we skip straight to trying to create a read-only connection to the database.
-  However, just because the database exists doesn't mean that it's done being
-  initialized, so creating the read-only connection can fail. We do this retry
-  loop to until creating the read-only connection succeeds. */
-  /* TODO: emit the number of retries? */
-  int retries = 0;
-  do {
-      try
-        {
-          this->dbRO = std::make_shared<PkgDbReadOnly>(
-            this->getFlake()->lockedFlake.getFingerprint(),
-            this->dbPath.string() );
-        }
-      catch ( ... )
-        {
-          std::this_thread::sleep_for( DB_RETRY_PERIOD );
-          if ( ++retries > DB_MAX_RETRIES )
-            {
-              throw PkgDbException(
-                "couldn't initialize read-only package database" );
-            }
-        }
+   * we skip straight to trying to create a read-only connection to
+   * the database.
+   * However, just because the database exists doesn't mean that it's done being
+   * initialized, so creating the read-only connection can fail. */
+  try
+    {
+      this->dbRO = std::make_shared<PkgDbReadOnly>(
+        this->getFlake()->lockedFlake.getFingerprint(),
+        this->dbPath.string() );
     }
-  while ( ( this->dbRO == nullptr ) );
+  catch ( ... )
+    {
+      throw PkgDbException( "couldn't initialize read-only package database" );
+    }
 
   /* If the schema version is bad, delete the DB so it will be recreated. */
   SqlVersions dbVersions = this->dbRO->getDbVersion();
@@ -141,45 +132,141 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 {
   if ( this->getDbReadOnly()->completedAttrSet( prefix ) ) { return; }
 
-  Todos       todo;
-  bool        wasRW = this->dbRW != nullptr;
-  MaybeCursor root  = this->getFlake()->maybeOpenCursor( prefix );
+  Todos todo;
 
-  if ( root == nullptr ) { return; }
+  // close the db if we have anything open in preparation for the child to take
+  // over.
+  this->closeDbReadWrite();
 
-  /* Open a read/write connection. */
-  auto   dbRW = this->getDbReadWrite();
-  row_id row  = dbRW->addOrGetAttrSetId( prefix );
+  this->freeFlake();
 
-  todo.emplace(
-    std::make_tuple( prefix, static_cast<flox::Cursor>( root ), row ) );
+  bool         scrapingComplete = false;
+  const size_t pageSize         = 5000;
+  size_t       pageIdx          = 0;
 
-  /* Start a transaction */
-  dbRW->db.execute( "BEGIN EXCLUSIVE TRANSACTION" );
-  try
-    {
-      while ( ! todo.empty() )
+  do {
+      const int EXIT_CHILD_INCOMPLETE = EXIT_SUCCESS + 1;
+      const int EXIT_FAILURE_NIX_EVAL
+        = 150;  // seems to not overlap with common posix codes
+
+      pid_t pid = fork();
+      if ( pid == -1 )
         {
-          dbRW->scrape( this->getFlake()->state->symbols, todo.front(), todo );
-          todo.pop();
+          throw PkgDbException( "fork to scrape attributes failed" );
         }
+      if ( 0 < pid )
+        {
+          int status = 0;
+          debugLog(
+            nix::fmt( "scrapePrefix: Waiting for forked process, pid: %d",
+                      pid ) );
+          waitpid( pid, &status, 0 );
+          debugLog(
+            nix::fmt( "scrapePrefix: Forked process exited, exitcode: %d",
+                      status ) );
 
-      /* Mark the prefix and its descendants as "done" */
-      dbRW->setPrefixDone( row, true );
+          if ( WIFEXITED( status ) )
+            {
+              if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
+                {
+                  debugLog( "scrapePrefix: Child reports all pages complete" );
+                  scrapingComplete = true;
+                }
+              else if ( WEXITSTATUS( status ) == EXIT_CHILD_INCOMPLETE )
+                {
+                  debugLog( "scrapePrefix: Child reports additional "
+                            "pages to process" );
+                  // Make sure to increment the pageIdx here (in the parent)
+                  pageIdx++;
+                  scrapingComplete = false;
+                }
+              else  // ( WEXITSTATUS( status ) != EXIT_SUCCESS )
+                {
+                  scrapingComplete = true;
+                  debugLog( "scrapePrefix: Child reports failure, aborting" );
+                  if ( WEXITSTATUS( status ) == EXIT_FAILURE_NIX_EVAL )
+                    {
+                      throw PkgDbException(
+                        "scraping failed: NixEvalException reported. "
+                        "See child log for details." );
+                    }
+                  else
+                    {
+                      throw PkgDbException(
+                        nix::fmt( "scraping failed: exit code %d",
+                                  WEXITSTATUS( status ) ) );
+                    }
+                }
+            }
+          else
+            {
+              scrapingComplete = true;
+              throw PkgDbException(
+                nix::fmt( "scraping failed: abnormal child exit, signal: %d",
+                          WTERMSIG( status ) ) );
+            }
+        }
+      else
+        {
+          /* Open a read/write connection. */
+          auto chunkDbRW = this->getDbReadWrite();
+
+          /* Start a transaction */
+          chunkDbRW->execute( "BEGIN TRANSACTION" );
+          row_id      chunkRow = chunkDbRW->addOrGetAttrSetId( prefix );
+          MaybeCursor root     = this->getFlake()->maybeOpenCursor( prefix );
+
+          Target rootTarget
+            = std::make_tuple( prefix,
+                               static_cast<flox::Cursor>( root ),
+                               chunkRow );
+          bool targetComplete = false;
+
+          try
+            {
+              debugLog( nix::fmt( "scrapePrefix(child): scraping page %d of "
+                                  "%d attributes",
+                                  pageIdx,
+                                  pageSize ) );
+              targetComplete
+                = chunkDbRW->scrape( this->getFlake()->state->symbols,
+                                     rootTarget,
+                                     pageSize,
+                                     pageIdx );
+            }
+          catch ( const nix::EvalError & err )
+            {
+              debugLog(
+                nix::fmt( "scrapePrefix(child): caught nix::EvalError: %s",
+                          err.msg().c_str() ) );
+              chunkDbRW->execute( "ROLLBACK TRANSACTION" );
+              this->closeDbReadWrite();
+              this->freeFlake();
+              exit( EXIT_FAILURE_NIX_EVAL );
+            }
+
+          /* Close the transaction. */
+          chunkDbRW->execute( "COMMIT TRANSACTION" );
+          debugLog( nix::fmt(
+            "scrapePrefix(child): scraping page %d complete, lastPage: %d",
+            pageIdx,
+            targetComplete ) );
+          try
+            {
+              this->closeDbReadWrite();
+              this->freeFlake();
+              exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+            }
+          catch ( const std::exception & err )
+            {
+              debugLog(
+                nix::fmt( "scrapePrefix(child): caught exception on exit: %s",
+                          err.what() ) );
+              exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+            }
+        }
     }
-  catch ( const nix::EvalError & err )
-    {
-      dbRW->db.execute( "ROLLBACK TRANSACTION" );
-      /* Close the r/w connection if we opened it. */
-      if ( ! wasRW ) { this->closeDbReadWrite(); }
-      throw NixEvalException( "error scraping flake", err );
-    }
-
-  /* Close the transaction. */
-  dbRW->db.execute( "COMMIT TRANSACTION" );
-
-  /* Close the r/w connection if we opened it. */
-  if ( ! wasRW ) { this->closeDbReadWrite(); }
+  while ( ! scrapingComplete );
 }
 
 

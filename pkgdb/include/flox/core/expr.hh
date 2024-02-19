@@ -30,9 +30,9 @@ namespace flox {
  * to find it's _real_ type first.
  */
 void
-forceTrivialValue( nix::EvalState &  state,
-                   nix::Value &      value,
-                   const nix::PosIdx pos = nix::noPos );
+forceTrivialValue( nix::EvalState & state,
+                   nix::Value &     value,
+                   nix::PosIdx      pos = nix::noPos );
 
 
 /* -------------------------------------------------------------------------- */
@@ -44,7 +44,7 @@ forceTrivialValue( nix::EvalState &  state,
 [[nodiscard]] nix::FlakeRef
 valueToFlakeRef( nix::EvalState &    state,
                  nix::Value &        value,
-                 const nix::PosIdx   pos = nix::noPos,
+                 nix::PosIdx         pos = nix::noPos,
                  const std::string & errorMsg
                  = "while parsing flake reference" );
 

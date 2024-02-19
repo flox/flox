@@ -34,6 +34,8 @@ private:
 
 public:
 
+  ~LockCommand() override = default;
+
   LockCommand();
 
   [[nodiscard]] command::VerboseParser &
@@ -113,6 +115,8 @@ private:
 
 public:
 
+  ~UpdateCommand() override = default;
+
   UpdateCommand();
 
   [[nodiscard]] command::VerboseParser &
@@ -147,6 +151,8 @@ private:
 
 public:
 
+  ~UpgradeCommand() override = default;
+
   UpgradeCommand();
 
   [[nodiscard]] command::VerboseParser &
@@ -178,6 +184,8 @@ private:
 
 
 public:
+
+  ~RegistryCommand() override = default;
 
   RegistryCommand();
 

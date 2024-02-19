@@ -34,6 +34,9 @@ OPTIONS
 
 ENVIRONMENT
   GIT               Command used as \`git' executable.
+  GREP              Command used as \`grep' executable.
+  SED               Command used as \`sed' executable.
+  SORT              Command used as \`sort' executable.
 "
 
 # ---------------------------------------------------------------------------- #
@@ -50,6 +53,9 @@ usage() {
 
 # @BEGIN_INJECT_UTILS@
 : "${GIT:=git}"
+: "${GREP:=grep}"
+: "${SED:=sed}"
+: "${SORT:=sort}"
 
 # ---------------------------------------------------------------------------- #
 
@@ -133,7 +139,10 @@ _NEW_REV="$($GIT rev-parse --verify "$NEW_SPEC")"
 
 # Get all modified files.
 readarray -t _modified < <(
-  $GIT diff-tree --no-commit-id --name-only -r "$_OLD_REV" "$_NEW_REV" --
+  {
+    $GIT diff-tree --no-commit-id --name-only -r "$_OLD_REV" "$_NEW_REV" --;
+    $GIT status --porcelain|$GREP '^\(A \| M\|??\) '|$SED 's/^.. //';
+  }|$SORT -u;
 )
 
 # Filter down to C++ source files.
@@ -142,14 +151,16 @@ _sources=()
 for mod in "${_modified[@]}"; do
   # Only keep files in `pkgdb/' subdirectories.
   case "$mod" in
-    pkgdb/*) : ;;
-    *) continue ;;
+    pkgdb/*) :; ;;
+    *) continue; ;;
   esac
 
   case "$mod" in
     # Keep this list aligned with `.github/workflows/clang-tidy.yml'
-    *.cpp | *.hpp | *.hxx | *.cxx | *.cc | *.hh | *.c | *.h | *.ipp) _sources+=("$mod") ;;
-    *) : ;;
+    *.cpp | *.hpp | *.hxx | *.cxx | *.cc | *.hh | *.c | *.h | *.ipp) 
+      _sources+=("$mod") ;
+    ;;
+    *) :; ;;
   esac
 done
 

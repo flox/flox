@@ -1,4 +1,0 @@
-# Package-specific defaults here.
-# Company-specific defaults in /etc/flox.toml.
-# User-specific overrides in ~/.config/flox/flox.toml.
-git_base_url = "https://git.hub.flox.dev/"

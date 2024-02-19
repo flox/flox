@@ -13,6 +13,7 @@
 #include <memory>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
+#include <sys/wait.h>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -20,6 +21,7 @@
 #include "flox/core/exceptions.hh"
 #include "flox/core/nix-state.hh"
 #include "flox/core/types.hh"
+#include "flox/core/util.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -82,8 +84,10 @@ private:
 
 public:
 
-  nix::ref<nix::EvalState>      state;
-  const nix::flake::LockedFlake lockedFlake;
+  nix::ref<nix::EvalState>
+    state;  // NOLINT(cppcoreguidelines-non-private-member-variables-in-classes)
+  nix::flake::LockedFlake
+    lockedFlake;  // NOLINT(cppcoreguidelines-non-private-member-variables-in-classes)
 
   FloxFlake( const nix::ref<nix::EvalState> & state,
              const nix::FlakeRef &            ref );
@@ -130,8 +134,28 @@ FLOX_DEFINE_EXCEPTION( LockFlakeException,
                        "error locking flake" )
 /** @} */
 
-
 /* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Execute @param lambda in a child process setup for downloading
+ *        files using `nix` fetchers.
+ *
+ * Helper function to execute @param lambda in a child process in anticipation
+ * of it triggering a download via nix.
+ * If this occurs, the nix static global `nix::curlFileTransfer` object will
+ * trigger a worker thread.
+ * Later forks ( for scraping ) will then try to cleanup those threads but
+ * will fail.
+ * This keeps the thread creation and cleanup in the same child process.
+ *
+ * After calling this, the lambda should be called from the parent to actually
+ * get the parent in the desired state, but the download will already be cached.
+ *
+ * There is room for optimization here for sure.
+ */
+void
+ensureFlakeIsDownloaded( std::function<void()> lambda );
+
 
 }  // namespace flox
 

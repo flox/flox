@@ -22,7 +22,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include "compat/concepts.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/core/types.hh"
 #include "flox/pkgdb/pkg-query.hh"
@@ -74,7 +73,7 @@ using InstallID = std::string;
 struct GroupingOptions {
 
   /**
-   * How to treat descriptors that do not set `packageGroup` explicitly.
+   * How to treat descriptors that do not set `pkgGroup` explicitly.
    *
    * - `singletons`: Each descriptor is its own group by default.
    * - `common`: Descriptors are added to a single _default_ group.
@@ -381,7 +380,7 @@ struct ManifestRaw : public GlobalManifestRaw
    *
    * The _diff_ is represented as an [JSON patch](https://jsonpatch.com) object.
    */
-  nlohmann::json
+  [[nodiscard]] nlohmann::json
   diff( const ManifestRaw & old ) const;
 
   explicit operator ManifestRawGA() const;
@@ -564,7 +563,7 @@ struct ManifestRawGA : public GlobalManifestRawGA
    *
    * The _diff_ is represented as an [JSON patch](https://jsonpatch.com) object.
    */
-  nlohmann::json
+  [[nodiscard]] nlohmann::json
   diff( const ManifestRawGA & old ) const;
 
   explicit operator ManifestRaw() const

@@ -1,6 +1,6 @@
 #
 # This is a flox environment manifest.
-# Visit flox.dev/docs/tutorials/edit-manifest/ 
+# Visit flox.dev/docs/concepts/manifest/
 # or see flox-edit(1) for more information
 #
 
@@ -8,7 +8,7 @@
 # the 'install' section
 
 [install]
-# hello.path = "hello"
+# hello.pkg-path = "hello"
 # nodejs = { version = "^18.4.2", path = "nodejs_18" }
 
 # Set an environment variable.

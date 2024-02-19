@@ -23,7 +23,7 @@ use super::{
     UpdateResult,
     ENVIRONMENT_POINTER_FILENAME,
 };
-use crate::flox::Flox;
+use crate::flox::{EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmetav2::{floxmeta_git_options, FloxmetaV2, FloxmetaV2Error};
@@ -38,7 +38,7 @@ use crate::providers::git::{
 };
 use crate::utils::mtime_of;
 
-const GENERATION_LOCK_FILENAME: &str = "env.lock";
+pub const GENERATION_LOCK_FILENAME: &str = "env.lock";
 
 #[derive(Debug)]
 pub struct ManagedEnvironment {
@@ -80,8 +80,7 @@ pub enum ManagedEnvironmentError {
     ReverseLink(std::io::Error),
     #[error("couldn't create links directory: {0}")]
     CreateLinksDir(std::io::Error),
-    #[error("attempted to open the empty path ''")]
-    EmptyPath,
+
     #[error("floxmeta branch name was malformed: {0}")]
     BadBranchName(String),
     #[error("project wasn't found at path {path}: {err}")]
@@ -90,6 +89,8 @@ pub enum ManagedEnvironmentError {
     Diverged,
     #[error("access to floxmeta repository was denied")]
     AccessDenied,
+    #[error("environment '{0}' does not exist at upstream '{1}'")]
+    UpstreamNotFound(EnvironmentRef, String),
     #[error("failed to push environment")]
     Push(#[source] GitRemoteCommandError),
     #[error("failed to delete local environment branch")]
@@ -123,9 +124,6 @@ pub enum ManagedEnvironmentError {
 
     #[error("could not commit generation")]
     CommitGeneration(#[source] GenerationsError),
-
-    #[error("could not link environment")]
-    Link(#[source] CoreEnvironmentError),
 
     #[error("could not build environment")]
     Build(#[source] CoreEnvironmentError),
@@ -509,7 +507,6 @@ impl ManagedEnvironment {
     /// At some point, it may be useful to create a ManagedEnvironment without
     /// fetching or cloning. This would be more correct for commands like delete
     /// that don't need to fetch the environment.
-
     pub fn open(
         flox: &Flox,
         pointer: ManagedPointer,
@@ -520,6 +517,17 @@ impl ManagedEnvironment {
             Err(FloxmetaV2Error::NotFound(_)) => {
                 debug!("cloning floxmeta for {}", pointer.owner);
                 FloxmetaV2::clone(flox, &pointer).map_err(ManagedEnvironmentError::OpenFloxmeta)?
+            },
+            Err(FloxmetaV2Error::CloneBranch(GitRemoteCommandError::AccessDenied))
+            | Err(FloxmetaV2Error::FetchBranch(GitRemoteCommandError::AccessDenied)) => {
+                return Err(ManagedEnvironmentError::AccessDenied)
+            },
+            Err(FloxmetaV2Error::CloneBranch(GitRemoteCommandError::RefNotFound(_)))
+            | Err(FloxmetaV2Error::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
+                return Err(ManagedEnvironmentError::UpstreamNotFound(
+                    pointer.into(),
+                    flox.floxhub.base_url().to_string(),
+                ))
             },
             Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
         };
@@ -951,12 +959,9 @@ impl ManagedEnvironment {
         // Caller decides whether to set token
         let token = flox.floxhub_token.as_ref();
 
-        let git_url = flox
-            .floxhub
-            .git_url()
-            .map_err(ManagedEnvironmentError::InvalidFloxhubBaseUrl)?;
+        let git_url = flox.floxhub.git_url();
 
-        let options = floxmeta_git_options(&git_url, &pointer.owner, token);
+        let options = floxmeta_git_options(git_url, &pointer.owner, token);
 
         let generations = Generations::init(
             options,
@@ -1129,7 +1134,7 @@ mod test {
         ManagedPointer {
             owner: EnvironmentOwner::from_str("owner").unwrap(),
             name: EnvironmentName::from_str("name").unwrap(),
-            floxhub_url: Url::from_str("https://floxhub.com").unwrap(),
+            floxhub_url: Url::from_str("https://hub.flox.dev").unwrap(),
             floxhub_git_url_override: Some(Url::from_directory_path(remote_path).unwrap()),
             version: Version::<1> {},
         }

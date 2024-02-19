@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::{env, fmt, fs, mem};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
 use flox_rust_sdk::flox::{EnvironmentRef, Flox, Floxhub, DEFAULT_FLOXHUB_URL, FLOX_VERSION};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
@@ -19,6 +19,7 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     DotFlox,
     Environment,
+    EnvironmentError2,
     EnvironmentPointer,
     ManagedPointer,
     DOT_FLOX,
@@ -27,11 +28,13 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::environment_ref;
 use flox_rust_sdk::nix::command_line::NixCommandLine;
 use indoc::{formatdoc, indoc};
-use log::{debug, error, info, warn};
+use log::{debug, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
+use thiserror::Error;
 use toml_edit::Key;
+use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
@@ -42,6 +45,7 @@ use crate::utils::init::{
     init_uuid,
     telemetry_opt_out_needs_migration,
 };
+use crate::utils::message;
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;
 
 static FLOX_DESCRIPTION: &'_ str = indoc! {"
@@ -65,7 +69,7 @@ static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
 });
 
 const ADDITIONAL_COMMANDS: &str = indoc! {"
-    update, upgrade, config, wipe-history, history, auth
+    update, upgrade, config, auth
 "};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
@@ -79,13 +83,14 @@ fn vec_not_empty<T>(x: Vec<T>) -> bool {
 #[derive(Bpaf, Clone, Debug)]
 pub enum Verbosity {
     Verbose(
-        /// Verbose mode
+        /// Increase logging verbosity
         ///
         /// Invoke multiple times for increasing detail.
         #[bpaf(short('v'), long("verbose"), req_flag(()), many, map(vec_len))]
         usize,
     ),
 
+    /// Silence logs except for errors
     #[bpaf(short, long)]
     Quiet,
 }
@@ -97,7 +102,11 @@ impl Default for Verbosity {
 }
 
 #[derive(Bpaf)]
-#[bpaf(options, descr(FLOX_DESCRIPTION))]
+#[bpaf(
+    options,
+    descr(FLOX_DESCRIPTION),
+    footer("Run 'man flox' for more details.")
+)]
 pub struct FloxCli(#[bpaf(external(flox_args))] pub FloxArgs);
 
 /// Main flox args parser
@@ -116,7 +125,7 @@ pub struct FloxArgs {
     pub verbosity: Verbosity,
 
     /// Debug mode
-    #[bpaf(long, req_flag(()), many, map(vec_not_empty))]
+    #[bpaf(long, req_flag(()), many, map(vec_not_empty), hide)]
     pub debug: bool,
 
     /// Print the version of the program
@@ -177,25 +186,38 @@ impl FloxArgs {
             env::set_var("FLOX_DISABLE_METRICS", "true");
         }
 
-        let access_tokens = init_access_tokens(&config.nix.access_tokens)?;
+        let access_tokens = init_access_tokens(
+            config
+                .nix
+                .as_ref()
+                .map(|nix_config| &nix_config.access_tokens),
+        )?;
 
         let netrc_file = dirs::home_dir()
             .expect("User must have a home directory")
             .join(".netrc");
 
-        let mut floxhub = Floxhub::new(
+        let git_url_override = {
+            if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
+                message::warning(formatdoc! {"
+                    Using {env_set_host} as floxhub host
+                    '$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
+                    alternative floxhub hosts are not yet supported!
+                "});
+                Some(Url::parse(&env_set_host)?)
+            } else {
+                None
+            }
+        };
+
+        let floxhub = Floxhub::new(
             config
                 .flox
                 .floxhub_url
                 .clone()
                 .unwrap_or_else(|| DEFAULT_FLOXHUB_URL.clone()),
-        );
-
-        if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
-            warn!("Using {env_set_host} as floxhub host");
-            warn!("`$_FLOX_FLOXHUB_GIT_URL` is used for testing purposes only, alternative floxhub hosts are not yet supported!");
-            floxhub.set_git_url_override(env_set_host.parse()?);
-        }
+            git_url_override,
+        )?;
 
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
@@ -265,11 +287,12 @@ impl Help {
         let mut args = Vec::from_iter(self.cmd.as_deref());
         args.push("--help");
 
+        // todo: just `run()` this -- we might not need the expl;icit error handling anymore
         match flox_cli().run_inner(&*args) {
             Ok(_) => unreachable!(),
             Err(ParseFailure::Completion(comp)) => print!("{comp}"),
-            Err(ParseFailure::Stdout(doc, _)) => info!("{doc}"),
-            Err(ParseFailure::Stderr(err)) => error!("{err}"),
+            Err(ParseFailure::Stdout(doc, _)) => message::plain(doc),
+            Err(ParseFailure::Stderr(err)) => message::error(err),
         }
     }
 }
@@ -278,31 +301,52 @@ impl Help {
 #[derive(Bpaf, Clone)]
 enum LocalDevelopmentCommands {
     /// Create an environment in the current directory
-    #[bpaf(command, long("create"))]
+    #[bpaf(
+        command,
+        long("create"),
+        footer("Run 'man flox-init' for more details.")
+    )]
     Init(#[bpaf(external(environment::init))] environment::Init),
-    /// Enter the environment
-    #[bpaf(command, long("develop"))]
+    /// Enter the environment, type 'exit' to leave
+    #[bpaf(
+        command,
+        long("develop"),
+        footer("Run 'man flox-activate' for more details.")
+    )]
     Activate(#[bpaf(external(environment::activate))] environment::Activate),
     /// Search for system or library packages to install
-    #[bpaf(command)]
+    #[bpaf(command, footer("Run 'man flox-search' for more details."))]
     Search(#[bpaf(external(search::search))] search::Search),
     /// Show details about a single package
-    #[bpaf(command, long("show"))]
+    #[bpaf(command, long("show"), footer("Run 'man flox-show' for more details."))]
     Show(#[bpaf(external(search::show))] search::Show),
-    /// Install a package into an environment
-    #[bpaf(command, short('i'))]
+    /// Install packages into an environment
+    #[bpaf(
+        command,
+        short('i'),
+        footer("Run 'man flox-install' for more details.")
+    )]
     Install(#[bpaf(external(environment::install))] environment::Install),
     /// Uninstall installed packages from an environment
-    #[bpaf(command, long("remove"), long("rm"))]
+    #[bpaf(
+        command,
+        long("remove"),
+        long("rm"),
+        footer("Run 'man flox-uninstall' for more details.")
+    )]
     Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
     /// Edit declarative environment configuration file
-    #[bpaf(command)]
+    #[bpaf(command, footer("Run 'man flox-edit' for more details."))]
     Edit(#[bpaf(external(environment::edit))] environment::Edit),
     /// List packages installed in an environment
-    #[bpaf(command)]
+    #[bpaf(command, footer("Run 'man flox-list' for more details."))]
     List(#[bpaf(external(environment::list))] environment::List),
     /// Delete an environment
-    #[bpaf(command, long("destroy"))]
+    #[bpaf(
+        command,
+        long("destroy"),
+        footer("Run 'man flox-delete' for more details.")
+    )]
     Delete(#[bpaf(external(environment::delete))] environment::Delete),
 }
 
@@ -326,14 +370,19 @@ impl LocalDevelopmentCommands {
 /// Sharing Commands
 #[derive(Bpaf, Clone)]
 enum SharingCommands {
-    /// Send environment to floxhub
-    #[bpaf(command)]
+    /// Send an environment to FloxHub
+    #[bpaf(command, footer("Run 'man flox-push' for more details."))]
     Push(#[bpaf(external(environment::push))] environment::Push),
-    #[bpaf(command)]
-    /// Pull environment from floxhub
+    /// Pull an environment from FloxHub
+    #[bpaf(command, footer("Run 'man flox-pull' for more details."))]
     Pull(#[bpaf(external(environment::pull))] environment::Pull),
     /// Containerize an environment
-    #[bpaf(command, hide)]
+    #[bpaf(
+        command,
+        hide,
+        footer("Run 'man flox-containerize' for more details."),
+        header("This command is experimental and its behaviour is subject to change")
+    )]
     Containerize(#[bpaf(external(environment::containerize))] environment::Containerize),
 }
 impl SharingCommands {
@@ -353,25 +402,31 @@ enum AdditionalCommands {
     Documentation(
         #[bpaf(external(AdditionalCommands::documentation))] AdditionalCommandsDocumentation,
     ),
-    #[bpaf(command, hide)]
+    /// Update environment's base catalog or the global base catalog
+    #[bpaf(command, hide, footer("Run 'man flox-update' for more details."))]
     Update(#[bpaf(external(environment::update))] environment::Update),
-    #[bpaf(command, hide, header(indoc! {"
+    /// Upgrade packages in an environment
+    #[bpaf(command, hide, footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
         When no arguments are specified, all packages in the environment are upgraded.\n\n
 
-        Packages to upgrade can be specified by either group name or, if a package is
+        Packages to upgrade can be specified by either group name, or, if a package is
         not in a group with any other packages, it may be specified by ID. If the
-        specified argument is both a group name and a package ID, only the group is
+        specified argument is both a group name and a package ID, the group is
         upgraded.\n\n
 
-        Packages without a specified group in the manifest can be upgraded by passing
-        'toplevel' as the group name.
+        Packages without a specified group in the manifest are placed in a group
+        named 'toplevel'.
+        The packages in that group can be upgraded without updating any other
+        groups by passing 'toplevel' as the group name.
     "}))]
-    /// Upgrade packages in an environment
     Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
-    #[bpaf(command, hide)]
+    /// View and set configuration options
+    #[bpaf(command, hide, footer("Run 'man flox-config' for more details."))]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
+    /// Delete builds of non-current versions of an environment
     #[bpaf(command("wipe-history"), hide)]
     WipeHistory(#[bpaf(external(environment::wipe_history))] environment::WipeHistory),
+    /// Show all versions of an environment
     #[bpaf(command, hide)]
     History(#[bpaf(external(environment::history))] environment::History),
 }
@@ -408,17 +463,22 @@ impl AdditionalCommandsDocumentation {
 #[derive(Bpaf, Clone)]
 #[bpaf(hide)]
 enum InternalCommands {
+    /// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
     #[bpaf(command("reset-metrics"))]
     ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
+    /// List environment generations with contents
     #[bpaf(command)]
     Generations(#[bpaf(external(environment::generations))] environment::Generations),
+    /// Switch to a specific generation of an environment
     #[bpaf(command("switch-generation"))]
     SwitchGeneration(
         #[bpaf(external(environment::switch_generation))] environment::SwitchGeneration,
     ),
+    /// Rollback to the previous generation of an environment
     #[bpaf(command)]
     Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
-    #[bpaf(command)]
+    /// FloxHub authentication commands
+    #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
     Auth(#[bpaf(external(auth::auth))] auth::Auth),
 }
 
@@ -487,13 +547,23 @@ pub enum EnvironmentSelect {
         PathBuf,
     ),
     Remote(
-        /// A remote environment on floxhub
-        #[bpaf(long("remote"), short('r'), argument("owner/name"))]
+        /// A remote environment on FloxHub
+        #[bpaf(long("remote"), short('r'), argument("owner>/<name"))]
         environment_ref::EnvironmentRef,
     ),
     #[default]
     #[bpaf(hide)]
     Unspecified,
+}
+
+#[derive(Debug, Error)]
+pub enum EnvironmentSelectError {
+    #[error(transparent)]
+    Environment(#[from] EnvironmentError2),
+    #[error("Did not find an environment in the current directory.")]
+    EnvNotFoundInCurrentDirectory,
+    #[error(transparent)]
+    Anyhow(#[from] anyhow::Error),
 }
 
 impl EnvironmentSelect {
@@ -504,17 +574,21 @@ impl EnvironmentSelect {
     /// behavior based on whether an environment is already active. For example,
     /// `flox activate` should never re-activate the last activated environment;
     /// it should default to an environment in the current directory.
-    pub fn to_concrete_environment(&self, flox: &Flox) -> Result<ConcreteEnvironment> {
+    pub fn to_concrete_environment(
+        &self,
+        flox: &Flox,
+    ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         match self {
-            EnvironmentSelect::Dir(path) => open_path(flox, path),
+            EnvironmentSelect::Dir(path) => Ok(open_path(flox, path)?),
             EnvironmentSelect::Unspecified => {
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_found_environment = find_dot_flox(&current_dir)?;
                 match maybe_found_environment {
                     Some(found) => {
-                        UninitializedEnvironment::DotFlox(found).into_concrete_environment(flox)
+                        Ok(UninitializedEnvironment::DotFlox(found)
+                            .into_concrete_environment(flox)?)
                     },
-                    None => Err(anyhow!(format!("No environment found in {current_dir:?}"))),
+                    None => Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory)?,
                 }
             },
             EnvironmentSelect::Remote(env_ref) => {
@@ -524,7 +598,7 @@ impl EnvironmentSelect {
                     &flox.floxhub,
                 );
 
-                let env = RemoteEnvironment::new(flox, pointer)?;
+                let env = RemoteEnvironment::new(flox, pointer).map_err(anyhow::Error::new)?;
                 Ok(ConcreteEnvironment::Remote(env))
             },
         }
@@ -540,19 +614,15 @@ impl EnvironmentSelect {
         &self,
         flox: &Flox,
         message: &str,
-    ) -> Result<ConcreteEnvironment> {
+    ) -> Result<ConcreteEnvironment, EnvironmentSelectError> {
         match self {
-            EnvironmentSelect::Dir(path) => open_path(flox, path),
+            EnvironmentSelect::Dir(path) => Ok(open_path(flox, path)?),
             // If the user doesn't specify an environment, check if there's an
             // already activated environment or an environment in the current
             // directory.
             EnvironmentSelect::Unspecified => match detect_environment(message)? {
-                Some(env) => env.into_concrete_environment(flox),
-                None => {
-                    let current_dir =
-                        env::current_dir().context("could not get current directory")?;
-                    Err(anyhow!(format!("No environment found in {current_dir:?}")))
-                },
+                Some(env) => Ok(env.into_concrete_environment(flox)?),
+                None => Err(EnvironmentSelectError::EnvNotFoundInCurrentDirectory)?,
             },
             EnvironmentSelect::Remote(env_ref) => {
                 let pointer = ManagedPointer::new(
@@ -561,7 +631,7 @@ impl EnvironmentSelect {
                     &flox.floxhub,
                 );
 
-                let env = RemoteEnvironment::new(flox, pointer)?;
+                let env = RemoteEnvironment::new(flox, pointer).map_err(anyhow::Error::new)?;
                 Ok(ConcreteEnvironment::Remote(env))
             },
         }
@@ -574,7 +644,9 @@ impl EnvironmentSelect {
 ///   inside a git repo.
 /// - Check if there's an already activated environment.
 /// - Prompt if both are true.
-pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironment>> {
+pub fn detect_environment(
+    message: &str,
+) -> Result<Option<UninitializedEnvironment>, EnvironmentSelectError> {
     let current_dir = env::current_dir().context("could not get current directory")?;
     let maybe_activated = last_activated_environment();
     let maybe_found_environment = find_dot_flox(&current_dir)?;
@@ -596,7 +668,8 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
             let found = UninitializedEnvironment::DotFlox(found);
 
             if !Dialog::can_prompt() {
-                bail!("can't determine whether to use {found} or {activated_env}");
+                debug!("No TTY detected, using the environment {found:?} found in the current directory or an ancestor directory");
+                return Ok(Some(found));
             }
 
             let dialog = Dialog {
@@ -609,7 +682,7 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
                     ],
                 },
             };
-            let (index, _) = dialog.raw_prompt()?;
+            let (index, _) = dialog.raw_prompt().map_err(anyhow::Error::new)?;
             match index {
                 0 => Some(found),
                 1 => Some(activated_env),
@@ -624,9 +697,8 @@ pub fn detect_environment(message: &str) -> Result<Option<UninitializedEnvironme
 }
 
 /// Open an environment defined in `{path}/.flox`
-fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment> {
+fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError2> {
     DotFlox::open(path)
-        .with_context(|| format!("No environment found in {path:?}"))
         .map(UninitializedEnvironment::DotFlox)?
         .into_concrete_environment(flox)
 }
@@ -708,7 +780,10 @@ impl UninitializedEnvironment {
     /// Open the contained environment and return a [ConcreteEnvironment]
     ///
     /// This function will fail if the contained environment is not available or invalid
-    pub fn into_concrete_environment(self, flox: &Flox) -> Result<ConcreteEnvironment> {
+    pub fn into_concrete_environment(
+        self,
+        flox: &Flox,
+    ) -> Result<ConcreteEnvironment, EnvironmentError2> {
         match self {
             UninitializedEnvironment::DotFlox(dot_flox) => {
                 let dot_flox_path = dot_flox.path.join(DOT_FLOX);
@@ -847,10 +922,10 @@ fn activated_environments() -> ActiveEnvironments {
     match ActiveEnvironments::from_str(&flox_active_environments_var) {
         Ok(active_environments) => active_environments,
         Err(e) => {
-            error!(
-                "Could not parse FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
+            message::error(format!(
+                "Could not parse _FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
                 e
-            );
+            ));
             ActiveEnvironments::default()
         },
     }
@@ -923,7 +998,7 @@ pub(super) async fn ensure_environment_trust(
         Thus, environments need to be trusted to be activated."};
 
     if Dialog::can_prompt() {
-        info!("{message}");
+        message::warning(message);
     } else {
         bail!("{message}")
     }

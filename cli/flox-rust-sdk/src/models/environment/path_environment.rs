@@ -25,6 +25,7 @@ use super::core_environment::CoreEnvironment;
 use super::{
     copy_dir_recursive,
     CanonicalPath,
+    CanonicalizeError,
     EditResult,
     Environment,
     EnvironmentError2,
@@ -81,7 +82,13 @@ impl PathEnvironment {
         pointer: PathPointer,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError2> {
-        let dot_flox_path = CanonicalPath::new(dot_flox_path)?;
+        let dot_flox_path =
+            CanonicalPath::new(dot_flox_path).map_err(|CanonicalizeError { path, err }| {
+                EnvironmentError2::InvalidDotFlox {
+                    path,
+                    source: Box::new(err),
+                }
+            })?;
 
         if &*dot_flox_path == Path::new("/") {
             return Err(EnvironmentError2::InvalidPath(
@@ -91,7 +98,7 @@ impl PathEnvironment {
 
         let env_path = dot_flox_path.join(ENV_DIR_NAME);
         if !env_path.exists() {
-            Err(EnvironmentError2::EnvNotFound)?;
+            Err(EnvironmentError2::EnvDirNotFound)?;
         }
 
         if !env_path.join(MANIFEST_FILENAME).exists() {
@@ -270,7 +277,9 @@ impl Environment for PathEnvironment {
         if Some(OsStr::new(".flox")) == dot_flox.file_name() {
             std::fs::remove_dir_all(dot_flox).map_err(EnvironmentError2::DeleteEnvironment)?;
         } else {
-            return Err(EnvironmentError2::DotFloxNotFound);
+            return Err(EnvironmentError2::DotFloxNotFound(
+                self.path.parent().unwrap_or(&self.path).to_path_buf(),
+            ));
         }
         Ok(())
     }
@@ -319,7 +328,9 @@ impl PathEnvironment {
         let dot_flox = dot_flox_path.as_ref();
         log::debug!("attempting to open .flox directory: {}", dot_flox.display());
         if !dot_flox.exists() {
-            Err(EnvironmentError2::DotFloxNotFound)?;
+            Err(EnvironmentError2::DotFloxNotFound(
+                dot_flox.parent().unwrap_or(dot_flox).to_path_buf(),
+            ))?;
         }
 
         PathEnvironment::new(dot_flox, pointer, temp_dir)
@@ -336,7 +347,7 @@ impl PathEnvironment {
     ) -> Result<Self, EnvironmentError2> {
         let system: &str = system.as_ref();
         match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
-            Err(EnvironmentError2::EnvNotFound) => {},
+            Err(EnvironmentError2::DotFloxNotFound(_)) => {},
             Err(e) => Err(e)?,
             Ok(_) => Err(EnvironmentError2::EnvironmentExists(
                 dot_flox_parent_path.as_ref().to_path_buf(),
@@ -361,10 +372,10 @@ impl PathEnvironment {
             manifest_path.display(),
             system
         );
-        let contents = fs::read_to_string(&manifest_path).map_err(EnvironmentError2::ManifestEdit);
+        let contents = fs::read_to_string(&manifest_path).map_err(EnvironmentError2::ReadManifest);
         if let Err(e) = contents {
             debug!("couldn't open manifest to replace placeholder system");
-            fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::ManifestEdit)?;
+            fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
             return Err(e);
         }
         let contents = contents.unwrap();
@@ -374,7 +385,7 @@ impl PathEnvironment {
             contents != replaced
         );
         let write_res =
-            fs::write(&manifest_path, replaced).map_err(EnvironmentError2::ManifestEdit);
+            fs::write(&manifest_path, replaced).map_err(EnvironmentError2::WriteManifest);
         if let Err(e) = write_res {
             debug!("overwriting manifest did not complete successfully");
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
@@ -445,7 +456,7 @@ mod tests {
         );
 
         assert!(
-            matches!(before, Err(EnvironmentError2::EnvNotFound)),
+            matches!(before, Err(EnvironmentError2::EnvDirNotFound)),
             "{before:?}"
         );
 

@@ -77,7 +77,7 @@ int
 BuildEnvCommand::run()
 {
 
-  flox::debugLog( "lockfile: " + this->lockfileContent.dump( 2 ) );
+  debugLog( "lockfile: " + this->lockfileContent.dump( 2 ) );
 
   resolver::LockfileRaw lockfileRaw = this->lockfileContent;
   auto lockfile = resolver::Lockfile( std::move( lockfileRaw ) );
@@ -114,7 +114,7 @@ BuildEnvCommand::run()
   /* Print the resulting store path */
   nlohmann::json result
     = { { "store_path", store->printStorePath( storePath ) } };
-  std::cout << result.dump() << std::endl;
+  std::cout << result.dump() << '\n';
 
   return EXIT_SUCCESS;
 }

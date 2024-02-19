@@ -24,7 +24,6 @@
 #include <nix/globals.hh>
 #include <nlohmann/json.hpp>
 
-#include "compat/concepts.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/core/types.hh"
 
@@ -170,7 +169,7 @@ struct PkgQueryArgs
  *              JSON object.
  */
 void
-to_json( nlohmann::json & jto, const PkgQueryArgs & descriptor );
+to_json( nlohmann::json & jto, const PkgQueryArgs & args );
 
 
 /* -------------------------------------------------------------------------- */

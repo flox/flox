@@ -89,8 +89,8 @@ jq_edit() {
 @test "'pkgdb manifest lock' impossible group" {
   setup_project
 
-  jq_edit manifest.json '.install.nodejsOld|=del( .["package-group"] )
-                         |.install.nodejsNew|=del( .["package-group"] )'
+  jq_edit manifest.json '.install.nodejsOld|=del( .["pkg-group"] )
+                         |.install.nodejsNew|=del( .["pkg-group"] )'
 
   run sh -c '$PKGDB_BIN manifest lock --manifest manifest.json > manifest.lock;'
   assert_failure
@@ -104,7 +104,7 @@ jq_edit() {
 @test "'pkgdb manifest lock' groups with no previous lock" {
   setup_project
 
-  jq_edit manifest.json '.install.nodejsNew|=del( .["package-group"] )'
+  jq_edit manifest.json '.install.nodejsNew|=del( .["pkg-group"] )'
 
   run sh -c '$PKGDB_BIN manifest lock --manifest manifest.json > manifest.lock;'
   assert_success
@@ -173,7 +173,7 @@ jq_edit() {
   run sh -c '$PKGDB_BIN manifest lock --lockfile manifest.lock --manifest manifest.json  \
                |tee manifest.lock3;'
   assert_success
-  assert_output --partial "upgrading group \`default'"
+  assert_output --partial "upgrading group 'default'"
   # Ensure we didn't produce an error.
   run jq -r '.category_message' manifest.lock3
   assert_output "null"
@@ -188,7 +188,7 @@ jq_edit() {
   setup_project
 
   jq_edit manifest.json '.install|=del( .nodejs )
-                         |.install.nodejsNew|=del( .["package-group"] )'
+                         |.install.nodejsNew|=del( .["pkg-group"] )'
 
   run sh -c '$PKGDB_BIN manifest lock --manifest manifest.json|tee manifest.lock;'
   assert_success

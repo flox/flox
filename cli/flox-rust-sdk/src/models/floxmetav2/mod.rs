@@ -7,7 +7,7 @@ use url::Url;
 use super::environment::managed_environment::remote_branch_name;
 use super::environment::ManagedPointer;
 use super::environment_ref::EnvironmentOwner;
-use crate::flox::{Flox, Floxhub, FloxhubToken};
+use crate::flox::{Flox, Floxhub, FloxhubError, FloxhubToken};
 use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandOpenError,
@@ -26,14 +26,11 @@ pub struct FloxmetaV2 {
 
 #[derive(Error, Debug)]
 pub enum FloxmetaV2Error {
-    #[error("No login token provided")]
-    LoggedOut,
     #[error("floxmeta for {0} not found")]
     NotFound(String),
-    #[error("Currently only hub.flox.dev is supported as a remote")]
-    UnsupportedRemote,
     #[error("Could not open user environment directory {0}")]
     Open(GitCommandOpenError),
+
     #[error("Failed to check for branch: {0}")]
     CheckForBranch(GitCommandBranchHashError),
     #[error("Failed to fetch environment: {0}")]
@@ -41,8 +38,8 @@ pub enum FloxmetaV2Error {
     #[error("Failed to clone environment: {0}")]
     CloneBranch(GitRemoteCommandError),
 
-    #[error("invalid floxhub base url")]
-    InvalidFloxhubBaseUrl(#[from] url::ParseError),
+    #[error(transparent)]
+    FloxhubError(FloxhubError),
 }
 
 impl FloxmetaV2 {
@@ -61,16 +58,15 @@ impl FloxmetaV2 {
     ) -> Result<Self, FloxmetaV2Error> {
         let token = flox.floxhub_token.as_ref();
 
-        let mut floxhub = Floxhub::new(pointer.floxhub_url.to_owned());
-        if let Some(git_url_override) = &pointer.floxhub_git_url_override {
-            floxhub.set_git_url_override(git_url_override.clone());
-        }
+        let floxhub = Floxhub::new(
+            pointer.floxhub_url.to_owned(),
+            pointer.floxhub_git_url_override.clone(),
+        )
+        .map_err(FloxmetaV2Error::FloxhubError)?;
 
-        let git_url = floxhub
-            .git_url()
-            .map_err(FloxmetaV2Error::InvalidFloxhubBaseUrl)?;
+        let git_url = floxhub.git_url();
 
-        let git_options = floxmeta_git_options(&git_url, &pointer.owner, token);
+        let git_options = floxmeta_git_options(git_url, &pointer.owner, token);
         let branch = remote_branch_name(pointer);
 
         let git = GitCommandProvider::clone_branch_with(
@@ -116,16 +112,15 @@ impl FloxmetaV2 {
     ) -> Result<Self, FloxmetaV2Error> {
         let token = flox.floxhub_token.as_ref();
 
-        let mut floxhub = Floxhub::new(pointer.floxhub_url.to_owned());
-        if let Some(git_url_override) = &pointer.floxhub_git_url_override {
-            floxhub.set_git_url_override(git_url_override.clone());
-        }
+        let floxhub = Floxhub::new(
+            pointer.floxhub_url.to_owned(),
+            pointer.floxhub_git_url_override.clone(),
+        )
+        .map_err(FloxmetaV2Error::FloxhubError)?;
 
-        let git_url = floxhub
-            .git_url()
-            .map_err(FloxmetaV2Error::InvalidFloxhubBaseUrl)?;
+        let git_url = floxhub.git_url();
 
-        let git_options = floxmeta_git_options(&git_url, &pointer.owner, token);
+        let git_options = floxmeta_git_options(git_url, &pointer.owner, token);
 
         if !user_floxmeta_dir.as_ref().exists() {
             Err(FloxmetaV2Error::NotFound(pointer.owner.to_string()))?
@@ -160,16 +155,15 @@ impl FloxmetaV2 {
     ) -> Result<Self, FloxmetaV2Error> {
         let token = flox.floxhub_token.as_ref();
 
-        let mut floxhub = Floxhub::new(pointer.floxhub_url.to_owned());
-        if let Some(git_url_override) = &pointer.floxhub_git_url_override {
-            floxhub.set_git_url_override(git_url_override.clone());
-        }
+        let floxhub = Floxhub::new(
+            pointer.floxhub_url.to_owned(),
+            pointer.floxhub_git_url_override.clone(),
+        )
+        .map_err(FloxmetaV2Error::FloxhubError)?;
 
-        let git_url = floxhub
-            .git_url()
-            .map_err(FloxmetaV2Error::InvalidFloxhubBaseUrl)?;
+        let git_url = floxhub.git_url();
 
-        let git_options = floxmeta_git_options(&git_url, &pointer.owner, token);
+        let git_options = floxmeta_git_options(git_url, &pointer.owner, token);
 
         let git = GitCommandProvider::init_with(git_options, user_floxmeta_dir, false).unwrap();
         git.rename_branch(&remote_branch_name(pointer)).unwrap();
@@ -281,9 +275,11 @@ mod tests {
         let (flox, tempdir) = flox_instance();
         let source_path = tempdir.path().join("source");
 
-        let mut floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone());
-
-        floxhub.set_git_url_override(Url::from_directory_path(&source_path).unwrap());
+        let floxhub = Floxhub::new(
+            DEFAULT_FLOXHUB_URL.clone(),
+            Some(Url::from_directory_path(&source_path).unwrap()),
+        )
+        .unwrap();
 
         let pointer = ManagedPointer::new(
             "floxtest".parse().unwrap(),

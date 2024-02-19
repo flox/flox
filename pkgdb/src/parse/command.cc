@@ -51,7 +51,7 @@ DescriptorCommand::run()
     }
   else
     {
-      throw flox::FloxException( "unrecognized format: `" + this->format
+      throw flox::FloxException( "unrecognized format: '" + this->format
                                  + "'" );
       return EXIT_FAILURE;
     }
@@ -79,7 +79,7 @@ ParseCommand::run()
       return this->cmdDescriptor.run();
     }
   std::cerr << this->parser << std::endl;
-  throw flox::FloxException( "You must provide a valid `parse' subcommand" );
+  throw flox::FloxException( "You must provide a valid 'parse' subcommand" );
   return EXIT_FAILURE;
 }
 

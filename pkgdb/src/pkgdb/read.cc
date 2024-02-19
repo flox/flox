@@ -26,21 +26,6 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
-bool
-isSQLError( int rcode )
-{
-  switch ( rcode )
-    {
-      case SQLITE_OK:
-      case SQLITE_ROW:
-      case SQLITE_DONE: return false; break;
-      default: return true; break;
-    }
-}
-
-
-/* -------------------------------------------------------------------------- */
-
 std::ostream &
 operator<<( std::ostream & oss, const SqlVersions & versions )
 {
@@ -102,10 +87,7 @@ void
 PkgDbReadOnly::connect()
 {
   this->db.connect( this->dbPath.string().c_str(), SQLITE_OPEN_READONLY );
-  /* Just try to execute any query to see if it blocks, which would mean that
-   * someone else has the database lock. */
-  std::string qry = "select * from DbVersions";
-  RETRY_WHILE_BUSY( this->db.execute( qry ) );
+  this->db.set_busy_timeout( DB_BUSY_TIMEOUT );
 }
 
 
@@ -313,7 +295,7 @@ PkgDbReadOnly::getAttrSetPath( row_id row )
       /* Handle no such path. */
       if ( itr == qry.end() )
         {
-          throw PkgDbException( nix::fmt( "No such `AttrSet.id' %llu.", row ) );
+          throw PkgDbException( nix::fmt( "No such 'AttrSet.id' %llu.", row ) );
         }
       row = ( *itr ).get<long long>( 0 );
       path.push_front( ( *itr ).get<std::string>( 1 ) );
@@ -364,7 +346,7 @@ PkgDbReadOnly::getPackagePath( row_id row )
   /* Handle no such path. */
   if ( itr == qry.end() )
     {
-      throw PkgDbException( nix::fmt( "No such `Packages.id' %llu.", row ) );
+      throw PkgDbException( nix::fmt( "No such 'Packages.id' %llu.", row ) );
     }
   flox::AttrPath path = this->getAttrSetPath( ( *itr ).get<long long>( 0 ) );
   path.emplace_back( ( *itr ).get<std::string>( 1 ) );
@@ -393,14 +375,14 @@ PkgDbReadOnly::getPackage( row_id row )
       , 'version',     version
       , 'description', Descriptions.description
       , 'license',     license
-      , 'broken',      iif( ( broken IS NULL )
-                          , json( 'null' )
-                          , iif( broken, json( 'true' ), json( 'false' ) )
-                          )
-      , 'unfree',      iif( ( unfree IS NULL )
-                          , json( 'null' )
-                          , iif( unfree, json( 'true' ), json( 'false' ) )
-                          )
+      , 'broken',      CASE WHEN broken IS NULL THEN json( 'null' )
+                            WHEN broken         THEN json( 'true' )
+                                                ELSE json( 'false' )
+                       END
+      , 'unfree',      CASE WHEN unfree IS NULL THEN json( 'null' )
+                            WHEN unfree         THEN json( 'true' )
+                                                ELSE json( 'false' )
+                       END
       ) AS json
       FROM Packages
            LEFT JOIN Descriptions ON ( descriptionId = Descriptions.id )

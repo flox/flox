@@ -12,6 +12,7 @@
 
 #include <nix/command.hh>
 #include <nix/derivations.hh>
+#include <nix/derived-path.hh>
 #include <nix/eval-inline.hh>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
@@ -58,7 +59,7 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-static const std::string BASH_ACTIVATE_SCRIPT = R"(
+const char * const BASH_ACTIVATE_SCRIPT = R"(
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
 if [ -f ~/.bashrc -a "${FLOX_SOURCED_FROM_SHELL_RC:-}" != 1 ]
@@ -79,7 +80,7 @@ fi
 
 
 // unlike bash, zsh activation calls this script from the user's shell rcfile
-static const std::string ZSH_ACTIVATE_SCRIPT = R"(
+const char * const ZSH_ACTIVATE_SCRIPT = R"(
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _prof_scripts;
   _prof_scripts=( $(
@@ -93,7 +94,7 @@ fi
 
 /* -------------------------------------------------------------------------- */
 
-static const nix::StorePath
+static nix::StorePath
 addDirToStore( nix::EvalState &    state,
                std::string const & dir,
                nix::StorePathSet & references )
@@ -128,7 +129,7 @@ addDirToStore( nix::EvalState &    state,
 
 /* -------------------------------------------------------------------------- */
 
-const nix::StorePath
+nix::StorePath
 createEnvironmentStorePath(
   nix::EvalState &               state,
   std::vector<RealisedPackage> & pkgs,
@@ -140,28 +141,25 @@ createEnvironmentStorePath(
   auto tempDir = nix::createTempDir();
   try
     {
-      buildenv::buildEnvironment( tempDir, std::move( pkgs ) );
+      buildenv::buildEnvironment( tempDir, pkgs );
     }
-  catch ( buildenv::BuildEnvFileConflictError & err )
+  catch ( buildenv::FileConflict & err )
     {
-      auto [storePathA, filePath] = state.store->toStorePath( err.getFileA() );
-      auto [storePathB, _]        = state.store->toStorePath( err.getFileB() );
+      auto [storePathA, filePath] = state.store->toStorePath( err.fileA );
+      auto [storePathB, _]        = state.store->toStorePath( err.fileB );
 
       auto [nameA, packageA] = originalPackage.at( storePathA );
       auto [nameB, packageB] = originalPackage.at( storePathB );
 
 
-      throw FloxException(
-        "environment error",
-        "failed to build environment",
-        nix::fmt(
-          "file conflict between packages '%s' and '%s' at '%s'"
-          "\n\n\tresolve by setting the priority of the preferred package "
-          "to a value lower than '%d'",
-          nameA,
-          nameB,
-          filePath,
-          err.getPriority() ) );
+      throw PackageConflictException( nix::fmt(
+        "'%s' conflicts with '%s'. Both packages provide the file '%s'"
+        "\n\nResolve by setting the priority of the preferred package "
+        "to a value lower than '%d'",
+        nameA,
+        nameB,
+        filePath,
+        err.priority ) );
     }
   return addDirToStore( state, tempDir, references );
 }
@@ -169,14 +167,14 @@ createEnvironmentStorePath(
 /* -------------------------------------------------------------------------- */
 
 static nix::Attr
-extractAttrPath( nix::EvalState & state,
-                 nix::Value &     vFlake,
-                 flox::AttrPath   attrPath )
+extractAttrPath( nix::EvalState &       state,
+                 nix::Value &           vFlake,
+                 const flox::AttrPath & attrPath )
 {
   state.forceAttrs( vFlake, nix::noPos, "while parsing flake" );
 
 
-  auto output = vFlake.attrs->get( state.symbols.create( "outputs" ) );
+  auto * output = vFlake.attrs->get( state.symbols.create( "outputs" ) );
 
   for ( auto attrName : attrPath )
     {
@@ -184,13 +182,14 @@ extractAttrPath( nix::EvalState & state,
                         output->pos,
                         "while parsing cached flake data" );
 
-      auto next = output->value->attrs->get( state.symbols.create( attrName ) );
+      auto * next
+        = output->value->attrs->get( state.symbols.create( attrName ) );
 
-      if ( ! next )
+      if ( next == nullptr )
         {
           std::ostringstream str;
           output->value->print( state.symbols, str );
-          throw FloxException( "attribute `%s' not found in set `%s'",
+          throw FloxException( "attribute '%s' not found in set '%s'",
                                attrName,
                                str.str() );
         }
@@ -202,7 +201,8 @@ extractAttrPath( nix::EvalState & state,
 
 
 /* -------------------------------------------------------------------------- */
-
+// TODO: this function is too long, break it up
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 nix::StorePath
 createFloxEnv( nix::EvalState &     state,
                resolver::Lockfile & lockfile,
@@ -224,7 +224,7 @@ createFloxEnv( nix::EvalState &     state,
     {
       if ( ! package.second.has_value() ) { continue; }
       auto const & locked_package = package.second.value();
-      locked_packages.push_back( { package.first, locked_package } );
+      locked_packages.emplace_back( package.first, locked_package );
     }
 
   /* Extract derivations */
@@ -242,7 +242,7 @@ createFloxEnv( nix::EvalState &     state,
                                                  packageInputRef,
                                                  nix::flake::LockFlags {} );
 
-      auto vFlake = state.allocValue();
+      auto * vFlake = state.allocValue();
       nix::flake::callFlake( state, packageFlake, *vFlake );
 
       /* Get referenced output. */
@@ -253,12 +253,38 @@ createFloxEnv( nix::EvalState &     state,
 
       if ( ! package_drv.has_value() )
         {
-          throw FloxException( "Failed to get derivation for package `"
-                               + nlohmann::json( package ).dump() + "'" );
+          throw PackageEvalFailure( "Failed to get derivation for package '"
+                                    + nlohmann::json( package ).dump() + "'" );
         }
 
-      auto packagePath
-        = state.store->printStorePath( package_drv->queryOutPath() );
+      std::string packagePath;
+      try
+        {
+          packagePath
+            = state.store->printStorePath( package_drv->queryOutPath() );
+        }
+      catch ( const nix::Error & e )
+        {
+
+          if ( e.info().msg.str().find(
+                 "is not available on the requested hostPlatform:" )
+               != std::string::npos )
+            {
+              throw PackageUnsupportedSystem(
+                nix::fmt(
+                  "package '%s' is not available for this system ('%s')",
+                  pId,
+                  system ),
+
+                nix::filterANSIEscapes( e.what(), true ) );
+            }
+
+          // rethrow the original root cause without the nix trace
+          throw PackageEvalFailure(
+            nix::fmt( "package '%s' failed to evaluate", pId ),
+            e.info().msg.str() );
+        };
+
 
       /* Collect all outputs to include in the environment.
        *
@@ -285,14 +311,23 @@ createFloxEnv( nix::EvalState &     state,
       /* Collect drvs that may yet need to be built. */
       if ( auto drvPath = package_drv->queryDrvPath() )
         {
-          drvsToBuild.push_back( nix::StorePathWithOutputs { *drvPath, {} } );
+          /* Build derivation of pacakge in environment,
+           * rethrow errors as PackageBuildFailure. */
+          try
+            {
+              auto storePathWithOutputs
+                = nix::StorePathWithOutputs { *drvPath, {} };
+              state.store->buildPaths(
+                nix::toDerivedPaths( { storePathWithOutputs } ) );
+            }
+          catch ( const nix::Error & e )
+            {
+              throw PackageBuildFailure(
+                "Failed to build package '" + pId + "'",
+                nix::filterANSIEscapes( e.what(), true ) );
+            }
         }
     }
-
-  // TODO: check if this builds `outputsToInstall` only
-  // TODO: do we need to honor repair flag? state.repair ? bmRepair : bmNormal
-  /* Build derivations that make up the environment */
-  state.store->buildPaths( nix::toDerivedPaths( drvsToBuild ) );
 
   /* verbatim content of the activate script common to all shells */
   std::stringstream commonActivate;
@@ -314,15 +349,15 @@ createFloxEnv( nix::EvalState &     state,
            * to disable these variables dynamically expanding at runtime.
            *
            * 'foo''\\''bar' is evaluated as  foo'bar  in bash/zsh*/
-          size_t i = 0;
-          while ( ( i = value.find( "'", i ) ) != std::string::npos )
+          size_t indexOfQuoteChar = 0;
+          while ( ( indexOfQuoteChar = value.find( '\'', indexOfQuoteChar ) )
+                  != std::string::npos )
             {
-              value.replace( i, 1, "'\\''" );
-              i += 4;
+              value.replace( indexOfQuoteChar, 1, "'\\''" );
+              indexOfQuoteChar += 4;
             }
 
-          commonActivate << nix::fmt( "export %s='%s'", name, value )
-                         << std::endl;
+          commonActivate << nix::fmt( "export %s='%s'\n", name, value );
         }
     }
 
@@ -357,8 +392,7 @@ createFloxEnv( nix::EvalState &     state,
           std::filesystem::permissions( tempDir / "activate" / "hook.sh",
                                         std::filesystem::perms::owner_exec,
                                         std::filesystem::perm_options::add );
-          commonActivate << "source \"$FLOX_ENV/activate/hook.sh\""
-                         << std::endl;
+          commonActivate << "source \"$FLOX_ENV/activate/hook.sh\"" << '\n';
         }
     }
 
@@ -403,40 +437,48 @@ createFloxEnv( nix::EvalState &     state,
 
   return createEnvironmentStorePath( state, pkgs, references, originalPackage );
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 
 nix::StorePath
-createContainerBuilder( nix::EvalState & state,
-                        nix::StorePath   environmentStorePath,
-                        const System &   system )
+createContainerBuilder( nix::EvalState &       state,
+                        const nix::StorePath & environmentStorePath,
+                        const System &         system )
 {
   static const nix::FlakeRef nixpkgsRef
     = nix::parseFlakeRef( COMMON_NIXPKGS_URL );
 
+  auto getFlake = [&]()
+  {
+    auto lockedNixpkgs
+      = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
+  };
+  ensureFlakeIsDownloaded( getFlake );
   auto lockedNixpkgs
     = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
-  nix::Value vNixpkgsFlake;
+
+  nix::Value vNixpkgsFlake {};
   nix::flake::callFlake( state, lockedNixpkgs, vNixpkgsFlake );
 
   state.store->ensurePath(
     state.store->parseStorePath( CONTAINER_BUILDER_PATH ) );
 
-  nix::Value vContainerBuilder;
+  nix::Value vContainerBuilder {};
   state.eval(
     state.parseExprFromFile( nix::CanonPath( CONTAINER_BUILDER_PATH ) ),
     vContainerBuilder );
 
-  nix::Value vEnvironmentStorePath;
+  nix::Value vEnvironmentStorePath {};
   auto       sStorePath = state.store->printStorePath( environmentStorePath );
   vEnvironmentStorePath.mkPath( sStorePath.c_str() );
 
-  nix::Value vSystem;
+  nix::Value vSystem {};
   vSystem.mkString( nix::nativeSystem );
 
-  nix::Value vContainerSystem;
+  nix::Value vContainerSystem {};
   vContainerSystem.mkString( system );
 
-  nix::Value vBindings;
+  nix::Value vBindings {};
   auto       bindings = state.buildBindings( 4 );
   bindings.push_back(
     { state.symbols.create( "nixpkgsFlake" ), &vNixpkgsFlake } );
@@ -448,7 +490,7 @@ createContainerBuilder( nix::EvalState & state,
 
   vBindings.mkAttrs( bindings );
 
-  nix::Value vContainerBuilderDrv;
+  nix::Value vContainerBuilderDrv {};
   state.callFunction( vContainerBuilder,
                       vBindings,
                       vContainerBuilderDrv,

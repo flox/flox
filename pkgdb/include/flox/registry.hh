@@ -19,7 +19,6 @@
 #include <nix/flake/flakeref.hh>
 #include <nlohmann/json.hpp>
 
-#include "compat/concepts.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/core/types.hh"
 #include "flox/core/util.hh"
@@ -655,6 +654,9 @@ public:
   [[nodiscard]] nix::ref<FloxFlake>
   getFlake();
 
+  /** @brief Release @a flox::FloxFlakeInput::flake member. */
+  void
+  freeFlake();
 
   /**
    * @brief Get a list of enabled subtrees.

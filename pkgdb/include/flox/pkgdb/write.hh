@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <stack>
 #include <tuple>
 
 #include "flox/pkgdb/read.hh"
@@ -23,8 +24,11 @@ namespace flox::pkgdb {
 /** @brief A set of arguments used by @a flox::pkgdb::PkgDb::scrape. */
 using Target = std::tuple<flox::AttrPath, flox::Cursor, row_id>;
 
-/** @brief A queue of @a flox::pkgdb::Target to be completed. */
-using Todos = std::queue<Target, std::list<Target>>;
+/**
+ * @brief A stack of @a flox::pkgdb::Target to be completed.
+ * A stack is used to promote depth-first processing.
+ */
+using Todos = std::stack<Target, std::list<Target>>;
 
 
 /* -------------------------------------------------------------------------- */
@@ -201,18 +205,12 @@ public:
    * @param attrName The name of the attribute name to be added ( last element
    *                 of the attribute path ).
    * @param cursor An attribute cursor to scrape data from.
-   * @param replace Whether to replace/ignore existing rows.
-   * @param checkDrv Whether to check `isDerivation` for @a cursor.
-   *                 Skipping this check is a slight optimization for cases
-   *                 where the caller has already checked themselves.
    * @return The `Packages.id` value for the added package.
    */
   row_id
   addPackage( row_id               parentId,
               std::string_view     attrName,
-              const flox::Cursor & cursor,
-              bool                 replace  = false,
-              bool                 checkDrv = true );
+              const flox::Cursor & cursor );
 
   /* Updates */
 
@@ -237,16 +235,24 @@ public:
   /**
    * @brief Scrape package definitions from an attribute set.
    *
-   * Adds any attributes marked with `recurseForDerivatsions = true` to
-   * @a todo list.
+   * Processes a subset of the attribute set rooted at @a target.
+   * The child attributes are chunked into pages of size @a pageSize, and
+   * the @a pageIdx -th page is processed in this invocation.  Attributes are
+   * processed depth first so the page is gauraunteed to be fully processed on
+   * a clean return.
+   *
    * @param syms Symbol table from @a cursor evaluator.
    * @param target A tuple containing the attribute path to scrape, a cursor,
    *               and a SQLite _row id_.
-   * @param todo Queue to add `recurseForDerivations = true` cursors to so
-   *             they may be scraped by later invocations.
+   * @param pageSize The size of chunks to process at a time.
+   * @param pageIdx The specific page to process in this invocation.
+   * @return True if the entire attribute set has been processed.
    */
-  void
-  scrape( nix::SymbolTable & syms, const Target & target, Todos & todo );
+  bool
+  scrape( nix::SymbolTable & syms,
+          const Target &     target,
+          std::size_t        pageSize,
+          std::size_t        pageIdx );
 
 
 }; /* End class `PkgDb' */

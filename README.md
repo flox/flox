@@ -51,9 +51,9 @@ Install packages from [the biggest open source repository
 (nixpkgs)][post-nixpkgs] that contains **more that 80.000 packages**.
 
 With `flox` you can:<br/>
-&rarr; [Create composable environments](https://flox.dev/docs/tutorials/projects)<br/>
-&rarr; [Share your environments with others](https://flox.dev/docs/cookbook/managed-environments/#share-an-environment)<br/>
-&rarr; [Build container images](https://flox.dev/docs/tutorials/build-container-images)<br/>
+&rarr; [Create environments](https://flox.dev/docs/tutorials/creating-environments)<br/>
+&rarr; [Share your environments with others](https://flox.dev/docs/tutorials/sharing-environments)<br/>
+&rarr; [Build container images](https://flox.dev/docs/tutorials/sharing-environments/#sharing-with-containers)<br/>
 &rarr; [... and much more][docs]<br/>
 
 <div align="center">
@@ -112,9 +112,9 @@ The flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
 [website]: https://flox.dev
 [discourse]: https://discourse.flox.dev
 [nix]: https://nixos.org
-[basics]:https://flox.dev/docs/basics
+[basics]:https://flox.dev/docs
 [share-envs]: https://flox.dev/docs/share-environments
-[images]: https://flox.dev/docs/build-container-images
+[images]: docs/tutorials/sharing-environments/#sharing-with-containers
 [docs]: https://flox.dev/docs
 [twitter]: https://twitter.com/floxdevelopment
 [matrix]: https://matrix.to/#/#flox:matrix.org

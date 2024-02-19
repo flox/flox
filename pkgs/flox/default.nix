@@ -6,6 +6,7 @@
   makeBinaryWrapper,
   flox-pkgdb,
   flox-cli,
+  flox-manpages,
 }: let
   # Inherit version from Cargo.toml, aligning with the CLI version.
   # We also inject some indication about the `git' revision of the repository.
@@ -17,14 +18,18 @@
   revCountDiff = self.revCount - inputs.flox-latest.revCount;
   suffix =
     if self ? revCount && self ? shortRev
-    then "${builtins.toString revCountDiff}-g${self.shortRev}"
-    else "dirty";
-  version = "${cargoToml.package.version}-${suffix}";
+    then
+      if revCountDiff == 0
+      then ""
+      else "-${builtins.toString revCountDiff}-g${self.shortRev}"
+    else "-dirty";
+  version = "${cargoToml.package.version}${suffix}";
 in
   symlinkJoin {
     name = "${flox-cli.pname}-${version}";
+    inherit version;
 
-    paths = [flox-cli];
+    paths = [flox-cli flox-manpages];
     nativeBuildInputs = [makeBinaryWrapper];
 
     postBuild = ''
