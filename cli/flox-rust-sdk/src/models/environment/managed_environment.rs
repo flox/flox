@@ -929,6 +929,13 @@ fn reverse_links_dir(flox: &Flox) -> PathBuf {
     flox.data_dir.join("links")
 }
 
+pub enum PullResult {
+    /// The environment was already up to date
+    UpToDate,
+    /// The environment was reset to the latest upstream version
+    Updated,
+}
+
 impl ManagedEnvironment {
     /// If access to a remote repository requires authentication,
     /// the floxhub token must be set in the flox instance.
@@ -1071,8 +1078,9 @@ impl ManagedEnvironment {
         Ok(())
     }
 
-    pub fn pull(&mut self, force: bool) -> Result<(), ManagedEnvironmentError> {
+    pub fn pull(&mut self, force: bool) -> Result<PullResult, ManagedEnvironmentError> {
         let sync_branch = remote_branch_name(&self.pointer);
+        let project_branch = branch_name(&self.pointer, &self.path);
 
         // Fetch the remote branch into the local sync branch.
         // The sync branch is always a reset to the remote branch
@@ -1089,10 +1097,17 @@ impl ManagedEnvironment {
             let consistent_history = self
                 .floxmeta
                 .git
-                .branch_contains_commit(&branch_name(&self.pointer, &self.path), &sync_branch)
+                .branch_contains_commit(&project_branch, &sync_branch)
                 .map_err(ManagedEnvironmentError::Git)?;
             if !consistent_history {
                 Err(ManagedEnvironmentError::Diverged)?;
+            }
+
+            let sync_branch_commit = self.floxmeta.git.branch_hash(&sync_branch).ok();
+            let project_branch_commit = self.floxmeta.git.branch_hash(&project_branch).ok();
+
+            if sync_branch_commit == project_branch_commit {
+                return Ok(PullResult::UpToDate);
             }
         }
 
@@ -1101,10 +1116,7 @@ impl ManagedEnvironment {
             .git
             .push_ref(
                 ".",
-                format!(
-                    "refs/heads/{sync_branch}:refs/heads/{project_branch}",
-                    project_branch = branch_name(&self.pointer, &self.path),
-                ),
+                format!("refs/heads/{sync_branch}:refs/heads/{project_branch}",),
                 force, // Set the force parameter to false or true based on your requirement
             )
             .map_err(ManagedEnvironmentError::ApplyUpdates)?;
@@ -1112,7 +1124,7 @@ impl ManagedEnvironment {
         // update the pointer lockfile
         self.lock_pointer()?;
 
-        Ok(())
+        Ok(PullResult::Updated)
     }
 }
 

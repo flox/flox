@@ -17,6 +17,7 @@ use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flo
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
+    PullResult,
 };
 use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
 use flox_rust_sdk::models::environment::{
