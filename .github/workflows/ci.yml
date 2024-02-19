@@ -67,6 +67,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -121,6 +122,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -181,6 +183,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -311,6 +314,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
