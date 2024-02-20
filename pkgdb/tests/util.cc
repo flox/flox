@@ -263,7 +263,7 @@ test_getAvailableMemory()
   // Result is in Kb, should reasonably expect this to be
   // >= 500mb and <= 128gb(?)
   EXPECT( flox::getAvailableSystemMemory() > 500 * 1024 );
-  EXPECT( flox::getAvailableSystemMemory() < 128 * 1024 * 0124 );
+  EXPECT( flox::getAvailableSystemMemory() < 128 * 1024 * 1024 );
 
   // Test available memory override
   auto memory = flox::getAvailableSystemMemory() / 2;
