@@ -60,7 +60,7 @@ ManifestDescriptorRaw::clear()
 /* -------------------------------------------------------------------------- */
 
 void
-ManifestDescriptorRaw::check( std::string iid ) const
+ManifestDescriptorRaw::check( const std::string & iid ) const
 {
   if ( this->absPath.has_value() )
     {
