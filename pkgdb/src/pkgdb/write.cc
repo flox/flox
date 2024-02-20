@@ -529,6 +529,7 @@ PkgDb::scrape( nix::SymbolTable & syms,
       if ( processAttrib( childCursor, prefix, parentId, aname, todo ) )
         {
           const auto [parentPrefix, _a, _b] = todo.top();
+          // NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while)
           do {
               const auto [prefix, cursor, parentId] = todo.top();
               todo.pop();
