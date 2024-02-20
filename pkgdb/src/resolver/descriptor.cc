@@ -553,6 +553,7 @@ validatedSingleAttr( const AttrPathGlob & attrs )
 bool
 globInAttrName( const AttrPathGlob & attrs )
 {
+  // NOLINTNEXTLINE(readability-use-anyofallof)
   for ( const std::optional<std::string> & attr : attrs )
     {
       if ( attr.has_value()
