@@ -407,7 +407,7 @@ RegistryCommand::run()
 
 /* -------------------------------------------------------------------------- */
 
-ManifestCommand::ManifestCommand() : parser( "manifest" ), cmdLock(), cmdDiff()
+ManifestCommand::ManifestCommand() : parser( "manifest" )
 {
   this->parser.add_description( "Manifest subcommands" );
   this->parser.add_subparser( this->cmdLock.getParser() );
