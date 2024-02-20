@@ -190,12 +190,10 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
                         "scraping failed: NixEvalException reported. "
                         "See child log for details." );
                     }
-                  else
-                    {
-                      throw PkgDbException(
-                        nix::fmt( "scraping failed: exit code %d",
-                                  WEXITSTATUS( status ) ) );
-                    }
+
+                  throw PkgDbException(
+                    nix::fmt( "scraping failed: exit code %d",
+                              WEXITSTATUS( status ) ) );
                 }
             }
           else
