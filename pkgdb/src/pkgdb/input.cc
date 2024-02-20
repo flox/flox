@@ -183,7 +183,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
                 }
               else  // ( WEXITSTATUS( status ) != EXIT_SUCCESS )
                 {
-                  scrapingComplete = true;
                   debugLog( "scrapePrefix: Child reports failure, aborting" );
                   if ( WEXITSTATUS( status ) == EXIT_FAILURE_NIX_EVAL )
                     {
@@ -201,7 +200,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
             }
           else
             {
-              scrapingComplete = true;
               throw PkgDbException(
                 nix::fmt( "scraping failed: abnormal child exit, signal: %d",
                           WTERMSIG( status ) ) );
