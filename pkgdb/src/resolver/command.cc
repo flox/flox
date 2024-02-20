@@ -281,15 +281,14 @@ UpgradeCommand::run()
                 }
               else
                 {
-                  throw FloxException(
-                    "'" + groupOrIID
-                    + "' is a package in a group with multiple packages.\n"
-                      "To upgrade the group, specify the group name:\n"
-                      "     $ flox upgrade "
-                    + groupName
-                    + "\n"
-                      "To upgrade all packages, run:\n"
-                      "     $ flox upgrade" );
+                  throw FloxException( nix::fmt(
+                    "'%s' is a package in a group with multiple packages.\n"
+                    "To upgrade the group, specify the group name:\n"
+                    "     $ flox upgrade %s\n"
+                    "To upgrade all packages, run:\n"
+                    "     $ flox upgrade",
+                    groupOrIID,
+                    groupName ) );
                 }
             }
           else
