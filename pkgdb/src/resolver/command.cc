@@ -40,7 +40,7 @@ LockCommand::run()
   nlohmann::json lockfile
     = this->getEnvironment().createLockfile().getLockfileRaw();
   /* Print that bad boii */
-  std::cout << lockfile.dump() << std::endl;
+  std::cout << lockfile.dump() << '\n';
   return EXIT_SUCCESS;
 }
 
@@ -119,7 +119,7 @@ int
 DiffCommand::run()
 {
   auto diff = this->getOldManifestRaw().diff( this->getManifestRaw() );
-  std::cout << diff.dump() << std::endl;
+  std::cout << diff.dump() << '\n';
   return EXIT_SUCCESS;
 }
 
@@ -210,7 +210,7 @@ UpdateCommand::run()
       lockfile = this->getEnvironment().createLockfile().getLockfileRaw();
     }
   /* Print that bad boii */
-  std::cout << lockfile.dump() << std::endl;
+  std::cout << lockfile.dump() << '\n';
 
   return EXIT_SUCCESS;
 }
@@ -343,7 +343,7 @@ UpgradeCommand::run()
   /* Print that bad boii */
   nlohmann::json result
     = { { "lockfile", newLockfile }, { "result", upgraded } };
-  std::cout << result.dump() << std::endl;
+  std::cout << result.dump() << '\n';
 
   return EXIT_SUCCESS;
 }
@@ -399,7 +399,7 @@ RegistryCommand::run()
       registries["lockfile-packages"] = nullptr;
     }
 
-  std::cout << registries.dump() << std::endl;
+  std::cout << registries.dump() << '\n';
   return EXIT_SUCCESS;
 }
 
@@ -442,7 +442,7 @@ ManifestCommand::run()
     {
       return this->cmdRegistry.run();
     }
-  std::cerr << this->parser << std::endl;
+  std::cerr << this->parser << '\n';
   throw flox::FloxException( "You must provide a valid 'manifest' subcommand" );
   return EXIT_FAILURE;
 }
