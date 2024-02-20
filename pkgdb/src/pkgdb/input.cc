@@ -145,6 +145,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   const size_t pageSize         = 5000;
   size_t       pageIdx          = 0;
 
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while)
   do {
       const int EXIT_CHILD_INCOMPLETE = EXIT_SUCCESS + 1;
       const int EXIT_FAILURE_NIX_EVAL
