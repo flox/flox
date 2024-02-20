@@ -576,7 +576,7 @@ validatedRelativePath( const AttrPathGlob &             attrs,
         "globs are only allowed to replace entire system names: '"
         + displayableGlobbedPath( attrs ) + "'" );
     }
-  else if ( attrs.size() < 2 )
+  if ( attrs.size() < 2 )
     {
       throw InvalidManifestDescriptorException(
         "relative paths must contain at least 2 attributes" );
