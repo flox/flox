@@ -480,9 +480,8 @@ PkgDb::scrape( nix::SymbolTable & syms,
             flox::AttrPath path = prefix;
             path.emplace_back( syms[aname] );
             row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
-            todo.emplace( std::make_tuple( std::move( path ),
-                                           std::move( childCursor ),
-                                           childId ) );
+            todo.emplace(
+              std::make_tuple( std::move( path ), childCursor, childId ) );
             return true;
           }
 
