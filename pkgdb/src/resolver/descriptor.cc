@@ -9,11 +9,11 @@
  * -------------------------------------------------------------------------- */
 
 #include <algorithm>
+#include <cstddef>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <regex>
-#include <stddef.h>
 #include <string>
 #include <string_view>
 #include <utility>
