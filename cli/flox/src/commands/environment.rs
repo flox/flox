@@ -1207,6 +1207,11 @@ impl Install {
     ) -> anyhow::Error {
         debug!("install error: {:?}", err);
 
+        subcommand_metric!(
+            "install",
+            "failed_packages" = packages.iter().map(|p| p.pkg_path.clone()).join(",")
+        );
+
         match err {
             // Try to make suggestions when a package isn't found
             EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
