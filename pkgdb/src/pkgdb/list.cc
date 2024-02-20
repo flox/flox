@@ -56,7 +56,7 @@ ListCommand::run()
       /* If the user explicitly gave a directory, throw an error. */
       if ( this->cacheDir.has_value() )
         {
-          std::cerr << "No such cachedir: " << cacheDir << std::endl;
+          std::cerr << "No such cachedir: " << cacheDir << '\n';
           return EXIT_FAILURE;
         }
       /* Otherwise "they just don't have any databases", so don't error out." */
@@ -69,7 +69,7 @@ ListCommand::run()
    * they didn't specify it explicitly. */
   if ( this->basenames && ( ! this->cacheDir.has_value() ) )
     {
-      std::cerr << "pkgdb cachedir: " << cacheDir.string() << std::endl;
+      std::cerr << "pkgdb cachedir: " << cacheDir.string() << '\n';
     }
 
   for ( const auto & entry : std::filesystem::directory_iterator( cacheDir ) )
@@ -88,7 +88,7 @@ ListCommand::run()
                           { "fingerprint",
                             db.fingerprint.to_string( nix::Base16, false ) } };
         }
-      else { std::cout << db.lockedRef.string << ' ' << dbPath << std::endl; }
+      else { std::cout << db.lockedRef.string << ' ' << dbPath << '\n'; }
     }
 
   return EXIT_SUCCESS;
