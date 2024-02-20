@@ -555,10 +555,10 @@ PkgQuery::str() const
   // Dump the bindings as well
   if ( ! this->binds.empty() )
     {
-      qry << std::endl << "-- ... with bindings:" << std::endl;
-      for ( auto & bind : this->binds )
+      qry << '\n' << "-- ... with bindings:" << '\n';
+      for ( const auto & bind : this->binds )
         {
-          qry << "-- " << bind.first << " : " << bind.second << std::endl;
+          qry << "-- " << bind.first << " : " << bind.second << '\n';
         }
     }
 
