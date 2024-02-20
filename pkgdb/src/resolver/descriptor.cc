@@ -570,13 +570,7 @@ validatedRelativePath( const AttrPathGlob &             attrs,
   // the system name, so there's no reason for a glob to be here at all.
   bool containsGlobbedAttr
     = std::find( attrs.begin(), attrs.end(), std::nullopt ) != attrs.end();
-  if ( containsGlobbedAttr )
-    {
-      throw InvalidManifestDescriptorException(
-        "globs are only allowed to replace entire system names: '"
-        + displayableGlobbedPath( attrs ) + "'" );
-    }
-  else if ( globInAttrName( attrs ) )
+  if ( containsGlobbedAttr || globInAttrName( attrs ) )
     {
       throw InvalidManifestDescriptorException(
         "globs are only allowed to replace entire system names: '"
