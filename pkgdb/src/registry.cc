@@ -421,6 +421,7 @@ RegistryRaw::operator==( const RegistryRaw & other ) const
 {
   if ( this->priority != other.priority ) { return false; }
   if ( this->defaults != other.defaults ) { return false; }
+  // NOLINTNEXTLINE(readability-use-anyofallof)
   for ( const auto & [key, value] : this->inputs )
     {
       try
