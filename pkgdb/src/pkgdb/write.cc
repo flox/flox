@@ -467,15 +467,15 @@ PkgDb::scrape( nix::SymbolTable & syms,
             this->addPackage( parentId, syms[aname], childCursor );
             return false;
           }
-        else if ( ! tryRecur ) { return false; }
-        else if ( auto maybe
-                  = childCursor->maybeGetAttr( "recurseForDerivations" );
-                  ( ( maybe != nullptr ) && maybe->getBool() )
-                  /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
-                   *      due to a bug in `nixpkgs' which doesn't set
-                   *      `recurseForDerivations' attribute correctly. */
-                  || ( ( prefix.front() == "legacyPackages" )
-                       && ( syms[aname] == "darwin" ) ) )
+        if ( ! tryRecur ) { return false; }
+
+        if ( auto maybe = childCursor->maybeGetAttr( "recurseForDerivations" );
+             ( ( maybe != nullptr ) && maybe->getBool() )
+             /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
+              *      due to a bug in `nixpkgs' which doesn't set
+              *      `recurseForDerivations' attribute correctly. */
+             || ( ( prefix.front() == "legacyPackages" )
+                  && ( syms[aname] == "darwin" ) ) )
           {
             flox::AttrPath path = prefix;
             path.emplace_back( syms[aname] );
@@ -485,7 +485,8 @@ PkgDb::scrape( nix::SymbolTable & syms,
                                            childId ) );
             return true;
           }
-        else { return false; }
+
+        return false;
       }
     catch ( const nix::EvalError & err )
       {
@@ -496,7 +497,7 @@ PkgDb::scrape( nix::SymbolTable & syms,
             nix::ignoreException( nix::lvlDebug );
             return false;
           }
-        else { throw; }
+        throw;
       }
   };
 
