@@ -25,6 +25,9 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+// Upstream nix code is using this pattern extensively,
+// lets not break the convention
 void
 prim_getFingerprint( nix::EvalState &  state,
                      const nix::PosIdx pos,
@@ -48,6 +51,7 @@ prim_getFingerprint( nix::EvalState &  state,
     flake.getFlake()->lockedFlake.getFingerprint().to_string( nix::Base16,
                                                               false ) );
 }
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
 
 
 /* -------------------------------------------------------------------------- */
