@@ -126,7 +126,8 @@ PkgDbInput::closeDbReadWrite()
 
 
 /* -------------------------------------------------------------------------- */
-
+// NOLINTBEGIN(readability-function-cognitive-complexity)
+// TODO: reduce complexity of this function
 void
 PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 {
@@ -268,7 +269,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
     }
   while ( ! scrapingComplete );
 }
-
+// NOLINTEND(readability-function-cognitive-complexity)
 
 /* -------------------------------------------------------------------------- */
 
