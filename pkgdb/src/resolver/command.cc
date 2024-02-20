@@ -246,6 +246,7 @@ UpgradeCommand::UpgradeCommand() : parser( "upgrade" )
 
 /* -------------------------------------------------------------------------- */
 
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 int
 UpgradeCommand::run()
 {
@@ -347,7 +348,7 @@ UpgradeCommand::run()
 
   return EXIT_SUCCESS;
 }
-
+// NOLINTEND(readability-function-cognitive-complexity)
 
 /* -------------------------------------------------------------------------- */
 
