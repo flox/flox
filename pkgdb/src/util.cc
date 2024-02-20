@@ -367,6 +367,19 @@ getAvailableSystemMemory()
 {
   long availableKb;
 
+  // Check and use environment override
+  const char * envVar   = "FLOX_AVAILABLE_MEMORY";
+  const char * envValue = std::getenv( envVar );
+  if ( envValue != nullptr && isUInt( envValue ) )
+    {
+      size_t envOverride = atoi( envValue );
+      verboseLog( nix::fmt(
+        "getAvailableSystemMemory: using environment override of '%d'",
+        envOverride ) );
+      return envOverride;
+    }
+
+
 #ifdef __APPLE__
   int freePages     = getSysCtlValue<int>( "vm.page_free_count" );
   int reusablePages = getSysCtlValue<int>( "vm.page_reusable_count" );

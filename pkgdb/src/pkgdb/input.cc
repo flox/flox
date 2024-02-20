@@ -128,39 +128,27 @@ PkgDbInput::closeDbReadWrite()
 int
 PkgDbInput::getScrapingPageSize()
 {
-  const size_t maxPageSize  = 100 * 1000;
-  const size_t minPageSize  = 1 * 1000;
-  const size_t failPageSize = 100;
-
-  // each entry (in order) is checked if the avaialble memory is >= memKb, and
+  // Each entry (in order) is checked if the avaialble memory is >= memKb, and
   // if so, will use pageSize.
   struct MemThreshold
   {
     long   memoryKb;
     size_t pageSize;
   };
+  // These are very rough heuristics.  It was found that about 4.5g is required
+  // to scrape the entire darwin subtree all at once.  1000 item page sizes
+  // seems to keep memory consumption under 1.5g.  These values are a
+  // conservative estimate with the hopes of never OOMing.  That said, the
+  // method of determining *available* memory is to count reported free memory,
+  // and also including *shared* and *cache/buffer* allocated memory thinking
+  // that it could be re-allocated.  The amount of truly *free* memory (at least
+  // on linux) is usually relatively low.
   const std::vector<MemThreshold> MemThresholds = {
-    { 6 /* Gb */ * ( 1024 * 1024 ), maxPageSize },
+    { 6 /* Gb */ * ( 1024 * 1024 ), PkgDbInput::maxPageSize },
     { 4 /* Gb */ * ( 1024 * 1024 ), 20 * 1000 },
     { 3 /* Gb */ * ( 1024 * 1024 ), 10 * 1000 },
     { 2 /* Gb */ * ( 1024 * 1024 ), 4 * 1000 },
   };
-
-  // Check and use environment override
-  auto envPageSizeOverride = nix::getEnv( "FLOX_SCRAPE_PAGE_SIZE" );
-  if ( envPageSizeOverride.has_value() )
-    {
-      verboseLog(
-        nix::fmt( "getScrapingPageSize: using environment override of '%s'",
-                  envPageSizeOverride.value() ) );
-      if ( size_t pgSize = atoi( envPageSizeOverride.value().c_str() );
-           pgSize < failPageSize )
-        {
-          errorLog( nix::fmt( "FLOX_SCRAPE_PAGE_SIZE cannot be less than %d",
-                              failPageSize ) );
-        }
-      else { return pgSize; }
-    }
 
   // No override, so use heuristics
   long availableMemory = getAvailableSystemMemory();
@@ -183,7 +171,7 @@ PkgDbInput::getScrapingPageSize()
   // Use the minimum and warn in the output
   verboseLog( "getScrapingPageSize: using minimum page size, performance will "
               "be impacted!" );
-  return minPageSize;
+  return PkgDbInput::minPageSize;
 }
 
 void
