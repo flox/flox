@@ -154,8 +154,9 @@ createEnvironmentStorePath(
 
       throw PackageConflictException( nix::fmt(
         "'%s' conflicts with '%s'. Both packages provide the file '%s'"
-        "\n\nResolve by setting the priority of the preferred package "
-        "to a value lower than '%d'",
+        "\n\nResolve by uninstalling one of the conflicting packages"
+        "or setting the priority of the preferred package to a value lower "
+        "than '%d'",
         nameA,
         nameB,
         filePath,
