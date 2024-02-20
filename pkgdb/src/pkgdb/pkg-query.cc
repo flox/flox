@@ -632,8 +632,9 @@ PkgQuery::execute( sqlite3pp::database & pdb ) const
   std::vector<std::pair<row_id, std::string>> idVersions;
   for ( const auto & row : *qry )
     {
-      const auto & [_, version] = idVersions.emplace_back(
-        std::make_pair( row.get<long long>( 0 ), row.get<std::string>( 1 ) ) );
+      const auto & [_, version]
+        = idVersions.emplace_back( row.get<long long>( 0 ),
+                                   row.get<std::string>( 1 ) );
       versions.emplace( version );
     }
   versions = this->filterSemvers( versions );
