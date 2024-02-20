@@ -435,6 +435,8 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
  * of recursion is faster and consumes less memory.
  * Repeated runs against `nixpkgs-flox` come in at ~2m03s using recursion and
  * ~1m40s using a queue. */
+// NOLINTBEGIN(readability-function-cognitive-complexity)
+// TODO: Refactor this function to reduce its complexity.
 bool
 PkgDb::scrape( nix::SymbolTable & syms,
                const Target &     target,
@@ -548,6 +550,7 @@ PkgDb::scrape( nix::SymbolTable & syms,
   return lastPage;
   ;
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 
 /* -------------------------------------------------------------------------- */
