@@ -11,7 +11,14 @@ use std::{env, fmt, fs, mem};
 
 use anyhow::{bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
-use flox_rust_sdk::flox::{EnvironmentRef, Flox, Floxhub, DEFAULT_FLOXHUB_URL, FLOX_VERSION};
+use flox_rust_sdk::flox::{
+    EnvironmentRef,
+    Flox,
+    Floxhub,
+    DEFAULT_FLOXHUB_URL,
+    DEFAULT_NAME,
+    FLOX_VERSION,
+};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
@@ -659,7 +666,9 @@ pub fn detect_environment(
 
         // If both a 'default' environment is activated and an environment is
         // found in the current directory or git repo, prefer the detected one.
-        (Some(activated), Some(detected)) if activated.pointer().name().as_ref() == "default" => {
+        (Some(activated), Some(detected))
+            if activated.pointer().name().as_ref() == DEFAULT_NAME =>
+        {
             Some(UninitializedEnvironment::DotFlox(detected))
         },
 

@@ -13,7 +13,7 @@ use std::{env, vec};
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
+use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
@@ -897,7 +897,7 @@ impl Init {
         let env_name = if let Some(name) = self.env_name {
             EnvironmentName::from_str(&name)?
         } else if dir == home_dir {
-            EnvironmentName::from_str("default")?
+            EnvironmentName::from_str(DEFAULT_NAME)?
         } else {
             let name = dir
                 .file_name()
