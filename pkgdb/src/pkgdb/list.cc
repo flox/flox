@@ -76,6 +76,8 @@ ListCommand::run()
     {
       if ( ! isSQLiteDb( entry.path() ) ) { continue; }
 
+      // `db` is a common abbreviation
+      // NOLINTNEXTLINE(readability-identifier-length)
       PkgDbReadOnly db( entry.path().string() );
 
       std::string dbPath = this->basenames ? entry.path().filename().string()
