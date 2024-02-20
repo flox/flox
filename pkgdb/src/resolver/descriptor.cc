@@ -278,6 +278,8 @@ initManifestDescriptorAbsPath( ManifestDescriptor &          desc,
 
 /* -------------------------------------------------------------------------- */
 
+// NOLINTBEGIN(readability-function-cognitive-complexity)
+// -- This is just matching json fields to struct fields
 void
 from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
 {
@@ -419,6 +421,7 @@ from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
         }
     }
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 void
 to_json( nlohmann::json & jto, const ManifestDescriptorRaw & descriptor )
