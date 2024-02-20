@@ -7,7 +7,7 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include <assert.h>
+#include <cassert>
 #include <list>
 #include <map>
 #include <optional>
