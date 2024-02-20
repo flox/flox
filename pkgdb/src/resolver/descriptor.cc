@@ -697,7 +697,7 @@ ManifestDescriptor::clear()
   this->systems  = std::nullopt;
   this->pkgPath  = std::nullopt;
   this->input    = std::nullopt;
-  this->priority = 5;
+  this->priority = DEFAULT_PRIORITY;
 }
 
 
