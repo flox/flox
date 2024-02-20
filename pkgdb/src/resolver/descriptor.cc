@@ -474,8 +474,8 @@ ManifestDescriptorRaw::ManifestDescriptorRaw(
       cursor = inputSepIdx + 1;
     }
   // Grab the attribute path or package name
-  size_t attrsEndIdx;
-  bool   hasVersion = false;
+  size_t attrsEndIdx = 0;
+  bool   hasVersion  = false;
   if ( auto versionSepIdx
        = descriptor.find( ManifestDescriptorRaw::versionSigil );
        versionSepIdx != std::string_view::npos )
