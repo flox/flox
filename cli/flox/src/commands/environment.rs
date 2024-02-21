@@ -1013,7 +1013,7 @@ impl List {
                 "{id}: {path} ({version})",
                 id = p.name,
                 path = p.rel_path,
-                version = p.info.version
+                version = p.info.version.as_deref().unwrap_or("N/A")
             )
         });
     }
@@ -1047,6 +1047,7 @@ impl List {
                 ",
                 description = description.as_deref().unwrap_or("N/A"),
                 license = license.as_deref().unwrap_or("N/A"),
+                version = version.as_deref().unwrap_or("N/A"),
             };
 
             println!("{message}");
