@@ -84,6 +84,12 @@ hook was defined.
 :   Contains a space-delimited list of the active environments,
     e.g. `owner1/foo owner2/bar local_env`.
 
+`$FLOX_ENV_CACHE`
+:   A directory for storing transient files used by an environment's hook.
+    These files will persist for environments used locally,
+    but they will not be pushed,
+    and they will not persist when using a remote environment with `-r`.
+
 `$_FLOX_ACTIVE_ENVIRONMENTS`
 :   A JSON array containing one object per active environment.
     This is currently an implementation detail

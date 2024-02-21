@@ -79,7 +79,7 @@ pub struct PathEnvironment {
 }
 
 /// A hook or packages to install when initializing an environment
-#[derive(Debug, Default, Eq, PartialEq)]
+#[derive(Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct InitCustomization {
     pub hook: Option<String>,
     pub packages: Option<Vec<PackageToInstall>>,
