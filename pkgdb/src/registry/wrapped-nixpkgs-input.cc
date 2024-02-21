@@ -66,7 +66,12 @@ createWrappedFlakeDirV0( const nix::FlakeRef & nixpkgsRef )
   flox::NixState           nixState;
   nix::ref<nix::EvalState> state = nixState.getState();
   nix::FlakeRef wrappedRef = nix::parseFlakeRef( "path:" + tmpDir.string() );
-  auto          _locked    = nix::flake::lockFlake( *state, wrappedRef, {} );
+  /* Push verbosity level to suppress "warning: creating lock file ..." */
+  auto oldVerbosity = nix::verbosity;
+  nix::verbosity    = nix::lvlError;
+  auto _locked      = nix::flake::lockFlake( *state, wrappedRef, {} );
+  /* Pop verbosity */
+  nix::verbosity = oldVerbosity;
   debugLog( "locked flake template" );
 
   return tmpDir;
@@ -178,7 +183,7 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
   for ( auto & [name, value] : attrs )
     {
       if ( ( name != "type" ) && ( name != "ref" ) && ( name != "rev" )
-           && ( name != "narHash" ) && ( name != "rulesVersion" )
+           && ( name != "narHash" ) && ( name != "version" )
            && ( name != "lastModified" ) )
         {
           throw nix::Error( "unsupported flox-nixpkgs input attribute '%s'",
@@ -188,7 +193,7 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
 
   /* Type check the following fields if they exist. */
   nix::fetchers::maybeGetStrAttr( attrs, "narHash" );
-  nix::fetchers::maybeGetIntAttr( attrs, "rulesVersion" );
+  nix::fetchers::maybeGetIntAttr( attrs, "version" );
   nix::fetchers::maybeGetIntAttr( attrs, "lastModified" );
 
   /*  */
@@ -223,9 +228,10 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
 std::optional<nix::fetchers::Input>
 WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
 {
-  if ( url.scheme != type() ) { return std::nullopt; }
+  if ( url.scheme != this->type() ) { return std::nullopt; }
 
   nix::fetchers::Input input;
+  input.attrs.insert_or_assign( "type", this->type() );
 
   auto path = nix::tokenizeString<std::vector<std::string>>( url.path, "/" );
 
@@ -246,8 +252,9 @@ WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
                           { return ! std::isdigit( chr ); } )
             == path[0].end() ) )
     {
-      input.attrs["rulesVersion"]
-        = static_cast<uint64_t>( atoll( path[0].c_str() + 1 ) );
+      input.attrs.insert_or_assign(
+        "version",
+        static_cast<uint64_t>( atoll( path[0].c_str() + 1 ) ) );
     }
   else
     {
@@ -259,7 +266,7 @@ WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
 
   if ( std::regex_match( path[1], nix::revRegex ) )
     {
-      input.attrs["rev"] = path[1];
+      input.attrs.insert_or_assign( "rev", path[1] );
     }
   else if ( std::regex_match( path[1], nix::refRegex ) )
     {
@@ -270,7 +277,7 @@ WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
             url.url,
             path[1] );
         }
-      input.attrs["ref"] = path[1];
+      input.attrs.insert_or_assign( "ref", path[1] );
     }
   else
     {
@@ -292,12 +299,11 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
   nix::ParsedURL url;
   url.scheme = type();
 
-  if ( auto rulesVersion
-       = nix::fetchers::maybeGetIntAttr( input.attrs, "rulesVersion" ) )
+  if ( auto version = nix::fetchers::maybeGetIntAttr( input.attrs, "version" ) )
     {
-      url.path = "v" + std::to_string( *rulesVersion );
+      url.path = "v" + std::to_string( *version );
     }
-  else { throw nix::Error( "missing 'rulesVersion' attribute in input" ); }
+  else { throw nix::Error( "missing 'version' attribute in input" ); }
 
   if ( auto rev = nix::fetchers::maybeGetStrAttr( input.attrs, "rev" ) )
     {
@@ -320,8 +326,7 @@ WrappedNixpkgsInputScheme::hasAllInfo(
   const nix::fetchers::Input & input ) const
 {
   return nix::fetchers::maybeGetStrAttr( input.attrs, "rev" ).has_value()
-         && nix::fetchers::maybeGetIntAttr( input.attrs, "rulesVersion" )
-              .has_value();
+         && nix::fetchers::maybeGetIntAttr( input.attrs, "version" ).has_value();
 }
 
 
@@ -379,10 +384,9 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
 {
   nix::fetchers::Input input( _input );
 
-  if ( ! nix::fetchers::maybeGetIntAttr( input.attrs, "rulesVersion" )
-           .has_value() )
+  if ( ! nix::fetchers::maybeGetIntAttr( input.attrs, "version" ).has_value() )
     {
-      input.attrs.insert_or_assign( "rulesVersion", latestWrapperVersion );
+      input.attrs.insert_or_assign( "version", latestWrapperVersion );
     }
 
   if ( ! nix::fetchers::maybeGetStrAttr( input.attrs, "ref" ).has_value() )
@@ -404,50 +408,48 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
 
   nix::fetchers::Attrs lockedAttrs(
     { { "type", "flox-nixpkgs" },
-      { "rulesVersion",
-        nix::fetchers::getIntAttr( input.attrs, "rulesVersion" ) },
+      { "version", nix::fetchers::getIntAttr( input.attrs, "version" ) },
       { "rev", rev->gitRev() } } );
 
+  /* If we're already cached then we're done. */
   if ( auto res = nix::fetchers::getCache()->lookup( store, lockedAttrs ) )
     {
-      input.attrs.insert_or_assign(
-        "lastModified",
-        nix::fetchers::getIntAttr( res->first, "lastModified" ) );
       return { std::move( res->second ), input };
     }
 
-  auto githubInput = nix::fetchers::Input::fromAttrs(
-    floxNixpkgsAttrsToGithubAttrs( input.attrs ) );
-  auto [_, lockedGithubInput] = githubInput.fetch( store );
-
-  input.attrs.insert_or_assign(
-    "lastModified",
-    nix::fetchers::getIntAttr( lockedGithubInput.attrs, "lastModified" ) );
-
   std::optional<std::filesystem::path> flakeDir;
-  switch ( nix::fetchers::getIntAttr( input.attrs, "rulesVersion" ) )
+  switch ( nix::fetchers::getIntAttr( input.attrs, "version" ) )
     {
       case 0:
+        flakeDir =
         flox::createWrappedFlakeDirV0(
-          nix::FlakeRef::fromAttrs( lockedGithubInput.attrs ) );
+          nix::FlakeRef::fromAttrs( floxNixpkgsAttrsToGithubAttrs( lockedAttrs ) ) );
         break;
 
       default:
-        throw nix::Error(
-          "Unsupported 'rulesVersion' '%d' in input '%s'",
-          nix::fetchers::getIntAttr( input.attrs, "rulesVersion" ),
-          input.toURLString() );
+        throw nix::Error( "Unsupported 'version' '%d' in input '%s'",
+                          nix::fetchers::getIntAttr( input.attrs, "version" ),
+                          input.toURLString() );
         break;
     }
+  assert( flakeDir.has_value() );
 
-  nix::StorePath storePath = store->addToStore( "source", *flakeDir );
+  nix::StorePath storePath = store->addToStore( input.getName(), *flakeDir );
+
+  if ( ! _input.getRev().has_value() )
+    {
+      nix::fetchers::getCache()->add(
+        store,
+        _input.attrs,
+        { { "rev", rev->gitRev() } },
+        storePath,
+        false );
+    }
 
   nix::fetchers::getCache()->add(
     store,
     lockedAttrs,
-    { { "rev", rev->gitRev() },
-      { "lastModified",
-        nix::fetchers::getIntAttr( input.attrs, "lastModified" ) } },
+    { { "rev", rev->gitRev() } },
     storePath,
     true );
 
