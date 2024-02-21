@@ -96,10 +96,12 @@ pub fn init_logger(verbosity: Option<Verbosity>) {
 
         // let fmt_filtered_layer =
         let metrics_layer = MetricsLayer::new();
+        let sentry_layer = sentry::integrations::tracing::layer();
 
         tracing_subscriber::registry()
             .with(fmt_filtered)
             .with(metrics_layer)
+            .with(sentry_layer)
             .init();
 
         fmt_reload_handle
