@@ -8,7 +8,7 @@
 # the 'install' section
 
 [install]
-_FLOX_INSTALL
+_FLOX_INIT_INSTALL
 # Set an environment variable.
 # These variables may not reference once another
 # and are added to the environment without expansion.
@@ -25,7 +25,7 @@ _FLOX_INSTALL
 # only the hook defined in 'file' will be run .
 
 [hook]
-_FLOX_HOOK
+_FLOX_INIT_HOOK
 
 # An environment that works on one system is guaranteed to work on the
 # same type of system,

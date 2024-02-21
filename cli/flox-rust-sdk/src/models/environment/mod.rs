@@ -58,8 +58,8 @@ pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 pub const FLOX_PATH_PATCHED_VAR: &str = "FLOX_PATH_PATCHED";
 pub const FLOX_SYSTEM_PLACEHOLDER: &str = "_FLOX_INIT_SYSTEM";
-pub const FLOX_HOOK_PLACEHOLDER: &str = "_FLOX_HOOK";
-pub const FLOX_INSTALL_PLACEHOLDER: &str = "_FLOX_INSTALL";
+pub const FLOX_HOOK_PLACEHOLDER: &str = "_FLOX_INIT_HOOK";
+pub const FLOX_INSTALL_PLACEHOLDER: &str = "_FLOX_INIT_INSTALL";
 
 pub type UpdateResult = (Option<LockedManifest>, LockedManifest);
 

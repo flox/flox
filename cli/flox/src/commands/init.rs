@@ -209,12 +209,10 @@ impl InitHook for Requirements {
         if choice == 2 {
             let message = formatdoc! {"
 
-            {}
-            Would you like Flox to apply these modifications?
-            You can always revisit the environment's declaration with 'flox edit'
-        ", format_customization(&self.get_init_customization())?};
-
-            let help = "Use '--auto-setup' to apply Flox recommendations in the future.";
+                {}
+                Would you like Flox to apply these modifications?
+                You can always revisit the environment's declaration with 'flox edit'
+            ", format_customization(&self.get_init_customization())?};
 
             let dialog = Dialog {
                 message: &message,
