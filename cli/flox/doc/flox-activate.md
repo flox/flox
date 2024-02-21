@@ -80,6 +80,8 @@ hook was defined.
 
 # ENVIRONMENT VARIABLES
 
+## Variables set by `flox activate`
+
 `$FLOX_PROMPT_ENVIRONMENTS`
 :   Contains a space-delimited list of the active environments,
     e.g. `owner1/foo owner2/bar local_env`.
@@ -90,10 +92,20 @@ hook was defined.
     but they will not be pushed,
     and they will not persist when using a remote environment with `-r`.
 
+`$FLOX_ENV_PROJECT`
+:   Points to the project using the flox environment.
+    For environments stored locally, this is the directory containing the
+    environment.
+    When running `flox activate -r`, this is set to the current working
+    directory.
+    This variable can be used to find project files in environment hooks.
+
 `$_FLOX_ACTIVE_ENVIRONMENTS`
 :   A JSON array containing one object per active environment.
     This is currently an implementation detail
     and its contents are subject to change.
+
+## Variables used by `flox activate`
 
 `$FLOX_PROMPT_COLOR_{1,2}`
 :   Flox adds text to the beginning of the shell prompt to indicate which

@@ -36,6 +36,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_ENV_CACHE_VAR,
     FLOX_ENV_DIRS_VAR,
     FLOX_ENV_LIB_DIRS_VAR,
+    FLOX_ENV_PROJECT_VAR,
     FLOX_ENV_VAR,
     FLOX_PATH_PATCHED_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
@@ -587,6 +588,10 @@ impl Activate {
                 FLOX_ENV_CACHE_VAR,
                 environment.cache_path()?.to_string_lossy().to_string(),
             ),
+            (
+                FLOX_ENV_PROJECT_VAR,
+                environment.project_path()?.to_string_lossy().to_string(),
+            ),
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
         ]);
@@ -631,7 +636,12 @@ impl Activate {
 
         command.envs(exports);
 
-        let script = formatdoc! {"
+        let escaped_args = run_args
+            .into_iter()
+            .map(|arg| shell_escape::escape(arg.into()))
+            .join(" ");
+
+        let script = formatdoc! {r#"
                 # to avoid infinite recursion sourcing bashrc
                 export FLOX_SOURCED_FROM_SHELL_RC=1
 
@@ -640,10 +650,9 @@ impl Activate {
 
                 unset FLOX_SOURCED_FROM_SHELL_RC
 
-                {run_args}
-        ",
+                {escaped_args}
+        "#,
             activation_path=shell_escape::escape(activation_path.to_string_lossy()),
-            run_args = run_args.join(" "),
         };
 
         command.arg("-c");

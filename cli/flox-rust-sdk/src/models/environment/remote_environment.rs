@@ -278,6 +278,10 @@ impl Environment for RemoteEnvironment {
         Ok(tempdir.into_path())
     }
 
+    fn project_path(&self) -> Result<PathBuf, EnvironmentError2> {
+        std::env::current_dir().map_err(EnvironmentError2::GetCurrentDir)
+    }
+
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
         self.inner.parent_path()
     }

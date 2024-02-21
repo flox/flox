@@ -378,6 +378,11 @@ impl Environment for ManagedEnvironment {
         Ok(cache_dir)
     }
 
+    /// Returns parent of .flox
+    fn project_path(&self) -> Result<PathBuf, EnvironmentError2> {
+        self.parent_path()
+    }
+
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
         self.path
             .parent()
