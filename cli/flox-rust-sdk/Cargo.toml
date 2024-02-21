@@ -40,6 +40,7 @@ tracing.workspace = true
 reqwest.workspace = true
 toml.workspace = true
 jsonwebtoken.workspace = true
+indent.workspace = true
 
 [dev-dependencies]
 anyhow = "1.0.65"

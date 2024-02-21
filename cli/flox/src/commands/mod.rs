@@ -1,6 +1,7 @@
 mod auth;
 mod environment;
 mod general;
+mod init;
 mod search;
 
 use std::collections::VecDeque;
@@ -313,7 +314,7 @@ enum LocalDevelopmentCommands {
         long("create"),
         footer("Run 'man flox-init' for more details.")
     )]
-    Init(#[bpaf(external(environment::init))] environment::Init),
+    Init(#[bpaf(external(init::init))] init::Init),
     /// Enter the environment, type 'exit' to leave
     #[bpaf(
         command,
@@ -1080,4 +1081,8 @@ pub(super) async fn ensure_environment_trust(
             Choices::ShowConfig => eprintln!("{}", environment.manifest_content(flox)?),
         }
     }
+}
+
+pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
+    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
 }

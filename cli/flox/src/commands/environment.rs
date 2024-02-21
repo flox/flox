@@ -13,13 +13,13 @@ use std::{env, vec};
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox, DEFAULT_NAME};
+use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
     PullResult,
 };
-use flox_rust_sdk::models::environment::path_environment::{self, PathEnvironment};
+use flox_rust_sdk::models::environment::path_environment::{self};
 use flox_rust_sdk::models::environment::{
     CanonicalPath,
     CoreEnvironmentError,
@@ -33,6 +33,7 @@ use flox_rust_sdk::models::environment::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
+    FLOX_ENV_CACHE_VAR,
     FLOX_ENV_DIRS_VAR,
     FLOX_ENV_LIB_DIRS_VAR,
     FLOX_ENV_VAR,
@@ -68,6 +69,7 @@ use crate::commands::{
     activated_environments,
     auth,
     ensure_environment_trust,
+    environment_description,
     ConcreteEnvironment,
     EnvironmentSelectError,
     UninitializedEnvironment,
@@ -581,6 +583,10 @@ impl Activate {
                 FLOX_ENV_LIB_DIRS_VAR,
                 flox_env_lib_dirs_joined.to_string_lossy().to_string(),
             ),
+            (
+                FLOX_ENV_CACHE_VAR,
+                environment.cache_path()?.to_string_lossy().to_string(),
+            ),
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
         ]);
@@ -873,62 +879,6 @@ mod activate_tests {
     }
 }
 
-// Create an environment in the current directory
-#[derive(Bpaf, Clone)]
-pub struct Init {
-    /// Directory to create the environment in (default: current directory)
-    #[bpaf(long, short, argument("path"))]
-    dir: Option<PathBuf>,
-
-    /// Name of the environment
-    ///
-    /// "$(basename $PWD)" or "default" if in $HOME
-    #[bpaf(long("name"), short('n'), argument("name"))]
-    env_name: Option<String>,
-}
-
-impl Init {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("init");
-
-        let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
-
-        let home_dir = dirs::home_dir().unwrap();
-
-        let env_name = if let Some(name) = self.env_name {
-            EnvironmentName::from_str(&name)?
-        } else if dir == home_dir {
-            EnvironmentName::from_str(DEFAULT_NAME)?
-        } else {
-            let name = dir
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .context("Can't init in root")?;
-            EnvironmentName::from_str(&name)?
-        };
-
-        let env = PathEnvironment::init(
-            PathPointer::new(env_name),
-            &dir,
-            flox.temp_dir.clone(),
-            &flox.system,
-        )?;
-
-        message::created(formatdoc! {"
-            Created environment {name} ({system})
-
-            Next:
-              $ flox search <package>    <- Search for a package
-              $ flox install <package>   <- Install a package into an environment
-              $ flox activate            <- Enter the environment
-            ",
-            name = env.name(),
-            system = flox.system
-        });
-        Ok(())
-    }
-}
-
 // List packages installed in an environment
 #[derive(Bpaf, Clone)]
 pub struct List {
@@ -1083,10 +1033,6 @@ impl List {
     }
 }
 
-fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
-    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
-}
-
 // Install a package into an environment
 #[derive(Bpaf, Clone)]
 pub struct Install {
@@ -1179,10 +1125,7 @@ impl Install {
             // Print which new packages were installed
             for pkg in packages.iter() {
                 if let Some(false) = installation.already_installed.get(&pkg.id) {
-                    message::updated(format!(
-                        "'{}' installed to environment {description}",
-                        pkg.id
-                    ));
+                    message::package_installed(pkg, &description);
                 } else {
                     message::warning(format!(
                         "Package with id '{}' already installed to environment {description}",

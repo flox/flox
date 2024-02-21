@@ -63,5 +63,6 @@ xdg = "2.4"
 oauth2 = "4.4"
 jsonwebtoken = "9.2"
 textwrap = "0.16.0"
+indent = { version = "0.1.1" }
 
 [patch.crates-io]

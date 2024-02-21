@@ -21,6 +21,7 @@ use super::{
     InstallationAttempt,
     ManagedPointer,
     UpdateResult,
+    CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
 };
 use crate::flox::{EnvironmentRef, Flox};
@@ -366,6 +367,15 @@ impl Environment for ManagedEnvironment {
         }
 
         Ok(self.out_link.to_path_buf())
+    }
+
+    /// Returns .flox/cache
+    fn cache_path(&self) -> Result<PathBuf, EnvironmentError2> {
+        let cache_dir = self.path.join(CACHE_DIR_NAME);
+        if !cache_dir.exists() {
+            std::fs::create_dir_all(&cache_dir).map_err(EnvironmentError2::CreateCacheDir)?;
+        }
+        Ok(cache_dir)
     }
 
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {

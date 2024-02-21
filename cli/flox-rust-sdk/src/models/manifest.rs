@@ -65,7 +65,7 @@ pub struct PackageInsertion {
 /// especially when the package is nested. This struct is the common
 /// denominator for packages with specified IDs and packages with
 /// default IDs.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PackageToInstall {
     pub id: String,
     pub pkg_path: String,

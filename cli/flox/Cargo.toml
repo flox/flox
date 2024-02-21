@@ -52,9 +52,11 @@ openssl.workspace = true
 chrono.workspace = true
 oauth2.workspace = true
 textwrap = {workspace = true, features = ["terminal_size"]}
+indent.workspace = true
 
 [dev-dependencies]
 temp-env = "0.3.2"
+pretty_assertions.workspace = true
 
 
 [features]
