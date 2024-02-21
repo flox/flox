@@ -32,7 +32,7 @@ pub const METRICS_EVENTS_API_KEY: &str = env!("METRICS_EVENTS_API_KEY");
 /// We set the target to `flox_command` so that we can filter for these exact events.
 #[macro_export]
 macro_rules! subcommand_metric {
-    ($arg:tt $(, $key:ident = $value:expr)*) => {{
+    ($arg:tt $(, $key:tt = $value:expr)*) => {{
         tracing::trace!(target: "flox_command", subcommand = $arg $(, $key = $value)*);
     }};
 }
