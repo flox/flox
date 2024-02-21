@@ -97,7 +97,7 @@ lockFlake( nix::EvalState &              state,
 {
   auto nixLockFlake
     = [&]() { return nix::flake::lockFlake( state, flakeRef, lockFlags ); };
-  // Calling this in a child process will ensure and downloads are complete,
+  // Calling this in a child process will ensure downloads are complete,
   // keeping file transfers isolated to a child process.
   callInChildProcess( nixLockFlake,
                       LockFlakeException( "failed to lock flake" ) );
