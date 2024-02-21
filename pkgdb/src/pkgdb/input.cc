@@ -7,7 +7,7 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include <assert.h>
+#include <cassert>
 #include <list>
 #include <map>
 #include <optional>
@@ -126,7 +126,8 @@ PkgDbInput::closeDbReadWrite()
 
 
 /* -------------------------------------------------------------------------- */
-
+// NOLINTBEGIN(readability-function-cognitive-complexity)
+// TODO: reduce complexity of this function
 void
 PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 {
@@ -144,6 +145,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   const size_t pageSize         = 5000;
   size_t       pageIdx          = 0;
 
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while)
   do {
       const int EXIT_CHILD_INCOMPLETE = EXIT_SUCCESS + 1;
       const int EXIT_FAILURE_NIX_EVAL
@@ -182,7 +184,6 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
                 }
               else  // ( WEXITSTATUS( status ) != EXIT_SUCCESS )
                 {
-                  scrapingComplete = true;
                   debugLog( "scrapePrefix: Child reports failure, aborting" );
                   if ( WEXITSTATUS( status ) == EXIT_FAILURE_NIX_EVAL )
                     {
@@ -190,17 +191,14 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
                         "scraping failed: NixEvalException reported. "
                         "See child log for details." );
                     }
-                  else
-                    {
-                      throw PkgDbException(
-                        nix::fmt( "scraping failed: exit code %d",
-                                  WEXITSTATUS( status ) ) );
-                    }
+
+                  throw PkgDbException(
+                    nix::fmt( "scraping failed: exit code %d",
+                              WEXITSTATUS( status ) ) );
                 }
             }
           else
             {
-              scrapingComplete = true;
               throw PkgDbException(
                 nix::fmt( "scraping failed: abnormal child exit, signal: %d",
                           WTERMSIG( status ) ) );
@@ -268,7 +266,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
     }
   while ( ! scrapingComplete );
 }
-
+// NOLINTEND(readability-function-cognitive-complexity)
 
 /* -------------------------------------------------------------------------- */
 

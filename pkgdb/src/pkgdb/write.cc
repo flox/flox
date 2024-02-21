@@ -435,6 +435,8 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
  * of recursion is faster and consumes less memory.
  * Repeated runs against `nixpkgs-flox` come in at ~2m03s using recursion and
  * ~1m40s using a queue. */
+// NOLINTBEGIN(readability-function-cognitive-complexity)
+// TODO: Refactor this function to reduce its complexity.
 bool
 PkgDb::scrape( nix::SymbolTable & syms,
                const Target &     target,
@@ -465,25 +467,25 @@ PkgDb::scrape( nix::SymbolTable & syms,
             this->addPackage( parentId, syms[aname], childCursor );
             return false;
           }
-        else if ( ! tryRecur ) { return false; }
-        else if ( auto maybe
-                  = childCursor->maybeGetAttr( "recurseForDerivations" );
-                  ( ( maybe != nullptr ) && maybe->getBool() )
-                  /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
-                   *      due to a bug in `nixpkgs' which doesn't set
-                   *      `recurseForDerivations' attribute correctly. */
-                  || ( ( prefix.front() == "legacyPackages" )
-                       && ( syms[aname] == "darwin" ) ) )
+        if ( ! tryRecur ) { return false; }
+
+        if ( auto maybe = childCursor->maybeGetAttr( "recurseForDerivations" );
+             ( ( maybe != nullptr ) && maybe->getBool() )
+             /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
+              *      due to a bug in `nixpkgs' which doesn't set
+              *      `recurseForDerivations' attribute correctly. */
+             || ( ( prefix.front() == "legacyPackages" )
+                  && ( syms[aname] == "darwin" ) ) )
           {
             flox::AttrPath path = prefix;
             path.emplace_back( syms[aname] );
             row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
-            todo.emplace( std::make_tuple( std::move( path ),
-                                           std::move( childCursor ),
-                                           childId ) );
+            todo.emplace(
+              std::make_tuple( std::move( path ), childCursor, childId ) );
             return true;
           }
-        else { return false; }
+
+        return false;
       }
     catch ( const nix::EvalError & err )
       {
@@ -494,7 +496,7 @@ PkgDb::scrape( nix::SymbolTable & syms,
             nix::ignoreException( nix::lvlDebug );
             return false;
           }
-        else { throw; }
+        throw;
       }
   };
 
@@ -527,6 +529,7 @@ PkgDb::scrape( nix::SymbolTable & syms,
       if ( processAttrib( childCursor, prefix, parentId, aname, todo ) )
         {
           const auto [parentPrefix, _a, _b] = todo.top();
+          // NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while)
           do {
               const auto [prefix, cursor, parentId] = todo.top();
               todo.pop();
@@ -548,6 +551,7 @@ PkgDb::scrape( nix::SymbolTable & syms,
   return lastPage;
   ;
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 
 /* -------------------------------------------------------------------------- */

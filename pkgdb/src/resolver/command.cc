@@ -40,7 +40,7 @@ LockCommand::run()
   nlohmann::json lockfile
     = this->getEnvironment().createLockfile().getLockfileRaw();
   /* Print that bad boii */
-  std::cout << lockfile.dump() << std::endl;
+  std::cout << lockfile.dump() << '\n';
   return EXIT_SUCCESS;
 }
 
@@ -119,7 +119,7 @@ int
 DiffCommand::run()
 {
   auto diff = this->getOldManifestRaw().diff( this->getManifestRaw() );
-  std::cout << diff.dump() << std::endl;
+  std::cout << diff.dump() << '\n';
   return EXIT_SUCCESS;
 }
 
@@ -210,7 +210,7 @@ UpdateCommand::run()
       lockfile = this->getEnvironment().createLockfile().getLockfileRaw();
     }
   /* Print that bad boii */
-  std::cout << lockfile.dump() << std::endl;
+  std::cout << lockfile.dump() << '\n';
 
   return EXIT_SUCCESS;
 }
@@ -246,6 +246,7 @@ UpgradeCommand::UpgradeCommand() : parser( "upgrade" )
 
 /* -------------------------------------------------------------------------- */
 
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 int
 UpgradeCommand::run()
 {
@@ -281,15 +282,14 @@ UpgradeCommand::run()
                 }
               else
                 {
-                  throw FloxException(
-                    "'" + groupOrIID
-                    + "' is a package in a group with multiple packages.\n"
-                      "To upgrade the group, specify the group name:\n"
-                      "     $ flox upgrade "
-                    + groupName
-                    + "\n"
-                      "To upgrade all packages, run:\n"
-                      "     $ flox upgrade" );
+                  throw FloxException( nix::fmt(
+                    "'%s' is a package in a group with multiple packages.\n"
+                    "To upgrade the group, specify the group name:\n"
+                    "     $ flox upgrade %s\n"
+                    "To upgrade all packages, run:\n"
+                    "     $ flox upgrade",
+                    groupOrIID,
+                    groupName ) );
                 }
             }
           else
@@ -344,11 +344,11 @@ UpgradeCommand::run()
   /* Print that bad boii */
   nlohmann::json result
     = { { "lockfile", newLockfile }, { "result", upgraded } };
-  std::cout << result.dump() << std::endl;
+  std::cout << result.dump() << '\n';
 
   return EXIT_SUCCESS;
 }
-
+// NOLINTEND(readability-function-cognitive-complexity)
 
 /* -------------------------------------------------------------------------- */
 
@@ -400,14 +400,14 @@ RegistryCommand::run()
       registries["lockfile-packages"] = nullptr;
     }
 
-  std::cout << registries.dump() << std::endl;
+  std::cout << registries.dump() << '\n';
   return EXIT_SUCCESS;
 }
 
 
 /* -------------------------------------------------------------------------- */
 
-ManifestCommand::ManifestCommand() : parser( "manifest" ), cmdLock(), cmdDiff()
+ManifestCommand::ManifestCommand() : parser( "manifest" )
 {
   this->parser.add_description( "Manifest subcommands" );
   this->parser.add_subparser( this->cmdLock.getParser() );
@@ -443,7 +443,7 @@ ManifestCommand::run()
     {
       return this->cmdRegistry.run();
     }
-  std::cerr << this->parser << std::endl;
+  std::cerr << this->parser << '\n';
   throw flox::FloxException( "You must provide a valid 'manifest' subcommand" );
   return EXIT_FAILURE;
 }
