@@ -10,8 +10,7 @@ use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentE
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::{init_global_manifest, EnvironmentError2};
 use log::{debug, warn};
-use tracing;
-use utils::init::init_logger;
+use utils::init::{init_logger, init_sentry};
 use utils::message;
 
 use crate::utils::errors::{format_error, format_managed_error, format_remote_error};
@@ -21,7 +20,6 @@ mod commands;
 mod config;
 mod utils;
 
-#[tracing::instrument]
 async fn run(args: FloxArgs) -> Result<()> {
     init_logger(Some(args.verbosity.clone()));
     set_user()?;
@@ -33,53 +31,6 @@ async fn run(args: FloxArgs) -> Result<()> {
 }
 
 fn main() -> ExitCode {
-    let sentry_dns = std::env::var("SENTRY_DSN");
-    let _sentry;
-
-    if sentry_dns.is_ok() {
-        _sentry = sentry::init((sentry_dns.unwrap(), sentry::ClientOptions {
-            // https://docs.sentry.io/platforms/rust/configuration/releases/
-            // TODO: should we maybe just use commit hash
-            release: sentry::release_name!(),
-
-            // https://docs.sentry.io/platforms/rust/configuration/environments/
-            // TODO: need to set this to respective channel: nightly, ...
-            // eg. environment: std::env::var("SENTRY_ENV").unwrap_or_default("development").into(),
-            environment: Some("development".into()),
-
-            // certain personally identifiable information (PII) are added
-            send_default_pii: true,
-
-            // Enable debug mode when needed
-            debug: true,
-
-            // To set a uniform sample rate
-            // https://docs.sentry.io/platforms/rust/performance/
-            traces_sample_rate: 1.0,
-
-            ..Default::default()
-        }));
-    }
-
-    // TODO: configure user
-    //sentry::configure_scope(|scope| {
-    //    scope.set_user(Some(sentry::User {
-    //        email: Some("jane.doe@example.com".to_owned()),
-    //        ..Default::default()
-    //    }));
-    //});
-
-    let exit_code = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async { amain().await });
-
-    return exit_code;
-}
-
-//#[tokio::main]
-async fn amain() -> ExitCode {
     // initialize logger with "best guess" defaults
     // updating the logger conf is cheap, so we reinitialize whenever we get more information
     init_logger(None);
@@ -97,23 +48,24 @@ async fn amain() -> ExitCode {
     }
 
     // Parse verbosity flags to affect help message/parse errors
-    let (verbosity, _debug) = {
+    let verbosity = {
         let verbosity_parser = commands::verbosity();
-        let debug_parser = bpaf::long("debug").switch();
-        let other_parser = bpaf::any("ANY", Some::<String>).many();
+        let other_parser = bpaf::any("_", Some::<String>).many();
 
-        bpaf::construct!(verbosity_parser, debug_parser, other_parser)
-            .map(|(v, d, _)| (v, d))
+        bpaf::construct!(verbosity_parser, other_parser)
+            .map(|(v, _)| v)
             .to_options()
             .run_inner(Args::current_args())
             .unwrap_or_default()
     };
+    init_logger(Some(verbosity));
+    let _sentry_guard = init_sentry();
+
     // Pass down the verbosity level to all pkgdb calls
     std::env::set_var(
         "_FLOX_PKGDB_VERBOSITY",
         format!("{}", verbosity.to_pkgdb_verbosity_level()),
     );
-    init_logger(Some(verbosity.clone()));
     debug!(
         "set _FLOX_PKGDB_VERBOSITY={}",
         verbosity.to_pkgdb_verbosity_level()
@@ -148,8 +100,10 @@ async fn amain() -> ExitCode {
     // Errors handled above
     let FloxCli(args) = args.unwrap();
 
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+
     // Run flox. Print errors and exit with status 1 on failure
-    let exit_code = match run(args).await {
+    let exit_code = match runtime.block_on(run(args)) {
         Ok(()) => ExitCode::from(0),
 
         Err(e) => {
@@ -186,7 +140,7 @@ async fn amain() -> ExitCode {
             ExitCode::from(1)
         },
     };
-    utils::init::flush_logger();
+
     exit_code
 }
 

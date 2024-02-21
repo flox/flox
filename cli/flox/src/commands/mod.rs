@@ -87,7 +87,7 @@ fn vec_not_empty<T>(x: Vec<T>) -> bool {
     !x.is_empty()
 }
 
-#[derive(Bpaf, Clone, Debug)]
+#[derive(Bpaf, Clone, Copy, Debug)]
 pub enum Verbosity {
     Verbose(
         /// Increase logging verbosity
@@ -103,10 +103,10 @@ pub enum Verbosity {
 }
 
 impl Verbosity {
-    pub fn to_pkgdb_verbosity_level(&self) -> usize {
+    pub fn to_pkgdb_verbosity_level(self) -> usize {
         match self {
             Verbosity::Quiet => 0,
-            Verbosity::Verbose(n) => *n,
+            Verbosity::Verbose(n) => n,
         }
     }
 }
