@@ -39,23 +39,23 @@ namespace flox {
 /* -------------------------------------------------------------------------- */
 
 void
-ensureFlakeIsDownloaded( std::function<void()> lambda )
+callInChildProcess( std::function<void()>  lambda,
+                    const std::exception & thrownOnError )
 {
   pid_t pid = fork();
   if ( pid == -1 )
     {
       // WML - TODO - better error handling here!
-      errorLog( "ensureFlakeIsDownloaded: failed to fork for flake download!" );
+      errorLog( "callInChildProcess: failed to fork!" );
       exit( EXIT_FAILURE );
     }
   if ( 0 < pid )
     {
-      debugLog(
-        nix::fmt( "ensureFlakeIsDownloaded: waiting for child: %d", pid ) );
+      debugLog( nix::fmt( "callInChildProcess: waiting for child: %d", pid ) );
       int status = 0;
       waitpid( pid, &status, 0 );
       debugLog( nix::fmt(
-        "ensureFlakeIsDownloaded: child is finished, exit code: %d, signal: %d",
+        "callInChildProcess: child is finished, exit code: %d, signal: %d",
         WEXITSTATUS( status ),
         WTERMSIG( status ) ) );
 
@@ -63,29 +63,28 @@ ensureFlakeIsDownloaded( std::function<void()> lambda )
         {
           if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
             {
-              /* The flake should be downloaded and cached locally now
-               * return to the caller. */
+              /* Success */
               return;
             }
           /* The error has already been reported via the child, just pass
            * along the exit code. */
           exit( WEXITSTATUS( status ) );
         }
-      else { throw LockFlakeException( "failed to lock flake" ); }
+      else { throw thrownOnError; }
     }
   else
     {
       lambda();
       try
         {
-          debugLog( "ensureFlakeIsDownloaded(child): finished, exiting" );
+          debugLog( "callInChildProcess(child): finished, exiting" );
           exit( EXIT_SUCCESS );
         }
       catch ( const std::exception & err )
         {
-          debugLog( nix::fmt(
-            "ensureFlakeIsDownloaded(child): caught exception on exit: %s",
-            err.what() ) );
+          debugLog(
+            nix::fmt( "callInChildProcess(child): caught exception on exit: %s",
+                      err.what() ) );
           exit( EXIT_SUCCESS );
         }
     }
@@ -98,7 +97,10 @@ lockFlake( nix::EvalState &              state,
 {
   auto nixLockFlake
     = [&]() { return nix::flake::lockFlake( state, flakeRef, lockFlags ); };
-  ensureFlakeIsDownloaded( nixLockFlake );
+  // Calling this in a child process will ensure and downloads are complete,
+  // keeping file transfers isolated to a child process.
+  callInChildProcess( nixLockFlake,
+                      LockFlakeException( "failed to lock flake" ) );
   return ( nixLockFlake() );
 }
 

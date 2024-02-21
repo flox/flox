@@ -138,26 +138,14 @@ FLOX_DEFINE_EXCEPTION( LockFlakeException,
 /* -------------------------------------------------------------------------- */
 
 /**
- * @brief Execute @param lambda in a child process setup for downloading
- *        files using `nix` fetchers.
+ * @brief Thin wrapper around nix::lockFlake to ensure any downloads happen in
+ *        a child process.
  *
- * Helper function to execute @param lambda in a child process in anticipation
- * of it triggering a download via nix.
- * If this occurs, the nix static global `nix::curlFileTransfer` object will
- * trigger a worker thread.
- * Later forks ( for scraping ) will then try to cleanup those threads but
- * will fail.
- * This keeps the thread creation and cleanup in the same child process.
- *
- * After calling this, the lambda should be called from the parent to actually
- * get the parent in the desired state, but the download will already be cached.
- *
- * There is room for optimization here for sure.
+ * When downloads occur, the nix static global `nix::curlFileTransfer` object
+ * will trigger a worker thread.  Later forks ( for scraping ) will then try to
+ * cleanup those threads but will fail.  Strictly using this wrapper for
+ * `lockFlake` keeps the thread creation and cleanup in the same child process.
  */
-// void
-// ensureFlakeIsDownloaded( std::function<void()> lambda );
-
-
 nix::flake::LockedFlake
 lockFlake( nix::EvalState &              state,
            const nix::FlakeRef &         flakeRef,

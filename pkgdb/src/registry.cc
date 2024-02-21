@@ -327,9 +327,7 @@ FloxFlakeInput::getLockedInput()
    * that point.
    * For now, we'll fork here to contain the downloads within a child, and
    * hopefully avoid that situation. */
-  auto getFlake = [&]() { auto unusedFlake = this->getFlake(); };
 
-  ensureFlakeIsDownloaded( getFlake );
   return { this->getSubtrees(), this->getFlake()->lockedFlake.flake.lockedRef };
 }
 
