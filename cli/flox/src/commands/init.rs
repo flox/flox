@@ -61,12 +61,10 @@ impl Init {
         // Don't run hooks in home dir
         let customization = (dir != home_dir)
             .then(|| self.run_hooks(&dir))
-            .transpose()?;
+            .transpose()?
+            .unwrap_or_default();
 
-        let env = if let Some(InitCustomization {
-            packages: Some(_), ..
-        }) = customization
-        {
+        let env = if customization.packages.is_some() {
             Dialog {
                 message: "Installing Flox suggested packages...",
                 help_message: None,
@@ -98,11 +96,7 @@ impl Init {
             name = env.name(),
             system = flox.system
         ));
-        if let Some(InitCustomization {
-            packages: Some(packages),
-            ..
-        }) = customization
-        {
+        if let Some(packages) = customization.packages {
             let description = environment_description(&ConcreteEnvironment::Path(env))?;
             for package in packages {
                 message::package_installed(&package, &description);
@@ -194,6 +188,9 @@ impl InitHook for Requirements {
             You can always revisit the environment's declaration with 'flox edit'
         "};
 
+        // TODO: ensure this is consistent with other hooks,
+        // or maybe only display it only after a user has confirmed they want to
+        // run at least one hook.
         let help = "Use '--auto-setup' to apply Flox recommendations in the future.";
 
         let dialog = Dialog {

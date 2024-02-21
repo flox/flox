@@ -368,7 +368,7 @@ impl PathEnvironment {
         dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
         system: impl AsRef<str>,
-        customization: &Option<InitCustomization>,
+        customization: &InitCustomization,
         flox: &Flox,
     ) -> Result<Self, EnvironmentError2> {
         let system: &str = system.as_ref();
@@ -433,12 +433,9 @@ impl PathEnvironment {
 
         let mut environment = Self::open(pointer, dot_flox_path, temp_dir)?;
 
-        if let Some(InitCustomization {
-            packages: Some(packages),
-            ..
-        }) = customization
-        {
+        if let Some(ref packages) = customization.packages {
             // Ignore the result, because we know there can't be packages already installed
+            // TODO: once we use toml_edit for replace_placeholders, we should add packages using insert_packages() in replace_placeholders and then do a build instead of calling installnser.
             environment.install(packages, flox)?;
         }
 
@@ -451,37 +448,34 @@ impl PathEnvironment {
     fn replace_placeholders(
         contents: &String,
         system: &str,
-        customization: &Option<InitCustomization>,
+        customization: &InitCustomization,
     ) -> String {
         // Replace system
         let mut replaced = contents.replace(FLOX_SYSTEM_PLACEHOLDER, system);
 
         // Don't add example packages if packages are being installed
-        let packages = match customization {
-            Some(InitCustomization {
-                packages: Some(_), ..
-            }) => "",
+        let packages = if customization.packages.is_some() {
+            ""
+        } else {
             // The install method adds a newline, so add one here as well
-            _ => indoc! {r#"
+            indoc! {r#"
             # hello.pkg-path = "hello"
             # nodejs = { version = "^18.4.2", path = "nodejs_18" }
-        "#},
+        "#}
         };
         replaced = replaced.replace(FLOX_INSTALL_PLACEHOLDER, packages);
 
         // Replace hook
-        let hook = match customization {
-            Some(InitCustomization {
-                hook: Some(ref hook),
-                ..
-            }) => formatdoc! {r#"
+        let hook = if let Some(ref hook) = customization.hook {
+            formatdoc! {r#"
                 script = """
                 {}
-                """"#, indent::indent_all_by(2, hook)},
-            _ => formatdoc! {r#"
-                    # script = """
-                    #   echo "it's gettin flox in here";
-                    # """"#},
+                """"#, indent::indent_all_by(2, hook)}
+        } else {
+            formatdoc! {r#"
+                # script = """
+                #   echo "it's gettin flox in here";
+                # """"#}
         };
         replaced = replaced.replace(FLOX_HOOK_PLACEHOLDER, &hook);
 
@@ -550,7 +544,7 @@ mod tests {
             environment_temp_dir.path(),
             temp_dir.path(),
             &flox.system,
-            &None,
+            &InitCustomization::default(),
             &flox,
         )
         .unwrap();
@@ -584,7 +578,7 @@ mod tests {
             environment_temp_dir.path(),
             temp_dir.path(),
             &flox.system,
-            &None,
+            &InitCustomization::default(),
             &flox,
         )
         .unwrap();
