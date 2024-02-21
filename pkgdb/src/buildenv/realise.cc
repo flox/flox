@@ -449,14 +449,8 @@ createContainerBuilder( nix::EvalState &       state,
   static const nix::FlakeRef nixpkgsRef
     = nix::parseFlakeRef( COMMON_NIXPKGS_URL );
 
-  auto getFlake = [&]()
-  {
-    auto lockedNixpkgs
-      = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
-  };
-  ensureFlakeIsDownloaded( getFlake );
   auto lockedNixpkgs
-    = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
+    = flox::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
 
   nix::Value vNixpkgsFlake {};
   nix::flake::callFlake( state, lockedNixpkgs, vNixpkgsFlake );

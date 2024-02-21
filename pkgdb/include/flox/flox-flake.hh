@@ -13,6 +13,7 @@
 #include <memory>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
+#include <nix/flake/flakeref.hh>
 #include <sys/wait.h>
 #include <vector>
 
@@ -153,9 +154,14 @@ FLOX_DEFINE_EXCEPTION( LockFlakeException,
  *
  * There is room for optimization here for sure.
  */
-void
-ensureFlakeIsDownloaded( std::function<void()> lambda );
+// void
+// ensureFlakeIsDownloaded( std::function<void()> lambda );
 
+
+nix::flake::LockedFlake
+lockFlake( nix::EvalState &              state,
+           const nix::FlakeRef &         flakeRef,
+           const nix::flake::LockFlags & lockFlags );
 
 }  // namespace flox
 

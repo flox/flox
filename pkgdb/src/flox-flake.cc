@@ -91,17 +91,22 @@ ensureFlakeIsDownloaded( std::function<void()> lambda )
     }
 }
 
+nix::flake::LockedFlake
+lockFlake( nix::EvalState &              state,
+           const nix::FlakeRef &         flakeRef,
+           const nix::flake::LockFlags & lockFlags )
+{
+  auto nixLockFlake
+    = [&]() { return nix::flake::lockFlake( state, flakeRef, lockFlags ); };
+  ensureFlakeIsDownloaded( nixLockFlake );
+  return ( nixLockFlake() );
+}
+
+
 FloxFlake::FloxFlake( const nix::ref<nix::EvalState> & state,
                       const nix::FlakeRef &            ref )
 try : state( state ),
-  lockedFlake(
-    [&]()
-    {
-      auto getFlake = [&]()
-      { nix::flake::lockFlake( *this->state, ref, defaultLockFlags ); };
-      ensureFlakeIsDownloaded( getFlake );
-      return nix::flake::lockFlake( *this->state, ref, defaultLockFlags );
-    }() )
+  lockedFlake( flox::lockFlake( *this->state, ref, defaultLockFlags ) )
   {}
 catch ( const std::exception & err )
   {
