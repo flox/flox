@@ -612,7 +612,8 @@ $(BINS): %: $(SRCS:.cc=.o)
 
 lib/ld-floxlib.so: src/ld-floxlib.c
 	$(MKDIR_P) $(@D);
-	$(CC) $(CFLAGS) -shared -fPIC $< -o $@ -ldl;
+	$(CC) -shared -fPIC $< -o $@;
+	patchelf --remove-rpath $@;
 
 
 # ---------------------------------------------------------------------------- #
@@ -632,14 +633,17 @@ $(TESTS) $(TEST_UTILS): tests/%: tests/%.o tests/test.hh
 #: Build binaries
 bin: $(BINS)
 
+#: Build libs
+lib: $(ALL_LIBS)
+
 #: Build test executables and resources
 tests: $(TESTS) $(TEST_UTILS)
 
-#: Build binaries, tests, and generated `.gitignore' files
-all: bin tests ignores
+#: Build binaries, tests, libs, and generated `.gitignore' files
+all: bin lib tests ignores
 
-#: Build binaries and generated `.gitignore' files
-most: bin ignores
+#: Build binaries, libs, and generated `.gitignore' files
+most: bin lib ignores
 
 
 # ---------------------------------------------------------------------------- #

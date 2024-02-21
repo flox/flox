@@ -21,15 +21,40 @@
 #  define _GNU_SOURCE
 #endif /* _GNU_SOURCE */
 
+#include <fcntl.h>
 #include <limits.h>
 #include <link.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+// Declare version bindings to work with minimum supported GLIBC versions.
+#if defined( __aarch64__ )
+// aarch64 Linux only goes back to 2.17.
+__asm__( ".symver close,close@GLIBC_2.17" );
+__asm__( ".symver fprintf,fprintf@GLIBC_2.17" );
+__asm__( ".symver getenv,getenv@GLIBC_2.17" );
+__asm__( ".symver open,open@GLIBC_2.17" );
+__asm__( ".symver snprintf,snprintf@GLIBC_2.17" );
+__asm__( ".symver stderr,stderr@GLIBC_2.17" );
+__asm__( ".symver strrchr,strrchr@GLIBC_2.17" );
+__asm__( ".symver strtok,strtok@GLIBC_2.17" );
+#elif defined( __x86_64__ )
+// x86_64 Linux goes back to 2.2.5.
+__asm__( ".symver close,close@GLIBC_2.2.5" );
+__asm__( ".symver fprintf,fprintf@GLIBC_2.2.5" );
+__asm__( ".symver getenv,getenv@GLIBC_2.2.5" );
+__asm__( ".symver open,open@GLIBC_2.2.5" );
+__asm__( ".symver snprintf,snprintf@GLIBC_2.2.5" );
+__asm__( ".symver stderr,stderr@GLIBC_2.2.5" );
+__asm__( ".symver strrchr,strrchr@GLIBC_2.2.5" );
+__asm__( ".symver strtok,strtok@GLIBC_2.2.5" );
+#else
+// Punt .. just go with default symbol bindings and hope for the best.
+#endif
 
 static int  audit_ld_floxlib = -1;
 static int  debug_ld_floxlib = -1;
@@ -44,8 +69,6 @@ la_version( unsigned int version )
 char *
 la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
 {
-  struct stat stat_buf;
-
   if ( debug_ld_floxlib < 0 )
     {
       debug_ld_floxlib = ( getenv( "LD_FLOXLIB_DEBUG" ) != NULL );
@@ -68,57 +91,62 @@ la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
   // Only look for the library once the dynamic linker has exhausted
   // all of the other possible search locations, and only if it isn't
   // already specified by way of an explicit path.
-  if ( flag == LA_SER_DEFAULT && stat( name, &stat_buf ) != 0 )
+  if ( flag == LA_SER_DEFAULT )
     {
-      char * basename          = strrchr( name, '/' );
-      char * flox_env_lib_dirs = getenv( "FLOX_ENV_LIB_DIRS" );
-
-      if ( basename != NULL ) { basename++; }
-      else { basename = (char *) name; }
-
-      if ( flox_env_lib_dirs != NULL )
+      int fd = open( name, O_RDONLY );
+      if ( fd != -1 ) { close( fd ); }
+      else
         {
-          // Iterate over the colon-separated list of paths in
-          // FLOX_ENV_LIB_DIRS looking for the requested library.
-          // If found, return the full path to the library and
-          // otherwise return the original name.
-          char * flox_env_library_dir = NULL;
-          flox_env_library_dir        = strtok( flox_env_lib_dirs, ":" );
-          while ( flox_env_library_dir != NULL )
+          char * basename          = strrchr( name, '/' );
+          char * flox_env_lib_dirs = getenv( "FLOX_ENV_LIB_DIRS" );
+
+          if ( basename != NULL ) { basename++; }
+          else { basename = (char *) name; }
+
+          if ( flox_env_lib_dirs != NULL )
             {
-              (void) snprintf( name_buf,
-                               sizeof( name_buf ),
-                               "%s/%s",
-                               flox_env_library_dir,
-                               basename );
-              if ( debug_ld_floxlib )
+              // Iterate over the colon-separated list of paths in
+              // FLOX_ENV_LIB_DIRS looking for the requested library.
+              // If found, return the full path to the library and
+              // otherwise return the original name.
+              char * flox_env_library_dir = NULL;
+              flox_env_library_dir        = strtok( flox_env_lib_dirs, ":" );
+              while ( flox_env_library_dir != NULL )
                 {
-                  fprintf( stderr,
-                           "DEBUG: la_objsearch() checking: %s\n",
-                           name_buf );
-                }
-              if ( stat( name_buf, &stat_buf ) == 0 )
-                {
-                  if ( audit_ld_floxlib < 0 )
-                    {
-                      audit_ld_floxlib
-                        = ( getenv( "LD_FLOXLIB_AUDIT" ) != NULL );
-                    }
-                  if ( audit_ld_floxlib || debug_ld_floxlib )
+                  (void) snprintf( name_buf,
+                                   sizeof( name_buf ),
+                                   "%s/%s",
+                                   flox_env_library_dir,
+                                   basename );
+                  if ( debug_ld_floxlib )
                     {
                       fprintf( stderr,
-                               "AUDIT: la_objsearch() resolved %s -> %s\n",
-                               name,
+                               "DEBUG: la_objsearch() checking: %s\n",
                                name_buf );
                     }
-                  return name_buf;
+                  fd = open( name_buf, O_RDONLY );
+                  if ( fd != -1 )
+                    {
+                      close( fd );
+                      if ( audit_ld_floxlib < 0 )
+                        {
+                          audit_ld_floxlib
+                            = ( getenv( "LD_FLOXLIB_AUDIT" ) != NULL );
+                        }
+                      if ( audit_ld_floxlib || debug_ld_floxlib )
+                        {
+                          fprintf( stderr,
+                                   "AUDIT: la_objsearch() resolved %s -> %s\n",
+                                   name,
+                                   name_buf );
+                        }
+                      return name_buf;
+                    }
+                  flox_env_library_dir = strtok( NULL, ":" );
                 }
-              flox_env_library_dir = strtok( NULL, ":" );
             }
         }
     }
-
   return (char *) name;
 }
-
 /* vim: set et ts=4: */
