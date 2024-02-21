@@ -102,6 +102,15 @@ pub enum Verbosity {
     Quiet,
 }
 
+impl Verbosity {
+    pub fn to_pkgdb_verbosity_level(&self) -> usize {
+        match self {
+            Verbosity::Quiet => 0,
+            Verbosity::Verbose(n) => *n,
+        }
+    }
+}
+
 impl Default for Verbosity {
     fn default() -> Self {
         Verbosity::Verbose(0)

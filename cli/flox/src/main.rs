@@ -60,7 +60,16 @@ async fn main() -> ExitCode {
             .run_inner(Args::current_args())
             .unwrap_or_default()
     };
-    init_logger(Some(verbosity));
+    // Pass down the verbosity level to all pkgdb calls
+    std::env::set_var(
+        "_FLOX_PKGDB_VERBOSITY",
+        format!("{}", verbosity.to_pkgdb_verbosity_level()),
+    );
+    init_logger(Some(verbosity.clone()));
+    debug!(
+        "set _FLOX_PKGDB_VERBOSITY={}",
+        verbosity.to_pkgdb_verbosity_level()
+    );
 
     // Run the argument parser
     //

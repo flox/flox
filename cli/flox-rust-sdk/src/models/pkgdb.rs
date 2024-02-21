@@ -1,7 +1,9 @@
 use std::env;
 use std::fmt::Display;
-use std::process::Command;
+use std::io::{BufRead, BufReader};
+use std::process::{Command, Stdio};
 
+use log::debug;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::Value;
@@ -62,20 +64,44 @@ pub enum CallPkgDbError {
     ParseJSON(#[source] serde_json::Error),
     #[error("call to pkgdb failed")]
     PkgDbCall(#[source] std::io::Error),
+    #[error("couldn't get pkgdb stdout")]
+    PkgDbStdout,
+    #[error("couldn't get pkgdb stderr")]
+    PkgDbStderr,
 }
 
 /// Call pkgdb and try to parse JSON or error JSON.
 ///
 /// Error JSON is parsed into a [CallPkgDbError::PkgDbError].
 pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
-    let output = pkgdb_cmd.output().map_err(CallPkgDbError::PkgDbCall)?;
+    let mut proc = pkgdb_cmd
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(CallPkgDbError::PkgDbCall)?;
+    let stderr = proc.stderr.take();
+    let Some(stderr) = stderr else {
+        proc.kill().map_err(CallPkgDbError::PkgDbCall)?;
+        return Err(CallPkgDbError::PkgDbStderr);
+    };
+    let mut stderr_reader = BufReader::new(stderr);
+    let mut buffer = String::new();
+    while let Ok(bytes_read) = stderr_reader.read_line(&mut buffer) {
+        // Zero bytes read -> the command is finished
+        if bytes_read == 0 {
+            break;
+        }
+        debug!(target: "pkgdb", "{}", buffer.trim_end());
+        buffer.clear();
+    }
+    let output = proc.wait_with_output().map_err(CallPkgDbError::PkgDbCall)?;
     // If command fails, try to parse stdout as a PkgDbError
     if !output.status.success() {
         match serde_json::from_slice::<PkgDbError>(&output.stdout) {
             Ok(pkgdb_err) => Err(pkgdb_err)?,
             Err(e) => Err(CallPkgDbError::ParsePkgDbError(e))?,
         }
-    // If command succeeds, try to parse stdout as JSON value
+    // If the command succeeds, try to parse stdout as a JSON value
     } else {
         let json = serde_json::from_slice(&output.stdout).map_err(CallPkgDbError::ParseJSON)?;
         Ok(json)

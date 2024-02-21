@@ -1,8 +1,11 @@
-use std::io::BufRead;
+use std::any::Any;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
+use std::sync::mpsc::SendError;
+use std::thread::ScopedJoinHandle;
 
-use log::debug;
+use log::{debug, trace};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::skip_serializing_none;
@@ -30,6 +33,12 @@ pub enum SearchError {
     InlineManifestMalformed(String),
     #[error("couldn't acquire stdout for search process")]
     PkgDbStdout,
+    #[error("couldn't acquire stderr for search process")]
+    PkgDbStderr,
+    #[error("couldn't send search result from background thread")]
+    StdoutSender(#[source] SendError<PkgDbOutput>),
+    #[error("internal error: {0}")]
+    SomethingElse(String),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -249,7 +258,7 @@ pub struct SearchResults {
     pub count: Option<u64>,
 }
 
-/// The types of JSON records that `pkgdb` can emit during a search
+/// The types of JSON records that `pkgdb` can emit on stdout during a search
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(untagged)]
 pub enum Record {
@@ -261,6 +270,13 @@ pub enum Record {
     SearchResult(SearchResult),
     /// An error
     Error(PkgDbError),
+}
+
+/// The different kinds of output that can be collected from pkgdb during a search
+#[derive(Debug)]
+pub enum PkgDbOutput {
+    Stdout(Record),
+    Stderr(String),
 }
 
 impl TryFrom<&[u8]> for SearchResults {
@@ -296,7 +312,6 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
     let mut pkgdb_command = Command::new(PKGDB_BIN.as_str());
     pkgdb_command
         .arg("search")
-        .arg("--quiet")
         .arg("--ga-registry")
         .arg(json)
         .stdout(Stdio::piped())
@@ -304,28 +319,125 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
 
     debug!("running search command {:?}", pkgdb_command);
     let mut pkgdb_process = pkgdb_command.spawn().map_err(SearchError::PkgDbCall)?;
-    let stdout = pkgdb_process.stdout.take();
-    if stdout.is_none() {
+    let Some(stdout) = pkgdb_process.stdout.take() else {
         pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
         return Err(SearchError::PkgDbStdout);
+    };
+    let Some(stderr) = pkgdb_process.stderr.take() else {
+        pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
+        return Err(SearchError::PkgDbStderr);
+    };
+    let search_outcome: std::thread::Result<(Vec<SearchResult>, Option<u64>)> =
+        std::thread::scope(|s| {
+            // Give the channel some fixed capacity to provide backpressure when
+            // overloaded.
+            let (sender_orig, receiver) = std::sync::mpsc::sync_channel(1000);
+
+            // Feed stderr lines into a channel sender
+            let sender = sender_orig.clone();
+            let stderr_thread: ScopedJoinHandle<Result<(), SendError<PkgDbOutput>>> =
+                s.spawn(move || {
+                    let sender = sender.clone();
+                    let mut reader = BufReader::new(stderr);
+                    let mut buffer = String::new();
+                    while let Ok(bytes_read) = reader.read_line(&mut buffer) {
+                        // Zero bytes read -> the command is finished
+                        if bytes_read == 0 {
+                            // drop(sender);
+                            break;
+                        }
+                        sender.send(PkgDbOutput::Stderr(buffer.clone()))?;
+                        buffer.clear();
+                    }
+                    trace!("stderr reader thread is done");
+                    Ok(())
+                });
+
+            // Feed JSON records from stdout into a channel sender
+            let sender = sender_orig;
+            let stdout_thread: ScopedJoinHandle<Result<(), SearchError>> = s.spawn(move || {
+                let sender = sender.clone();
+                let deserializer = serde_json::Deserializer::from_reader(stdout);
+                for maybe_record in deserializer.into_iter() {
+                    let record = maybe_record.map_err(SearchError::Deserialize)?;
+                    sender
+                        .send(PkgDbOutput::Stdout(record))
+                        .map_err(SearchError::StdoutSender)?;
+                }
+                drop(sender);
+                trace!("stdout reader thread is done");
+                Ok(())
+            });
+
+            // Read items from the channel in the order in which they were received
+            let mut count = None;
+            let mut results = Vec::new();
+            while let Ok(output) = receiver.recv() {
+                match output {
+                    PkgDbOutput::Stderr(line) => {
+                        debug!(target: "pkgdb", "[pkgdb] {}", line);
+                    },
+                    PkgDbOutput::Stdout(Record::Error(err)) => {
+                        debug!("error from pkgdb: {}", err);
+                        pkgdb_process.kill().map_err(|e| {
+                            Box::new(SearchError::PkgDbCall(e)) as Box<dyn Any + Send>
+                        })?;
+                        if !stderr_thread.is_finished() {
+                            trace!("waiting for stderr thread to finish");
+                            let _ = stderr_thread.join();
+                        }
+                        if !stdout_thread.is_finished() {
+                            trace!("waiting for stdout thread to finish");
+                            let _ = stdout_thread.join();
+                        }
+                        return Err(Box::new(err) as Box<dyn Any + Send>);
+                    },
+                    PkgDbOutput::Stdout(Record::ResultCount { result_count }) => {
+                        debug!("result count = {}", result_count);
+                        count = Some(result_count);
+                    },
+                    PkgDbOutput::Stdout(Record::SearchResult(result)) => {
+                        debug!("search result = {:?}", result);
+                        results.push(result);
+                    },
+                }
+                trace!("waiting for next channel item");
+            }
+
+            trace!("joining reader threads");
+            let stderr_thread_outcome = stderr_thread.join();
+            let stdout_thread_outcome = stdout_thread.join();
+            trace!("done joining reader threads");
+            if stderr_thread_outcome.is_ok() && stdout_thread_outcome.is_ok() {
+                Ok((results, count))
+            } else {
+                Err(
+                    Box::new(String::from("background thread didn't exit successfully"))
+                        as Box<dyn Any + Send>,
+                )
+            }
+        });
+
+    match search_outcome {
+        Ok((results, count)) => {
+            let exit_status = pkgdb_process.wait().map_err(SearchError::PkgDbCall)?;
+            Ok((SearchResults { results, count }, exit_status))
+        },
+        // Yeah, this is ugly. What's happening here is that the return type of `std::thread::scope`
+        // is `Result<T, Box<dyn Any + Send>>`, so the compiler basically has no knowledge of what the error
+        // type is. However, *we* do because we wrote the code. We know that we either return a boxed
+        // `SearchError` or a boxed `String`. We attempt to downcast to either one of those types, and if
+        // that fails we return a generic "internal search error" message. This doesn't tell the user anything,
+        // but it tells us that we screwed up.
+        Err(err) => match err.downcast::<SearchError>() {
+            Ok(e) => Err(*e),
+            Err(any) => Err(SearchError::SomethingElse(
+                *(any
+                    .downcast::<String>()
+                    .unwrap_or(Box::new("internal search error".into()))),
+            )),
+        },
     }
-    let deserializer = serde_json::Deserializer::from_reader(stdout.unwrap());
-    let mut count = None;
-    let mut results = Vec::new();
-    for maybe_record in deserializer.into_iter() {
-        let record = maybe_record.map_err(SearchError::Deserialize)?;
-        debug!("record = {:?}", record);
-        match record {
-            Record::Error(err) => {
-                pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
-                return Err(SearchError::PkgDb(err));
-            },
-            Record::ResultCount { result_count } => count = Some(result_count),
-            Record::SearchResult(result) => results.push(result),
-        }
-    }
-    let exit_status = pkgdb_process.wait().map_err(SearchError::PkgDbCall)?;
-    Ok((SearchResults { results, count }, exit_status))
 }
 
 /// A package search result

@@ -111,7 +111,7 @@ where
 
         let head = format!("{level_prefix} {time_prefix} {origin_prefix}").bold();
 
-        let message = format!("{head}:\n{message}");
+        let message = format!("{head}: {message}");
 
         writeln!(f, "{}", message)?;
 
