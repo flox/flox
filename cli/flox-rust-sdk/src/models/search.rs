@@ -31,12 +31,6 @@ pub enum SearchError {
     CanonicalManifestPath(std::io::Error),
     #[error("inline manifest was malformed: {0}")]
     InlineManifestMalformed(String),
-    #[error("couldn't acquire stdout for search process")]
-    PkgDbStdout,
-    #[error("couldn't acquire stderr for search process")]
-    PkgDbStderr,
-    #[error("couldn't send search result from background thread")]
-    StdoutSender(#[source] SendError<PkgDbOutput>),
     #[error("internal error: {0}")]
     SomethingElse(String),
 }
@@ -306,6 +300,7 @@ impl TryFrom<&[u8]> for SearchResults {
 }
 
 /// Calls `pkgdb` and reads a stream of search records.
+#[allow(clippy::type_complexity)]
 pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitStatus), SearchError> {
     let json = serde_json::to_string(search_params).map_err(SearchError::Serialize)?;
 
@@ -319,15 +314,16 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
 
     debug!("running search command {:?}", pkgdb_command);
     let mut pkgdb_process = pkgdb_command.spawn().map_err(SearchError::PkgDbCall)?;
-    let Some(stdout) = pkgdb_process.stdout.take() else {
-        pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
-        return Err(SearchError::PkgDbStdout);
-    };
-    let Some(stderr) = pkgdb_process.stderr.take() else {
-        pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
-        return Err(SearchError::PkgDbStderr);
-    };
-    let search_outcome: std::thread::Result<(Vec<SearchResult>, Option<u64>)> =
+    let stdout = pkgdb_process
+        .stdout
+        .take()
+        .expect("couldn't get stdout handle");
+    let stderr = pkgdb_process
+        .stderr
+        .take()
+        .expect("couldn't get stderr handle");
+
+    let search_outcome: std::thread::Result<Result<(Vec<SearchResult>, Option<u64>), String>> =
         std::thread::scope(|s| {
             // Give the channel some fixed capacity to provide backpressure when
             // overloaded.
@@ -338,16 +334,11 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
             let stderr_thread: ScopedJoinHandle<Result<(), SendError<PkgDbOutput>>> =
                 s.spawn(move || {
                     let sender = sender.clone();
-                    let mut reader = BufReader::new(stderr);
-                    let mut buffer = String::new();
-                    while let Ok(bytes_read) = reader.read_line(&mut buffer) {
-                        // Zero bytes read -> the command is finished
-                        if bytes_read == 0 {
-                            // drop(sender);
-                            break;
+                    let mut reader = BufReader::new(stderr).lines();
+                    while let Some(Ok(line)) = reader.next() {
+                        if let Err(err) = sender.send(PkgDbOutput::Stderr(line)) {
+                            debug!("failed to send stderr line: {err}");
                         }
-                        sender.send(PkgDbOutput::Stderr(buffer.clone()))?;
-                        buffer.clear();
                     }
                     trace!("stderr reader thread is done");
                     Ok(())
@@ -360,11 +351,10 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
                 let deserializer = serde_json::Deserializer::from_reader(stdout);
                 for maybe_record in deserializer.into_iter() {
                     let record = maybe_record.map_err(SearchError::Deserialize)?;
-                    sender
-                        .send(PkgDbOutput::Stdout(record))
-                        .map_err(SearchError::StdoutSender)?;
+                    if let Err(err) = sender.send(PkgDbOutput::Stdout(record)) {
+                        debug!("failed to send stdout line: {err}");
+                    }
                 }
-                drop(sender);
                 trace!("stdout reader thread is done");
                 Ok(())
             });
@@ -401,7 +391,6 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
                         results.push(result);
                     },
                 }
-                trace!("waiting for next channel item");
             }
 
             trace!("joining reader threads");
@@ -409,34 +398,22 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
             let stdout_thread_outcome = stdout_thread.join();
             trace!("done joining reader threads");
             if stderr_thread_outcome.is_ok() && stdout_thread_outcome.is_ok() {
-                Ok((results, count))
+                Ok(Ok((results, count)))
             } else {
-                Err(
-                    Box::new(String::from("background thread didn't exit successfully"))
-                        as Box<dyn Any + Send>,
-                )
+                Ok(Err(String::from(
+                    "background threads didn't exit successfully",
+                )))
             }
         });
 
     match search_outcome {
-        Ok((results, count)) => {
+        Ok(Ok((results, count))) => {
             let exit_status = pkgdb_process.wait().map_err(SearchError::PkgDbCall)?;
             Ok((SearchResults { results, count }, exit_status))
         },
-        // Yeah, this is ugly. What's happening here is that the return type of `std::thread::scope`
-        // is `Result<T, Box<dyn Any + Send>>`, so the compiler basically has no knowledge of what the error
-        // type is. However, *we* do because we wrote the code. We know that we either return a boxed
-        // `SearchError` or a boxed `String`. We attempt to downcast to either one of those types, and if
-        // that fails we return a generic "internal search error" message. This doesn't tell the user anything,
-        // but it tells us that we screwed up.
-        Err(err) => match err.downcast::<SearchError>() {
-            Ok(e) => Err(*e),
-            Err(any) => Err(SearchError::SomethingElse(
-                *(any
-                    .downcast::<String>()
-                    .unwrap_or(Box::new("internal search error".into()))),
-            )),
-        },
+        Ok(Err(msg)) => Err(SearchError::SomethingElse(msg)),
+        // This means the thread panicked and there's not much we can do about it
+        Err(_) => Err(SearchError::SomethingElse("internal search error".into())),
     }
 }
 

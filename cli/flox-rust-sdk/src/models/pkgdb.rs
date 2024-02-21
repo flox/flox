@@ -79,21 +79,14 @@ pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
         .stdout(Stdio::piped())
         .spawn()
         .map_err(CallPkgDbError::PkgDbCall)?;
-    let stderr = proc.stderr.take();
-    let Some(stderr) = stderr else {
-        proc.kill().map_err(CallPkgDbError::PkgDbCall)?;
-        return Err(CallPkgDbError::PkgDbStderr);
-    };
-    let mut stderr_reader = BufReader::new(stderr);
-    let mut buffer = String::new();
-    while let Ok(bytes_read) = stderr_reader.read_line(&mut buffer) {
-        // Zero bytes read -> the command is finished
-        if bytes_read == 0 {
-            break;
-        }
-        debug!(target: "pkgdb", "{}", buffer.trim_end());
-        buffer.clear();
-    }
+    let stderr = proc.stderr.take().expect("couldn't get stderr handle");
+    let stderr_reader = BufReader::new(stderr);
+    stderr_reader
+        .lines()
+        .map_while(Result::ok)
+        .for_each(|line| {
+            debug!(target: "pkgdb", "{line}");
+        });
     let output = proc.wait_with_output().map_err(CallPkgDbError::PkgDbCall)?;
     // If command fails, try to parse stdout as a PkgDbError
     if !output.status.success() {
