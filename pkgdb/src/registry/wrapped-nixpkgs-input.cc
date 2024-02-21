@@ -7,12 +7,18 @@
  *
  * -------------------------------------------------------------------------- */
 
+#include <filesystem>
+#include <fstream>
+#include <string>
+
 #include <nix/cache.hh>
 #include <nix/fetchers.hh>
 #include <nix/store-api.hh>
 #include <nix/url-parts.hh>
 
 #include "flox/core/exceptions.hh"
+#include "flox/core/nix-state.hh"
+#include "flox/core/util.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -21,11 +27,68 @@ namespace flox {
 
 /* -------------------------------------------------------------------------- */
 
-struct DownloadUrl
+/**
+ * @brief Create a temporary directory containing a `flake.nix` which wraps
+ *        @a nixpkgsRef configuring it to allow unfree and broken packages.
+ */
+static std::filesystem::path
+createWrappedFlakeDirV0( const nix::FlakeRef & nixpkgsRef )
 {
-  std::string  url;
-  nix::Headers headers;
-};
+  /* Create a temporary directory to put the filled out template and rules file
+   * in. */
+  std::filesystem::path tmpDir = nix::createTempDir();
+  debugLog( "created temp dir for flake template: " + tmpDir.string() );
+
+  /* Fill out the template with the flake references and the rules file path. */
+  std::ofstream            flakeOut( tmpDir / "flake.nix" );
+  static const std::string flakeTemplate =
+#include "./flake-v0.nix.in.hh"
+    ;
+  std::istringstream flakeIn( flakeTemplate );
+  std::string        line;
+  while ( std::getline( flakeIn, line ) )
+    {
+      /* Inject URL */
+      if ( line.find( "@NIXPKGS_URL@" ) != std::string::npos )
+        {
+          line.replace( line.find( "@NIXPKGS_URL@" ),
+                        std::string( "@NIXPKGS_URL@" ).length(),
+                        nixpkgsRef.to_string() );
+        }
+      flakeOut << line << '\n';
+    }
+  flakeOut.close();
+  debugLog( "filled out flake template with flake-ref:"
+            + nixpkgsRef.to_string() );
+
+  /* Lock the filled out template to avoid spurious re-locking and silence the
+   * "Added input ..." message. */
+  flox::NixState           nixState;
+  nix::ref<nix::EvalState> state = nixState.getState();
+  nix::FlakeRef wrappedRef = nix::parseFlakeRef( "path:" + tmpDir.string() );
+  auto          _locked    = nix::flake::lockFlake( *state, wrappedRef, {} );
+  debugLog( "locked flake template" );
+
+  return tmpDir;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+static const uint64_t latestWrapperVersion = 0;
+
+/**
+ * @brief Create a temporary directory containing a `flake.nix` which wraps
+ *        @a nixpkgsRef applying evaluated changes.
+ *
+ * This alias should always refer to the routine associated
+ * with `latestWrapperVersion`.
+ */
+static inline std::filesystem::path
+createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef )
+{
+  return createWrappedFlakeDirV0( nixpkgsRef );
+}
 
 
 /* -------------------------------------------------------------------------- */
@@ -316,6 +379,12 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
 {
   nix::fetchers::Input input( _input );
 
+  if ( ! nix::fetchers::maybeGetIntAttr( input.attrs, "rulesVersion" )
+           .has_value() )
+    {
+      input.attrs.insert_or_assign( "rulesVersion", latestWrapperVersion );
+    }
+
   if ( ! nix::fetchers::maybeGetStrAttr( input.attrs, "ref" ).has_value() )
     {
       input.attrs.insert_or_assign( "ref", "HEAD" );
@@ -336,7 +405,7 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
   nix::fetchers::Attrs lockedAttrs(
     { { "type", "flox-nixpkgs" },
       { "rulesVersion",
-        nix::fetchers::getIntAttr( _input.attrs, "rulesVersion" ) },
+        nix::fetchers::getIntAttr( input.attrs, "rulesVersion" ) },
       { "rev", rev->gitRev() } } );
 
   if ( auto res = nix::fetchers::getCache()->lookup( store, lockedAttrs ) )
@@ -349,25 +418,36 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
 
   auto githubInput = nix::fetchers::Input::fromAttrs(
     floxNixpkgsAttrsToGithubAttrs( input.attrs ) );
-  auto [githubTree, lockedGithubInput] = githubInput.fetch( store );
+  auto [_, lockedGithubInput] = githubInput.fetch( store );
 
   input.attrs.insert_or_assign(
     "lastModified",
     nix::fetchers::getIntAttr( lockedGithubInput.attrs, "lastModified" ) );
 
-  // TODO: replace `flake.nix' and do whatever other patching you want.
+  std::optional<std::filesystem::path> flakeDir;
+  switch ( nix::fetchers::getIntAttr( input.attrs, "rulesVersion" ) )
+    {
+      case 0:
+        flox::createWrappedFlakeDirV0(
+          nix::FlakeRef::fromAttrs( lockedGithubInput.attrs ) );
+        break;
 
-  // TODO: change `githubTree.actualPath' to the top level of your patched tree
-  nix::StorePath storePath
-    = store->addToStore( "source", githubTree.actualPath );
+      default:
+        throw nix::Error(
+          "Unsupported 'rulesVersion' '%d' in input '%s'",
+          nix::fetchers::getIntAttr( input.attrs, "rulesVersion" ),
+          input.toURLString() );
+        break;
+    }
+
+  nix::StorePath storePath = store->addToStore( "source", *flakeDir );
 
   nix::fetchers::getCache()->add(
     store,
     lockedAttrs,
     { { "rev", rev->gitRev() },
       { "lastModified",
-        nix::fetchers::getIntAttr( lockedGithubInput.attrs,
-                                   "lastModified" ) } },
+        nix::fetchers::getIntAttr( input.attrs, "lastModified" ) } },
     storePath,
     true );
 
@@ -377,8 +457,17 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
 
 /* -------------------------------------------------------------------------- */
 
-}  // namespace flox
+static auto rWrappedNixpkgsInputScheme = nix::OnStartup(
+  []
+  {
+    nix::fetchers::registerInputScheme(
+      std::make_unique<WrappedNixpkgsInputScheme>() );
+  } );
 
+
+/* -------------------------------------------------------------------------- */
+
+}  // namespace flox
 
 /* -------------------------------------------------------------------------- *
  *

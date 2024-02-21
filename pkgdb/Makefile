@@ -652,7 +652,6 @@ most: bin lib ignores
 
 #: Generate documentation
 docs: docs/index.html
-
 docs/index.html: FORCE
 	$(DOXYGEN) ./Doxyfile
 
@@ -679,6 +678,21 @@ tests/.gitignore: FORCE
 #: Run `clang-format' across entire project
 fmt: $(HEADERS) $(ALL_SRCS)
 	$(FMT) -i $^;
+
+
+# ---------------------------------------------------------------------------- #
+
+# Generated Files
+# ---------------
+
+src/registry/flake-v0.nix.in.hh: src/registry/flake-v0.nix.in Makefile
+	$(MKDIR_P) $(@D);
+	echo 'R"_NIX(' > $@;
+	$(CAT) $< >> $@;
+	echo ')_NIX";' >> $@;
+
+CLEANFILES += src/registry/flake-v0.nix.in.hh
+src/registry/wrapped-nixpkgs-input.o: src/registry/flake-v0.nix.in.hh
 
 
 # ---------------------------------------------------------------------------- #
