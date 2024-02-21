@@ -326,7 +326,8 @@ WrappedNixpkgsInputScheme::hasAllInfo(
   const nix::fetchers::Input & input ) const
 {
   return nix::fetchers::maybeGetStrAttr( input.attrs, "rev" ).has_value()
-         && nix::fetchers::maybeGetIntAttr( input.attrs, "version" ).has_value();
+         && nix::fetchers::maybeGetIntAttr( input.attrs, "version" )
+              .has_value();
 }
 
 
@@ -421,9 +422,8 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
   switch ( nix::fetchers::getIntAttr( input.attrs, "version" ) )
     {
       case 0:
-        flakeDir =
-        flox::createWrappedFlakeDirV0(
-          nix::FlakeRef::fromAttrs( floxNixpkgsAttrsToGithubAttrs( lockedAttrs ) ) );
+        flakeDir = flox::createWrappedFlakeDirV0( nix::FlakeRef::fromAttrs(
+          floxNixpkgsAttrsToGithubAttrs( lockedAttrs ) ) );
         break;
 
       default:
@@ -438,20 +438,18 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
 
   if ( ! _input.getRev().has_value() )
     {
-      nix::fetchers::getCache()->add(
-        store,
-        _input.attrs,
-        { { "rev", rev->gitRev() } },
-        storePath,
-        false );
+      nix::fetchers::getCache()->add( store,
+                                      _input.attrs,
+                                      { { "rev", rev->gitRev() } },
+                                      storePath,
+                                      false );
     }
 
-  nix::fetchers::getCache()->add(
-    store,
-    lockedAttrs,
-    { { "rev", rev->gitRev() } },
-    storePath,
-    true );
+  nix::fetchers::getCache()->add( store,
+                                  lockedAttrs,
+                                  { { "rev", rev->gitRev() } },
+                                  storePath,
+                                  true );
 
   return { storePath, input };
 }
