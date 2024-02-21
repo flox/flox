@@ -457,3 +457,17 @@ function add_insecure_package() {
   run "$FLOX_BIN" list
   assert_success
 }
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=pull:up-to-date
+# updating an up-to-date environment should return with an info message
+@test "pull up-to-date env returns info message" {
+  # pull a fresh environment
+  "$FLOX_BIN" pull --remote owner/name
+  # pull it again, and expect an info message
+  run "$FLOX_BIN" pull
+  assert_success
+  assert_line --partial "already up to date."
+}

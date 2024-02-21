@@ -17,6 +17,7 @@ use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flo
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
     ManagedEnvironmentError,
+    PullResult,
 };
 use flox_rust_sdk::models::environment::path_environment::{self};
 use flox_rust_sdk::models::environment::{
@@ -1534,7 +1535,7 @@ impl Pull {
 
                 Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote, self.force, &start)?;
 
-                message::updated(complete);
+                message::created(complete);
             },
             PullSelect::Existing {} => {
                 let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
@@ -1556,7 +1557,7 @@ impl Pull {
                     floxhub_host = flox.floxhub.base_url()
                 );
 
-                Dialog {
+                let result = Dialog {
                     message: &start_message,
                     help_message: None,
                     typed: Spinner::new(|| {
@@ -1570,17 +1571,24 @@ impl Pull {
                 }
                 .spin()?;
 
-                let complete_message = formatdoc! {"
-                    Pulled {owner}/{name} from {floxhub_host}{suffix}
+                match result {
+                    PullResult::Updated => {
+                        message::updated(formatdoc! {"
+                            Pulled {owner}/{name} from {floxhub_host}{suffix}
 
-                    You can activate this environment with 'flox activate'
-                    ",
-                    owner = pointer.owner, name = pointer.name,
-                    floxhub_host = flox.floxhub.base_url(),
-                    suffix = if self.force { " (forced)" } else { "" }
-                };
-
-                message::created(complete_message);
+                            You can activate this environment with 'flox activate'
+                            ",
+                            owner = pointer.owner, name = pointer.name,
+                            floxhub_host = flox.floxhub.base_url(),
+                            suffix = if self.force { " (forced)" } else { "" }
+                        });
+                    },
+                    PullResult::UpToDate => {
+                        message::warning(formatdoc! {"
+                            {owner}/{name} is already up to date.
+                        ", owner = pointer.owner, name = pointer.name});
+                    },
+                }
             },
         }
 
@@ -1596,13 +1604,14 @@ impl Pull {
         dot_flox_path: PathBuf,
         pointer: ManagedPointer,
         force: bool,
-    ) -> Result<()> {
-        let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)
-            .context("Could not open environment")?;
-        env.pull(force)?; //.context("Could not pull environment")?;
-        env.build(flox)?; //.context("Could not build environment")?;
-
-        Ok(())
+    ) -> Result<PullResult, EnvironmentError2> {
+        let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)?;
+        let state = env.pull(force)?;
+        // only build if the environment was updated
+        if let PullResult::Updated = state {
+            env.build(flox)?;
+        }
+        Ok(state)
     }
 
     /// Pull a new environment from floxhub into the given directory

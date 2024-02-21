@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
-use flox_rust_sdk::flox::{EnvironmentName, Flox};
+use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{Environment, PathPointer};
 use flox_rust_sdk::models::manifest::{insert_packages, PackageToInstall};
@@ -49,7 +49,7 @@ impl Init {
         let env_name = if let Some(ref name) = self.env_name {
             EnvironmentName::from_str(name)?
         } else if dir == home_dir {
-            EnvironmentName::from_str("default")?
+            EnvironmentName::from_str(DEFAULT_NAME)?
         } else {
             let name = dir
                 .file_name()
