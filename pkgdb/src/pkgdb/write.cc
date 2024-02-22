@@ -428,52 +428,50 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
 }
 
 void
-PkgDb::processSingleAttrib ( const nix::SymbolStr & sym,
-                              const flox::Cursor &      cursor,
-                               const flox::AttrPath &    prefix,
-                               const flox::pkgdb::row_id parentId,
-                               const bool tryRecur, 
-                               const bool inLegacyPackages,
-                               Todos &                   todo)
-  {
-    try
-      {
-        // flox::Cursor cursor = parentCursor->getAttr( aname );
-        if ( cursor->isDerivation() )
-          {
-            this->addPackage( parentId, sym, cursor );
-          }
-        else if ( !tryRecur )
-          {
-            std::cout << "WML tryRecur is false\n";
-            return;
-          }
-        else if ( auto maybeRecurse = cursor->maybeGetAttr( "recurseForDerivations" );
-             ( ( maybeRecurse != nullptr ) && maybeRecurse->getBool() )
-             /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
-              *      due to a bug in `nixpkgs' which doesn't set
-              *      `recurseForDerivations' attribute correctly. */
-             || ( inLegacyPackages && ( sym == "darwin" ) ) )
-          {
-            flox::AttrPath path = prefix;
-            path.emplace_back( sym );
-            row_id childId = this->addOrGetAttrSetId( sym, parentId );
-            todo.emplace(
-              std::make_tuple( std::move( path ), cursor, childId ) );
-          }
-      }
-    catch ( const nix::EvalError & err )
-      {
-        /* Ignore errors in `legacyPackages' */
-        if ( inLegacyPackages )
-          {
-            /* Only print eval errors in "debug" mode. */
-            nix::ignoreException( nix::lvlDebug );
-            return;
-          }
-        throw;
-      }
-  }
+PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
+                            const flox::Cursor &      cursor,
+                            const flox::AttrPath &    prefix,
+                            const flox::pkgdb::row_id parentId,
+                            const flox::subtree_type  subtree,
+                            Todos &                   todo )
+{
+  try
+    {
+      if ( cursor->isDerivation() )
+        {
+          this->addPackage( parentId, sym, cursor );
+        }
+      else if ( subtree == ST_PACKAGES )
+        {
+          /* Do not recurse down the `packages` subtree */
+          return;
+        }
+      else if ( auto maybeRecurse
+                = cursor->maybeGetAttr( "recurseForDerivations" );
+                ( ( maybeRecurse != nullptr ) && maybeRecurse->getBool() )
+                /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
+                 *      due to a bug in `nixpkgs' which doesn't set
+                 *      `recurseForDerivations' attribute correctly. */
+                || ( ( subtree == ST_LEGACY ) && ( sym == "darwin" ) ) )
+        {
+          flox::AttrPath path = prefix;
+          path.emplace_back( sym );
+          row_id childId = this->addOrGetAttrSetId( sym, parentId );
+          todo.emplace( std::make_tuple( std::move( path ), cursor, childId ) );
+        }
+    }
+  catch ( const nix::EvalError & err )
+    {
+      /* Ignore errors in `legacyPackages' */
+      if ( subtree == ST_LEGACY )
+        {
+          /* Only print eval errors in "debug" mode. */
+          nix::ignoreException( nix::lvlDebug );
+          return;
+        }
+      throw;
+    }
+}
 
 
 /* -------------------------------------------------------------------------- */
@@ -494,10 +492,8 @@ PkgDb::scrape( nix::SymbolTable & syms,
   /* If it has previously been scraped then bail out. */
   if ( this->completedAttrSet( parentId ) ) { return true; }
 
-  // TODO - Is this a typo?  See comment in scrapeSinglePrefix about ignoring
-  // errors in legacyPackages
-  bool tryRecur = prefix.front() != "packages";
-  bool inLegacyPackages = prefix.front() == "legacyPackages";
+  /* Store the subtree we are in for later use in various logic */
+  auto subtree = Subtree( prefix.front() );
 
   debugLog( nix::fmt( "evaluating package set '%s'",
                       concatStringsSep( ".", prefix ) ) );
@@ -510,9 +506,12 @@ PkgDb::scrape( nix::SymbolTable & syms,
   bool   lastPage     = thisPageSize < pageSize;
   auto   page
     = std::views::counted( allAttribs.begin() + startIdx, thisPageSize );
+  Todos todo;
 
   for ( nix::Symbol & aname : page )
     {
+      if ( syms[aname] == "recurseForDerivations" ) { continue; }
+
       if ( nix::lvlTalkative <= nix::verbosity )
         {
           const std::string pathS
@@ -520,18 +519,20 @@ PkgDb::scrape( nix::SymbolTable & syms,
           traceLog( nix::fmt( "Processing attribute path: '%s'.", pathS ) );
         }
 
-      if ( syms[aname] == "recurseForDerivations" ) { continue; }
-
-      Todos        todo;
-
       /* Try processing this attribute.
        * If we are to recurse, todo will be loaded with the first target for
        * us... we process this subtree completely using the todo stack. */
-      processSingleAttrib( syms[aname], cursor->getAttr( aname ), prefix, parentId, tryRecur, inLegacyPackages, todo );
-      if (! todo.empty())
+      processSingleAttrib( syms[aname],
+                           cursor->getAttr( aname ),
+                           prefix,
+                           parentId,
+                           subtree,
+                           todo );
+      if ( ! todo.empty() )
         {
           const auto [parentPrefix, _a, _b] = todo.top();
-          while ( ! todo.empty() ) {
+          while ( ! todo.empty() )
+            {
               const auto [prefix, cursor, parentId] = todo.top();
               todo.pop();
 
@@ -539,7 +540,12 @@ PkgDb::scrape( nix::SymbolTable & syms,
                 {
                   auto sym = syms[aname];
                   if ( sym == "recurseForDerivations" ) { continue; }
-                  processSingleAttrib( sym, cursor->getAttr( aname ), prefix, parentId, tryRecur, inLegacyPackages, todo );
+                  processSingleAttrib( sym,
+                                       cursor->getAttr( aname ),
+                                       prefix,
+                                       parentId,
+                                       subtree,
+                                       todo );
                 }
             }
 
