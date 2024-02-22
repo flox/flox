@@ -254,6 +254,18 @@ public:
           std::size_t        pageSize,
           std::size_t        pageIdx );
 
+  /**
+   * @brief Helper function for @a scrape to process a single attribute, adding
+   * child attributes to the @a todo queue when appropriate to recurse.
+   */
+  void
+  processSingleAttrib( const nix::SymbolStr &    sym,
+                       const flox::Cursor &      cursor,
+                       const flox::AttrPath &    prefix,
+                       const flox::pkgdb::row_id parentId,
+                       const flox::subtree_type  subtree,
+                       Todos &                   todo );
+
 
 }; /* End class `PkgDb' */
 
