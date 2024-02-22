@@ -89,7 +89,6 @@ private:
   /** The name of the input, used to emit output with shortnames. */
   std::optional<std::string> name;
 
-
   /**
    * @brief Prepare database handles for use.
    *
@@ -116,6 +115,11 @@ public:
   struct db_path_tag
   {};
 
+  /** Heuristically determined limits for page size for scraping.  This affects
+   * memory usage.  See @a getScrapingPageSize()
+   */
+  static const size_t maxPageSize = 100 * 1000;
+  static const size_t minPageSize = 1 * 1000;
 
   /**
    * @brief Construct a @a PkgDbInput from a @a RegistryInput and a path to
@@ -256,6 +260,14 @@ public:
   {
     return this->name;
   }
+
+  /**
+   * @brief Helper to identify the pageSize to use for scraping.
+   * @return pageSize in items
+   */
+  static int
+  getScrapingPageSize();
+
 }; /* End struct `PkgDbInput' */
 
 

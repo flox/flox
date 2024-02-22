@@ -14,15 +14,17 @@
   cargoTomlLatest = (lib.importTOML "${inputs.flox-latest}/cli/flox/Cargo.toml").package.version or "dirty";
   revCountDiff = self.revCount - inputs.flox-latest.revCount;
   version =
-    if !(self ? revCount || self ? shortRev) then # path://$PWD
+    if !(self ? revCount || self ? shortRev)
+    then # path://$PWD
       "${cargoToml}-dirty"
-    else if !(self ? revCount) then # github:flox/flox
+    else if !(self ? revCount)
+    then # github:flox/flox
       "${cargoToml}-g${self.shortRev}"
-    else if revCountDiff == 0 then # for release, only possible with overrides/follows
+    else if revCountDiff == 0
+    then # for release, only possible with overrides/follows
       "${cargoToml}"
     else # git+ssh://git@github.com/flox/flox
-      "${cargoTomlLatest}-${builtins.toString revCountDiff}-g${self.shortRev}"
-    ;
+      "${cargoTomlLatest}-${builtins.toString revCountDiff}-g${self.shortRev}";
 in
   symlinkJoin {
     name = "${flox-cli.pname}-${version}";

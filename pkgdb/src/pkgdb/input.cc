@@ -124,6 +124,56 @@ PkgDbInput::closeDbReadWrite()
   if ( this->dbRW != nullptr ) { this->dbRW = nullptr; }
 }
 
+
+int
+PkgDbInput::getScrapingPageSize()
+{
+  // Each entry (in order) is checked if the avaialble memory is >= memKb, and
+  // if so, will use pageSize.
+  struct MemThreshold
+  {
+    long   memoryKb;
+    size_t pageSize;
+  };
+  // These are very rough heuristics.  It was found that about 4.5g is required
+  // to scrape the entire darwin subtree all at once.  1000 item page sizes
+  // seems to keep memory consumption under 1.5g.  These values are a
+  // conservative estimate with the hopes of never OOMing.  That said, the
+  // method of determining *available* memory is to count reported free memory,
+  // and also including *shared* and *cache/buffer* allocated memory thinking
+  // that it could be re-allocated.  The amount of truly *free* memory (at least
+  // on linux) is usually relatively low.
+  const std::vector<MemThreshold> MemThresholds = {
+    { 6 /* Gb */ * ( 1024 * 1024 ), PkgDbInput::maxPageSize },
+    { 4 /* Gb */ * ( 1024 * 1024 ), 20 * 1000 },
+    { 3 /* Gb */ * ( 1024 * 1024 ), 10 * 1000 },
+    { 2 /* Gb */ * ( 1024 * 1024 ), 4 * 1000 },
+  };
+
+  // No override, so use heuristics
+  long availableMemory = getAvailableSystemMemory();
+
+  debugLog( nix::fmt( "getScrapingPageSize: using available memory as: %dkb",
+                      availableMemory ) );
+
+  for ( auto threshold : MemThresholds )
+    {
+      traceLog( nix::fmt( "getScrapingPageSize: checking threshold: %dkb",
+                          threshold.memoryKb ) );
+      if ( availableMemory > threshold.memoryKb )
+        {
+          debugLog( nix::fmt( "getScrapingPageSize: using page size: %d",
+                              threshold.pageSize ) );
+          return threshold.pageSize;
+        }
+    }
+
+  // Use the minimum and warn in the output
+  verboseLog( "getScrapingPageSize: using minimum page size, performance will "
+              "be impacted!" );
+  return PkgDbInput::minPageSize;
+}
+
 void
 PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 {
@@ -137,7 +187,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
   this->freeFlake();
 
   bool         scrapingComplete = false;
-  const size_t pageSize         = 5000;
+  const size_t pageSize         = getScrapingPageSize();
   size_t       pageIdx          = 0;
 
   while ( ! scrapingComplete )
