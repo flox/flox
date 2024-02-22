@@ -427,6 +427,53 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
   this->setPrefixDone( this->addOrGetAttrSetId( prefix ), done );
 }
 
+void
+PkgDb::processAttrib ( nix::SymbolTable & syms,
+                              const flox::Cursor &      childCursor,
+                               const flox::AttrPath &    prefix,
+                               const flox::pkgdb::row_id parentId,
+                               const nix::Symbol &       aname,
+                               const bool tryRecur, 
+                               const bool inLegacyPackages,
+                               Todos &                   todo)
+  {
+    try
+      {
+        if ( childCursor->isDerivation() )
+          {
+            this->addPackage( parentId, syms[aname], childCursor );
+          }
+        else if ( !tryRecur )
+          {
+            return;
+          }
+        else if ( auto maybeRecurse = childCursor->maybeGetAttr( "recurseForDerivations" );
+             ( ( maybeRecurse != nullptr ) && maybeRecurse->getBool() )
+             /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
+              *      due to a bug in `nixpkgs' which doesn't set
+              *      `recurseForDerivations' attribute correctly. */
+             || ( inLegacyPackages && ( syms[aname] == "darwin" ) ) )
+          {
+            flox::AttrPath path = prefix;
+            path.emplace_back( syms[aname] );
+            row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
+            todo.emplace(
+              std::make_tuple( std::move( path ), childCursor, childId ) );
+          }
+      }
+    catch ( const nix::EvalError & err )
+      {
+        /* Ignore errors in `legacyPackages' */
+        if ( inLegacyPackages )
+          {
+            /* Only print eval errors in "debug" mode. */
+            nix::ignoreException( nix::lvlDebug );
+            return;
+          }
+        throw;
+      }
+  }
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -435,8 +482,6 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
  * of recursion is faster and consumes less memory.
  * Repeated runs against `nixpkgs-flox` come in at ~2m03s using recursion and
  * ~1m40s using a queue. */
-// NOLINTBEGIN(readability-function-cognitive-complexity)
-// TODO: Refactor this function to reduce its complexity.
 bool
 PkgDb::scrape( nix::SymbolTable & syms,
                const Target &     target,
@@ -448,57 +493,13 @@ PkgDb::scrape( nix::SymbolTable & syms,
   /* If it has previously been scraped then bail out. */
   if ( this->completedAttrSet( parentId ) ) { return true; }
 
+  // TODO - Is this a typo?  See comment in scrapeSinglePrefix about ignoring
+  // errors in legacyPackages
   bool tryRecur = prefix.front() != "packages";
+  bool inLegacyPackages = prefix.front() == "legacyPackages";
 
   debugLog( nix::fmt( "evaluating package set '%s'",
                       concatStringsSep( ".", prefix ) ) );
-
-  auto processAttrib
-    = [this, &syms, tryRecur]( const flox::Cursor &      childCursor,
-                               const flox::AttrPath &    prefix,
-                               const flox::pkgdb::row_id parentId,
-                               const nix::Symbol &       aname,
-                               Todos &                   todo ) -> bool
-  {
-    try
-      {
-        if ( childCursor->isDerivation() )
-          {
-            this->addPackage( parentId, syms[aname], childCursor );
-            return false;
-          }
-        if ( ! tryRecur ) { return false; }
-
-        if ( auto maybe = childCursor->maybeGetAttr( "recurseForDerivations" );
-             ( ( maybe != nullptr ) && maybe->getBool() )
-             /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
-              *      due to a bug in `nixpkgs' which doesn't set
-              *      `recurseForDerivations' attribute correctly. */
-             || ( ( prefix.front() == "legacyPackages" )
-                  && ( syms[aname] == "darwin" ) ) )
-          {
-            flox::AttrPath path = prefix;
-            path.emplace_back( syms[aname] );
-            row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
-            todo.emplace(
-              std::make_tuple( std::move( path ), childCursor, childId ) );
-            return true;
-          }
-
-        return false;
-      }
-    catch ( const nix::EvalError & err )
-      {
-        /* Ignore errors in `legacyPackages' */
-        if ( tryRecur )
-          {
-            /* Only print eval errors in "debug" mode. */
-            nix::ignoreException( nix::lvlDebug );
-            return false;
-          }
-        throw;
-      }
-  };
 
   auto   allAttribs   = cursor->getAttrs();
   size_t startIdx     = pageIdx * pageSize;
@@ -526,7 +527,8 @@ PkgDb::scrape( nix::SymbolTable & syms,
       /* Try processing this attribute.
        * If we are to recurse, todo will be loaded with the first target for
        * us... we process this subtree completely using the todo stack. */
-      if ( processAttrib( childCursor, prefix, parentId, aname, todo ) )
+      processAttrib( syms, childCursor, prefix, parentId, aname, tryRecur, inLegacyPackages, todo );
+      if (! todo.empty())
         {
           const auto [parentPrefix, _a, _b] = todo.top();
           while ( ! todo.empty() ) {
@@ -537,10 +539,9 @@ PkgDb::scrape( nix::SymbolTable & syms,
                 {
                   if ( syms[aname] == "recurseForDerivations" ) { continue; }
                   flox::Cursor childCursor = cursor->getAttr( aname );
-                  processAttrib( childCursor, prefix, parentId, aname, todo );
+                  processAttrib( syms, childCursor, prefix, parentId, aname, tryRecur, inLegacyPackages, todo );
                 }
             }
-          
 
           this->setPrefixDone( parentPrefix, true );
         }
@@ -548,9 +549,7 @@ PkgDb::scrape( nix::SymbolTable & syms,
 
   if ( lastPage ) { this->setPrefixDone( prefix, true ); }
   return lastPage;
-  ;
 }
-// NOLINTEND(readability-function-cognitive-complexity)
 
 
 /* -------------------------------------------------------------------------- */

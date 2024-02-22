@@ -254,6 +254,15 @@ public:
           std::size_t        pageSize,
           std::size_t        pageIdx );
 
+  void processAttrib ( nix::SymbolTable & syms,
+                              const flox::Cursor &      childCursor,
+                               const flox::AttrPath &    prefix,
+                               const flox::pkgdb::row_id parentId,
+                               const nix::Symbol &       aname,
+                               const bool inLegacyPackages,
+                               const bool tryRecur,
+                               Todos &                   todo);
+
 
 }; /* End class `PkgDb' */
 
