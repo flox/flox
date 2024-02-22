@@ -428,8 +428,8 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
 }
 
 void
-PkgDb::processAttrib ( nix::SymbolTable & syms,
-                              const flox::Cursor &      childCursor,
+PkgDb::processSingleAttrib ( const nix::SymbolTable & syms,
+                              const flox::Cursor &      parentCursor,
                                const flox::AttrPath &    prefix,
                                const flox::pkgdb::row_id parentId,
                                const nix::Symbol &       aname,
@@ -439,6 +439,7 @@ PkgDb::processAttrib ( nix::SymbolTable & syms,
   {
     try
       {
+        flox::Cursor childCursor = parentCursor->getAttr( aname );
         if ( childCursor->isDerivation() )
           {
             this->addPackage( parentId, syms[aname], childCursor );
@@ -522,12 +523,11 @@ PkgDb::scrape( nix::SymbolTable & syms,
       if ( syms[aname] == "recurseForDerivations" ) { continue; }
 
       Todos        todo;
-      flox::Cursor childCursor = cursor->getAttr( aname );
 
       /* Try processing this attribute.
        * If we are to recurse, todo will be loaded with the first target for
        * us... we process this subtree completely using the todo stack. */
-      processAttrib( syms, childCursor, prefix, parentId, aname, tryRecur, inLegacyPackages, todo );
+      processSingleAttrib( syms, cursor, prefix, parentId, aname, tryRecur, inLegacyPackages, todo );
       if (! todo.empty())
         {
           const auto [parentPrefix, _a, _b] = todo.top();
@@ -538,8 +538,7 @@ PkgDb::scrape( nix::SymbolTable & syms,
               for ( nix::Symbol & aname : cursor->getAttrs() )
                 {
                   if ( syms[aname] == "recurseForDerivations" ) { continue; }
-                  flox::Cursor childCursor = cursor->getAttr( aname );
-                  processAttrib( syms, childCursor, prefix, parentId, aname, tryRecur, inLegacyPackages, todo );
+                  processSingleAttrib( syms, cursor, prefix, parentId, aname, tryRecur, inLegacyPackages, todo );
                 }
             }
 

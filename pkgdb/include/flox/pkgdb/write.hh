@@ -254,8 +254,12 @@ public:
           std::size_t        pageSize,
           std::size_t        pageIdx );
 
-  void processAttrib ( nix::SymbolTable & syms,
-                              const flox::Cursor &      childCursor,
+  /**
+   * @brief Helper function for @a scrape to process a single attribute, adding
+   * child attributes to the @a todo queue when appropriate to recurse.
+   */
+  void processSingleAttrib ( const nix::SymbolTable & syms,
+                              const flox::Cursor &      parentCursor,
                                const flox::AttrPath &    prefix,
                                const flox::pkgdb::row_id parentId,
                                const nix::Symbol &       aname,
