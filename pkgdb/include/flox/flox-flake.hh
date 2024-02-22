@@ -137,6 +137,10 @@ FLOX_DEFINE_EXCEPTION( LockFlakeException,
 
 /* -------------------------------------------------------------------------- */
 
+void
+callInChildProcess( std::function<void()>  lambda,
+                    const std::exception & thrownOnError );
+
 /**
  * @brief Thin wrapper around nix::lockFlake to ensure any downloads happen in
  *        a child process.
