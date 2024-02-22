@@ -124,10 +124,6 @@ PkgDbInput::closeDbReadWrite()
   if ( this->dbRW != nullptr ) { this->dbRW = nullptr; }
 }
 
-
-/* -------------------------------------------------------------------------- */
-// NOLINTBEGIN(readability-function-cognitive-complexity)
-// TODO: reduce complexity of this function
 void
 PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 {
@@ -135,22 +131,17 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
   Todos todo;
 
-  // close the db if we have anything open in preparation for the child to take
-  // over.
+  // Close the db and clean up if we have anything open in preparation for the
+  // child to take over.
   this->closeDbReadWrite();
-
   this->freeFlake();
 
   bool         scrapingComplete = false;
   const size_t pageSize         = 5000;
   size_t       pageIdx          = 0;
 
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while)
-  do {
-      const int EXIT_CHILD_INCOMPLETE = EXIT_SUCCESS + 1;
-      const int EXIT_FAILURE_NIX_EVAL
-        = 150;  // seems to not overlap with common posix codes
-
+  while ( ! scrapingComplete )
+    {
       pid_t pid = fork();
       if ( pid == -1 )
         {
@@ -158,6 +149,8 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         }
       if ( 0 < pid )
         {
+          //
+          // This is the parent process
           int status = 0;
           debugLog(
             nix::fmt( "scrapePrefix: Waiting for forked process, pid: %d",
@@ -206,67 +199,71 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         }
       else
         {
-          /* Open a read/write connection. */
-          auto chunkDbRW = this->getDbReadWrite();
-
-          /* Start a transaction */
-          chunkDbRW->execute( "BEGIN TRANSACTION" );
-          row_id      chunkRow = chunkDbRW->addOrGetAttrSetId( prefix );
-          MaybeCursor root     = this->getFlake()->maybeOpenCursor( prefix );
-
-          Target rootTarget
-            = std::make_tuple( prefix,
-                               static_cast<flox::Cursor>( root ),
-                               chunkRow );
-          bool targetComplete = false;
-
-          try
-            {
-              debugLog( nix::fmt( "scrapePrefix(child): scraping page %d of "
-                                  "%d attributes",
-                                  pageIdx,
-                                  pageSize ) );
-              targetComplete
-                = chunkDbRW->scrape( this->getFlake()->state->symbols,
-                                     rootTarget,
-                                     pageSize,
-                                     pageIdx );
-            }
-          catch ( const nix::EvalError & err )
-            {
-              debugLog(
-                nix::fmt( "scrapePrefix(child): caught nix::EvalError: %s",
-                          err.msg().c_str() ) );
-              chunkDbRW->execute( "ROLLBACK TRANSACTION" );
-              this->closeDbReadWrite();
-              this->freeFlake();
-              exit( EXIT_FAILURE_NIX_EVAL );
-            }
-
-          /* Close the transaction. */
-          chunkDbRW->execute( "COMMIT TRANSACTION" );
-          debugLog( nix::fmt(
-            "scrapePrefix(child): scraping page %d complete, lastPage: %d",
-            pageIdx,
-            targetComplete ) );
-          try
-            {
-              this->closeDbReadWrite();
-              this->freeFlake();
-              exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
-            }
-          catch ( const std::exception & err )
-            {
-              debugLog(
-                nix::fmt( "scrapePrefix(child): caught exception on exit: %s",
-                          err.what() ) );
-              exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
-            }
+          //
+          // This is the child process
+          scrapePrefixWorker( this, prefix, pageIdx, pageSize );
         }
     }
-  while ( ! scrapingComplete );
 }
-// NOLINTEND(readability-function-cognitive-complexity)
+
+void
+PkgDbInput::scrapePrefixWorker( PkgDbInput *     input,
+                                const AttrPath & prefix,
+                                const size_t     pageIdx,
+                                const size_t     pageSize )
+{
+  /* Open a read/write connection. */
+  auto chunkDbRW = input->getDbReadWrite();
+
+  /* Start a transaction */
+  chunkDbRW->execute( "BEGIN TRANSACTION" );
+  row_id      chunkRow = chunkDbRW->addOrGetAttrSetId( prefix );
+  MaybeCursor root     = input->getFlake()->maybeOpenCursor( prefix );
+
+  Target rootTarget
+    = std::make_tuple( prefix, static_cast<flox::Cursor>( root ), chunkRow );
+  bool targetComplete = false;
+
+  try
+    {
+      debugLog( nix::fmt( "scrapePrefix(child): scraping page %d of "
+                          "%d attributes",
+                          pageIdx,
+                          pageSize ) );
+      targetComplete = chunkDbRW->scrape( input->getFlake()->state->symbols,
+                                          rootTarget,
+                                          pageSize,
+                                          pageIdx );
+    }
+  catch ( const nix::EvalError & err )
+    {
+      debugLog( nix::fmt( "scrapePrefix(child): caught nix::EvalError: %s",
+                          err.msg().c_str() ) );
+      chunkDbRW->execute( "ROLLBACK TRANSACTION" );
+      input->closeDbReadWrite();
+      input->freeFlake();
+      exit( EXIT_FAILURE_NIX_EVAL );
+    }
+
+  /* Close the transaction. */
+  chunkDbRW->execute( "COMMIT TRANSACTION" );
+  debugLog(
+    nix::fmt( "scrapePrefix(child): scraping page %d complete, lastPage: %d",
+              pageIdx,
+              targetComplete ) );
+  try
+    {
+      input->closeDbReadWrite();
+      input->freeFlake();
+      exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+    }
+  catch ( const std::exception & err )
+    {
+      debugLog( nix::fmt( "scrapePrefix(child): caught exception on exit: %s",
+                          err.what() ) );
+      exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+    }
+}
 
 /* -------------------------------------------------------------------------- */
 
