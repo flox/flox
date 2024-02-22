@@ -390,7 +390,7 @@ getAvailableSystemMemory()
    * availableKb *= pageSize;
    */
 
-  long long physicalRAM = getSysCtlValue<int>( "hw.memsize" );
+  long long physicalRAM = getSysCtlValue<long long>( "hw.memsize" );
   /* For now use 3/4ths of physical ram.
    * Simplifed from ((physicalRAM / 1024) / 4) * 3
    */
