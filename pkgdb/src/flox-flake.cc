@@ -45,7 +45,6 @@ callInChildProcess( std::function<void()>  lambda,
   pid_t pid = fork();
   if ( pid == -1 )
     {
-      // WML - TODO - better error handling here!
       errorLog( "callInChildProcess: failed to fork!" );
       exit( EXIT_FAILURE );
     }
