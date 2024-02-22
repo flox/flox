@@ -317,12 +317,10 @@ FloxFlakeInput::getSubtrees()
 RegistryInput
 FloxFlakeInput::getLockedInput()
 {
-  auto getFlake = [&]() { auto unusedFlake = this->getFlake(); };
+  // auto getFlake = [&]() { auto unusedFlake = this->getFlake(); };
 
-  callInChildProcess( getFlake, LockFlakeException( "testing only" ) );
+  // callInChildProcess( getFlake, LockFlakeException( "testing only" ) );
   return { this->getSubtrees(), this->getFlake()->lockedFlake.flake.lockedRef };
-  // return { this->getSubtrees(), this->getFlake()->lockedFlake.flake.lockedRef
-  // };
 }
 
 
