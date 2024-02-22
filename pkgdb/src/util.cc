@@ -381,11 +381,20 @@ getAvailableSystemMemory()
 
 
 #ifdef __APPLE__
-  int freePages     = getSysCtlValue<int>( "vm.page_free_count" );
-  int reusablePages = getSysCtlValue<int>( "vm.page_reusable_count" );
-  int pageSize      = getSysCtlValue<int>( "vm.pagesize" );
-  availableKb       = ( freePages + reusablePages ) / 1024;
-  availableKb *= pageSize;
+  /* The following first attempt proved to be way too conservative
+   *
+   * int freePages     = getSysCtlValue<int>( "vm.page_free_count" );
+   * int reusablePages = getSysCtlValue<int>( "vm.page_reusable_count" );
+   * int pageSize      = getSysCtlValue<int>( "vm.pagesize" );
+   * availableKb       = ( freePages + reusablePages ) / 1024;
+   * availableKb *= pageSize;
+   */
+
+  long long physicalRAM = getSysCtlValue<int>( "hw.memsize" );
+  /* For now use 3/4ths of physical ram.
+   * Simplifed from ((physicalRAM / 1024) / 4) * 3
+   */
+  availableKb = ( physicalRAM / 4096 ) * 3;
 #else
   struct sysinfo memInfo;
   sysinfo( &memInfo );
