@@ -15,6 +15,7 @@ use super::{
     EnvironmentError2,
     InstallationAttempt,
     ManagedPointer,
+    UninstallationAttempt,
     UpdateResult,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
@@ -205,7 +206,7 @@ impl Environment for RemoteEnvironment {
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<String, EnvironmentError2> {
+    ) -> Result<UninstallationAttempt, EnvironmentError2> {
         let result = self.inner.uninstall(packages, flox)?;
         self.inner
             .push(flox, false)

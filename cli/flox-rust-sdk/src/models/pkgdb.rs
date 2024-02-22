@@ -1,6 +1,7 @@
 use std::env;
 use std::fmt::Display;
 use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use log::debug;
@@ -41,9 +42,12 @@ pub mod error_codes {
 /// The JSON output of a `pkgdb upgrade` call
 #[derive(Deserialize)]
 pub struct UpgradeResultJSON {
-    pub result: UpgradeResult,
+    pub result: UpgradeResultInner,
     pub lockfile: Value,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct UpgradeResultInner(pub Vec<String>);
 
 /// The JSON output of a `pkgdb buildenv` call
 #[derive(Deserialize)]
@@ -51,8 +55,11 @@ pub struct BuildEnvResult {
     pub store_path: String,
 }
 
-#[derive(Deserialize)]
-pub struct UpgradeResult(pub Vec<String>);
+#[derive(Debug)]
+pub struct UpgradeResult {
+    pub packages: Vec<String>,
+    pub store_path: Option<PathBuf>,
+}
 
 #[derive(Debug, Error)]
 pub enum CallPkgDbError {

@@ -10,6 +10,7 @@ use super::{
     copy_dir_recursive,
     CanonicalizeError,
     InstallationAttempt,
+    UninstallationAttempt,
     UpdateResult,
     LOCKFILE_FILENAME,
     MANIFEST_FILENAME,
@@ -131,6 +132,7 @@ impl<State> CoreEnvironment<State> {
     /// Linking should be done explicitly by the caller using [Self::link].
     ///
     /// todo: should we always write the lockfile to disk?
+    #[must_use = "don't discard the store path of built environments"]
     pub fn build(&mut self, flox: &Flox) -> Result<PathBuf, CoreEnvironmentError> {
         let lockfile = self.lock(flox)?;
 
@@ -141,7 +143,7 @@ impl<State> CoreEnvironment<State> {
         );
 
         let store_path = lockfile
-            .build(Path::new(&*PKGDB_BIN), None)
+            .build(Path::new(&*PKGDB_BIN), None, &None)
             .map_err(CoreEnvironmentError::LockedManifest)?;
 
         debug!(
@@ -201,11 +203,12 @@ impl<State> CoreEnvironment<State> {
     /// Create a new out-link for the environment at the given path.
     ///
     /// Builds the environment if necessary.
-    /// todo: should we always build implicitly?
+    /// TODO: should we always build implicitly?
     pub fn link(
         &mut self,
         flox: &Flox,
         out_link_path: impl AsRef<Path>,
+        store_path: &Option<PathBuf>,
     ) -> Result<(), CoreEnvironmentError> {
         let lockfile = self.lock(flox)?;
         debug!(
@@ -215,9 +218,12 @@ impl<State> CoreEnvironment<State> {
             out_link_path.as_ref().display()
         );
         lockfile
-            .build(Path::new(&*PKGDB_BIN), Some(out_link_path.as_ref()))
+            .build(
+                Path::new(&*PKGDB_BIN),
+                Some(out_link_path.as_ref()),
+                store_path,
+            )
             .map_err(CoreEnvironmentError::LockedManifest)?;
-
         Ok(())
     }
 }
@@ -251,14 +257,16 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
     ) -> Result<InstallationAttempt, CoreEnvironmentError> {
         let current_manifest_contents = self.manifest_content()?;
-        let installation = insert_packages(&current_manifest_contents, packages)
+        let mut installation = insert_packages(&current_manifest_contents, packages)
             .map(|insertion| InstallationAttempt {
                 new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
                 already_installed: insertion.already_installed,
+                store_path: None,
             })
             .map_err(CoreEnvironmentError::ModifyToml)?;
         if let Some(ref new_manifest) = installation.new_manifest {
-            self.transact_with_manifest_contents(new_manifest, flox)?;
+            let store_path = self.transact_with_manifest_contents(new_manifest, flox)?;
+            installation.store_path = Some(store_path);
         }
         Ok(installation)
     }
@@ -272,12 +280,15 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<String, CoreEnvironmentError> {
+    ) -> Result<UninstallationAttempt, CoreEnvironmentError> {
         let current_manifest_contents = self.manifest_content()?;
         let toml = remove_packages(&current_manifest_contents, &packages)
             .map_err(CoreEnvironmentError::ModifyToml)?;
-        self.transact_with_manifest_contents(toml.to_string(), flox)?;
-        Ok(toml.to_string())
+        let store_path = self.transact_with_manifest_contents(toml.to_string(), flox)?;
+        Ok(UninstallationAttempt {
+            new_manifest: Some(toml.to_string()),
+            store_path: Some(store_path),
+        })
     }
 
     /// Atomically edit this environment, ensuring that it still builds
@@ -295,9 +306,9 @@ impl CoreEnvironment<ReadOnly> {
             return Ok(EditResult::Unchanged);
         }
 
-        self.transact_with_manifest_contents(&contents, flox)?;
+        let store_path = self.transact_with_manifest_contents(&contents, flox)?;
 
-        EditResult::new(&old_contents, &contents)
+        EditResult::new(&old_contents, &contents, Some(store_path))
     }
 
     /// Atomically edit this environment, without checking that it still builds
@@ -340,7 +351,7 @@ impl CoreEnvironment<ReadOnly> {
         self.replace_with(temp_env)?;
 
         match build_attempt {
-            Ok(_) => Ok(EditResult::new(&old_contents, &contents)),
+            Ok(store_path) => Ok(EditResult::new(&old_contents, &contents, Some(store_path))),
             Err(err) => Ok(Err(err)),
         }
     }
@@ -351,8 +362,12 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         inputs: Vec<String>,
     ) -> Result<UpdateResult, CoreEnvironmentError> {
-        // TODO double check canonicalization
-        let (old_lockfile, new_lockfile) = LockedManifest::update_manifest(
+        // TODO: double check canonicalization
+        let UpdateResult {
+            new_lockfile,
+            old_lockfile,
+            ..
+        } = LockedManifest::update_manifest(
             flox,
             Some(self.manifest_path()),
             self.lockfile_path(),
@@ -360,12 +375,16 @@ impl CoreEnvironment<ReadOnly> {
         )
         .map_err(CoreEnvironmentError::LockedManifest)?;
 
-        self.transact_with_lockfile_contents(
+        let store_path = self.transact_with_lockfile_contents(
             serde_json::to_string_pretty(&new_lockfile).unwrap(),
             flox,
         )?;
 
-        Ok((old_lockfile, new_lockfile))
+        Ok(UpdateResult {
+            new_lockfile,
+            old_lockfile,
+            store_path: Some(store_path),
+        })
     }
 
     /// Atomically upgrade packages in this environment
@@ -405,9 +424,12 @@ impl CoreEnvironment<ReadOnly> {
         )
         .map_err(CoreEnvironmentError::ParseUpgradeOutput)?;
 
-        self.transact_with_lockfile_contents(json.lockfile.to_string(), flox)?;
+        let store_path = self.transact_with_lockfile_contents(json.lockfile.to_string(), flox)?;
 
-        Ok(json.result)
+        Ok(UpgradeResult {
+            packages: json.result.0,
+            store_path: Some(store_path),
+        })
     }
 
     /// Makes a temporary copy of the environment so modifications to the manifest
@@ -473,11 +495,12 @@ impl CoreEnvironment<ReadOnly> {
     }
 
     /// Attempt to transactionally replace the manifest contents
+    #[must_use = "don't discard the store path of built environments"]
     fn transact_with_manifest_contents(
         &mut self,
         manifest_contents: impl AsRef<str>,
         flox: &Flox,
-    ) -> Result<(), CoreEnvironmentError> {
+    ) -> Result<PathBuf, CoreEnvironmentError> {
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
             .into_path();
@@ -492,11 +515,11 @@ impl CoreEnvironment<ReadOnly> {
         temp_env.update_manifest(&manifest_contents)?;
 
         debug!("transaction: building environment");
-        temp_env.build(flox)?;
+        let store_path = temp_env.build(flox)?;
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
-        Ok(())
+        Ok(store_path)
     }
 
     /// Attempt to transactionally replace the lockfile contents
@@ -508,11 +531,12 @@ impl CoreEnvironment<ReadOnly> {
     /// TODO: this is separate from transact_with_manifest_contents because it
     /// shouldn't have to call lock. Currently build calls lock, but we
     /// shouldn't have to lock a second time.
+    #[must_use = "don't discard the store path of built environments"]
     fn transact_with_lockfile_contents(
         &mut self,
         lockfile_contents: impl AsRef<str>,
         flox: &Flox,
-    ) -> Result<(), CoreEnvironmentError> {
+    ) -> Result<PathBuf, CoreEnvironmentError> {
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
             .into_path();
@@ -527,11 +551,11 @@ impl CoreEnvironment<ReadOnly> {
         temp_env.update_lockfile(&lockfile_contents)?;
 
         debug!("transaction: building environment");
-        temp_env.build(flox)?;
+        let store_path = temp_env.build(flox)?;
 
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
-        Ok(())
+        Ok(store_path)
     }
 }
 
@@ -563,18 +587,22 @@ impl CoreEnvironment<ReadWrite> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EditResult {
     /// The manifest was not modified.
     Unchanged,
     /// The manifest was modified, and the user needs to re-activate it.
-    ReActivateRequired,
+    ReActivateRequired { store_path: Option<PathBuf> },
     /// The manifest was modified, but the user does not need to re-activate it.
-    Success,
+    Success { store_path: Option<PathBuf> },
 }
 
 impl EditResult {
-    pub fn new(old_manifest: &str, new_manifest: &str) -> Result<Self, CoreEnvironmentError> {
+    pub fn new(
+        old_manifest: &str,
+        new_manifest: &str,
+        store_path: Option<PathBuf>,
+    ) -> Result<Self, CoreEnvironmentError> {
         if old_manifest == new_manifest {
             Ok(Self::Unchanged)
         } else {
@@ -587,10 +615,18 @@ impl EditResult {
                 toml::from_str(new_manifest).map_err(CoreEnvironmentError::DeserializeManifest)?;
             // TODO: some modifications to `install` currently require re-activation
             if old_manifest.hook != new_manifest.hook || old_manifest.vars != new_manifest.vars {
-                Ok(Self::ReActivateRequired)
+                Ok(Self::ReActivateRequired { store_path })
             } else {
-                Ok(Self::Success)
+                Ok(Self::Success { store_path })
             }
+        }
+    }
+
+    pub fn store_path(&self) -> Option<PathBuf> {
+        match self {
+            EditResult::Unchanged => None,
+            EditResult::ReActivateRequired { store_path } => store_path.clone(),
+            EditResult::Success { store_path } => store_path.clone(),
         }
     }
 }

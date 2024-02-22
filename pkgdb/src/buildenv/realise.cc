@@ -214,6 +214,7 @@ extractAttrPath( nix::EvalState &       state,
 static std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
 getLockedPackages( resolver::Lockfile & lockfile, const System & system )
 {
+  traceLog( "creating FloxEnv" );
   auto packages = lockfile.getLockfileRaw().packages.find( system );
   if ( packages == lockfile.getLockfileRaw().packages.end() )
     {
@@ -291,30 +292,6 @@ getRealisedPackages( nix::EvalState &                        state,
     {
       throw PackageEvalFailure( "Failed to get derivation for package '"
                                 + nlohmann::json( package ).dump() + "'" );
-    }
-
-  auto broken = package_drv->queryMetaBool( "broken", false );
-  if ( broken && ! allows.broken.value_or( false ) )
-    {
-      throw PackageEvalFailure(
-        nix::fmt( "Package '%s' is marked as broken.\n\n"
-                  "Allow building broken packages by setting "
-                  "'options.allow.broken = true' in manifest.toml",
-                  pId ) );
-    }
-
-  // if the package does not have an `unfree` attribute,
-  // assume it is unfree.
-  // Generally, nixpkgs packages _will_ have this attribute set.
-  // However, if it is missing it is safer to assume it is unfree.
-  auto unfree = package_drv->queryMetaBool( "unfree", true );
-  if ( unfree && ! allows.unfree.value_or( false ) )
-    {
-      throw PackageEvalFailure(
-        nix::fmt( "Package '%s' is marked as unfree.\n\n"
-                  "Allow building unfree packages by setting "
-                  "'options.allow.unfree = true' in manifest.toml",
-                  pId ) );
     }
 
   std::string packagePath;

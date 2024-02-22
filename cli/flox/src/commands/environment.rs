@@ -172,13 +172,15 @@ impl Edit {
             EditResult::Unchanged => {
                 message::warning("No changes made to environment.");
             },
-            EditResult::ReActivateRequired
+            EditResult::ReActivateRequired { .. }
                 if activated_environments().is_active(&active_environment) =>
             {
                 message::warning(reactivate_required_note)
             },
-            EditResult::ReActivateRequired => message::updated("Environment successfully updated."),
-            EditResult::Success => message::updated("Environment successfully updated."),
+            EditResult::ReActivateRequired { .. } => {
+                message::updated("Environment successfully updated.")
+            },
+            EditResult::Success { .. } => message::updated("Environment successfully updated."),
         }
         Ok(())
     }
@@ -1986,25 +1988,31 @@ impl Update {
                     environment_select.detect_concrete_environment(&flox, "update")?;
 
                 let description = Some(environment_description(&concrete_environment)?);
-                let (old_manifest, new_manifest) =
-                    self.update_manifest(flox, concrete_environment)?;
+                let UpdateResult {
+                    new_lockfile,
+                    old_lockfile,
+                    ..
+                } = self.update_manifest(flox, concrete_environment)?;
                 (
-                    old_manifest
+                    old_lockfile
                         .map(TypedLockedManifest::try_from)
                         .transpose()?,
-                    TypedLockedManifest::try_from(new_manifest)?,
+                    TypedLockedManifest::try_from(new_lockfile)?,
                     false,
                     description,
                 )
             },
             EnvironmentOrGlobalSelect::Global => {
-                let (old_manifest, new_manifest) =
-                    LockedManifest::update_global_manifest(&flox, self.inputs)?;
+                let UpdateResult {
+                    new_lockfile,
+                    old_lockfile,
+                    ..
+                } = LockedManifest::update_global_manifest(&flox, self.inputs)?;
                 (
-                    old_manifest
+                    old_lockfile
                         .map(TypedLockedManifest::try_from)
                         .transpose()?,
-                    TypedLockedManifest::try_from(new_manifest)?,
+                    TypedLockedManifest::try_from(new_lockfile)?,
                     true,
                     None,
                 )
@@ -2148,10 +2156,7 @@ impl Upgrade {
 
         let mut environment = concrete_environment.into_dyn_environment();
 
-        let upgraded = environment
-            .upgrade(&flox, &self.groups_or_iids)?
-            // .context("upgrading environment failed")?
-            .0;
+        let upgraded = environment.upgrade(&flox, &self.groups_or_iids)?.packages;
 
         if upgraded.is_empty() {
             if self.groups_or_iids.is_empty() {

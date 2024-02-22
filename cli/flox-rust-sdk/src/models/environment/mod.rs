@@ -62,7 +62,12 @@ pub const FLOX_SYSTEM_PLACEHOLDER: &str = "_FLOX_INIT_SYSTEM";
 pub const FLOX_HOOK_PLACEHOLDER: &str = "_FLOX_INIT_HOOK";
 pub const FLOX_INSTALL_PLACEHOLDER: &str = "_FLOX_INIT_INSTALL";
 
-pub type UpdateResult = (Option<LockedManifest>, LockedManifest);
+#[derive(Debug)]
+pub struct UpdateResult {
+    pub new_lockfile: LockedManifest,
+    pub old_lockfile: Option<LockedManifest>,
+    pub store_path: Option<PathBuf>,
+}
 
 /// A path that is guaranteed to be canonicalized
 ///
@@ -105,6 +110,18 @@ impl CanonicalPath {
 pub struct InstallationAttempt {
     pub new_manifest: Option<String>,
     pub already_installed: HashMap<String, bool>,
+    /// The store path of environment that was built to validate the install.
+    /// This is used as an optimization to skip builds that we've already done.
+    pub store_path: Option<PathBuf>,
+}
+
+/// The result of an uninstallation attempt
+#[derive(Debug)]
+pub struct UninstallationAttempt {
+    pub new_manifest: Option<String>,
+    /// The store path of environment that was built to validate the uninstall.
+    /// This is used as an optimization to skip builds that we've already done.
+    pub store_path: Option<PathBuf>,
 }
 
 pub trait Environment: Send {
@@ -129,7 +146,7 @@ pub trait Environment: Send {
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<String, EnvironmentError2>;
+    ) -> Result<UninstallationAttempt, EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2>;

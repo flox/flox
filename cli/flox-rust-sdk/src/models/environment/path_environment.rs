@@ -32,6 +32,7 @@ use super::{
     EnvironmentPointer,
     InstallationAttempt,
     PathPointer,
+    UninstallationAttempt,
     UpdateResult,
     CACHE_DIR_NAME,
     DOT_FLOX,
@@ -186,8 +187,8 @@ impl Environment for PathEnvironment {
     ///   any new packages.
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
-        env_view.build(flox)?;
-        env_view.link(flox, self.out_link(&flox.system)?)?;
+        let store_path = env_view.build(flox)?;
+        env_view.link(flox, self.out_link(&flox.system)?, &Some(store_path))?;
 
         Ok(())
     }
@@ -218,7 +219,7 @@ impl Environment for PathEnvironment {
     ) -> Result<InstallationAttempt, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.install(packages, flox)?;
-        env_view.link(flox, self.out_link(&flox.system)?)?;
+        env_view.link(flox, self.out_link(&flox.system)?, &result.store_path)?;
 
         Ok(result)
     }
@@ -232,10 +233,10 @@ impl Environment for PathEnvironment {
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<String, EnvironmentError2> {
+    ) -> Result<UninstallationAttempt, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.uninstall(packages, flox)?;
-        env_view.link(flox, self.out_link(&flox.system)?)?;
+        env_view.link(flox, self.out_link(&flox.system)?, &result.store_path)?;
 
         Ok(result)
     }
@@ -245,7 +246,7 @@ impl Environment for PathEnvironment {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.edit(flox, contents)?;
         if result != EditResult::Unchanged {
-            env_view.link(flox, self.out_link(&flox.system)?)?;
+            env_view.link(flox, self.out_link(&flox.system)?, &result.store_path())?;
         }
         Ok(result)
     }
@@ -258,7 +259,7 @@ impl Environment for PathEnvironment {
     ) -> Result<UpdateResult, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.update(flox, inputs)?;
-        env_view.link(flox, self.out_link(&flox.system)?)?;
+        env_view.link(flox, self.out_link(&flox.system)?, &result.store_path)?;
 
         Ok(result)
     }
@@ -271,7 +272,7 @@ impl Environment for PathEnvironment {
     ) -> Result<UpgradeResult, EnvironmentError2> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.upgrade(flox, groups_or_iids)?;
-        env_view.link(flox, self.out_link(&flox.system)?)?;
+        env_view.link(flox, self.out_link(&flox.system)?, &result.store_path)?;
 
         Ok(result)
     }

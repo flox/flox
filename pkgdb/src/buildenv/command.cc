@@ -58,6 +58,11 @@ BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
     .metavar( "OUT-LINK" )
     .action( [&]( const std::string & str ) { this->outLink = str; } );
 
+  this->parser.add_argument( "--store-path" )
+    .help( "the store path to create the link to" )
+    .metavar( "STORE-PATH" )
+    .action( [&]( const std::string & str ) { this->storePath = str; } );
+
   this->parser.add_argument( "--system", "-s" )
     .help( "system to build for" )
     .metavar( "SYSTEM" )
@@ -85,6 +90,27 @@ BuildEnvCommand::run()
 
   auto store = this->getStore();
   auto state = this->getState();
+
+  if ( this->storePath.has_value() && this->outLink.has_value() )
+    {
+      std::filesystem::path path( this->storePath.value() );
+      nix::StorePath        storePath( std::string( path.filename() ) );
+      debugLog( nix::fmt(
+        "store path was provided, skipping build: store_path=%s, out_link=%s",
+        store->printStorePath( storePath ),
+        this->outLink.value() ) );
+      writeOutLink( store, storePath, this->outLink.value() );
+      /* Print the resulting store path */
+      nlohmann::json result
+        = { { "store_path", store->printStorePath( storePath ) } };
+      std::cout << result.dump() << '\n';
+      return EXIT_SUCCESS;
+    }
+  else if ( this->storePath.has_value() && ! this->outLink.has_value() )
+    {
+      throw BuildenvInvalidArguments(
+        "'--store-path' requires the '--out-link' flag" );
+    }
 
   debugLog( "building environment" );
 

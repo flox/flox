@@ -79,12 +79,16 @@ impl LockedManifest {
         &self,
         pkgdb: &Path,
         gcroot_out_link_path: Option<&Path>,
+        store_path: &Option<PathBuf>,
     ) -> Result<PathBuf, LockedManifestError> {
         let mut pkgdb_cmd = Command::new(pkgdb);
         pkgdb_cmd.arg("buildenv").arg(&self.to_string());
 
         if let Some(gcroot_out_link_path) = gcroot_out_link_path {
             pkgdb_cmd.args(["--out-link", &gcroot_out_link_path.to_string_lossy()]);
+            if let Some(store_path) = store_path {
+                pkgdb_cmd.args(["--store-path", &store_path.to_string_lossy()]);
+            }
         }
 
         debug!("building environment with command: {pkgdb_cmd:?}");
@@ -163,7 +167,11 @@ impl LockedManifest {
         let lockfile: LockedManifest =
             LockedManifest(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::UpdateFailed)?);
 
-        Ok((old_lockfile, lockfile))
+        Ok(UpdateResult {
+            new_lockfile: lockfile,
+            old_lockfile,
+            store_path: None,
+        })
     }
 
     /// Update global manifest lockfile and write it.
@@ -172,8 +180,11 @@ impl LockedManifest {
         inputs: Vec<String>,
     ) -> Result<UpdateResult, LockedManifestError> {
         let lockfile_path = global_manifest_lockfile_path(flox);
-        let (old_lockfile, new_lockfile) =
-            Self::update_manifest(flox, None::<PathBuf>, &lockfile_path, inputs)?;
+        let UpdateResult {
+            new_lockfile,
+            old_lockfile,
+            store_path,
+        } = Self::update_manifest(flox, None::<PathBuf>, &lockfile_path, inputs)?;
 
         debug!("writing lockfile to {}", lockfile_path.display());
         std::fs::write(
@@ -182,7 +193,11 @@ impl LockedManifest {
                 .map_err(LockedManifestError::SerializeGlobalLockfile)?,
         )
         .map_err(LockedManifestError::WriteGlobalLockfile)?;
-        Ok((old_lockfile, new_lockfile))
+        Ok(UpdateResult {
+            new_lockfile,
+            old_lockfile,
+            store_path,
+        })
     }
 
     /// Creates the global lockfile if it doesn't exist and returns its path.
