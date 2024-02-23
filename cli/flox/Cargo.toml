@@ -7,15 +7,11 @@ edition = "2021"
 
 [dependencies]
 flox-rust-sdk.workspace = true
-flox-types.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
-rnix.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-serde_with.workspace = true
 serde_yaml.workspace = true
-async-trait.workspace = true
 log.workspace = true
 bpaf.workspace = true
 config.workspace = true
@@ -23,9 +19,7 @@ dirs.workspace = true
 tempfile.workspace = true
 futures.workspace = true
 once_cell.workspace = true
-serde_variant.workspace = true
 itertools.workspace = true
-regex.workspace = true
 toml_edit.workspace = true
 supports-color.workspace = true
 inquire.workspace = true
@@ -45,10 +39,8 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-log.workspace = true
 fslock.workspace = true
-pathdiff.workspace = true
 indexmap.workspace = true
 url.workspace = true
-openssl.workspace = true
 chrono.workspace = true
 oauth2.workspace = true
 textwrap = {workspace = true, features = ["terminal_size"]}

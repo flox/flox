@@ -18,7 +18,6 @@ use std::fs::{self};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use flox_types::catalog::System;
 use indoc::{formatdoc, indoc};
 use log::debug;
 
@@ -40,6 +39,7 @@ use super::{
     GCROOTS_DIR_NAME,
     LOCKFILE_FILENAME,
 };
+use crate::data::System;
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment::{

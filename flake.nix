@@ -24,9 +24,6 @@
   inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
   inputs.sqlite3pp.inputs.nixpkgs.follows = "nixpkgs";
 
-  inputs.parser-util.url = "github:flox/parser-util";
-  inputs.parser-util.inputs.nixpkgs.follows = "nixpkgs";
-
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   inputs.pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -45,7 +42,6 @@
     nixpkgs,
     floco,
     sqlite3pp,
-    parser-util,
     pre-commit-hooks,
     crane,
     flox-latest,
@@ -112,7 +108,6 @@
     # Aggregates all external dependency overlays before adding any of the
     # packages defined by this flake.
     overlays.deps = nixpkgs.lib.composeManyExtensions [
-      parser-util.overlays.default # for `parser-util'
       overlays.nlohmann
       overlays.semver
       overlays.nix
