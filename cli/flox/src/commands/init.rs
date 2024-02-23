@@ -233,7 +233,7 @@ impl InitHook for Requirements {
 
                 PYTHON_DIR="$FLOX_ENV_CACHE/python"
                 if [ ! -d "$PYTHON_DIR" ]; then
-                  echo -n "Creating python virtual environment in $PYTHON_DIR"
+                  echo "Creating python virtual environment in $PYTHON_DIR"
                   python -m venv "$PYTHON_DIR"
                 fi
 
@@ -335,7 +335,7 @@ mod tests {
 
                         PYTHON_DIR="$FLOX_ENV_CACHE/python"
                         if [ ! -d "$PYTHON_DIR" ]; then
-                          echo -n "Creating python virtual environment in $PYTHON_DIR"
+                          echo "Creating python virtual environment in $PYTHON_DIR"
                           python -m venv "$PYTHON_DIR"
                         fi
 
