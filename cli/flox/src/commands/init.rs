@@ -184,7 +184,7 @@ impl InitHook for Requirements {
             * python, pip
             * A Python virtual environment to install dependencies into
 
-            Would you like Flox to apply the standard Python environment?
+            Would you like Flox to set up a standard Python environment?
             You can always revisit the environment's declaration with 'flox edit'
         "};
 
