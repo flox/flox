@@ -541,7 +541,6 @@ name = "flox"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "bpaf",
  "chrono",
  "config",

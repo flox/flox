@@ -1,5 +1,4 @@
 use anyhow::{bail, Result};
-use async_trait::async_trait;
 use flox_rust_sdk::flox::{Flox, Floxhub, DEFAULT_FLOXHUB_URL};
 use log::debug;
 use tempfile::TempDir;
@@ -7,8 +6,7 @@ use tempfile::TempDir;
 use super::init::init_access_tokens;
 use crate::config::Config;
 
-#[async_trait]
-pub trait FloxCompletionExt
+pub(crate) trait FloxCompletionExt
 where
     Self: Sized,
 {
@@ -17,7 +15,6 @@ where
     fn completion_instance() -> Result<Self>;
 }
 
-#[async_trait]
 impl FloxCompletionExt for Flox {
     fn completion_instance() -> Result<Flox> {
         let config = Config::parse()
