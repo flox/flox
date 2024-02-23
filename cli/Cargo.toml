@@ -1,5 +1,5 @@
 [workspace]
-members = ["flox", "flox-rust-sdk", "floxd"]
+members = ["flox", "flox-rust-sdk"]
 default-members = ["flox"]
 
 resolver = "2"
