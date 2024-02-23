@@ -404,7 +404,7 @@ WrappedNixpkgsInputScheme::applyOverrides( const nix::fetchers::Input & _input,
 {
   auto input = _input;
 
-  if ( rev && ref )
+  if ( rev.has_value() && ref.has_value() )
     {
       throw nix::BadURL(
         "cannot apply both a commit hash (%s) and a branch/tag "
