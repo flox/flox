@@ -113,6 +113,9 @@ misc_vars_setup() {
   NODEJS_VERSION_OLDEST="16.16.0"
   export NODEJS_VERSION_OLDEST
 
+  # Default version for `flox-nixpkgs` inputs.
+  # NOTE: Keep in line with `../src/registry/wrapped-nixpkgs-input.cc`
+  export FLOX_NIXPKGS_VERSION="0";
 
   export __PD_RAN_MISC_VARS_SETUP=:
 }

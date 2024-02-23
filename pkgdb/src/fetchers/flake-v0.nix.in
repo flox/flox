@@ -1,0 +1,104 @@
+# -*- mode: nix; -*-
+# ============================================================================ #
+#
+# Wraps `nixpkgs' to patch the package set for traversal by `pkgdb scrape'.
+#
+# ---------------------------------------------------------------------------- #
+
+{
+
+# ---------------------------------------------------------------------------- #
+
+  # `@...@' is substituted at runtime.
+  inputs.nixpkgs.url = "@NIXPKGS_URL@";
+
+# ---------------------------------------------------------------------------- #
+
+  outputs = { nixpkgs, self, ... }: let
+
+# ---------------------------------------------------------------------------- #
+
+    # Nixpkgs Configuration
+    config = {
+      allowUnfree = true;
+      allowBroken = true;
+    }; # End `config'
+
+
+# ---------------------------------------------------------------------------- #
+
+    lib = {
+
+      # eachDefaultSystemMap fn
+      # -----------------------
+      # Given a function 'fn' which takes system names as an argument, produce
+      # an attribute set whose keys are system names, and values are the result
+      # of applying 'fn' to that system name.
+      #
+      # Example:
+      #   eachDefaultSystemMap ( system: "Hello, ${system}!" )
+      #   => {
+      #     x86_64-linux = "Hello, x86_64-linux!";
+      #     aarch64-linux = "Hello, aarch64-linux!";
+      #     x86_64-darwin = "Hello, x86_64-darwin!";
+      #     aarch64-darwin = "Hello, aarch64-darwin!";
+      #   }
+      #
+      # Type:
+      #   eachDefaultSystemMap :: ( String -> Any ) -> AttrSet
+      #
+      eachDefaultSystemMap = let
+        defaultSystems = [
+          "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"
+        ];
+      in fn: let
+          proc = system: { name = system; value = fn system; };
+        in builtins.listToAttrs ( map proc defaultSystems );
+
+
+    }; # End `lib'
+
+
+# ---------------------------------------------------------------------------- #
+
+  in {  # Begin `outputs'
+
+# ---------------------------------------------------------------------------- #
+
+    inherit lib;
+
+    legacyPackages = let
+
+      # genLegacyPackages system
+      # ------------------------
+      # Generate a set of legacy packages for the given system.
+      #
+      # Example:
+      #  genLegacyPackages "x86_64-linux"
+      #  => { python3 = { pip = <derivation>; }; ... }
+      #
+      # Type:
+      #   genLegacyPackages :: String -> AttrSet
+      #
+      genLegacyPackages = system:
+        # Get a configured `nixpkgs' for the given system.
+        import nixpkgs.outPath { inherit system config; };
+
+    in lib.eachDefaultSystemMap genLegacyPackages;
+
+
+# ---------------------------------------------------------------------------- #
+
+  }; # End `outputs'
+
+
+# ---------------------------------------------------------------------------- #
+
+} # End flake
+
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #

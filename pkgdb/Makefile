@@ -682,6 +682,21 @@ fmt: $(HEADERS) $(ALL_SRCS)
 
 
 # ---------------------------------------------------------------------------- #
+
+# Generated Files
+# ---------------
+
+src/fetchers/flake-v0.nix.in.hh: src/fetchers/flake-v0.nix.in Makefile
+	$(MKDIR_P) $(@D);
+	echo 'R"_NIX(' > $@;
+	$(CAT) $< >> $@;
+	echo ')_NIX";' >> $@;
+
+CLEANFILES += src/fetchers/flake-v0.nix.in.hh
+src/fetchers/wrapped-nixpkgs-input.o: src/fetchers/flake-v0.nix.in.hh
+
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #
