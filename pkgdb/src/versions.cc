@@ -27,7 +27,6 @@
 #include "versions.hh"
 
 
-
 /* -------------------------------------------------------------------------- */
 
 /** Interfaces for analyzing version numbers */
@@ -210,15 +209,16 @@ std::list<std::string>
 semverSat( const std::string & range, const std::list<std::string> & versions )
 {
   std::list<std::string> rsl;
-  auto r = cleanRange( range );
-  for ( const auto & version : versions ) {
-    if ( semver::valid(version) && semver::satisfies( version, r ) ) {
-      rsl.push_back( version );
+  auto                   r = cleanRange( range );
+  for ( const auto & version : versions )
+    {
+      if ( semver::valid( version ) && semver::satisfies( version, r ) )
+        {
+          rsl.push_back( version );
+        }
     }
-  }
-  rsl.sort([&](const auto & a, const auto & b) {
-    return semver::lt(a, b);
-  });
+  rsl.sort( [&]( const auto & a, const auto & b )
+            { return semver::lt( a, b ); } );
   return rsl;
 }
 

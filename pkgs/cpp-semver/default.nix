@@ -1,8 +1,8 @@
-{ lib
-, stdenvNoCC
-, fetchFromGitHub
+{
+  lib,
+  stdenvNoCC,
+  fetchFromGitHub,
 }:
-
 stdenvNoCC.mkDerivation rec {
   pname = "cpp-semver";
   version = "unstabble-2021-12-10";
@@ -25,8 +25,7 @@ stdenvNoCC.mkDerivation rec {
   meta = with lib; {
     description = "semver in c++";
     homepage = "https://github.com/easz/cpp-semver";
-    maintainers = with maintainers; [ tomberek ];
+    maintainers = with maintainers; [tomberek];
     license = licenses.mit;
   };
 }
-

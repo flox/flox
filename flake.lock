@@ -187,7 +187,6 @@
     "root": {
       "inputs": {
         "crane": "crane",
-        "floco": "floco",
         "flox-latest": "flox-latest",
         "nixpkgs": "nixpkgs",
         "nixpkgs-bear": "nixpkgs-bear",
