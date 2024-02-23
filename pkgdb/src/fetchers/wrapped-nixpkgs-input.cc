@@ -224,7 +224,7 @@ floxNixpkgsAttrsToGithubAttrs( const nix::fetchers::Attrs & attrs )
   else
     {
       throw nix::Error(
-        "missing `rev` or `ref` field in `flox-nixpkgs` input" );
+        "missing 'rev' or 'ref' field in 'flox-nixpkgs' input" );
     }
 
   return _attrs;
