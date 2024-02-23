@@ -61,11 +61,11 @@ pub fn init_logger(verbosity: Option<Verbosity>) {
         // Show our own info logs
         Verbosity::Verbose(0) => "off,flox=info",
         // Also show debug from our libraries
-        Verbosity::Verbose(1) => "off,flox=debug,flox-rust-sdk=debug,runix=debug",
+        Verbosity::Verbose(1) => "off,flox=debug,flox-rust-sdk=debug",
         // Also show trace from our libraries and POSIX
-        Verbosity::Verbose(2) => "off,flox=trace,flox-rust-sdk=trace,runix=trace",
+        Verbosity::Verbose(2) => "off,flox=trace,flox-rust-sdk=trace",
         // Also show trace from our libraries and POSIX
-        Verbosity::Verbose(3) => "debug,flox=trace,flox-rust-sdk=trace,runix=trace",
+        Verbosity::Verbose(3) => "debug,flox=trace,flox-rust-sdk=trace",
         Verbosity::Verbose(_) => "trace",
     };
 

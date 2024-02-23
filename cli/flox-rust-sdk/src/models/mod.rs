@@ -2,7 +2,6 @@
 pub mod container_builder;
 pub mod environment;
 pub mod environment_ref;
-pub use runix::{flake_ref, registry};
 pub mod floxmetav2;
 pub mod lockfile;
 pub mod manifest;

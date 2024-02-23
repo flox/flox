@@ -757,7 +757,6 @@ dependencies = [
  "reqwest",
  "rnix 0.11.0",
  "rowan 0.15.13",
- "runix",
  "serde",
  "serde_json",
  "serde_with",
@@ -2072,41 +2071,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "runix"
-version = "0.2.0"
-source = "git+https://github.com/flox/runix#0121048684b864b7ba055e8c8703a0186885ad1a"
-dependencies = [
- "async-trait",
- "chrono",
- "derive_more",
- "log",
- "once_cell",
- "percent-encoding",
- "regex",
- "runix-derive",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "serde_with",
- "shell-escape",
- "thiserror",
- "tokio",
- "tokio-stream",
- "url",
-]
-
-[[package]]
-name = "runix-derive"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c075e9f29a7d57ca9271d5c4901a2034b5868120506cfb00a4d169abc63a4ba7"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "rust-ini"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2829,7 +2793,6 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
- "tokio-util",
 ]
 
 [[package]]

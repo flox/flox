@@ -15,7 +15,6 @@
   zlib,
   pkg-config,
   darwin,
-  parser-util,
   cacert,
   glibcLocalesUtf8,
   installShellFiles,
@@ -63,7 +62,6 @@
         if flox-pkgdb == null
         then "ld-floxlib.so"
         else "${flox-pkgdb}/lib/ld-floxlib.so";
-      PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
       FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 
       # bundling of internally used nix scripts
@@ -140,7 +138,7 @@
       pkg-config # for openssl
     ];
 
-    inherit (envs) LIBSSH2_SYS_USE_PKG_CONFIG PARSER_UTIL_BIN;
+    inherit (envs) LIBSSH2_SYS_USE_PKG_CONFIG;
   };
 in
   craneLib.buildPackage ({

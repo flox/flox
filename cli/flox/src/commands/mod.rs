@@ -34,7 +34,6 @@ use flox_rust_sdk::models::environment::{
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::environment_ref;
-use flox_rust_sdk::nix::command_line::NixCommandLine;
 use indoc::{formatdoc, indoc};
 use log::{debug, info};
 use once_cell::sync::Lazy;
@@ -239,10 +238,6 @@ impl FloxArgs {
             floxhub_token: config.flox.floxhub_token.clone(),
             floxhub,
         };
-
-        // Set the global Nix config via the environment variables in flox.default_args so that
-        // subprocesses called by `flox` (e.g. `parser-util`) can inherit them.
-        flox.nix::<NixCommandLine>(vec![]).export_env_vars();
 
         // in debug mode keep the tempdir to reproduce nix commands
         if self.debug || matches!(self.verbosity, Verbosity::Verbose(1..)) {

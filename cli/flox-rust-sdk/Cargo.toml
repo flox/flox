@@ -14,7 +14,6 @@ serde_json.workspace = true
 async-trait.workspace = true
 log.workspace = true
 derive_more.workspace = true
-runix.workspace = true
 url.workspace = true
 serde_with.workspace = true
 thiserror.workspace = true
