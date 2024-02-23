@@ -97,7 +97,7 @@ teardown() {
   assert_success
   assert_output --partial "glibc: glibc (2.34)"
   # Also assert the environment's loader points to the expected package.
-  run "$FLOX_BIN" activate -- bash -exc '"realpath $FLOX_ENV/lib/ld-linux-*.so.*"'
+  run "$FLOX_BIN" activate -- bash -exc 'realpath $FLOX_ENV/lib/ld-linux-*.so.*'
   assert_success
   assert_output --partial -- "-glibc-2.34-210/lib/ld-linux-"
 
@@ -108,10 +108,10 @@ teardown() {
   ### Test 2: confirm LD_AUDIT can find missing libraries
   # Link against nixmain because that's a library that won't be present on any host system.
   # Build print-nix-version, remove RUNPATH & interpreter
-  run "$FLOX_BIN" activate -- bash -exc '" \
+  run "$FLOX_BIN" activate -- bash -exc ' \
     g++ -std=c++17 -o get-nix-version ./get-nix-version.cc -I"$FLOX_ENV"/include -L"$FLOX_ENV"/lib -lnixmain && \
     patchelf --remove-rpath ./get-nix-version && \
-    LD_FLOXLIB_AUDIT=1 ./get-nix-version"'
+    LD_FLOXLIB_AUDIT=1 ./get-nix-version'
   assert_success
   assert_output --partial "testing (Nix) 2.10.3"
 
@@ -120,6 +120,6 @@ teardown() {
   # warning that bats will display by default when it attempts to launch a
   # command that fails to run because it cannot load its libraries.
   run -127 "$FLOX_BIN" activate -- bash -exc \
-    '"env -i LD_DEBUG=libs ./get-nix-version"'
+    'env -i LD_DEBUG=libs ./get-nix-version'
   assert_failure
 }
