@@ -246,6 +246,42 @@ setup_file() {
 }
 
 # ---------------------------------------------------------------------------- #
+
+@test "'github' fetcher does NOT set 'allowUnfree' and 'allowBroken'" {
+  run --separate-stderr "$PKGDB_BIN" eval "let
+    nixpkgs = builtins.getFlake \"github:NixOS/nixpkgs/$NIXPKGS_REV\";
+    inherit (nixpkgs.legacyPackages.x86_64-linux) config;
+  in assert ! ( config.allowUnfree || config.allowBroken ); true";
+  assert_success;
+  assert_output "true";
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox-nixpkgs' fetcher sets 'allowUnfree' and 'allowBroken'" {
+  run --separate-stderr "$PKGDB_BIN" eval "let
+    nixpkgs = builtins.getFlake \"flox-nixpkgs\:v0/$NIXPKGS_REV\";
+    inherit (nixpkgs.legacyPackages.x86_64-linux) config;
+  in assert config.allowUnfree && config.allowBroken; true";
+  assert_success;
+  assert_output "true";
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "'flox-nixpkgs' and 'github' fetchers fingerprints differ" {
+  run --separate-stderr "$PKGDB_BIN" eval "let
+    fp0 = builtins.getFingerprint \"flox-nixpkgs\:v0/$NIXPKGS_REV\";
+    fp1 = builtins.getFingerprint \"github:NixOS/nixpkgs/$NIXPKGS_REV\";
+  in assert fp0 != fp1; true";
+  assert_success;
+  assert_output "true";
+}
+
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #
