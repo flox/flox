@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
-use flox_types::version::Version;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -16,6 +15,7 @@ use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::LockedManifest;
 use super::manifest::PackageToInstall;
 use super::pkgdb::UpgradeResult;
+use crate::data::Version;
 use crate::flox::{Flox, Floxhub};
 use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{

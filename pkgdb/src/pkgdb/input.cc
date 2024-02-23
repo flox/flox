@@ -125,9 +125,55 @@ PkgDbInput::closeDbReadWrite()
 }
 
 
-/* -------------------------------------------------------------------------- */
-// NOLINTBEGIN(readability-function-cognitive-complexity)
-// TODO: reduce complexity of this function
+int
+PkgDbInput::getScrapingPageSize()
+{
+  // Each entry (in order) is checked if the avaialble memory is >= memKb, and
+  // if so, will use pageSize.
+  struct MemThreshold
+  {
+    long   memoryKb;
+    size_t pageSize;
+  };
+  // These are very rough heuristics.  It was found that about 4.5g is required
+  // to scrape the entire darwin subtree all at once.  1000 item page sizes
+  // seems to keep memory consumption under 1.5g.  These values are a
+  // conservative estimate with the hopes of never OOMing.  That said, the
+  // method of determining *available* memory is to count reported free memory,
+  // and also including *shared* and *cache/buffer* allocated memory thinking
+  // that it could be re-allocated.  The amount of truly *free* memory (at least
+  // on linux) is usually relatively low.
+  const std::vector<MemThreshold> MemThresholds = {
+    { 6 /* Gb */ * ( 1024 * 1024 ), PkgDbInput::maxPageSize },
+    { 4 /* Gb */ * ( 1024 * 1024 ), 20 * 1000 },
+    { 3 /* Gb */ * ( 1024 * 1024 ), 10 * 1000 },
+    { 2 /* Gb */ * ( 1024 * 1024 ), 4 * 1000 },
+  };
+
+  // No override, so use heuristics
+  long availableMemory = getAvailableSystemMemory();
+
+  debugLog( nix::fmt( "getScrapingPageSize: using available memory as: %dkb",
+                      availableMemory ) );
+
+  for ( auto threshold : MemThresholds )
+    {
+      traceLog( nix::fmt( "getScrapingPageSize: checking threshold: %dkb",
+                          threshold.memoryKb ) );
+      if ( availableMemory > threshold.memoryKb )
+        {
+          debugLog( nix::fmt( "getScrapingPageSize: using page size: %d",
+                              threshold.pageSize ) );
+          return threshold.pageSize;
+        }
+    }
+
+  // Use the minimum and warn in the output
+  verboseLog( "getScrapingPageSize: using minimum page size, performance will "
+              "be impacted!" );
+  return PkgDbInput::minPageSize;
+}
+
 void
 PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 {
@@ -135,22 +181,17 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 
   Todos todo;
 
-  // close the db if we have anything open in preparation for the child to take
-  // over.
+  // Close the db and clean up if we have anything open in preparation for the
+  // child to take over.
   this->closeDbReadWrite();
-
   this->freeFlake();
 
   bool         scrapingComplete = false;
-  const size_t pageSize         = 5000;
+  const size_t pageSize         = getScrapingPageSize();
   size_t       pageIdx          = 0;
 
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while)
-  do {
-      const int EXIT_CHILD_INCOMPLETE = EXIT_SUCCESS + 1;
-      const int EXIT_FAILURE_NIX_EVAL
-        = 150;  // seems to not overlap with common posix codes
-
+  while ( ! scrapingComplete )
+    {
       pid_t pid = fork();
       if ( pid == -1 )
         {
@@ -158,6 +199,8 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         }
       if ( 0 < pid )
         {
+          //
+          // This is the parent process
           int status = 0;
           debugLog(
             nix::fmt( "scrapePrefix: Waiting for forked process, pid: %d",
@@ -206,67 +249,71 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         }
       else
         {
-          /* Open a read/write connection. */
-          auto chunkDbRW = this->getDbReadWrite();
-
-          /* Start a transaction */
-          chunkDbRW->execute( "BEGIN TRANSACTION" );
-          row_id      chunkRow = chunkDbRW->addOrGetAttrSetId( prefix );
-          MaybeCursor root     = this->getFlake()->maybeOpenCursor( prefix );
-
-          Target rootTarget
-            = std::make_tuple( prefix,
-                               static_cast<flox::Cursor>( root ),
-                               chunkRow );
-          bool targetComplete = false;
-
-          try
-            {
-              debugLog( nix::fmt( "scrapePrefix(child): scraping page %d of "
-                                  "%d attributes",
-                                  pageIdx,
-                                  pageSize ) );
-              targetComplete
-                = chunkDbRW->scrape( this->getFlake()->state->symbols,
-                                     rootTarget,
-                                     pageSize,
-                                     pageIdx );
-            }
-          catch ( const nix::EvalError & err )
-            {
-              debugLog(
-                nix::fmt( "scrapePrefix(child): caught nix::EvalError: %s",
-                          err.msg().c_str() ) );
-              chunkDbRW->execute( "ROLLBACK TRANSACTION" );
-              this->closeDbReadWrite();
-              this->freeFlake();
-              exit( EXIT_FAILURE_NIX_EVAL );
-            }
-
-          /* Close the transaction. */
-          chunkDbRW->execute( "COMMIT TRANSACTION" );
-          debugLog( nix::fmt(
-            "scrapePrefix(child): scraping page %d complete, lastPage: %d",
-            pageIdx,
-            targetComplete ) );
-          try
-            {
-              this->closeDbReadWrite();
-              this->freeFlake();
-              exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
-            }
-          catch ( const std::exception & err )
-            {
-              debugLog(
-                nix::fmt( "scrapePrefix(child): caught exception on exit: %s",
-                          err.what() ) );
-              exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
-            }
+          //
+          // This is the child process
+          scrapePrefixWorker( this, prefix, pageIdx, pageSize );
         }
     }
-  while ( ! scrapingComplete );
 }
-// NOLINTEND(readability-function-cognitive-complexity)
+
+void
+PkgDbInput::scrapePrefixWorker( PkgDbInput *     input,
+                                const AttrPath & prefix,
+                                const size_t     pageIdx,
+                                const size_t     pageSize )
+{
+  /* Open a read/write connection. */
+  auto chunkDbRW = input->getDbReadWrite();
+
+  /* Start a transaction */
+  chunkDbRW->execute( "BEGIN TRANSACTION" );
+  row_id      chunkRow = chunkDbRW->addOrGetAttrSetId( prefix );
+  MaybeCursor root     = input->getFlake()->maybeOpenCursor( prefix );
+
+  Target rootTarget
+    = std::make_tuple( prefix, static_cast<flox::Cursor>( root ), chunkRow );
+  bool targetComplete = false;
+
+  try
+    {
+      debugLog( nix::fmt( "scrapePrefix(child): scraping page %d of "
+                          "%d attributes",
+                          pageIdx,
+                          pageSize ) );
+      targetComplete = chunkDbRW->scrape( input->getFlake()->state->symbols,
+                                          rootTarget,
+                                          pageSize,
+                                          pageIdx );
+    }
+  catch ( const nix::EvalError & err )
+    {
+      debugLog( nix::fmt( "scrapePrefix(child): caught nix::EvalError: %s",
+                          err.msg().c_str() ) );
+      chunkDbRW->execute( "ROLLBACK TRANSACTION" );
+      input->closeDbReadWrite();
+      input->freeFlake();
+      exit( EXIT_FAILURE_NIX_EVAL );
+    }
+
+  /* Close the transaction. */
+  chunkDbRW->execute( "COMMIT TRANSACTION" );
+  debugLog(
+    nix::fmt( "scrapePrefix(child): scraping page %d complete, lastPage: %d",
+              pageIdx,
+              targetComplete ) );
+  try
+    {
+      input->closeDbReadWrite();
+      input->freeFlake();
+      exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+    }
+  catch ( const std::exception & err )
+    {
+      debugLog( nix::fmt( "scrapePrefix(child): caught exception on exit: %s",
+                          err.what() ) );
+      exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+    }
+}
 
 /* -------------------------------------------------------------------------- */
 

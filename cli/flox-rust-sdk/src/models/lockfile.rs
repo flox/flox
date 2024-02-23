@@ -8,14 +8,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use flox_types::catalog::System;
-use flox_types::version::Version;
 use log::debug;
 use thiserror::Error;
 
 use super::container_builder::ContainerBuilder;
 use super::environment::{CanonicalizeError, UpdateResult};
 use super::pkgdb::CallPkgDbError;
+use crate::data::{System, Version};
 use crate::flox::Flox;
 use crate::models::environment::{
     global_manifest_lockfile_path,

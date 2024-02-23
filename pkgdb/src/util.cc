@@ -18,6 +18,12 @@
 #include <string_view>
 #include <vector>
 
+#ifdef __APPLE__
+#  include <sys/sysctl.h>
+#else
+#  include <sys/sysinfo.h>
+#endif
+
 #include <nlohmann/json.hpp>
 #include <sqlite3pp.hh>
 
@@ -342,6 +348,69 @@ displayableGlobbedPath( const flox::AttrPathGlob & attrs )
 }
 
 
+#ifdef __APPLE__
+// Sysctl is only used for darwin
+template<class T>
+T
+getSysCtlValue( const char * valueName )
+{
+  T      value;
+  size_t bufSz = sizeof( value );
+  int    res   = sysctlbyname( valueName, &value, &bufSz, nullptr, 0 );
+  if ( res == 0 ) { return value; }
+  else { return -1; }
+}
+#endif
+
+long
+getAvailableSystemMemory()
+{
+  long availableKb;
+
+  // Check and use environment override
+  const char * envVar   = "FLOX_AVAILABLE_MEMORY";
+  const char * envValue = std::getenv( envVar );
+  if ( envValue != nullptr && isUInt( envValue ) )
+    {
+      size_t envOverride = atoi( envValue );
+      verboseLog( nix::fmt(
+        "getAvailableSystemMemory: using environment override of '%d'",
+        envOverride ) );
+      return envOverride;
+    }
+
+
+#ifdef __APPLE__
+  /* The following first attempt proved to be way too conservative
+   *
+   * int freePages     = getSysCtlValue<int>( "vm.page_free_count" );
+   * int reusablePages = getSysCtlValue<int>( "vm.page_reusable_count" );
+   * int pageSize      = getSysCtlValue<int>( "vm.pagesize" );
+   * availableKb       = ( freePages + reusablePages ) / 1024;
+   * availableKb *= pageSize;
+   */
+
+  long long physicalRAM = getSysCtlValue<long long>( "hw.memsize" );
+  /* For now use 3/4ths of physical ram.
+   * Simplifed from ((physicalRAM / 1024) / 4) * 3
+   */
+  availableKb = ( physicalRAM / 4096 ) * 3;
+#else
+  struct sysinfo memInfo;
+  sysinfo( &memInfo );
+
+  long long freePhysMem = memInfo.freeram;
+  long long bufMem      = memInfo.bufferram;
+  long long sharedMem   = memInfo.sharedram;
+  // Multiply in next statement to avoid int overflow on right hand side...
+  freePhysMem *= memInfo.mem_unit;
+  bufMem *= memInfo.mem_unit;
+  sharedMem *= memInfo.mem_unit;
+  availableKb = ( freePhysMem + bufMem + sharedMem ) / 1024;
+#endif
+
+  return availableKb;
+}
 /* -------------------------------------------------------------------------- */
 
 }  // namespace flox

@@ -9,6 +9,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <string>
 
 #include "flox/core/types.hh"
 #include "flox/core/util.hh"
@@ -251,6 +252,30 @@ test_trim_copy0()
   return true;
 }
 
+bool
+test_getAvailableMemory()
+{
+  const char * envVar              = "FLOX_AVAILABLE_MEMORY";
+  const char * existingMemOverride = getenv( envVar );
+
+  // Ensure there is no override in the current environment
+  setenv( envVar, "", 1 );
+  // Result is in Kb, should reasonably expect this to be
+  // >= 500mb and <= 128gb(?)
+  EXPECT( flox::getAvailableSystemMemory() > 500 * 1024 );
+  EXPECT( flox::getAvailableSystemMemory() < 128 * 1024 * 1024 );
+
+  // Test available memory override
+  auto memory = flox::getAvailableSystemMemory() / 2;
+  setenv( envVar, std::to_string( memory ).c_str(), 1 );
+  EXPECT_EQ( flox::getAvailableSystemMemory(), memory );
+
+  // Clear this out for the remainder of the process
+  if ( existingMemOverride ) { setenv( envVar, existingMemOverride, 1 ); }
+  else { unsetenv( envVar ); }
+  return true;
+}
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -278,6 +303,8 @@ main()
   RUN_TEST( trim_copy0 );
 
   RUN_TEST( hasPrefix0 );
+
+  RUN_TEST( getAvailableMemory );
 
   return ec;
 }

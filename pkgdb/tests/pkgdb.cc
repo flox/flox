@@ -36,6 +36,7 @@
 #include "flox/core/types.hh"
 #include "flox/flox-flake.hh"
 #include "flox/pkgdb/db-package.hh"
+#include "flox/pkgdb/input.hh"
 #include "flox/pkgdb/pkg-query.hh"
 #include "flox/pkgdb/write.hh"
 #include "test.hh"
@@ -942,6 +943,32 @@ test_getPackages_semver0( flox::pkgdb::PkgDb & db )
   return true;
 }
 
+bool
+test_scrapeMemoryUse()
+{
+  using flox::pkgdb::PkgDbInput;
+  const char * envVar              = "FLOX_AVAILABLE_MEMORY";
+  const char * existingMemOverride = getenv( envVar );
+
+  // Using discovered 'available memory' shall be within the min and max
+  // defined.
+  size_t pageSize = PkgDbInput::getScrapingPageSize();
+  EXPECT( pageSize >= PkgDbInput::minPageSize
+          && pageSize <= PkgDbInput::maxPageSize );
+
+  // Limit to lower bound for 1GB availble memory
+  setenv( envVar, std::to_string( 1 * 1024 * 1024 ).c_str(), 1 );
+  EXPECT( PkgDbInput::getScrapingPageSize() == PkgDbInput::minPageSize );
+
+  // Limit to upper bound for 8GB available memory
+  setenv( envVar, std::to_string( 8 * 1024 * 1024 ).c_str(), 1 );
+  EXPECT( PkgDbInput::getScrapingPageSize() == PkgDbInput::maxPageSize );
+
+  // Clear this out for the remainder of the process
+  if ( existingMemOverride ) { setenv( envVar, existingMemOverride, 1 ); }
+  else { unsetenv( envVar ); }
+  return true;
+}
 
 /* -------------------------------------------------------------------------- */
 
@@ -998,6 +1025,8 @@ main( int argc, char * argv[] )
     RUN_TEST( DbPackage0, db );
 
     RUN_TEST( getPackages_semver0, db );
+
+    RUN_TEST( scrapeMemoryUse );
   }
 
   /* XXX: You may find it useful to preserve the file and print it for some
