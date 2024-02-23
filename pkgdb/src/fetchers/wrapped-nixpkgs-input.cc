@@ -87,7 +87,7 @@ createWrappedFlakeDirV0( const nix::FlakeRef & nixpkgsRef )
       flakeOut << line << '\n';
     }
   flakeOut.close();
-  debugLog( "filled out flake template with flake-ref:"
+  debugLog( "filled out flake template with flake reference: "
             + nixpkgsRef.to_string() );
 
   /* Lock the filled out template to avoid spurious re-locking and silence the
