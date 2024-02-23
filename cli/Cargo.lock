@@ -690,7 +690,6 @@ dependencies = [
  "derive_more",
  "dirs",
  "flox-rust-sdk",
- "flox-types",
  "fslock",
  "futures",
  "indent",
@@ -743,7 +742,6 @@ dependencies = [
  "derive_more",
  "dotenv",
  "env_logger 0.10.1",
- "flox-types",
  "fs_extra",
  "futures",
  "git-url-parse",
@@ -776,25 +774,6 @@ dependencies = [
  "uuid",
  "walkdir",
 ]
-
-[[package]]
-name = "flox-types"
-version = "0.0.1"
-dependencies = [
- "anyhow",
- "derive_more",
- "pretty_assertions",
- "runix",
- "serde",
- "serde_json",
- "serde_with",
- "thiserror",
- "url",
-]
-
-[[package]]
-name = "floxd"
-version = "0.1.0"
 
 [[package]]
 name = "fnv"

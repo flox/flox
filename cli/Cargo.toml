@@ -1,5 +1,5 @@
 [workspace]
-members = ["flox", "flox-rust-sdk", "flox-types", "floxd"]
+members = ["flox", "flox-rust-sdk", "floxd"]
 default-members = ["flox"]
 
 resolver = "2"
@@ -15,7 +15,6 @@ crossterm = "0.26"
 derive_more = "0.99.17"
 dirs = "5.0.0"
 flox-rust-sdk = { path = "flox-rust-sdk" }
-flox-types = { path = "flox-types" }
 fs_extra = "1.2.0"
 fslock = "0.2.1"
 futures = "0.3"

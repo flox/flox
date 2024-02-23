@@ -2,7 +2,6 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-use flox_types::version::Version;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -24,6 +23,7 @@ use super::{
     CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
 };
+use crate::data::Version;
 use crate::flox::{EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};

@@ -11,3 +11,5 @@ pub mod prelude {
 
 pub mod flox;
 pub use runix as nix;
+
+pub mod data;

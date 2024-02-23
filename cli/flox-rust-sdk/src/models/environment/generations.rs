@@ -22,13 +22,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
-use flox_types::version::Version;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;
 use super::{copy_dir_recursive, PathPointer, ENV_DIR_NAME};
+use crate::data::Version;
 use crate::models::environment::MANIFEST_FILENAME;
 use crate::providers::git::{
     GitCommandError,

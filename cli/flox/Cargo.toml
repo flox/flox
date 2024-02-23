@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 flox-rust-sdk.workspace = true
-flox-types.workspace = true
 anyhow.workspace = true
 tokio.workspace = true
 rnix.workspace = true
