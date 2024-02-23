@@ -128,7 +128,7 @@ createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef, uint64_t version = 0 )
       case 0: return flox::createWrappedFlakeDirV0( nixpkgsRef ); break;
 
       default:
-        throw nix::Error( "Unsupported 'version' '%d' in input '%s'",
+        throw nix::Error( "unsupported 'version' '%d' in input '%s'",
                           version,
                           nixpkgsRef.to_string() );
         break;
