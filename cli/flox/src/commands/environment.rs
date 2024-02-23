@@ -636,11 +636,6 @@ impl Activate {
 
         command.envs(exports);
 
-        let escaped_args = run_args
-            .into_iter()
-            .map(|arg| shell_escape::escape(arg.into()))
-            .join(" ");
-
         let script = formatdoc! {r#"
                 # to avoid infinite recursion sourcing bashrc
                 export FLOX_SOURCED_FROM_SHELL_RC=1
@@ -650,9 +645,10 @@ impl Activate {
 
                 unset FLOX_SOURCED_FROM_SHELL_RC
 
-                {escaped_args}
+                {quoted_args}
         "#,
             activation_path=shell_escape::escape(activation_path.to_string_lossy()),
+            quoted_args = Self::quote_run_args(&run_args)
         };
 
         command.arg("-c");
@@ -864,6 +860,19 @@ impl Activate {
         };
 
         println!("{script}");
+    }
+
+    /// Quote run args so that words don't get split,
+    /// but don't escape all characters.
+    ///
+    /// To do this we escape `"`,
+    /// but we don't escape anything else.
+    /// We want `$` for example to be expanded by the shell.
+    fn quote_run_args(run_args: &[String]) -> String {
+        run_args
+            .iter()
+            .map(|arg| format!(r#""{}""#, arg.replace('"', r#"\""#)))
+            .join(" ")
     }
 }
 
@@ -2226,5 +2235,19 @@ impl Containerize {
 
         message::created(format!("Container written to '{output_name}'"));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_quote_run_args() {
+        assert_eq!(
+            Activate::quote_run_args(&["a b".to_string(), '"'.to_string()]),
+            r#""a b" "\"""#
+        )
     }
 }
