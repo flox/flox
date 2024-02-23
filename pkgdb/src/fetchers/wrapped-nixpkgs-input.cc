@@ -245,8 +245,7 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
   for ( const auto & [name, value] : attrs )
     {
       if ( ( name != "type" ) && ( name != "ref" ) && ( name != "rev" )
-           && ( name != "narHash" ) && ( name != "version" )
-           && ( name != "lastModified" ) )
+           && ( name != "narHash" ) && ( name != "version" ) )
         {
           throw nix::Error( "unsupported flox-nixpkgs input attribute '%s'",
                             name );
@@ -256,7 +255,6 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
   /* Type check the following fields if they exist. */
   nix::fetchers::maybeGetStrAttr( attrs, "narHash" );
   nix::fetchers::maybeGetIntAttr( attrs, "version" );
-  nix::fetchers::maybeGetIntAttr( attrs, "lastModified" );
 
   /*  */
   if ( auto ref = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
