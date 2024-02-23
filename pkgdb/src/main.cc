@@ -67,6 +67,24 @@ FLOX_DEFINE_EXCEPTION( NixException, EC_NIX, "caught a nix exception" )
 
 /* -------------------------------------------------------------------------- */
 
+void
+setVerbosityFromEnv()
+{
+  auto valueChars = std::getenv( "_FLOX_PKGDB_VERBOSITY" );
+  if ( valueChars == nullptr ) { return; }
+  std::string value( valueChars );
+  if ( value == std::string( "0" ) ) { nix::verbosity = nix::lvlError; }
+  else if ( value == std::string( "1" ) ) { nix::verbosity = nix::lvlInfo; }
+  else if ( value == std::string( "2" ) ) { nix::verbosity = nix::lvlDebug; }
+  else if ( value == std::string( "3" ) ) { nix::verbosity = nix::lvlChatty; }
+  else if ( value == std::string( "4" ) ) { nix::verbosity = nix::lvlVomit; }
+  // Put this at the end so that if we *want* logging it will show up
+  traceLog( "found _FLOX_PKGDB_VERBOSITY=" + value );
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 int
 run( int argc, char * argv[] )
 {
@@ -115,6 +133,9 @@ run( int argc, char * argv[] )
     {
       throw flox::command::InvalidArgException( err.what() );
     }
+
+  /* Set the verbosity level requested by flox */
+  setVerbosityFromEnv();
 
   /* Run subcommand */
   if ( prog.is_subcommand_used( "scrape" ) ) { return cmdScrape.run(); }
