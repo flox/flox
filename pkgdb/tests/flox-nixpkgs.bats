@@ -27,7 +27,7 @@ load setup_suite.bash
 @test "'flox-nixpkgs' fetcher sets 'allowUnfree' and 'allowBroken'" {
   run --separate-stderr "$PKGDB_BIN" eval "let
     nixpkgs = builtins.getFlake
-                \"flox-nixpkgs\:v$FLOX_NIXPKGS_VERSION/$NIXPKGS_REV\";
+                \"flox-nixpkgs:v$FLOX_NIXPKGS_VERSION/$NIXPKGS_REV\";
     inherit (nixpkgs.legacyPackages.x86_64-linux) config;
   in assert config.allowUnfree && config.allowBroken; true";
   assert_success;
