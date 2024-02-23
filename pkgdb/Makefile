@@ -652,6 +652,7 @@ most: bin lib ignores
 
 #: Generate documentation
 docs: docs/index.html
+
 docs/index.html: FORCE
 	$(DOXYGEN) ./Doxyfile
 
