@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
@@ -323,7 +322,7 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
         .take()
         .expect("couldn't get stderr handle");
 
-    let search_outcome: std::thread::Result<Result<(Vec<SearchResult>, Option<u64>), String>> =
+    let search_outcome: std::thread::Result<Result<(Vec<SearchResult>, Option<u64>), SearchError>> =
         std::thread::scope(|s| {
             // Give the channel some fixed capacity to provide backpressure when
             // overloaded.
@@ -369,9 +368,11 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
                     },
                     PkgDbOutput::Stdout(Record::Error(err)) => {
                         debug!("error from pkgdb: {}", err);
-                        pkgdb_process.kill().map_err(|e| {
-                            Box::new(SearchError::PkgDbCall(e)) as Box<dyn Any + Send>
-                        })?;
+                        let kill = pkgdb_process.kill().map_err(SearchError::PkgDbCall);
+                        // This destructuring is necessary for type conversion
+                        if let Err(err) = kill {
+                            return Ok(Err(err));
+                        }
                         if !stderr_thread.is_finished() {
                             trace!("waiting for stderr thread to finish");
                             let _ = stderr_thread.join();
@@ -380,7 +381,7 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
                             trace!("waiting for stdout thread to finish");
                             let _ = stdout_thread.join();
                         }
-                        return Err(Box::new(err) as Box<dyn Any + Send>);
+                        return Ok(Err(SearchError::PkgDb(err)));
                     },
                     PkgDbOutput::Stdout(Record::ResultCount { result_count }) => {
                         debug!("result count = {}", result_count);
@@ -400,8 +401,8 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
             if stderr_thread_outcome.is_ok() && stdout_thread_outcome.is_ok() {
                 Ok(Ok((results, count)))
             } else {
-                Ok(Err(String::from(
-                    "background threads didn't exit successfully",
+                Ok(Err(SearchError::SomethingElse(
+                    "background threads didn't exit successfully".into(),
                 )))
             }
         });
@@ -411,7 +412,7 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
             let exit_status = pkgdb_process.wait().map_err(SearchError::PkgDbCall)?;
             Ok((SearchResults { results, count }, exit_status))
         },
-        Ok(Err(msg)) => Err(SearchError::SomethingElse(msg)),
+        Ok(Err(err)) => Err(err),
         // This means the thread panicked and there's not much we can do about it
         Err(_) => Err(SearchError::SomethingElse("internal search error".into())),
     }
