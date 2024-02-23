@@ -42,7 +42,6 @@ setup() {
   common_test_setup
   project_setup
   floxhub_setup owner
-  home_setup test
 }
 
 teardown() {

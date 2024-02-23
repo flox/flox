@@ -2,7 +2,9 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
-# Test rust impl of `flox install`
+# Test the managed environment feature of flox.
+# * Tests whether flox commands work as expected in a managed environment
+# * Tests conversion of a local environments to managed environments
 #
 # ---------------------------------------------------------------------------- #
 
@@ -37,7 +39,6 @@ project_teardown() {
 setup() {
   common_test_setup
   project_setup
-  home_setup test
   floxhub_setup "$OWNER"
 }
 
@@ -280,6 +281,11 @@ EOF
 
 # bats test_tags=managed,delete,managed:delete
 @test "m10: deletes existing environment" {
+  # This test asserts before and after state of the home directory.
+  # Remaining state from other tests may cause this test misbehave.
+  # Hence, use a clean home directory, for this test rather than the shared one.
+  home_setup test
+
   make_empty_remote_env
 
   run dot_flox_exists
