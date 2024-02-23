@@ -165,13 +165,7 @@ done
 # Set fallbacks.
 
 if [[ -z "${_PROJECT_ROOT:-}" ]]; then
-  if [[ -d "$PWD/.git" ]]; then
-    _PROJECT_ROOT="$PWD"
-  elif [[ -d "$PWD/../.git" ]]; then
-    _PROJECT_ROOT="${PWD%/*}"
-  else
-    _PROJECT_ROOT="$( $GIT rev-parse --show-toplevel; )"
-  fi
+  _PROJECT_ROOT="$( $GIT rev-parse --show-toplevel; )"
 fi
 
 
