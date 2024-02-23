@@ -50,6 +50,23 @@ load setup_suite.bash
 
 # ---------------------------------------------------------------------------- #
 
+@test "'flox-nixpkgs' and 'github' 'outPaths' match" {
+  run --separate-stderr "$PKGDB_BIN" eval "let
+    fp0 = builtins.getFlake
+            \"flox-nixpkgs\:v$FLOX_NIXPKGS_VERSION/$NIXPKGS_REV\";
+    op0 = fp0.legacyPackages.x86_64-linux.hello.outPath;
+
+    fp1 = builtins.getFlake \"github:NixOS/nixpkgs/$NIXPKGS_REV\";
+    op1 = fp1.legacyPackages.x86_64-linux.hello.outPath;
+
+  in assert op0 == op1; true";
+  assert_success;
+  assert_output "true";
+}
+
+
+# ---------------------------------------------------------------------------- #
+
 @test "locked fields on 'flox-nixpkgs' scheme" {
   URL="flox-nixpkgs:v$FLOX_NIXPKGS_VERSION/$NIXPKGS_REV";
   run --separate-stderr "$PKGDB_BIN" get flake "$URL";
