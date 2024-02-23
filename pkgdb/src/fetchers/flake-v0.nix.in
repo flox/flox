@@ -9,7 +9,7 @@
 
 # ---------------------------------------------------------------------------- #
 
-  # `@NIXPKGS_URL@' is substituted at runtime.
+  # `@...@' is substituted at runtime.
   inputs.nixpkgs.url = "@NIXPKGS_URL@";
 
 # ---------------------------------------------------------------------------- #
@@ -31,9 +31,9 @@
 
       # eachDefaultSystemMap fn
       # -----------------------
-      # Given a function `fn' which takes system names as an argument, produce
+      # Given a function 'fn' which takes system names as an argument, produce
       # an attribute set whose keys are system names, and values are the result
-      # of applying that system name to `fn'.
+      # of applying 'fn' to that system name.
       #
       # Example:
       #   eachDefaultSystemMap ( system: "Hello, ${system}!" )

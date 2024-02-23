@@ -41,6 +41,7 @@
 
 #include "flox/core/nix-state.hh"
 #include "flox/core/util.hh"
+#include "flox/flox-flake.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -98,7 +99,7 @@ createWrappedFlakeDirV0( const nix::FlakeRef & nixpkgsRef )
   /* Push verbosity level to suppress "warning: creating lock file ..." */
   auto oldVerbosity = nix::verbosity;
   nix::verbosity    = nix::lvlError;
-  auto _locked      = nix::flake::lockFlake( *state, wrappedRef, {} );
+  auto _locked      = flox::lockFlake( *state, wrappedRef, {} );
   /* Pop verbosity */
   nix::verbosity = oldVerbosity;
   debugLog( "locked flake template" );
@@ -294,11 +295,6 @@ WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
   input.attrs.insert_or_assign( "type", this->type() );
 
   auto path = nix::tokenizeString<std::vector<std::string>>( url.path, "/" );
-
-  if ( path.size() != 2 )
-    {
-      throw nix::BadURL( "URL '%s' is invalid", url.url );
-    }
 
   if ( path.size() != 2 )
     {
