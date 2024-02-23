@@ -118,6 +118,24 @@ genParamsNixpkgsFlox() {
 
 # bats test_tags=search:semver, search:pname
 
+@test "'pkgdb search' with partial semvers (such as those in an .nvmrc)" {
+  params="$(genParams ".query.pname|=\"nodejs\"|.query.semver=\"18\"")"
+  $PKGDB_BIN search "$params"
+  run sh -c "$PKGDB_BIN search '$params' | wc -l"
+  assert_success
+  assert_output 4
+
+  params="$(genParams ".query.pname|=\"nodejs\"|.query.semver=\"18.18\"")"
+  $PKGDB_BIN search "$params"
+  run sh -c "$PKGDB_BIN search '$params' | wc -l"
+  assert_success
+  assert_output 4
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=search:semver, search:pname
+
 # Test `semver' by filtering to 18.*
 @test "'pkgdb search' 'pname=nodejs & semver=18.*'" {
   params="$(genParams '.query.pname|="nodejs"|.query.semver="18.*"')"

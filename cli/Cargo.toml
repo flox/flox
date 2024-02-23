@@ -50,5 +50,6 @@ oauth2 = "4.4"
 jsonwebtoken = "9.2"
 textwrap = "0.16.0"
 indent = { version = "0.1.1" }
+semver = "1.0.22"
 
 [patch.crates-io]
