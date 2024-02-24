@@ -359,6 +359,7 @@ env_is_activated() {
   # this is confusing:
   SHELL="bash" run "$FLOX_BIN" activate
   assert_success
+  assert_output --regexp "export FLOX_VERSION="
   assert_output --regexp "source .*/activate/bash"
 }
 
@@ -366,6 +367,7 @@ env_is_activated() {
 @test "'flox activate' prints script to modify current shell (zsh)" {
   SHELL="zsh" run "$FLOX_BIN" activate
   assert_success
+  assert_output --regexp "export FLOX_VERSION="
   assert_output --regexp "source .*/activate/zsh"
 }
 
