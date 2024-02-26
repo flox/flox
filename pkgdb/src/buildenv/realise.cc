@@ -250,15 +250,18 @@ getLockedPackages( resolver::Lockfile & lockfile, const System & system )
  * message).
  * @return List of realised packages and their store paths for referencing.
  * @throws PackageEvalFailure if the package fails to evaluate.
+ * @throws PackageEvalFailure if the package is marked as broken or unfree and
+ * neither is allowed through the options.
  * @throws PackageBuildFailure if the package fails to build.
  * @throws PackageUnsupportedSystem if the package is not available for the
  given system.
  */
 static std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
-getRealisedPackages( nix::EvalState &                   state,
-                     const std::string &                pId,
-                     const resolver::LockedPackageRaw & package,
-                     const System &                     system )
+getRealisedPackages( nix::EvalState &                        state,
+                     const std::string &                     pId,
+                     const resolver::LockedPackageRaw &      package,
+                     const System &                          system,
+                     const flox::resolver::Options::Allows & allows )
 {
   std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>> realised;
 
@@ -288,6 +291,30 @@ getRealisedPackages( nix::EvalState &                   state,
     {
       throw PackageEvalFailure( "Failed to get derivation for package '"
                                 + nlohmann::json( package ).dump() + "'" );
+    }
+
+  auto broken = package_drv->queryMetaBool( "broken", false );
+  if ( broken && ! allows.broken.value_or( false ) )
+    {
+      throw PackageEvalFailure(
+        nix::fmt( "Package '%s' is marked as broken.\n\n"
+                  "Allow building broken packages by setting "
+                  "'options.allow.broken = true' in manifest.toml",
+                  pId ) );
+    }
+
+  // if the package does not have an `unfree` attribute,
+  // assume it is unfree.
+  // Generally, nixpkgs packages _will_ have this attribute set.
+  // However, if it is missing it is safer to assume it is unfree.
+  auto unfree = package_drv->queryMetaBool( "unfree", true );
+  if ( unfree && ! allows.unfree.value_or( false ) )
+    {
+      throw PackageEvalFailure(
+        nix::fmt( "Package '%s' is marked as unfree.\n\n"
+                  "Allow building unfree packages by setting "
+                  "'options.allow.unfree = true' in manifest.toml",
+                  pId ) );
     }
 
   std::string packagePath;
@@ -516,6 +543,11 @@ createFloxEnv( nix::EvalState &     state,
 {
   auto locked_packages = getLockedPackages( lockfile, system );
 
+  auto allows = lockfile.getManifestRaw()
+                  .options.value_or( flox::resolver::Options {} )
+                  .allow.value_or( flox::resolver::Options::Allows {} );
+
+
   /* Extract derivations */
   nix::StorePathSet            references;
   std::vector<RealisedPackage> pkgs;
@@ -524,7 +556,8 @@ createFloxEnv( nix::EvalState &     state,
 
   for ( auto const & [pId, package] : locked_packages )
     {
-      auto realised = getRealisedPackages( state, pId, package, system );
+      auto realised
+        = getRealisedPackages( state, pId, package, system, allows );
       for ( auto [realisedPackage, output] : realised )
         {
           pkgs.push_back( realisedPackage );

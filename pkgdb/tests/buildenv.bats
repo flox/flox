@@ -66,6 +66,13 @@ setup_file() {
 # bats test_tags=unfree,unfree:fail
 @test "Environment with unfree packages fails to build by default" {
   run "$PKGDB_BIN" buildenv "$LOCKFILES/unfree/manifest.lock"
+  assert_failure
+  assert_output --partial "'hello' is marked as unfree"
+}
+
+# bats test_tags=unfree,unfree:success
+@test "Environment with unfree packages succeeds if allwed in options" {
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/unfree-allowed/manifest.lock"
   assert_success
 }
 
