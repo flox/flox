@@ -217,8 +217,6 @@ semverSat( const std::string & range, const std::list<std::string> & versions )
           rsl.push_back( version );
         }
     }
-  rsl.sort( [&]( const auto & a, const auto & b )
-            { return semver::lt( a, b ); } );
   return rsl;
 }
 
