@@ -41,6 +41,7 @@
 
 #include "flox/core/nix-state.hh"
 #include "flox/core/util.hh"
+#include "flox/fetchers/wrapped-nixpkgs-input.hh"
 #include "flox/flox-flake.hh"
 
 
@@ -212,6 +213,69 @@ floxNixpkgsAttrsToGithubAttrs( const nix::fetchers::Attrs & attrs )
   _attrs["type"]  = "github";
   _attrs["owner"] = "NixOS";
   _attrs["repo"]  = "nixpkgs";
+
+  /* Inherit `rev' and `ref' fields */
+  if ( auto rev = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
+    {
+      _attrs["rev"] = *rev;
+    }
+  else if ( auto ref = nix::fetchers::maybeGetStrAttr( attrs, "ref" ) )
+    {
+      _attrs["ref"] = *ref;
+    }
+  else
+    {
+      throw nix::Error(
+        "missing 'rev' or 'ref' field in 'flox-nixpkgs' input" );
+    }
+
+  return _attrs;
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Helper used to convert a `github` attribute set representation,
+ *        to a `flox-nixpkgs` attribute set representation.
+ * @note This is the inverse of `floxNixpkgsAttrsToGithubAttrs`.
+ * @param attrs The attribute set representation of an (assumed) `github` input.
+ * @return The attribute set representation of a `flox-nixpkgs` input.
+ * @throws nix::Error If the input type is not `github`.
+ * @throws nix::Error If the input type is `github` but the `rev` or `ref`
+ * fields are missing.
+ * @throws nix::Error If the input owner/repo is not `NixOS/nixpkgs` (case
+ * insensitive).
+ *
+ * @todo throw a flox exception instead of a nix exception for easier handling?
+ * @todo support wrapping of other inputs than `github:nixos/nixpkgs`.
+ * This would also require changes to the `WrappedNixpkgsInputScheme` class,
+ * as well as existing conversion methods imlemented for it.
+ */
+nix::fetchers::Attrs
+githubAttrsToFloxNixpkgsAttrs( const nix::fetchers::Attrs & attrs )
+{
+  auto type = nix::fetchers::getStrAttr( attrs, "type" );
+
+  if ( type != "github" )
+    {
+      throw nix::Error( "unsupported input type '%s' expected 'github'", type );
+    }
+
+  auto owner = nix::fetchers::getStrAttr( attrs, "owner" );
+  auto repo  = nix::fetchers::getStrAttr( attrs, "repo" );
+
+  if ( nix::toLower( owner ) != "nixos" || nix::toLower( repo ) != "nixpkgs" )
+    {
+      throw nix::Error(
+        "unsupported input owner/repo '%s/%s' expected 'NixOS/nixpkgs'",
+        owner,
+        repo );
+    }
+
+
+  nix::fetchers::Attrs _attrs;
+  _attrs["type"]    = "flox-nixpkgs";
+  _attrs["version"] = latestWrapperVersion;
 
   /* Inherit `rev' and `ref' fields */
   if ( auto rev = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
