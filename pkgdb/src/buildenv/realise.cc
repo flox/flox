@@ -13,11 +13,13 @@
 #include <nix/command.hh>
 #include <nix/derivations.hh>
 #include <nix/derived-path.hh>
+#include <nix/eval-cache.hh>
 #include <nix/eval-inline.hh>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
 #include <nix/get-drvs.hh>
 #include <nix/globals.hh>
+#include <nix/installable-flake.hh>
 #include <nix/local-fs-store.hh>
 #include <nix/path-with-outputs.hh>
 #include <nix/profiles.hh>
@@ -167,37 +169,34 @@ createEnvironmentStorePath(
 
 /* -------------------------------------------------------------------------- */
 
-static nix::Attr
-extractAttrPath( nix::EvalState &       state,
-                 nix::Value &           vFlake,
-                 const flox::AttrPath & attrPath )
+/**
+ * @brief Extract a nix value from a (flake) curor.
+ * @param cursor Cursor to extract the value from.
+ * @param attrPath an attribute path to a package in the flake.
+ * @return The value referenced by @a attrPath.
+ * @throws PackageEvalFailure if the attribute is not found.
+ */
+static nix::Value
+extractAttrPath( nix::EvalState &              state,
+                 nix::eval_cache::AttrCursor & cFlake,
+                 const flox::AttrPath &        attrPath )
 {
-  state.forceAttrs( vFlake, nix::noPos, "while parsing flake" );
-
-
-  auto * output = vFlake.attrs->get( state.symbols.create( "outputs" ) );
-
+  std::vector<nix::Symbol> attrPathNix {};
   for ( auto attrName : attrPath )
     {
-      state.forceAttrs( *output->value,
-                        output->pos,
-                        "while parsing cached flake data" );
-
-      auto * next
-        = output->value->attrs->get( state.symbols.create( attrName ) );
-
-      if ( next == nullptr )
-        {
-          std::ostringstream str;
-          output->value->print( state.symbols, str );
-          throw FloxException( "attribute '%s' not found in set '%s'",
-                               attrName,
-                               str.str() );
-        }
-      output = next;
+      attrPathNix.push_back( state.symbols.create( attrName ) );
     }
 
-  return *output;
+  auto maybeValue = cFlake.findAlongAttrPath( attrPathNix );
+  if ( ! maybeValue )
+    {
+      throw PackageEvalFailure(
+        nix::fmt( "Failed to find package '%s'", cFlake.getAttrPathStr() ) );
+    }
+
+  auto output = ( *maybeValue )->forceValue();
+
+  return output;
 }
 
 
@@ -243,14 +242,17 @@ createFloxEnv( nix::EvalState &     state,
                                                  packageInputRef,
                                                  nix::flake::LockFlags {} );
 
-      auto * vFlake = state.allocValue();
-      nix::flake::callFlake( state, packageFlake, *vFlake );
+      auto evalCache = nix::openEvalCache(
+        state,
+        std::make_shared<nix::flake::LockedFlake>( packageFlake ) );
+
+      nix::ref<nix::eval_cache::AttrCursor> cFlake = evalCache->getRoot();
 
       /* Get referenced output. */
-      auto output = extractAttrPath( state, *vFlake, package.attrPath );
+      auto vFlake = extractAttrPath( state, *cFlake, package.attrPath );
 
-      /* Interpret ooutput as derivation. */
-      auto package_drv = getDerivation( state, *output.value, false );
+      /* Interpret output as derivation. */
+      auto package_drv = getDerivation( state, vFlake, false );
 
       if ( ! package_drv.has_value() )
         {
