@@ -300,6 +300,11 @@ yaml_PREFIX := $(yaml_PREFIX)
 yaml_CFLAGS  = -isystem $(yaml_PREFIX)/include
 yaml_LDFLAGS = -L$(yaml_PREFIX)/lib -lyaml-cpp
 
+semver_PREFIX ?=                                                        \
+	$(shell $(NIX) build --no-link --print-out-paths '.#cpp-semver')
+semver_PREFIX := $(semver_PREFIX)
+semver_CFLAGS  = -isystem $(semver_PREFIX)/include
+
 nix_INCDIR ?= $(shell $(PKG_CONFIG) --variable=includedir nix-cmd)
 nix_INCDIR := $(nix_INCDIR)
 ifndef nix_CFLAGS
@@ -329,21 +334,11 @@ CXXFLAGS += $(nix_CFLAGS)
 CXXFLAGS += $(nljson_CFLAGS)
 CXXFLAGS += $(toml_CFLAGS)
 CXXFLAGS += $(yaml_CFLAGS)
+CXXFLAGS += $(semver_CFLAGS)
 
 LDFLAGS += $(nix_LDFLAGS)
 LDFLAGS += $(sqlite3_LDFLAGS)
 LDFLAGS += $(yaml_LDFLAGS)
-
-
-# ---------------------------------------------------------------------------- #
-
-# Locate `semver'
-# ---------------
-
-SEMVER_PATH ?=                                                        \
-  $(shell $(NIX) build --no-link --print-out-paths                    \
-	                     'github:aakropotkin/floco#semver')/bin/semver
-CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
 
 
 # ---------------------------------------------------------------------------- #

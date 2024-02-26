@@ -18,9 +18,6 @@
   # drop once bear is no longer broken in a newer release
   inputs.nixpkgs-bear.url = "github:NixOS/nixpkgs/release-23.05";
 
-  inputs.floco.url = "github:aakropotkin/floco";
-  inputs.floco.inputs.nixpkgs.follows = "nixpkgs";
-
   inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
   inputs.sqlite3pp.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -40,7 +37,6 @@
   outputs = {
     self,
     nixpkgs,
-    floco,
     sqlite3pp,
     pre-commit-hooks,
     crane,
@@ -84,20 +80,9 @@
       nix = final.callPackage ./pkgs/nix {};
     };
 
-    # Cherry pick `semver' recipe from `floco'.
+    # Use cpp-semver
     overlays.semver = final: prev: {
-      semver = let
-        base = final.callPackage "${floco}/fpkgs/semver" {
-          nixpkgs = throw (
-            "`nixpkgs' should not be references when `pkgsFor' "
-            + "is provided"
-          );
-          inherit (final) lib;
-          pkgsFor = final;
-          nodePackage = final.nodejs;
-        };
-      in
-        base.overrideAttrs (prevAttrs: {preferLocalBuild = false;});
+      cpp-semver = final.callPackage ./pkgs/cpp-semver {};
     };
 
     # bear is broken in release 23.11 on darwin

@@ -13,11 +13,11 @@
   nlohmann_json,
   pkg-config,
   remake,
-  semver,
   sqlite,
   sqlite3pp,
   toml11,
   yaml-cpp,
+  cpp-semver,
   # For testing
   bash,
   yj,
@@ -45,8 +45,8 @@
     boost_CFLAGS = "-isystem " + boost.dev.outPath + "/include";
     toml_CFLAGS = "-isystem " + toml11.outPath + "/include";
     yaml_PREFIX = yaml-cpp.outPath;
+    semver_PREFIX = cpp-semver.outPath;
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
-    SEMVER_PATH = semver.outPath + "/bin/semver";
     # Used by `buildenv' to provide activation hook extensions.
     PROFILE_D_SCRIPTS_DIR = let
       path = builtins.path {
@@ -147,7 +147,7 @@ in
           notIgnored && notResult;
       };
 
-      propagatedBuildInputs = [semver];
+      propagatedBuildInputs = [cpp-semver];
 
       nativeBuildInputs = [pkg-config coreutils gnugrep];
 
@@ -160,6 +160,7 @@ in
         yaml-cpp
         boost
         nix
+        cpp-semver
       ];
 
       configurePhase = ''
@@ -183,7 +184,7 @@ in
         inherit
           envs
           nix
-          semver
+          cpp-semver
           ;
 
         ciPackages = [
