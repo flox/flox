@@ -200,14 +200,18 @@ extractAttrPath( nix::EvalState &       state,
   return *output;
 }
 
-
 /* -------------------------------------------------------------------------- */
-// TODO: this function is too long, break it up
-// NOLINTBEGIN(readability-function-cognitive-complexity)
-nix::StorePath
-createFloxEnv( nix::EvalState &     state,
-               resolver::Lockfile & lockfile,
-               const System &       system )
+
+/**
+ * @brief Extract locked packages from the lockfile for the given system.
+ * @throws @a SystemNotSupportedByLockfile exception if the lockfile does not
+ *         specify packages for the given system.
+ * @param lockfile Lockfile to extract packages from.
+ * @param system System to extract packages for.
+ * @return List of locked packages for the given system paired with their id.
+ */
+static std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
+getLockedPackages( resolver::Lockfile & lockfile, const System & system )
 {
   auto packages = lockfile.getLockfileRaw().packages.find( system );
   if ( packages == lockfile.getLockfileRaw().packages.end() )
@@ -228,107 +232,140 @@ createFloxEnv( nix::EvalState &     state,
       locked_packages.emplace_back( package.first, locked_package );
     }
 
-  /* Extract derivations */
-  nix::StorePathSet                      references;
-  std::vector<RealisedPackage>           pkgs;
-  std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
-    originalPackage;
+  return locked_packages;
+}
 
-  for ( auto const & [pId, package] : locked_packages )
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Realise a locked package into a list of realised packages and store
+ * paths.
+ * Builds the derivation of the package and creates a @a RealisedPackage for
+ * each output.
+ * @param state Nix state.
+ * @param pId Package id from the lockfile (used to inform build error message).
+ * @param package Locked package to realise.
+ * @param system System to realise the package for. (used to inform build error
+ * message).
+ * @return List of realised packages and their store paths for referencing.
+ * @throws PackageEvalFailure if the package fails to evaluate.
+ * @throws PackageBuildFailure if the package fails to build.
+ * @throws PackageUnsupportedSystem if the package is not available for the
+ given system.
+ */
+static std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
+getRealisedPackages( nix::EvalState &                   state,
+                     const std::string &                pId,
+                     const resolver::LockedPackageRaw & package,
+                     const System &                     system )
+{
+  std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>> realised;
+
+
+  auto packageInputRef = nix::FlakeRef( package.input );
+  auto packageFlake
+    = flox::lockFlake( state, packageInputRef, nix::flake::LockFlags {} );
+
+  auto * vFlake = state.allocValue();
+  nix::flake::callFlake( state, packageFlake, *vFlake );
+
+  /* Get referenced output. */
+  auto output = extractAttrPath( state, *vFlake, package.attrPath );
+
+  /* Interpret output as derivation. */
+  auto package_drv = getDerivation( state, *output.value, false );
+
+  if ( ! package_drv.has_value() )
     {
-      // TODO: use `FloxFlake'
-      auto packageInputRef = nix::FlakeRef( package.input );
-      auto packageFlake    = nix::flake::lockFlake( state,
-                                                 packageInputRef,
-                                                 nix::flake::LockFlags {} );
+      throw PackageEvalFailure( "Failed to get derivation for package '"
+                                + nlohmann::json( package ).dump() + "'" );
+    }
 
-      auto * vFlake = state.allocValue();
-      nix::flake::callFlake( state, packageFlake, *vFlake );
+  std::string packagePath;
+  try
+    {
+      packagePath = state.store->printStorePath( package_drv->queryOutPath() );
+    }
+  catch ( const nix::Error & e )
+    {
 
-      /* Get referenced output. */
-      auto output = extractAttrPath( state, *vFlake, package.attrPath );
-
-      /* Interpret ooutput as derivation. */
-      auto package_drv = getDerivation( state, *output.value, false );
-
-      if ( ! package_drv.has_value() )
+      if ( e.info().msg.str().find(
+             "is not available on the requested hostPlatform:" )
+           != std::string::npos )
         {
-          throw PackageEvalFailure( "Failed to get derivation for package '"
-                                    + nlohmann::json( package ).dump() + "'" );
+          throw PackageUnsupportedSystem(
+            nix::fmt( "package '%s' is not available for this system ('%s')",
+                      pId,
+                      system ),
+
+            nix::filterANSIEscapes( e.what(), true ) );
         }
 
-      std::string packagePath;
+      // rethrow the original root cause without the nix trace
+      throw PackageEvalFailure(
+        nix::fmt( "package '%s' failed to evaluate", pId ),
+        e.info().msg.str() );
+    };
+
+
+  /* Collect all outputs to include in the environment.
+   *
+   * Set the priority of the outputs to the priority of the package
+   * and the internal priority to the index of the output.
+   * This way `buildenv::buildEnvironment` can resolve conflicts between
+   * outputs of the same derivation. */
+  for ( auto [idx, output] : enumerate( package_drv->queryOutputs() ) )
+    {
+      /* Skip outputs without path */
+      if ( ! output.second.has_value() ) { continue; }
+      RealisedPackage realisedPackage(
+        state.store->printStorePath( output.second.value() ),
+        true,
+        buildenv::Priority( package.priority,
+                            packagePath,
+                            /* idx should always fit in uint its unlikely a
+                             * package has more than 4 billion outputs. */
+                            static_cast<unsigned>( idx ) ) );
+      realised.emplace_back( realisedPackage, output.second.value() );
+    }
+
+  /* Build the derivation */
+  if ( auto drvPath = package_drv->queryDrvPath() )
+    {
+      /* Build derivation of pacakge in environment,
+       * rethrow errors as PackageBuildFailure. */
       try
         {
-          packagePath
-            = state.store->printStorePath( package_drv->queryOutPath() );
+          auto storePathWithOutputs
+            = nix::StorePathWithOutputs { *drvPath, {} };
+          state.store->buildPaths(
+            nix::toDerivedPaths( { storePathWithOutputs } ) );
         }
       catch ( const nix::Error & e )
         {
-
-          if ( e.info().msg.str().find(
-                 "is not available on the requested hostPlatform:" )
-               != std::string::npos )
-            {
-              throw PackageUnsupportedSystem(
-                nix::fmt(
-                  "package '%s' is not available for this system ('%s')",
-                  pId,
-                  system ),
-
-                nix::filterANSIEscapes( e.what(), true ) );
-            }
-
-          // rethrow the original root cause without the nix trace
-          throw PackageEvalFailure(
-            nix::fmt( "package '%s' failed to evaluate", pId ),
-            e.info().msg.str() );
-        };
-
-
-      /* Collect all outputs to include in the environment.
-       *
-       * Set the priority of the outputs to the priority of the package
-       * and the internal priority to the index of the output.
-       * This way `buildenv::buildEnvironment` can resolve conflicts between
-       * outputs of the same derivation. */
-      for ( auto [idx, output] : enumerate( package_drv->queryOutputs() ) )
-        {
-          /* Skip outputs without path */
-          if ( ! output.second.has_value() ) { continue; }
-          pkgs.emplace_back(
-            state.store->printStorePath( output.second.value() ),
-            true,
-            buildenv::Priority( package.priority,
-                                packagePath,
-                                /* idx should always fit in uint its unlikely a
-                                 * package has more than 4 billion outputs. */
-                                static_cast<unsigned>( idx ) ) );
-          references.insert( output.second.value() );
-          originalPackage.insert( { output.second.value(), { pId, package } } );
-        }
-
-      /* Collect drvs that may yet need to be built. */
-      if ( auto drvPath = package_drv->queryDrvPath() )
-        {
-          /* Build derivation of pacakge in environment,
-           * rethrow errors as PackageBuildFailure. */
-          try
-            {
-              auto storePathWithOutputs
-                = nix::StorePathWithOutputs { *drvPath, {} };
-              state.store->buildPaths(
-                nix::toDerivedPaths( { storePathWithOutputs } ) );
-            }
-          catch ( const nix::Error & e )
-            {
-              throw PackageBuildFailure(
-                "Failed to build package '" + pId + "'",
-                nix::filterANSIEscapes( e.what(), true ) );
-            }
+          throw PackageBuildFailure( "Failed to build package '" + pId + "'",
+                                     nix::filterANSIEscapes( e.what(), true ) );
         }
     }
 
+  return realised;
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Make a @a RealisedPackage and store path for the activation scripts.
+ * The package contains the activation scripts for *bash* and *zsh*.
+ * @param state Nix state.
+ * @param lockfile Lockfile to extract environment variables and hook script
+ * from.
+ * @return A pair of the realised package and the store path of the activation
+ * scripts.
+ */
+static std::pair<buildenv::RealisedPackage, nix::StorePathSet>
+makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile )
+{
+  std::vector<nix::StorePath> activationScripts;
   /* verbatim content of the activate script common to all shells */
   std::stringstream commonActivate;
 
@@ -416,28 +453,94 @@ createFloxEnv( nix::EvalState &     state,
 
   auto activationStorePath
     = state.store->addToStore( "activation-scripts", tempDir );
-  references.insert( activationStorePath );
-  pkgs.emplace_back( state.store->printStorePath( activationStorePath ),
-                     true,
-                     buildenv::Priority() );
 
+  RealisedPackage realised( state.store->printStorePath( activationStorePath ),
+                            true,
+                            buildenv::Priority() );
+  auto            references = nix::StorePathSet();
+  references.insert( activationStorePath );
   references.insert( state.store->parseStorePath( SET_PROMPT_BASH_SH ) );
   references.insert( state.store->parseStorePath( SET_PROMPT_ZSH_SH ) );
 
+
+  return { realised, references };
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Make a @a RealisedPackage and store path for the profile.d scripts.
+ * @param state Nix state.
+ * @return A pair of the realised package and the store path of the profile.d
+ * scripts.
+ */
+static std::pair<buildenv::RealisedPackage, nix::StorePath>
+makeProfileDScripts( nix::EvalState & state )
+{
   /* Insert profile.d scripts.
-   * The store path is provided at compile time via the `PROFILE_D_SCRIPTS_DIR'
-   * environment variable. */
+   * The store path is provided at compile time via the
+   * `PROFILE_D_SCRIPTS_DIR' environment variable. */
   auto profileScriptsPath
     = state.store->parseStorePath( PROFILE_D_SCRIPTS_DIR );
   state.store->ensurePath( profileScriptsPath );
-  references.insert( profileScriptsPath );
-  pkgs.emplace_back( state.store->printStorePath( profileScriptsPath ),
-                     true,
-                     buildenv::Priority() );
+  RealisedPackage realised( state.store->printStorePath( profileScriptsPath ),
+                            true,
+                            buildenv::Priority() );
+
+  return { realised, profileScriptsPath };
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Create a nix package for an environment definition.
+ * @param state Nix state.
+ * @param lockfile Lockfile to extract environment definition from.
+ * @param system System to create the environment for.
+ * @return The store path of the environment.
+ */
+nix::StorePath
+createFloxEnv( nix::EvalState &     state,
+               resolver::Lockfile & lockfile,
+               const System &       system )
+{
+  auto locked_packages = getLockedPackages( lockfile, system );
+
+  /* Extract derivations */
+  nix::StorePathSet            references;
+  std::vector<RealisedPackage> pkgs;
+  std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
+    originalPackage;
+
+  for ( auto const & [pId, package] : locked_packages )
+    {
+      auto realised = getRealisedPackages( state, pId, package, system );
+      for ( auto [realisedPackage, output] : realised )
+        {
+          pkgs.push_back( realisedPackage );
+          references.insert( output );
+          originalPackage.insert( { output, { pId, package } } );
+        }
+    }
+
+  // Add activation scripts to the environment
+  auto [activationScriptPackage, activationScriptReferences]
+    = makeActivationScripts( state, lockfile );
+
+  pkgs.push_back( activationScriptPackage );
+  references.insert( activationScriptReferences.begin(),
+                     activationScriptReferences.end() );
+
+
+  auto [profileScriptsPath, profileScriptsReference]
+    = makeProfileDScripts( state );
+
+  pkgs.push_back( profileScriptsPath );
+  references.insert( profileScriptsReference );
 
   return createEnvironmentStorePath( state, pkgs, references, originalPackage );
 }
-// NOLINTEND(readability-function-cognitive-complexity)
 
 
 nix::StorePath
