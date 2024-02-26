@@ -61,6 +61,16 @@ setup_file() {
   assert_success
 }
 
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=unfree,unfree:fail
+@test "Environment with unfree packages fails to build by default" {
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/unfree/manifest.lock"
+  assert_success
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=single,binaries
 @test "Built environment contains binaries" {
   run "$PKGDB_BIN" buildenv \
