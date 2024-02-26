@@ -321,15 +321,16 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
   nix::fetchers::maybeGetStrAttr( attrs, "narHash" );
   nix::fetchers::maybeGetIntAttr( attrs, "version" );
 
-  /*  */
-  if ( auto ref = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
+  /* Check the rev field if present */
+  if ( auto rev = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
     {
-      if ( std::regex_search( *ref, nix::revRegex ) )
+      if ( ! std::regex_match( *rev, nix::revRegex ) )
         {
-          throw nix::BadURL( "invalid Git commit hash '%s'", *ref );
+          throw nix::BadURL( "invalid Git commit hash '%s'", *rev );
         }
     }
 
+  /* Check the ref field if present */
   if ( auto ref = nix::fetchers::maybeGetStrAttr( attrs, "ref" ) )
     {
       if ( std::regex_search( *ref, nix::badGitRefRegex ) )
