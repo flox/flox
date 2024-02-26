@@ -27,6 +27,7 @@
 #include <nlohmann/json.hpp>
 
 #include "flox/buildenv/realise.hh"
+#include "flox/fetchers/wrapped-nixpkgs-input.hh"
 #include "flox/resolver/lockfile.hh"
 
 
@@ -262,7 +263,15 @@ getRealisedPackages( nix::EvalState &                   state,
   std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>> realised;
 
 
-  auto packageInputRef = nix::FlakeRef( package.input );
+  /**
+   * Ensure the input is fetched with `flox-nixpkgs`.
+   * Currently, the 'flox-nixpkgs' fetcher requires the original input to be
+   * a rev or ref of `github:nixos/nixpkgs`.
+   */
+  auto floxNixpkgsAttrs
+    = flox::githubAttrsToFloxNixpkgsAttrs( package.input.attrs );
+  auto packageInputRef = nix::FlakeRef::fromAttrs( floxNixpkgsAttrs );
+
   auto packageFlake
     = flox::lockFlake( state, packageInputRef, nix::flake::LockFlags {} );
 
