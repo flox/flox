@@ -212,8 +212,8 @@ createFloxEnv( nix::EvalState &     state,
   auto packages = lockfile.getLockfileRaw().packages.find( system );
   if ( packages == lockfile.getLockfileRaw().packages.end() )
     {
-      // TODO: throw structured exception
-      throw SystenNotSupportedByLockfile(
+      // Custom exception for non supported system
+      throw SystemNotSupportedByLockfile(
         "'" + system + "' not supported by this environment" );
     }
 
@@ -230,7 +230,6 @@ createFloxEnv( nix::EvalState &     state,
 
   /* Extract derivations */
   nix::StorePathSet                      references;
-  std::vector<nix::StorePathWithOutputs> drvsToBuild;
   std::vector<RealisedPackage>           pkgs;
   std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
     originalPackage;

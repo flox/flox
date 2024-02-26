@@ -31,12 +31,12 @@
 namespace flox::buildenv {
 
 /**
- * @class flox::buildenv::SystenNotSupportedByLockfile
+ * @class flox::buildenv::SystemNotSupportedByLockfile
  * @brief An exception thrown when a lockfile is is missing a package.<system>
  * entry fro the requested system.
  * @{
  */
-FLOX_DEFINE_EXCEPTION( SystenNotSupportedByLockfile,
+FLOX_DEFINE_EXCEPTION( SystemNotSupportedByLockfile,
                        EC_LOCKFILE_INCOMPATIBLE_SYSTEM,
                        "unsupported system" )
 /** @} */
