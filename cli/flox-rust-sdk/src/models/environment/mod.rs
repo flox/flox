@@ -52,6 +52,7 @@ pub const CACHE_DIR_NAME: &str = "cache";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 pub const FLOX_ENV_CACHE_VAR: &str = "FLOX_ENV_CACHE";
+pub const FLOX_ENV_PROJECT_VAR: &str = "FLOX_ENV_PROJECT";
 pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
@@ -162,6 +163,9 @@ pub trait Environment: Send {
 
     /// Return a path that environment hooks should use to store transient data.
     fn cache_path(&self) -> Result<PathBuf, EnvironmentError2>;
+
+    /// Return a path that should be used as the project root for environment hooks.
+    fn project_path(&self) -> Result<PathBuf, EnvironmentError2>;
 
     /// Directory containing .flox
     ///
@@ -435,6 +439,9 @@ pub enum EnvironmentError2 {
 
     #[error("could not create temporary directory")]
     CreateTempDir(#[source] std::io::Error),
+
+    #[error("could not get current directory")]
+    GetCurrentDir(#[source] std::io::Error),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions

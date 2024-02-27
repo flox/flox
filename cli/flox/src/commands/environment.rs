@@ -36,6 +36,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_ENV_CACHE_VAR,
     FLOX_ENV_DIRS_VAR,
     FLOX_ENV_LIB_DIRS_VAR,
+    FLOX_ENV_PROJECT_VAR,
     FLOX_ENV_VAR,
     FLOX_PATH_PATCHED_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
@@ -587,6 +588,10 @@ impl Activate {
                 FLOX_ENV_CACHE_VAR,
                 environment.cache_path()?.to_string_lossy().to_string(),
             ),
+            (
+                FLOX_ENV_PROJECT_VAR,
+                environment.project_path()?.to_string_lossy().to_string(),
+            ),
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
         ]);
@@ -631,7 +636,7 @@ impl Activate {
 
         command.envs(exports);
 
-        let script = formatdoc! {"
+        let script = formatdoc! {r#"
                 # to avoid infinite recursion sourcing bashrc
                 export FLOX_SOURCED_FROM_SHELL_RC=1
 
@@ -640,10 +645,10 @@ impl Activate {
 
                 unset FLOX_SOURCED_FROM_SHELL_RC
 
-                {run_args}
-        ",
+                {quoted_args}
+        "#,
             activation_path=shell_escape::escape(activation_path.to_string_lossy()),
-            run_args = run_args.join(" "),
+            quoted_args = Self::quote_run_args(&run_args)
         };
 
         command.arg("-c");
@@ -855,6 +860,19 @@ impl Activate {
         };
 
         println!("{script}");
+    }
+
+    /// Quote run args so that words don't get split,
+    /// but don't escape all characters.
+    ///
+    /// To do this we escape `"`,
+    /// but we don't escape anything else.
+    /// We want `$` for example to be expanded by the shell.
+    fn quote_run_args(run_args: &[String]) -> String {
+        run_args
+            .iter()
+            .map(|arg| format!(r#""{}""#, arg.replace('"', r#"\""#)))
+            .join(" ")
     }
 }
 
@@ -2217,5 +2235,19 @@ impl Containerize {
 
         message::created(format!("Container written to '{output_name}'"));
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_quote_run_args() {
+        assert_eq!(
+            Activate::quote_run_args(&["a b".to_string(), '"'.to_string()]),
+            r#""a b" "\"""#
+        )
     }
 }

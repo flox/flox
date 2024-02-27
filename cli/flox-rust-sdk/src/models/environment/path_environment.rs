@@ -318,6 +318,11 @@ impl Environment for PathEnvironment {
         Ok(cache_dir)
     }
 
+    /// Returns parent path of .flox
+    fn project_path(&self) -> Result<PathBuf, EnvironmentError2> {
+        self.parent_path()
+    }
+
     /// Path to the environment's parent directory
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
         let mut path = self.path.to_path_buf();
