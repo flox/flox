@@ -7,6 +7,8 @@
   flox-pkgdb,
   flox-cli,
   flox-manpages,
+  SENTRY_DSN ? null,
+  SENTRY_ENV ? null,
 }: let
   # Inherit version from Cargo.toml, aligning with the CLI version.
   # We also inject some indication about the `git' revision of the repository.
@@ -35,6 +37,8 @@ in
 
     postBuild = ''
       wrapProgram $out/bin/flox \
+        ${lib.optionalString (SENTRY_DSN != null) "--set SENTRY_DSN \"${SENTRY_DSN}\" "} \
+        ${lib.optionalString (SENTRY_ENV != null) "--set SENTRY_ENV \"${SENTRY_ENV}\" "} \
         --set PKGDB_BIN       "${flox-pkgdb}/bin/pkgdb" \
         --set LD_FLOXLIB      "${flox-pkgdb}/lib/ld-floxlib.so" \
         --set FLOX_BIN        "${flox-cli}/bin/flox" \
