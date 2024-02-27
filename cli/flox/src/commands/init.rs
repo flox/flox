@@ -228,6 +228,7 @@ impl InitHook for Requirements {
     fn get_init_customization(&self) -> InitCustomization {
         InitCustomization {
             hook: Some(
+                // TODO: when we support fish, we'll need to source activate.fish
                 indoc! {r#"
                 # Setup a Python virtual environment
 
