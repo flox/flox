@@ -36,9 +36,6 @@ impl std::io::Write for LockingTerminalStderr {
     }
 }
 
-// type LayerType = tracing_subscriber::layer::Layered<MetricsLayer, tracing_subscriber::Registry>;
-// type ReloadHandle<T> = tracing_subscriber::reload::Handle<T, LayerType>;
-
 #[allow(clippy::type_complexity)]
 static LOGGER_HANDLE: OnceCell<
     tracing_subscriber::reload::Handle<
@@ -94,7 +91,6 @@ pub fn init_logger(verbosity: Option<Verbosity>) {
         let (fmt_filtered, fmt_reload_handle) =
             tracing_subscriber::reload::Layer::new(fmt_filtered);
 
-        // let fmt_filtered_layer =
         let metrics_layer = MetricsLayer::new();
         let sentry_layer = sentry::integrations::tracing::layer();
 
@@ -111,10 +107,7 @@ pub fn init_logger(verbosity: Option<Verbosity>) {
         match tracing_subscriber::filter::EnvFilter::try_from_default_env()
             .or_else(|_| tracing_subscriber::EnvFilter::try_new(log_filter))
         {
-            Ok(new_filter) => {
-                // layer.filter_mut().
-                *layer.filter_mut() = new_filter
-            },
+            Ok(new_filter) => *layer.filter_mut() = new_filter,
             Err(err) => {
                 error!("Updating logger filter failed: {}", err);
             },
