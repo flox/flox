@@ -58,6 +58,7 @@ fn main() -> ExitCode {
             .run_inner(Args::current_args())
             .unwrap_or_default()
     };
+
     init_logger(Some(verbosity));
     let _sentry_guard = init_sentry();
 
