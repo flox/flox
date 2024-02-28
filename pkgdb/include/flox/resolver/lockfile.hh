@@ -39,6 +39,16 @@ FLOX_DEFINE_EXCEPTION( InvalidLockfileException,
                        "invalid lockfile" )
 /** @} */
 
+/**
+ * @class flox::resolver::PackageCheckFailure
+ * @brief An exception thrown when a lockfile is invalid.
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( PackageCheckFailure,
+                       EC_PACKAGE_CHECK_FAILURE,
+                       "bad package" )
+/** @} */
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -120,6 +130,19 @@ operator<<( std::ostream & oss, const LockedInputRaw & raw );
 
 /* -------------------------------------------------------------------------- */
 
+
+struct CheckPackageWarning
+{
+  std::string packageId;
+  std::string message;
+};
+
+void
+to_json( nlohmann::json & j, const CheckPackageWarning & result );
+
+
+/* -------------------------------------------------------------------------- */
+
 /** @brief A locked package's _installable URI_. */
 struct LockedPackageRaw
 {
@@ -145,6 +168,8 @@ struct LockedPackageRaw
   }
 
 
+  std::vector<CheckPackageWarning>
+  check( const std::string & packageId, const Options::Allows & allows ) const;
 }; /* End struct `LockedPackageRaw' */
 
 
@@ -363,6 +388,17 @@ public:
   std::size_t
   removeUnusedInputs();
 
+
+  /**
+   * @brief Check the lockfile's `packages.**` members for consistency with the
+   * `options.allow.*` policies
+   *
+   * @return A list of warnings of non-fatal issues.
+   * @throws PackageCheckFailure if a package is not consistent with a policy.
+   */
+  std::vector<CheckPackageWarning>
+  checkPackages( const std::optional<flox::System> & system
+                 = std::nullopt ) const;
 
 }; /* End class `Lockfile' */
 

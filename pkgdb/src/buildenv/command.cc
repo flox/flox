@@ -108,7 +108,7 @@ BuildEnvCommand::run()
     }
   else if ( this->storePath.has_value() && ! this->outLink.has_value() )
     {
-      throw BuildenvInvalidArguments(
+      throw command::InvalidArgException(
         "'--store-path' requires the '--out-link' flag" );
     }
 

@@ -810,6 +810,8 @@ Environment::createLockfile()
         }
     }
   Lockfile lockfile( *this->lockfileRaw );
+
+  lockfile.checkPackages();
   lockfile.removeUnusedInputs();
   return lockfile;
 }
