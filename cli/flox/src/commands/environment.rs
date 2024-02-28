@@ -597,7 +597,7 @@ impl Activate {
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
         ]);
 
-        exports.extend(default_nix_subprocess_env(true));
+        exports.extend(default_nix_subprocess_env());
 
         if let Some(fixed_up_original_path_joined) = fixed_up_original_path_joined {
             exports.insert(
