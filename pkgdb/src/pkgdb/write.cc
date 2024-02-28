@@ -702,52 +702,6 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
   this->setPrefixDone( this->addOrGetAttrSetId( prefix ), done );
 }
 
-void
-PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
-                            const flox::Cursor &      cursor,
-                            const flox::AttrPath &    prefix,
-                            const flox::pkgdb::row_id parentId,
-                            const flox::subtree_type  subtree,
-                            Todos &                   todo )
-{
-  try
-    {
-      if ( cursor->isDerivation() )
-        {
-          this->addPackage( parentId, sym, cursor );
-        }
-      else if ( subtree == ST_PACKAGES )
-        {
-          /* Do not recurse down the `packages` subtree */
-          return;
-        }
-      else if ( auto maybeRecurse
-                = cursor->maybeGetAttr( "recurseForDerivations" );
-                ( ( maybeRecurse != nullptr ) && maybeRecurse->getBool() )
-                /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
-                 *      due to a bug in `nixpkgs' which doesn't set
-                 *      `recurseForDerivations' attribute correctly. */
-                || ( ( subtree == ST_LEGACY ) && ( sym == "darwin" ) ) )
-        {
-          flox::AttrPath path = prefix;
-          path.emplace_back( sym );
-          row_id childId = this->addOrGetAttrSetId( sym, parentId );
-          todo.emplace( std::make_tuple( std::move( path ), cursor, childId ) );
-        }
-    }
-  catch ( const nix::EvalError & err )
-    {
-      /* Ignore errors in `legacyPackages' */
-      if ( subtree == ST_LEGACY )
-        {
-          /* Only print eval errors in "debug" mode. */
-          nix::ignoreException( nix::lvlDebug );
-          return;
-        }
-      throw;
-    }
-}
-
 /* -------------------------------------------------------------------------- */
 
 static const RulesTreeNode &
@@ -762,6 +716,105 @@ getDefaultRules()
       rules = RulesTreeNode( std::move( raw ) );
     }
   return *rules;
+}
+
+
+void
+PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
+                            const flox::Cursor &      cursor,
+                            const flox::AttrPath &    prefix,
+                            const flox::pkgdb::row_id parentId,
+                            const flox::subtree_type  subtree,
+                            Todos &                   todo )
+{
+  try
+    {
+      flox::AttrPath path = prefix;
+      path.emplace_back( sym );
+
+      // RULESPORT>>
+      // FIXME: This breaks allows under recursiveDisallows!
+      /* If the package or prefix is disallowed, bail. */
+      const std::string pathS = concatStringsSep( ".", prefix ) + "." + sym;
+      debugLog( nix::fmt( "WML: processing path %s\n", pathS.c_str() ) );
+      std::optional<bool> rulesAllowed = getDefaultRules().applyRules( path );
+      if ( rulesAllowed.has_value() && ( ! ( *rulesAllowed ) ) )
+        {
+          debugLog( "WML: skipping disallowed attribute: " + pathS );
+          return;
+        }
+      // <<RULESPORT
+
+      if ( cursor->maybeGetAttr( "__functor" ) != nullptr
+           || cursor->maybeGetAttr( "__functionArgs" ) != nullptr )
+        {
+          debugLog( nix::fmt( "WML: skipping functor %s", sym ) );
+          return;
+        }
+
+      auto maybeAttrs = cursor->getAttrs();
+      if ( maybeAttrs.empty() )
+        {
+          traceLog( "WML: skipping empty attribute set: " + pathS );
+          return;
+        }
+      if ( cursor->isDerivation() )
+        {
+          debugLog( "WML: adding package " + sym + "\n" );
+          this->addPackage( parentId, sym, cursor );
+        }
+      else if ( subtree == ST_PACKAGES )
+        {
+          /* Do not recurse down the `packages` subtree */
+          return;
+        }
+      // OLD CODE
+      // else if ( auto maybeRecurse
+      //           = cursor->maybeGetAttr( "recurseForDerivations" );
+      //           ( ( maybeRecurse != nullptr ) && maybeRecurse->getBool() )
+      //           /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
+      //            *      due to a bug in `nixpkgs' which doesn't set
+      //            *      `recurseForDerivations' attribute correctly. */
+      //           || ( ( subtree == ST_LEGACY ) && ( sym == "darwin" ) ) )
+      else
+        //  if ( auto maybeRecurse
+        //           = cursor->maybeGetAttr( "recurseForDerivations" );
+        //           (rulesAllowed.value_or( maybeRecurse != nullptr &&
+        //           maybeRecurse->getBool()) ))
+        {
+          traceLog( nix::fmt( "WML: getting attr to check for recursion\n" ) );
+          auto maybeRecurse = cursor->maybeGetAttr( "recurseForDerivations" );
+          bool allowed      = rulesAllowed.value_or( maybeRecurse != nullptr
+                                                && maybeRecurse->getBool() );
+
+          traceLog( nix::fmt( "WML: %s -> rulesAllowed.has_value: %d\n",
+                              pathS,
+                              rulesAllowed.has_value() ) );
+          if ( rulesAllowed.has_value() )
+            {
+              traceLog(
+                nix::fmt( "WML: rulesAllowed is %d\n", rulesAllowed.value() ) );
+            }
+
+          if ( allowed )
+            {
+              row_id childId = this->addOrGetAttrSetId( sym, parentId );
+              todo.emplace(
+                std::make_tuple( std::move( path ), cursor, childId ) );
+            }
+        }
+    }
+  catch ( const nix::EvalError & err )
+    {
+      /* Ignore errors in `legacyPackages' */
+      if ( subtree == ST_LEGACY )
+        {
+          /* Only print eval errors in "debug" mode. */
+          nix::ignoreException( nix::lvlDebug );
+          return;
+        }
+      throw;
+    }
 }
 
 
@@ -826,6 +879,15 @@ PkgDb::scrape( nix::SymbolTable & syms,
             {
               const auto [prefix, cursor, parentId] = todo.top();
               todo.pop();
+
+              /* Skip functors */
+              if ( cursor->maybeGetAttr( "__functor" ) != nullptr
+                   || cursor->maybeGetAttr( "__functionArgs" ) != nullptr )
+                {
+                  debugLog(
+                    nix::fmt( "WML: skipping functor %s", syms[aname] ) );
+                  continue;
+                }
 
               for ( nix::Symbol & aname : cursor->getAttrs() )
                 {
