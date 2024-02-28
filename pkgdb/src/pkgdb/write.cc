@@ -732,35 +732,31 @@ PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
       flox::AttrPath path = prefix;
       path.emplace_back( sym );
 
-      // RULESPORT>>
       // FIXME: This breaks allows under recursiveDisallows!
       /* If the package or prefix is disallowed, bail. */
-      const std::string pathS = concatStringsSep( ".", prefix ) + "." + sym;
-      debugLog( nix::fmt( "WML: processing path %s\n", pathS.c_str() ) );
+      const std::string   pathS = concatStringsSep( ".", prefix ) + "." + sym;
       std::optional<bool> rulesAllowed = getDefaultRules().applyRules( path );
       if ( rulesAllowed.has_value() && ( ! ( *rulesAllowed ) ) )
         {
-          debugLog( "WML: skipping disallowed attribute: " + pathS );
+          traceLog( "scrapeRules: skipping disallowed attribute: " + pathS );
           return;
         }
-      // <<RULESPORT
 
       if ( cursor->maybeGetAttr( "__functor" ) != nullptr
            || cursor->maybeGetAttr( "__functionArgs" ) != nullptr )
         {
-          debugLog( nix::fmt( "WML: skipping functor %s", sym ) );
+          traceLog( nix::fmt( "scrapeRules: skipping functor %s", sym ) );
           return;
         }
 
       auto maybeAttrs = cursor->getAttrs();
       if ( maybeAttrs.empty() )
         {
-          traceLog( "WML: skipping empty attribute set: " + pathS );
+          traceLog( "scrapeRules: skipping empty attribute set: " + pathS );
           return;
         }
       if ( cursor->isDerivation() )
         {
-          debugLog( "WML: adding package " + sym + "\n" );
           this->addPackage( parentId, sym, cursor );
         }
       else if ( subtree == ST_PACKAGES )
@@ -768,32 +764,18 @@ PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
           /* Do not recurse down the `packages` subtree */
           return;
         }
-      // OLD CODE
-      // else if ( auto maybeRecurse
-      //           = cursor->maybeGetAttr( "recurseForDerivations" );
-      //           ( ( maybeRecurse != nullptr ) && maybeRecurse->getBool() )
-      //           /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
-      //            *      due to a bug in `nixpkgs' which doesn't set
-      //            *      `recurseForDerivations' attribute correctly. */
-      //           || ( ( subtree == ST_LEGACY ) && ( sym == "darwin" ) ) )
       else
-        //  if ( auto maybeRecurse
-        //           = cursor->maybeGetAttr( "recurseForDerivations" );
-        //           (rulesAllowed.value_or( maybeRecurse != nullptr &&
-        //           maybeRecurse->getBool()) ))
         {
-          traceLog( nix::fmt( "WML: getting attr to check for recursion\n" ) );
           auto maybeRecurse = cursor->maybeGetAttr( "recurseForDerivations" );
           bool allowed      = rulesAllowed.value_or( maybeRecurse != nullptr
                                                 && maybeRecurse->getBool() );
 
-          traceLog( nix::fmt( "WML: %s -> rulesAllowed.has_value: %d\n",
-                              pathS,
-                              rulesAllowed.has_value() ) );
           if ( rulesAllowed.has_value() )
             {
               traceLog(
-                nix::fmt( "WML: rulesAllowed is %d\n", rulesAllowed.value() ) );
+                nix::fmt( "scrapeRules: matching rule found (%s), for %s\n",
+                          rulesAllowed.value() ? "true" : "false",
+                          pathS ) );
             }
 
           if ( allowed )
@@ -884,8 +866,8 @@ PkgDb::scrape( nix::SymbolTable & syms,
               if ( cursor->maybeGetAttr( "__functor" ) != nullptr
                    || cursor->maybeGetAttr( "__functionArgs" ) != nullptr )
                 {
-                  debugLog(
-                    nix::fmt( "WML: skipping functor %s", syms[aname] ) );
+                  debugLog( nix::fmt( "scrapeRules: skipping functor %s",
+                                      syms[aname] ) );
                   continue;
                 }
 

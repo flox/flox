@@ -59,7 +59,8 @@ static const nlohmann::json pkgDescriptorBaseRaw = R"( {
 
 static const nlohmann::json rulesJSON = R"( {
   "allowRecursive": [
-    ["legacyPackages", null, "darwin"]
+    ["legacyPackages", null, "darwin"],
+    ["legacyPackages", null, "swiftPackages", "darwin"]
   ],
   "disallowRecursive": [
     ["legacyPackages", null, "emacsPackages"],
@@ -1022,17 +1023,31 @@ test_RulesTree_getRule0()
 {
   flox::pkgdb::RulesTreeNode rules(
     rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
-  flox::pkgdb::ScrapeRule rule = rules.getRule(
+
+  flox::pkgdb::ScrapeRule rule
+    = rules.getRule( flox::AttrPath { "legacyPackages", "x86_64-linux" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+
+  rule = rules.getRule(
     flox::AttrPath { "legacyPackages", "x86_64-linux", "darwin" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+
   rule = rules.getRule(
     flox::AttrPath { "legacyPackages", "x86_64-darwin", "darwin" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+
   rule = rules.getRule(
     flox::AttrPath { "legacyPackages", "aarch64-linux", "darwin" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+
   rule = rules.getRule(
     flox::AttrPath { "legacyPackages", "aarch64-darwin", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+
+  rule = rules.getRule( flox::AttrPath { "legacyPackages",
+                                         "aarch64-darwin",
+                                         "swiftPackages",
+                                         "darwin" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
   return true;
 }
@@ -1095,6 +1110,13 @@ test_RulesTree_getRule2()
                                       "python310Packages",
                                       "pip" } );
   EXPECT_EQ( rule2, flox::pkgdb::SR_ALLOW_PACKAGE );
+
+  flox::pkgdb::ScrapeRule rule3
+    = rules.getRule( flox::AttrPath { "legacyPackages",
+                                      "x86_64-linux",
+                                      "swiftPackages",
+                                      "darwin" } );
+  EXPECT_EQ( rule3, flox::pkgdb::SR_ALLOW_RECURSIVE );
   return true;
 }
 
