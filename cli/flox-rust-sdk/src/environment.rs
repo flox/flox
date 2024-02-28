@@ -17,10 +17,13 @@ pub static NIX_BIN: &str = env!("NIX_BIN");
 /// For flox specifically, set Nix-provided defaults for certain
 /// environment variables that we know to be required on the various
 /// operating systems.
+/// Setting buildtime variants of these environment variables
+/// will bundle include them in flox' pacakge closure
+/// and ennsure that subprocesses are run with valid konwn values.
 pub fn default_nix_subprocess_env() -> HashMap<&'static str, String> {
     let mut env_map: HashMap<&str, String> = HashMap::new();
 
-    // respect SSL_CERT_FILE, but if it isn't set, use buildtime NIXPKGS_CACERT_BUNDLE_CRT
+    // use buildtime NIXPKGS_CACERT_BUNDLE_CRT
     let ssl_cert_file = match env::var("SSL_CERT_FILE") {
         Ok(v) => v,
         Err(_) => {
@@ -32,6 +35,7 @@ pub fn default_nix_subprocess_env() -> HashMap<&'static str, String> {
 
     env_map.insert("NIX_SSL_CERT_FILE", ssl_cert_file);
 
+    // on macos use buildtime NIX_COREFOUNDATION_RPATH and PATH_LOCALE
     #[cfg(target_os = "macos")]
     {
         env_map.insert(
@@ -41,19 +45,15 @@ pub fn default_nix_subprocess_env() -> HashMap<&'static str, String> {
         env_map.insert("PATH_LOCALE", env!("PATH_LOCALE").to_string());
     }
 
+    // on linux use buildtime LOCALE_ARCHIVE
     #[cfg(target_os = "linux")]
     {
         env_map.insert("LOCALE_ARCHIVE", env!("LOCALE_ARCHIVE").to_string());
     }
 
+    // TODO: remove `FLOX_VERSION`.
+    // Not removing just yet, as I'm not sure why it's here.
     env_map.insert("FLOX_VERSION", crate::flox::FLOX_VERSION.to_string());
-
-    // For now these variables are managed in bash
-    // let home = env!("HOME");
-    // env_map.insert(
-    //     "NIX_USER_CONF_FILES".to_string(),
-    //     format!("{}/.config/flox/nix.conf", home),
-    // );
 
     env_map
 }
