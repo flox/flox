@@ -923,10 +923,6 @@ impl Activate {
             env_map.insert("LOCALE_ARCHIVE", env!("LOCALE_ARCHIVE").to_string());
         }
 
-        // TODO: remove `FLOX_VERSION`.
-        // Not removing just yet, as I'm not sure why it's here.
-        env_map.insert("FLOX_VERSION", flox_rust_sdk::flox::FLOX_VERSION.to_string());
-
         env_map
     }
 }
