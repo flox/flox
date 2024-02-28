@@ -597,10 +597,7 @@ impl Activate {
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
         ]);
 
-        let env = default_nix_subprocess_env(true);
-        env.iter().for_each(|(k, v)| {
-            exports.insert(k, v.to_string());
-        });
+        exports.extend(default_nix_subprocess_env(true));
 
         if let Some(fixed_up_original_path_joined) = fixed_up_original_path_joined {
             exports.insert(

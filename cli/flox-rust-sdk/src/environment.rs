@@ -20,8 +20,8 @@ pub static NIX_BIN: &str = env!("NIX_BIN");
 ///
 /// * `set_all` - Set all environment variables irrespective of
 ///               their presence in the current environment.
-pub fn default_nix_subprocess_env(set_all: bool) -> HashMap<String, String> {
-    let mut env_map: HashMap<String, String> = HashMap::new();
+pub fn default_nix_subprocess_env(set_all: bool) -> HashMap<&'static str, String> {
+    let mut env_map: HashMap<&str, String> = HashMap::new();
 
     // respect SSL_CERT_FILE, but if it isn't set, use buildtime NIXPKGS_CACERT_BUNDLE_CRT
     let ssl_cert_file = match env::var("SSL_CERT_FILE") {
@@ -29,7 +29,7 @@ pub fn default_nix_subprocess_env(set_all: bool) -> HashMap<String, String> {
         Err(_) => {
             let nixpkgs_cacert_bundle_crt = env!("NIXPKGS_CACERT_BUNDLE_CRT");
             env_map.insert(
-                "SSL_CERT_FILE".to_string(),
+                "SSL_CERT_FILE",
                 nixpkgs_cacert_bundle_crt.to_string(),
             );
             nixpkgs_cacert_bundle_crt.to_string()
@@ -37,19 +37,19 @@ pub fn default_nix_subprocess_env(set_all: bool) -> HashMap<String, String> {
     };
 
     if set_all || env::var("NIX_SSL_CERT_FILE").is_err() {
-        env_map.insert("NIX_SSL_CERT_FILE".to_string(), ssl_cert_file);
+        env_map.insert("NIX_SSL_CERT_FILE", ssl_cert_file);
     }
 
     #[cfg(target_os = "macos")]
     {
         if set_all || env::var("NIX_COREFOUNDATION_RPATH").is_err() {
             env_map.insert(
-                "NIX_COREFOUNDATION_RPATH".to_string(),
+                "NIX_COREFOUNDATION_RPATH",
                 env!("NIX_COREFOUNDATION_RPATH").to_string(),
             );
         }
         if set_all || env::var("PATH_LOCALE").is_err() {
-            env_map.insert("PATH_LOCALE".to_string(), env!("PATH_LOCALE").to_string());
+            env_map.insert("PATH_LOCALE", env!("PATH_LOCALE").to_string());
         }
     }
 
@@ -57,14 +57,14 @@ pub fn default_nix_subprocess_env(set_all: bool) -> HashMap<String, String> {
     {
         if set_all || env::var("LOCALE_ARCHIVE").is_err() {
             env_map.insert(
-                "LOCALE_ARCHIVE".to_string(),
+                "LOCALE_ARCHIVE",
                 env!("LOCALE_ARCHIVE").to_string(),
             );
         }
     }
 
     env_map.insert(
-        "FLOX_VERSION".to_string(),
+        "FLOX_VERSION",
         crate::flox::FLOX_VERSION.to_string(),
     );
 
