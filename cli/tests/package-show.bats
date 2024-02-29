@@ -13,6 +13,7 @@ load test_support.bash
 # ---------------------------------------------------------------------------- #
 
 # Helpers for project based tests.
+# Note in this file, these aren't added to setup() and teardown()
 
 project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
@@ -36,11 +37,15 @@ project_teardown() {
 
 setup() {
   common_test_setup
-  project_setup
 }
 teardown() {
-  project_teardown
   common_test_teardown
+}
+
+setup_file() {
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
 }
 
 # ---------------------------------------------------------------------------- #
@@ -144,17 +149,13 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' works in project without manifest or lockfile" {
+  project_setup
+
   rm -f "$PROJECT_DIR/.flox/manifest.toml"
   run --separate-stderr "$FLOX_BIN" show hello
   assert_success
-}
 
-# ---------------------------------------------------------------------------- #
-
-@test "'flox show' works outside of projects" {
-  rm -rf "$PROJECT_DIR/.flox"
-  run --separate-stderr "$FLOX_BIN" show hello
-  assert_success
+  project_teardown
 }
 
 # ---------------------------------------------------------------------------- #
@@ -162,6 +163,8 @@ teardown() {
 # bats test_tags=search:project, search:manifest, search:show
 
 @test "'flox show' uses '_PKGDB_GA_REGISTRY_REF_OR_REV' revision" {
+  project_setup
+
   rm -f "$GLOBAL_MANIFEST_LOCK"
 
   mkdir -p "$PROJECT_DIR/.flox/env"
@@ -183,6 +186,8 @@ teardown() {
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
   assert_output "    nodejs - nodejs@$NODEJS_VERSION_NEW"
+
+  project_teardown
 }
 
 # ---------------------------------------------------------------------------- #
@@ -190,6 +195,8 @@ teardown() {
 # bats test_tags=search:project, search:manifest, search:lockfile, search:show
 
 @test "'flox show' uses locked revision when available" {
+  project_setup
+
   mkdir -p "$PROJECT_DIR/.flox/env"
   # Note: at some point it may also be necessary to create a .flox/env.json
   {
@@ -231,6 +238,8 @@ teardown() {
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
   assert_output "    nodejs - nodejs@$NODEJS_VERSION_OLD"
+
+  project_teardown
 }
 
 # ---------------------------------------------------------------------------- #
