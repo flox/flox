@@ -31,12 +31,12 @@
 namespace flox::buildenv {
 
 /**
- * @class flox::buildenv::SystenNotSupportedByLockfile
+ * @class flox::buildenv::SystemNotSupportedByLockfile
  * @brief An exception thrown when a lockfile is is missing a package.<system>
  * entry fro the requested system.
  * @{
  */
-FLOX_DEFINE_EXCEPTION( SystenNotSupportedByLockfile,
+FLOX_DEFINE_EXCEPTION( SystemNotSupportedByLockfile,
                        EC_LOCKFILE_INCOMPATIBLE_SYSTEM,
                        "unsupported system" )
 /** @} */
@@ -106,13 +106,15 @@ createFloxEnv( nix::EvalState &     state,
 /* -------------------------------------------------------------------------- */
 
 /**
- * @brief Create a @a nix::StorePath containing a realised environment.
- * @param pkgs A list of packages to be added to the environment.
- * @param state A `nix` evaluator.
- * @param references A set of indirect dependencies to be added to
- *                   the environment.
- * @param originalPackage A map of packages to be added to the environment.
- * @return A @a nix::StorePath with a realised environment.
+ * @brief Merge all components of the environment into a single store path.
+ * @param state Nix state.
+ * @param pkgs List of packages to include in the environment.
+ *             - outputs of packages declared in the environment manifest
+ *             - flox specific packages (activation scripts, profile.d, etc.)
+ * @param references Set of store paths that the environment depends on.
+ * @param originalPackage Map of store paths to the locked package definition
+ *                        that provided them.
+ * @return The combined store path of the environment.
  */
 const nix::StorePath &
 createEnvironmentStorePath(
