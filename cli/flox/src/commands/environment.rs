@@ -1192,6 +1192,18 @@ impl Install {
         .spin()
         .map_err(|err| Self::handle_error(err, &flox, &*environment, &packages))?;
 
+        let lockfile_path = environment.lockfile_path(&flox)?;
+        let lockfile_path = CanonicalPath::new(lockfile_path)?;
+        let warnings = LockedManifest::check_lockfile(&lockfile_path)?;
+
+        warnings
+            .iter()
+            .filter(|w| {
+                // Filter out warnings that are not related to the packages we just installed
+                packages.iter().any(|p| w.package == p.id)
+            })
+            .for_each(|w| message::warning(&w.message));
+
         if installation.new_manifest.is_some() {
             // Print which new packages were installed
             for pkg in packages.iter() {

@@ -224,8 +224,11 @@ impl LockedManifest {
             .arg("--lockfile")
             .arg(path.as_os_str());
 
-        let value = call_pkgdb(pkgdb_cmd).unwrap();
-        let warnings: Vec<LockfileCheckWarning> = serde_json::from_value(value).unwrap();
+        debug!("checking lockfile with command: {}", pkgdb_cmd.display());
+
+        let value = call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::CheckLockfile)?;
+        let warnings: Vec<LockfileCheckWarning> =
+            serde_json::from_value(value).map_err(LockedManifestError::ParseCheckWarnings)?;
 
         Ok(warnings)
     }
@@ -341,8 +344,12 @@ pub struct InstalledPackage {
 pub enum LockedManifestError {
     #[error("failed to lock manifest")]
     LockManifest(#[source] CallPkgDbError),
+    #[error("failed to check lockfile")]
+    CheckLockfile(#[source] CallPkgDbError),
     #[error("failed to build environment")]
     BuildEnv(#[source] CallPkgDbError),
+    #[error("failed to parse check warnings")]
+    ParseCheckWarnings(#[source] serde_json::Error),
     #[error("package is unsupported for this sytem")]
     UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
     #[error("failed to build container builder")]
