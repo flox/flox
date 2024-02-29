@@ -214,6 +214,21 @@ impl LockedManifest {
         let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
         serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
     }
+
+    pub fn check_lockfile(
+        path: &CanonicalPath,
+    ) -> Result<Vec<LockfileCheckWarning>, LockedManifestError> {
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd
+            .args(["manifest", "check"])
+            .arg("--lockfile")
+            .arg(path.as_os_str());
+
+        let value = call_pkgdb(pkgdb_cmd).unwrap();
+        let warnings: Vec<LockfileCheckWarning> = serde_json::from_value(value).unwrap();
+
+        Ok(warnings)
+    }
 }
 
 impl ToString for LockedManifest {
@@ -354,6 +369,13 @@ pub enum LockedManifestError {
     SerializeGlobalLockfile(#[source] serde_json::Error),
     #[error("could not write global lockfile")]
     WriteGlobalLockfile(#[source] std::io::Error),
+}
+
+/// A warning produced by `pkgdb manifest check`
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct LockfileCheckWarning {
+    pub package: String,
+    pub message: String,
 }
 
 #[cfg(test)]
