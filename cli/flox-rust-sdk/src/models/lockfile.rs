@@ -22,6 +22,7 @@ use crate::models::environment::{
     CanonicalPath,
 };
 use crate::models::pkgdb::{call_pkgdb, BuildEnvResult, PKGDB_BIN};
+use crate::utils::CommandExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Input {
@@ -65,7 +66,7 @@ impl LockedManifest {
             .arg("--lockfile")
             .arg(existing_lockfile_path);
 
-        debug!("locking manifest with command: {pkgdb_cmd:?}");
+        debug!("locking manifest with command: {}", pkgdb_cmd.display());
         call_pkgdb(pkgdb_cmd)
             .map_err(LockedManifestError::LockManifest)
             .map(Self)
@@ -91,7 +92,7 @@ impl LockedManifest {
             }
         }
 
-        debug!("building environment with command: {pkgdb_cmd:?}");
+        debug!("building environment with command: {}", pkgdb_cmd.display());
 
         let result: BuildEnvResult =
             serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::BuildEnv)?)
@@ -112,7 +113,10 @@ impl LockedManifest {
             .arg("--container")
             .arg(&self.to_string());
 
-        debug!("building container builder with command: {pkgdb_cmd:?}");
+        debug!(
+            "building container builder with command: {}",
+            pkgdb_cmd.display()
+        );
         let result: BuildEnvResult =
             serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::BuildEnv)?)
                 .map_err(LockedManifestError::ParseBuildEnvOutput)?;
@@ -163,7 +167,7 @@ impl LockedManifest {
 
         pkgdb_cmd.args(inputs);
 
-        debug!("updating lockfile with command: {pkgdb_cmd:?}");
+        debug!("updating lockfile with command: {}", pkgdb_cmd.display());
         let lockfile: LockedManifest =
             LockedManifest(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::UpdateFailed)?);
 
