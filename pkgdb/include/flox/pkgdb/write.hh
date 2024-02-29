@@ -43,7 +43,6 @@ struct ScrapeRulesRaw
   std::vector<AttrPathGlob> disallowPackage;
   std::vector<AttrPathGlob> allowRecursive;
   std::vector<AttrPathGlob> disallowRecursive;
-  // TODO: aliases
 }; /* End struct `ScrapeRulesRaw` */
 
 

@@ -28,10 +28,6 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
-extern std::optional<std::string> rulesPath;
-
-/* -------------------------------------------------------------------------- */
-
 std::string
 scrapeRuleToString( ScrapeRule rule )
 {
@@ -704,20 +700,27 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
 
 /* -------------------------------------------------------------------------- */
 
+/* Current returns the one and only set of rules for scraping.
+ * These are hardcoded for now.
+ * TODO: make the rules file to use a command line argument or otherwise
+ * configurable.
+ */
 static const RulesTreeNode &
 getDefaultRules()
 {
   static std::optional<RulesTreeNode> rules;
   if ( ! rules.has_value() )
     {
-      ScrapeRulesRaw raw = nlohmann::json::parse(
+      /* These are just hardcoded for now.*/
+      std::string_view rulesJSON = (
 #include "./rules.json.hh"
       );
-      rules = RulesTreeNode( std::move( raw ) );
+
+      ScrapeRulesRaw raw = nlohmann::json::parse( rulesJSON );
+      rules              = RulesTreeNode( std::move( raw ) );
     }
   return *rules;
 }
-
 
 void
 PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
