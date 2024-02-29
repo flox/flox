@@ -55,10 +55,10 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
       if ( this->rule != SR_DEFAULT )
         {
           // TODO: Pass abs-path
-          throw FloxException(
-            "attempted to overwrite existing rule for `" + this->attrName
-            + "' with rule `" + scrapeRuleToString( this->rule )
-            + "' with new rule `" + scrapeRuleToString( rule ) + "'" );
+          throw FloxException( "attempted to overwrite existing rule '"
+                               + scrapeRuleToString( this->rule ) + "' for '"
+                               + this->attrName + "' with new rule '"
+                               + scrapeRuleToString( rule ) + "'" );
         }
       traceLog( "assigning rule to `" + scrapeRuleToString( rule ) + "' to `"
                 + this->attrName + '\'' );

@@ -68,6 +68,19 @@ scrapeRuleToString( ScrapeRule rule );
 
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Node definition for a rules tree.
+ *
+ * The tree is built with a root node, where each node contains an attribute
+ * name, and the rule to be applied, along with a list of child nodes.
+ * This tree is built from reading the rules file, with paths through the tree
+ * constucted with SR_DEFAULT rules along the path until a leaf node with the
+ * appropriate rule can be added.  This allows hierarchical searching through
+ * the tree for attribute paths encountered during scraping and maintains the
+ * context for child inheritance of the rule defined for the deepest ancestral
+ * node.
+ */
 struct RulesTreeNode
 {
   using Children = std::unordered_map<std::string, RulesTreeNode>;
