@@ -5,7 +5,9 @@
    systems.
 
     The entries are `allowRecursive`, `disallowRecursive`, `allowPackage`,
-   `diallowPackage`.
+   `diallowPackage`.  Note that currently a `disallowRecursive` will override
+   nested `allow*` rules.  This is not currently needed but could be allowed in
+   the future if needed.
 
    Current rules explanation:
     - legacyPackages.*.darwin is not scraped using default logic

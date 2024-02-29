@@ -735,11 +735,11 @@ PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
       flox::AttrPath path = prefix;
       path.emplace_back( sym );
 
-      // FIXME: This breaks allows under recursiveDisallows!
       /* If the package or prefix is disallowed, bail. */
       const std::string   pathS = concatStringsSep( ".", prefix ) + "." + sym;
-      std::optional<bool> rulesAllowed = getDefaultRules().applyRules( path );
-      if ( rulesAllowed.has_value() && ( ! ( *rulesAllowed ) ) )
+      std::optional<bool> rulesBasedOverride
+        = getDefaultRules().applyRules( path );
+      if ( rulesBasedOverride.has_value() && ( ! ( *rulesBasedOverride ) ) )
         {
           traceLog( "scrapeRules: skipping disallowed attribute: " + pathS );
           return;
@@ -770,14 +770,13 @@ PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
       else
         {
           auto maybeRecurse = cursor->maybeGetAttr( "recurseForDerivations" );
-          bool allowed      = rulesAllowed.value_or( maybeRecurse != nullptr
-                                                && maybeRecurse->getBool() );
-
-          if ( rulesAllowed.has_value() )
+          bool allowed      = rulesBasedOverride.value_or(
+            maybeRecurse != nullptr && maybeRecurse->getBool() );
+          if ( rulesBasedOverride.has_value() )
             {
               traceLog(
                 nix::fmt( "scrapeRules: matching rule found (%s), for %s\n",
-                          rulesAllowed.value() ? "true" : "false",
+                          rulesBasedOverride.value() ? "true" : "false",
                           pathS ) );
             }
 
