@@ -395,6 +395,18 @@ Environment::tryResolveDescriptorIn( const ManifestDescriptor & descriptor,
   descriptor.fillPkgQueryArgs( args );
   /* Limit results to the target system. */
   args.systems = std::vector<System> { system };
+
+  /**
+   * Always resolve unfree and broken packages.
+   * Lockfiles are checked separately for violations with `options.allow.*`
+   * settings.
+   *
+   * `pkgdb search` results currently respect `options.allow.*` settings
+   * directly, e.g. unfree packages are omitted if
+   * `options.allow.unfree = false` in the global, or project manifest.
+   */
+  args.allowUnfree = true;
+
   pkgdb::PkgQuery query( args );
   auto            rows = query.execute( input.getDbReadOnly()->db );
   if ( rows.empty() )
