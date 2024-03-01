@@ -19,6 +19,7 @@ use super::{
     EnvironmentError2,
     InstallationAttempt,
     ManagedPointer,
+    UninstallationAttempt,
     UpdateResult,
     CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
@@ -171,8 +172,8 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        temporary.build(flox)?;
-        temporary.link(flox, &self.out_link)?;
+        let store_path = temporary.build(flox)?;
+        temporary.link(flox, &self.out_link, &Some(store_path))?;
 
         Ok(())
     }
@@ -223,7 +224,7 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link)?;
+        temporary.link(flox, &self.out_link, &result.store_path)?;
 
         Ok(result)
     }
@@ -233,7 +234,7 @@ impl Environment for ManagedEnvironment {
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<String, EnvironmentError2> {
+    ) -> Result<UninstallationAttempt, EnvironmentError2> {
         let mut generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -249,7 +250,7 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link)?;
+        temporary.link(flox, &self.out_link, &result.store_path)?;
 
         Ok(result)
     }
@@ -270,13 +271,15 @@ impl Environment for ManagedEnvironment {
             return Ok(result);
         }
 
+        let store_path = result.store_path();
+
         debug!("Environment changed, create generation, lock generation, build and link");
 
         generations
             .add_generation(&mut temporary, "manually edited".to_string())
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link)?;
+        temporary.link(flox, &self.out_link, &store_path)?;
 
         Ok(result)
     }
@@ -296,7 +299,7 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let message = temporary.update(flox, inputs)?;
+        let result = temporary.update(flox, inputs)?;
 
         // TODO: better message
         let metadata = "updated environment".to_string();
@@ -305,9 +308,9 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link)?;
+        temporary.link(flox, &self.out_link, &result.store_path)?;
 
-        Ok(message)
+        Ok(result)
     }
 
     /// Atomically upgrade packages in this environment
@@ -327,7 +330,7 @@ impl Environment for ManagedEnvironment {
 
         let result = temporary.upgrade(flox, groups_or_iids)?;
 
-        let metadata = format!("upgraded packages: {}", result.0.join(", "));
+        let metadata = format!("upgraded packages: {}", result.packages.join(", "));
 
         generations
             .add_generation(&mut temporary, metadata)

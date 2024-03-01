@@ -95,6 +95,8 @@ enum error_category {
   EC_PACKAGE_EVAL_FAILURE,
   /** Package build failure. */
   EC_PACKAGE_BUILD_FAILURE,
+  /** `pkgdb buildenv` was called with invalid arguments */
+  EC_BUILDENV_ARGUMENTS,
 }; /* End enum `error_category' */
 
 
