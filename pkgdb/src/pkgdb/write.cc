@@ -60,18 +60,24 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
                                + this->attrName + "' with new rule '"
                                + scrapeRuleToString( rule ) + "'" );
         }
-      traceLog( "assigning rule to `" + scrapeRuleToString( rule ) + "' to `"
+      traceLog( "assigning rule to '" + scrapeRuleToString( rule ) + "' to '"
                 + this->attrName + '\'' );
       this->rule = rule;
       return;
     }
-  traceLog( "adding rule to `" + this->attrName + "': `"
+  traceLog( "adding rule to '" + this->attrName + "': '"
             + displayableGlobbedPath( relPath ) + " = "
             + scrapeRuleToString( rule ) + '\'' );
 
   /* Handle system glob by splitting into 4 recursive calls. */
   if ( ! relPath.front().has_value() )
     {
+      if ( this->attrName != "legacyPackages" )
+        {
+          throw FloxException(
+            "glob in rules (null) only allowed as child of legacyPackages" );
+        }
+
       traceLog( "splitting system glob into real systems" );
       for ( const auto & system : getDefaultSystems() )
         {
@@ -90,20 +96,20 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
 
   if ( auto it = this->children.find( attrName ); it != this->children.end() )
     {
-      traceLog( "found existing child `" + attrName + '\'' );
+      traceLog( "found existing child '" + attrName + '\'' );
       /* Add to existing child node. */
       it->second.addRule( relPath, rule );
     }
   else if ( relPath.empty() )
     {
       /* Add leaf node. */
-      traceLog( "creating leaf `" + attrName + " = "
+      traceLog( "creating leaf '" + attrName + " = "
                 + scrapeRuleToString( rule ) + '\'' );
       this->children.emplace( attrName, RulesTreeNode( attrName, rule ) );
     }
   else
     {
-      traceLog( "creating child `" + attrName + '\'' );
+      traceLog( "creating child '" + attrName + '\'' );
       /* Create a new child node. */
       this->children.emplace( attrName, RulesTreeNode( attrName ) );
       this->children.at( attrName ).addRule( relPath, rule );
@@ -125,6 +131,7 @@ RulesTreeNode::getRule( const AttrPath & path ) const
         }
       catch ( const std::out_of_range & err )
         {
+          // TODO SR_NONE??????
           return SR_DEFAULT;
         }
     }
@@ -157,7 +164,7 @@ RulesTreeNode::applyRules( const AttrPath & path ) const
       case SR_DISALLOW_RECURSIVE: return false;
       case SR_DEFAULT: return std::nullopt;
       default:
-        throw PkgDbException( "encountered unexpected rule `"
+        throw PkgDbException( "encountered unexpected rule '"
                               + scrapeRuleToString( rule ) + '\'' );
     }
 }
@@ -178,8 +185,7 @@ from_json( const nlohmann::json & jfrom, RulesTreeNode & rules )
 void
 to_json( nlohmann::json & jto, const RulesTreeNode & rules )
 {
-  jto           = nlohmann::json::object();
-  jto["__rule"] = scrapeRuleToString( rules.rule );
+  jto = { { "__rule", scrapeRuleToString( rules.rule ) } };
   for ( const auto & [name, child] : rules.children )
     {
       nlohmann::json jchild;
@@ -193,6 +199,7 @@ to_json( nlohmann::json & jto, const RulesTreeNode & rules )
 
 RulesTreeNode::RulesTreeNode( ScrapeRulesRaw raw )
 {
+  /* Add rules in order of precedence */
   for ( const auto & path : raw.allowPackage )
     {
       AttrPathGlob pathCopy( std::move( path ) );
@@ -288,7 +295,7 @@ from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules )
                 }
             }
         }
-      else { throw FloxException( "unknown scrape rule: `" + key + "'" ); }
+      else { throw FloxException( "unknown scrape rule: '" + key + "'" ); }
     }
 }
 
@@ -700,7 +707,7 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
 
 /* -------------------------------------------------------------------------- */
 
-/* Current returns the one and only set of rules for scraping.
+/* Currently returns the one and only set of rules for scraping.
  * These are hardcoded for now.
  * TODO: make the rules file to use a command line argument or otherwise
  * configurable.

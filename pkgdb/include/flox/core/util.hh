@@ -229,6 +229,7 @@ struct adl_serializer<nix::FlakeRef>
 operator==( const std::vector<std::string> & lhs,
             const std::vector<std::string> & rhs );
 
+
 /* -------------------------------------------------------------------------- */
 
 namespace flox {
