@@ -10,17 +10,8 @@ use super::core_environment::CoreEnvironment;
 use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
-    gcroots_dir,
-    CanonicalPath,
-    CanonicalizeError,
-    CoreEnvironmentError,
-    EditResult,
-    Environment,
-    EnvironmentError2,
-    InstallationAttempt,
-    ManagedPointer,
-    UpdateResult,
-    CACHE_DIR_NAME,
+    gcroots_dir, CanonicalPath, CanonicalizeError, CoreEnvironmentError, EditResult, Environment,
+    EnvironmentError2, InstallationAttempt, ManagedPointer, UpdateResult, CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
 };
 use crate::data::Version;
@@ -32,10 +23,7 @@ use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
 use crate::providers::git::{
-    GitCommandBranchHashError,
-    GitCommandError,
-    GitProvider,
-    GitRemoteCommandError,
+    GitCommandBranchHashError, GitCommandError, GitProvider, GitRemoteCommandError,
 };
 use crate::utils::mtime_of;
 
@@ -135,7 +123,7 @@ pub enum ManagedEnvironmentError {
     #[error("could not canonicalize environment path")]
     CanonicalizePath(#[source] CanonicalizeError),
 
-    #[error("invalid floxhub base url")]
+    #[error("invalid FloxHub base url")]
     InvalidFloxhubBaseUrl(#[source] url::ParseError),
 }
 
@@ -904,7 +892,7 @@ fn write_pointer_lockfile(
 /// When pulling the same remote environment in multiple directories,
 /// unique copies of the environment are created.
 /// I.e. `install`ing a package in one directory does not affect the other
-/// until synchronized through floxhub.
+/// until synchronized through FloxHub.
 /// To identify the individual branches per directory,
 /// the directory path is encoded using [`ManagedEnvironment::encode`].
 ///
@@ -925,7 +913,7 @@ fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> Strin
 /// In most cases [`branch_name`] should be used over this,
 /// within the context of an instance of [ManagedEnvironment].
 ///
-/// [`remote_branch_name`] is primarily used when talking to upstream on floxhub,
+/// [`remote_branch_name`] is primarily used when talking to upstream on FloxHub,
 /// during opening to reconciliate with the upsream repo
 /// as well as during [`ManagedEnvironment::pull`].
 pub fn remote_branch_name(pointer: &ManagedPointer) -> String {
@@ -953,7 +941,7 @@ pub enum PullResult {
 
 impl ManagedEnvironment {
     /// If access to a remote repository requires authentication,
-    /// the floxhub token must be set in the flox instance.
+    /// the FloxHub token must be set in the flox instance.
     /// The caller is responsible for ensuring that the token is present and valid.
     pub fn push_new(
         flox: &Flox,
@@ -1249,11 +1237,14 @@ mod test {
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
-        assert_eq!(lock, GenerationLock {
-            rev: hash_2.clone(),
-            local_rev: None,
-            version: Version::<1> {},
-        });
+        assert_eq!(
+            lock,
+            GenerationLock {
+                rev: hash_2.clone(),
+                local_rev: None,
+                version: Version::<1> {},
+            }
+        );
 
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_2);
     }
@@ -1300,11 +1291,14 @@ mod test {
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
-        assert_eq!(lock, GenerationLock {
-            rev: hash_1.clone(),
-            local_rev: None,
-            version: Version::<1> {},
-        });
+        assert_eq!(
+            lock,
+            GenerationLock {
+                rev: hash_1.clone(),
+                local_rev: None,
+                version: Version::<1> {},
+            }
+        );
 
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_1);
     }
@@ -1367,11 +1361,14 @@ mod test {
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
-        assert_eq!(lock, GenerationLock {
-            rev: hash_2,
-            local_rev: None,
-            version: Version::<1> {},
-        });
+        assert_eq!(
+            lock,
+            GenerationLock {
+                rev: hash_2,
+                local_rev: None,
+                version: Version::<1> {},
+            }
+        );
 
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_3);
     }

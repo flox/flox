@@ -1,13 +1,9 @@
 use flox_rust_sdk::models::environment::managed_environment::{
-    ManagedEnvironmentError,
-    GENERATION_LOCK_FILENAME,
+    ManagedEnvironmentError, GENERATION_LOCK_FILENAME,
 };
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::{
-    CanonicalizeError,
-    CoreEnvironmentError,
-    EnvironmentError2,
-    ENVIRONMENT_POINTER_FILENAME,
+    CanonicalizeError, CoreEnvironmentError, EnvironmentError2, ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, ContextMsgError, PkgDbError};
@@ -388,7 +384,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
 
         // todo: enrich with url
         ManagedEnvironmentError::InvalidFloxhubBaseUrl(err) => formatdoc! {"
-            The floxhub base url set in the config is invalid: {err}
+            The FloxHub base url set in the config is invalid: {err}
 
             Please ensure that the url
             * is either a valid http or https url
