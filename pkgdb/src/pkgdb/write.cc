@@ -730,34 +730,28 @@ PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
                             const flox::subtree_type  subtree,
                             Todos &                   todo )
 {
+  auto getPathString = [&prefix, &sym]() -> const std::string
+  { return concatStringsSep( ".", prefix ) + "." + sym; };
+
   try
     {
+
       flox::AttrPath path = prefix;
       path.emplace_back( sym );
 
       /* If the package or prefix is disallowed, bail. */
-      const std::string   pathS = concatStringsSep( ".", prefix ) + "." + sym;
       std::optional<bool> rulesBasedOverride
         = getDefaultRules().applyRules( path );
       if ( rulesBasedOverride.has_value() && ( ! ( *rulesBasedOverride ) ) )
         {
-          traceLog( "scrapeRules: skipping disallowed attribute: " + pathS );
+          if ( nix::lvlTalkative <= nix::verbosity )
+            {
+              traceLog( "scrapeRules: skipping disallowed attribute: "
+                        + getPathString() );
+            }
           return;
         }
 
-      if ( cursor->maybeGetAttr( "__functor" ) != nullptr
-           || cursor->maybeGetAttr( "__functionArgs" ) != nullptr )
-        {
-          traceLog( nix::fmt( "scrapeRules: skipping functor %s", sym ) );
-          return;
-        }
-
-      auto maybeAttrs = cursor->getAttrs();
-      if ( maybeAttrs.empty() )
-        {
-          traceLog( "scrapeRules: skipping empty attribute set: " + pathS );
-          return;
-        }
       if ( cursor->isDerivation() )
         {
           this->addPackage( parentId, sym, cursor );
@@ -769,15 +763,21 @@ PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
         }
       else
         {
-          auto maybeRecurse = cursor->maybeGetAttr( "recurseForDerivations" );
-          bool allowed      = rulesBasedOverride.value_or(
-            maybeRecurse != nullptr && maybeRecurse->getBool() );
-          if ( rulesBasedOverride.has_value() )
+          bool allowed = rulesBasedOverride.has_value()
+                           ? rulesBasedOverride.value()
+                           : [&cursor]() -> bool
+          {
+            auto maybeRecurse = cursor->maybeGetAttr( "recurseForDerivations" );
+            return maybeRecurse != nullptr && maybeRecurse->getBool();
+          }();
+
+          if ( nix::lvlTalkative <= nix::verbosity
+               && rulesBasedOverride.has_value() )
             {
               traceLog(
                 nix::fmt( "scrapeRules: matching rule found (%s), for %s\n",
                           rulesBasedOverride.value() ? "true" : "false",
-                          pathS ) );
+                          getPathString() ) );
             }
 
           if ( allowed )
@@ -797,6 +797,7 @@ PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
           nix::ignoreException( nix::lvlDebug );
           return;
         }
+
       throw;
     }
 }
@@ -840,13 +841,6 @@ PkgDb::scrape( nix::SymbolTable & syms,
     {
       if ( syms[aname] == "recurseForDerivations" ) { continue; }
 
-      if ( nix::lvlTalkative <= nix::verbosity )
-        {
-          const std::string pathS
-            = concatStringsSep( ".", prefix ) + "." + syms[aname];
-          traceLog( nix::fmt( "Processing attribute path: '%s'.", pathS ) );
-        }
-
       /* Try processing this attribute.
        * If we are to recurse, todo will be loaded with the first target for
        * us... we process this subtree completely using the todo stack. */
@@ -864,25 +858,32 @@ PkgDb::scrape( nix::SymbolTable & syms,
               const auto [prefix, cursor, parentId] = todo.top();
               todo.pop();
 
-              /* Skip functors */
-              if ( cursor->maybeGetAttr( "__functor" ) != nullptr
-                   || cursor->maybeGetAttr( "__functionArgs" ) != nullptr )
+              try
                 {
-                  debugLog( nix::fmt( "scrapeRules: skipping functor %s",
-                                      syms[aname] ) );
-                  continue;
+                  for ( nix::Symbol & aname : cursor->getAttrs() )
+                    {
+                      auto sym = syms[aname];
+                      if ( sym == "recurseForDerivations" ) { continue; }
+                      processSingleAttrib( sym,
+                                           cursor->getAttr( aname ),
+                                           prefix,
+                                           parentId,
+                                           subtree,
+                                           todo );
+                    }
                 }
-
-              for ( nix::Symbol & aname : cursor->getAttrs() )
+              catch ( const nix::EvalError & err )
                 {
-                  auto sym = syms[aname];
-                  if ( sym == "recurseForDerivations" ) { continue; }
-                  processSingleAttrib( sym,
-                                       cursor->getAttr( aname ),
-                                       prefix,
-                                       parentId,
-                                       subtree,
-                                       todo );
+                  /* The `getAttrs()` call will throw this on a non-attribute
+                   * set path.  They appear to be infrequent and the penalty
+                   * checking each one appears to be high. Better ask for
+                   * forgiveness than permission?  */
+                  if ( err.info().msg.str().find( "is not an attribute set" )
+                       != std::string::npos )
+                    {
+                      continue;
+                    }
+                  throw;
                 }
             }
 
