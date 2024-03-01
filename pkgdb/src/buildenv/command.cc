@@ -114,7 +114,7 @@ BuildEnvCommand::run()
 
   debugLog( "building environment" );
 
-  auto storePath = createFloxEnv( *state, lockfile, system );
+  auto storePath = createFloxEnv( state, lockfile, system );
 
   debugLog( "built environment: " + store->printStorePath( storePath ) );
 

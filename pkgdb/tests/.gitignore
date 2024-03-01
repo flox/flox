@@ -5,6 +5,7 @@ is_sqlite3
 lockfile
 manifest
 pkgdb
+realise
 registry
 search-params
 util

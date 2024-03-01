@@ -795,7 +795,7 @@ mod tests {
 
         env_view.build(&flox).expect("build should succeed");
         env_view
-            .link(&flox, env_path.path().with_extension("out-link"))
+            .link(&flox, env_path.path().with_extension("out-link"), &None)
             .expect("link should succeed");
 
         // very rudimentary check that the environment manifest built correctly
