@@ -485,6 +485,12 @@ impl Node {
         Ok(results.results.swap_remove(0))
     }
 
+    /// Return whether to skip the nodejs hook entirely, install a requested
+    /// version of nodejs, or offer to install the Flox default version of
+    /// nodejs.
+    ///
+    /// This is decided based on whether .nvmrc and package.json are present,
+    /// and whether Flox can provide versions they request.
     fn get_action(&self) -> NodeAction {
         match (&self.nvmrc_version, self.package_json_version.as_ref()) {
             (NVMRCVersion::Some(result), _) => NodeAction::Install(result.clone()),
