@@ -331,20 +331,15 @@ extract_json_errmsg( nlohmann::json::exception & err )
 std::string
 displayableGlobbedPath( const flox::AttrPathGlob & attrs )
 {
-  std::vector<std::string> globbed;
-  for ( const std::optional<std::string> & attr : attrs )
+  std::stringstream oss;
+  bool              first = true;
+  for ( const auto & attr : attrs )
     {
-      if ( attr.has_value() ) { globbed.emplace_back( *attr ); }
-      else { globbed.emplace_back( "*" ); }
+      if ( first ) { first = false; }
+      else { oss << '.'; }
+      oss << attr.value_or( "*" );
     }
-  auto fold
-    = []( std::string a, std::string b ) { return std::move( a ) + '.' + b; };
-
-  std::string s = std::accumulate( std::next( globbed.begin() ),
-                                   globbed.end(),
-                                   globbed[0],
-                                   fold );
-  return s;
+  return oss.str();
 }
 
 
@@ -414,6 +409,20 @@ getAvailableSystemMemory()
 /* -------------------------------------------------------------------------- */
 
 }  // namespace flox
+
+/* -------------------------------------------------------------------------- */
+
+bool
+operator==( const std::vector<std::string> & lhs,
+            const std::vector<std::string> & rhs )
+{
+  if ( lhs.size() != rhs.size() ) { return false; }
+  for ( size_t idx = 0; idx < lhs.size(); ++idx )
+    {
+      if ( lhs[idx] != rhs[idx] ) { return false; }
+    }
+  return true;
+}
 
 
 /* -------------------------------------------------------------------------- *

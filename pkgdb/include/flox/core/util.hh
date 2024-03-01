@@ -20,6 +20,7 @@
 #include <nix/attrs.hh>
 #include <nix/error.hh>
 #include <nix/flake/flakeref.hh>
+#include <nix/util.hh>
 #include <nlohmann/json.hpp>
 
 #include "flox/core/exceptions.hh"
@@ -221,6 +222,12 @@ struct adl_serializer<nix::FlakeRef>
 
 }  // namespace nlohmann
 
+/* -------------------------------------------------------------------------- */
+
+/** @brief Detect if two vectors of strings are equal. */
+[[nodiscard]] bool
+operator==( const std::vector<std::string> & lhs,
+            const std::vector<std::string> & rhs );
 
 /* -------------------------------------------------------------------------- */
 
@@ -344,13 +351,26 @@ isUInt( std::string_view str );
 /* -------------------------------------------------------------------------- */
 
 /**
- * @brief Does the string @str have the prefix @a prefix?
+ * @brief Does the string @a str have the prefix @a prefix?
  * @param prefix The prefix to check for.
  * @param str String to test.
  * @return `true` iff @a str has the prefix @a prefix.
  */
 [[nodiscard]] bool
 hasPrefix( std::string_view prefix, std::string_view str );
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Does the vector of strings @a lst begin with the elements
+ *        of @a prefix?
+ * @param prefix The prefix to check for.
+ * @param lst Vector of strings to test.
+ * @return `true` iff @a lst has the prefix @a prefix.
+ */
+[[nodiscard]] bool
+hasPrefix( const std::vector<std::string> & prefix,
+           const std::vector<std::string> & lst );
 
 
 /* -------------------------------------------------------------------------- */

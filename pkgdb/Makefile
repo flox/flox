@@ -588,7 +588,7 @@ bats-check: bin $(TEST_UTILS)
 #       declarations of "headers" in the conventional sense.
 
 # SQL Schemas
-src/pkgdb/write.o: src/pkgdb/schemas.hh
+src/pkgdb/write.o: src/pkgdb/schemas.hh src/pkgdb/rules.json.hh
 
 
 # ---------------------------------------------------------------------------- #
