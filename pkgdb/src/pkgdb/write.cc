@@ -130,6 +130,7 @@ RulesTreeNode::getRule( const AttrPath & path ) const
         }
       catch ( const std::out_of_range & err )
         {
+          // TODO SR_NONE??????
           return SR_DEFAULT;
         }
     }
