@@ -15,23 +15,48 @@ use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{EnvironmentName, EnvironmentOwner, EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
-    ManagedEnvironment, ManagedEnvironmentError, PullResult,
+    ManagedEnvironment,
+    ManagedEnvironmentError,
+    PullResult,
 };
 use flox_rust_sdk::models::environment::path_environment::{self};
 use flox_rust_sdk::models::environment::{
-    CanonicalPath, CoreEnvironmentError, EditResult, Environment, EnvironmentError2,
-    EnvironmentPointer, ManagedPointer, PathPointer, UpdateResult, DOT_FLOX,
-    ENVIRONMENT_POINTER_FILENAME, FLOX_ACTIVE_ENVIRONMENTS_VAR, FLOX_ENV_CACHE_VAR,
-    FLOX_ENV_DIRS_VAR, FLOX_ENV_LIB_DIRS_VAR, FLOX_ENV_PROJECT_VAR, FLOX_ENV_VAR,
-    FLOX_PATH_PATCHED_VAR, FLOX_PROMPT_ENVIRONMENTS_VAR,
+    CanonicalPath,
+    CoreEnvironmentError,
+    EditResult,
+    Environment,
+    EnvironmentError2,
+    EnvironmentPointer,
+    ManagedPointer,
+    PathPointer,
+    UpdateResult,
+    DOT_FLOX,
+    ENVIRONMENT_POINTER_FILENAME,
+    FLOX_ACTIVE_ENVIRONMENTS_VAR,
+    FLOX_ENV_CACHE_VAR,
+    FLOX_ENV_DIRS_VAR,
+    FLOX_ENV_LIB_DIRS_VAR,
+    FLOX_ENV_PROJECT_VAR,
+    FLOX_ENV_VAR,
+    FLOX_PATH_PATCHED_VAR,
+    FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::lockfile::{
-    FlakeRef, Input, InstalledPackage, LockedManifest, LockedManifestError, PackageInfo,
+    FlakeRef,
+    Input,
+    InstalledPackage,
+    LockedManifest,
+    LockedManifestError,
+    PackageInfo,
     TypedLockedManifest,
 };
 use flox_rust_sdk::models::manifest::{self, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::{
-    call_pkgdb, error_codes, CallPkgDbError, PkgDbError, PKGDB_BIN,
+    call_pkgdb,
+    error_codes,
+    CallPkgDbError,
+    PkgDbError,
+    PKGDB_BIN,
 };
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
@@ -42,14 +67,21 @@ use url::Url;
 
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{
-    activated_environments, auth, ensure_environment_trust, environment_description,
-    ConcreteEnvironment, EnvironmentSelectError, UninitializedEnvironment,
+    activated_environments,
+    auth,
+    ensure_environment_trust,
+    environment_description,
+    ConcreteEnvironment,
+    EnvironmentSelectError,
+    UninitializedEnvironment,
 };
 use crate::config::Config;
 use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::{
-    apply_doc_link_for_unsupported_packages, display_chain, format_core_error,
+    apply_doc_link_for_unsupported_packages,
+    display_chain,
+    format_core_error,
     format_locked_manifest_error,
 };
 use crate::utils::message;
@@ -1731,14 +1763,11 @@ impl Pull {
                 if !force && !Dialog::can_prompt() {
                     fs::remove_dir_all(&dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
-                    bail!(
-                        "{}",
-                        formatdoc! {"
+                    bail!("{}", formatdoc! {"
                             This environment is not yet compatible with your system ({system}).
 
                             {hint}"
-                        , system = flox.system}
-                    );
+                    , system = flox.system});
                 }
 
                 // will return OK if the user chose to abort the pull

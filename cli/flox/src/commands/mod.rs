@@ -13,14 +13,25 @@ use std::{env, fmt, fs, mem};
 use anyhow::{bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
 use flox_rust_sdk::flox::{
-    EnvironmentRef, Flox, Floxhub, DEFAULT_FLOXHUB_URL, DEFAULT_NAME, FLOX_VERSION,
+    EnvironmentRef,
+    Flox,
+    Floxhub,
+    DEFAULT_FLOXHUB_URL,
+    DEFAULT_NAME,
+    FLOX_VERSION,
 };
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
-    find_dot_flox, DotFlox, Environment, EnvironmentError2, EnvironmentPointer, ManagedPointer,
-    DOT_FLOX, FLOX_ACTIVE_ENVIRONMENTS_VAR,
+    find_dot_flox,
+    DotFlox,
+    Environment,
+    EnvironmentError2,
+    EnvironmentPointer,
+    ManagedPointer,
+    DOT_FLOX,
+    FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::environment_ref;
 use indoc::{formatdoc, indoc};
@@ -36,7 +47,10 @@ use crate::commands::general::update_config;
 use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::init::{
-    init_access_tokens, init_telemetry, init_uuid, telemetry_opt_out_needs_migration,
+    init_access_tokens,
+    init_telemetry,
+    init_uuid,
+    telemetry_opt_out_needs_migration,
 };
 use crate::utils::message;
 use crate::utils::metrics::METRICS_UUID_FILE_NAME;

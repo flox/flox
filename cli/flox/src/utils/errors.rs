@@ -1,9 +1,13 @@
 use flox_rust_sdk::models::environment::managed_environment::{
-    ManagedEnvironmentError, GENERATION_LOCK_FILENAME,
+    ManagedEnvironmentError,
+    GENERATION_LOCK_FILENAME,
 };
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::{
-    CanonicalizeError, CoreEnvironmentError, EnvironmentError2, ENVIRONMENT_POINTER_FILENAME,
+    CanonicalizeError,
+    CoreEnvironmentError,
+    EnvironmentError2,
+    ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, ContextMsgError, PkgDbError};

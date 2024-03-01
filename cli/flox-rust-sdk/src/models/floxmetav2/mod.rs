@@ -9,8 +9,12 @@ use super::environment::ManagedPointer;
 use super::environment_ref::EnvironmentOwner;
 use crate::flox::{Flox, Floxhub, FloxhubError, FloxhubToken};
 use crate::providers::git::{
-    GitCommandBranchHashError, GitCommandOpenError, GitCommandOptions, GitCommandProvider,
-    GitProvider, GitRemoteCommandError,
+    GitCommandBranchHashError,
+    GitCommandOpenError,
+    GitCommandOptions,
+    GitCommandProvider,
+    GitProvider,
+    GitRemoteCommandError,
 };
 
 pub const FLOXMETA_DIR_NAME: &str = "meta";

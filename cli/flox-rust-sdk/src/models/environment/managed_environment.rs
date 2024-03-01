@@ -10,8 +10,17 @@ use super::core_environment::CoreEnvironment;
 use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
-    gcroots_dir, CanonicalPath, CanonicalizeError, CoreEnvironmentError, EditResult, Environment,
-    EnvironmentError2, InstallationAttempt, ManagedPointer, UpdateResult, CACHE_DIR_NAME,
+    gcroots_dir,
+    CanonicalPath,
+    CanonicalizeError,
+    CoreEnvironmentError,
+    EditResult,
+    Environment,
+    EnvironmentError2,
+    InstallationAttempt,
+    ManagedPointer,
+    UpdateResult,
+    CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
 };
 use crate::data::Version;
@@ -23,7 +32,10 @@ use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
 use crate::providers::git::{
-    GitCommandBranchHashError, GitCommandError, GitProvider, GitRemoteCommandError,
+    GitCommandBranchHashError,
+    GitCommandError,
+    GitProvider,
+    GitRemoteCommandError,
 };
 use crate::utils::mtime_of;
 
@@ -1237,14 +1249,11 @@ mod test {
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
-        assert_eq!(
-            lock,
-            GenerationLock {
-                rev: hash_2.clone(),
-                local_rev: None,
-                version: Version::<1> {},
-            }
-        );
+        assert_eq!(lock, GenerationLock {
+            rev: hash_2.clone(),
+            local_rev: None,
+            version: Version::<1> {},
+        });
 
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_2);
     }
@@ -1291,14 +1300,11 @@ mod test {
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
-        assert_eq!(
-            lock,
-            GenerationLock {
-                rev: hash_1.clone(),
-                local_rev: None,
-                version: Version::<1> {},
-            }
-        );
+        assert_eq!(lock, GenerationLock {
+            rev: hash_1.clone(),
+            local_rev: None,
+            version: Version::<1> {},
+        });
 
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_1);
     }
@@ -1361,14 +1367,11 @@ mod test {
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
-        assert_eq!(
-            lock,
-            GenerationLock {
-                rev: hash_2,
-                local_rev: None,
-                version: Version::<1> {},
-            }
-        );
+        assert_eq!(lock, GenerationLock {
+            rev: hash_2,
+            local_rev: None,
+            version: Version::<1> {},
+        });
 
         assert_eq!(floxmeta.git.branch_hash(&branch).unwrap(), hash_3);
     }
