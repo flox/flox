@@ -276,10 +276,9 @@ impl InitHook for Requirements {
 }
 
 struct Node {
-    nvmrc_version: NVMRCVersion,
-    /// None if we found a version in .nvmrc, otherwise contains whether
-    /// package.json requests a version
-    package_json_version: Option<PackageJSONVersion>,
+    package_json_version: PackageJSONVersion,
+    /// None if we found a version in package.json
+    nvmrc_version: Option<NVMRCVersion>,
     hook: Option<NodePackageManager>,
 }
 
@@ -326,13 +325,13 @@ enum NodeAction {
 
 impl Node {
     pub fn new(path: &Path, flox: &Flox) -> Result<Self> {
-        // Get value for self.nvmrc_version
-        let nvmrc_version = Self::get_nvmrc_version(path, flox)?;
-
         // Get value for self.package_json_version
-        let package_json_version = match nvmrc_version {
-            NVMRCVersion::Some(_) => None,
-            _ => Some(Self::get_package_json_version(path, flox)?),
+        let package_json_version = Self::get_package_json_version(path, flox)?;
+
+        // Get value for self.nvmrc_version
+        let nvmrc_version = match package_json_version {
+            PackageJSONVersion::Some(_) | PackageJSONVersion::Unavailable => None,
+            _ => Some(Self::get_nvmrc_version(path, flox)?),
         };
 
         // Get value for self.hook
@@ -492,37 +491,21 @@ impl Node {
     /// This is decided based on whether .nvmrc and package.json are present,
     /// and whether Flox can provide versions they request.
     fn get_action(&self) -> NodeAction {
-        match (&self.nvmrc_version, self.package_json_version.as_ref()) {
-            (NVMRCVersion::Some(result), _) => NodeAction::Install(result.clone()),
-            // Maybe the project works with a different node version,
-            // and there's just something else in .nvmrc
-            (NVMRCVersion::Unavailable, Some(PackageJSONVersion::None))
-            | (NVMRCVersion::Unavailable, Some(PackageJSONVersion::Unspecified)) => {
+        match (&self.package_json_version, self.nvmrc_version.as_ref()) {
+            // package.json takes precedence over .nvmrc
+            (PackageJSONVersion::Some(result), _) => NodeAction::Install(result.clone()),
+            // Treat the version in package.json strictly; if we can't find it, don't suggest something else.
+            (PackageJSONVersion::Unavailable, _) => NodeAction::Nothing,
+            (_, Some(NVMRCVersion::Some(result))) => NodeAction::Install(result.clone()),
+            (_, Some(NVMRCVersion::Unsure)) => NodeAction::OfferFloxDefault,
+            (_, Some(NVMRCVersion::Unavailable)) => NodeAction::OfferFloxDefault,
+            (PackageJSONVersion::Unspecified, Some(NVMRCVersion::None)) => {
                 NodeAction::OfferFloxDefault
             },
-            // If package.json asks for a version we don't have, don't offer a
-            // version that would cause warnings.
-            (_, Some(PackageJSONVersion::Unavailable)) => NodeAction::Nothing,
-            // The project will work with a flox provided version, even though
-            // it's not the one in .nvmrc.
-            (NVMRCVersion::Unavailable, Some(PackageJSONVersion::Some(result))) => {
-                NodeAction::Install(result.clone())
+            (PackageJSONVersion::None, Some(NVMRCVersion::None)) => NodeAction::Nothing,
+            (PackageJSONVersion::Unspecified, None) | (PackageJSONVersion::None, None) => {
+                unreachable!()
             },
-            (NVMRCVersion::None, Some(PackageJSONVersion::None)) => NodeAction::Nothing,
-            (NVMRCVersion::None, Some(PackageJSONVersion::Some(result))) => {
-                NodeAction::Install(result.clone())
-            },
-            (NVMRCVersion::None, Some(PackageJSONVersion::Unspecified)) => {
-                NodeAction::OfferFloxDefault
-            },
-            (NVMRCVersion::Unsure, Some(PackageJSONVersion::None))
-            | (NVMRCVersion::Unsure, Some(PackageJSONVersion::Unspecified)) => {
-                NodeAction::OfferFloxDefault
-            },
-            (NVMRCVersion::Unsure, Some(PackageJSONVersion::Some(result))) => {
-                NodeAction::Install(result.clone())
-            },
-            (_, None) => unreachable!(),
         }
     }
 
@@ -534,45 +517,9 @@ impl Node {
     ///    printing that message twice)
     fn nodejs_message_and_version(&self, flox: &Flox) -> Result<(String, Option<String>, bool)> {
         let mut mentions_package_json = false;
-        let (message, version) = match (&self.nvmrc_version, self.package_json_version.as_ref()) {
-            (NVMRCVersion::Some(result), _) => {
-                let message = format!(
-                    "Flox detected an .nvmrc{}",
-                    result
-                        .version
-                        .as_ref()
-                        .map(|version| format!(" compatible with node {version}"))
-                        .unwrap_or("".to_string())
-                );
-                (message, result.version.clone())
-            },
-
-            (NVMRCVersion::Unavailable, Some(PackageJSONVersion::None))
-            | (NVMRCVersion::Unavailable, Some(PackageJSONVersion::Unspecified)) =>
-            // Maybe the project works with a different node version,
-            // and there's just something else in .nvmrc
-            {
-                let result = Self::get_default_node(flox)?;
-                let message = format!("Flox detected an .nvmrc with a version of nodejs not provided by Flox, but Flox can provide {}",
-                       result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
-                (message, result.version)
-            },
-            (_, Some(PackageJSONVersion::Unavailable)) =>
-            // If package.json asks for a version we don't have, don't offer a
-            // version that would cause warnings.
-            {
-                unreachable!()
-            },
-            (NVMRCVersion::Unavailable, Some(PackageJSONVersion::Some(result))) =>
-            // The project will work with a flox provided version, even though
-            // it's not the one in .nvmrc.
-            {
-                let message = format!("Flox detected an .nvmrc with a version of nodejs not provided by Flox, but Flox can provide {}",
-                result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
-                (message, result.version.clone())
-            },
-            (NVMRCVersion::None, Some(PackageJSONVersion::None)) => unreachable!(),
-            (NVMRCVersion::None, Some(PackageJSONVersion::Some(result))) => {
+        let (message, version) = match (&self.package_json_version, self.nvmrc_version.as_ref()) {
+            // package.json takes precedence over .nvmrc
+            (PackageJSONVersion::Some(result), _) => {
                 let message = format!(
                     "Flox detected a package.json compatible with node{}",
                     result
@@ -584,25 +531,40 @@ impl Node {
                 mentions_package_json = true;
                 (message, result.version.clone())
             },
-
-            (NVMRCVersion::None, Some(PackageJSONVersion::Unspecified)) => {
-                let result = Self::get_default_node(flox)?;
-                mentions_package_json = true;
-                ("Flox detected a package.json".to_string(), result.version)
+            // Treat the version in package.json strictly; if we can't find it, don't suggest something else.
+            (PackageJSONVersion::Unavailable, _) => unreachable!(),
+            (_, Some(NVMRCVersion::Some(result))) => {
+                let message = format!(
+                    "Flox detected an .nvmrc{}",
+                    result
+                        .version
+                        .as_ref()
+                        .map(|version| format!(" compatible with node {version}"))
+                        .unwrap_or("".to_string())
+                );
+                (message, result.version.clone())
             },
-            (NVMRCVersion::Unsure, Some(PackageJSONVersion::None))
-            | (NVMRCVersion::Unsure, Some(PackageJSONVersion::Unspecified)) => {
+            (_, Some(NVMRCVersion::Unsure)) => {
                 let result = Self::get_default_node(flox)?;
                 let message = format!("Flox detected an .nvmrc with a version specifier not understood by Flox, but Flox can provide {}",
                        result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
                 (message, result.version)
             },
-            (NVMRCVersion::Unsure, Some(PackageJSONVersion::Some(result))) => {
-                let message = format!("Flox detected an .nvmrc with a version specifier not understood by Flox, but Flox can provide {}",
-                       result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
+            (_, Some(NVMRCVersion::Unavailable)) => {
+                let result = Self::get_default_node(flox)?;
+                let message = format!("Flox detected an .nvmrc with a version of nodejs not provided by Flox, but Flox can provide {}",
+                result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
                 (message, result.version.clone())
             },
-            (_, None) => unreachable!(),
+            (PackageJSONVersion::Unspecified, Some(NVMRCVersion::None)) => {
+                let result = Self::get_default_node(flox)?;
+                mentions_package_json = true;
+                ("Flox detected a package.json".to_string(), result.version)
+            },
+            (PackageJSONVersion::None, Some(NVMRCVersion::None)) => unreachable!(),
+            (PackageJSONVersion::Unspecified, None) | (PackageJSONVersion::None, None) => {
+                unreachable!()
+            },
         };
         Ok((message, version, mentions_package_json))
     }
@@ -963,7 +925,7 @@ mod tests {
     fn test_node_get_init_customization_install_action() {
         assert_eq!(
             Node {
-                nvmrc_version: NVMRCVersion::Some(Box::new(SearchResult {
+                package_json_version: PackageJSONVersion::Some(Box::new(SearchResult {
                     input: "".to_string(),
                     abs_path: vec![],
                     subtree: Subtree::LegacyPackages,
@@ -977,7 +939,7 @@ mod tests {
                     license: None,
                     id: 0,
                 })),
-                package_json_version: None,
+                nvmrc_version: None,
                 hook: None,
             }
             .get_init_customization(),
@@ -997,8 +959,8 @@ mod tests {
     fn test_node_get_init_customization_offer_flox_default_action() {
         assert_eq!(
             Node {
-                nvmrc_version: NVMRCVersion::Unsure,
-                package_json_version: Some(PackageJSONVersion::Unspecified),
+                package_json_version: PackageJSONVersion::Unspecified,
+                nvmrc_version: Some(NVMRCVersion::Unsure),
                 hook: None,
             }
             .get_init_customization(),
