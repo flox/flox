@@ -203,7 +203,7 @@ impl InitHook for Requirements {
             * A Python virtual environment to install dependencies into
 
             Would you like Flox to set up a standard Python environment?
-            You can always revisit the environment's declaration with 'flox edit'
+            You can always change the environment's manifest with 'flox edit'
         "};
 
         let dialog = Dialog {
@@ -221,7 +221,7 @@ impl InitHook for Requirements {
 
                 {}
                 Would you like Flox to apply these modifications?
-                You can always revisit the environment's declaration with 'flox edit'
+                You can always change the environment's manifest with 'flox edit'
             ", format_customization(&self.get_init_customization())?};
 
             let dialog = Dialog {
@@ -602,7 +602,7 @@ impl Node {
         message.push_str(&formatdoc! {"
 
             Would you like Flox to apply this suggestion?
-            You can always revisit the environment's declaration with 'flox edit'
+            You can always change the environment's manifest with 'flox edit'
             "});
 
         let dialog = Dialog {
@@ -619,7 +619,7 @@ impl Node {
 
                 {}
                 Would you like Flox to apply these modifications?
-                You can always revisit the environment's declaration with 'flox edit'
+                You can always change the environment's manifest with 'flox edit'
             ", format_customization(&self.get_init_customization())?};
 
             let dialog = Dialog {
@@ -646,7 +646,7 @@ impl Node {
             * Either an npm or yarn installation hook
 
             Would you like Flox to apply one of these modifications?
-            You can always revisit the environment's declaration with 'flox edit'", nodejs_version.map(|version| format!(" {version}")).unwrap_or("".to_string())};
+            You can always change the environment's manifest with 'flox edit'", nodejs_version.map(|version| format!(" {version}")).unwrap_or("".to_string())};
         let options = [
             "Yes - with npm hook",
             "Yes - with yarn hook",
@@ -678,7 +678,7 @@ impl Node {
 
                 {}
                 Would you like Flox to apply one of these modifications?
-                You can always revisit the environment's declaration with 'flox edit'
+                You can always change the environment's manifest with 'flox edit'
             ", format_customization(&self.get_init_customization())?};
 
             let dialog = Dialog {
