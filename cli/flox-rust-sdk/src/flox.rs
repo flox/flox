@@ -144,9 +144,9 @@ impl Floxhub {
             .host_str()
             .ok_or(FloxhubError::NoHost(base_url.to_string()))?;
         let without_hub = host
-            .strip_prefix("hub")
+            .strip_prefix("hub.")
             .ok_or(FloxhubError::NoHubPrefix(base_url.to_string()))?;
-        let with_api_prefix = format!("api{}", without_hub);
+        let with_api_prefix = format!("api.{}", without_hub);
         git_url
             .set_host(Some(&with_api_prefix))
             .map_err(|e| FloxhubError::InvalidFloxhubBaseUrl(with_api_prefix, e))?;
@@ -159,7 +159,7 @@ impl Floxhub {
 pub enum FloxhubError {
     #[error("Invalid FloxHub URL: '{0}'. URL must contain a host.")]
     NoHost(String),
-    #[error("Invalid FloxHub URL: '{0}'. URL must begin with 'hub'")]
+    #[error("Invalid FloxHub URL: '{0}'. URL must begin with 'hub.'")]
     NoHubPrefix(String),
     #[error("Couldn't set git URL host to '{0}'")]
     InvalidFloxhubBaseUrl(String, #[source] url::ParseError),
@@ -237,8 +237,9 @@ pub mod tests {
     #[test]
     fn test_derive_git_url_dev() {
         assert_eq!(
-            Floxhub::derive_git_url(&Url::from_str("https://hub-dev.flox.dev").unwrap()).unwrap(),
-            Url::from_str("https://api-dev.flox.dev/git").unwrap()
+            Floxhub::derive_git_url(&Url::from_str("https://hub.preview.flox.dev").unwrap())
+                .unwrap(),
+            Url::from_str("https://api.preview.flox.dev/git").unwrap()
         );
     }
 }
