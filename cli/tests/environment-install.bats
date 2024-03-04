@@ -322,3 +322,12 @@ teardown() {
   assert_line --partial "The package 'hello-unfree' has an unfree license."
   assert_output --partial "'options.allow.unfree = true'"
 }
+
+@test "'flox install' fails to install broken packages" {
+  "$FLOX_BIN" init
+
+  run "$FLOX_BIN" install yi
+  assert_failure
+  assert_line --partial "The package 'yi' is marked as broken."
+  assert_output --partial "'options.allow.broken = true'"
+}

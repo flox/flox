@@ -367,6 +367,38 @@ LockedPackageRaw::check( const std::string &     packageId,
       result.emplace_back( warning );
     }
 
+  /**
+   * Assume the package is not broken, if field is missing.
+   * By default broken packages are denied, so packages without a broken
+   * attribute can not be built, without opting to allow broken packages
+   * entirely.
+   * Additionally, a missing broken attribute, may be the result of not
+   * attempting a build at scrape time, thus it's unclear whether the package
+   * is in fact broken.
+   */
+  bool broken = this->info.value( "broken", false );
+
+  if ( broken )
+    {
+      if ( ! allows.broken.value_or( false ) )
+        {
+          throw PackageCheckFailure(
+            nix::fmt( "The package '%s' is marked as broken.\n\n"
+                      "Allow broken packages by setting "
+                      "'options.allow.broken = true' in manifest.toml",
+                      packageId ) );
+        }
+
+      auto warning = CheckPackageWarning {
+        packageId,
+        nix::fmt( "The package '%s' is marked as broken, it may not behave as "
+                  "expected during runtime.",
+                  packageId ),
+      };
+
+      result.emplace_back( warning );
+    }
+
   // TODO: check more package metadata
 
   return result;

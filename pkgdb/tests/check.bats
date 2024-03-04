@@ -58,3 +58,25 @@ setup_file() {
 
   assert [ "$(echo "$output" | $JQ -r '.exit_code')" == "127" ]
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=broken,broken:fail-by-default
+@test "Environment with broken packages fails to lock by default" {
+  run -127 --separate-stderr ${PKGDB_BIN?} manifest lock --ga-registry --manifest "${MANIFESTS?}/broken/manifest.toml"
+  assert_failure
+}
+
+# bats test_tags=broken,broken:lock-if-allowd
+@test "Environment with broke package succeeds to lock and produces warnings" {
+  run --separate-stderr ${PKGDB_BIN?} manifest lock --ga-registry --manifest "${MANIFESTS?}/broken-allowed/manifest.toml"
+  assert_success
+  echo "$output" > $BATS_TEST_TMPDIR/manifest.lock
+
+  run ${PKGDB_BIN?} manifest check --lockfile $BATS_TEST_TMPDIR/manifest.lock
+  assert_success
+  echo "$output" > $BATS_TEST_TMPDIR/warnings.json
+
+  assert [ "$($JQ -r '. | length' $BATS_TEST_TMPDIR/warnings.json)" == "1" ]
+  assert [ "$($JQ -r '.[0].package' $BATS_TEST_TMPDIR/warnings.json)" == "yi" ]
+}

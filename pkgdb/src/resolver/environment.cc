@@ -406,6 +406,7 @@ Environment::tryResolveDescriptorIn( const ManifestDescriptor & descriptor,
    * `options.allow.unfree = false` in the global, or project manifest.
    */
   args.allowUnfree = true;
+  args.allowBroken = true;
 
   pkgdb::PkgQuery query( args );
   auto            rows = query.execute( input.getDbReadOnly()->db );
