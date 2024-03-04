@@ -2219,7 +2219,14 @@ impl Upgrade {
 
         let mut environment = concrete_environment.into_dyn_environment();
 
-        let upgraded = environment.upgrade(&flox, &self.groups_or_iids)?.packages;
+        let result = Dialog {
+            message: "Upgrading packages...",
+            help_message: None,
+            typed: Spinner::new(|| environment.upgrade(&flox, &self.groups_or_iids)),
+        }
+        .spin()?;
+
+        let upgraded = result.packages;
 
         if upgraded.is_empty() {
             if self.groups_or_iids.is_empty() {
