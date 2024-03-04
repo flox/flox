@@ -74,7 +74,6 @@ static const nlohmann::json rulesJSON = R"( {
  ]
 } )"_json;
 
-
 /* -------------------------------------------------------------------------- */
 
 static row_id
@@ -975,6 +974,29 @@ test_RulesTree_parse0()
   return true;
 }
 
+bool
+test_RulesTree_parse0_badRules()
+{
+  const nlohmann::json badRulesJSON = R"( {
+    "allowRecursive": [
+      ["legacyPackages", null, "darwin"],
+      ["legacyPackages", null, null, "darwin"]
+    ]
+  } )"_json;
+
+  try
+    {
+      flox::pkgdb::RulesTreeNode rules(
+        badRulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
+    }
+  catch ( const flox::FloxException & err )
+    {
+      /* expect this to be thown on account of a bad rule. */
+      return true;
+    }
+  return false;
+}
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -1209,6 +1231,7 @@ main( int argc, char * argv[] )
     RUN_TEST( scrapeMemoryUse );
 
     RUN_TEST( RulesTree_parse0 );
+    RUN_TEST( RulesTree_parse0_badRules );
     RUN_TEST( RulesTree_parse1 );
     RUN_TEST( RulesTree_getRule_fallback0 );
     RUN_TEST( RulesTree_getRule0 );

@@ -33,7 +33,6 @@ scrapeRuleToString( ScrapeRule rule )
 {
   switch ( rule )
     {
-      case SR_NONE: return "UNSET";
       case SR_DEFAULT: return "default";
       case SR_ALLOW_PACKAGE: return "allowPackage";
       case SR_DISALLOW_PACKAGE: return "disallowPackage";
@@ -131,7 +130,6 @@ RulesTreeNode::getRule( const AttrPath & path ) const
         }
       catch ( const std::out_of_range & err )
         {
-          // TODO SR_NONE??????
           return SR_DEFAULT;
         }
     }

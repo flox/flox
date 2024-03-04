@@ -54,7 +54,6 @@ from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules );
 /* -------------------------------------------------------------------------- */
 
 enum ScrapeRule {
-  SR_NONE = 0,         /**< Empty state. */
   SR_DEFAULT,          /**< Applies no special rules. */
   SR_ALLOW_PACKAGE,    /**< Forces an package entry in DB. */
   SR_ALLOW_RECURSIVE,  /**< Forces a sub-tree to be scraped. */
