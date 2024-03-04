@@ -23,7 +23,7 @@ load test_support.bash
 
 setup_file() {
   common_file_setup
-  "$FLOX_BIN" config --set floxhub_url "https://hub-dev.flox.dev/"
+  "$FLOX_BIN" config --set floxhub_url "https://hub.preview.flox.dev/"
   if [ -z "${FLOXEM_FLOXTEST_TOKEN:-}" ]; then
     skip "FLOXEM_FLOXTEST_TOKEN is not set"
   fi
