@@ -139,7 +139,7 @@ impl Init {
         for mut hook in hooks {
             // Run hooks if we can't prompt
             if hook.should_run(dir)?
-                && (self.auto_setup || !Dialog::can_prompt() || hook.prompt_user(dir, flox)?)
+                && (self.auto_setup || (Dialog::can_prompt() && hook.prompt_user(dir, flox)?))
             {
                 customizations.push(hook.get_init_customization())
             }
@@ -276,9 +276,16 @@ impl InitHook for Requirements {
 }
 
 struct Node {
+    /// Node version as specified in package.json if it exists
     package_json_version: PackageJSONVersion,
-    /// None if we found a version in package.json
+    /// Node version as specified in .nvmrc if it exists
+    /// [None] if we found a version in package.json
     nvmrc_version: Option<NVMRCVersion>,
+    /// Whether a hook for `npm` or `yarn` should be generated
+    /// This is initially set to whether package-lock.json and yarn.lock are
+    /// present.
+    /// If both are present and the user can be prompted, it will then be set to
+    /// either [NodePackageManager::Npm] or [NodePackageManager::Yarn]
     hook: Option<NodePackageManager>,
 }
 
@@ -294,18 +301,16 @@ enum RequestedNVMRCVersion {
     None,
     /// .nvmrc contains an alias or something we can't parse as a version.
     Unsure,
-    Some(String),
+    Found(String),
 }
 
 enum NVMRCVersion {
-    /// .nvmrc not present or empty
-    None,
-    /// .nvmrc or package.json contains a version,
+    /// .nvmrc contains a version,
     /// but flox doesn't provide it.
     Unavailable,
     /// .nvmrc contains an alias or something we can't parse as a version.
     Unsure,
-    Some(Box<SearchResult>),
+    Found(Box<SearchResult>),
 }
 
 enum PackageJSONVersion {
@@ -314,7 +319,7 @@ enum PackageJSONVersion {
     /// package.json exists but doesn't have an engines.node field
     Unspecified,
     Unavailable,
-    Some(Box<SearchResult>),
+    Found(Box<SearchResult>),
 }
 
 enum NodeAction {
@@ -330,8 +335,8 @@ impl Node {
 
         // Get value for self.nvmrc_version
         let nvmrc_version = match package_json_version {
-            PackageJSONVersion::Some(_) | PackageJSONVersion::Unavailable => None,
-            _ => Some(Self::get_nvmrc_version(path, flox)?),
+            PackageJSONVersion::Found(_) | PackageJSONVersion::Unavailable => None,
+            _ => Self::get_nvmrc_version(path, flox)?,
         };
 
         // Get value for self.hook
@@ -360,26 +365,27 @@ impl Node {
     ///
     /// This will perform a search to determine if a requested version is
     /// available.
-    fn get_nvmrc_version(path: &Path, flox: &Flox) -> Result<NVMRCVersion> {
+    fn get_nvmrc_version(path: &Path, flox: &Flox) -> Result<Option<NVMRCVersion>> {
         let nvmrc = path.join(".nvmrc");
         if !nvmrc.exists() {
-            return Ok(NVMRCVersion::None);
+            return Ok(None);
         }
 
         let nvmrc_contents = fs::read_to_string(&nvmrc)?;
         let nvmrc_version = match Self::parse_nvmrc_version(&nvmrc_contents) {
-            RequestedNVMRCVersion::None => NVMRCVersion::None,
-            RequestedNVMRCVersion::Unsure => NVMRCVersion::Unsure,
-            RequestedNVMRCVersion::Some(version) => {
-                match Self::check_for_node_version(&version, flox)? {
-                    None => NVMRCVersion::Unavailable,
-                    Some(result) => NVMRCVersion::Some(Box::new(result)),
+            RequestedNVMRCVersion::None => None,
+            RequestedNVMRCVersion::Unsure => Some(NVMRCVersion::Unsure),
+            RequestedNVMRCVersion::Found(version) => {
+                match Self::try_find_compatible_nodejs_version(&version, flox)? {
+                    None => Some(NVMRCVersion::Unavailable),
+                    Some(result) => Some(NVMRCVersion::Found(Box::new(result))),
                 }
             },
         };
         Ok(nvmrc_version)
     }
 
+    /// Translate the contents of a `.nvmrc` file into a [RequestedNVMRCVersion]
     fn parse_nvmrc_version(nvmrc_contents: &str) -> RequestedNVMRCVersion {
         // When reading from a file, nvm runs:
         // "$(command head -n 1 "${NVMRC_PATH}" | command tr -d '\r')" || command printf ''
@@ -405,10 +411,10 @@ impl Node {
                     _ if trimmed_first_line.starts_with('v')
                         && VersionReq::parse(&trimmed_first_line[1..]).is_ok() =>
                     {
-                        RequestedNVMRCVersion::Some(trimmed_first_line[1..].to_string())
+                        RequestedNVMRCVersion::Found(trimmed_first_line[1..].to_string())
                     },
                     _ if VersionReq::parse(trimmed_first_line).is_ok() => {
-                        RequestedNVMRCVersion::Some(trimmed_first_line.to_string())
+                        RequestedNVMRCVersion::Found(trimmed_first_line.to_string())
                     },
                     _ => RequestedNVMRCVersion::Unsure,
                 }
@@ -431,26 +437,25 @@ impl Node {
             // Treat a package.json that can't be parsed as JSON the same as it not existing
             Err(_) => Ok(PackageJSONVersion::None),
             Ok(package_json_json) => match package_json_json["engines"]["node"].as_str() {
-                Some(version) => match Self::check_for_node_version(version, flox)? {
+                Some(version) => match Self::try_find_compatible_nodejs_version(version, flox)? {
                     None => Ok(PackageJSONVersion::Unavailable),
-                    Some(result) => Ok(PackageJSONVersion::Some(Box::new(result))),
+                    Some(result) => Ok(PackageJSONVersion::Found(Box::new(result))),
                 },
                 None => Ok(PackageJSONVersion::Unspecified),
             },
         }
     }
 
-    fn check_for_node_version(version: &str, flox: &Flox) -> Result<Option<SearchResult>> {
+    fn try_find_compatible_nodejs_version(
+        version: &str,
+        flox: &Flox,
+    ) -> Result<Option<SearchResult>> {
         let query = Query {
-            name: None,
             pname: Some("nodejs".to_string()),
-            version: None,
             semver: Some(version.to_string()),
-            r#match: None,
-            match_name: None,
-            match_name_or_rel_path: None,
             limit: Some(1),
             deduplicate: false,
+            ..Default::default()
         };
         let params = SearchParams {
             manifest: None,
@@ -493,19 +498,14 @@ impl Node {
     fn get_action(&self) -> NodeAction {
         match (&self.package_json_version, self.nvmrc_version.as_ref()) {
             // package.json takes precedence over .nvmrc
-            (PackageJSONVersion::Some(result), _) => NodeAction::Install(result.clone()),
+            (PackageJSONVersion::Found(result), _) => NodeAction::Install(result.clone()),
             // Treat the version in package.json strictly; if we can't find it, don't suggest something else.
             (PackageJSONVersion::Unavailable, _) => NodeAction::Nothing,
-            (_, Some(NVMRCVersion::Some(result))) => NodeAction::Install(result.clone()),
+            (_, Some(NVMRCVersion::Found(result))) => NodeAction::Install(result.clone()),
             (_, Some(NVMRCVersion::Unsure)) => NodeAction::OfferFloxDefault,
             (_, Some(NVMRCVersion::Unavailable)) => NodeAction::OfferFloxDefault,
-            (PackageJSONVersion::Unspecified, Some(NVMRCVersion::None)) => {
-                NodeAction::OfferFloxDefault
-            },
-            (PackageJSONVersion::None, Some(NVMRCVersion::None)) => NodeAction::Nothing,
-            (PackageJSONVersion::Unspecified, None) | (PackageJSONVersion::None, None) => {
-                unreachable!()
-            },
+            (PackageJSONVersion::Unspecified, None) => NodeAction::OfferFloxDefault,
+            (PackageJSONVersion::None, None) => NodeAction::Nothing,
         }
     }
 
@@ -515,11 +515,13 @@ impl Node {
     /// 2. The version of nodejs Flox would install
     /// 3. Whether the message says Flox detected package.json (to avoid
     ///    printing that message twice)
+    ///
+    /// Any case that get_action() would return NodeAction::Nothing for is unreachable
     fn nodejs_message_and_version(&self, flox: &Flox) -> Result<(String, Option<String>, bool)> {
         let mut mentions_package_json = false;
         let (message, version) = match (&self.package_json_version, self.nvmrc_version.as_ref()) {
             // package.json takes precedence over .nvmrc
-            (PackageJSONVersion::Some(result), _) => {
+            (PackageJSONVersion::Found(result), _) => {
                 let message = format!(
                     "Flox detected a package.json compatible with node{}",
                     result
@@ -532,8 +534,9 @@ impl Node {
                 (message, result.version.clone())
             },
             // Treat the version in package.json strictly; if we can't find it, don't suggest something else.
+            // get_action() returns NodeAction::Nothing for this case so it's unreachable
             (PackageJSONVersion::Unavailable, _) => unreachable!(),
-            (_, Some(NVMRCVersion::Some(result))) => {
+            (_, Some(NVMRCVersion::Found(result))) => {
                 let message = format!(
                     "Flox detected an .nvmrc{}",
                     result
@@ -556,15 +559,13 @@ impl Node {
                 result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
                 (message, result.version.clone())
             },
-            (PackageJSONVersion::Unspecified, Some(NVMRCVersion::None)) => {
+            (PackageJSONVersion::Unspecified, None) => {
                 let result = Self::get_default_node(flox)?;
                 mentions_package_json = true;
                 ("Flox detected a package.json".to_string(), result.version)
             },
-            (PackageJSONVersion::None, Some(NVMRCVersion::None)) => unreachable!(),
-            (PackageJSONVersion::Unspecified, None) | (PackageJSONVersion::None, None) => {
-                unreachable!()
-            },
+            // get_action() returns NodeAction::Nothing for this case so it's unreachable
+            (PackageJSONVersion::None, None) => unreachable!(),
         };
         Ok((message, version, mentions_package_json))
     }
@@ -875,31 +876,31 @@ mod tests {
     fn test_parse_nvmrc_version_some() {
         assert_eq!(
             Node::parse_nvmrc_version("v0.1.14"),
-            RequestedNVMRCVersion::Some("0.1.14".to_string())
+            RequestedNVMRCVersion::Found("0.1.14".to_string())
         );
         assert_eq!(
             Node::parse_nvmrc_version("v20.11.1"),
-            RequestedNVMRCVersion::Some("20.11.1".to_string())
+            RequestedNVMRCVersion::Found("20.11.1".to_string())
         );
         assert_eq!(
             Node::parse_nvmrc_version("0.1.14"),
-            RequestedNVMRCVersion::Some("0.1.14".to_string())
+            RequestedNVMRCVersion::Found("0.1.14".to_string())
         );
         assert_eq!(
             Node::parse_nvmrc_version("0"),
-            RequestedNVMRCVersion::Some("0".to_string())
+            RequestedNVMRCVersion::Found("0".to_string())
         );
         assert_eq!(
             Node::parse_nvmrc_version("0.1"),
-            RequestedNVMRCVersion::Some("0.1".to_string())
+            RequestedNVMRCVersion::Found("0.1".to_string())
         );
         assert_eq!(
             Node::parse_nvmrc_version("0.1.14\n"),
-            RequestedNVMRCVersion::Some("0.1.14".to_string())
+            RequestedNVMRCVersion::Found("0.1.14".to_string())
         );
         assert_eq!(
             Node::parse_nvmrc_version("0.1.14   "),
-            RequestedNVMRCVersion::Some("0.1.14".to_string())
+            RequestedNVMRCVersion::Found("0.1.14".to_string())
         );
     }
 
@@ -925,7 +926,7 @@ mod tests {
     fn test_node_get_init_customization_install_action() {
         assert_eq!(
             Node {
-                package_json_version: PackageJSONVersion::Some(Box::new(SearchResult {
+                package_json_version: PackageJSONVersion::Found(Box::new(SearchResult {
                     input: "".to_string(),
                     abs_path: vec![],
                     subtree: Subtree::LegacyPackages,
