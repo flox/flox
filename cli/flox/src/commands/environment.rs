@@ -1438,8 +1438,14 @@ impl Push {
             EnvironmentPointer::Managed(managed_pointer) => {
                 let message = Self::push_existing_message(&managed_pointer, self.force);
 
-                // todo add spinner
-                Self::push_managed_env(&flox, managed_pointer, dir, self.force)?;
+                Dialog {
+                    message: "Pushing updates to FloxHub...",
+                    help_message: None,
+                    typed: Spinner::new(|| {
+                        Self::push_managed_env(&flox, managed_pointer, dir, self.force)
+                    }),
+                }
+                .spin()?;
 
                 message::updated(message);
             },
@@ -1457,8 +1463,14 @@ impl Push {
                     )?
                 };
 
-                // todo add spinner
-                let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)?;
+                let env = Dialog {
+                    message: "Pushing environment to FloxHub...",
+                    help_message: None,
+                    typed: Spinner::new(|| {
+                        Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)
+                    }),
+                }
+                .spin()?;
 
                 message::updated(Self::push_new_message(env.pointer(), self.force));
             },
