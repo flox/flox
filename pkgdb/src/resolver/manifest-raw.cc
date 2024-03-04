@@ -528,10 +528,14 @@ to_json( nlohmann::json & jto, const HookRaw & hook )
 void
 HookRaw::check() const
 {
-  if ( this->script.has_value() && this->file.has_value() )
+  auto hasAtMostOneActivationScript = this->script.has_value()
+                                      ^ this->file.has_value()
+                                      ^ this->onActivate.has_value();
+  if ( ! hasAtMostOneActivationScript )
     {
       throw InvalidManifestFileException(
-        "hook may only define one of 'hook.script' or 'hook.file' fields." );
+        "hook may only define one of 'hook.script', 'hook.file', or "
+        "`hook.on-activate` fields." );
     }
 }
 

@@ -140,7 +140,8 @@ struct Options
   merge( const Options & overrides );
 
   /** @brief Convert to a _base_ set of @a flox::pkgdb::PkgQueryArgs. */
-  explicit operator pkgdb::PkgQueryArgs() const;
+  explicit
+  operator pkgdb::PkgQueryArgs() const;
 
 
 }; /* End struct `Options' */
@@ -214,7 +215,8 @@ struct GlobalManifestRaw
     this->options  = std::nullopt;
   }
 
-  explicit operator GlobalManifestRawGA() const;
+  explicit
+  operator GlobalManifestRawGA() const;
 
 
 }; /* End struct `GlobalManifestRaw' */
@@ -274,8 +276,12 @@ struct HookRaw
   /** Define an inline script to be run at activation time. */
   std::optional<std::string> script;
 
-  /** Reads activation script from a file. */
+  /** Reads activation script from a file relative to the project root. */
   std::optional<std::string> file;
+
+  /** Defines an inline script to be run non-interactively from a bash subshell
+   * after the user's profile scripts have been sourced.*/
+  std::optional<std::string> onActivate;
 
 
   /**
@@ -383,7 +389,8 @@ struct ManifestRaw : public GlobalManifestRaw
   [[nodiscard]] nlohmann::json
   diff( const ManifestRaw & old ) const;
 
-  explicit operator ManifestRawGA() const;
+  explicit
+  operator ManifestRawGA() const;
 
 
 }; /* End struct `ManifestRaw' */
@@ -452,12 +459,14 @@ struct GlobalManifestRawGA
     this->options = std::nullopt;
   }
 
-  explicit operator GlobalManifestRaw() const
+  explicit
+  operator GlobalManifestRaw() const
   {
     return GlobalManifestRaw( getGARegistry(), this->options );
   }
 
-  explicit operator ManifestRaw() const
+  explicit
+  operator ManifestRaw() const
   {
     return ManifestRaw( static_cast<GlobalManifestRaw>( *this ) );
   }
@@ -566,7 +575,8 @@ struct ManifestRawGA : public GlobalManifestRawGA
   [[nodiscard]] nlohmann::json
   diff( const ManifestRawGA & old ) const;
 
-  explicit operator ManifestRaw() const
+  explicit
+  operator ManifestRaw() const
   {
     ManifestRaw raw;
     raw.registry = getGARegistry();
