@@ -45,6 +45,7 @@ chrono.workspace = true
 oauth2.workspace = true
 textwrap = {workspace = true, features = ["terminal_size"]}
 indent.workspace = true
+semver.workspace = true
 
 [dev-dependencies]
 temp-env = "0.3.2"
