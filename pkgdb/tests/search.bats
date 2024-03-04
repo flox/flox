@@ -98,7 +98,7 @@ genParamsNixpkgsFlox() {
   params="$(genParams ".query.pname|=\"nodejs\"|.query.version=\"$NODEJS_VERSION\"")"
   run sh -c "$PKGDB_BIN search '$params' | wc -l"
   assert_success
-  assert_output 4
+  assert_output 5
 }
 
 # ---------------------------------------------------------------------------- #
@@ -141,7 +141,7 @@ genParamsNixpkgsFlox() {
   params="$(genParams '.query.pname|="nodejs"|.query.semver="18.*"')"
   run sh -c "$PKGDB_BIN search '$params' | wc -l"
   assert_success
-  assert_output 4
+  assert_output 5
 }
 
 # ---------------------------------------------------------------------------- #
@@ -153,7 +153,7 @@ genParamsNixpkgsFlox() {
   params="$(genParams ".query.name|=\"nodejs-$NODEJS_VERSION\"")"
   run sh -c "$PKGDB_BIN search '$params' | wc -l;"
   assert_success
-  assert_output 4
+  assert_output 5
 }
 
 # ---------------------------------------------------------------------------- #
