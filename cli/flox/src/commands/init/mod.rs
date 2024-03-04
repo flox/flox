@@ -66,7 +66,10 @@ impl Init {
 
         // Don't run hooks in home dir
         let customization = (dir != home_dir)
-            .then(|| self.run_hooks(&dir, &flox))
+            .then(|| {
+                // TODO: hooks may run a scrape, so we should scrape here with a spinner
+                self.run_hooks(&dir, &flox)
+            })
             .transpose()?
             .unwrap_or_default();
 
@@ -302,7 +305,6 @@ fn format_customization(customization: &InitCustomization) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::models::search::Subtree;
     use pretty_assertions::assert_eq;
 
     use super::*;

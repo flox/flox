@@ -74,6 +74,13 @@ SearchCommand::addSearchQueryOptions( argparse::ArgumentParser & parser )
     .action( [&]( const std::string & arg )
              { this->params.query.pname = arg; } );
 
+  parser.add_argument( "--rel-path" )
+    .help( "search for packages by exact 'relPath'." )
+    .metavar( "DOT.SEPARATED.REL.PATH" )
+    .nargs( 1 )
+    .action( [&]( const std::string & arg )
+             { this->params.query.relPath = splitAttrPath( arg ); } );
+
   parser.add_argument( "--version" )
     .help( "search for packages by exact 'version' match." )
     .metavar( "VERSION" )

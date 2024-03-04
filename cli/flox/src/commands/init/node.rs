@@ -3,12 +3,12 @@ use std::path::Path;
 
 use anyhow::{anyhow, Result};
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::global_manifest_path;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
-use flox_rust_sdk::models::environment::{global_manifest_lockfile_path, global_manifest_path};
 use flox_rust_sdk::models::lockfile::LockedManifest;
 use flox_rust_sdk::models::manifest::PackageToInstall;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use log::debug;
 use semver::VersionReq;
 
@@ -16,24 +16,52 @@ use super::{format_customization, InitHook, AUTO_SETUP_HINT};
 use crate::config::features::Features;
 use crate::utils::dialog::{Dialog, Select};
 
+const NPM_HOOK: &str = indoc! {r#"
+                # Install nodejs depedencies
+                npm install"#};
+
+const YARN_HOOK: &str = indoc! {r#"
+                # Install nodejs depedencies
+                yarn"#};
+
 pub(super) struct Node {
+    /// Whether npm or yarn should be installed.
+    ///
+    ///
+    /// If initially set to [PackageManager::Npm],
+    /// it will be set to either [PackageManager::Npm] or [PackageManager::Yarn]
+    /// after prompting the user.
+    package_manager: Option<PackageManager>,
     /// Node version as specified in package.json if it exists
-    package_json_version: PackageJSONVersion,
+    /// [PackageJSONVersion::None] if we found a compatible npm or yarn,
+    package_json_node_version: PackageJSONVersion,
     /// Node version as specified in .nvmrc if it exists
     /// [None] if we found a version in package.json
     nvmrc_version: Option<NVMRCVersion>,
-    /// Whether a hook for `npm` or `yarn` should be generated
-    /// This is initially set to whether package-lock.json and yarn.lock are
-    /// present.
-    /// If both are present and the user can be prompted, it will then be set to
-    /// either [NodePackageManager::Npm] or [NodePackageManager::Yarn]
-    hook: Option<NodePackageManager>,
 }
 
-enum NodePackageManager {
-    Npm,
-    Yarn,
-    Both,
+/// This stores which lockfiles are present and which of nixpkgs provided npm
+/// and yarn are compatible with package.json
+///
+/// After prompting the user, it is set to either [PackageManager::Npm]
+/// or [PackageManager::Yarn] even if either package manager is compatible.
+#[derive(Debug, PartialEq)]
+enum PackageManager {
+    /// package.json is present,
+    /// and nixpkgs provides npm and nodejs compatible with package.json
+    ///
+    /// Contains a [SearchResult] for npm and nodejs
+    Npm(SearchResult, SearchResult),
+    /// yarn.lock is present,
+    /// and nixpkgs provides yarn and nodejs compatible with package.json
+    ///
+    /// Contains a [SearchResult] for yarn and nodejs
+    Yarn(SearchResult, SearchResult),
+    /// Both yarn.lock and package-lock.json are present,
+    /// and nixpkgs provides npm, yarn, and nodejs compatible with package.json
+    ///
+    /// Contains a [SearchResult] for npm, yarn, and nodejs
+    Both(SearchResult, SearchResult, Box<SearchResult>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -51,13 +79,14 @@ enum NVMRCVersion {
     Unavailable,
     /// .nvmrc contains an alias or something we can't parse as a version.
     Unsure,
-    Found(Box<SearchResult>),
+    Some(Box<SearchResult>),
 }
 
 enum PackageJSONVersion {
-    /// package.json does not exist
+    /// We didn't check for package.json,
+    /// or it does not exist or is invalid.
     None,
-    /// package.json exists but doesn't have an engines.node field
+    /// package.json exists but doesn't specify a version
     Unspecified,
     Unavailable,
     Found(Box<SearchResult>),
@@ -69,36 +98,151 @@ enum NodeAction {
     Nothing,
 }
 
+struct PackageJSONVersions {
+    npm: Option<String>,
+    yarn: Option<String>,
+    node: Option<String>,
+}
+
 impl Node {
     pub fn new(path: &Path, flox: &Flox) -> Result<Self> {
-        // Get value for self.package_json_version
-        let package_json_version = Self::get_package_json_version(path, flox)?;
-
-        // Get value for self.nvmrc_version
-        let nvmrc_version = match package_json_version {
-            PackageJSONVersion::Found(_) | PackageJSONVersion::Unavailable => None,
-            _ => Self::get_nvmrc_version(path, flox)?,
+        // Get value for self.package_manager
+        let versions = Self::get_package_json_versions(path)?;
+        let package_manager = match versions {
+            None => None,
+            Some(ref versions) => {
+                let package_lock_exists = path.join("package-lock.json").exists();
+                let yarn_lock_exists = path.join("yarn.lock").exists();
+                Self::get_package_manager(versions, package_lock_exists, yarn_lock_exists, flox)?
+            },
         };
 
-        // Get value for self.hook
-        let hook = if path.join("package.json").exists() {
-            let package_lock_exists = path.join("package-lock.json").exists();
-            let yarn_lock_exists = path.join("yarn.lock").exists();
-            match (package_lock_exists, yarn_lock_exists) {
-                (false, false) => None,
-                (true, false) => Some(NodePackageManager::Npm),
-                (false, true) => Some(NodePackageManager::Yarn),
-                (true, true) => Some(NodePackageManager::Both),
+        // Get value for self.package_json_node_version if we didn't find a valid npm or yarn
+        let package_json_node_version = if package_manager.is_some() {
+            PackageJSONVersion::None
+        } else {
+            match versions {
+                Some(PackageJSONVersions {
+                    node: Some(node_version),
+                    ..
+                }) => match Self::try_find_compatible_version("nodejs", &node_version, None, flox)?
+                {
+                    None => PackageJSONVersion::Unavailable,
+                    Some(result) => PackageJSONVersion::Found(Box::new(result)),
+                },
+                Some(_) => PackageJSONVersion::Unspecified,
+                _ => PackageJSONVersion::None,
+            }
+        };
+
+        // Get value for self.nvmrc_version if we didn't find a valid npm or yarn
+        let nvmrc_version = if package_manager.is_some() {
+            None
+        } else {
+            match package_json_node_version {
+                // package.json is higher priority than .nvmrc,
+                // so don't check .nvmrc if we know we'll use the version in
+                // package.json or we know we can't provide it
+                PackageJSONVersion::Found(_) | PackageJSONVersion::Unavailable => None,
+                _ => Self::get_nvmrc_version(path, flox)?,
+            }
+        };
+
+        Ok(Self {
+            package_json_node_version,
+            nvmrc_version,
+            package_manager,
+        })
+    }
+
+    /// Look for nodejs, npm, and yarn versions in a (possibly non-existent)
+    /// `package.json` file
+    fn get_package_json_versions(path: &Path) -> Result<Option<PackageJSONVersions>> {
+        let package_json = path.join("package.json");
+        if !package_json.exists() {
+            return Ok(None);
+        }
+        let package_json_contents = fs::read_to_string(package_json)?;
+        match serde_json::from_str::<serde_json::Value>(&package_json_contents) {
+            // Treat a package.json that can't be parsed as JSON the same as it not existing
+            Err(_) => Ok(None),
+            Ok(package_json_json) => {
+                let node = package_json_json["engines"]["node"]
+                    .as_str()
+                    .map(|s| s.to_string());
+                let npm = package_json_json["engines"]["npm"]
+                    .as_str()
+                    .map(|s| s.to_string());
+                let yarn = package_json_json["engines"]["yarn"]
+                    .as_str()
+                    .map(|s| s.to_string());
+                Ok(Some(PackageJSONVersions { node, npm, yarn }))
+            },
+        }
+    }
+
+    /// Try to find node, npm, and yarn versions that satisfy constraints in
+    /// package.json
+    fn get_package_manager(
+        versions: &PackageJSONVersions,
+        package_lock_exists: bool,
+        yarn_lock_exists: bool,
+        flox: &Flox,
+    ) -> Result<Option<PackageManager>> {
+        let PackageJSONVersions { npm, yarn, node } = versions;
+
+        let found_node = match node {
+            Some(node_version) => {
+                match Self::get_default_node_if_compatible(Some(node_version.clone()), flox)? {
+                    // If the corresponding node isn't compatible, don't install a package manager
+                    None => return Ok(None),
+                    Some(found_node) => found_node,
+                }
+            },
+            None => Self::get_default_node_if_compatible(None, flox)?
+                .ok_or(anyhow!("Flox couldn't find nodejs in nixpkgs"))?,
+        };
+
+        // We assume that yarn and npm are built with found_node, which is
+        // currently true in nixpkgs
+        let found_npm = if !yarn_lock_exists || package_lock_exists {
+            match npm {
+                Some(npm_version) => Self::try_find_compatible_version(
+                    "npm",
+                    npm_version,
+                    Some(vec!["nodePackages".to_string(), "npm".to_string()]),
+                    flox,
+                )?,
+                _ => Some(Self::get_default_package("nodePackages.npm", flox)?),
             }
         } else {
             None
         };
 
-        Ok(Self {
-            nvmrc_version,
-            package_json_version,
-            hook,
-        })
+        let found_yarn = if yarn_lock_exists {
+            match yarn {
+                Some(yarn_version) => {
+                    Self::try_find_compatible_version("yarn", yarn_version, None, flox)?
+                },
+                _ => Some(Self::get_default_package("yarn", flox)?),
+            }
+        } else {
+            None
+        };
+
+        let package_manager = {
+            match (found_npm, found_yarn) {
+                (None, None) => None,
+                (Some(found_npm), None) => Some(PackageManager::Npm(found_npm, found_node)),
+                (None, Some(found_yarn)) => Some(PackageManager::Yarn(found_yarn, found_node)),
+                (Some(found_npm), Some(found_yarn)) => Some(PackageManager::Both(
+                    found_npm,
+                    found_yarn,
+                    Box::new(found_node),
+                )),
+            }
+        };
+        Ok(package_manager)
     }
 
     /// Determine appropriate [NVMRCVersion] variant for a (possibly
@@ -117,9 +261,9 @@ impl Node {
             RequestedNVMRCVersion::None => None,
             RequestedNVMRCVersion::Unsure => Some(NVMRCVersion::Unsure),
             RequestedNVMRCVersion::Found(version) => {
-                match Self::try_find_compatible_nodejs_version(&version, flox)? {
+                match Self::try_find_compatible_version("nodejs", &version, None, flox)? {
                     None => Some(NVMRCVersion::Unavailable),
-                    Some(result) => Some(NVMRCVersion::Found(Box::new(result))),
+                    Some(result) => Some(NVMRCVersion::Some(Box::new(result))),
                 }
             },
         };
@@ -163,37 +307,45 @@ impl Node {
         }
     }
 
-    /// Determine appropriate [PackageJSONVersion] variant for a (possibly
-    /// non-existent) `package.json` file in `path`
-    ///
-    /// This will perform a search to determine if a requested version is
-    /// available.
-    fn get_package_json_version(path: &Path, flox: &Flox) -> Result<PackageJSONVersion> {
-        let package_json = path.join("package.json");
-        if !package_json.exists() {
-            return Ok(PackageJSONVersion::None);
-        }
-        let package_json_contents = fs::read_to_string(package_json)?;
-        match serde_json::from_str::<serde_json::Value>(&package_json_contents) {
-            // Treat a package.json that can't be parsed as JSON the same as it not existing
-            Err(_) => Ok(PackageJSONVersion::None),
-            Ok(package_json_json) => match package_json_json["engines"]["node"].as_str() {
-                Some(version) => match Self::try_find_compatible_nodejs_version(version, flox)? {
-                    None => Ok(PackageJSONVersion::Unavailable),
-                    Some(result) => Ok(PackageJSONVersion::Found(Box::new(result))),
-                },
-                None => Ok(PackageJSONVersion::Unspecified),
-            },
-        }
-    }
-
-    fn try_find_compatible_nodejs_version(
+    /// Searches for a given pname and version, optionally restricting rel_path
+    fn try_find_compatible_version(
+        pname: &str,
         version: &str,
+        rel_path: Option<Vec<String>>,
         flox: &Flox,
     ) -> Result<Option<SearchResult>> {
         let query = Query {
-            pname: Some("nodejs".to_string()),
+            pname: Some(pname.to_string()),
             semver: Some(version.to_string()),
+            limit: Some(1),
+            deduplicate: false,
+            rel_path,
+            ..Default::default()
+        };
+        let params = SearchParams {
+            manifest: None,
+            global_manifest: PathOrJson::Path(global_manifest_path(flox)),
+            lockfile: PathOrJson::Path(LockedManifest::ensure_global_lockfile(flox)?),
+            query,
+        };
+
+        let (mut results, _) = do_search(&params)?;
+
+        if results.results.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(results.results.swap_remove(0)))
+    }
+
+    /// Get nixpkgs#nodejs,
+    /// optionally verifying that it satisfies a version constraint.
+    fn get_default_node_if_compatible(
+        version: Option<String>,
+        flox: &Flox,
+    ) -> Result<Option<SearchResult>> {
+        let query = Query {
+            rel_path: Some(vec!["nodejs".to_string()]),
+            semver: version,
             limit: Some(1),
             deduplicate: false,
             ..Default::default()
@@ -213,19 +365,20 @@ impl Node {
         Ok(Some(results.results.swap_remove(0)))
     }
 
-    fn get_default_node(flox: &Flox) -> Result<SearchResult> {
-        let query = Query::new("nodejs", Features::parse()?.search_strategy, Some(1), false)?;
+    /// Get a package as if installed with `flox install {package}`
+    fn get_default_package(package: &str, flox: &Flox) -> Result<SearchResult> {
+        let query = Query::new(package, Features::parse()?.search_strategy, Some(1), false)?;
         let params = SearchParams {
             manifest: None,
             global_manifest: PathOrJson::Path(global_manifest_path(flox)),
-            lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
+            lockfile: PathOrJson::Path(LockedManifest::ensure_global_lockfile(flox)?),
             query,
         };
 
         let (mut results, _) = do_search(&params)?;
 
         if results.results.is_empty() {
-            Err(anyhow!("Flox couldn't find any versions of nodejs"))?
+            Err(anyhow!("Flox couldn't find any versions of {package}"))?
         }
         Ok(results.results.swap_remove(0))
     }
@@ -236,13 +389,13 @@ impl Node {
     ///
     /// This is decided based on whether .nvmrc and package.json are present,
     /// and whether Flox can provide versions they request.
-    fn get_action(&self) -> NodeAction {
-        match (&self.package_json_version, self.nvmrc_version.as_ref()) {
+    fn get_node_action(&self) -> NodeAction {
+        match (&self.package_json_node_version, self.nvmrc_version.as_ref()) {
             // package.json takes precedence over .nvmrc
             (PackageJSONVersion::Found(result), _) => NodeAction::Install(result.clone()),
             // Treat the version in package.json strictly; if we can't find it, don't suggest something else.
             (PackageJSONVersion::Unavailable, _) => NodeAction::Nothing,
-            (_, Some(NVMRCVersion::Found(result))) => NodeAction::Install(result.clone()),
+            (_, Some(NVMRCVersion::Some(result))) => NodeAction::Install(result.clone()),
             (_, Some(NVMRCVersion::Unsure)) => NodeAction::OfferFloxDefault,
             (_, Some(NVMRCVersion::Unavailable)) => NodeAction::OfferFloxDefault,
             (PackageJSONVersion::Unspecified, None) => NodeAction::OfferFloxDefault,
@@ -254,13 +407,13 @@ impl Node {
     /// 1. A message describing what version of nodejs Flox found requested to
     /// include in the prompt.
     /// 2. The version of nodejs Flox would install
-    /// 3. Whether the message says Flox detected package.json (to avoid
-    ///    printing that message twice)
     ///
     /// Any case that get_action() would return NodeAction::Nothing for is unreachable
-    fn nodejs_message_and_version(&self, flox: &Flox) -> Result<(String, Option<String>, bool)> {
-        let mut mentions_package_json = false;
-        let (message, version) = match (&self.package_json_version, self.nvmrc_version.as_ref()) {
+    fn nodejs_message_and_version(&self, flox: &Flox) -> Result<(String, Option<String>)> {
+        let (message, version) = match (
+            &self.package_json_node_version,
+            self.nvmrc_version.as_ref(),
+        ) {
             // package.json takes precedence over .nvmrc
             (PackageJSONVersion::Found(result), _) => {
                 let message = format!(
@@ -271,13 +424,12 @@ impl Node {
                         .map(|version| format!(" {version}"))
                         .unwrap_or("".to_string())
                 );
-                mentions_package_json = true;
                 (message, result.version.clone())
             },
             // Treat the version in package.json strictly; if we can't find it, don't suggest something else.
             // get_action() returns NodeAction::Nothing for this case so it's unreachable
             (PackageJSONVersion::Unavailable, _) => unreachable!(),
-            (_, Some(NVMRCVersion::Found(result))) => {
+            (_, Some(NVMRCVersion::Some(result))) => {
                 let message = format!(
                     "Flox detected an .nvmrc{}",
                     result
@@ -289,41 +441,32 @@ impl Node {
                 (message, result.version.clone())
             },
             (_, Some(NVMRCVersion::Unsure)) => {
-                let result = Self::get_default_node(flox)?;
+                let result = Self::get_default_package("nodejs", flox)?;
                 let message = format!("Flox detected an .nvmrc with a version specifier not understood by Flox, but Flox can provide {}",
                        result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
                 (message, result.version)
             },
             (_, Some(NVMRCVersion::Unavailable)) => {
-                let result = Self::get_default_node(flox)?;
+                let result = Self::get_default_package("nodejs", flox)?;
                 let message = format!("Flox detected an .nvmrc with a version of nodejs not provided by Flox, but Flox can provide {}",
                 result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
                 (message, result.version.clone())
             },
             (PackageJSONVersion::Unspecified, None) => {
-                let result = Self::get_default_node(flox)?;
-                mentions_package_json = true;
+                let result = Self::get_default_package("nodejs", flox)?;
                 ("Flox detected a package.json".to_string(), result.version)
             },
             // get_action() returns NodeAction::Nothing for this case so it's unreachable
             (PackageJSONVersion::None, None) => unreachable!(),
         };
-        Ok((message, version, mentions_package_json))
+        Ok((message, version))
     }
 
-    fn prompt_with_known_hook(&self, flox: &Flox) -> Result<bool> {
-        let (nodejs_detected, nodejs_version, mentions_package_json) =
-            self.nodejs_message_and_version(flox)?;
+    /// Prompt whether to install nodejs (but not npm or yarn)
+    fn prompt_for_node(&self, flox: &Flox) -> Result<bool> {
+        let (nodejs_detected, nodejs_version) = self.nodejs_message_and_version(flox)?;
         let mut message = format!("{nodejs_detected}\n");
-        match self.hook {
-            None => {},
-            Some(NodePackageManager::Npm) if !mentions_package_json => {
-                message.push_str("Flox detected a package.json\n")
-            },
-            Some(NodePackageManager::Npm) => {},
-            Some(NodePackageManager::Yarn) => message.push_str("Flox detected a yarn.lock\n"),
-            Some(NodePackageManager::Both) => unreachable!(),
-        }
+
         message.push_str(&formatdoc! {"
 
             Flox can add the following to your environment:
@@ -333,13 +476,6 @@ impl Node {
                 .map(|version| format!(" {version}"))
                 .unwrap_or("".to_string()),
         });
-
-        match self.hook {
-            None => {},
-            Some(NodePackageManager::Npm) => message.push_str("* An npm installation hook\n"),
-            Some(NodePackageManager::Yarn) => message.push_str("* A yarn installation hook\n"),
-            Some(NodePackageManager::Both) => unreachable!(),
-        }
 
         message.push_str(&formatdoc! {"
 
@@ -377,24 +513,127 @@ impl Node {
         Ok(choice == 0)
     }
 
-    fn prompt_for_hook(&mut self, flox: &Flox) -> Result<bool> {
-        let (nodejs_detected, nodejs_version, _) = self.nodejs_message_and_version(flox)?;
+    /// Prompt whether to install npm or yarn when only one of them is viable
+    fn prompt_with_known_package_manager(&self) -> Result<bool> {
+        let mut message = match &self.package_manager {
+            Some(PackageManager::Npm(found_npm, found_node)) => {
+                let npm_version = found_npm
+                    .version
+                    .as_ref()
+                    .map(|version| format!(" {version}"))
+                    .unwrap_or("".to_string());
+                let node_version = found_node
+                    .version
+                    .as_ref()
+                    .map(|version| format!(" {version}"))
+                    .unwrap_or("".to_string());
+                formatdoc! {"
+                    Flox detected a package.json
+
+                    Flox can add the following to your environment:
+                    * npm{npm_version} with nodejs{node_version} bundled
+                    * An npm installation hook
+                "}
+            },
+
+            Some(PackageManager::Yarn(found_yarn, found_node)) => {
+                let yarn_version = found_yarn
+                    .version
+                    .as_ref()
+                    .map(|version| format!(" {version}"))
+                    .unwrap_or("".to_string());
+                let node_version = found_node
+                    .version
+                    .as_ref()
+                    .map(|version| format!(" {version}"))
+                    .unwrap_or("".to_string());
+
+                formatdoc! {"
+                    Flox detected a package.json and a yarn.lock
+
+                    Flox can add the following to your environment:
+                    * yarn{yarn_version} with nodejs{node_version} bundled
+                    * A yarn installation hook
+                "}
+            },
+            None | Some(PackageManager::Both(..)) => unreachable!(),
+        };
+
+        message.push_str(&formatdoc! {"
+
+            Would you like Flox to apply this suggestion?
+            You can always change the environment's manifest with 'flox edit'
+            "});
+
+        let dialog = Dialog {
+            message: &message,
+            help_message: Some(AUTO_SETUP_HINT),
+            typed: Select {
+                options: ["Yes", "No", "Show suggested modifications"].to_vec(),
+            },
+        };
+        let (mut choice, _) = dialog.raw_prompt()?;
+
+        if choice == 2 {
+            let message = formatdoc! {"
+
+                {}
+                Would you like Flox to apply these modifications?
+                You can always change the environment's manifest with 'flox edit'
+            ", format_customization(&self.get_init_customization())?};
+
+            let dialog = Dialog {
+                message: &message,
+                help_message: Some(AUTO_SETUP_HINT),
+                typed: Select {
+                    options: ["Yes", "No"].to_vec(),
+                },
+            };
+
+            (choice, _) = dialog.raw_prompt()?;
+        }
+        Ok(choice == 0)
+    }
+
+    /// Prompt whether to install npm or yarn when either is viable
+    fn prompt_for_package_manager(&mut self) -> Result<bool> {
+        let (found_npm, found_yarn, found_node) = match &self.package_manager {
+            Some(PackageManager::Both(found_npm, found_yarn, found_node)) => {
+                (found_npm.clone(), found_yarn.clone(), found_node.clone())
+            },
+            _ => unreachable!(),
+        };
+        let npm_version = found_npm
+            .version
+            .as_ref()
+            .map(|version| format!(" {version}"))
+            .unwrap_or("".to_string());
+        let yarn_version = found_yarn
+            .version
+            .as_ref()
+            .map(|version| format!(" {version}"))
+            .unwrap_or("".to_string());
+        let node_version = found_node
+            .version
+            .as_ref()
+            .map(|version| format!(" {version}"))
+            .unwrap_or("".to_string());
+
         let message = formatdoc! {"
-            {nodejs_detected}
             Flox detected both a package-lock.json and a yarn.lock
 
             Flox can add the following to your environment:
-            * nodejs{}
+            * Either npm{npm_version} or yarn{yarn_version} (both have nodejs{node_version} bundled)
             * Either an npm or yarn installation hook
 
             Would you like Flox to apply one of these modifications?
-            You can always change the environment's manifest with 'flox edit'", nodejs_version.map(|version| format!(" {version}")).unwrap_or("".to_string())};
+            You can always change the environment's manifest with 'flox edit'"};
         let options = [
-            "Yes - with npm hook",
-            "Yes - with yarn hook",
+            "Yes - with npm",
+            "Yes - with yarn",
             "No",
-            "Show modifications with npm hook",
-            "Show modifications with yarn hook",
+            "Show modifications with npm",
+            "Show modifications with yarn",
         ]
         .to_vec();
 
@@ -412,9 +651,13 @@ impl Node {
             // Temporarily set choice so self.get_init_customization() returns
             // the correct hook
             if choice == 3 {
-                self.hook = Some(NodePackageManager::Npm)
+                self.package_manager =
+                    Some(PackageManager::Npm(found_npm.clone(), *found_node.clone()))
             } else if choice == 4 {
-                self.hook = Some(NodePackageManager::Yarn)
+                self.package_manager = Some(PackageManager::Yarn(
+                    found_yarn.clone(),
+                    *found_node.clone(),
+                ))
             }
             let message = formatdoc! {"
 
@@ -435,9 +678,12 @@ impl Node {
         }
 
         if choice == 0 {
-            self.hook = Some(NodePackageManager::Npm)
+            self.package_manager = Some(PackageManager::Npm(found_npm.clone(), *found_node.clone()))
         } else if choice == 1 {
-            self.hook = Some(NodePackageManager::Yarn)
+            self.package_manager = Some(PackageManager::Yarn(
+                found_yarn.clone(),
+                *found_node.clone(),
+            ))
         }
         Ok(choice == 0 || choice == 1)
     }
@@ -445,7 +691,23 @@ impl Node {
 
 impl InitHook for Node {
     fn should_run(&mut self, _path: &Path) -> Result<bool> {
-        match self.get_action() {
+        match self.package_manager {
+            Some(PackageManager::Both(..)) => {
+                debug!("Should run node init hook. Both npm and yarn detected.");
+                return Ok(true);
+            },
+            Some(PackageManager::Npm(..)) => {
+                debug!("Should run node init hook and install npm.");
+                return Ok(true);
+            },
+            Some(PackageManager::Yarn(..)) => {
+                debug!("Should run node init hook and install yarn.");
+                return Ok(true);
+            },
+            None => {},
+        }
+
+        match self.get_node_action() {
             NodeAction::Install(_) => {
                 debug!("Should run node init hook with requested nodejs version");
                 Ok(true)
@@ -462,49 +724,78 @@ impl InitHook for Node {
     }
 
     fn prompt_user(&mut self, _path: &Path, flox: &Flox) -> Result<bool> {
-        if let Some(NodePackageManager::Both) = self.hook {
-            self.prompt_for_hook(flox)
-        } else {
-            self.prompt_with_known_hook(flox)
+        match self.package_manager {
+            Some(PackageManager::Both(..)) => self.prompt_for_package_manager(),
+            Some(PackageManager::Npm(..)) | Some(PackageManager::Yarn(..)) => {
+                self.prompt_with_known_package_manager()
+            },
+            None => self.prompt_for_node(flox),
         }
     }
 
     fn get_init_customization(&self) -> InitCustomization {
-        let nodejs_to_install = match self.get_action() {
-            NodeAction::Install(result) => PackageToInstall {
-                id: "nodejs".to_string(),
-                pkg_path: result.rel_path.join("."),
-                version: result.version,
-                input: None,
+        let mut packages = vec![];
+
+        let hook = match &self.package_manager {
+            None => None,
+            // Default to npm for Some(PackageManager::Both)
+            // This is only reachable if --auto-setup is used.
+            Some(PackageManager::Npm(found_npm, _)) | Some(PackageManager::Both(found_npm, ..)) => {
+                packages.extend(vec![PackageToInstall {
+                    id: "npm".to_string(),
+                    pkg_path: found_npm.rel_path.join("."),
+                    // TODO: we probably shouldn't pin this when we're just
+                    // providing the default
+                    version: found_npm.version.clone(),
+                    input: None,
+                }]);
+                Some(NPM_HOOK.to_string())
             },
-            NodeAction::OfferFloxDefault => PackageToInstall {
-                id: "nodejs".to_string(),
-                pkg_path: "nodejs".to_string(),
-                version: None,
-                input: None,
+            Some(PackageManager::Yarn(found_yarn, _)) => {
+                packages.extend(vec![PackageToInstall {
+                    id: "yarn".to_string(),
+                    pkg_path: found_yarn.rel_path.join("."),
+                    // TODO: we probably shouldn't pin this when we're just
+                    // providing the default
+                    version: found_yarn.version.clone(),
+                    input: None,
+                }]);
+                Some(YARN_HOOK.to_string())
             },
-            NodeAction::Nothing => unreachable!(),
         };
 
-        let hook = match self.hook {
-            None => None,
-            Some(NodePackageManager::Npm) => Some("# TODO: npm hook".to_string()),
-            Some(NodePackageManager::Yarn) => Some("# TODO: yarn hook".to_string()),
-            // Default to npm
-            Some(NodePackageManager::Both) => Some("# TODO: npm hook".to_string()),
-        };
+        if self.package_manager.is_none() {
+            let nodejs_to_install = match self.get_node_action() {
+                NodeAction::Install(result) => PackageToInstall {
+                    id: "nodejs".to_string(),
+                    pkg_path: result.rel_path.join("."),
+                    version: result.version,
+                    input: None,
+                },
+                NodeAction::OfferFloxDefault => PackageToInstall {
+                    id: "nodejs".to_string(),
+                    pkg_path: "nodejs".to_string(),
+                    version: None,
+                    input: None,
+                },
+                NodeAction::Nothing => unreachable!(),
+            };
+            packages.push(nodejs_to_install);
+        }
 
         InitCustomization {
             hook,
-            packages: Some(vec![nodejs_to_install]),
+            packages: Some(packages),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use flox_rust_sdk::flox::test_flox_instance;
     use flox_rust_sdk::models::search::Subtree;
     use pretty_assertions::assert_eq;
+    use tempfile::TempDir;
 
     use super::*;
 
@@ -559,10 +850,10 @@ mod tests {
     }
 
     #[test]
-    fn test_node_get_init_customization_install_action() {
+    fn test_get_init_customization_install_action() {
         assert_eq!(
             Node {
-                package_json_version: PackageJSONVersion::Found(Box::new(SearchResult {
+                package_json_node_version: PackageJSONVersion::Found(Box::new(SearchResult {
                     input: "".to_string(),
                     abs_path: vec![],
                     subtree: Subtree::LegacyPackages,
@@ -577,7 +868,7 @@ mod tests {
                     id: 0,
                 })),
                 nvmrc_version: None,
-                hook: None,
+                package_manager: None,
             }
             .get_init_customization(),
             InitCustomization {
@@ -593,12 +884,12 @@ mod tests {
     }
 
     #[test]
-    fn test_node_get_init_customization_offer_flox_default_action() {
+    fn test_get_init_customization_offer_flox_default_action() {
         assert_eq!(
             Node {
-                package_json_version: PackageJSONVersion::Unspecified,
+                package_json_node_version: PackageJSONVersion::Unspecified,
                 nvmrc_version: Some(NVMRCVersion::Unsure),
-                hook: None,
+                package_manager: None,
             }
             .get_init_customization(),
             InitCustomization {
@@ -611,5 +902,331 @@ mod tests {
                 hook: None,
             }
         );
+    }
+
+    #[test]
+    fn test_get_init_customization_npm_hook() {
+        assert_eq!(
+            Node {
+                package_json_node_version: PackageJSONVersion::None,
+                nvmrc_version: None,
+                package_manager: Some(PackageManager::Npm(
+                    SearchResult {
+                        input: "".to_string(),
+                        abs_path: vec![],
+                        subtree: Subtree::LegacyPackages,
+                        system: "".to_string(),
+                        rel_path: vec!["npm".to_string(), "path".to_string()],
+                        pname: None,
+                        version: Some("1".to_string()),
+                        description: None,
+                        broken: None,
+                        unfree: None,
+                        license: None,
+                        id: 0,
+                    },
+                    SearchResult {
+                        input: "".to_string(),
+                        abs_path: vec![],
+                        subtree: Subtree::LegacyPackages,
+                        system: "".to_string(),
+                        rel_path: vec!["nodejs".to_string(), "path".to_string()], // should be disregarded
+                        pname: None,
+                        version: Some("0.1.14".to_string()), // should be disregarded
+                        description: None,
+                        broken: None,
+                        unfree: None,
+                        license: None,
+                        id: 0,
+                    },
+                )),
+            }
+            .get_init_customization(),
+            InitCustomization {
+                packages: Some(vec![
+                    PackageToInstall {
+                        id: "npm".to_string(),
+                        pkg_path: "npm.path".to_string(),
+                        version: Some("1".to_string()),
+                        input: None,
+                    }]),
+                hook: Some(NPM_HOOK.to_string()),
+            }
+        );
+    }
+
+    // TODO: all the get_package_manager() tests actually hit the database,
+    // and it might be better to mock out do_search().
+    // But I'm only seeing 11 tests take 1-1.5 seconds,
+    // so at this point I think there are bigger testing efficiency fish to fry.
+
+    fn flox_instance_with_locked_global_manifest() -> (Flox, TempDir) {
+        let (flox, _temp_dir_handle) = test_flox_instance();
+        let pkgdb_nixpkgs_rev_new = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
+        std::env::set_var("_PKGDB_GA_REGISTRY_REF_OR_REV", pkgdb_nixpkgs_rev_new);
+        LockedManifest::update_global_manifest(&flox, vec![]).unwrap();
+        (flox, _temp_dir_handle)
+    }
+
+    #[test]
+    fn test_get_package_manager_none() {
+        let (flox, _temp_dir_handle) = flox_instance_with_locked_global_manifest();
+        let package_manager = Node::get_package_manager(
+            &PackageJSONVersions {
+                npm: None,
+                yarn: None,
+                node: None,
+            },
+            false,
+            false,
+            &flox,
+        )
+        .unwrap()
+        .unwrap();
+        let (found_npm, found_node) = match package_manager {
+            PackageManager::Npm(found_npm, found_node) => (found_npm, found_node),
+            _ => panic!(),
+        };
+        assert_eq!(found_node.rel_path, vec!["nodejs".to_string()]);
+        assert_eq!(found_npm.rel_path, vec![
+            "nodePackages".to_string(),
+            "npm".to_string()
+        ]);
+    }
+
+    /// Test get_package_manager() when node has a version specified
+    #[test]
+    fn test_get_package_manager_node() {
+        let (flox, _temp_dir_handle) = flox_instance_with_locked_global_manifest();
+        let package_manager = Node::get_package_manager(
+            &PackageJSONVersions {
+                npm: None,
+                yarn: None,
+                node: Some("18".to_string()),
+            },
+            false,
+            false,
+            &flox,
+        )
+        .unwrap()
+        .unwrap();
+        let (found_npm, found_node) = match package_manager {
+            PackageManager::Npm(found_npm, found_node) => (found_npm, found_node),
+            _ => panic!(),
+        };
+        assert_eq!(found_node.rel_path, vec!["nodejs".to_string()]);
+        assert!(found_node.version.unwrap().starts_with("18"));
+        assert_eq!(found_npm.rel_path, vec![
+            "nodePackages".to_string(),
+            "npm".to_string()
+        ]);
+    }
+
+    /// Test get_package_manager() when node and npm have versions specified
+    #[test]
+    fn test_get_package_manager_node_and_npm() {
+        let (flox, _temp_dir_handle) = flox_instance_with_locked_global_manifest();
+        let package_manager = Node::get_package_manager(
+            &PackageJSONVersions {
+                npm: Some("10".to_string()),
+                yarn: None,
+                node: Some("18".to_string()),
+            },
+            false,
+            false,
+            &flox,
+        )
+        .unwrap()
+        .unwrap();
+        let (found_npm, found_node) = match package_manager {
+            PackageManager::Npm(found_npm, found_node) => (found_npm, found_node),
+            _ => panic!(),
+        };
+        assert_eq!(found_node.rel_path, vec!["nodejs".to_string()]);
+        assert!(found_node.version.unwrap().starts_with("18"));
+        assert_eq!(found_npm.rel_path, vec![
+            "nodePackages".to_string(),
+            "npm".to_string()
+        ]);
+        assert!(found_npm.version.unwrap().starts_with("10"));
+    }
+
+    /// Test get_package_manager() when node has a version specified not
+    /// compatible with the nixpkgs npm
+    #[test]
+    fn test_get_package_manager_node_and_npm_unavailable() {
+        let (flox, _temp_dir_handle) = flox_instance_with_locked_global_manifest();
+        let package_manager = Node::get_package_manager(
+            &PackageJSONVersions {
+                npm: Some("10".to_string()),
+                yarn: None,
+                node: Some("20".to_string()),
+            },
+            false,
+            false,
+            &flox,
+        )
+        .unwrap();
+        assert_eq!(package_manager, None);
+    }
+
+    /// Test get_package_manager() when node has a version specified not
+    /// compatible with the nixpkgs npm, even if the version of npm is not
+    /// specified.
+    #[test]
+    fn test_get_package_manager_node_not_compatible() {
+        let (flox, _temp_dir_handle) = flox_instance_with_locked_global_manifest();
+        let package_manager = Node::get_package_manager(
+            &PackageJSONVersions {
+                npm: None,
+                yarn: None,
+                node: Some("20".to_string()),
+            },
+            false,
+            false,
+            &flox,
+        )
+        .unwrap();
+        assert_eq!(package_manager, None);
+    }
+
+    /// Test get_package_manager() when a yarn.lock is present
+    #[test]
+    fn test_get_package_manager_yarn_lock() {
+        let (flox, _temp_dir_handle) = flox_instance_with_locked_global_manifest();
+        let package_manager = Node::get_package_manager(
+            &PackageJSONVersions {
+                npm: None,
+                yarn: None,
+                node: Some("18".to_string()),
+            },
+            false,
+            true,
+            &flox,
+        )
+        .unwrap()
+        .unwrap();
+        let (found_yarn, found_node) = match package_manager {
+            PackageManager::Yarn(found_yarn, found_node) => (found_yarn, found_node),
+            _ => panic!(),
+        };
+        assert_eq!(found_node.rel_path, vec!["nodejs".to_string()]);
+        assert!(found_node.version.unwrap().starts_with("18"));
+        assert_eq!(found_yarn.rel_path, vec!["yarn".to_string()]);
+        assert_eq!(found_yarn.version.unwrap(), "1.22.19");
+    }
+
+    /// Test get_package_manager() when node has a version specified not
+    /// compatible with the nixpkgs yarn, even if the version of yarn is not
+    /// specified.
+    #[test]
+    fn test_get_package_manager_node_not_compatible_with_yarn() {
+        let (flox, _temp_dir_handle) = flox_instance_with_locked_global_manifest();
+        let package_manager = Node::get_package_manager(
+            &PackageJSONVersions {
+                npm: None,
+                yarn: None,
+                node: Some("20".to_string()),
+            },
+            false,
+            true,
+            &flox,
+        )
+        .unwrap();
+        assert_eq!(package_manager, None);
+    }
+
+    /// Test get_package_manager() when the yarn version requested does not exist
+    #[test]
+    fn test_get_package_manager_yarn_incompatible() {
+        let (flox, _temp_dir_handle) = flox_instance_with_locked_global_manifest();
+        let package_manager = Node::get_package_manager(
+            &PackageJSONVersions {
+                npm: None,
+                yarn: Some("2".to_string()),
+                node: None,
+            },
+            false,
+            true,
+            &flox,
+        )
+        .unwrap();
+        assert_eq!(package_manager, None);
+    }
+
+    /// Test get_package_manager() when both locks are present
+    #[test]
+    fn test_get_package_manager_both_locks() {
+        let (flox, _temp_dir_handle) = flox_instance_with_locked_global_manifest();
+        let package_manager = Node::get_package_manager(
+            &PackageJSONVersions {
+                npm: None,
+                yarn: None,
+                node: None,
+            },
+            true,
+            true,
+            &flox,
+        )
+        .unwrap();
+        let (found_npm, found_yarn, found_node) = match package_manager {
+            Some(PackageManager::Both(found_npm, found_yarn, found_node)) => {
+                (found_npm, found_yarn, found_node)
+            },
+            _ => panic!(),
+        };
+        assert_eq!(found_npm.rel_path, vec![
+            "nodePackages".to_string(),
+            "npm".to_string()
+        ]);
+        assert!(found_npm.version.unwrap().starts_with("10"));
+        assert_eq!(found_node.rel_path, vec!["nodejs".to_string()]);
+        assert!(found_node.version.unwrap().starts_with("18"));
+        assert_eq!(found_yarn.rel_path, vec!["yarn".to_string()]);
+        assert_eq!(found_yarn.version.unwrap(), "1.22.19");
+    }
+
+    /// Test get_package_manager() when both locks are present and the version of npm cannot be provided
+    #[test]
+    fn test_get_package_manager_both_locks_unavailable_npm() {
+        let (flox, _temp_dir_handle) = flox_instance_with_locked_global_manifest();
+        let package_manager = Node::get_package_manager(
+            &PackageJSONVersions {
+                npm: Some("11".to_string()),
+                yarn: None,
+                node: None,
+            },
+            true,
+            true,
+            &flox,
+        )
+        .unwrap();
+        let (found_yarn, found_node) = match package_manager {
+            Some(PackageManager::Yarn(found_yarn, found_node)) => (found_yarn, found_node),
+            _ => panic!(),
+        };
+        assert_eq!(found_node.rel_path, vec!["nodejs".to_string()]);
+        assert!(found_node.version.unwrap().starts_with("18"));
+        assert_eq!(found_yarn.rel_path, vec!["yarn".to_string()]);
+        assert_eq!(found_yarn.version.unwrap(), "1.22.19");
+    }
+
+    /// Test get_package_manager() when both locks are present but requested
+    /// versions of both npm and yarn are unavailable
+    #[test]
+    fn test_get_package_manager_both_locks_both_unavailable() {
+        let (flox, _temp_dir_handle) = flox_instance_with_locked_global_manifest();
+        let package_manager = Node::get_package_manager(
+            &PackageJSONVersions {
+                npm: Some("11".to_string()),
+                yarn: Some("2".to_string()),
+                node: None,
+            },
+            true,
+            true,
+            &flox,
+        )
+        .unwrap();
+        assert_eq!(package_manager, None);
     }
 }

@@ -147,6 +147,8 @@ pub struct Query {
     pub name: Option<String>,
     /// Match against the `pname` of the package
     pub pname: Option<String>,
+    /// Match against the `relPath` of the package
+    pub rel_path: Option<Vec<String>>,
     /// Match against the explicit version number of the package
     pub version: Option<String>,
     /// Match against a semver specifier
