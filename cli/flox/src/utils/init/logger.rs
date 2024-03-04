@@ -6,7 +6,6 @@ use tracing_subscriber::prelude::*;
 use tracing_subscriber::Registry;
 
 use crate::commands::Verbosity;
-use crate::utils::logger::{self, LogFormatter};
 use crate::utils::metrics::MetricsLayer;
 use crate::utils::TERMINAL_STDERR;
 
@@ -43,7 +42,7 @@ static LOGGER_HANDLE: OnceCell<
             Layer<
                 Registry,
                 tracing_subscriber::fmt::format::DefaultFields,
-                LogFormatter,
+                tracing_subscriber::fmt::format::Format,
                 LockingTerminalStderr,
             >,
             tracing_subscriber::EnvFilter,
@@ -54,7 +53,6 @@ static LOGGER_HANDLE: OnceCell<
 > = OnceCell::new();
 pub fn init_logger(verbosity: Option<Verbosity>) {
     let verbosity = verbosity.unwrap_or_default();
-    let debug = matches!(verbosity, Verbosity::Verbose(1..));
 
     let log_filter = match verbosity {
         // Show only errors
@@ -85,7 +83,7 @@ pub fn init_logger(verbosity: Option<Verbosity>) {
 
         let fmt_filtered = tracing_subscriber::fmt::layer()
             .with_writer(LockingTerminalStderr)
-            .event_format(logger::LogFormatter { debug })
+            .event_format(tracing_subscriber::fmt::format())
             .with_filter(filter);
 
         let (fmt_filtered, fmt_reload_handle) =
