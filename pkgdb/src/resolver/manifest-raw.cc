@@ -471,8 +471,8 @@ from_json( const nlohmann::json & jfrom, HookRaw & hook )
                                                     "manifest field 'hook'" );
 
   /* Clear fields. */
-  hook.file   = std::nullopt;
-  hook.script = std::nullopt;
+  hook.script     = std::nullopt;
+  hook.onActivate = std::nullopt;
 
   for ( const auto & [key, value] : jfrom.items() )
     {
@@ -489,16 +489,16 @@ from_json( const nlohmann::json & jfrom, HookRaw & hook )
                 + value.dump() );
             }
         }
-      else if ( key == "file" )
+      else if ( key == "on-activate" )
         {
           try
             {
-              value.get_to( hook.file );
+              value.get_to( hook.onActivate );
             }
           catch ( const nlohmann::json::exception & )
             {
               throw InvalidManifestFileException(
-                "failed to parse manifest field 'hook.file' with value: "
+                "failed to parse manifest field 'hook.on-activate' with value: "
                 + value.dump() );
             }
         }
@@ -517,8 +517,11 @@ static void
 to_json( nlohmann::json & jto, const HookRaw & hook )
 {
   hook.check();
-  if ( hook.file.has_value() ) { jto = { { "file", *hook.file } }; }
-  else if ( hook.script.has_value() ) { jto = { { "script", *hook.script } }; }
+  if ( hook.script.has_value() ) { jto = { { "script", *hook.script } }; }
+  else if ( hook.onActivate.has_value() )
+    {
+      jto = { { "on-activate", *hook.onActivate } };
+    }
   else { jto = nlohmann::json::object(); }
 }
 
@@ -528,14 +531,11 @@ to_json( nlohmann::json & jto, const HookRaw & hook )
 void
 HookRaw::check() const
 {
-  auto hasAtMostOneActivationScript = this->script.has_value()
-                                      ^ this->file.has_value()
-                                      ^ this->onActivate.has_value();
-  if ( ! hasAtMostOneActivationScript )
+  if ( this->script.has_value() && this->onActivate.has_value() )
     {
       throw InvalidManifestFileException(
-        "hook may only define one of 'hook.script', 'hook.file', or "
-        "`hook.on-activate` fields." );
+        "hook may only define one of 'hook.script' or `hook.on-activate` "
+        "fields." );
     }
 }
 

@@ -98,15 +98,8 @@ setup_file() {
   assert_output "script"
 }
 
-# bats test_tags=hook,file
-@test "Built environment includes hook file" {
-  skip "Hook files require path"
-  run "$PKGDB_BIN" buildenv "$LOCKFILES/hook-file/manifest.lock" \
-    --out-link "$BATS_TEST_TMPDIR/env"
-  assert_success
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/hook.sh"
-  run "$CAT" "$BATS_TEST_TMPDIR/env/activate/hook.sh"
-  assert_output "file"
+@test "Built enviroment includes 'on-activate' script" {
+  skip "FIXME: write this test"
 }
 
 # --------------------------------------------------------------------------- #

@@ -1,0 +1,10 @@
+[install]
+
+[vars]
+
+[hook]
+on-activate = """
+    echo "hello flox"
+"""
+
+[options]

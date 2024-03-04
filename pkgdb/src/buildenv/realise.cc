@@ -655,25 +655,18 @@ makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile )
   /* Add hook script.
    * Write hook script to a temporary file and copy it to the environment.
    * Add source command to the activate script. */
-  // TODO: is it script _xor_ file?
-  // Currently it is assumed that `hook.script` and `hook.file` are
-  // mutually exclusive.
-  // If both are set, `hook.file` takes precedence.
-  if ( auto hook = lockfile.getManifest().getManifestRaw().hook )
+  if ( auto hookScript = lockfile.getManifest().getManifestRaw().hook )
     {
       nix::Path script_path;
 
-      /* Either set script path to a temporary file. */
-      if ( auto script = hook->script )
+      /* Set script path to a temporary file. */
+      if ( auto script = hookScript->script )
         {
           script_path = nix::createTempFile().second;
           std::ofstream file( script_path );
           file << script.value();
           file.close();
         }
-
-      /* ...Or to the file specified in the manifest. */
-      if ( auto file = hook->file ) { script_path = file.value(); }
 
       if ( ! script_path.empty() )
         {

@@ -406,9 +406,8 @@ bool
 test_hookAllowsAtMostOneActivationHook()
 {
   flox::resolver::HookRaw hook;
-  hook.script     = "";
-  hook.file       = "";
-  hook.onActivate = "";
+  hook.script     = "foo";
+  hook.onActivate = "foo";
   try
     {
       hook.check();
@@ -418,6 +417,21 @@ test_hookAllowsAtMostOneActivationHook()
       return true;
     }
   return false;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+bool
+test_parseManifestRawWithOnActivateScript()
+{
+  std::ifstream ifs( TEST_DATA_DIR "/manifest/on-activate.toml" );
+
+  std::string toml( ( std::istreambuf_iterator<char>( ifs ) ),
+                    ( std::istreambuf_iterator<char>() ) );
+
+  flox::resolver::ManifestRaw manifest = flox::tomlToJSON( toml );
+  return true;
 }
 
 
@@ -453,6 +467,9 @@ main()
 
   RUN_TEST( GlobalManifestGA_getRegistryRaw0 );
   RUN_TEST( EnvironmentManifestGA_getRegistryRaw0 );
+
+  RUN_TEST( hookAllowsAtMostOneActivationHook );
+  RUN_TEST( parseManifestRawWithOnActivateScript );
 
   return exitCode;
 }
