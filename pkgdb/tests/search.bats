@@ -484,6 +484,13 @@ genParamsNixpkgsFlox() {
 
 # bats tests_tags=search
 
+@test "'pkgdb is properly scraping nodePackages" {
+  params="$(genGMParams ".query.pname=\"npm\" | .manifest.options.systems=[\"x86_64-linux\"]")"
+  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
+  assert_success
+  assert_equal "${#lines[@]}" 2
+}
+
 @test "'pkgdb search' with ' in search term" {
   skip "FIXME: no results"
   params="$(genGMParams ".query.match=\"hello'\" | .manifest.options.systems=[\"x86_64-linux\"]")"

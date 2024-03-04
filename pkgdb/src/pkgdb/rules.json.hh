@@ -16,12 +16,14 @@
    Current rules explanation:
     - legacyPackages.*.darwin is not scraped using default logic
     - legacyPackages.*.swiftPackages.darwin is not scraped using default logic
+    - legacyPackages.*.nodePackages is not scraped using default logic
 */
 R"_JSON(
 {
     "allowRecursive": [
        ["legacyPackages", null, "darwin"],
-       ["legacyPackages", null, "swiftPackages", "darwin"]
+       ["legacyPackages", null, "swiftPackages", "darwin"],
+       ["legacyPackages", null, "nodePackages"]
     ]
 }
 )_JSON"
