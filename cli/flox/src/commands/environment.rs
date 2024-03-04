@@ -721,7 +721,7 @@ impl Activate {
 
         let message = formatdoc! {"
                 You are now using the environment {now_active}.
-                To stop using this environment, type 'exit'"};
+                To stop using this environment, type 'exit'\n"};
         message::updated(message);
 
         // exec should never return
