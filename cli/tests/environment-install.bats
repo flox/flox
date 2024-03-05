@@ -114,7 +114,7 @@ teardown() {
   # rather than hardcoding package names.
   assert_output --partial "flox install nodejs"
   assert_output --partial "flox install elmPackages.nodejs"
-  assert_output --partial "flox install nodejs_21"
+  assert_output --partial "flox install nodePackages.nodejs"
 }
 
 @test "'flox install' provides curated suggestions when package not found" {

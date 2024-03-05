@@ -123,13 +123,13 @@ genParamsNixpkgsFlox() {
   $PKGDB_BIN search "$params"
   run sh -c "$PKGDB_BIN search '$params' | wc -l"
   assert_success
-  assert_output 4
+  assert_output 5
 
   params="$(genParams ".query.pname|=\"nodejs\"|.query.semver=\"18.18\"")"
   $PKGDB_BIN search "$params"
   run sh -c "$PKGDB_BIN search '$params' | wc -l"
   assert_success
-  assert_output 4
+  assert_output 5
 }
 
 # ---------------------------------------------------------------------------- #
