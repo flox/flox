@@ -136,7 +136,7 @@ pub enum ManagedEnvironmentError {
     #[error("could not canonicalize environment path")]
     CanonicalizePath(#[source] CanonicalizeError),
 
-    #[error("invalid floxhub base url")]
+    #[error("invalid FloxHub base url")]
     InvalidFloxhubBaseUrl(#[source] url::ParseError),
 }
 
@@ -907,7 +907,7 @@ fn write_pointer_lockfile(
 /// When pulling the same remote environment in multiple directories,
 /// unique copies of the environment are created.
 /// I.e. `install`ing a package in one directory does not affect the other
-/// until synchronized through floxhub.
+/// until synchronized through FloxHub.
 /// To identify the individual branches per directory,
 /// the directory path is encoded using [`ManagedEnvironment::encode`].
 ///
@@ -928,7 +928,7 @@ fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> Strin
 /// In most cases [`branch_name`] should be used over this,
 /// within the context of an instance of [ManagedEnvironment].
 ///
-/// [`remote_branch_name`] is primarily used when talking to upstream on floxhub,
+/// [`remote_branch_name`] is primarily used when talking to upstream on FloxHub,
 /// during opening to reconciliate with the upsream repo
 /// as well as during [`ManagedEnvironment::pull`].
 pub fn remote_branch_name(pointer: &ManagedPointer) -> String {
@@ -956,7 +956,7 @@ pub enum PullResult {
 
 impl ManagedEnvironment {
     /// If access to a remote repository requires authentication,
-    /// the floxhub token must be set in the flox instance.
+    /// the FloxHub token must be set in the flox instance.
     /// The caller is responsible for ensuring that the token is present and valid.
     pub fn push_new(
         flox: &Flox,

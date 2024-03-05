@@ -75,7 +75,7 @@ teardown() {
   "$FLOX_BIN" install hello
   run "$FLOX_BIN" push --owner "$OWNER" --force
   assert_success
-  assert_output --partial "pushed to floxhub (forced)"
+  assert_output --partial "pushed to FloxHub (forced)"
 }
 
 # This should pull the environment created by the previous run on a different

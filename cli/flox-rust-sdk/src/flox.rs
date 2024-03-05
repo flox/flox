@@ -43,7 +43,7 @@ pub struct Flox {
 
     pub floxhub: Floxhub,
 
-    /// Token to authenticate with floxhub.
+    /// Token to authenticate with FloxHub.
     /// It's usually populated from the config during [Flox] initialization.
     /// Checking for [None] can be used to check if the use is logged in.
     pub floxhub_token: Option<FloxhubToken>,
@@ -64,7 +64,7 @@ impl AsRef<str> for FloxhubToken {
 }
 
 impl FloxhubToken {
-    /// Create a new floxhub token from a string
+    /// Create a new FloxHub token from a string
     pub fn new(token: String) -> Self {
         FloxhubToken(token)
     }
@@ -119,7 +119,7 @@ impl Floxhub {
         })
     }
 
-    /// Return the base url of the floxhub instance
+    /// Return the base url of the FloxHub instance
     /// might change to a more specific url in the future
     pub fn base_url(&self) -> &Url {
         &self.base_url
@@ -129,11 +129,11 @@ impl Floxhub {
         self.git_url_overridden.then_some(&self.git_url)
     }
 
-    /// Return the url of the floxhub git interface
+    /// Return the url of the FloxHub git interface
     ///
     /// If the environment variable `_FLOX_FLOXHUB_GIT_URL` is set,
-    /// it will be used instead of the derived floxhub host.
-    /// This is useful for testing floxhub locally.
+    /// it will be used instead of the derived FloxHub host.
+    /// This is useful for testing FloxHub locally.
     pub fn git_url(&self) -> &Url {
         &self.git_url
     }
@@ -173,7 +173,7 @@ pub mod tests {
 
     use super::*;
 
-    /// A fake floxhub token
+    /// A fake FloxHub token
     ///
     /// {
     ///  "typ": "JWT",

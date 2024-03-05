@@ -216,9 +216,9 @@ impl FloxArgs {
         let git_url_override = {
             if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
                 message::warning(formatdoc! {"
-                    Using {env_set_host} as floxhub host
+                    Using {env_set_host} as FloxHub host
                     '$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
-                    alternative floxhub hosts are not yet supported!
+                    alternative FloxHub hosts are not yet supported!
                 "});
                 Some(Url::parse(&env_set_host)?)
             } else {

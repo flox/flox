@@ -388,7 +388,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
 
         // todo: enrich with url
         ManagedEnvironmentError::InvalidFloxhubBaseUrl(err) => formatdoc! {"
-            The floxhub base url set in the config is invalid: {err}
+            The FloxHub base url set in the config is invalid: {err}
 
             Please ensure that the url
             * is either a valid http or https url

@@ -133,7 +133,7 @@ impl Edit {
                     message::updated(format!("renamed environment {old_name} to {name}"));
                 } else {
                     // todo: handle remote environments in the future
-                    bail!("Cannot rename environments on floxhub");
+                    bail!("Cannot rename environments on FloxHub");
                 }
             },
         }
@@ -1415,12 +1415,12 @@ impl Push {
         if flox.floxhub_token.is_none() {
             if !Dialog::can_prompt() {
                 let message = formatdoc! {"
-                    You are not logged in to floxhub.
+                    You are not logged in to FloxHub.
 
-                    Can not automatically login to floxhub in non-interactive context.
+                    Can not automatically login to FloxHub in non-interactive context.
 
                     To login you can either
-                    * login to floxhub with 'flox auth login',
+                    * login to FloxHub with 'flox auth login',
                     * set the 'floxhub_token' field to '<your token>' in your config
                     * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable."
                 };
@@ -1479,7 +1479,7 @@ impl Push {
         Ok(())
     }
 
-    /// pushes a path environment in a directory to floxhub and makes it a managed environment
+    /// pushes a path environment in a directory to FloxHub and makes it a managed environment
     fn push_make_managed(
         flox: &Flox,
         path_pointer: PathPointer,
@@ -1539,7 +1539,7 @@ impl Push {
 
     /// construct a message for an updated environment
     ///
-    /// todo: add floxhub base url when it's available
+    /// todo: add FloxHub base url when it's available
     fn push_existing_message(env: &ManagedPointer, force: bool) -> String {
         let owner = &env.owner;
         let name = &env.name;
@@ -1547,7 +1547,7 @@ impl Push {
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            Updates to {name} successfully pushed to floxhub{suffix}
+            Updates to {name} successfully pushed to FloxHub{suffix}
 
             Use 'flox pull {owner}/{name}' to get this environment in any other location.
         "}
@@ -1555,7 +1555,7 @@ impl Push {
 
     /// construct a message for a newly created environment
     ///
-    /// todo: add floxhub base url when it's available
+    /// todo: add FloxHub base url when it's available
     fn push_new_message(env: &ManagedPointer, force: bool) -> String {
         let owner = &env.owner;
         let name = &env.name;
@@ -1563,7 +1563,7 @@ impl Push {
         let suffix = if force { " (forced)" } else { "" };
 
         formatdoc! {"
-            {name} successfully pushed to floxhub{suffix}
+            {name} successfully pushed to FloxHub{suffix}
 
             Use 'flox pull {owner}/{name}' to get this environment in any other location.
         "}
@@ -1684,7 +1684,7 @@ impl Pull {
         Ok(())
     }
 
-    /// Update an existing environment with the latest version from floxhub
+    /// Update an existing environment with the latest version from FloxHub
     ///
     /// Opens the environment and calls [ManagedEnvironment::pull] on it,
     /// which will update the lockfile.
@@ -1703,7 +1703,7 @@ impl Pull {
         Ok(state)
     }
 
-    /// Pull a new environment from floxhub into the given directory
+    /// Pull a new environment from FloxHub into the given directory
     ///
     /// This will create a new environment in the given directory.
     /// Uses [ManagedEnvironment::open] which will try to clone the environment.
