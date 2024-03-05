@@ -2067,7 +2067,13 @@ impl Update {
                     new_lockfile,
                     old_lockfile,
                     ..
-                } = self.update_manifest(flox, concrete_environment)?;
+                } = Dialog {
+                    message: "Updating environment...",
+                    help_message: None,
+                    typed: Spinner::new(|| self.update_manifest(flox, concrete_environment)),
+                }
+                .spin()?;
+
                 (
                     old_lockfile
                         .map(TypedLockedManifest::try_from)
@@ -2082,7 +2088,15 @@ impl Update {
                     new_lockfile,
                     old_lockfile,
                     ..
-                } = LockedManifest::update_global_manifest(&flox, self.inputs)?;
+                } = Dialog {
+                    message: "Updating global-manifest...",
+                    help_message: None,
+                    typed: Spinner::new(|| {
+                        LockedManifest::update_global_manifest(&flox, self.inputs)
+                    }),
+                }
+                .spin()?;
+
                 (
                     old_lockfile
                         .map(TypedLockedManifest::try_from)
