@@ -38,6 +38,7 @@
 #include "flox/pkgdb/db-package.hh"
 #include "flox/pkgdb/input.hh"
 #include "flox/pkgdb/pkg-query.hh"
+#include "flox/pkgdb/scrape-rules.hh"
 #include "flox/pkgdb/write.hh"
 #include "test.hh"
 
@@ -57,7 +58,7 @@ static const nlohmann::json pkgDescriptorBaseRaw = R"( {
 
 /* -------------------------------------------------------------------------- */
 
-static const nlohmann::json rulesJSON = R"( {
+static const std::string_view rulesJSON = R"( {
   "allowRecursive": [
     ["legacyPackages", null, "darwin"],
     ["legacyPackages", null, "swiftPackages", "darwin"]
@@ -72,7 +73,7 @@ static const nlohmann::json rulesJSON = R"( {
  "disallowPackage": [
    ["legacyPackages", null, "gcc"]
  ]
-} )"_json;
+} )";
 
 /* -------------------------------------------------------------------------- */
 
@@ -969,8 +970,19 @@ test_getPackages_semver0( flox::pkgdb::PkgDb & db )
 bool
 test_RulesTree_parse0()
 {
-  flox::pkgdb::RulesTreeNode rules(
-    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
+  flox::pkgdb::ScrapeRules rules( rulesJSON );
+  return true;
+}
+
+/**
+ * @brief Ensure parsing @a flox::pkgdb::RulesTreeNode from JSON doesn't throw.
+ */
+bool
+test_RulesTree_hash()
+{
+  flox::pkgdb::ScrapeRules rules( rulesJSON );
+  auto                     hashStr = rules.hashString();
+  EXPECT_EQ( hashStr, "md5:9d81a5b907db9b19cc84ba41af36150b" );
   return true;
 }
 
@@ -1007,10 +1019,10 @@ test_RulesTree_parse0_badRules()
 bool
 test_RulesTree_parse1()
 {
-  flox::pkgdb::RulesTreeNode rules(
-    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
+  flox::pkgdb::ScrapeRules     scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode   rulesRoot = scrapeRules.getRootNode();
+  flox::pkgdb::RulesTreeNode * node      = &rulesRoot;
   flox::AttrPath path = { "legacyPackages", "x86_64-linux", "darwin" };
-  flox::pkgdb::RulesTreeNode * node = &rules;
   for ( const std::string & attr : path )
     {
       if ( node->children.find( attr ) == node->children.end() )
@@ -1029,9 +1041,10 @@ test_RulesTree_parse1()
 bool
 test_RulesTree_getRule_fallback0()
 {
-  flox::pkgdb::RulesTreeNode rules(
-    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
-  flox::pkgdb::ScrapeRule rule = rules.getRule( flox::AttrPath { "phony" } );
+  flox::pkgdb::ScrapeRules   scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode rulesRoot = scrapeRules.getRootNode();
+  flox::pkgdb::ScrapeRule    rule
+    = rulesRoot.getRule( flox::AttrPath { "phony" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
   return true;
 }
@@ -1043,33 +1056,33 @@ test_RulesTree_getRule_fallback0()
 bool
 test_RulesTree_getRule0()
 {
-  flox::pkgdb::RulesTreeNode rules(
-    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
+  flox::pkgdb::ScrapeRules   scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode rulesRoot = scrapeRules.getRootNode();
 
   flox::pkgdb::ScrapeRule rule
-    = rules.getRule( flox::AttrPath { "legacyPackages", "x86_64-linux" } );
+    = rulesRoot.getRule( flox::AttrPath { "legacyPackages", "x86_64-linux" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
 
-  rule = rules.getRule(
+  rule = rulesRoot.getRule(
     flox::AttrPath { "legacyPackages", "x86_64-linux", "darwin" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
 
-  rule = rules.getRule(
+  rule = rulesRoot.getRule(
     flox::AttrPath { "legacyPackages", "x86_64-darwin", "darwin" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
 
-  rule = rules.getRule(
+  rule = rulesRoot.getRule(
     flox::AttrPath { "legacyPackages", "aarch64-linux", "darwin" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
 
-  rule = rules.getRule(
+  rule = rulesRoot.getRule(
     flox::AttrPath { "legacyPackages", "aarch64-darwin", "darwin" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
 
-  rule = rules.getRule( flox::AttrPath { "legacyPackages",
-                                         "aarch64-darwin",
-                                         "swiftPackages",
-                                         "darwin" } );
+  rule = rulesRoot.getRule( flox::AttrPath { "legacyPackages",
+                                             "aarch64-darwin",
+                                             "swiftPackages",
+                                             "darwin" } );
   EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
   return true;
 }
@@ -1083,10 +1096,10 @@ test_RulesTree_getRule0()
 bool
 test_RulesTree_getRule1()
 {
-  flox::pkgdb::RulesTreeNode rules(
-    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
+  flox::pkgdb::ScrapeRules   scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode rulesRoot = scrapeRules.getRootNode();
 
-  flox::pkgdb::ScrapeRule rule = rules.children.at( "legacyPackages" )
+  flox::pkgdb::ScrapeRule rule = rulesRoot.children.at( "legacyPackages" )
                                    .children.at( "x86_64-linux" )
                                    .children.at( "python310Packages" )
                                    .children.at( "pip" )
@@ -1094,10 +1107,10 @@ test_RulesTree_getRule1()
   EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_PACKAGE );
 
   flox::pkgdb::ScrapeRule rule2
-    = rules.getRule( flox::AttrPath { "legacyPackages",
-                                      "x86_64-linux",
-                                      "python310Packages",
-                                      "pip" } );
+    = rulesRoot.getRule( flox::AttrPath { "legacyPackages",
+                                          "x86_64-linux",
+                                          "python310Packages",
+                                          "pip" } );
   EXPECT_EQ( rule2, flox::pkgdb::SR_ALLOW_PACKAGE );
   return true;
 }
@@ -1116,10 +1129,10 @@ test_RulesTree_getRule1()
 bool
 test_RulesTree_getRule2()
 {
-  flox::pkgdb::RulesTreeNode rules(
-    rulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
+  flox::pkgdb::ScrapeRules   scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode rulesRoot = scrapeRules.getRootNode();
 
-  flox::pkgdb::ScrapeRule rule = rules.children.at( "legacyPackages" )
+  flox::pkgdb::ScrapeRule rule = rulesRoot.children.at( "legacyPackages" )
                                    .children.at( "x86_64-linux" )
                                    .children.at( "python310Packages" )
                                    .children.at( "pip" )
@@ -1127,17 +1140,17 @@ test_RulesTree_getRule2()
   EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_PACKAGE );
 
   flox::pkgdb::ScrapeRule rule2
-    = rules.getRule( flox::AttrPath { "legacyPackages",
-                                      "x86_64-linux",
-                                      "python310Packages",
-                                      "pip" } );
+    = rulesRoot.getRule( flox::AttrPath { "legacyPackages",
+                                          "x86_64-linux",
+                                          "python310Packages",
+                                          "pip" } );
   EXPECT_EQ( rule2, flox::pkgdb::SR_ALLOW_PACKAGE );
 
   flox::pkgdb::ScrapeRule rule3
-    = rules.getRule( flox::AttrPath { "legacyPackages",
-                                      "x86_64-linux",
-                                      "swiftPackages",
-                                      "darwin" } );
+    = rulesRoot.getRule( flox::AttrPath { "legacyPackages",
+                                          "x86_64-linux",
+                                          "swiftPackages",
+                                          "darwin" } );
   EXPECT_EQ( rule3, flox::pkgdb::SR_ALLOW_RECURSIVE );
   return true;
 }
@@ -1237,6 +1250,7 @@ main( int argc, char * argv[] )
     RUN_TEST( RulesTree_getRule0 );
     RUN_TEST( RulesTree_getRule1 );
     RUN_TEST( RulesTree_getRule2 );
+    RUN_TEST( RulesTree_hash );
   }
 
   /* XXX: You may find it useful to preserve the file and print it for some

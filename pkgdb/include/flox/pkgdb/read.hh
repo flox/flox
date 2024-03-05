@@ -93,13 +93,25 @@ struct SqlVersions
 
 }; /* End struct `SqlVersions' */
 
+/** @brief SQLite3 schema fields for DbScrapeMeta table. */
+struct ScrapeMeta
+{
+  /**
+   * The hash representing the Scraping rules used to generate the database.
+   * This is checked upon opening and if they differ than the rules expected in
+   * the running version of pkgdb, the datbase is invalidated so it will be
+   * recreated on the *next* invocation.
+   */
+  std::string rulesHash;
+};
+
 /** @brief Emit version information to an output stream. */
 std::ostream &
 operator<<( std::ostream & oss, const SqlVersions & versions );
 
 
 /** The current SQLite3 schema versions. */
-constexpr SqlVersions sqlVersions = { .tables = 2, .views = 4 };
+constexpr SqlVersions sqlVersions = { .tables = 3, .views = 4 };
 
 
 /* -------------------------------------------------------------------------- */
@@ -264,6 +276,10 @@ public:
   /** @return The Package Database schema version. */
   SqlVersions
   getDbVersion();
+
+  /** @return The Package Database scrape meta fields. */
+  ScrapeMeta
+  getDbScrapeMeta();
 
   /**
    * @brief Get the `AttrSet.id` for a given path.

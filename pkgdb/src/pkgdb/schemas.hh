@@ -20,9 +20,13 @@ static const char * sql_versions = R"SQL(
 CREATE TABLE IF NOT EXISTS DbVersions (
   name     TEXT NOT NULL PRIMARY KEY
 , version  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS DbScrapeMeta (
+  key      TEXT NOT NULL PRIMARY KEY
+, value    TEXT NOT NULL
 )
 )SQL";
-
 
 /* -------------------------------------------------------------------------- */
 

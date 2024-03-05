@@ -25,6 +25,7 @@
 
 #include "flox/core/exceptions.hh"
 #include "flox/pkgdb/input.hh"
+#include "flox/pkgdb/scrape-rules.hh"
 #include "flox/pkgdb/write.hh"
 
 
@@ -72,12 +73,19 @@ PkgDbInput::init()
     }
 
   /* If the schema version is bad, delete the DB so it will be recreated. */
-  SqlVersions dbVersions = this->dbRO->getDbVersion();
-  if ( dbVersions.tables != sqlVersions.tables )
+  const ScrapeRules & scrapeRules  = getDefaultRules();
+  SqlVersions         dbVersions   = this->dbRO->getDbVersion();
+  ScrapeMeta          dbScrapeMeta = this->dbRO->getDbScrapeMeta();
+  if ( bool rulesMatch = ( dbScrapeMeta.rulesHash == scrapeRules.hashString() );
+       dbVersions.tables != sqlVersions.tables || ! rulesMatch )
     {
       nix::logger->log(
         nix::lvlTalkative,
-        nix::fmt( "Clearing outdated database '%s'", this->dbPath.string() ) );
+        nix::fmt( "Outdated database '%s'", this->dbPath.string() ) );
+      nix::logger->log( nix::lvlTalkative,
+                        nix::fmt( "Clearing due to %s",
+                                  rulesMatch ? "table schema being outdated"
+                                             : "scraping rules mismatch" ) );
       std::filesystem::remove( this->dbPath );
       PkgDb( this->getFlake()->lockedFlake, this->dbPath.string() );
     }
