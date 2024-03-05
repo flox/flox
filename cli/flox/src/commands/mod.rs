@@ -16,6 +16,7 @@ use flox_rust_sdk::flox::{
     EnvironmentRef,
     Flox,
     Floxhub,
+    FloxhubToken,
     DEFAULT_FLOXHUB_URL,
     DEFAULT_NAME,
     FLOX_VERSION,
@@ -241,6 +242,13 @@ impl FloxArgs {
             git_url_override,
         )?;
 
+        let floxhub_token = config
+            .flox
+            .floxhub_token
+            .as_deref()
+            .map(FloxhubToken::from_str)
+            .transpose()?;
+
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
@@ -250,7 +258,7 @@ impl FloxArgs {
             temp_dir: temp_dir_path.clone(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             uuid: init_uuid(&config.flox.data_dir).await?,
-            floxhub_token: config.flox.floxhub_token.clone(),
+            floxhub_token,
             floxhub,
         };
 

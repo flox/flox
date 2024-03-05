@@ -4,7 +4,7 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
-use flox_rust_sdk::flox::{EnvironmentRef, FloxhubToken};
+use flox_rust_sdk::flox::EnvironmentRef;
 use itertools::{Either, Itertools};
 use log::{debug, trace};
 use once_cell::sync::OnceCell;
@@ -54,7 +54,12 @@ pub struct FloxConfig {
     pub config_dir: PathBuf,
 
     /// Token to authenticate on FloxHub
-    pub floxhub_token: Option<FloxhubToken>,
+    ///
+    /// Note: This does _not_ use [flox_rust_sdk::flox::FloxhubToken] because
+    /// parsing the token -- and thus parsing the config -- fails if the token is expired.
+    /// Instead parse as String (or some specialized enum to support keychains in the future)
+    /// and then validate the token as we build the [flox_rust_sdk::flox::Flox] instance.
+    pub floxhub_token: Option<String>,
 
     /// How many items `flox search` should show by default
     pub search_limit: Option<u8>,
