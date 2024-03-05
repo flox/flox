@@ -193,8 +193,6 @@ impl Auth {
                 Ok(())
             },
             Auth::Logout => {
-                create_oauth_client()?;
-
                 if config.flox.floxhub_token.is_none() {
                     message::warning("You are not logged in");
                     return Ok(());
