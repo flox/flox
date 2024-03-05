@@ -27,6 +27,7 @@ use crate::models::manifest::{
     TomlEditError,
 };
 use crate::models::pkgdb::{CallPkgDbError, UpgradeResult, UpgradeResultJSON, PKGDB_BIN};
+use crate::utils::CommandExt;
 
 pub struct ReadOnly {}
 struct ReadWrite {}
@@ -418,7 +419,10 @@ impl CoreEnvironment<ReadOnly> {
         }
         pkgdb_cmd.args(groups_or_iids);
 
-        debug!("upgrading environment with command: {pkgdb_cmd:?}");
+        debug!(
+            "upgrading environment with command: {}",
+            pkgdb_cmd.display()
+        );
         let json: UpgradeResultJSON = serde_json::from_value(
             call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::UpgradeFailed)?,
         )

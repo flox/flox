@@ -37,6 +37,8 @@ pub mod error_codes {
     pub const PACKAGE_EVAL_FAILURE: u64 = 125;
     /// The package failed to build
     pub const PACKAGE_BUILD_FAILURE: u64 = 126;
+    /// The package does not pass the options check
+    pub const BAD_PACKAGE_FAILURE: u64 = 127;
 }
 
 /// The JSON output of a `pkgdb upgrade` call

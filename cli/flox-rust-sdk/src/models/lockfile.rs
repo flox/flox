@@ -22,6 +22,7 @@ use crate::models::environment::{
     CanonicalPath,
 };
 use crate::models::pkgdb::{call_pkgdb, BuildEnvResult, PKGDB_BIN};
+use crate::utils::CommandExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Input {
@@ -65,7 +66,7 @@ impl LockedManifest {
             .arg("--lockfile")
             .arg(existing_lockfile_path);
 
-        debug!("locking manifest with command: {pkgdb_cmd:?}");
+        debug!("locking manifest with command: {}", pkgdb_cmd.display());
         call_pkgdb(pkgdb_cmd)
             .map_err(LockedManifestError::LockManifest)
             .map(Self)
@@ -91,7 +92,7 @@ impl LockedManifest {
             }
         }
 
-        debug!("building environment with command: {pkgdb_cmd:?}");
+        debug!("building environment with command: {}", pkgdb_cmd.display());
 
         let result: BuildEnvResult =
             serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::BuildEnv)?)
@@ -112,7 +113,10 @@ impl LockedManifest {
             .arg("--container")
             .arg(&self.to_string());
 
-        debug!("building container builder with command: {pkgdb_cmd:?}");
+        debug!(
+            "building container builder with command: {}",
+            pkgdb_cmd.display()
+        );
         let result: BuildEnvResult =
             serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::BuildEnv)?)
                 .map_err(LockedManifestError::ParseBuildEnvOutput)?;
@@ -163,7 +167,7 @@ impl LockedManifest {
 
         pkgdb_cmd.args(inputs);
 
-        debug!("updating lockfile with command: {pkgdb_cmd:?}");
+        debug!("updating lockfile with command: {}", pkgdb_cmd.display());
         let lockfile: LockedManifest =
             LockedManifest(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::UpdateFailed)?);
 
@@ -213,6 +217,24 @@ impl LockedManifest {
     pub fn read_from_file(path: &CanonicalPath) -> Result<Self, LockedManifestError> {
         let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
         serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
+    }
+
+    pub fn check_lockfile(
+        path: &CanonicalPath,
+    ) -> Result<Vec<LockfileCheckWarning>, LockedManifestError> {
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd
+            .args(["manifest", "check"])
+            .arg("--lockfile")
+            .arg(path.as_os_str());
+
+        debug!("checking lockfile with command: {}", pkgdb_cmd.display());
+
+        let value = call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::CheckLockfile)?;
+        let warnings: Vec<LockfileCheckWarning> =
+            serde_json::from_value(value).map_err(LockedManifestError::ParseCheckWarnings)?;
+
+        Ok(warnings)
     }
 }
 
@@ -326,8 +348,12 @@ pub struct InstalledPackage {
 pub enum LockedManifestError {
     #[error("failed to lock manifest")]
     LockManifest(#[source] CallPkgDbError),
+    #[error("failed to check lockfile")]
+    CheckLockfile(#[source] CallPkgDbError),
     #[error("failed to build environment")]
     BuildEnv(#[source] CallPkgDbError),
+    #[error("failed to parse check warnings")]
+    ParseCheckWarnings(#[source] serde_json::Error),
     #[error("package is unsupported for this sytem")]
     UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
     #[error("failed to build container builder")]
@@ -354,6 +380,13 @@ pub enum LockedManifestError {
     SerializeGlobalLockfile(#[source] serde_json::Error),
     #[error("could not write global lockfile")]
     WriteGlobalLockfile(#[source] std::io::Error),
+}
+
+/// A warning produced by `pkgdb manifest check`
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct LockfileCheckWarning {
+    pub package: String,
+    pub message: String,
 }
 
 #[cfg(test)]

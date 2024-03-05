@@ -586,6 +586,14 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
                 {un_prefixed}
             "}
         },
+        // 127: bad package, forbidden by options
+        // https://github.com/flox/flox/issues/492
+        LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: error_codes::BAD_PACKAGE_FAILURE,
+            context_message: Some(ContextMsgError { message, .. }),
+            ..
+        })) => message.to_string(),
+
         LockedManifestError::LockManifest(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to lock environment manifest.")
         },
@@ -659,6 +667,9 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         LockedManifestError::UpdateFailed(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to update environment.")
         },
+        LockedManifestError::CheckLockfile(pkgdb_error) => {
+            format_pkgdb_error(pkgdb_error, err, "Failed to check environment.")
+        },
         // endregion
 
         // this is a bug, but likely needs some formatting
@@ -683,6 +694,8 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
 
             Please ensure that you have write permissions to '~/.config/flox/global-manifest.lock'.
         "},
+
+        LockedManifestError::ParseCheckWarnings(_) => display_chain(err),
     }
 }
 

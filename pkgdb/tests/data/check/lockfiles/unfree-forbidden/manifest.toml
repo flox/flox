@@ -1,0 +1,7 @@
+# Expected to fail, because `hello-unfree` has an unfree license
+# but `options.allow.unfree` is set to `false`
+[install]
+hello.pkg-path = "hello-unfree"
+
+[options]
+allow.unfree = false

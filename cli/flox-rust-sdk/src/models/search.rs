@@ -11,6 +11,7 @@ use serde_with::skip_serializing_none;
 
 use super::pkgdb::PkgDbError;
 use crate::models::pkgdb::PKGDB_BIN;
+use crate::utils::CommandExt;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SearchError {
@@ -311,7 +312,7 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    debug!("running search command {:?}", pkgdb_command);
+    debug!("running search command {}", pkgdb_command.display());
     let mut pkgdb_process = pkgdb_command.spawn().map_err(SearchError::PkgDbCall)?;
     let stdout = pkgdb_process
         .stdout

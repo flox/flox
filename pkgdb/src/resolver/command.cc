@@ -407,6 +407,70 @@ RegistryCommand::run()
 
 /* -------------------------------------------------------------------------- */
 
+CheckCommand::CheckCommand() : parser( "check" )
+{
+  this->parser.add_description(
+    "Lint a manifest and return warnings as newline delimited json objects" );
+  this->parser.add_argument( "--lockfile" )
+    .help( "the path to the project's 'manifest.lock'" )
+    .metavar( "PATH" )
+    .nargs( 1 )
+    .action( [&]( const std::string & strPath )
+             { this->setLockfileRaw( nix::absPath( strPath ) ); } );
+
+  this->parser.add_argument( "--system" )
+    .help( "The system to check packages for" )
+    .metavar( "SYSTEM" )
+    .nargs( 1 )
+    .action( [&]( const std::string & system ) { this->system = system; } );
+}
+
+void
+CheckCommand::setLockfileRaw( std::filesystem::path path )
+{
+  if ( this->lockfile.has_value() )
+    {
+      throw EnvironmentMixinException(
+        "lockfile already initialized, cannot change." );
+    }
+
+  if ( ! std::filesystem::exists( path ) )
+    {
+      throw InvalidLockfileException( "lockfile '" + path.string()
+                                      + "' does not exist." );
+    }
+
+  this->lockfileRaw = readAndCoerceJSON( path );
+}
+
+Lockfile
+CheckCommand::getLockfile()
+{
+  if ( this->lockfile.has_value() ) { return *this->lockfile; }
+
+  if ( ! this->lockfileRaw.has_value() )
+    {
+      throw EnvironmentMixinException(
+        "lockfile not initialized, cannot get." );
+    }
+
+  this->lockfile = Lockfile( *this->lockfileRaw );
+  return *this->lockfile;
+}
+
+int
+CheckCommand::run()
+{
+  auto warnings = this->getLockfile().checkPackages(
+    this->system.value_or( nix::nativeSystem ) );
+
+  std::cout << nlohmann::json( warnings ).dump() << std::endl;
+
+  return EXIT_SUCCESS;
+}
+
+/* -------------------------------------------------------------------------- */
+
 ManifestCommand::ManifestCommand() : parser( "manifest" )
 {
   this->parser.add_description( "Manifest subcommands" );
@@ -415,6 +479,7 @@ ManifestCommand::ManifestCommand() : parser( "manifest" )
   this->parser.add_subparser( this->cmdRegistry.getParser() );
   this->parser.add_subparser( this->cmdUpdate.getParser() );
   this->parser.add_subparser( this->cmdUpgrade.getParser() );
+  this->parser.add_subparser( this->cmdCheck.getParser() );
 }
 
 
@@ -442,6 +507,10 @@ ManifestCommand::run()
   if ( this->parser.is_subcommand_used( "registry" ) )
     {
       return this->cmdRegistry.run();
+    }
+  if ( this->parser.is_subcommand_used( "check" ) )
+    {
+      return this->cmdCheck.run();
     }
   std::cerr << this->parser << '\n';
   throw flox::FloxException( "You must provide a valid 'manifest' subcommand" );

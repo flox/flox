@@ -7,6 +7,8 @@ use std::process::Command;
 use log::{debug, error, warn};
 use thiserror::Error;
 
+use crate::utils::CommandExt;
+
 #[derive(Error, Debug)]
 pub enum EmptyError {}
 
@@ -186,7 +188,7 @@ impl GitCommandProvider {
     }
 
     fn run_command(command: &mut Command) -> Result<OsString, GitCommandError> {
-        debug!("{:?}", command);
+        debug!("running git command: {}", command.display());
         let out = command.output()?;
 
         if !out.status.success() {

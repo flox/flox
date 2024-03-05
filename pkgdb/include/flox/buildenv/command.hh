@@ -27,19 +27,6 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-/**
- * @class flox::buildenv::SystemNotSupportedByLockfile
- * @brief An exception thrown when a lockfile is is missing a package.<system>
- * entry fro the requested system.
- * @{
- */
-FLOX_DEFINE_EXCEPTION( BuildenvInvalidArguments,
-                       EC_BUILDENV_ARGUMENTS,
-                       "invalid arguments to buildenv" )
-/** @} */
-
-/* -------------------------------------------------------------------------- */
-
 /** @brief Evaluate and build a locked environment. */
 class BuildEnvCommand : NixState
 {

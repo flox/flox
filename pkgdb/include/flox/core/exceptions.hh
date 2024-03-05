@@ -91,12 +91,21 @@ enum error_category {
    * from nixpkgs' meta checks of supported systems.
    */
   EC_PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-  /** Package evaluation failure, other than unsupported systems */
+  /**
+   * Package evaluation failure, other than unsupported systems
+   * Unfree and other similar errors are caught earlier and thrown as @a
+   * EC_PACKAGE_CHECK_FAILURE.
+   */
   EC_PACKAGE_EVAL_FAILURE,
   /** Package build failure. */
   EC_PACKAGE_BUILD_FAILURE,
-  /** `pkgdb buildenv` was called with invalid arguments */
-  EC_BUILDENV_ARGUMENTS,
+  /**
+   * Package check failure.
+   * Thrown by @a Lockfile::checkPackages when a package check resulted in
+   * an error. E.g.:
+   * - An unfree package is found with `options.allow.unfree = false`.
+   */
+  EC_PACKAGE_CHECK_FAILURE,
 }; /* End enum `error_category' */
 
 

@@ -26,6 +26,7 @@ tracing.workspace = true
 toml.workspace = true
 jsonwebtoken.workspace = true
 indent.workspace = true
+shell-escape.workspace = true
 
 [dev-dependencies]
 anyhow = "1.0.65"
