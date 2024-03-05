@@ -71,6 +71,10 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
   /* Handle system glob by splitting into 4 recursive calls. */
   if ( ! relPath.front().has_value() )
     {
+      // TODO: This does not allow scraping of "packages" trees, and it allows
+      // for
+      //      "legacyPackages.legacyPackages.*.**".  Both should probably be
+      //      addressed but do not pose a functional threat at the moment.
       if ( this->attrName != "legacyPackages" )
         {
           throw FloxException(
