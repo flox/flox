@@ -116,7 +116,7 @@ impl FromStr for FloxhubToken {
     }
 }
 
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum FloxhubTokenError {
     #[error("token expired")]
     Expired,
@@ -195,8 +195,6 @@ pub enum FloxhubError {
 use tempfile::TempDir;
 /// Should only be used in the flox crate
 pub fn test_flox_instance() -> (Flox, TempDir) {
-    use std::str::FromStr;
-
     use crate::models::environment::{global_manifest_path, init_global_manifest};
 
     let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -232,6 +230,7 @@ pub fn test_flox_instance() -> (Flox, TempDir) {
 pub mod tests {
     use std::str::FromStr;
 
+    pub use super::test_flox_instance as flox_instance;
     use super::*;
 
     /// A fake FloxHub token
@@ -249,12 +248,32 @@ pub mod tests {
     /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     const FAKE_TOKEN: &str= "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74";
 
-    pub use super::test_flox_instance as flox_instance;
+    /// A fake floxhub token, that is expired
+    ///
+    /// {
+    ///  "typ": "JWT",
+    ///  "alg": "HS256"
+    /// }
+    /// .
+    /// {
+    ///   "https://flox.dev/handle": "test"
+    ///   "exp": 1704063600,                // 2024-01-01T00:00:00+00:00
+    /// }
+    /// .
+    /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    const FAKE_EXPIRED_TOKEN: &str= "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY";
 
     #[tokio::test]
     async fn test_get_username() {
         let token = FloxhubToken::new(FAKE_TOKEN.to_string()).unwrap();
         assert_eq!(token.handle(), "test");
+    }
+
+    #[tokio::test]
+    async fn test_detect_expired() {
+        let token_error =
+            FloxhubToken::new(FAKE_EXPIRED_TOKEN.to_string()).expect_err("Token should be expired");
+        assert_eq!(token_error, FloxhubTokenError::Expired);
     }
 
     #[test]

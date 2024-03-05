@@ -8,7 +8,7 @@ resolver = "2"
 anyhow = "1"
 blake3 = "1.5.0"
 bpaf = { version = "0.9.8", features = ["derive", "autocomplete"] }
-chrono = "0.4.24"
+chrono = { version = "0.4.24", features = ["serde"] }
 config = "0.13.1"
 crossterm = "0.26"
 derive_more = "0.99.17"
@@ -43,7 +43,7 @@ toml_edit = { version = "0.19", features = ["serde"] }
 tracing = "0.1"
 tracing-log = { version = "0.2", features = [] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-url = "2.4"
+url = { version = "2.4", features = ["serde"] }
 uuid = { version = "1.2", features = ["serde", "v4"] }
 walkdir = "2"
 xdg = "2.4"
