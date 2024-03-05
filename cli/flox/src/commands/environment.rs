@@ -1449,11 +1449,10 @@ impl Push {
                     owner
                 } else {
                     EnvironmentOwner::from_str(
-                        &flox
-                            .floxhub_token
+                        flox.floxhub_token
                             .as_ref()
                             .context("Need to be loggedin")?
-                            .handle()?,
+                            .handle(),
                     )?
                 };
 
@@ -1961,8 +1960,7 @@ impl Pull {
                 let by_current_user = flox
                     .floxhub_token
                     .as_ref()
-                    .and_then(|token| token.handle().ok())
-                    .map(|handle| handle == env_ref.owner().as_str())
+                    .map(|token| token.handle() == env_ref.owner().as_str())
                     .unwrap_or_default();
                 let message = format!("The environment {env_ref} does not exist.");
                 if by_current_user {

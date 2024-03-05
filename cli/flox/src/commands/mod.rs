@@ -991,7 +991,7 @@ pub(super) async fn ensure_environment_trust(
     }
 
     if let Some(ref token) = flox.floxhub_token {
-        if token.handle()?.as_str() == env_ref.owner().as_str() {
+        if token.handle() == env_ref.owner().as_str() {
             debug!("environment {env_ref} is trusted by token");
             return Ok(());
         }

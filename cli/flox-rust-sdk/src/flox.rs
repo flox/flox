@@ -1,8 +1,10 @@
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use jsonwebtoken::{DecodingKey, Validation};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use serde_with::DeserializeFromStr;
 use thiserror::Error;
 use url::Url;
 
@@ -54,41 +56,60 @@ impl Flox {}
 pub static DEFAULT_FLOXHUB_URL: Lazy<Url> =
     Lazy::new(|| Url::parse("https://hub.flox.dev").unwrap());
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FloxhubToken(String);
+#[derive(Debug, Clone, Deserialize)]
+struct FloxTokenClaims {
+    #[serde(rename = "https://flox.dev/handle")]
+    handle: String,
+}
 
-impl AsRef<str> for FloxhubToken {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+#[derive(Debug, Clone, DeserializeFromStr)]
+pub struct FloxhubToken {
+    token: String,
+    token_data: FloxTokenClaims,
 }
 
 impl FloxhubToken {
-    /// Create a new FloxHub token from a string
-    pub fn new(token: String) -> Self {
-        FloxhubToken(token)
+    /// Create a new floxhub token from a string
+    pub fn new(token: String) -> Result<Self, FloxhubTokenError> {
+        token.parse()
     }
 
     /// Return the token as a string
     pub fn secret(&self) -> &str {
-        &self.0
+        &self.token
     }
 
-    pub fn handle(&self) -> Result<String, FloxhubTokenError> {
-        #[derive(Debug, Deserialize)]
-        struct Claims {
-            #[serde(rename = "https://flox.dev/handle")]
-            handle: String,
-        }
+    /// Return the handle of the user the token belongs to
+    pub fn handle(&self) -> &str {
+        &self.token_data.handle
+    }
+}
 
+impl Serialize for FloxhubToken {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.token.serialize(serializer)
+    }
+}
+
+impl FromStr for FloxhubToken {
+    type Err = FloxhubTokenError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut validation = Validation::default();
         // we're neither creating or verifying the token on the client side
         validation.insecure_disable_signature_validation();
         validation.validate_aud = false;
         let token =
-            jsonwebtoken::decode::<Claims>(&self.0, &DecodingKey::from_secret(&[]), &validation)
+            jsonwebtoken::decode::<FloxTokenClaims>(s, &DecodingKey::from_secret(&[]), &validation)
                 .map_err(FloxhubTokenError::InvalidToken)?;
-        Ok(token.claims.handle)
+
+        Ok(FloxhubToken {
+            token: s.to_string(),
+            token_data: token.claims,
+        })
     }
 }
 
@@ -226,8 +247,8 @@ pub mod tests {
 
     #[tokio::test]
     async fn test_get_username() {
-        let token = FloxhubToken::new(FAKE_TOKEN.to_string());
-        assert_eq!(token.handle().unwrap(), "test");
+        let token = FloxhubToken::new(FAKE_TOKEN.to_string()).unwrap();
+        assert_eq!(token.handle(), "test");
     }
 
     #[test]

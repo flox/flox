@@ -213,7 +213,7 @@ impl Auth {
                     return Ok(());
                 };
 
-                let handle = token.handle().context("Could not get user details")?;
+                let handle = token.handle();
 
                 message::plain(format!(
                     "You are logged in as {handle} on {}",
@@ -240,15 +240,15 @@ pub async fn login_flox(flox: &mut Flox) -> Result<()> {
     debug!("Writing token to config");
 
     // set the token in the runtime config
-    let token = flox.floxhub_token.insert(FloxhubToken::new(cred.token));
-    let handle = token.handle().context("Could not get user details")?;
+    let token = flox.floxhub_token.insert(FloxhubToken::new(cred.token)?);
+    let handle = token.handle();
 
     // write the token to the config file
     update_config(
         &flox.config_dir,
         &flox.temp_dir,
         "floxhub_token",
-        Some(token),
+        Some(token.clone()),
     )
     .context("Could not write token to config")?;
 
