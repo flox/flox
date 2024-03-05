@@ -87,7 +87,7 @@ fn vec_not_empty<T>(x: Vec<T>) -> bool {
     !x.is_empty()
 }
 
-#[derive(Bpaf, Clone, Debug)]
+#[derive(Bpaf, Clone, Copy, Debug)]
 pub enum Verbosity {
     Verbose(
         /// Increase logging verbosity
@@ -103,10 +103,10 @@ pub enum Verbosity {
 }
 
 impl Verbosity {
-    pub fn to_pkgdb_verbosity_level(&self) -> usize {
+    pub fn to_pkgdb_verbosity_level(self) -> usize {
         match self {
             Verbosity::Quiet => 0,
-            Verbosity::Verbose(n) => *n,
+            Verbosity::Verbose(n) => n,
         }
     }
 }
@@ -131,7 +131,7 @@ pub struct FloxCli(#[bpaf(external(flox_args))] pub FloxArgs);
 /// and allows to be composed with other parsers.
 ///
 /// To parse the flox CLI, use [`FloxCli`] instead using [`flox_cli()`].
-#[derive(Bpaf)]
+#[derive(Debug, Bpaf)]
 #[bpaf(ignore_rustdoc)] // we don't want this struct to be interpreted as a group
 pub struct FloxArgs {
     /// Verbose mode
@@ -151,6 +151,12 @@ pub struct FloxArgs {
 
     #[bpaf(external(commands), optional)]
     command: Option<Commands>,
+}
+
+impl fmt::Debug for Commands {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Command")
+    }
 }
 
 impl FloxArgs {

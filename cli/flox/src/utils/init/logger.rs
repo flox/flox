@@ -1,11 +1,11 @@
-use std::io::Write;
-
 use log::{debug, error};
 use once_cell::sync::OnceCell;
+use tracing_subscriber::filter::Filtered;
+use tracing_subscriber::fmt::Layer;
 use tracing_subscriber::prelude::*;
+use tracing_subscriber::Registry;
 
 use crate::commands::Verbosity;
-use crate::utils::logger::{self, LogFormatter};
 use crate::utils::metrics::MetricsLayer;
 use crate::utils::TERMINAL_STDERR;
 
@@ -35,25 +35,24 @@ impl std::io::Write for LockingTerminalStderr {
     }
 }
 
-type LayerType = tracing_subscriber::layer::Layered<MetricsLayer, tracing_subscriber::Registry>;
-type ReloadHandle<T> = tracing_subscriber::reload::Handle<T, LayerType>;
-
 #[allow(clippy::type_complexity)]
-static LOGGER_HANDLE: OnceCell<(
-    ReloadHandle<tracing_subscriber::EnvFilter>,
-    ReloadHandle<
-        tracing_subscriber::fmt::Layer<
-            LayerType,
-            tracing_subscriber::fmt::format::DefaultFields,
-            LogFormatter,
-            LockingTerminalStderr,
+static LOGGER_HANDLE: OnceCell<
+    tracing_subscriber::reload::Handle<
+        Filtered<
+            Layer<
+                Registry,
+                tracing_subscriber::fmt::format::DefaultFields,
+                tracing_subscriber::fmt::format::Format,
+                LockingTerminalStderr,
+            >,
+            tracing_subscriber::EnvFilter,
+            Registry,
         >,
+        Registry,
     >,
-)> = OnceCell::new();
-
+> = OnceCell::new();
 pub fn init_logger(verbosity: Option<Verbosity>) {
     let verbosity = verbosity.unwrap_or_default();
-    let debug = matches!(verbosity, Verbosity::Verbose(1..));
 
     let log_filter = match verbosity {
         // Show only errors
@@ -69,52 +68,50 @@ pub fn init_logger(verbosity: Option<Verbosity>) {
         Verbosity::Verbose(_) => "trace",
     };
 
-    let (filter_handle, fmt_handle) = LOGGER_HANDLE.get_or_init(|| {
+    let filter_handle = LOGGER_HANDLE.get_or_init(|| {
         debug!("Initializing logger (how are you seeing this?)");
 
-        let filter = tracing_subscriber::filter::EnvFilter::try_from_default_env()
-            .or_else(|_| tracing_subscriber::filter::EnvFilter::try_new(log_filter))
-            .unwrap();
-        let (filter_reloadable, filter_reload_handle) =
-            tracing_subscriber::reload::Layer::new(filter);
+        // The first time this layer is set it establishes an upper boundary for `log` verbosity.
+        // If you try to `modify` this layer later, `log` will not accept any higher verbosity events.
+        //
+        // Before we used to replace both the fmt layer _and_ this layer.
+        // That purged enough internal state to reset the `log` verbosity filter.
+        // For simplicity, we'll now just set the filter to `trace`,
+        // and then modify it later to the actual level below.
+        // Logs are being passed through by the `log` crate and correctly filtered by `tracing`.
+        let filter = tracing_subscriber::filter::EnvFilter::try_new("trace").unwrap();
 
-        let fmt = tracing_subscriber::fmt::layer()
+        let fmt_filtered = tracing_subscriber::fmt::layer()
             .with_writer(LockingTerminalStderr)
-            .event_format(logger::LogFormatter { debug });
+            .event_format(tracing_subscriber::fmt::format())
+            .with_filter(filter);
 
-        let (fmt_reloadable, fmt_reload_handle) = tracing_subscriber::reload::Layer::new(fmt);
+        let (fmt_filtered, fmt_reload_handle) =
+            tracing_subscriber::reload::Layer::new(fmt_filtered);
 
-        let fmt_filtered = fmt_reloadable.with_filter(filter_reloadable);
+        let metrics_layer = MetricsLayer::new();
+        let sentry_layer = sentry::integrations::tracing::layer();
 
         tracing_subscriber::registry()
-            .with(MetricsLayer::new())
             .with(fmt_filtered)
+            .with(metrics_layer)
+            .with(sentry_layer)
             .init();
 
-        (filter_reload_handle, fmt_reload_handle)
+        fmt_reload_handle
     });
 
-    if let Err(err) = filter_handle.modify(|layer| {
-        *layer = tracing_subscriber::filter::EnvFilter::try_from_default_env()
-            .or_else(|_| tracing_subscriber::filter::EnvFilter::try_new(log_filter))
-            .unwrap();
-    }) {
+    let result = filter_handle.modify(|layer| {
+        match tracing_subscriber::filter::EnvFilter::try_from_default_env()
+            .or_else(|_| tracing_subscriber::EnvFilter::try_new(log_filter))
+        {
+            Ok(new_filter) => *layer.filter_mut() = new_filter,
+            Err(err) => {
+                error!("Updating logger filter failed: {}", err);
+            },
+        };
+    });
+    if let Err(err) = result {
         error!("Updating logger filter failed: {}", err);
-    }
-
-    if let Err(err) = fmt_handle.modify(|layer| {
-        *layer = tracing_subscriber::fmt::layer()
-            .with_writer(LockingTerminalStderr)
-            .event_format(logger::LogFormatter { debug });
-    }) {
-        error!("Updating logger filter failed: {}", err);
-    }
-}
-
-pub fn flush_logger() {
-    if let Some((_, fmt_handle)) = LOGGER_HANDLE.get() {
-        let _ = fmt_handle.modify(|l| {
-            let _ = l.writer_mut().flush();
-        });
     }
 }

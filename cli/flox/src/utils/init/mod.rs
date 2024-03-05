@@ -8,9 +8,11 @@ use serde::Deserialize;
 
 mod logger;
 mod metrics;
+mod sentry;
 
 pub use logger::*;
 pub use metrics::*;
+pub use sentry::*;
 
 pub fn init_access_tokens(
     config_tokens: Option<&HashMap<String, String>>,

@@ -9,7 +9,6 @@ pub mod dialog;
 pub mod didyoumean;
 pub mod errors;
 pub mod init;
-pub mod logger;
 pub mod message;
 pub mod metrics;
 pub mod openers;
