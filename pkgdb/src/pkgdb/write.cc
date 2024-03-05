@@ -154,11 +154,10 @@ static void
 initScrapeMeta( PkgDb & pdb )
 {
   const ScrapeRules & scrapeRules = getDefaultRules();
-  traceLog( "WML: inserting into DbScrapeMeta table." )
-    sqlite3pp::command defineScrapeMeta(
-      pdb.db,
-      "INSERT OR IGNORE INTO DbScrapeMeta ( key, value ) VALUES"
-      " ( 'scrape_rules_hash', ? )" );
+  sqlite3pp::command  defineScrapeMeta(
+    pdb.db,
+    "INSERT OR IGNORE INTO DbScrapeMeta ( key, value ) VALUES"
+     " ( 'scrape_rules_hash', ? )" );
   defineScrapeMeta.bind( 1, scrapeRules.hashString().c_str(), sqlite3pp::copy );
   if ( sql_rc rcode = defineScrapeMeta.execute(); isSQLError( rcode ) )
     {
