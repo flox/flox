@@ -104,7 +104,10 @@ impl FromStr for FloxhubToken {
         validation.validate_aud = false;
         let token =
             jsonwebtoken::decode::<FloxTokenClaims>(s, &DecodingKey::from_secret(&[]), &validation)
-                .map_err(FloxhubTokenError::InvalidToken)?;
+                .map_err(|e| match e.kind() {
+                    jsonwebtoken::errors::ErrorKind::ExpiredSignature => FloxhubTokenError::Expired,
+                    _ => FloxhubTokenError::InvalidToken(e),
+                })?;
 
         Ok(FloxhubToken {
             token: s.to_string(),
@@ -115,6 +118,9 @@ impl FromStr for FloxhubToken {
 
 #[derive(Debug, Clone, Error)]
 pub enum FloxhubTokenError {
+    #[error("token expired")]
+    Expired,
+
     #[error("invalid token")]
     InvalidToken(#[source] jsonwebtoken::errors::Error),
 }
