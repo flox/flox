@@ -54,7 +54,6 @@ from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules );
 /* -------------------------------------------------------------------------- */
 
 enum ScrapeRule {
-  SR_NONE = 0,         /**< Empty state. */
   SR_DEFAULT,          /**< Applies no special rules. */
   SR_ALLOW_PACKAGE,    /**< Forces an package entry in DB. */
   SR_ALLOW_RECURSIVE,  /**< Forces a sub-tree to be scraped. */
@@ -75,12 +74,27 @@ scrapeRuleToString( ScrapeRule rule );
  * The tree is built with a root node, where each node contains an attribute
  * name, and the rule to be applied, along with a list of child nodes.
  * This tree is built from reading the rules file, with paths through the tree
- * constucted with SR_DEFAULT rules along the path until a leaf node with the
+ * constructed with SR_DEFAULT rules along the path until a leaf node with the
  * appropriate rule can be added.  This allows hierarchical searching through
  * the tree for attribute paths encountered during scraping and maintains the
  * context for child inheritance of the rule defined for the deepest ancestral
- * node.
+ * node.  The rules tree is built as such entirely, once by reading the rules
+ * file. Attributes are checked node by node, until the full attribute lands on
+ * a node with a rule, or SR_DEFAULT is returned, instructing scrape to use the
+ * default decision making process.
+ *
+ * Example, the following 2 rules result in the following tree:
+ *
+ * allowRecursive foo.bar.bat
+ * allowRecursive foo.boo
+ *
+ * _root -> SR_DEFAULT
+ *   ^- foo -> SR_DEFAULT
+ *     ^- boo -> SR_ALLOW_RECURSIVE
+ *     ^- bar -> SR_DEFAULT
+ *       ^- bat -> SR_ALLOW_RECURSIVE
  */
+
 struct RulesTreeNode
 {
   using Children = std::unordered_map<std::string, RulesTreeNode>;
@@ -109,13 +123,23 @@ struct RulesTreeNode
     : attrName( std::move( attrName ) ), children( std::move( children ) )
   {}
 
+  /**
+   * @brief Adds a single rule to the RulesTree.
+   *
+   * This will add a node at @a relPath, relative to this node with the given
+   * rule, setting new descendant nodes to SR_DEFAULT along the way.  Trying to
+   * overwrite an existing rule that is not SR_DEFAULT will throw an exception.
+   *
+   * @see @a flox::pkgdb::RulesTreeNode::applyRules
+   */
   void
   addRule( AttrPathGlob & relPath, ScrapeRule rule );
 
   /**
    * @brief Get the rule at a path, or @a flox::pkgdb::SR_DEFAULT as a fallback.
    *
-   * This *does NOT* apply parent rules to children.
+   * This *does NOT* apply parent rules to children.  The @a path is considered
+   * to be relative to this node.
    *
    * @see @a flox::pkgdb::RulesTreeNode::applyRules
    */

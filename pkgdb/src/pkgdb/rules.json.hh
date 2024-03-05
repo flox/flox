@@ -9,6 +9,10 @@
    nested `allow*` rules.  This is not currently needed but could be allowed in
    the future if needed.
 
+   NOTE that both `allowRecursive` and `allowPackage` will have the same effect,
+   based strictly on the type of attribute they are present on.  It's not
+   currently clear if both are needed, this should be reviewed.
+
    Current rules explanation:
     - legacyPackages.*.darwin is not scraped using default logic
     - legacyPackages.*.swiftPackages.darwin is not scraped using default logic
