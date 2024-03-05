@@ -17,6 +17,7 @@ use flox_rust_sdk::flox::{
     Flox,
     Floxhub,
     FloxhubToken,
+    FloxhubTokenError,
     DEFAULT_FLOXHUB_URL,
     DEFAULT_NAME,
     FLOX_VERSION,
@@ -247,7 +248,38 @@ impl FloxArgs {
             .floxhub_token
             .as_deref()
             .map(FloxhubToken::from_str)
-            .transpose()?;
+            .transpose();
+
+        let floxhub_token = match floxhub_token {
+            Err(FloxhubTokenError::Expired) => {
+                message::warning("Your FloxHub token has expired. You may need to log in again.");
+                if let Err(e) = update_config(
+                    &config.flox.config_dir,
+                    &temp_dir_path,
+                    "floxhub_token",
+                    None::<String>,
+                ) {
+                    log::debug!("Could not remove token from user config: {e}");
+                }
+                None
+            },
+            Err(FloxhubTokenError::InvalidToken(token_error)) => {
+                message::error(formatdoc! {"
+                    Your FloxHub token is invalid: {token_error}
+                    You may need to log in again.
+                "});
+                if let Err(e) = update_config(
+                    &config.flox.config_dir,
+                    &temp_dir_path,
+                    "floxhub_token",
+                    None::<String>,
+                ) {
+                    log::debug!("Could not remove token from user config: {e}");
+                }
+                None
+            },
+            Ok(token) => token,
+        };
 
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
