@@ -23,6 +23,7 @@ setup_file() {
   # the future.
   export BATS_NO_PARALLELIZE_WITHIN_FILE=true
   export TEST_HARNESS_FLAKE="$TESTS_DIR/harnesses/proj0"
+  export TEST_DATA="$TESTS_DIR/data/search"
 
   export DBPATH="$BATS_FILE_TMPDIR/test.sqlite"
 
@@ -46,11 +47,11 @@ get_version() {
 }
 
 get_scrape_meta() {
-  sqlite3 "$DBPATH" "SELECT value FROM DbScrapeMeta WHERE key = '${1?}'"
+  sqlite3 "${1?}" "SELECT value FROM DbScrapeMeta WHERE key = '${2?}'"
 }
 
 get_package_count() {
-  sqlite3 "$DBPATH" "SELECT COUNT(*) FROM Packages"
+  sqlite3 "${1?}" "SELECT COUNT(*) FROM Packages"
 }
 # ---------------------------------------------------------------------------- #
 
@@ -76,49 +77,58 @@ get_package_count() {
   refute_output 0
 }
 
+genParamsNixpkgsFlox() {
+  jq -r ".query.match|=null
+          |.manifest.registry.inputs.nixpkgs.from|=\"$TEST_HARNESS_FLAKE\"" \
+    "$TEST_DATA/params-local.json"
+}
+
 @test "invalidation based on rules hash" {
   # Get the package count and hash to start, change the stored hash, 
   # and delete the packages
   
-  real_package_count=$(get_package_count)
-  assert [ $real_package_count > 0 ]
+  search_params="$(genParamsNixpkgsFlox)"
+  run sh -c "$PKGDB_BIN search '$search_params'"
+  assert_output --partial 'pkg1'
+  
+  # Find the db path this was scraped to
+  dbpath=$($PKGDB_BIN list | grep $TEST_HARNESS_FLAKE | awk '{ print $2 }' )
 
-  # Save current rules hash
-  old_rules_hash=$(get_scrape_meta scrape_rules_hash)
+  # Make sure we have > 0 packages, save the rules hash
+  real_package_count=$(get_package_count $dbpath)
+  assert [ $real_package_count > 0 ]
+  old_rules_hash=$(get_scrape_meta $dbpath scrape_rules_hash)
   
-  # Delete the packages
-  run sqlite3 "$DBPATH" "DELETE from Packages"
+  # Delete the packages, and assert it's empty
+  run sqlite3 "$dbpath" "DELETE from Packages"
   assert_success
-  assert_equal $(get_package_count) 0
+  assert_equal $(get_package_count $dbpath) 0
   
-  # Trigger a scrape and make sure that alone doesn't re-trigger
-  #
-  # TODO It does! So this is not a fair test!  We really need to do a search.
-  # 
-  ##     run "$PKGDB_BIN" scrape --database "$DBPATH" "$TEST_HARNESS_FLAKE" \
-  ##       packages "$NIX_SYSTEM"
-  ##     assert_success
-  ##     assert_equal $(get_package_count) $real_package_count
+  # Search and confirm no packages are found now and we do NOT trigger a re-scrape
+  # Do it twice since the first will invalidate the db, and the second will re-create
+  run sh -c "$PKGDB_BIN search '$search_params'"
+  refute_output --partial 'pkg1'
+  run sh -c "$PKGDB_BIN search '$search_params'"
+  refute_output --partial 'pkg1'
   
-  # Modify and ensure it's different
-  run sqlite3 "$DBPATH" \
+  # Modify the rules hash and ensure it's different
+  run sqlite3 "$dbpath" \
     "UPDATE DbScrapeMeta SET value = 'md5:invalid' WHERE key = 'scrape_rules_hash'"
   assert_success
-  refute [ "$old_rules_hash" == "$(get_scrape_meta scrape_rules_hash)" ]
+  refute [ "$old_rules_hash" == "$(get_scrape_meta $dbpath scrape_rules_hash)" ]
 
-  # Trigger a scrape which should result in an invalidation *for the next run*
-  run "$PKGDB_BIN" scrape --database "$DBPATH" "$TEST_HARNESS_FLAKE" \
-    packages "$NIX_SYSTEM"
+
+  # Run a search which should result in an invalidation *for the next run*
+  run sh -c "$PKGDB_BIN search '$search_params'"
   assert_success
   
-  # Trigger a scrape which should now actually re-scrape
-  run "$PKGDB_BIN" scrape --database "$DBPATH" "$TEST_HARNESS_FLAKE" \
-    packages "$NIX_SYSTEM"
-  assert_success
-  new_rules_hash=$(get_scrape_meta scrape_rules_hash)
+  # Run a second to actually re-create the Db, and check that we did
+  run sh -c "$PKGDB_BIN search '$search_params'"
+  assert_output --partial 'pkg1'
+  new_rules_hash=$(get_scrape_meta $dbpath scrape_rules_hash)
   assert_equal $old_rules_hash $new_rules_hash
   
-  rescraped_package_count=$(get_package_count)
+  rescraped_package_count=$(get_package_count $dbpath)
   assert_equal $real_package_count $rescraped_package_count
 }
 
