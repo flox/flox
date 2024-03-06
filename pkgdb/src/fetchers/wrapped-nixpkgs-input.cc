@@ -100,7 +100,7 @@ createWrappedFlakeDirV0( const nix::FlakeRef & nixpkgsRef )
   /* Push verbosity level to suppress "warning: creating lock file ..." */
   auto oldVerbosity = nix::verbosity;
   nix::verbosity    = nix::lvlError;
-  auto _locked      = flox::lockFlake( *state, wrappedRef, {} );
+  auto _locked      = nix::flake::lockFlake( *state, wrappedRef, {} );
   /* Pop verbosity */
   nix::verbosity = oldVerbosity;
   debugLog( "locked flake template" );
