@@ -982,6 +982,14 @@ pub(super) async fn ensure_environment_trust(
 
     let trust = config.flox.trusted_environments.get(&env_ref);
 
+    // Official Flox environments are trusted by default
+    // Only applies to the current flox owned FloxHub,
+    // so this rule might need to be revisited in the future.
+    if env_ref.owner().as_str() == "flox" {
+        debug!("Official Flox environment {env_ref} is trusted by default");
+        return Ok(());
+    }
+
     if let Some(ref token) = flox.floxhub_token {
         if token.handle()?.as_str() == env_ref.owner().as_str() {
             debug!("environment {env_ref} is trusted by token");
