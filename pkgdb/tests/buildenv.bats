@@ -98,8 +98,11 @@ setup_file() {
   assert_output "script"
 }
 
-@test "Built enviroment includes 'on-activate' script" {
-  skip "FIXME: write this test"
+@test "Built environment includes 'on-activate' script" {
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/on-activate/manifest.lock" \
+    --out-link "$BATS_TEST_TMPDIR/env"
+  assert_success
+  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/on-activate.sh"
 }
 
 # --------------------------------------------------------------------------- #

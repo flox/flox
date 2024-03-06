@@ -361,6 +361,9 @@ src/buildenv/realise.o: CXXFLAGS +=               \
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DCOMMON_NIXPKGS_URL="$(COMMON_NIXPKGS_URL)"'
 
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DFLOX_BASH_BIN="$(FLOX_BASH_BIN)"'
+
 # ---------------------------------------------------------------------------- #
 
 #: Remove build artifacts

@@ -60,6 +60,10 @@ namespace flox::buildenv {
 #  error "COMMON_NIXPKGS_URL must be set to a locked flakeref of nixpkgs to use"
 #endif
 
+#ifndef FLOX_BASH_BIN
+#  error "FLOX_BASH_BIN must be set to the path of a Bash executable"
+#endif
+
 /* -------------------------------------------------------------------------- */
 
 const char * const BASH_ACTIVATE_SCRIPT = R"(
@@ -607,6 +611,61 @@ getRealisedPackages( nix::ref<nix::EvalState> &         state,
 
 /* -------------------------------------------------------------------------- */
 
+void
+addScriptToScriptsDir( const std::string &           scriptContents,
+                       const std::filesystem::path & scriptsDir,
+                       const std::string &           scriptName,
+                       std::stringstream & mainActivationScriptContents,
+                       const bool          shouldSource )
+{
+  /* Ensure that the "activate" subdirectory exists. */
+  std::filesystem::create_directories( scriptsDir / ACTIVATION_SUBDIR_NAME );
+
+  /* Write the script to a temporary file. */
+  std::filesystem::path scriptTempPath( nix::createTempFile().second );
+  debugLog(
+    nix::fmt( "created tempfile for activation script: script=%s, path=%s",
+              scriptName,
+              scriptTempPath ) );
+  std::ofstream scriptTmpFile( scriptTempPath );
+  if ( ! scriptTmpFile.is_open() )
+    {
+      throw ActivationScriptBuildFailure( std::string( strerror( errno ) ) );
+    }
+  scriptTmpFile << scriptContents << std::endl;
+  if ( scriptTmpFile.fail() )
+    {
+      throw ActivationScriptBuildFailure( std::string( strerror( errno ) ) );
+    }
+  scriptTmpFile.close();
+
+  /* Copy the script to the scripts directory. */
+  auto scriptPath = scriptsDir / ACTIVATION_SUBDIR_NAME / scriptName;
+  debugLog( nix::fmt( "copying script to scripts dir: src=%s, dest=%s",
+                      scriptTempPath,
+                      scriptPath ) );
+  std::filesystem::copy_file( scriptTempPath, scriptPath );
+  std::filesystem::permissions( scriptPath,
+                                std::filesystem::perms::owner_exec,
+                                std::filesystem::perm_options::add );
+
+  /* Reference the script from the main activation script. */
+  auto scriptRelativePath
+    = nix::fmt( "\"$FLOX_ENV/%s/%s\"", ACTIVATION_SUBDIR_NAME, scriptName );
+  if ( shouldSource )
+    {
+      mainActivationScriptContents << "source " << scriptRelativePath << '\n';
+    }
+  else
+    {
+      mainActivationScriptContents << FLOX_BASH_BIN << " " << scriptRelativePath
+                                   << '\n';
+    }
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 /**
  * @brief Make a @a RealisedPackage and store path for the activation scripts.
  * The package contains the activation scripts for *bash* and *zsh*.
@@ -652,31 +711,27 @@ makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile )
         }
     }
 
-  /* Add hook script.
-   * Write hook script to a temporary file and copy it to the environment.
-   * Add source command to the activate script. */
-  if ( auto hookScript = lockfile.getManifest().getManifestRaw().hook )
+  /* Add 'on-activate' script. */
+  auto hook = lockfile.getManifest().getManifestRaw().hook;
+  if ( hook.has_value() )
     {
-      nix::Path script_path;
-
-      /* Set script path to a temporary file. */
-      if ( auto script = hookScript->script )
+      if ( hook->script.has_value() )
         {
-          script_path = nix::createTempFile().second;
-          std::ofstream file( script_path );
-          file << script.value();
-          file.close();
+          debugLog( "adding 'hook.script' to activation scripts" );
+          addScriptToScriptsDir( hook->script.value(),
+                                 tempDir,
+                                 "hook.sh",
+                                 commonActivate,
+                                 true );
         }
-
-      if ( ! script_path.empty() )
+      else if ( hook->onActivate.has_value() )
         {
-
-          std::filesystem::copy_file( script_path,
-                                      tempDir / "activate" / "hook.sh" );
-          std::filesystem::permissions( tempDir / "activate" / "hook.sh",
-                                        std::filesystem::perms::owner_exec,
-                                        std::filesystem::perm_options::add );
-          commonActivate << "source \"$FLOX_ENV/activate/hook.sh\"" << '\n';
+          debugLog( "adding 'hook.on-activate' to activation scripts" );
+          addScriptToScriptsDir( hook->onActivate.value(),
+                                 tempDir,
+                                 "on-activate.sh",
+                                 commonActivate,
+                                 false );
         }
     }
 
@@ -698,6 +753,7 @@ makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile )
   zshActivate << commonActivate.str();
   zshActivate.close();
 
+  debugLog( "adding activation scripts to store" );
   auto activationStorePath
     = state.store->addToStore( "activation-scripts", tempDir );
 

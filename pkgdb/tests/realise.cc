@@ -122,6 +122,80 @@ test_unsupportedSystemExceptionForUnsupportedPackage(
 
 /* -------------------------------------------------------------------------- */
 
+bool
+test_sourcedScriptAddedToActivationScript()
+{
+  auto              script     = "echo 'hello'";
+  auto              scriptsDir = std::filesystem::path( nix::createTempDir() );
+  auto              scriptName = "hook.sh";
+  std::stringstream mainContents;
+  flox::buildenv::addScriptToScriptsDir( script,
+                                         scriptsDir,
+                                         scriptName,
+                                         mainContents,
+                                         true );
+  auto activationScript = mainContents.str();
+  if ( activationScript.find( "source \"$FLOX_ENV/activate/hook.sh" )
+       == std::string::npos )
+    {
+      return false;
+    }
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+bool
+test_execedScriptAddedToActivationScript()
+{
+  auto              script     = "echo 'hello'";
+  auto              scriptsDir = std::filesystem::path( nix::createTempDir() );
+  auto              scriptName = "hook.sh";
+  std::stringstream mainContents;
+  flox::buildenv::addScriptToScriptsDir( script,
+                                         scriptsDir,
+                                         scriptName,
+                                         mainContents,
+                                         false );
+  auto activationScript = mainContents.str();
+  if ( activationScript.find( "bash \"$FLOX_ENV/activate/hook.sh" )
+       == std::string::npos )
+    {
+      return false;
+    }
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+bool
+test_scriptAddedToScriptsDir()
+{
+  auto              script     = "echo 'hello'";
+  auto              scriptsDir = std::filesystem::path( nix::createTempDir() );
+  auto              scriptName = "hook.sh";
+  std::stringstream mainContents;
+  flox::buildenv::addScriptToScriptsDir( script,
+                                         scriptsDir,
+                                         scriptName,
+                                         mainContents,
+                                         true );
+  auto activateSubdir = scriptsDir / flox::buildenv::ACTIVATION_SUBDIR_NAME;
+  for ( const auto & dirEntry :
+        std::filesystem::directory_iterator( activateSubdir ) )
+    {
+      auto isHookScript = dirEntry.is_regular_file()
+                          && ( dirEntry.path().filename() == "hook.sh" );
+      if ( isHookScript ) { return true; }
+    }
+  return false;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 int
 main( int argc, char * argv[] )
 {
@@ -143,6 +217,10 @@ main( int argc, char * argv[] )
   RUN_TEST( tryEvaluatePackageOutPathReturnsValidOutpath, state, system );
   RUN_TEST( evalFailureForInsecurePackage, state, system );
   RUN_TEST( unsupportedSystemExceptionForUnsupportedPackage, state, system );
+
+  RUN_TEST( sourcedScriptAddedToActivationScript );
+  RUN_TEST( execedScriptAddedToActivationScript );
+  RUN_TEST( scriptAddedToScriptsDir );
 
   return exitCode;
 }

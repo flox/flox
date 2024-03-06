@@ -106,6 +106,11 @@ enum error_category {
    * - An unfree package is found with `options.allow.unfree = false`.
    */
   EC_PACKAGE_CHECK_FAILURE,
+  /**
+   * A failure encountered while building the activation scripts. This could be
+   * due to file I/O failing.
+   */
+  EC_ACTIVATION_SCRIPT_BUILD_ERROR,
 }; /* End enum `error_category' */
 
 

@@ -262,6 +262,8 @@ section may be referenced within the hook.
 Common usages for environment hooks are printing usage messages or performing
 setup operations such as initializing a database or starting a server.
 
+The `hook.script` and `hook.on-activate` options are mutually exclusive.
+
 ### `on-activate`
 The `on-activate` script is run non-interactively in a Bash subshell after the
 environment is activated.
