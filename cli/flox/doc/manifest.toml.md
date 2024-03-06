@@ -256,13 +256,31 @@ SERVER_PORT = "3000"
 
 The `[hook]` section of the manifest allows you to specify a script that's
 executed immediately after the environment is activated.
-Since the hook runs after activation the environment variables in the `[vars]`
+Since the hook runs after activation, the environment variables in the `[vars]`
 section may be referenced within the hook.
 
 Common usages for environment hooks are printing usage messages or performing
 setup operations such as initializing a database or starting a server.
 
-The script is set using the `script` option.
+### `on-activate`
+The `on-activate` script is run non-interactively in a Bash subshell after the
+environment is activated.
+This is useful for environment initialization that you want done in a consistent
+shell so that you don't need to worry about shell compatibility.
+The exit code and `stdout` of this script are discarded.
+
+```toml
+[hook]
+on-activate = """
+    mkdir -p data_dir
+"""
+```
+
+
+### `script`
+This `script` option defines a script that is sourced by the user's interactive
+shell.
+This is the main difference between `hook.script` and `hook.on-activate`.
 
 ```toml
 [hook]
