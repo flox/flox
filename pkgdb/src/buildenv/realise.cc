@@ -435,9 +435,8 @@ evalCacheCursorForInput( nix::ref<nix::EvalState> &             state,
   auto packageInputRef  = nix::FlakeRef::fromAttrs( floxNixpkgsAttrs );
 
   /* See note on `flox::lockFlake on whe we call the native version here. */
-  auto packageFlake = nix::flake::lockFlake( *state,
-                                             packageInputRef,
-                                             nix::flake::LockFlags {} );
+  auto packageFlake
+    = flox::lockFlake( *state, packageInputRef, nix::flake::LockFlags {} );
 
   auto cursor = getPackageCursor( state, packageFlake, attrPath );
   return cursor;
