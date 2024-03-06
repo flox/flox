@@ -975,7 +975,7 @@ test_RulesTree_parse0()
 }
 
 /**
- * @brief Ensure parsing @a flox::pkgdb::RulesTreeNode from JSON doesn't throw.
+ * @brief Ensure the hash is generated for the rules and is deterministic.
  */
 bool
 test_RulesTree_hash()

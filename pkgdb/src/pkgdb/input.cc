@@ -43,9 +43,11 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
-void
-PkgDbInput::init()
+bool
+PkgDbInput::initDbRO()
 {
+  bool isFresh = false;
+
   /* Initialize DB if missing. */
   if ( ! std::filesystem::exists( this->dbPath ) )
     {
@@ -54,6 +56,7 @@ PkgDbInput::init()
         nix::lvlTalkative,
         nix::fmt( "Creating database '%s'", this->dbPath.string() ) );
       PkgDb( this->getFlake()->lockedFlake, this->dbPath.string() );
+      isFresh = true;
     }
 
   /* If the database exists we don't want to needlessly try to initialize it, so
@@ -72,40 +75,55 @@ PkgDbInput::init()
       throw PkgDbException( "couldn't initialize read-only package database" );
     }
 
-  /* If the schema version is bad, delete the DB so it will be recreated. */
-  const ScrapeRules & scrapeRules  = getDefaultRules();
-  SqlVersions         dbVersions   = this->dbRO->getDbVersion();
-  ScrapeMeta          dbScrapeMeta = this->dbRO->getDbScrapeMeta();
-  if ( bool rulesMatch = ( dbScrapeMeta.rulesHash == scrapeRules.hashString() );
-       dbVersions.tables != sqlVersions.tables || ! rulesMatch )
-    {
-      nix::logger->log(
-        nix::lvlTalkative,
-        nix::fmt( "Outdated database '%s'", this->dbPath.string() ) );
-      nix::logger->log( nix::lvlTalkative,
-                        nix::fmt( "Clearing due to %s",
-                                  rulesMatch ? "table schema being outdated"
-                                             : "scraping rules mismatch" ) );
-      std::filesystem::remove( this->dbPath );
-      PkgDb( this->getFlake()->lockedFlake, this->dbPath.string() );
-    }
-  else if ( dbVersions.views != sqlVersions.views )
-    {
-      nix::logger->log( nix::lvlTalkative,
-                        nix::fmt( "Updating outdated database views '%s'",
-                                  this->dbPath.string() ) );
-      PkgDb( this->getFlake()->lockedFlake, this->dbPath.string() );
-    }
+  return isFresh;
+}
 
-  /* If the schema version is still wrong throw an error, but we don't
-   * expect this to actually occur. */
-  dbVersions = this->dbRO->getDbVersion();
-  if ( dbVersions != sqlVersions )
+void
+PkgDbInput::init()
+{
+  /* If this is a fresh Db, we don't need to do any of this checking. */
+  if ( ! initDbRO() )
     {
-      throw PkgDbException(
-        nix::fmt( "Incompatible Flox PkgDb schema versions ( %u, %u )",
-                  dbVersions.tables,
-                  dbVersions.views ) );
+      /* If the schema version is not as expected, or the rules hash is
+       * different (rules update), delete the file, free the `dbRo` object in
+       * memory, and re-init the file. */
+      const ScrapeRules & scrapeRules  = getDefaultRules();
+      SqlVersions         dbVersions   = this->dbRO->getDbVersion();
+      ScrapeMeta          dbScrapeMeta = this->dbRO->getDbScrapeMeta();
+      if ( bool rulesMatch
+           = ( dbScrapeMeta.rulesHash == scrapeRules.hashString() );
+           dbVersions.tables != sqlVersions.tables || ! rulesMatch )
+        {
+          nix::logger->log(
+            nix::lvlTalkative,
+            nix::fmt( "Outdated database '%s'", this->dbPath.string() ) );
+          nix::logger->log( nix::lvlTalkative,
+                            nix::fmt( "Clearing due to %s",
+                                      rulesMatch
+                                        ? "table schema being outdated"
+                                        : "scraping rules mismatch" ) );
+          /* Delete the file, free the in memory Db, and re-create it. */
+          this->dbRO = nullptr;
+          std::filesystem::remove( this->dbPath );
+          initDbRO();
+        }
+      else if ( dbVersions.views != sqlVersions.views )
+        {
+          /* This will actually do much more than updating the views, but it is
+           * handled correctly in SQL. */
+          PkgDb( this->getFlake()->lockedFlake, this->dbPath.string() );
+        }
+
+      /* If the schema version is still wrong throw an error, but we don't
+       * expect this to actually occur. */
+      dbVersions = this->dbRO->getDbVersion();
+      if ( dbVersions != sqlVersions )
+        {
+          throw PkgDbException(
+            nix::fmt( "Incompatible Flox PkgDb schema versions ( %u, %u )",
+                      dbVersions.tables,
+                      dbVersions.views ) );
+        }
     }
 }
 

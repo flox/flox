@@ -104,6 +104,8 @@ private:
    */
   void
   init();
+  bool
+  initDbRO();
 
 
 public:

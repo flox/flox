@@ -92,7 +92,7 @@ genParamsNixpkgsFlox() {
   assert_output --partial 'pkg1'
   
   # Find the db path this was scraped to
-  dbpath=$($PKGDB_BIN list | grep $TEST_HARNESS_FLAKE | awk '{ print $2 }' )
+  dbpath=$($PKGDB_BIN get db $TEST_HARNESS_FLAKE)
 
   # Make sure we have > 0 packages, save the rules hash
   real_package_count=$(get_package_count $dbpath)
@@ -117,12 +117,8 @@ genParamsNixpkgsFlox() {
   assert_success
   refute [ "$old_rules_hash" == "$(get_scrape_meta $dbpath scrape_rules_hash)" ]
 
-
-  # Run a search which should result in an invalidation *for the next run*
-  run sh -c "$PKGDB_BIN search '$search_params'"
-  assert_success
-  
-  # Run a second to actually re-create the Db, and check that we did
+  # Run a search which should result in an invalidation and re-creation of the
+  # database
   run sh -c "$PKGDB_BIN search '$search_params'"
   assert_output --partial 'pkg1'
   new_rules_hash=$(get_scrape_meta $dbpath scrape_rules_hash)
