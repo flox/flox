@@ -222,9 +222,7 @@ pub mod tests {
     /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     const FAKE_TOKEN: &str= "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74";
 
-    pub fn flox_instance() -> (Flox, TempDir) {
-        test_flox_instance()
-    }
+    pub use super::test_flox_instance as flox_instance;
 
     #[tokio::test]
     async fn test_get_username() {

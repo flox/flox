@@ -1,14 +1,18 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
-use flox_rust_sdk::models::environment::{Environment, PathPointer};
+use flox_rust_sdk::models::environment::{CanonicalPath, Environment, PathPointer};
+use flox_rust_sdk::models::lockfile::{LockedManifest, TypedLockedManifest};
 use flox_rust_sdk::models::manifest::{insert_packages, PackageToInstall};
+use flox_rust_sdk::models::pkgdb::scrape_input;
 use indoc::{formatdoc, indoc};
+use log::debug;
 use toml_edit::{Document, Formatted, Item, Table, Value};
 
 use crate::commands::{environment_description, ConcreteEnvironment};
@@ -65,13 +69,29 @@ impl Init {
         };
 
         // Don't run hooks in home dir
-        let customization = (dir != home_dir)
-            .then(|| {
-                // TODO: hooks may run a scrape, so we should scrape here with a spinner
-                self.run_hooks(&dir, &flox)
-            })
-            .transpose()?
-            .unwrap_or_default();
+        let customization = if dir != home_dir || self.auto_setup {
+            // Some hooks run searches,
+            // so run a scrape first
+            let global_lockfile = LockedManifest::ensure_global_lockfile(&flox)?;
+            let lockfile: TypedLockedManifest =
+                LockedManifest::read_from_file(&CanonicalPath::new(&global_lockfile)?)?
+                    .try_into()?;
+
+            // --ga-registry forces a single input
+            if let Some((_, input)) = lockfile.registry().inputs.iter().next() {
+                Dialog {
+                    message: "Generating database for flox packages...",
+                    help_message: None,
+                    typed: Spinner::new(|| scrape_input(&input.from)),
+                }
+                .spin_with_delay(Duration::from_secs_f32(0.25))?;
+            }
+
+            self.run_hooks(&dir, &flox)?
+        } else {
+            debug!("Skipping hooks in home directory");
+            InitCustomization::default()
+        };
 
         let env = if customization.packages.is_some() {
             Dialog {

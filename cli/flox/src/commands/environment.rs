@@ -42,7 +42,6 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::lockfile::{
-    FlakeRef,
     Input,
     InstalledPackage,
     LockedManifest,
@@ -51,13 +50,7 @@ use flox_rust_sdk::models::lockfile::{
     TypedLockedManifest,
 };
 use flox_rust_sdk::models::manifest::{self, PackageToInstall};
-use flox_rust_sdk::models::pkgdb::{
-    call_pkgdb,
-    error_codes,
-    CallPkgDbError,
-    PkgDbError,
-    PKGDB_BIN,
-};
+use flox_rust_sdk::models::pkgdb::{self, error_codes, CallPkgDbError, PkgDbError, ScrapeError};
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
@@ -2152,14 +2145,14 @@ impl Update {
         }
 
         // TODO: make this async when scraping multiple inputs
-        let results: Vec<Result<()>> = Dialog {
+        let results: Vec<Result<(), ScrapeError>> = Dialog {
             message: "Generating databases for updated inputs...",
             help_message: (inputs_to_scrape.len() > 1).then_some("This may take a while."),
             typed: Spinner::new(|| {
                 // TODO: rayon::par_iter
                 inputs_to_scrape
                     .iter()
-                    .map(|input| Self::scrape_input(&input.from))
+                    .map(|input| pkgdb::scrape_input(&input.from))
                     .collect()
             }),
         }
@@ -2181,19 +2174,6 @@ impl Update {
 
         Ok(environment.update(&flox, self.inputs.clone())?)
         // .context("updating environment failed")
-    }
-
-    fn scrape_input(input: &FlakeRef) -> Result<()> {
-        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        // TODO: this works for nixpkgs, but it won't work for anything else that is not exposing "legacyPackages"
-        pkgdb_cmd
-            .args(["scrape"])
-            .arg(serde_json::to_string(&input)?)
-            .arg("legacyPackages");
-
-        debug!("scraping input: {pkgdb_cmd:?}");
-        call_pkgdb(pkgdb_cmd)?;
-        Ok(())
     }
 }
 
