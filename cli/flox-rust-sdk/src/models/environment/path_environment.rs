@@ -466,7 +466,7 @@ impl PathEnvironment {
             // The install method adds a newline, so add one here as well
             indoc! {r#"
             # hello.pkg-path = "hello"
-            # nodejs = { version = "^18.4.2", path = "nodejs_18" }
+            # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
         "#}
         };
         replaced = replaced.replace(FLOX_INSTALL_PLACEHOLDER, packages);
