@@ -249,10 +249,14 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         }
       else
         {
-          //
-          // This is the child process.  Do NOT run the exit handlers when
-          // exiting the child process It may have references to threads started
-          // in the parent that we do NOT want to get cleaned up.
+          /*
+           * It is critical for the forked child process to NOT run the exit
+           * handlers (as will be done in calling `exit()`).
+           * Doing so will cause the child to try and cleanup threads and such,
+           * that the parent is still using, specifically the nix download
+           * thread. Calling `_exit()` does not call the exit handlers and
+           * allows the child to exit cleanly without interrupting the parent.
+           */
           _exit( scrapePrefixWorker( this, prefix, pageIdx, pageSize ) );
         }
     }
