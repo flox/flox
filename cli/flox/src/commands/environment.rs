@@ -1438,8 +1438,14 @@ impl Push {
             EnvironmentPointer::Managed(managed_pointer) => {
                 let message = Self::push_existing_message(&managed_pointer, self.force);
 
-                // todo add spinner
-                Self::push_managed_env(&flox, managed_pointer, dir, self.force)?;
+                Dialog {
+                    message: "Pushing updates to FloxHub...",
+                    help_message: None,
+                    typed: Spinner::new(|| {
+                        Self::push_managed_env(&flox, managed_pointer, dir, self.force)
+                    }),
+                }
+                .spin()?;
 
                 message::updated(message);
             },
@@ -1457,8 +1463,14 @@ impl Push {
                     )?
                 };
 
-                // todo add spinner
-                let env = Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)?;
+                let env = Dialog {
+                    message: "Pushing environment to FloxHub...",
+                    help_message: None,
+                    typed: Spinner::new(|| {
+                        Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)
+                    }),
+                }
+                .spin()?;
 
                 message::updated(Self::push_new_message(env.pointer(), self.force));
             },
@@ -2055,7 +2067,13 @@ impl Update {
                     new_lockfile,
                     old_lockfile,
                     ..
-                } = self.update_manifest(flox, concrete_environment)?;
+                } = Dialog {
+                    message: "Updating environment...",
+                    help_message: None,
+                    typed: Spinner::new(|| self.update_manifest(flox, concrete_environment)),
+                }
+                .spin()?;
+
                 (
                     old_lockfile
                         .map(TypedLockedManifest::try_from)
@@ -2070,7 +2088,15 @@ impl Update {
                     new_lockfile,
                     old_lockfile,
                     ..
-                } = LockedManifest::update_global_manifest(&flox, self.inputs)?;
+                } = Dialog {
+                    message: "Updating global-manifest...",
+                    help_message: None,
+                    typed: Spinner::new(|| {
+                        LockedManifest::update_global_manifest(&flox, self.inputs)
+                    }),
+                }
+                .spin()?;
+
                 (
                     old_lockfile
                         .map(TypedLockedManifest::try_from)
@@ -2219,7 +2245,14 @@ impl Upgrade {
 
         let mut environment = concrete_environment.into_dyn_environment();
 
-        let upgraded = environment.upgrade(&flox, &self.groups_or_iids)?.packages;
+        let result = Dialog {
+            message: "Upgrading packages...",
+            help_message: None,
+            typed: Spinner::new(|| environment.upgrade(&flox, &self.groups_or_iids)),
+        }
+        .spin()?;
+
+        let upgraded = result.packages;
 
         if upgraded.is_empty() {
             if self.groups_or_iids.is_empty() {
