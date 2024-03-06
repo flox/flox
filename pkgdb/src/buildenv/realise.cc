@@ -434,8 +434,10 @@ evalCacheCursorForInput( nix::ref<nix::EvalState> &             state,
   auto floxNixpkgsAttrs = flox::githubAttrsToFloxNixpkgsAttrs( input.attrs );
   auto packageInputRef  = nix::FlakeRef::fromAttrs( floxNixpkgsAttrs );
 
-  auto packageFlake
-    = flox::lockFlake( *state, packageInputRef, nix::flake::LockFlags {} );
+  /* See note on `flox::lockFlake on whe we call the native version here. */
+  auto packageFlake = nix::flake::lockFlake( *state,
+                                             packageInputRef,
+                                             nix::flake::LockFlags {} );
 
   auto cursor = getPackageCursor( state, packageFlake, attrPath );
   return cursor;

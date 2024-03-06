@@ -145,10 +145,18 @@ callInChildProcess( std::function<void()>  lambda,
  * @brief Thin wrapper around nix::lockFlake to ensure any downloads happen in
  *        a child process.
  *
- * When downloads occur, the nix static global `nix::curlFileTransfer` object
- * will trigger a worker thread.  Later forks ( for scraping ) will then try to
- * cleanup those threads but will fail.  Strictly using this wrapper for
- * `lockFlake` keeps the thread creation and cleanup in the same child process.
+ * When downloads occur, the nix `nix::curlFileTransfer` object
+ * will trigger a worker thread.  Later forks ( for scraping, or other ) will
+ * then try to cleanup those threads but will fail.  Strictly using this wrapper
+ * for `lockFlake` keeps the thread creation and cleanup in the same child
+ * process. There are other downloads that occur in Nix that foul this up such
+ * as `queryMissing`.  Since that can happen in the parent, and once it does,
+ * you do NOT want to fork, it's kind of an art to make the right call, this or
+ * the native one based on the context of where the call is being made.
+ *
+ * TODO: This mechanism should be revisited to see if it's actually needed, or
+ * if the download thread cleanup can be addressed differently, in a more
+ * consistent manner.
  */
 nix::flake::LockedFlake
 lockFlake( nix::EvalState &              state,

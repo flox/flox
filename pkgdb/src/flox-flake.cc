@@ -94,12 +94,23 @@ lockFlake( nix::EvalState &              state,
            const nix::FlakeRef &         flakeRef,
            const nix::flake::LockFlags & lockFlags )
 {
-  auto nixLockFlake
+  /* We want to make sure we don't make nested calls to forks */
+  static std::atomic_flag inChildSentinel = ATOMIC_FLAG_INIT;
+  auto                    nixLockFlake
     = [&]() { return nix::flake::lockFlake( state, flakeRef, lockFlags ); };
-  // Calling this in a child process will ensure downloads are complete,
-  // keeping file transfers isolated to a child process.
-  callInChildProcess( nixLockFlake,
-                      LockFlakeException( "failed to lock flake" ) );
+  if ( ! inChildSentinel.test_and_set() )
+    {
+      // Calling this in a child process will ensure downloads are complete,
+      // keeping file transfers isolated to a child process.
+      callInChildProcess( nixLockFlake,
+                          LockFlakeException( "failed to lock flake" ) );
+      inChildSentinel.clear();
+    }
+  else
+    {
+      traceLog( "flox::lockFlake: already in child process, not re-forking." );
+    }
+
   return ( nixLockFlake() );
 }
 
