@@ -206,15 +206,28 @@ EOF
 # we trust it automatically.
 #
 # flox reads the user handle from the auth token.
-# Here we set a floxhub token with the user handle "test".
+# The default floxhub test token has the user handle "test".
 @test "m10.4: 'activate --remote' succeeds if owned by current user" {
   export OWNER="test"
   floxhub_setup "$OWNER"
   make_empty_remote_env
 
-  "$FLOX_BIN" install hello --remote "$OWNER/test"
-
   run "$FLOX_BIN" activate --remote "$OWNER/test" -- exit
+  assert_success
+}
+
+# bats test_tags=remote,activate,trust,remote:activate:trust-flox
+#
+# If the remotely accessed environment is owned by Flox,
+# we trust it automatically.
+#
+# flox reads the user handle from the auth token.
+# Here we set a floxhub token with the user handle "test".
+@test "m10.5: 'activate --remote' succeeds if owned by Flox" {
+  floxhub_setup "flox"
+  OWNER=flox make_empty_remote_env
+
+  run "$FLOX_BIN" activate --remote "flox/test" -- exit
   assert_success
 }
 
@@ -222,7 +235,7 @@ EOF
 
 @test "sanity check upgrade works for remote environments" {
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-  make_empty_remote_env
+    make_empty_remote_env
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" install hello --remote "$OWNER/test"

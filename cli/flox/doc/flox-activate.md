@@ -61,7 +61,7 @@ hook was defined.
     code.
     This presents a security risk,
     so you will be prompted whether to trust the environment.
-    Environments owned by the current user are always trusted.
+    Environments owned by the current user and Flox are always trusted.
     You may set certain environments to always be trusted using the config key
     `trusted_environments."<owner/name>" = (trust | deny)`,
     or via the following command:
