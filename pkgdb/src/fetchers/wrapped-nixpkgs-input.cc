@@ -97,12 +97,7 @@ createWrappedFlakeDirV0( const nix::FlakeRef & nixpkgsRef )
   flox::NixState           nixState;
   nix::ref<nix::EvalState> state = nixState.getState();
   nix::FlakeRef wrappedRef = nix::parseFlakeRef( "path:" + tmpDir.string() );
-  /* Push verbosity level to suppress "warning: creating lock file ..." */
-  auto oldVerbosity = nix::verbosity;
-  nix::verbosity    = nix::lvlError;
-  auto _locked      = flox::lockFlake( *state, wrappedRef, {} );
-  /* Pop verbosity */
-  nix::verbosity = oldVerbosity;
+  auto          _locked    = nix::flake::lockFlake( *state, wrappedRef, {} );
   debugLog( "locked flake template" );
 
   return tmpDir;

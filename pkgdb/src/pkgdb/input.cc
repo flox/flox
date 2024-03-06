@@ -249,14 +249,20 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         }
       else
         {
-          //
-          // This is the child process
-          scrapePrefixWorker( this, prefix, pageIdx, pageSize );
+          /*
+           * It is critical for the forked child process to NOT run the exit
+           * handlers (as will be done in calling `exit()`).
+           * Doing so will cause the child to try and cleanup threads and such,
+           * that the parent is still using, specifically the nix download
+           * thread. Calling `_exit()` does not call the exit handlers and
+           * allows the child to exit cleanly without interrupting the parent.
+           */
+          _exit( scrapePrefixWorker( this, prefix, pageIdx, pageSize ) );
         }
     }
 }
 
-void
+int
 PkgDbInput::scrapePrefixWorker( PkgDbInput *     input,
                                 const AttrPath & prefix,
                                 const size_t     pageIdx,
@@ -292,7 +298,7 @@ PkgDbInput::scrapePrefixWorker( PkgDbInput *     input,
       chunkDbRW->execute( "ROLLBACK TRANSACTION" );
       input->closeDbReadWrite();
       input->freeFlake();
-      exit( EXIT_FAILURE_NIX_EVAL );
+      return EXIT_FAILURE_NIX_EVAL;
     }
 
   /* Close the transaction. */
@@ -305,13 +311,13 @@ PkgDbInput::scrapePrefixWorker( PkgDbInput *     input,
     {
       input->closeDbReadWrite();
       input->freeFlake();
-      exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+      return targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE;
     }
   catch ( const std::exception & err )
     {
       debugLog( nix::fmt( "scrapePrefix(child): caught exception on exit: %s",
                           err.what() ) );
-      exit( targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE );
+      return targetComplete ? EXIT_SUCCESS : EXIT_CHILD_INCOMPLETE;
     }
 }
 

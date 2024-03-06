@@ -226,7 +226,7 @@ public:
    * @param pageIdx The page of attributes to process
    * @param pageSize The number of attributes per page.
    */
-  static void
+  static int
   scrapePrefixWorker( PkgDbInput *     input,
                       const AttrPath & prefix,
                       const size_t     pageIdx,

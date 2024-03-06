@@ -434,8 +434,9 @@ evalCacheCursorForInput( nix::ref<nix::EvalState> &             state,
   auto floxNixpkgsAttrs = flox::githubAttrsToFloxNixpkgsAttrs( input.attrs );
   auto packageInputRef  = nix::FlakeRef::fromAttrs( floxNixpkgsAttrs );
 
-  auto packageFlake
-    = flox::lockFlake( *state, packageInputRef, nix::flake::LockFlags {} );
+  auto packageFlake = nix::flake::lockFlake( *state,
+                                             packageInputRef,
+                                             nix::flake::LockFlags {} );
 
   auto cursor = getPackageCursor( state, packageFlake, attrPath );
   return cursor;
@@ -808,7 +809,7 @@ createContainerBuilder( nix::EvalState &       state,
     = nix::parseFlakeRef( COMMON_NIXPKGS_URL );
 
   auto lockedNixpkgs
-    = flox::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
+    = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
 
   nix::Value vNixpkgsFlake {};
   nix::flake::callFlake( state, lockedNixpkgs, vNixpkgsFlake );

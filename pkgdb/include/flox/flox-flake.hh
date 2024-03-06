@@ -137,24 +137,6 @@ FLOX_DEFINE_EXCEPTION( LockFlakeException,
 
 /* -------------------------------------------------------------------------- */
 
-void
-callInChildProcess( std::function<void()>  lambda,
-                    const std::exception & thrownOnError );
-
-/**
- * @brief Thin wrapper around nix::lockFlake to ensure any downloads happen in
- *        a child process.
- *
- * When downloads occur, the nix static global `nix::curlFileTransfer` object
- * will trigger a worker thread.  Later forks ( for scraping ) will then try to
- * cleanup those threads but will fail.  Strictly using this wrapper for
- * `lockFlake` keeps the thread creation and cleanup in the same child process.
- */
-nix::flake::LockedFlake
-lockFlake( nix::EvalState &              state,
-           const nix::FlakeRef &         flakeRef,
-           const nix::flake::LockFlags & lockFlags );
-
 }  // namespace flox
 
 

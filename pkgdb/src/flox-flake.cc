@@ -38,76 +38,10 @@ namespace flox {
 
 /* -------------------------------------------------------------------------- */
 
-void
-callInChildProcess( std::function<void()>  lambda,
-                    const std::exception & thrownOnError )
-{
-  pid_t pid = fork();
-  if ( pid == -1 )
-    {
-      errorLog( "callInChildProcess: failed to fork!" );
-      exit( EXIT_FAILURE );
-    }
-  if ( 0 < pid )
-    {
-      debugLog( nix::fmt( "callInChildProcess: waiting for child: %d", pid ) );
-      int status = 0;
-      waitpid( pid, &status, 0 );
-      debugLog( nix::fmt(
-        "callInChildProcess: child is finished, exit code: %d, signal: %d",
-        WEXITSTATUS( status ),
-        WTERMSIG( status ) ) );
-
-      if ( WIFEXITED( status ) )
-        {
-          if ( WEXITSTATUS( status ) == EXIT_SUCCESS )
-            {
-              /* Success */
-              return;
-            }
-          /* The error has already been reported via the child, just pass
-           * along the exit code. */
-          exit( WEXITSTATUS( status ) );
-        }
-      else { throw thrownOnError; }
-    }
-  else
-    {
-      lambda();
-      try
-        {
-          debugLog( "callInChildProcess(child): finished, exiting" );
-          exit( EXIT_SUCCESS );
-        }
-      catch ( const std::exception & err )
-        {
-          debugLog(
-            nix::fmt( "callInChildProcess(child): caught exception on exit: %s",
-                      err.what() ) );
-          exit( EXIT_SUCCESS );
-        }
-    }
-}
-
-nix::flake::LockedFlake
-lockFlake( nix::EvalState &              state,
-           const nix::FlakeRef &         flakeRef,
-           const nix::flake::LockFlags & lockFlags )
-{
-  auto nixLockFlake
-    = [&]() { return nix::flake::lockFlake( state, flakeRef, lockFlags ); };
-  // Calling this in a child process will ensure downloads are complete,
-  // keeping file transfers isolated to a child process.
-  callInChildProcess( nixLockFlake,
-                      LockFlakeException( "failed to lock flake" ) );
-  return ( nixLockFlake() );
-}
-
-
 FloxFlake::FloxFlake( const nix::ref<nix::EvalState> & state,
                       const nix::FlakeRef &            ref )
 try : state( state ),
-  lockedFlake( flox::lockFlake( *this->state, ref, defaultLockFlags ) )
+  lockedFlake( nix::flake::lockFlake( *this->state, ref, defaultLockFlags ) )
   {}
 catch ( const std::exception & err )
   {

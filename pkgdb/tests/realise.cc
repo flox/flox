@@ -22,7 +22,7 @@ cursorForPackageName( nix::ref<nix::EvalState> & state,
 {
   auto flakeRef = nix::parseFlakeRef( nixpkgsRef );
   auto lockedRef
-    = flox::lockFlake( *state, flakeRef, nix::flake::LockFlags {} );
+    = nix::flake::lockFlake( *state, flakeRef, nix::flake::LockFlags {} );
   std::vector<std::string> attrPath = { "legacyPackages", system, name };
   auto cursor = flox::buildenv::getPackageCursor( state, lockedRef, attrPath );
   return cursor;
