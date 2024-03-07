@@ -144,11 +144,8 @@ impl Init {
 
     /// Run all hooks and return a single combined customization
     fn run_hooks(&self, dir: &Path, flox: &Flox) -> Result<InitCustomization> {
-        let hooks: Vec<Box<dyn InitHook>> = if std::env::var("_FLOX_NODE_HOOK").is_ok() {
-            vec![Box::new(Requirements), Box::new(Node::new(dir, flox)?)]
-        } else {
-            vec![Box::new(Requirements)]
-        };
+        let hooks: Vec<Box<dyn InitHook>> =
+            vec![Box::new(Requirements), Box::new(Node::new(dir, flox)?)];
 
         let mut customizations = vec![];
 

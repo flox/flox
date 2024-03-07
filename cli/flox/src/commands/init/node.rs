@@ -14,6 +14,7 @@ use semver::VersionReq;
 use super::{format_customization, InitHook, AUTO_SETUP_HINT};
 use crate::config::features::Features;
 use crate::utils::dialog::{Dialog, Select};
+use crate::utils::message;
 
 const NPM_HOOK: &str = indoc! {r#"
                 # Install nodejs depedencies
@@ -26,7 +27,7 @@ const YARN_HOOK: &str = indoc! {r#"
 pub(super) struct Node {
     /// Node version as specified in package.json if it exists
     /// [PackageJSONVersion::None] if we found a compatible npm or yarn,
-    package_json_node_version: PackageJSONVersion,
+    package_json_node_version: Option<PackageJSONVersion>,
     /// Node version as specified in .nvmrc if it exists
     /// [None] if we found a version in package.json
     nvmrc_version: Option<NVMRCVersion>,
@@ -52,9 +53,6 @@ enum NVMRCVersion {
 }
 
 enum PackageJSONVersion {
-    /// We didn't check for package.json,
-    /// or it does not exist or is invalid.
-    None,
     /// package.json exists but doesn't specify a version
     Unspecified,
     Unavailable,
@@ -97,10 +95,10 @@ impl Node {
         // satisfies all constraints,
         // but that seems unlikely to be as commonly needed.
         let versions = Self::get_package_json_versions(path)?;
+        let yarn_lock_exists = path.join("yarn.lock").exists();
         let yarn_install = match versions {
             None => None,
             Some(ref versions) => {
-                let yarn_lock_exists = path.join("yarn.lock").exists();
                 if yarn_lock_exists {
                     Self::try_find_compatible_yarn(versions, flox)?
                 } else {
@@ -119,7 +117,7 @@ impl Node {
             if !package_json_and_package_lock {
                 return Ok(Self {
                     action: NodeAction::InstallYarn(Box::new(yarn_install.clone())),
-                    package_json_node_version: PackageJSONVersion::None,
+                    package_json_node_version: None,
                     nvmrc_version: None,
                 });
             }
@@ -131,11 +129,11 @@ impl Node {
                 node: Some(ref node_version),
                 ..
             }) => match Self::try_find_compatible_version("nodejs", node_version, None, flox)? {
-                None => PackageJSONVersion::Unavailable,
-                Some(result) => PackageJSONVersion::Found(Box::new(result)),
+                None => Some(PackageJSONVersion::Unavailable),
+                Some(result) => Some(PackageJSONVersion::Found(Box::new(result))),
             },
-            Some(_) => PackageJSONVersion::Unspecified,
-            _ => PackageJSONVersion::None,
+            Some(_) => Some(PackageJSONVersion::Unspecified),
+            _ => None,
         };
 
         // Get value for self.nvmrc_version
@@ -143,7 +141,7 @@ impl Node {
             // package.json is higher priority than .nvmrc,
             // so don't check .nvmrc if we know we'll use the version in
             // package.json or we know we can't provide it
-            PackageJSONVersion::Found(_) | PackageJSONVersion::Unavailable => None,
+            Some(PackageJSONVersion::Found(_)) | Some(PackageJSONVersion::Unavailable) => None,
             _ => Self::get_nvmrc_version(path, flox)?,
         };
 
@@ -154,6 +152,8 @@ impl Node {
                     &nvmrc_version,
                     valid_package_json,
                 ) {
+                    // We know at this point that package-lock.json exists,
+                    // because otherwise we would have returned above
                     Some(node_install) => NodeAction::InstallYarnOrNode(
                         Box::new(yarn_install),
                         Box::new(node_install),
@@ -167,7 +167,14 @@ impl Node {
                     &nvmrc_version,
                     valid_package_json,
                 ) {
-                    Some(node_install) => NodeAction::InstallNode(Box::new(node_install)),
+                    Some(mut node_install) => {
+                        // If yarn.lock exists but we couldn't find a compatible
+                        // yarn, don't offer an npm hook
+                        if yarn_lock_exists {
+                            node_install.npm_hook = false;
+                        }
+                        NodeAction::InstallNode(Box::new(node_install))
+                    },
                     None => NodeAction::Nothing,
                 }
             },
@@ -383,18 +390,18 @@ impl Node {
     /// This is decided based on whether .nvmrc and package.json are present,
     /// and whether Flox can provide versions they request.
     fn get_node_install(
-        package_json_node_version: &PackageJSONVersion,
+        package_json_node_version: &Option<PackageJSONVersion>,
         nvmrc_version: &Option<NVMRCVersion>,
         npm_hook: bool,
     ) -> Option<NodeInstall> {
         match (package_json_node_version, nvmrc_version) {
             // package.json takes precedence over .nvmrc
-            (PackageJSONVersion::Found(result), _) => Some(NodeInstall {
+            (Some(PackageJSONVersion::Found(result)), _) => Some(NodeInstall {
                 node: Some(*result.clone()),
                 npm_hook,
             }),
             // Treat the version in package.json strictly; if we can't find it, don't suggest something else.
-            (PackageJSONVersion::Unavailable, _) => None,
+            (Some(PackageJSONVersion::Unavailable), _) => None,
             (_, Some(NVMRCVersion::Found(result))) => Some(NodeInstall {
                 node: Some(*result.clone()),
                 npm_hook,
@@ -407,11 +414,11 @@ impl Node {
                 node: None,
                 npm_hook,
             }),
-            (PackageJSONVersion::Unspecified, None) => Some(NodeInstall {
+            (Some(PackageJSONVersion::Unspecified), None) => Some(NodeInstall {
                 node: None,
                 npm_hook,
             }),
-            (PackageJSONVersion::None, None) => None,
+            (None, None) => None,
         }
     }
 
@@ -430,29 +437,21 @@ impl Node {
             self.nvmrc_version.as_ref(),
         ) {
             // package.json takes precedence over .nvmrc
-            (PackageJSONVersion::Found(result), _) => {
+            (Some(PackageJSONVersion::Found(result)), _) => {
                 let message = format!(
                     "Flox detected a package.json compatible with node{}",
-                    result
-                        .version
-                        .as_ref()
-                        .map(|version| format!(" {version}"))
-                        .unwrap_or("".to_string())
+                    Self::format_version_or_empty(result.version.as_ref())
                 );
                 mentions_package_json = true;
                 (message, result.version.clone())
             },
             // Treat the version in package.json strictly; if we can't find it, don't suggest something else.
             // get_action() returns NodeAction::Nothing for this case so it's unreachable
-            (PackageJSONVersion::Unavailable, _) => unreachable!(),
+            (Some(PackageJSONVersion::Unavailable), _) => unreachable!(),
             (_, Some(NVMRCVersion::Found(result))) => {
                 let message = format!(
                     "Flox detected an .nvmrc{}",
-                    result
-                        .version
-                        .as_ref()
-                        .map(|version| format!(" compatible with node {version}"))
-                        .unwrap_or("".to_string())
+                    Self::format_version_or_empty(result.version.as_ref())
                 );
                 (message, result.version.clone())
             },
@@ -468,141 +467,86 @@ impl Node {
                 result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
                 (message, result.version.clone())
             },
-            (PackageJSONVersion::Unspecified, None) => {
+            (Some(PackageJSONVersion::Unspecified), None) => {
                 let result = Self::get_default_package("nodejs", flox)?;
                 mentions_package_json = true;
                 ("Flox detected a package.json".to_string(), result.version)
             },
             // get_action() returns NodeAction::Nothing for this case so it's unreachable
-            (PackageJSONVersion::None, None) => unreachable!(),
+            (None, None) => unreachable!(),
         };
         Ok((message, version, mentions_package_json))
+    }
+
+    fn prompt(&self) -> Result<bool> {
+        let message = indoc! {
+        "Would you like Flox to apply this suggestion?
+        You can always change the environment's manifest with 'flox edit'"};
+
+        let dialog = Dialog {
+            message,
+            help_message: Some(AUTO_SETUP_HINT),
+            typed: Select {
+                options: ["Yes", "No", "Show suggested modifications"].to_vec(),
+            },
+        };
+        let (mut choice, _) = dialog.clone().raw_prompt()?;
+
+        while choice == 2 {
+            message::plain(format_customization(&self.get_init_customization())?);
+
+            (choice, _) = dialog.clone().raw_prompt()?;
+        }
+
+        Ok(choice == 0)
     }
 
     /// Prompt whether to install nodejs (but not npm or yarn)
     fn prompt_for_node(&self, node_install: &NodeInstall, flox: &Flox) -> Result<bool> {
         let (nodejs_detected, nodejs_version, mentions_package_json) =
             self.nodejs_message_and_version(flox)?;
-        let mut message = format!("{nodejs_detected}\n");
-        if !mentions_package_json {
-            message.push_str("Flox detected a package.json\n");
-        }
-
+        let mut detected = format!("{nodejs_detected}\n");
         if node_install.npm_hook {
-            message.push_str(&formatdoc! {"
+            if !mentions_package_json {
+                detected.push_str("Flox detected a package.json\n");
+            }
+
+            detected.push_str(&formatdoc! {"
 
                 Flox can add the following to your environment:
                 * nodejs{} with npm bundled
                 * An npm installation hook
             ",
-                nodejs_version
-                    .map(|version| format!(" {version}"))
-                    .unwrap_or("".to_string()),
+                Self::format_version_or_empty(nodejs_version.as_ref()),
             });
         } else {
-            message.push_str(&formatdoc! {"
+            detected.push_str(&formatdoc! {"
 
                 Flox can add the following to your environment:
                 * nodejs{}
             ",
-                nodejs_version
-                    .map(|version| format!(" {version}"))
-                    .unwrap_or("".to_string()),
+                Self::format_version_or_empty(nodejs_version.as_ref()),
             });
         }
+        message::plain(detected);
 
-        message.push_str(&formatdoc! {"
-
-            Would you like Flox to apply this suggestion?
-            You can always change the environment's manifest with 'flox edit'
-            "});
-
-        let dialog = Dialog {
-            message: &message,
-            help_message: Some(AUTO_SETUP_HINT),
-            typed: Select {
-                options: ["Yes", "No", "Show suggested modifications"].to_vec(),
-            },
-        };
-        let (mut choice, _) = dialog.raw_prompt()?;
-
-        if choice == 2 {
-            let message = formatdoc! {"
-
-                {}
-                Would you like Flox to apply these modifications?
-                You can always change the environment's manifest with 'flox edit'
-            ", format_customization(&self.get_init_customization())?};
-
-            let dialog = Dialog {
-                message: &message,
-                help_message: Some(AUTO_SETUP_HINT),
-                typed: Select {
-                    options: ["Yes", "No"].to_vec(),
-                },
-            };
-
-            (choice, _) = dialog.raw_prompt()?;
-        }
-        Ok(choice == 0)
+        self.prompt()
     }
 
-    /// Prompt whether to install npm or yarn when only one of them is viable
+    /// Prompt whether to install yarn
     fn prompt_with_yarn(&self, yarn_install: &YarnInstall) -> Result<bool> {
-        let message = {
-            let yarn_version = yarn_install
-                .yarn
-                .version
-                .as_ref()
-                .map(|version| format!(" {version}"))
-                .unwrap_or("".to_string());
-            let node_version = yarn_install
-                .node
-                .version
-                .as_ref()
-                .map(|version| format!(" {version}"))
-                .unwrap_or("".to_string());
+        let yarn_version = Self::format_version_or_empty(yarn_install.yarn.version.as_ref());
+        let node_version = Self::format_version_or_empty(yarn_install.node.version.as_ref());
 
-            formatdoc! {"
-                    Flox detected a package.json and a yarn.lock
+        message::plain(formatdoc! {"
+            Flox detected a package.json and a yarn.lock
 
-                    Flox can add the following to your environment:
-                    * yarn{yarn_version} with nodejs{node_version} bundled
-                    * A yarn installation hook
+            Flox can add the following to your environment:
+            * yarn{yarn_version} with nodejs{node_version} bundled
+            * A yarn installation hook
+            "});
 
-                    Would you like Flox to apply this suggestion?
-                    You can always change the environment's manifest with 'flox edit'
-                "}
-        };
-
-        let dialog = Dialog {
-            message: &message,
-            help_message: Some(AUTO_SETUP_HINT),
-            typed: Select {
-                options: ["Yes", "No", "Show suggested modifications"].to_vec(),
-            },
-        };
-        let (mut choice, _) = dialog.raw_prompt()?;
-
-        if choice == 2 {
-            let message = formatdoc! {"
-
-                {}
-                Would you like Flox to apply these modifications?
-                You can always change the environment's manifest with 'flox edit'
-            ", format_customization(&self.get_init_customization())?};
-
-            let dialog = Dialog {
-                message: &message,
-                help_message: Some(AUTO_SETUP_HINT),
-                typed: Select {
-                    options: ["Yes", "No"].to_vec(),
-                },
-            };
-
-            (choice, _) = dialog.raw_prompt()?;
-        }
-        Ok(choice == 0)
+        self.prompt()
     }
 
     /// Prompt whether to install npm or yarn when either is viable
@@ -612,36 +556,27 @@ impl Node {
         node_install: NodeInstall,
         flox: &Flox,
     ) -> Result<bool> {
-        let yarn_version = yarn_install
-            .yarn
+        let yarn_version = Self::format_version_or_empty(yarn_install.yarn.version.as_ref());
+        let yarn_node_version = Self::format_version_or_empty(yarn_install.node.version.as_ref());
+        let node_version = Self::format_version_or_empty(
+            match &node_install.node {
+                Some(found_node) => found_node.clone(),
+                None => Self::get_default_package("nodejs", flox)?,
+            }
             .version
-            .as_ref()
-            .map(|version| format!(" {version}"))
-            .unwrap_or("".to_string());
-        let yarn_node_version = yarn_install
-            .node
-            .version
-            .as_ref()
-            .map(|version| format!(" {version}"))
-            .unwrap_or("".to_string());
-        let node_version = match &node_install.node {
-            Some(found_node) => found_node.clone(),
-            None => Self::get_default_package("nodejs", flox)?,
-        }
-        .version
-        .as_ref()
-        .map(|version| format!(" {version}"))
-        .unwrap_or("".to_string());
+            .as_ref(),
+        );
 
-        let message = formatdoc! {"
+        message::plain(formatdoc! {"
             Flox detected both a package-lock.json and a yarn.lock
 
             Flox can add the following to your environment:
-            * Either nodejs{node_version} with npm bundled, or yarn{yarn_version} with nodejs{yarn_node_version} bundled
-            * Either an npm or yarn installation hook
-
-            Would you like Flox to apply one of these modifications?
-            You can always change the environment's manifest with 'flox edit'"};
+            * Either nodejs{node_version} with npm bundled, OR yarn{yarn_version} with nodejs{yarn_node_version} bundled
+            * Either an npm installation hook, OR a yarn installation hook
+            "});
+        let message = formatdoc! {
+        "Would you like Flox to apply one of these modifications?
+         You can always change the environment's manifest with 'flox edit'"};
         let options = [
             "Yes - with npm",
             "Yes - with yarn",
@@ -659,7 +594,7 @@ impl Node {
             },
         };
 
-        let (mut choice, _) = dialog.raw_prompt()?;
+        let (mut choice, _) = dialog.clone().raw_prompt()?;
 
         while choice == 3 || choice == 4 {
             // Temporarily set choice so self.get_init_customization() returns
@@ -669,22 +604,9 @@ impl Node {
             } else if choice == 4 {
                 self.action = NodeAction::InstallYarn(Box::new(yarn_install.clone()))
             }
-            let message = formatdoc! {"
+            message::plain(format_customization(&self.get_init_customization())?);
 
-                {}
-                Would you like Flox to apply one of these modifications?
-                You can always change the environment's manifest with 'flox edit'
-            ", format_customization(&self.get_init_customization())?};
-
-            let dialog = Dialog {
-                message: &message,
-                help_message: Some(AUTO_SETUP_HINT),
-                typed: Select {
-                    options: options.clone(),
-                },
-            };
-
-            (choice, _) = dialog.raw_prompt()?;
+            (choice, _) = dialog.clone().raw_prompt()?;
         }
 
         if choice == 0 {
@@ -693,6 +615,12 @@ impl Node {
             self.action = NodeAction::InstallYarn(Box::new(yarn_install.clone()))
         }
         Ok(choice == 0 || choice == 1)
+    }
+
+    fn format_version_or_empty(version: Option<&String>) -> String {
+        version
+            .map(|version| format!(" {version}"))
+            .unwrap_or("".to_string())
     }
 }
 
@@ -846,7 +774,7 @@ mod tests {
     fn test_get_init_customization_yarn() {
         assert_eq!(
             Node {
-                package_json_node_version: PackageJSONVersion::None,
+                package_json_node_version: None,
                 nvmrc_version: None,
                 action: NodeAction::InstallYarn(Box::new(YarnInstall {
                     yarn: SearchResult {
@@ -876,7 +804,7 @@ mod tests {
     fn test_get_init_customization_yarn_or_node() {
         assert_eq!(
             Node {
-                package_json_node_version: PackageJSONVersion::None,
+                package_json_node_version: None,
                 nvmrc_version: None,
                 action: NodeAction::InstallYarnOrNode(
                     Box::new(YarnInstall {
@@ -910,7 +838,7 @@ mod tests {
     fn test_get_init_customization_node() {
         assert_eq!(
             Node {
-                package_json_node_version: PackageJSONVersion::None,
+                package_json_node_version: None,
                 nvmrc_version: None,
                 action: NodeAction::InstallNode(Box::new(NodeInstall {
                     node: Some(SearchResult {
