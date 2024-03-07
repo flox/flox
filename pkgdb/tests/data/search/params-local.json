@@ -1,0 +1,29 @@
+{
+  "manifest": {
+    "registry": {
+      "inputs": {
+        "nixpkgs": {
+          "from": "<testdir>/harnesses/proj0"
+        }
+      }
+    }
+  , "options": {
+      "systems": ["x86_64-linux"]
+    , "allow": {
+        "unfree": true
+      , "broken": false
+      , "licenses": null
+      }
+    , "semver": {
+        "prefer-pre-releases": false
+      }
+    }
+  }
+, "query": {
+    "match": "pkg1"
+  , "name": null
+  , "pname": null
+  , "version": null
+  , "semver": null
+  }
+}

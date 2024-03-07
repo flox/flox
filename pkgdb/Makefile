@@ -567,12 +567,13 @@ cc-check: $(TESTS:.cc=)
 
 #: Run all bats tests
 PKGDB_BATS_FILES ?= "$(PKGDB_ROOT)/tests"
+PKGDB_BATS_OPTS ?= ""
 bats-check: bin $(TEST_UTILS)
 	PKGDB_BIN="$(PKGDB_ROOT)/bin/pkgdb"                          \
 	PKGDB_IS_SQLITE3_BIN="$(PKGDB_ROOT)/tests/is_sqlite3"        \
 	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_ROOT)/tests/search-params"  \
 	  $(BATS) --print-output-on-failure --verbose-run --timing   \
-	          "$(PKGDB_BATS_FILES)";
+	          $(PKGDB_BATS_OPTS) "$(PKGDB_BATS_FILES)";
 
 
 # ---------------------------------------------------------------------------- #
@@ -588,8 +589,9 @@ bats-check: bin $(TEST_UTILS)
 #       declarations of "headers" in the conventional sense.
 
 # SQL Schemas
-src/pkgdb/write.o: src/pkgdb/schemas.hh src/pkgdb/rules.json.hh
+src/pkgdb/write.o: src/pkgdb/schemas.hh
 
+src/pkgdb/scrape-rules.o: src/pkgdb/rules.json.hh
 
 # ---------------------------------------------------------------------------- #
 

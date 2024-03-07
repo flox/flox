@@ -15,14 +15,19 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
-/* Holds metadata information about schema versions. */
+/* Holds various schema versions and metadata about the scraped packages held
+ * such as the rules hash used. */
 static const char * sql_versions = R"SQL(
 CREATE TABLE IF NOT EXISTS DbVersions (
   name     TEXT NOT NULL PRIMARY KEY
 , version  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS DbScrapeMeta (
+  key      TEXT NOT NULL PRIMARY KEY
+, value    TEXT NOT NULL
 )
 )SQL";
-
 
 /* -------------------------------------------------------------------------- */
 
