@@ -62,11 +62,12 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
+/* We disable command hashing so a `flox install` will be reflected immediately
+ * in the shell.  Sometimes `hash` is used to detect if something is installed,
+ * and with hashing disabled, that fails.  Therefore, disable that at the end,
+ * in case it's used in the prior scripts (e.g. ~/.bashrc).
+ */
 const char * const BASH_ACTIVATE_SCRIPT = R"(
-# Disable command hashing to allow for newly installed flox packages to be found
-# immediately.
-set +h
-
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
 if [ -f ~/.bashrc -a "${FLOX_SOURCED_FROM_SHELL_RC:-}" != 1 ]
@@ -83,16 +84,15 @@ if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   for p in "${_prof_scripts[@]}"; do . "$p"; done
   unset _prof_scripts;
 fi
+
+# Disable command hashing to allow for newly installed flox packages to be found
+# immediately.
+set +h
 )";
 
 
 // unlike bash, zsh activation calls this script from the user's shell rcfile
 const char * const ZSH_ACTIVATE_SCRIPT = R"(
-# Disable command hashing to allow for newly installed flox packages to be found
-# immediately.
-setopt nohashcmds
-setopt nohashdirs
-
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _prof_scripts;
   _prof_scripts=( $(
@@ -101,6 +101,11 @@ if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   for p in "${_prof_scripts[@]}"; do . "$p"; done
   unset _prof_scripts;
 fi
+
+# Disable command hashing to allow for newly installed flox packages to be found
+# immediately.
+setopt nohashcmds
+setopt nohashdirs
 )";
 
 
