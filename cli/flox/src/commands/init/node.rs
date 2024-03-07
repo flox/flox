@@ -480,7 +480,7 @@ impl Node {
     }
 
     /// Prompt whether to install nodejs (but not npm or yarn)
-    fn prompt_for_node(&self, flox: &Flox) -> Result<bool> {
+    fn prompt_for_node(&self, node_install: &NodeInstall, flox: &Flox) -> Result<bool> {
         let (nodejs_detected, nodejs_version, mentions_package_json) =
             self.nodejs_message_and_version(flox)?;
         let mut message = format!("{nodejs_detected}\n");
@@ -488,15 +488,28 @@ impl Node {
             message.push_str("Flox detected a package.json\n");
         }
 
-        message.push_str(&formatdoc! {"
+        if node_install.npm_hook {
+            message.push_str(&formatdoc! {"
 
-            Flox can add the following to your environment:
-            * nodejs{}
-        ",
-            nodejs_version
-                .map(|version| format!(" {version}"))
-                .unwrap_or("".to_string()),
-        });
+                Flox can add the following to your environment:
+                * nodejs{} with npm bundled
+                * An npm installation hook
+            ",
+                nodejs_version
+                    .map(|version| format!(" {version}"))
+                    .unwrap_or("".to_string()),
+            });
+        } else {
+            message.push_str(&formatdoc! {"
+
+                Flox can add the following to your environment:
+                * nodejs{}
+            ",
+                nodejs_version
+                    .map(|version| format!(" {version}"))
+                    .unwrap_or("".to_string()),
+            });
+        }
 
         message.push_str(&formatdoc! {"
 
@@ -705,7 +718,7 @@ impl InitHook for Node {
             NodeAction::InstallYarnOrNode(yarn_install, node_install) => {
                 self.prompt_for_package_manager(*yarn_install.clone(), *node_install.clone(), flox)
             },
-            NodeAction::InstallNode(_) => self.prompt_for_node(flox),
+            NodeAction::InstallNode(node_install) => self.prompt_for_node(node_install, flox),
             NodeAction::Nothing => unreachable!(),
         }
     }
