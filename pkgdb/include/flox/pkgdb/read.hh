@@ -99,8 +99,7 @@ struct ScrapeMeta
   /**
    * The hash representing the Scraping rules used to generate the database.
    * This is checked upon opening and if they differ than the rules expected in
-   * the running version of pkgdb, the datbase is invalidated so it will be
-   * recreated on the *next* invocation.
+   * the running version of pkgdb, the datbase is invalidated and recreated.
    */
   std::string rulesHash;
 };
