@@ -1,0 +1,8 @@
+[vars]
+foo = "bar"
+
+[hook]
+on-activate = """
+    mkdir -p "$foo"
+    export foo="baz"
+"""

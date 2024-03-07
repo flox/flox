@@ -473,7 +473,7 @@ env_is_activated() {
 
 # bats test_tags=activate:flox-uses-default-env
 @test "'flox *' uses local environment over 'default' environment" {
-  $FLOX_BIN delete
+  "$FLOX_BIN" delete
 
   mkdir default
   pushd default > /dev/null || return
@@ -494,4 +494,41 @@ env_is_activated() {
   run -- "$FLOX_BIN" activate --dir default -- "$FLOX_BIN" list -n
   assert_success
   assert_line "emacs"
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate:scripts:on-activate
+@test "'hook.on-activate' runs" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
+  # Run a command that causes the activation scripts to run without putting us
+  # in the interactive shell
+  run "$FLOX_BIN" activate -- echo "hello"
+  # The on-activate script creates a directory whose name is the value of the
+  # "$foo" environment variable.
+  [ -d "$PROJECT_DIR/bar" ]
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate:scripts:on-activate
+@test "'hook.on-activate' doesn't modify environment variables" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
+  # Run a command that causes the activation scripts to run without putting us
+  # in the interactive shell
+  # What this is testing:
+  # - Commands (e.g. echo "$foo") are run after activation scripts run
+  # - The [vars] section sets foo=bar
+  # - The on-activate script exports foo=baz
+  # - If the on-activate script is able to modify variables outside the shell,
+  #   then we should see "baz" here. The expected output is "bar" since that
+  #   script isn't supposed to be able to modify environment variables.
+  run "$FLOX_BIN" activate -- echo '$foo'
+  assert_output "bar"
 }

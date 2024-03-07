@@ -274,8 +274,9 @@ struct HookRaw
   /** Define an inline script to be run at activation time. */
   std::optional<std::string> script;
 
-  /** Reads activation script from a file. */
-  std::optional<std::string> file;
+  /** Defines an inline script to be run non-interactively from a bash subshell
+   * after the user's profile scripts have been sourced.*/
+  std::optional<std::string> onActivate;
 
 
   /**

@@ -30,6 +30,12 @@
 
 namespace flox::buildenv {
 
+/* -------------------------------------------------------------------------- */
+
+const std::string ACTIVATION_SUBDIR_NAME = "activate";
+
+/* -------------------------------------------------------------------------- */
+
 /**
  * @class flox::buildenv::SystemNotSupportedByLockfile
  * @brief An exception thrown when a lockfile is is missing a package.<system>
@@ -87,6 +93,15 @@ FLOX_DEFINE_EXCEPTION( PackageBuildFailure,
                        "build failure" )
 /** @} */
 
+/**
+ * @class flox::buildenv::PackageBuildFailure
+ * @brief An exception thrown when a package fails to build.
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( ActivationScriptBuildFailure,
+                       EC_ACTIVATION_SCRIPT_BUILD_ERROR,
+                       "failure building activation script" )
+/** @} */
 
 /* -------------------------------------------------------------------------- */
 
@@ -340,6 +355,31 @@ nix::StorePath
 createContainerBuilder( nix::EvalState &       state,
                         const nix::StorePath & environmentStorePath,
                         const System &         system );
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Adds this script to the directory of activation scripts included in
+ * the environment and references it from the main activation script.
+ * @param scriptContents The contents of the script. The particular shell does
+ * not matter.
+ * @param scriptsDir The path of the scripts directory being assembled.
+ * @param scriptName The name to give to the script in the scripts directory.
+ * @param mainActivationScriptContents The main activation script being
+ * assembled.
+ * @param shouldSource In the main actiation script, the newly created script
+ * will either be sourced or called in a subshell depending on the value of this
+ * parameter. If the script isn't sourced, it will be executed in a Bash
+ * subshell.
+ */
+void
+addScriptToScriptsDir( const std::string &           scriptContents,
+                       const std::filesystem::path & scriptsDir,
+                       const std::string &           scriptName,
+                       std::stringstream & mainActivationScriptContents,
+                       const bool          shouldSource );
+
 
 /* -------------------------------------------------------------------------- */
 

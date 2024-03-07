@@ -18,8 +18,8 @@
   toml11,
   yaml-cpp,
   cpp-semver,
-  # For testing
   bash,
+  # For testing
   yj,
   jq,
   gnugrep,
@@ -91,6 +91,9 @@
       path = ../../pkgdb/src/buildenv/assets/mkContainer.nix;
     };
 
+    # The Bash executable to use for `hook.on-activate`
+    FLOX_BASH_BIN = "${bash}/bin/bash";
+
     # Used by `buildenv --container' to access `dockerTools` at a known version
     # When utilities from nixpkgs are used by flox at runtime,
     # they should be
@@ -161,6 +164,7 @@ in
         boost
         nix
         cpp-semver
+        bash
       ];
 
       configurePhase = ''
@@ -192,7 +196,6 @@ in
           batsWith
           yj
           jq
-          bash
           git
           sqlite
           parallel

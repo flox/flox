@@ -50,16 +50,18 @@ test_findStaleDb()
     newTimes.actime  = std::chrono::system_clock::to_time_t( atime );
     newTimes.modtime = statValue.st_mtime;
 
-    printf( "setting access time of %s to %ld\n",
-            stalePath.c_str(),
-            newTimes.actime );
+    // /* For debugging */
+    // printf( "setting access time of %s to %ld\n",
+    //         stalePath.c_str(),
+    //         newTimes.actime );
 
     utime( stalePath.c_str(), &newTimes );
 
     stat( stalePath.c_str(), &statValue );
-    printf( "access time of %s is now %ld\n",
-            stalePath.c_str(),
-            statValue.st_atime );
+    // /* For debugging */
+    // printf( "access time of %s is now %ld\n",
+    //         stalePath.c_str(),
+    //         statValue.st_atime );
   }
 
   auto toDelete = flox::pkgdb::findStaleDatabases( tempdir, 3 );
