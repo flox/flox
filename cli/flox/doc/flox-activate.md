@@ -109,6 +109,14 @@ hook was defined.
 
 ## Variables used by `flox activate`
 
+`$FLOX_SHELL`
+:  When launching an interactive sub-shell, Flox launches the shell specified in
+   `$FLOX_SHELL` if it is set.
+
+`$SHELL`
+:  When launching an interactive sub-shell, Flox launches the shell specified in
+   `$SHELL` if it is set and `$FLOX_SHELL` is not set.
+
 `$FLOX_PROMPT_COLOR_{1,2}`
 :   Flox adds text to the beginning of the shell prompt to indicate which
     environments are active.
