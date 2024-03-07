@@ -618,6 +618,12 @@ impl Node {
             .as_ref()
             .map(|version| format!(" {version}"))
             .unwrap_or("".to_string());
+        let yarn_node_version = yarn_install
+            .node
+            .version
+            .as_ref()
+            .map(|version| format!(" {version}"))
+            .unwrap_or("".to_string());
         let node_version = match &node_install.node {
             Some(found_node) => found_node.clone(),
             None => Self::get_default_package("nodejs", flox)?,
@@ -631,7 +637,7 @@ impl Node {
             Flox detected both a package-lock.json and a yarn.lock
 
             Flox can add the following to your environment:
-            * Either nodejs{node_version} with npm bundled, or yarn{yarn_version} with nodejs{node_version} bundled
+            * Either nodejs{node_version} with npm bundled, or yarn{yarn_version} with nodejs{yarn_node_version} bundled
             * Either an npm or yarn installation hook
 
             Would you like Flox to apply one of these modifications?
