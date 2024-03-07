@@ -63,6 +63,10 @@ namespace flox::buildenv {
 /* -------------------------------------------------------------------------- */
 
 const char * const BASH_ACTIVATE_SCRIPT = R"(
+# Disable command hashing to allow for newly installed flox packages to be found
+# immediately.
+set +h
+
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
 if [ -f ~/.bashrc -a "${FLOX_SOURCED_FROM_SHELL_RC:-}" != 1 ]
@@ -84,6 +88,11 @@ fi
 
 // unlike bash, zsh activation calls this script from the user's shell rcfile
 const char * const ZSH_ACTIVATE_SCRIPT = R"(
+# Disable command hashing to allow for newly installed flox packages to be found
+# immediately.
+setopt nohashcmds
+setopt nohashdirs
+
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _prof_scripts;
   _prof_scripts=( $(
