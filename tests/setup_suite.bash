@@ -300,17 +300,10 @@ xdg_tmp_setup() {
 
   mkdir -p "${XDG_CONFIG_HOME:?}"
   chmod u+w "$XDG_CONFIG_HOME"
-
-  if [[ -e "${REAL_XDG_CONFIG_HOME:?}/nix" ]]; then
-    rm -rf "$XDG_CONFIG_HOME/nix"
-    cp -Tr -- "$REAL_XDG_CONFIG_HOME/nix" "$XDG_CONFIG_HOME/nix"
-    chmod -R u+w "$XDG_CONFIG_HOME/nix"
-  fi
-  if [[ -e "$REAL_XDG_CONFIG_HOME/flox" ]]; then
-    rm -rf "$XDG_CONFIG_HOME/flox"
-    cp -Tr -- "$REAL_XDG_CONFIG_HOME/flox" "$XDG_CONFIG_HOME/flox"
-    chmod -R u+w "$XDG_CONFIG_HOME/flox"
-  fi
+  mkdir -p "$XDG_DATA_HOME/nix"
+  chmod u+w "$XDG_DATA_HOME/nix"
+  mkdir -p "$XDG_DATA_HOME/flox"
+  chmod u+w "$XDG_DATA_HOME/flox"
 
   # Data Dirs
 
