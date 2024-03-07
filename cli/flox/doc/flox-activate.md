@@ -80,6 +80,14 @@ hook was defined.
 
 # ENVIRONMENT VARIABLES
 
+`$FLOX_SHELL`
+:  When launching an interactive sub-shell, Flox launches the shell specified in
+   `$FLOX_SHELL` if it is set.
+
+`$SHELL`
+:  When launching an interactive sub-shell, Flox launches the shell specified in
+   `$SHELL` if it is set and `$FLOX_SHELL` is not set.
+
 `$FLOX_PROMPT_ENVIRONMENTS`
 :   Contains a space-delimited list of the active environments,
     e.g. `owner1/foo owner2/bar local_env`.
