@@ -414,7 +414,8 @@ impl ShellType {
     ///
     /// [1]: <https://github.com/flox/flox/blob/668a80a40ba19d50f8ca304ff351f4b27a886e21/flox-bash/lib/utils.sh#L1432>
     fn detect() -> Result<Self> {
-        let shell = env::var("FLOX_SHELL").unwrap_or(env::var("SHELL").context("SHELL must be set")?);
+        let shell =
+            env::var("FLOX_SHELL").unwrap_or(env::var("SHELL").context("SHELL must be set")?);
         let shell = Path::new(&shell);
         let shell = Self::try_from(shell)?;
         Ok(shell)
