@@ -21,7 +21,7 @@ mod config;
 mod utils;
 
 async fn run(args: FloxArgs) -> Result<()> {
-    init_logger(Some(args.verbosity.clone()));
+    init_logger(Some(args.verbosity));
     set_user()?;
     set_parent_process_id();
     let config = config::Config::parse()?;
