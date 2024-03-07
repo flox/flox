@@ -1,5 +1,6 @@
 pub mod errors;
 pub mod guard;
+use std::fmt::Display;
 use std::path::Path;
 use std::time::SystemTime;
 use std::{fs, io};
@@ -121,5 +122,37 @@ pub fn mtime_of(path: impl AsRef<Path>) -> SystemTime {
             metadata
         };
         metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH)
+    }
+}
+
+/// An extension trait for [std::process::Command]
+pub(crate) trait CommandExt {
+    /// Provide a [DisplayCommand] that can be used to display
+    /// POSIX like formatting of the command.
+    fn display(&self) -> DisplayCommand;
+}
+
+impl CommandExt for std::process::Command {
+    fn display(&self) -> DisplayCommand {
+        DisplayCommand(self)
+    }
+}
+
+pub(crate) struct DisplayCommand<'a>(&'a std::process::Command);
+
+impl Display for DisplayCommand<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let command = self.0;
+
+        let args = command
+            .get_args()
+            .map(|a| shell_escape::escape(a.to_string_lossy()));
+
+        write!(f, "{}", command.get_program().to_string_lossy())?;
+        for arg in args {
+            write!(f, " {}", arg)?;
+        }
+
+        Ok(())
     }
 }

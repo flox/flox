@@ -300,6 +300,11 @@ yaml_PREFIX := $(yaml_PREFIX)
 yaml_CFLAGS  = -isystem $(yaml_PREFIX)/include
 yaml_LDFLAGS = -L$(yaml_PREFIX)/lib -lyaml-cpp
 
+semver_PREFIX ?=                                                        \
+	$(shell $(NIX) build --no-link --print-out-paths '.#cpp-semver')
+semver_PREFIX := $(semver_PREFIX)
+semver_CFLAGS  = -isystem $(semver_PREFIX)/include
+
 nix_INCDIR ?= $(shell $(PKG_CONFIG) --variable=includedir nix-cmd)
 nix_INCDIR := $(nix_INCDIR)
 ifndef nix_CFLAGS
@@ -329,21 +334,11 @@ CXXFLAGS += $(nix_CFLAGS)
 CXXFLAGS += $(nljson_CFLAGS)
 CXXFLAGS += $(toml_CFLAGS)
 CXXFLAGS += $(yaml_CFLAGS)
+CXXFLAGS += $(semver_CFLAGS)
 
 LDFLAGS += $(nix_LDFLAGS)
 LDFLAGS += $(sqlite3_LDFLAGS)
 LDFLAGS += $(yaml_LDFLAGS)
-
-
-# ---------------------------------------------------------------------------- #
-
-# Locate `semver'
-# ---------------
-
-SEMVER_PATH ?=                                                        \
-  $(shell $(NIX) build --no-link --print-out-paths                    \
-	                     'github:aakropotkin/floco#semver')/bin/semver
-CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
 
 
 # ---------------------------------------------------------------------------- #
@@ -365,6 +360,9 @@ src/buildenv/realise.o: CXXFLAGS +=               \
 
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DCOMMON_NIXPKGS_URL="$(COMMON_NIXPKGS_URL)"'
+
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DFLOX_BASH_BIN="$(FLOX_BASH_BIN)"'
 
 # ---------------------------------------------------------------------------- #
 
@@ -572,12 +570,13 @@ cc-check: $(TESTS:.cc=)
 
 #: Run all bats tests
 PKGDB_BATS_FILES ?= "$(PKGDB_ROOT)/tests"
+PKGDB_BATS_OPTS ?= ""
 bats-check: bin $(TEST_UTILS)
 	PKGDB_BIN="$(PKGDB_ROOT)/bin/pkgdb"                          \
 	PKGDB_IS_SQLITE3_BIN="$(PKGDB_ROOT)/tests/is_sqlite3"        \
 	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_ROOT)/tests/search-params"  \
 	  $(BATS) --print-output-on-failure --verbose-run --timing   \
-	          "$(PKGDB_BATS_FILES)";
+	          $(PKGDB_BATS_OPTS) "$(PKGDB_BATS_FILES)";
 
 
 # ---------------------------------------------------------------------------- #
@@ -595,6 +594,7 @@ bats-check: bin $(TEST_UTILS)
 # SQL Schemas
 src/pkgdb/write.o: src/pkgdb/schemas.hh
 
+src/pkgdb/scrape-rules.o: src/pkgdb/rules.json.hh
 
 # ---------------------------------------------------------------------------- #
 
@@ -612,7 +612,8 @@ $(BINS): %: $(SRCS:.cc=.o)
 
 lib/ld-floxlib.so: src/ld-floxlib.c
 	$(MKDIR_P) $(@D);
-	$(CC) $(CFLAGS) -shared -fPIC $< -o $@ -ldl;
+	$(CC) -shared -fPIC $< -o $@;
+	patchelf --remove-rpath $@;
 
 
 # ---------------------------------------------------------------------------- #
@@ -632,14 +633,17 @@ $(TESTS) $(TEST_UTILS): tests/%: tests/%.o tests/test.hh
 #: Build binaries
 bin: $(BINS)
 
+#: Build libs
+lib: $(ALL_LIBS)
+
 #: Build test executables and resources
 tests: $(TESTS) $(TEST_UTILS)
 
-#: Build binaries, tests, and generated `.gitignore' files
-all: bin tests ignores
+#: Build binaries, tests, libs, and generated `.gitignore' files
+all: bin lib tests ignores
 
-#: Build binaries and generated `.gitignore' files
-most: bin ignores
+#: Build binaries, libs, and generated `.gitignore' files
+most: bin lib ignores
 
 
 # ---------------------------------------------------------------------------- #
@@ -675,6 +679,21 @@ tests/.gitignore: FORCE
 #: Run `clang-format' across entire project
 fmt: $(HEADERS) $(ALL_SRCS)
 	$(FMT) -i $^;
+
+
+# ---------------------------------------------------------------------------- #
+
+# Generated Files
+# ---------------
+
+src/fetchers/flake-v0.nix.in.hh: src/fetchers/flake-v0.nix.in Makefile
+	$(MKDIR_P) $(@D);
+	echo 'R"_NIX(' > $@;
+	$(CAT) $< >> $@;
+	echo ')_NIX";' >> $@;
+
+CLEANFILES += src/fetchers/flake-v0.nix.in.hh
+src/fetchers/wrapped-nixpkgs-input.o: src/fetchers/flake-v0.nix.in.hh
 
 
 # ---------------------------------------------------------------------------- #

@@ -44,6 +44,7 @@ ENVIRONMENT
   IWYU_TOOL           Command used as \`iwyu_tool.py' executable.
   FIND                Command used as \`find' executable.
   MAKE                Command used as \`make' executable.
+  GIT                 Command used as \`git' executable.
 "
 
 # ---------------------------------------------------------------------------- #
@@ -62,6 +63,7 @@ usage() {
 : "${FIND:=find}"
 : "${IWYU_TOOL:=iwyu_tool.py}"
 : "${MAKE:=make}"
+: "${GIT:=git}"
 
 # ---------------------------------------------------------------------------- #
 
@@ -162,7 +164,10 @@ done
 
 # Set fallbacks.
 
-: "${_PROJECT_ROOT:=$PWD}"
+if [[ -z "${_PROJECT_ROOT:-}" ]]; then
+  _PROJECT_ROOT="$( $GIT rev-parse --show-toplevel; )"
+fi
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -201,7 +206,7 @@ if [[ "${#_SOURCES[@]}" -gt 0 ]]; then _iwyu_args+=("${_SOURCES[@]}"); fi
 # Add `--' separator to begin args for underlying `include-what-you-use' util.
 _iwyu_args+=(
 	--
-	-Xiwyu --mapping_file="$_PROJECT_ROOT/build-aux/iwyu-mappings.json"
+	-Xiwyu --mapping_file="$_PROJECT_ROOT/pkgdb/build-aux/iwyu-mappings.json"
 )
 
 # Add \`-Xiwyu' to all \`_extra_iwyu_args'.

@@ -10,7 +10,7 @@ use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentE
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::{init_global_manifest, EnvironmentError2};
 use log::{debug, warn};
-use utils::init::init_logger;
+use utils::init::{init_logger, init_sentry};
 use utils::message;
 
 use crate::utils::errors::{format_error, format_managed_error, format_remote_error};
@@ -30,8 +30,7 @@ async fn run(args: FloxArgs) -> Result<()> {
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
+fn main() -> ExitCode {
     // initialize logger with "best guess" defaults
     // updating the logger conf is cheap, so we reinitialize whenever we get more information
     init_logger(None);
@@ -49,18 +48,29 @@ async fn main() -> ExitCode {
     }
 
     // Parse verbosity flags to affect help message/parse errors
-    let (verbosity, _debug) = {
+    let verbosity = {
         let verbosity_parser = commands::verbosity();
-        let debug_parser = bpaf::long("debug").switch();
-        let other_parser = bpaf::any("ANY", Some::<String>).many();
+        let other_parser = bpaf::any("_", Some::<String>).many();
 
-        bpaf::construct!(verbosity_parser, debug_parser, other_parser)
-            .map(|(v, d, _)| (v, d))
+        bpaf::construct!(verbosity_parser, other_parser)
+            .map(|(v, _)| v)
             .to_options()
             .run_inner(Args::current_args())
             .unwrap_or_default()
     };
+
     init_logger(Some(verbosity));
+    let _sentry_guard = init_sentry();
+
+    // Pass down the verbosity level to all pkgdb calls
+    std::env::set_var(
+        "_FLOX_PKGDB_VERBOSITY",
+        format!("{}", verbosity.to_pkgdb_verbosity_level()),
+    );
+    debug!(
+        "set _FLOX_PKGDB_VERBOSITY={}",
+        verbosity.to_pkgdb_verbosity_level()
+    );
 
     // Run the argument parser
     //
@@ -91,8 +101,10 @@ async fn main() -> ExitCode {
     // Errors handled above
     let FloxCli(args) = args.unwrap();
 
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+
     // Run flox. Print errors and exit with status 1 on failure
-    let exit_code = match run(args).await {
+    let exit_code = match runtime.block_on(run(args)) {
         Ok(()) => ExitCode::from(0),
 
         Err(e) => {
@@ -129,7 +141,7 @@ async fn main() -> ExitCode {
             ExitCode::from(1)
         },
     };
-    utils::init::flush_logger();
+
     exit_code
 }
 

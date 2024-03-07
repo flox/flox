@@ -2,7 +2,6 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
-use flox_types::version::Version;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -20,9 +19,12 @@ use super::{
     EnvironmentError2,
     InstallationAttempt,
     ManagedPointer,
+    UninstallationAttempt,
     UpdateResult,
+    CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
 };
+use crate::data::Version;
 use crate::flox::{EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
@@ -134,7 +136,7 @@ pub enum ManagedEnvironmentError {
     #[error("could not canonicalize environment path")]
     CanonicalizePath(#[source] CanonicalizeError),
 
-    #[error("invalid floxhub base url")]
+    #[error("invalid FloxHub base url")]
     InvalidFloxhubBaseUrl(#[source] url::ParseError),
 }
 
@@ -170,8 +172,8 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        temporary.build(flox)?;
-        temporary.link(flox, &self.out_link)?;
+        let store_path = temporary.build(flox)?;
+        temporary.link(flox, &self.out_link, &Some(store_path))?;
 
         Ok(())
     }
@@ -222,7 +224,7 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link)?;
+        temporary.link(flox, &self.out_link, &result.store_path)?;
 
         Ok(result)
     }
@@ -232,7 +234,7 @@ impl Environment for ManagedEnvironment {
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<String, EnvironmentError2> {
+    ) -> Result<UninstallationAttempt, EnvironmentError2> {
         let mut generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -248,7 +250,7 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link)?;
+        temporary.link(flox, &self.out_link, &result.store_path)?;
 
         Ok(result)
     }
@@ -269,13 +271,15 @@ impl Environment for ManagedEnvironment {
             return Ok(result);
         }
 
+        let store_path = result.store_path();
+
         debug!("Environment changed, create generation, lock generation, build and link");
 
         generations
             .add_generation(&mut temporary, "manually edited".to_string())
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link)?;
+        temporary.link(flox, &self.out_link, &store_path)?;
 
         Ok(result)
     }
@@ -295,7 +299,7 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let message = temporary.update(flox, inputs)?;
+        let result = temporary.update(flox, inputs)?;
 
         // TODO: better message
         let metadata = "updated environment".to_string();
@@ -304,9 +308,9 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link)?;
+        temporary.link(flox, &self.out_link, &result.store_path)?;
 
-        Ok(message)
+        Ok(result)
     }
 
     /// Atomically upgrade packages in this environment
@@ -326,7 +330,7 @@ impl Environment for ManagedEnvironment {
 
         let result = temporary.upgrade(flox, groups_or_iids)?;
 
-        let metadata = format!("upgraded packages: {}", result.0.join(", "));
+        let metadata = format!("upgraded packages: {}", result.packages.join(", "));
 
         generations
             .add_generation(&mut temporary, metadata)
@@ -366,6 +370,20 @@ impl Environment for ManagedEnvironment {
         }
 
         Ok(self.out_link.to_path_buf())
+    }
+
+    /// Returns .flox/cache
+    fn cache_path(&self) -> Result<PathBuf, EnvironmentError2> {
+        let cache_dir = self.path.join(CACHE_DIR_NAME);
+        if !cache_dir.exists() {
+            std::fs::create_dir_all(&cache_dir).map_err(EnvironmentError2::CreateCacheDir)?;
+        }
+        Ok(cache_dir)
+    }
+
+    /// Returns parent of .flox
+    fn project_path(&self) -> Result<PathBuf, EnvironmentError2> {
+        self.parent_path()
     }
 
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
@@ -889,7 +907,7 @@ fn write_pointer_lockfile(
 /// When pulling the same remote environment in multiple directories,
 /// unique copies of the environment are created.
 /// I.e. `install`ing a package in one directory does not affect the other
-/// until synchronized through floxhub.
+/// until synchronized through FloxHub.
 /// To identify the individual branches per directory,
 /// the directory path is encoded using [`ManagedEnvironment::encode`].
 ///
@@ -910,7 +928,7 @@ fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> Strin
 /// In most cases [`branch_name`] should be used over this,
 /// within the context of an instance of [ManagedEnvironment].
 ///
-/// [`remote_branch_name`] is primarily used when talking to upstream on floxhub,
+/// [`remote_branch_name`] is primarily used when talking to upstream on FloxHub,
 /// during opening to reconciliate with the upsream repo
 /// as well as during [`ManagedEnvironment::pull`].
 pub fn remote_branch_name(pointer: &ManagedPointer) -> String {
@@ -929,9 +947,16 @@ fn reverse_links_dir(flox: &Flox) -> PathBuf {
     flox.data_dir.join("links")
 }
 
+pub enum PullResult {
+    /// The environment was already up to date
+    UpToDate,
+    /// The environment was reset to the latest upstream version
+    Updated,
+}
+
 impl ManagedEnvironment {
     /// If access to a remote repository requires authentication,
-    /// the floxhub token must be set in the flox instance.
+    /// the FloxHub token must be set in the flox instance.
     /// The caller is responsible for ensuring that the token is present and valid.
     pub fn push_new(
         flox: &Flox,
@@ -1071,8 +1096,9 @@ impl ManagedEnvironment {
         Ok(())
     }
 
-    pub fn pull(&mut self, force: bool) -> Result<(), ManagedEnvironmentError> {
+    pub fn pull(&mut self, force: bool) -> Result<PullResult, ManagedEnvironmentError> {
         let sync_branch = remote_branch_name(&self.pointer);
+        let project_branch = branch_name(&self.pointer, &self.path);
 
         // Fetch the remote branch into the local sync branch.
         // The sync branch is always a reset to the remote branch
@@ -1089,10 +1115,17 @@ impl ManagedEnvironment {
             let consistent_history = self
                 .floxmeta
                 .git
-                .branch_contains_commit(&branch_name(&self.pointer, &self.path), &sync_branch)
+                .branch_contains_commit(&project_branch, &sync_branch)
                 .map_err(ManagedEnvironmentError::Git)?;
             if !consistent_history {
                 Err(ManagedEnvironmentError::Diverged)?;
+            }
+
+            let sync_branch_commit = self.floxmeta.git.branch_hash(&sync_branch).ok();
+            let project_branch_commit = self.floxmeta.git.branch_hash(&project_branch).ok();
+
+            if sync_branch_commit == project_branch_commit {
+                return Ok(PullResult::UpToDate);
             }
         }
 
@@ -1101,10 +1134,7 @@ impl ManagedEnvironment {
             .git
             .push_ref(
                 ".",
-                format!(
-                    "refs/heads/{sync_branch}:refs/heads/{project_branch}",
-                    project_branch = branch_name(&self.pointer, &self.path),
-                ),
+                format!("refs/heads/{sync_branch}:refs/heads/{project_branch}",),
                 force, // Set the force parameter to false or true based on your requirement
             )
             .map_err(ManagedEnvironmentError::ApplyUpdates)?;
@@ -1112,7 +1142,7 @@ impl ManagedEnvironment {
         // update the pointer lockfile
         self.lock_pointer()?;
 
-        Ok(())
+        Ok(PullResult::Updated)
     }
 }
 

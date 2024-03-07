@@ -2,6 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use log::debug;
+use tempfile::TempDir;
 use thiserror::Error;
 
 use super::managed_environment::{remote_branch_name, ManagedEnvironment, ManagedEnvironmentError};
@@ -14,6 +15,7 @@ use super::{
     EnvironmentError2,
     InstallationAttempt,
     ManagedPointer,
+    UninstallationAttempt,
     UpdateResult,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
@@ -204,7 +206,7 @@ impl Environment for RemoteEnvironment {
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<String, EnvironmentError2> {
+    ) -> Result<UninstallationAttempt, EnvironmentError2> {
         let result = self.inner.uninstall(packages, flox)?;
         self.inner
             .push(flox, false)
@@ -266,6 +268,19 @@ impl Environment for RemoteEnvironment {
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
         Self::update_out_link(flox, &self.out_link, &mut self.inner)?;
         Ok(self.out_link.clone())
+    }
+
+    /// Return a path that environment hooks should use to store transient data.
+    ///
+    /// Remote environments shouldn't have state of any kind, so this just
+    /// returns a temporary directory.
+    fn cache_path(&self) -> Result<PathBuf, EnvironmentError2> {
+        let tempdir = TempDir::new().map_err(EnvironmentError2::CreateTempDir)?;
+        Ok(tempdir.into_path())
+    }
+
+    fn project_path(&self) -> Result<PathBuf, EnvironmentError2> {
+        std::env::current_dir().map_err(EnvironmentError2::GetCurrentDir)
     }
 
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {

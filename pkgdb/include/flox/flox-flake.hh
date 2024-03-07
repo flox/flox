@@ -13,6 +13,7 @@
 #include <memory>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
+#include <nix/flake/flakeref.hh>
 #include <sys/wait.h>
 #include <vector>
 
@@ -135,27 +136,6 @@ FLOX_DEFINE_EXCEPTION( LockFlakeException,
 /** @} */
 
 /* -------------------------------------------------------------------------- */
-
-/**
- * @brief Execute @param lambda in a child process setup for downloading
- *        files using `nix` fetchers.
- *
- * Helper function to execute @param lambda in a child process in anticipation
- * of it triggering a download via nix.
- * If this occurs, the nix static global `nix::curlFileTransfer` object will
- * trigger a worker thread.
- * Later forks ( for scraping ) will then try to cleanup those threads but
- * will fail.
- * This keeps the thread creation and cleanup in the same child process.
- *
- * After calling this, the lambda should be called from the parent to actually
- * get the parent in the desired state, but the download will already be cached.
- *
- * There is room for optimization here for sure.
- */
-void
-ensureFlakeIsDownloaded( std::function<void()> lambda );
-
 
 }  // namespace flox
 

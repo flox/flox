@@ -330,6 +330,92 @@ operator<<( std::ostream & oss, const LockedPackageRaw & raw )
 
 /* -------------------------------------------------------------------------- */
 
+std::vector<CheckPackageWarning>
+LockedPackageRaw::check( const std::string &     packageId,
+                         const Options::Allows & allows ) const
+{
+  std::vector<CheckPackageWarning> result;
+
+  /**
+   * Defensively assume the package _is_ unfree, if field is missing.
+   * By default unfree packages are allowed,
+   * but if denied we should prevent false negatives.
+   */
+  bool unfree = this->info.value( "unfree", true );
+
+  if ( unfree )
+    {
+      if ( ! allows.unfree.value_or( true ) )
+
+
+        {
+          throw PackageCheckFailure(
+            nix::fmt( "The package '%s' has an unfree license.\n\n"
+                      "Allow unfree packages by setting "
+                      "'options.allow.unfree = true' in manifest.toml",
+                      packageId ) );
+        }
+
+
+      auto warning = CheckPackageWarning {
+        packageId,
+        nix::fmt( "The package '%s' has an unfree license, please verify "
+                  "the licensing terms of use",
+                  packageId ),
+      };
+
+      result.emplace_back( warning );
+    }
+
+  /**
+   * Assume the package is not broken, if field is missing.
+   * By default broken packages are denied, so packages without a broken
+   * attribute can not be built, without opting to allow broken packages
+   * entirely.
+   * Additionally, a missing broken attribute, may be the result of not
+   * attempting a build at scrape time, thus it's unclear whether the package
+   * is in fact broken.
+   */
+  bool broken = this->info.value( "broken", false );
+
+  if ( broken )
+    {
+      if ( ! allows.broken.value_or( false ) )
+        {
+          throw PackageCheckFailure(
+            nix::fmt( "The package '%s' is marked as broken.\n\n"
+                      "Allow broken packages by setting "
+                      "'options.allow.broken = true' in manifest.toml",
+                      packageId ) );
+        }
+
+      auto warning = CheckPackageWarning {
+        packageId,
+        nix::fmt( "The package '%s' is marked as broken, it may not behave as "
+                  "expected during runtime.",
+                  packageId ),
+      };
+
+      result.emplace_back( warning );
+    }
+
+  // TODO: check more package metadata
+
+  return result;
+}
+
+void
+to_json( nlohmann::json & j, const CheckPackageWarning & result )
+{
+  j = nlohmann::json {
+    { "package", result.packageId },
+    { "message", result.message },
+  };
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 void
 LockfileRaw::clear()
 {
@@ -493,6 +579,35 @@ Lockfile::removeUnusedInputs()
 
 
 /* -------------------------------------------------------------------------- */
+
+std::vector<CheckPackageWarning>
+Lockfile::checkPackages( const std::optional<flox::System> & system ) const
+{
+  std::vector<CheckPackageWarning> warnings;
+
+  auto allows = this->getLockfileRaw()
+                  .manifest.options.value_or( Options {} )
+                  .allow.value_or( Options::Allows {} );
+
+  for ( auto [system_, packages] : this->getLockfileRaw().packages )
+    {
+      if ( system.has_value() && system_ != system.value() ) { continue; }
+
+      for ( auto [pid, package] : packages )
+        {
+          // disabled for current system or optional
+          if ( ! package.has_value() ) { continue; }
+
+          auto packageWarnings = package.value().check( pid, allows );
+          warnings.insert( warnings.end(),
+                           packageWarnings.begin(),
+                           packageWarnings.end() );
+        }
+    }
+
+  return warnings;
+}
+
 
 }  // namespace flox::resolver
 

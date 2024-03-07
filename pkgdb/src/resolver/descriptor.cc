@@ -9,11 +9,11 @@
  * -------------------------------------------------------------------------- */
 
 #include <algorithm>
+#include <cstddef>
 #include <map>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <regex>
-#include <stddef.h>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -60,7 +60,7 @@ ManifestDescriptorRaw::clear()
 /* -------------------------------------------------------------------------- */
 
 void
-ManifestDescriptorRaw::check( std::string iid ) const
+ManifestDescriptorRaw::check( const std::string & iid ) const
 {
   if ( this->absPath.has_value() )
     {
@@ -278,6 +278,8 @@ initManifestDescriptorAbsPath( ManifestDescriptor &          desc,
 
 /* -------------------------------------------------------------------------- */
 
+// NOLINTBEGIN(readability-function-cognitive-complexity)
+// -- This is just matching json fields to struct fields
 void
 from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
 {
@@ -419,6 +421,7 @@ from_json( const nlohmann::json & jfrom, ManifestDescriptorRaw & descriptor )
         }
     }
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 void
 to_json( nlohmann::json & jto, const ManifestDescriptorRaw & descriptor )
@@ -474,8 +477,8 @@ ManifestDescriptorRaw::ManifestDescriptorRaw(
       cursor = inputSepIdx + 1;
     }
   // Grab the attribute path or package name
-  size_t attrsEndIdx;
-  bool   hasVersion = false;
+  size_t attrsEndIdx = 0;
+  bool   hasVersion  = false;
   if ( auto versionSepIdx
        = descriptor.find( ManifestDescriptorRaw::versionSigil );
        versionSepIdx != std::string_view::npos )
@@ -550,6 +553,7 @@ validatedSingleAttr( const AttrPathGlob & attrs )
 bool
 globInAttrName( const AttrPathGlob & attrs )
 {
+  // NOLINTNEXTLINE(readability-use-anyofallof)
   for ( const std::optional<std::string> & attr : attrs )
     {
       if ( attr.has_value()
@@ -570,19 +574,13 @@ validatedRelativePath( const AttrPathGlob &             attrs,
   // the system name, so there's no reason for a glob to be here at all.
   bool containsGlobbedAttr
     = std::find( attrs.begin(), attrs.end(), std::nullopt ) != attrs.end();
-  if ( containsGlobbedAttr )
+  if ( containsGlobbedAttr || globInAttrName( attrs ) )
     {
       throw InvalidManifestDescriptorException(
         "globs are only allowed to replace entire system names: '"
         + displayableGlobbedPath( attrs ) + "'" );
     }
-  else if ( globInAttrName( attrs ) )
-    {
-      throw InvalidManifestDescriptorException(
-        "globs are only allowed to replace entire system names: '"
-        + displayableGlobbedPath( attrs ) + "'" );
-    }
-  else if ( attrs.size() < 2 )
+  if ( attrs.size() < 2 )
     {
       throw InvalidManifestDescriptorException(
         "relative paths must contain at least 2 attributes" );
@@ -699,7 +697,7 @@ ManifestDescriptor::clear()
   this->systems  = std::nullopt;
   this->pkgPath  = std::nullopt;
   this->input    = std::nullopt;
-  this->priority = 5;
+  this->priority = DEFAULT_PRIORITY;
 }
 
 

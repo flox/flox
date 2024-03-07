@@ -1,14 +1,17 @@
-use std::io::BufRead;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
+use std::sync::mpsc::SendError;
+use std::thread::ScopedJoinHandle;
 
-use log::debug;
+use log::{debug, trace};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::skip_serializing_none;
 
 use super::pkgdb::PkgDbError;
 use crate::models::pkgdb::PKGDB_BIN;
+use crate::utils::CommandExt;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SearchError {
@@ -28,8 +31,8 @@ pub enum SearchError {
     CanonicalManifestPath(std::io::Error),
     #[error("inline manifest was malformed: {0}")]
     InlineManifestMalformed(String),
-    #[error("couldn't acquire stdout for search process")]
-    PkgDbStdout,
+    #[error("internal error: {0}")]
+    SomethingElse(String),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -249,7 +252,7 @@ pub struct SearchResults {
     pub count: Option<u64>,
 }
 
-/// The types of JSON records that `pkgdb` can emit during a search
+/// The types of JSON records that `pkgdb` can emit on stdout during a search
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(untagged)]
 pub enum Record {
@@ -261,6 +264,13 @@ pub enum Record {
     SearchResult(SearchResult),
     /// An error
     Error(PkgDbError),
+}
+
+/// The different kinds of output that can be collected from pkgdb during a search
+#[derive(Debug)]
+pub enum PkgDbOutput {
+    Stdout(Record),
+    Stderr(String),
 }
 
 impl TryFrom<&[u8]> for SearchResults {
@@ -290,42 +300,123 @@ impl TryFrom<&[u8]> for SearchResults {
 }
 
 /// Calls `pkgdb` and reads a stream of search records.
+#[allow(clippy::type_complexity)]
 pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitStatus), SearchError> {
     let json = serde_json::to_string(search_params).map_err(SearchError::Serialize)?;
 
     let mut pkgdb_command = Command::new(PKGDB_BIN.as_str());
     pkgdb_command
         .arg("search")
-        .arg("--quiet")
         .arg("--ga-registry")
         .arg(json)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    debug!("running search command {:?}", pkgdb_command);
+    debug!("running search command {}", pkgdb_command.display());
     let mut pkgdb_process = pkgdb_command.spawn().map_err(SearchError::PkgDbCall)?;
-    let stdout = pkgdb_process.stdout.take();
-    if stdout.is_none() {
-        pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
-        return Err(SearchError::PkgDbStdout);
+    let stdout = pkgdb_process
+        .stdout
+        .take()
+        .expect("couldn't get stdout handle");
+    let stderr = pkgdb_process
+        .stderr
+        .take()
+        .expect("couldn't get stderr handle");
+
+    let search_outcome: std::thread::Result<Result<(Vec<SearchResult>, Option<u64>), SearchError>> =
+        std::thread::scope(|s| {
+            // Give the channel some fixed capacity to provide backpressure when
+            // overloaded.
+            let (sender_orig, receiver) = std::sync::mpsc::sync_channel(1000);
+
+            // Feed stderr lines into a channel sender
+            let sender = sender_orig.clone();
+            let stderr_thread: ScopedJoinHandle<Result<(), SendError<PkgDbOutput>>> =
+                s.spawn(move || {
+                    let sender = sender.clone();
+                    let mut reader = BufReader::new(stderr).lines();
+                    while let Some(Ok(line)) = reader.next() {
+                        if let Err(err) = sender.send(PkgDbOutput::Stderr(line)) {
+                            debug!("failed to send stderr line: {err}");
+                        }
+                    }
+                    trace!("stderr reader thread is done");
+                    Ok(())
+                });
+
+            // Feed JSON records from stdout into a channel sender
+            let sender = sender_orig;
+            let stdout_thread: ScopedJoinHandle<Result<(), SearchError>> = s.spawn(move || {
+                let sender = sender.clone();
+                let deserializer = serde_json::Deserializer::from_reader(stdout);
+                for maybe_record in deserializer.into_iter() {
+                    let record = maybe_record.map_err(SearchError::Deserialize)?;
+                    if let Err(err) = sender.send(PkgDbOutput::Stdout(record)) {
+                        debug!("failed to send stdout line: {err}");
+                    }
+                }
+                trace!("stdout reader thread is done");
+                Ok(())
+            });
+
+            // Read items from the channel in the order in which they were received
+            let mut count = None;
+            let mut results = Vec::new();
+            while let Ok(output) = receiver.recv() {
+                match output {
+                    PkgDbOutput::Stderr(line) => {
+                        debug!(target: "pkgdb", "[pkgdb] {}", line);
+                    },
+                    PkgDbOutput::Stdout(Record::Error(err)) => {
+                        debug!("error from pkgdb: {}", err);
+                        let kill = pkgdb_process.kill().map_err(SearchError::PkgDbCall);
+                        // This destructuring is necessary for type conversion
+                        if let Err(err) = kill {
+                            return Ok(Err(err));
+                        }
+                        if !stderr_thread.is_finished() {
+                            trace!("waiting for stderr thread to finish");
+                            let _ = stderr_thread.join();
+                        }
+                        if !stdout_thread.is_finished() {
+                            trace!("waiting for stdout thread to finish");
+                            let _ = stdout_thread.join();
+                        }
+                        return Ok(Err(SearchError::PkgDb(err)));
+                    },
+                    PkgDbOutput::Stdout(Record::ResultCount { result_count }) => {
+                        debug!("result count = {}", result_count);
+                        count = Some(result_count);
+                    },
+                    PkgDbOutput::Stdout(Record::SearchResult(result)) => {
+                        debug!("search result = {:?}", result);
+                        results.push(result);
+                    },
+                }
+            }
+
+            trace!("joining reader threads");
+            let stderr_thread_outcome = stderr_thread.join();
+            let stdout_thread_outcome = stdout_thread.join();
+            trace!("done joining reader threads");
+            if stderr_thread_outcome.is_ok() && stdout_thread_outcome.is_ok() {
+                Ok(Ok((results, count)))
+            } else {
+                Ok(Err(SearchError::SomethingElse(
+                    "background threads didn't exit successfully".into(),
+                )))
+            }
+        });
+
+    match search_outcome {
+        Ok(Ok((results, count))) => {
+            let exit_status = pkgdb_process.wait().map_err(SearchError::PkgDbCall)?;
+            Ok((SearchResults { results, count }, exit_status))
+        },
+        Ok(Err(err)) => Err(err),
+        // This means the thread panicked and there's not much we can do about it
+        Err(_) => Err(SearchError::SomethingElse("internal search error".into())),
     }
-    let deserializer = serde_json::Deserializer::from_reader(stdout.unwrap());
-    let mut count = None;
-    let mut results = Vec::new();
-    for maybe_record in deserializer.into_iter() {
-        let record = maybe_record.map_err(SearchError::Deserialize)?;
-        debug!("record = {:?}", record);
-        match record {
-            Record::Error(err) => {
-                pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
-                return Err(SearchError::PkgDb(err));
-            },
-            Record::ResultCount { result_count } => count = Some(result_count),
-            Record::SearchResult(result) => results.push(result),
-        }
-    }
-    let exit_status = pkgdb_process.wait().map_err(SearchError::PkgDbCall)?;
-    Ok((SearchResults { results, count }, exit_status))
 }
 
 /// A package search result

@@ -22,7 +22,8 @@
 namespace flox {
 
 /* -------------------------------------------------------------------------- */
-
+// NOLINTBEGIN(readability-function-cognitive-complexity)
+// -- This is just matching json fields to struct fields
 void
 from_json( const nlohmann::json & jfrom, RawPackage & pkg )
 {
@@ -179,7 +180,7 @@ from_json( const nlohmann::json & jfrom, RawPackage & pkg )
         }
     }
 }
-
+// NOLINTEND(readability-function-cognitive-complexity)
 
 /* -------------------------------------------------------------------------- */
 

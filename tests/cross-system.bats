@@ -23,7 +23,7 @@ load test_support.bash
 
 setup_file() {
   common_file_setup
-  "$FLOX_BIN" config --set floxhub_url "https://hub-dev.flox.dev/"
+  "$FLOX_BIN" config --set floxhub_url "https://hub.preview.flox.dev/"
   if [ -z "${FLOXEM_FLOXTEST_TOKEN:-}" ]; then
     skip "FLOXEM_FLOXTEST_TOKEN is not set"
   fi
@@ -75,7 +75,7 @@ teardown() {
   "$FLOX_BIN" install hello
   run "$FLOX_BIN" push --owner "$OWNER" --force
   assert_success
-  assert_output --partial "pushed to floxhub (forced)"
+  assert_output --partial "pushed to FloxHub (forced)"
 }
 
 # This should pull the environment created by the previous run on a different

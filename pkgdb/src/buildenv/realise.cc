@@ -13,11 +13,13 @@
 #include <nix/command.hh>
 #include <nix/derivations.hh>
 #include <nix/derived-path.hh>
+#include <nix/eval-cache.hh>
 #include <nix/eval-inline.hh>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
 #include <nix/get-drvs.hh>
 #include <nix/globals.hh>
+#include <nix/installable-flake.hh>
 #include <nix/local-fs-store.hh>
 #include <nix/path-with-outputs.hh>
 #include <nix/profiles.hh>
@@ -27,6 +29,7 @@
 #include <nlohmann/json.hpp>
 
 #include "flox/buildenv/realise.hh"
+#include "flox/fetchers/wrapped-nixpkgs-input.hh"
 #include "flox/resolver/lockfile.hh"
 
 
@@ -57,8 +60,17 @@ namespace flox::buildenv {
 #  error "COMMON_NIXPKGS_URL must be set to a locked flakeref of nixpkgs to use"
 #endif
 
+#ifndef FLOX_BASH_BIN
+#  error "FLOX_BASH_BIN must be set to the path of a Bash executable"
+#endif
+
 /* -------------------------------------------------------------------------- */
 
+/* We disable command hashing so a `flox install` will be reflected immediately
+ * in the shell.  Sometimes `hash` is used to detect if something is installed,
+ * and with hashing disabled, that fails.  Therefore, disable that at the end,
+ * in case it's used in the prior scripts (e.g. ~/.bashrc).
+ */
 const char * const BASH_ACTIVATE_SCRIPT = R"(
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
@@ -76,6 +88,10 @@ if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   for p in "${_prof_scripts[@]}"; do . "$p"; done
   unset _prof_scripts;
 fi
+
+# Disable command hashing to allow for newly installed flox packages to be found
+# immediately.
+set +h
 )";
 
 
@@ -89,6 +105,11 @@ if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   for p in "${_prof_scripts[@]}"; do . "$p"; done
   unset _prof_scripts;
 fi
+
+# Disable command hashing to allow for newly installed flox packages to be found
+# immediately.
+setopt nohashcmds
+setopt nohashdirs
 )";
 
 
@@ -154,8 +175,9 @@ createEnvironmentStorePath(
 
       throw PackageConflictException( nix::fmt(
         "'%s' conflicts with '%s'. Both packages provide the file '%s'"
-        "\n\nResolve by setting the priority of the preferred package "
-        "to a value lower than '%d'",
+        "\n\nResolve by uninstalling one of the conflicting packages"
+        "or setting the priority of the preferred package to a value lower "
+        "than '%d'",
         nameA,
         nameB,
         filePath,
@@ -166,53 +188,23 @@ createEnvironmentStorePath(
 
 /* -------------------------------------------------------------------------- */
 
-static nix::Attr
-extractAttrPath( nix::EvalState &       state,
-                 nix::Value &           vFlake,
-                 const flox::AttrPath & attrPath )
+/**
+ * @brief Extract locked packages from the lockfile for the given system.
+ * @throws @a SystemNotSupportedByLockfile exception if the lockfile does not
+ *         specify packages for the given system.
+ * @param lockfile Lockfile to extract packages from.
+ * @param system System to extract packages for.
+ * @return List of locked packages for the given system paired with their id.
+ */
+static std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
+getLockedPackages( resolver::Lockfile & lockfile, const System & system )
 {
-  state.forceAttrs( vFlake, nix::noPos, "while parsing flake" );
-
-
-  auto * output = vFlake.attrs->get( state.symbols.create( "outputs" ) );
-
-  for ( auto attrName : attrPath )
-    {
-      state.forceAttrs( *output->value,
-                        output->pos,
-                        "while parsing cached flake data" );
-
-      auto * next
-        = output->value->attrs->get( state.symbols.create( attrName ) );
-
-      if ( next == nullptr )
-        {
-          std::ostringstream str;
-          output->value->print( state.symbols, str );
-          throw FloxException( "attribute '%s' not found in set '%s'",
-                               attrName,
-                               str.str() );
-        }
-      output = next;
-    }
-
-  return *output;
-}
-
-
-/* -------------------------------------------------------------------------- */
-// TODO: this function is too long, break it up
-// NOLINTBEGIN(readability-function-cognitive-complexity)
-nix::StorePath
-createFloxEnv( nix::EvalState &     state,
-               resolver::Lockfile & lockfile,
-               const System &       system )
-{
+  traceLog( "creating FloxEnv" );
   auto packages = lockfile.getLockfileRaw().packages.find( system );
   if ( packages == lockfile.getLockfileRaw().packages.end() )
     {
-      // TODO: throw structured exception
-      throw SystenNotSupportedByLockfile(
+      // Custom exception for non supported system
+      throw SystemNotSupportedByLockfile(
         "'" + system + "' not supported by this environment" );
     }
 
@@ -227,108 +219,480 @@ createFloxEnv( nix::EvalState &     state,
       locked_packages.emplace_back( package.first, locked_package );
     }
 
-  /* Extract derivations */
-  nix::StorePathSet                      references;
-  std::vector<nix::StorePathWithOutputs> drvsToBuild;
-  std::vector<RealisedPackage>           pkgs;
-  std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
-    originalPackage;
+  return locked_packages;
+}
 
-  for ( auto const & [pId, package] : locked_packages )
+/* -------------------------------------------------------------------------- */
+
+std::optional<nix::ref<nix::eval_cache::AttrCursor>>
+maybeGetCursor( nix::ref<nix::EvalState> &              state,
+                nix::ref<nix::eval_cache::AttrCursor> & cursor,
+                const std::string &                     attr )
+{
+  debugLog(
+    nix::fmt( "getting attr cursor '%s.%s", cursor->getAttrPathStr(), attr ) );
+  auto symbol      = state->symbols.create( attr );
+  auto maybeCursor = cursor->maybeGetAttr( symbol, true );
+  if ( maybeCursor == nullptr ) { return std::nullopt; }
+  auto newCursor
+    = static_cast<nix::ref<nix::eval_cache::AttrCursor>>( maybeCursor );
+  return newCursor;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+nix::ref<nix::eval_cache::AttrCursor>
+getPackageCursor( nix::ref<nix::EvalState> &      state,
+                  const nix::flake::LockedFlake & flake,
+                  const flox::AttrPath &          attrpath )
+{
+  auto evalCache
+    = nix::openEvalCache( *state,
+                          std::make_shared<nix::flake::LockedFlake>( flake ) );
+  auto                     cursor = evalCache->getRoot();
+  std::vector<std::string> seen;
+  for ( auto attrName : attrpath )
     {
-      // TODO: use `FloxFlake'
-      auto packageInputRef = nix::FlakeRef( package.input );
-      auto packageFlake    = nix::flake::lockFlake( state,
-                                                 packageInputRef,
-                                                 nix::flake::LockFlags {} );
 
-      auto * vFlake = state.allocValue();
-      nix::flake::callFlake( state, packageFlake, *vFlake );
-
-      /* Get referenced output. */
-      auto output = extractAttrPath( state, *vFlake, package.attrPath );
-
-      /* Interpret ooutput as derivation. */
-      auto package_drv = getDerivation( state, *output.value, false );
-
-      if ( ! package_drv.has_value() )
+      if ( auto maybeCursor = maybeGetCursor( state, cursor, attrName );
+           maybeCursor.has_value() )
         {
-          throw PackageEvalFailure( "Failed to get derivation for package '"
-                                    + nlohmann::json( package ).dump() + "'" );
+          cursor = *maybeCursor;
+        }
+      else
+        {
+          debugLog( "failed to get package cursor" );
+          throw PackageEvalFailure(
+            nix::fmt( "failed to evaluate attribute '%s.%s'",
+                      cursor->getAttrPathStr(),
+                      attrName ) );
+        }
+    }
+  return cursor;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+std::optional<std::string>
+maybeGetStringAttr( nix::ref<nix::EvalState> &              state,
+                    nix::ref<nix::eval_cache::AttrCursor> & cursor,
+                    const std::string &                     attr )
+{
+  debugLog(
+    nix::fmt( "getting string attr '%s.%s", cursor->getAttrPathStr(), attr ) );
+  auto maybeCursor = maybeGetCursor( state, cursor, attr );
+  if ( ! maybeCursor.has_value() ) { return std::nullopt; }
+  auto str = ( *maybeCursor )->getString();
+  return str;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+std::optional<std::vector<std::string>>
+maybeGetStringListAttr( nix::ref<nix::EvalState> &              state,
+                        nix::ref<nix::eval_cache::AttrCursor> & cursor,
+                        const std::string &                     attr )
+{
+  debugLog( nix::fmt( "getting string list attr '%s.%s",
+                      cursor->getAttrPathStr(),
+                      attr ) );
+  auto maybeCursor = maybeGetCursor( state, cursor, attr );
+  if ( ! maybeCursor.has_value() ) { return std::nullopt; }
+  auto strs = ( *maybeCursor )->getListOfStrings();
+  return strs;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+std::optional<bool>
+maybeGetBoolAttr( nix::ref<nix::EvalState> &              state,
+                  nix::ref<nix::eval_cache::AttrCursor> & cursor,
+                  const std::string &                     attr )
+{
+  debugLog(
+    nix::fmt( "getting bool attr '%s.%s", cursor->getAttrPathStr(), attr ) );
+  auto maybeCursor = maybeGetCursor( state, cursor, attr );
+  if ( ! maybeCursor.has_value() ) { return std::nullopt; }
+  auto b = ( *maybeCursor )->getBool();
+  return b;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+OutputsOrMissingOutput
+getOutputsOutpaths( nix::ref<nix::EvalState> &              state,
+                    nix::ref<nix::eval_cache::AttrCursor> & pkgCursor,
+                    const std::vector<std::string> &        names )
+{
+  std::unordered_map<std::string, std::string> outpaths;
+  for ( const auto & outputName : names )
+    {
+      debugLog( nix::fmt( "getting output attr '%s.%s",
+                          pkgCursor->getAttrPathStr(),
+                          outputName ) );
+
+
+      // cursor to `<pkg>.${outputName}`
+      auto maybeCursor = maybeGetCursor( state, pkgCursor, outputName );
+      if ( ! maybeCursor.has_value() )
+        {
+          OutputsOrMissingOutput missing = outputName;
+          return missing;
         }
 
-      std::string packagePath;
+      // cursor to `<pkg>.${outputName}.outPath`
+      auto maybeStorePath
+        = maybeGetStringAttr( state, *maybeCursor, "outPath" );
+
+      if ( maybeStorePath == std::nullopt )
+        {
+          OutputsOrMissingOutput missing = outputName + ".outPath";
+          return missing;
+        }
+
+      outpaths[outputName] = *maybeStorePath;
+    }
+  return outpaths;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+std::string
+tryEvaluatePackageOutPath( nix::ref<nix::EvalState> &              state,
+                           const std::string &                     packageName,
+                           const std::string &                     system,
+                           nix::ref<nix::eval_cache::AttrCursor> & cursor )
+{
+  try
+    {
+      debugLog( nix::fmt( "trying to get outPath for '%s.outPath'",
+                          cursor->getAttrPathStr() ) );
+
+      auto result = maybeGetStringAttr( state, cursor, "outPath" );
+      if ( result.has_value() ) { return *result; }
+      throw PackageEvalFailure( "package '" + packageName
+                                + "' had no outPath" );
+    }
+  catch ( const nix::Error & e )
+    {
+      /**
+       * "not available on the requested hostPlatform"
+       *   -> package isn't supported on this system
+       */
+      debugLog( "failed to get outPath: " + std::string( e.what() ) );
+      if ( e.info().msg.str().find(
+             "is not available on the requested hostPlatform:" )
+           != std::string::npos )
+        {
+          debugLog( "'" + packageName + "' is not available on this system" );
+          throw PackageUnsupportedSystem(
+            nix::fmt( "package '%s' is not available for this system ('%s')",
+                      packageName,
+                      system ),
+
+            nix::filterANSIEscapes( e.what(), true ) );
+        }
+
+      /**
+       * eval errors are cached without the eror trace
+       * force an impure eval to get the full error message
+       */
       try
         {
-          packagePath
-            = state.store->printStorePath( package_drv->queryOutPath() );
+          debugLog(
+            "evaluating outPath uncached to get full error message" ) auto
+            vPackage
+            = cursor->forceValue();
+          state->forceAttrs( vPackage, nix::noPos, "while evaluating package" );
+          // expected to fail
+          auto aOutPath
+            = vPackage.attrs->get( state->symbols.create( "outPath" ) );
+          state->forceString( *aOutPath->value,
+                              aOutPath->pos,
+                              "while evaluating outPath" );
+          /**
+           * this should only be reachable if we have a cached eval failure,
+           * that evaluates successfully at a later time.
+           * Since eval checks for nixpkgs are disabled through the
+           * `flox-nixpkgs` fetcher which upon change will observe a different
+           * fingerprint, i.e. fresh cache, this is rather unlikely.
+           */
+          debugLog( "evaluation was expected to fail, but was successful" );
+          return aOutPath->value->string.s;
         }
       catch ( const nix::Error & e )
         {
-
-          if ( e.info().msg.str().find(
-                 "is not available on the requested hostPlatform:" )
-               != std::string::npos )
-            {
-              throw PackageUnsupportedSystem(
-                nix::fmt(
-                  "package '%s' is not available for this system ('%s')",
-                  pId,
-                  system ),
-
-                nix::filterANSIEscapes( e.what(), true ) );
-            }
-
-          // rethrow the original root cause without the nix trace
           throw PackageEvalFailure(
-            nix::fmt( "package '%s' failed to evaluate", pId ),
+            nix::fmt( "package '%s' failed to evaluate", packageName ),
             e.info().msg.str() );
-        };
-
-
-      /* Collect all outputs to include in the environment.
-       *
-       * Set the priority of the outputs to the priority of the package
-       * and the internal priority to the index of the output.
-       * This way `buildenv::buildEnvironment` can resolve conflicts between
-       * outputs of the same derivation. */
-      for ( auto [idx, output] : enumerate( package_drv->queryOutputs() ) )
-        {
-          /* Skip outputs without path */
-          if ( ! output.second.has_value() ) { continue; }
-          pkgs.emplace_back(
-            state.store->printStorePath( output.second.value() ),
-            true,
-            buildenv::Priority( package.priority,
-                                packagePath,
-                                /* idx should always fit in uint its unlikely a
-                                 * package has more than 4 billion outputs. */
-                                static_cast<unsigned>( idx ) ) );
-          references.insert( output.second.value() );
-          originalPackage.insert( { output.second.value(), { pId, package } } );
         }
+    }
+}
 
-      /* Collect drvs that may yet need to be built. */
-      if ( auto drvPath = package_drv->queryDrvPath() )
+
+/* -------------------------------------------------------------------------- */
+
+nix::ref<nix::eval_cache::AttrCursor>
+evalCacheCursorForInput( nix::ref<nix::EvalState> &             state,
+                         const flox::resolver::LockedInputRaw & input,
+                         const flox::AttrPath &                 attrPath )
+{
+
+  /**
+   * Ensure the input is fetched with `flox-nixpkgs`.
+   * Currently, the 'flox-nixpkgs' fetcher requires the original input to be
+   * a rev or ref of `github:nixos/nixpkgs`.
+   */
+  auto floxNixpkgsAttrs = flox::githubAttrsToFloxNixpkgsAttrs( input.attrs );
+  auto packageInputRef  = nix::FlakeRef::fromAttrs( floxNixpkgsAttrs );
+
+  auto packageFlake = nix::flake::lockFlake( *state,
+                                             packageInputRef,
+                                             nix::flake::LockFlags {} );
+
+  auto cursor = getPackageCursor( state, packageFlake, attrPath );
+  return cursor;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+std::unordered_map<std::string, std::string>
+outpathsForPackageOutputs( nix::ref<nix::EvalState> &              state,
+                           const std::string &                     packageName,
+                           nix::ref<nix::eval_cache::AttrCursor> & pkgCursor )
+{
+  debugLog( "getting outputs for " + packageName );
+
+  // get `<pkg>.outputs`
+  auto outputNames = maybeGetStringListAttr( state, pkgCursor, "outputs" );
+  if ( ! ( outputNames.has_value() ) )
+    {
+      throw PackageEvalFailure(
+        nix::fmt( "package '%s' had no outputs", packageName ) );
+    }
+  debugLog( nix::fmt( "found outputs [%s] for '%s'",
+                      flox::concatStringsSep( ",", *outputNames ),
+                      packageName ) );
+
+  debugLog( "getting outPaths for outputs of " + packageName );
+
+  auto maybeOutputsToOutpaths
+    = getOutputsOutpaths( state, pkgCursor, *outputNames );
+
+  if ( std::holds_alternative<std::string>( maybeOutputsToOutpaths ) )
+    {
+      auto missingOutput = std::get<std::string>( maybeOutputsToOutpaths );
+      throw PackageEvalFailure( nix::fmt( "package '%s' had no output '%s'",
+                                          packageName,
+                                          missingOutput ) );
+    }
+  auto outputsToOutpaths
+    = std::get<std::unordered_map<std::string, std::string>>(
+      maybeOutputsToOutpaths );
+  return outputsToOutpaths;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
+collectRealisedPackages(
+  nix::ref<nix::EvalState> &                     state,
+  const std::string &                            packageName,
+  const flox::resolver::LockedPackageRaw &       lockedPackage,
+  const std::string &                            parentOutpath,
+  std::unordered_map<std::string, std::string> & outputsToOutpaths )
+{
+  std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>> pkgs;
+  auto internalPriority = 0;
+  for ( const auto & [name, outpathStr] : outputsToOutpaths )
+    {
+      debugLog( "processing output '" + name + "' of '" + packageName + "'" );
+      auto outpathForOutput = state->store->parseStorePath( outpathStr );
+      buildenv::RealisedPackage pkg(
+        state->store->printStorePath( outpathForOutput ),
+        true,
+        buildenv::Priority( lockedPackage.priority,
+                            parentOutpath,
+                            internalPriority++ ) );
+      pkgs.emplace_back( pkg, outpathForOutput );
+    }
+  return pkgs;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
+getRealisedPackages( nix::ref<nix::EvalState> &         state,
+                     const std::string &                packageName,
+                     const resolver::LockedPackageRaw & lockedPackage,
+                     const System &                     system )
+{
+  auto timeEvalStart = std::chrono::high_resolution_clock::now();
+  auto cursor        = evalCacheCursorForInput( state,
+                                         lockedPackage.input,
+                                         lockedPackage.attrPath );
+
+  /* Try to eval the outPath. Trying this eval tells us whether the package is
+   * unsupported. This eval will fail in a number of cases:
+   * - The package doesn't work on this system
+   * - The package is marked "insecure" i.e. it's old (e.g. Python 2)
+   * - Possibly other cases as well
+   * */
+
+  // uses the cached value
+  auto parentOutpath
+    = tryEvaluatePackageOutPath( state, packageName, system, cursor );
+
+  // auto parentOutpath
+  // = tryEvalPath( state, packageName, system, cursor, isUnfree, "outPath" );
+
+  /**
+   * Collect the store paths for each output of the package.
+   * Note that the "out" output is the same as the package's outPath.
+   */
+  auto outputsToOutpaths
+    = outpathsForPackageOutputs( state, packageName, cursor );
+
+
+  auto pkgs        = collectRealisedPackages( state,
+                                       packageName,
+                                       lockedPackage,
+                                       parentOutpath,
+                                       outputsToOutpaths );
+  auto timeEvalEnd = std::chrono::high_resolution_clock::now();
+
+  bool allValid = true;
+  for ( const auto & [pkg, outPath] : pkgs )
+    {
+      try
         {
-          /* Build derivation of pacakge in environment,
-           * rethrow errors as PackageBuildFailure. */
-          try
-            {
-              auto storePathWithOutputs
-                = nix::StorePathWithOutputs { *drvPath, {} };
-              state.store->buildPaths(
-                nix::toDerivedPaths( { storePathWithOutputs } ) );
-            }
-          catch ( const nix::Error & e )
-            {
-              throw PackageBuildFailure(
-                "Failed to build package '" + pId + "'",
-                nix::filterANSIEscapes( e.what(), true ) );
-            }
+          state->store->ensurePath( outPath );
+        }
+      catch ( const nix::Error & e )
+        {
+          debugLog( "failed to ensure path: " + std::string( e.what() ) );
+          allValid = false;
+          break;  // no need to check the rest if any output is not
+                  // substitutable
         }
     }
 
+  // one or more outputs are not substitutable
+  // we need to build the derivation to get all outputs
+  if ( ! allValid )
+    {
+      auto drvPath = cursor->forceDerivation();
+      try
+        {
+          auto storePathWithOutputs = nix::StorePathWithOutputs { drvPath, {} };
+          state->store->buildPaths(
+            nix::toDerivedPaths( { storePathWithOutputs } ) );
+        }
+      catch ( const nix::Error & e )
+        {
+          throw PackageBuildFailure( "Failed to build package '" + packageName
+                                       + "'",
+                                     nix::filterANSIEscapes( e.what(), true ) );
+        }
+    }
+
+
+  auto timeBuildEnd = std::chrono::high_resolution_clock::now();
+
+  /* Report some timings for diagnostics */
+  auto timeEval = std::chrono::duration_cast<std::chrono::microseconds>(
+    timeEvalEnd - timeEvalStart );
+  auto timeBuild = std::chrono::duration_cast<std::chrono::microseconds>(
+    timeBuildEnd - timeEvalEnd );
+  auto timeTotal = timeEval + timeBuild;
+  debugLog( nix::fmt( "times for package %s: eval=%dus, build=%dus, total=%dus",
+                      packageName,
+                      timeEval.count(),
+                      timeBuild.count(),
+                      timeTotal.count() ) );
+  return pkgs;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+void
+addScriptToScriptsDir( const std::string &           scriptContents,
+                       const std::filesystem::path & scriptsDir,
+                       const std::string &           scriptName,
+                       std::stringstream & mainActivationScriptContents,
+                       const bool          shouldSource )
+{
+  /* Ensure that the "activate" subdirectory exists. */
+  std::filesystem::create_directories( scriptsDir / ACTIVATION_SUBDIR_NAME );
+
+  /* Write the script to a temporary file. */
+  std::filesystem::path scriptTempPath( nix::createTempFile().second );
+  debugLog(
+    nix::fmt( "created tempfile for activation script: script=%s, path=%s",
+              scriptName,
+              scriptTempPath ) );
+  std::ofstream scriptTmpFile( scriptTempPath );
+  if ( ! scriptTmpFile.is_open() )
+    {
+      throw ActivationScriptBuildFailure( std::string( strerror( errno ) ) );
+    }
+  scriptTmpFile << scriptContents << std::endl;
+  if ( scriptTmpFile.fail() )
+    {
+      throw ActivationScriptBuildFailure( std::string( strerror( errno ) ) );
+    }
+  scriptTmpFile.close();
+
+  /* Copy the script to the scripts directory. */
+  auto scriptPath = scriptsDir / ACTIVATION_SUBDIR_NAME / scriptName;
+  debugLog( nix::fmt( "copying script to scripts dir: src=%s, dest=%s",
+                      scriptTempPath,
+                      scriptPath ) );
+  std::filesystem::copy_file( scriptTempPath, scriptPath );
+  std::filesystem::permissions( scriptPath,
+                                std::filesystem::perms::owner_exec,
+                                std::filesystem::perm_options::add );
+
+  /* Reference the script from the main activation script. */
+  auto scriptRelativePath
+    = nix::fmt( "\"$FLOX_ENV/%s/%s\"", ACTIVATION_SUBDIR_NAME, scriptName );
+  if ( shouldSource )
+    {
+      mainActivationScriptContents << "source " << scriptRelativePath << '\n';
+    }
+  else
+    {
+      mainActivationScriptContents << FLOX_BASH_BIN << " " << scriptRelativePath
+                                   << '\n';
+    }
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Make a @a RealisedPackage and store path for the activation scripts.
+ * The package contains the activation scripts for *bash* and *zsh*.
+ * @param state Nix state.
+ * @param lockfile Lockfile to extract environment variables and hook script
+ * from.
+ * @return A pair of the realised package and the store path of the activation
+ * scripts.
+ */
+static std::pair<buildenv::RealisedPackage, nix::StorePathSet>
+makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile )
+{
+  std::vector<nix::StorePath> activationScripts;
   /* verbatim content of the activate script common to all shells */
   std::stringstream commonActivate;
 
@@ -361,38 +725,27 @@ createFloxEnv( nix::EvalState &     state,
         }
     }
 
-  /* Add hook script.
-   * Write hook script to a temporary file and copy it to the environment.
-   * Add source command to the activate script. */
-  // TODO: is it script _xor_ file?
-  // Currently it is assumed that `hook.script` and `hook.file` are
-  // mutually exclusive.
-  // If both are set, `hook.file` takes precedence.
-  if ( auto hook = lockfile.getManifest().getManifestRaw().hook )
+  /* Add 'on-activate' script. */
+  auto hook = lockfile.getManifest().getManifestRaw().hook;
+  if ( hook.has_value() )
     {
-      nix::Path script_path;
-
-      /* Either set script path to a temporary file. */
-      if ( auto script = hook->script )
+      if ( hook->script.has_value() )
         {
-          script_path = nix::createTempFile().second;
-          std::ofstream file( script_path );
-          file << script.value();
-          file.close();
+          debugLog( "adding 'hook.script' to activation scripts" );
+          addScriptToScriptsDir( hook->script.value(),
+                                 tempDir,
+                                 "hook.sh",
+                                 commonActivate,
+                                 true );
         }
-
-      /* ...Or to the file specified in the manifest. */
-      if ( auto file = hook->file ) { script_path = file.value(); }
-
-      if ( ! script_path.empty() )
+      else if ( hook->onActivate.has_value() )
         {
-
-          std::filesystem::copy_file( script_path,
-                                      tempDir / "activate" / "hook.sh" );
-          std::filesystem::permissions( tempDir / "activate" / "hook.sh",
-                                        std::filesystem::perms::owner_exec,
-                                        std::filesystem::perm_options::add );
-          commonActivate << "source \"$FLOX_ENV/activate/hook.sh\"" << '\n';
+          debugLog( "adding 'hook.on-activate' to activation scripts" );
+          addScriptToScriptsDir( hook->onActivate.value(),
+                                 tempDir,
+                                 "on-activate.sh",
+                                 commonActivate,
+                                 false );
         }
     }
 
@@ -414,30 +767,100 @@ createFloxEnv( nix::EvalState &     state,
   zshActivate << commonActivate.str();
   zshActivate.close();
 
+  debugLog( "adding activation scripts to store" );
   auto activationStorePath
     = state.store->addToStore( "activation-scripts", tempDir );
-  references.insert( activationStorePath );
-  pkgs.emplace_back( state.store->printStorePath( activationStorePath ),
-                     true,
-                     buildenv::Priority() );
 
+  RealisedPackage realised( state.store->printStorePath( activationStorePath ),
+                            true,
+                            buildenv::Priority() );
+  auto            references = nix::StorePathSet();
+  references.insert( activationStorePath );
   references.insert( state.store->parseStorePath( SET_PROMPT_BASH_SH ) );
   references.insert( state.store->parseStorePath( SET_PROMPT_ZSH_SH ) );
 
+
+  return { realised, references };
+}
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Make a @a RealisedPackage and store path for the profile.d scripts.
+ * @param state Nix state.
+ * @return A pair of the realised package and the store path of the profile.d
+ * scripts.
+ */
+static std::pair<buildenv::RealisedPackage, nix::StorePath>
+makeProfileDScripts( nix::EvalState & state )
+{
   /* Insert profile.d scripts.
-   * The store path is provided at compile time via the `PROFILE_D_SCRIPTS_DIR'
-   * environment variable. */
+   * The store path is provided at compile time via the
+   * `PROFILE_D_SCRIPTS_DIR' environment variable. */
   auto profileScriptsPath
     = state.store->parseStorePath( PROFILE_D_SCRIPTS_DIR );
   state.store->ensurePath( profileScriptsPath );
-  references.insert( profileScriptsPath );
-  pkgs.emplace_back( state.store->printStorePath( profileScriptsPath ),
-                     true,
-                     buildenv::Priority() );
+  RealisedPackage realised( state.store->printStorePath( profileScriptsPath ),
+                            true,
+                            buildenv::Priority() );
 
-  return createEnvironmentStorePath( state, pkgs, references, originalPackage );
+  return { realised, profileScriptsPath };
 }
-// NOLINTEND(readability-function-cognitive-complexity)
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Create a nix package for an environment definition.
+ * @param state Nix state.
+ * @param lockfile Lockfile to extract environment definition from.
+ * @param system System to create the environment for.
+ * @return The store path of the environment.
+ */
+nix::StorePath
+createFloxEnv( nix::ref<nix::EvalState> & state,
+               resolver::Lockfile &       lockfile,
+               const System &             system )
+{
+  auto locked_packages = getLockedPackages( lockfile, system );
+
+  /* Extract derivations */
+  nix::StorePathSet            references;
+  std::vector<RealisedPackage> pkgs;
+  std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
+    originalPackage;
+
+  for ( auto const & [pId, package] : locked_packages )
+    {
+      auto realised = getRealisedPackages( state, pId, package, system );
+      for ( auto [realisedPackage, output] : realised )
+        {
+          pkgs.push_back( realisedPackage );
+          references.insert( output );
+          originalPackage.insert( { output, { pId, package } } );
+        }
+    }
+
+  // Add activation scripts to the environment
+  auto [activationScriptPackage, activationScriptReferences]
+    = makeActivationScripts( *state, lockfile );
+
+  pkgs.push_back( activationScriptPackage );
+  references.insert( activationScriptReferences.begin(),
+                     activationScriptReferences.end() );
+
+
+  auto [profileScriptsPath, profileScriptsReference]
+    = makeProfileDScripts( *state );
+
+  pkgs.push_back( profileScriptsPath );
+  references.insert( profileScriptsReference );
+
+  return createEnvironmentStorePath( *state,
+                                     pkgs,
+                                     references,
+                                     originalPackage );
+}
 
 
 nix::StorePath
@@ -448,12 +871,6 @@ createContainerBuilder( nix::EvalState &       state,
   static const nix::FlakeRef nixpkgsRef
     = nix::parseFlakeRef( COMMON_NIXPKGS_URL );
 
-  auto getFlake = [&]()
-  {
-    auto lockedNixpkgs
-      = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
-  };
-  ensureFlakeIsDownloaded( getFlake );
   auto lockedNixpkgs
     = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );
 

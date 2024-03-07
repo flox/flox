@@ -51,16 +51,16 @@ jobs:
           if [[ '${{ inputs.all }}' = true ]]; then
             echo "Checking all sources" >&2;
             # Keep this list aligned with `build-aux/changed-sources'
-            find pkgdb/include pkgdb/src pkgdb/test  \
-                 -name '*.cpp' -o                    \
-                 -name '*.hpp' -o                    \
-                 -name '*.hxx' -o                    \
-                 -name '*.cxx' -o                    \
-                 -name '*.cc'  -o                    \
-                 -name '*.hh'  -o                    \
-                 -name '*.c'   -o                    \
-                 -name '*.h'   -o                    \
-                 -name '*.ipp'                       \
+            find pkgdb/include pkgdb/src pkgdb/tests  \
+                 -name '*.cpp' -o                     \
+                 -name '*.hpp' -o                     \
+                 -name '*.hxx' -o                     \
+                 -name '*.cxx' -o                     \
+                 -name '*.cc'  -o                     \
+                 -name '*.hh'  -o                     \
+                 -name '*.c'   -o                     \
+                 -name '*.h'   -o                     \
+                 -name '*.ipp'                        \
                  -print > targets;
           else
             git fetch origin '${{ github.base_ref }}';

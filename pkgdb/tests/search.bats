@@ -98,7 +98,7 @@ genParamsNixpkgsFlox() {
   params="$(genParams ".query.pname|=\"nodejs\"|.query.version=\"$NODEJS_VERSION\"")"
   run sh -c "$PKGDB_BIN search '$params' | wc -l"
   assert_success
-  assert_output 4
+  assert_output 5
 }
 
 # ---------------------------------------------------------------------------- #
@@ -118,12 +118,30 @@ genParamsNixpkgsFlox() {
 
 # bats test_tags=search:semver, search:pname
 
+@test "'pkgdb search' with partial semvers (such as those in an .nvmrc)" {
+  params="$(genParams ".query.pname|=\"nodejs\"|.query.semver=\"18\"")"
+  $PKGDB_BIN search "$params"
+  run sh -c "$PKGDB_BIN search '$params' | wc -l"
+  assert_success
+  assert_output 5
+
+  params="$(genParams ".query.pname|=\"nodejs\"|.query.semver=\"18.18\"")"
+  $PKGDB_BIN search "$params"
+  run sh -c "$PKGDB_BIN search '$params' | wc -l"
+  assert_success
+  assert_output 5
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=search:semver, search:pname
+
 # Test `semver' by filtering to 18.*
 @test "'pkgdb search' 'pname=nodejs & semver=18.*'" {
   params="$(genParams '.query.pname|="nodejs"|.query.semver="18.*"')"
   run sh -c "$PKGDB_BIN search '$params' | wc -l"
   assert_success
-  assert_output 4
+  assert_output 5
 }
 
 # ---------------------------------------------------------------------------- #
@@ -135,7 +153,7 @@ genParamsNixpkgsFlox() {
   params="$(genParams ".query.name|=\"nodejs-$NODEJS_VERSION\"")"
   run sh -c "$PKGDB_BIN search '$params' | wc -l;"
   assert_success
-  assert_output 4
+  assert_output 5
 }
 
 # ---------------------------------------------------------------------------- #
@@ -465,6 +483,13 @@ genParamsNixpkgsFlox() {
 # ---------------------------------------------------------------------------- #
 
 # bats tests_tags=search
+
+@test "'pkgdb is properly scraping nodePackages" {
+  params="$(genGMParams ".query.pname=\"npm\" | .manifest.options.systems=[\"x86_64-linux\"]")"
+  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
+  assert_success
+  assert_equal "${#lines[@]}" 2
+}
 
 @test "'pkgdb search' with ' in search term" {
   skip "FIXME: no results"

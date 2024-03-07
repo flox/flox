@@ -1,7 +1,10 @@
 use std::env;
 use std::fmt::Display;
-use std::process::Command;
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
+use std::process::{Command, Stdio};
 
+use log::debug;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::Value;
@@ -34,14 +37,21 @@ pub mod error_codes {
     pub const PACKAGE_EVAL_FAILURE: u64 = 125;
     /// The package failed to build
     pub const PACKAGE_BUILD_FAILURE: u64 = 126;
+    /// The package does not pass the options check
+    pub const BAD_PACKAGE_FAILURE: u64 = 127;
+    /// Failed to build the activation script, possibly due to an I/O failure
+    pub const ACTIVATION_SCRIPT_BUILD_FAILURE: u64 = 128;
 }
 
 /// The JSON output of a `pkgdb upgrade` call
 #[derive(Deserialize)]
 pub struct UpgradeResultJSON {
-    pub result: UpgradeResult,
+    pub result: UpgradeResultInner,
     pub lockfile: Value,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct UpgradeResultInner(pub Vec<String>);
 
 /// The JSON output of a `pkgdb buildenv` call
 #[derive(Deserialize)]
@@ -49,8 +59,11 @@ pub struct BuildEnvResult {
     pub store_path: String,
 }
 
-#[derive(Deserialize)]
-pub struct UpgradeResult(pub Vec<String>);
+#[derive(Debug)]
+pub struct UpgradeResult {
+    pub packages: Vec<String>,
+    pub store_path: Option<PathBuf>,
+}
 
 #[derive(Debug, Error)]
 pub enum CallPkgDbError {
@@ -62,20 +75,37 @@ pub enum CallPkgDbError {
     ParseJSON(#[source] serde_json::Error),
     #[error("call to pkgdb failed")]
     PkgDbCall(#[source] std::io::Error),
+    #[error("couldn't get pkgdb stdout")]
+    PkgDbStdout,
+    #[error("couldn't get pkgdb stderr")]
+    PkgDbStderr,
 }
 
 /// Call pkgdb and try to parse JSON or error JSON.
 ///
 /// Error JSON is parsed into a [CallPkgDbError::PkgDbError].
 pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
-    let output = pkgdb_cmd.output().map_err(CallPkgDbError::PkgDbCall)?;
+    let mut proc = pkgdb_cmd
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(CallPkgDbError::PkgDbCall)?;
+    let stderr = proc.stderr.take().expect("couldn't get stderr handle");
+    let stderr_reader = BufReader::new(stderr);
+    stderr_reader
+        .lines()
+        .map_while(Result::ok)
+        .for_each(|line| {
+            debug!(target: "pkgdb", "{line}");
+        });
+    let output = proc.wait_with_output().map_err(CallPkgDbError::PkgDbCall)?;
     // If command fails, try to parse stdout as a PkgDbError
     if !output.status.success() {
         match serde_json::from_slice::<PkgDbError>(&output.stdout) {
             Ok(pkgdb_err) => Err(pkgdb_err)?,
             Err(e) => Err(CallPkgDbError::ParsePkgDbError(e))?,
         }
-    // If command succeeds, try to parse stdout as JSON value
+    // If the command succeeds, try to parse stdout as a JSON value
     } else {
         let json = serde_json::from_slice(&output.stdout).map_err(CallPkgDbError::ParseJSON)?;
         Ok(json)

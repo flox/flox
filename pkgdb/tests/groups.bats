@@ -202,7 +202,7 @@ jq_edit() {
   assert_output "$UNSTABLE_REV"
 
   jq_edit manifest.json '.install.nodejs={
-    "name": "nodejs", "version": ">'"$NODEJS_VERSION_OLDEST"' <='"$NODEJS_VERISION"'"
+    "name": "nodejs", "version": ">'"$NODEJS_VERSION_OLDEST"' <='"$NODEJS_VERSION"'"
   }'
 
   # This doesn't have `pipefail' so we will always get a `manifest.lock2'

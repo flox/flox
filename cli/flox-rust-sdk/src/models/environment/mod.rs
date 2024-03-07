@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
-use flox_types::version::Version;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -16,6 +15,7 @@ use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::LockedManifest;
 use super::manifest::PackageToInstall;
 use super::pkgdb::UpgradeResult;
+use crate::data::Version;
 use crate::flox::{Flox, Floxhub};
 use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{
@@ -48,16 +48,26 @@ pub const GLOBAL_MANIFEST_LOCKFILE_FILENAME: &str = "global-manifest.lock";
 pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
+pub const CACHE_DIR_NAME: &str = "cache";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
+pub const FLOX_ENV_CACHE_VAR: &str = "FLOX_ENV_CACHE";
+pub const FLOX_ENV_PROJECT_VAR: &str = "FLOX_ENV_PROJECT";
 pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 pub const FLOX_PATH_PATCHED_VAR: &str = "FLOX_PATH_PATCHED";
 pub const FLOX_SYSTEM_PLACEHOLDER: &str = "_FLOX_INIT_SYSTEM";
+pub const FLOX_HOOK_PLACEHOLDER: &str = "_FLOX_INIT_HOOK";
+pub const FLOX_INSTALL_PLACEHOLDER: &str = "_FLOX_INIT_INSTALL";
 
-pub type UpdateResult = (Option<LockedManifest>, LockedManifest);
+#[derive(Debug)]
+pub struct UpdateResult {
+    pub new_lockfile: LockedManifest,
+    pub old_lockfile: Option<LockedManifest>,
+    pub store_path: Option<PathBuf>,
+}
 
 /// A path that is guaranteed to be canonicalized
 ///
@@ -100,6 +110,18 @@ impl CanonicalPath {
 pub struct InstallationAttempt {
     pub new_manifest: Option<String>,
     pub already_installed: HashMap<String, bool>,
+    /// The store path of environment that was built to validate the install.
+    /// This is used as an optimization to skip builds that we've already done.
+    pub store_path: Option<PathBuf>,
+}
+
+/// The result of an uninstallation attempt
+#[derive(Debug)]
+pub struct UninstallationAttempt {
+    pub new_manifest: Option<String>,
+    /// The store path of environment that was built to validate the uninstall.
+    /// This is used as an optimization to skip builds that we've already done.
+    pub store_path: Option<PathBuf>,
 }
 
 pub trait Environment: Send {
@@ -124,7 +146,7 @@ pub trait Environment: Send {
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<String, EnvironmentError2>;
+    ) -> Result<UninstallationAttempt, EnvironmentError2>;
 
     /// Atomically edit this environment, ensuring that it still builds
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2>;
@@ -155,6 +177,12 @@ pub trait Environment: Send {
     /// dynamically, i.e. so that install/edit can modify the environment
     /// without requiring reactivation.
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
+
+    /// Return a path that environment hooks should use to store transient data.
+    fn cache_path(&self) -> Result<PathBuf, EnvironmentError2>;
+
+    /// Return a path that should be used as the project root for environment hooks.
+    fn project_path(&self) -> Result<PathBuf, EnvironmentError2>;
 
     /// Directory containing .flox
     ///
@@ -290,6 +318,20 @@ impl EnvironmentPointer {
 
         serde_json::from_slice(&pointer_contents).map_err(EnvironmentError2::ParseEnvJson)
     }
+
+    pub fn name(&self) -> &EnvironmentName {
+        match self {
+            EnvironmentPointer::Managed(pointer) => &pointer.name,
+            EnvironmentPointer::Path(pointer) => &pointer.name,
+        }
+    }
+
+    pub fn owner(&self) -> Option<&EnvironmentOwner> {
+        match self {
+            EnvironmentPointer::Managed(pointer) => Some(&pointer.owner),
+            EnvironmentPointer::Path(_) => None,
+        }
+    }
 }
 
 /// Represents a `.flox` directory that contains an `env.json`.
@@ -408,6 +450,15 @@ pub enum EnvironmentError2 {
 
     #[error("failed to create GC roots directory")]
     CreateGcRootDir(#[source] std::io::Error),
+
+    #[error("failed to create cache directory")]
+    CreateCacheDir(#[source] std::io::Error),
+
+    #[error("could not create temporary directory")]
+    CreateTempDir(#[source] std::io::Error),
+
+    #[error("could not get current directory")]
+    GetCurrentDir(#[source] std::io::Error),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions

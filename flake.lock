@@ -77,11 +77,11 @@
     "flox-latest": {
       "flake": false,
       "locked": {
-        "lastModified": 1698339512,
-        "narHash": "sha256-+/x9h9tsWbD5c4aDLy1Ru2ziP2U8myse7NaPkArmeU8=",
+        "lastModified": 1707948038,
+        "narHash": "sha256-2IckJm3741mKayCBEULWpxfDW+k79MlGSHti0bzgy0Y=",
         "ref": "latest",
-        "rev": "2f44b10256364e57291b0bbaa2be4d26573f7a90",
-        "revCount": 692,
+        "rev": "b6e4ccfe564fdc7300a0f302a2ab50923cb82a06",
+        "revCount": 1025,
         "type": "git",
         "url": "ssh://git@github.com/flox/flox"
       },
@@ -109,22 +109,6 @@
       "original": {
         "owner": "hercules-ci",
         "repo": "gitignore.nix",
-        "type": "github"
-      }
-    },
-    "nix-patches": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1698959422,
-        "narHash": "sha256-Y1kfXm/fmHo7NS5w8YSNGZNpe4pPR/eGLr5QNdQDQHs=",
-        "owner": "flox",
-        "repo": "pkgdb",
-        "rev": "5a3d9dd15674852baac08e07c84a59d62ceb7740",
-        "type": "github"
-      },
-      "original": {
-        "owner": "flox",
-        "repo": "pkgdb",
         "type": "github"
       }
     },
@@ -176,27 +160,6 @@
         "type": "github"
       }
     },
-    "parser-util": {
-      "inputs": {
-        "nix-patches": "nix-patches",
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1699380608,
-        "narHash": "sha256-HNB25DfG28ntlabEpqvXkY48LBYjceKRXQyOIBbwy7I=",
-        "owner": "flox",
-        "repo": "parser-util",
-        "rev": "ff2c910d7644ccf50c7d0042016ab81a143c9369",
-        "type": "github"
-      },
-      "original": {
-        "owner": "flox",
-        "repo": "parser-util",
-        "type": "github"
-      }
-    },
     "pre-commit-hooks": {
       "inputs": {
         "flake-compat": "flake-compat",
@@ -224,11 +187,9 @@
     "root": {
       "inputs": {
         "crane": "crane",
-        "floco": "floco",
         "flox-latest": "flox-latest",
         "nixpkgs": "nixpkgs",
         "nixpkgs-bear": "nixpkgs-bear",
-        "parser-util": "parser-util",
         "pre-commit-hooks": "pre-commit-hooks",
         "sqlite3pp": "sqlite3pp"
       }

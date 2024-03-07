@@ -7,6 +7,8 @@ use std::process::Command;
 use log::{debug, error, warn};
 use thiserror::Error;
 
+use crate::utils::CommandExt;
+
 #[derive(Error, Debug)]
 pub enum EmptyError {}
 
@@ -186,7 +188,7 @@ impl GitCommandProvider {
     }
 
     fn run_command(command: &mut Command) -> Result<OsString, GitCommandError> {
-        debug!("{:?}", command);
+        debug!("running git command: {}", command.display());
         let out = command.output()?;
 
         if !out.status.success() {
@@ -250,9 +252,11 @@ impl GitCommandProvider {
         options: GitCommandOptions,
         path: P,
     ) -> Result<Self, GitCommandOpenError> {
+        debug!("attempting to open repo: path={}", path.as_ref().display());
         let bare = Self::is_bare_repo(&path)?;
 
         // resolved and canonicalized path to the git repo
+        debug!("determining path to git repo");
         let resolved_path = {
             let toplevel_or_git_dir = if bare {
                 let mut command = options.new_command();
@@ -280,6 +284,7 @@ impl GitCommandProvider {
                 .canonicalize()
                 .map_err(GitCommandOpenError::Canonicalize)?
         };
+        debug!("got non-canonical path: path={}", resolved_path.display());
 
         let path = path
             .as_ref()
@@ -289,6 +294,7 @@ impl GitCommandProvider {
         if resolved_path != path {
             return Err(GitCommandOpenError::Subdirectory);
         }
+        debug!("canonicalized path: path={}", path.display());
 
         Ok(GitCommandProvider {
             options,

@@ -122,3 +122,17 @@ EOF
   assert_success
   assert_output "hello"
 }
+
+# ---------------------------------------------------------------------------- #
+
+# https://github.com/flox/flox/issues/1039
+# bats test_tags=list,list:tolerates-missing-version
+@test "'flox list' tolerates missing version" {
+  "$FLOX_BIN" init
+  # `influxdb does not have a version attribute set in nixpkgs (2024-02-19)
+  # todo: replace with a more predicatable/smaller example
+  "$FLOX_BIN" install influxdb2
+  run "$FLOX_BIN" list
+  assert_success
+  assert_output "influxdb2: influxdb2 (N/A)"
+}

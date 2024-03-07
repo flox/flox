@@ -13,7 +13,7 @@ flox-auth - FloxHub authentication commands
 
 ```
 flox [<general-options>] auth
-     (login | logout)
+     (login | logout | status)
 ```
 
 # DESCRIPTION
@@ -22,7 +22,7 @@ Authenticate with FloxHub so that you can push and pull environments.
 
 # OPTIONS
 
-## login
+## `login`
 Logs in to FloxHub.
 
 Required to interact with environments on FloxHub via `flox push`,
@@ -34,9 +34,13 @@ If called interactively it can open the browser for you if you press `<enter>`.
 
 See also:
 [`flox-push(1)`](./flox-push.md),
-[`flox-pull(1)`](./flox-pull.md), 
+[`flox-pull(1)`](./flox-pull.md),
 [`flox-activate(1)`](./flox-activate.md)
 
-## logout
+## `logout`
 
 Logs out from FloxHub.
+
+## `status`
+
+Print your current login status

@@ -12,7 +12,8 @@ load test_support.bash
 
 # ---------------------------------------------------------------------------- #
 
-# Helpers for project based tests.
+# Helpers for project based tests
+# Note in this file, these aren't added to setup() and teardown()
 
 project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
@@ -36,11 +37,9 @@ project_teardown() {
 
 setup() {
   common_test_setup
-  project_setup
 }
 
 teardown() {
-  project_teardown
   common_test_teardown
 }
 
@@ -55,6 +54,10 @@ setup_file() {
     echo "You must set \$PKGDB_BIN to run these tests" >&2
     exit 1
   fi
+
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
 }
 
 # ---------------------------------------------------------------------------- #
@@ -196,21 +199,15 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' works in project without manifest or lockfile" {
+  project_setup
+
   rm -f "$PROJECT_DIR/.flox/manifest.toml"
   run --separate-stderr "$FLOX_BIN" search hello --all
   assert_success
   n_lines="${#lines[@]}"
   assert_equal "$n_lines" 10 # search results from global manifest registry
-}
 
-# ---------------------------------------------------------------------------- #
-
-@test "'flox search' works outside of projects" {
-  rm -rf "$PROJECT_DIR/.flox"
-  run --separate-stderr "$FLOX_BIN" search hello --all
-  assert_success
-  n_lines="${#lines[@]}"
-  assert_equal "$n_lines" 10 # search results from global manifest registry
+  project_teardown
 }
 
 # ---------------------------------------------------------------------------- #
@@ -298,6 +295,8 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' - same number of results for single and multi-system environments" {
+  project_setup
+
   local extra_system
   run --separate-stderr "$FLOX_BIN" search neovim
   assert_success
@@ -330,6 +329,8 @@ setup_file() {
   # We should have the same numbers before and after adding the second system.
   assert_equal "$num_lines" "$multi_system_num_lines"
   assert_equal "$total" "$multi_system_total"
+
+  project_teardown
 }
 
 # ---------------------------------------------------------------------------- #

@@ -114,7 +114,7 @@ teardown() {
   # rather than hardcoding package names.
   assert_output --partial "flox install nodejs"
   assert_output --partial "flox install elmPackages.nodejs"
-  assert_output --partial "flox install nodejs_21"
+  assert_output --partial "flox install nodePackages.nodejs"
 }
 
 @test "'flox install' provides curated suggestions when package not found" {
@@ -304,4 +304,30 @@ teardown() {
   run jq -r '.registry.inputs.nixpkgs.from.narHash' "$LOCKFILE_PATH"
   assert_success
   assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
+}
+
+@test "'flox install' warns about unfree packages" {
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello-unfree
+  assert_success
+  assert_line --partial "The package 'hello-unfree' has an unfree license"
+}
+
+@test "'flox install' fails to install unfree packages if forbidden" {
+  "$FLOX_BIN" init
+  tomlq --in-place -t '.options.allow.unfree = false' "$MANIFEST_PATH"
+
+  run "$FLOX_BIN" install hello-unfree
+  assert_failure
+  assert_line --partial "The package 'hello-unfree' has an unfree license."
+  assert_output --partial "'options.allow.unfree = true'"
+}
+
+@test "'flox install' fails to install broken packages" {
+  "$FLOX_BIN" init
+
+  run "$FLOX_BIN" install yi
+  assert_failure
+  assert_line --partial "The package 'yi' is marked as broken."
+  assert_output --partial "'options.allow.broken = true'"
 }

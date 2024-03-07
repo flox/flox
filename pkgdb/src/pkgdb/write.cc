@@ -7,21 +7,26 @@
  *
  * -------------------------------------------------------------------------- */
 
+#include <fstream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <ranges>
+#include <string>
 
+#include <nlohmann/json.hpp>
+
+#include "flox/core/util.hh"
 #include "flox/flake-package.hh"
+#include "flox/pkgdb/scrape-rules.hh"
 #include "flox/pkgdb/write.hh"
 
 #include "./schemas.hh"
-
 
 /* -------------------------------------------------------------------------- */
 
 namespace flox::pkgdb {
 
-/* -------------------------------------------------------------------------- */
 
 /** @brief Create views in database if they do not exist. */
 static void
@@ -34,7 +39,6 @@ initViews( PkgDb & pdb )
                                       pdb.db.error_msg() ) );
     }
 }
-
 
 /* -------------------------------------------------------------------------- */
 
@@ -90,7 +94,7 @@ updateViews( PkgDb & pdb )
 static void
 initTables( PkgDb & pdb )
 {
-  if ( sql_rc rcode = pdb.execute( sql_versions ); isSQLError( rcode ) )
+  if ( sql_rc rcode = pdb.execute_all( sql_versions ); isSQLError( rcode ) )
     {
       throw PkgDbException(
         nix::fmt( "failed to initialize DbVersions table:(%d) %s",
@@ -145,6 +149,23 @@ initVersions( PkgDb & pdb )
     }
 }
 
+/** @brief Create `DbScrapeMeta` rows if they do not exist. */
+static void
+initScrapeMeta( PkgDb & pdb )
+{
+  const ScrapeRules & scrapeRules = getDefaultRules();
+  sqlite3pp::command  defineScrapeMeta(
+    pdb.db,
+    "INSERT OR IGNORE INTO DbScrapeMeta ( key, value ) VALUES"
+     " ( 'scrape_rules_hash', ? )" );
+  defineScrapeMeta.bind( 1, scrapeRules.hashString().c_str(), sqlite3pp::copy );
+  if ( sql_rc rcode = defineScrapeMeta.execute(); isSQLError( rcode ) )
+    {
+      throw PkgDbException( "failed to write DbScrapeMeta info",
+                            pdb.db.error_msg() );
+    }
+}
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -153,6 +174,7 @@ PkgDb::init()
 {
   initTables( *this );
   initVersions( *this );
+  initScrapeMeta( *this );
 
   /* If the views version is outdated, update them. */
   if ( this->getDbVersion().views < sqlVersions.views )
@@ -428,6 +450,87 @@ PkgDb::setPrefixDone( const flox::AttrPath & prefix, bool done )
 }
 
 
+void
+PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
+                            const flox::Cursor &      cursor,
+                            const flox::AttrPath &    prefix,
+                            const flox::pkgdb::row_id parentId,
+                            const flox::subtree_type  subtree,
+                            Todos &                   todo )
+{
+  auto getPathString = [&prefix, &sym]() -> const std::string
+  { return concatStringsSep( ".", prefix ) + "." + sym; };
+
+  try
+    {
+
+      flox::AttrPath path = prefix;
+      path.emplace_back( sym );
+
+      /* If the package or prefix is disallowed, bail. */
+      std::optional<bool> rulesBasedOverride
+        = getDefaultRules().applyRules( path );
+      if ( rulesBasedOverride.has_value() && ( ! ( *rulesBasedOverride ) ) )
+        {
+          if ( nix::lvlTalkative <= nix::verbosity )
+            {
+              traceLog( "scrapeRules: skipping disallowed attribute: "
+                        + getPathString() );
+            }
+          return;
+        }
+
+      if ( cursor->isDerivation() )
+        {
+          this->addPackage( parentId, sym, cursor );
+        }
+      else if ( subtree == ST_PACKAGES )
+        {
+          /* Do not recurse down the `packages` subtree */
+          return;
+        }
+      else
+        {
+          bool allowed = rulesBasedOverride.has_value()
+                           ? rulesBasedOverride.value()
+                           : [&cursor]() -> bool
+          {
+            auto maybeRecurse = cursor->maybeGetAttr( "recurseForDerivations" );
+            return maybeRecurse != nullptr && maybeRecurse->getBool();
+          }();
+
+          if ( nix::lvlTalkative <= nix::verbosity
+               && rulesBasedOverride.has_value() )
+            {
+              traceLog(
+                nix::fmt( "scrapeRules: matching rule found (%s), for %s\n",
+                          rulesBasedOverride.value() ? "true" : "false",
+                          getPathString() ) );
+            }
+
+          if ( allowed )
+            {
+              row_id childId = this->addOrGetAttrSetId( sym, parentId );
+              todo.emplace(
+                std::make_tuple( std::move( path ), cursor, childId ) );
+            }
+        }
+    }
+  catch ( const nix::EvalError & err )
+    {
+      /* Ignore errors in `legacyPackages' */
+      if ( subtree == ST_LEGACY )
+        {
+          /* Only print eval errors in "debug" mode. */
+          nix::ignoreException( nix::lvlDebug );
+          return;
+        }
+
+      throw;
+    }
+}
+
+
 /* -------------------------------------------------------------------------- */
 
 /* NOTE:
@@ -446,57 +549,11 @@ PkgDb::scrape( nix::SymbolTable & syms,
   /* If it has previously been scraped then bail out. */
   if ( this->completedAttrSet( parentId ) ) { return true; }
 
-  bool tryRecur = prefix.front() != "packages";
+  /* Store the subtree we are in for later use in various logic */
+  auto subtree = Subtree( prefix.front() );
 
   debugLog( nix::fmt( "evaluating package set '%s'",
                       concatStringsSep( ".", prefix ) ) );
-
-  auto processAttrib
-    = [this, &syms, tryRecur]( const flox::Cursor &      childCursor,
-                               const flox::AttrPath &    prefix,
-                               const flox::pkgdb::row_id parentId,
-                               const nix::Symbol &       aname,
-                               Todos &                   todo ) -> bool
-  {
-    try
-      {
-        if ( childCursor->isDerivation() )
-          {
-            this->addPackage( parentId, syms[aname], childCursor );
-            return false;
-          }
-        else if ( ! tryRecur ) { return false; }
-        else if ( auto maybe
-                  = childCursor->maybeGetAttr( "recurseForDerivations" );
-                  ( ( maybe != nullptr ) && maybe->getBool() )
-                  /* XXX: We explicitly recurse into `legacyPackages.*.darwin'
-                   *      due to a bug in `nixpkgs' which doesn't set
-                   *      `recurseForDerivations' attribute correctly. */
-                  || ( ( prefix.front() == "legacyPackages" )
-                       && ( syms[aname] == "darwin" ) ) )
-          {
-            flox::AttrPath path = prefix;
-            path.emplace_back( syms[aname] );
-            row_id childId = this->addOrGetAttrSetId( syms[aname], parentId );
-            todo.emplace( std::make_tuple( std::move( path ),
-                                           std::move( childCursor ),
-                                           childId ) );
-            return true;
-          }
-        else { return false; }
-      }
-    catch ( const nix::EvalError & err )
-      {
-        /* Ignore errors in `legacyPackages' */
-        if ( tryRecur )
-          {
-            /* Only print eval errors in "debug" mode. */
-            nix::ignoreException( nix::lvlDebug );
-            return false;
-          }
-        else { throw; }
-      }
-  };
 
   auto   allAttribs   = cursor->getAttrs();
   size_t startIdx     = pageIdx * pageSize;
@@ -506,39 +563,57 @@ PkgDb::scrape( nix::SymbolTable & syms,
   bool   lastPage     = thisPageSize < pageSize;
   auto   page
     = std::views::counted( allAttribs.begin() + startIdx, thisPageSize );
+  Todos todo;
 
   for ( nix::Symbol & aname : page )
     {
-      if ( auto lvl = nix::lvlTalkative; lvl <= nix::verbosity )
-        {
-          const std::string pathS
-            = concatStringsSep( ".", prefix ) + "." + syms[aname];
-          traceLog( nix::fmt( "Processing attribute path: '%s'.", pathS ) );
-        }
-
       if ( syms[aname] == "recurseForDerivations" ) { continue; }
-
-      Todos        todo;
-      flox::Cursor childCursor = cursor->getAttr( aname );
 
       /* Try processing this attribute.
        * If we are to recurse, todo will be loaded with the first target for
        * us... we process this subtree completely using the todo stack. */
-      if ( processAttrib( childCursor, prefix, parentId, aname, todo ) )
+      processSingleAttrib( syms[aname],
+                           cursor->getAttr( aname ),
+                           prefix,
+                           parentId,
+                           subtree,
+                           todo );
+      if ( ! todo.empty() )
         {
           const auto [parentPrefix, _a, _b] = todo.top();
-          do {
+          while ( ! todo.empty() )
+            {
               const auto [prefix, cursor, parentId] = todo.top();
               todo.pop();
 
-              for ( nix::Symbol & aname : cursor->getAttrs() )
+              try
                 {
-                  if ( syms[aname] == "recurseForDerivations" ) { continue; }
-                  flox::Cursor childCursor = cursor->getAttr( aname );
-                  processAttrib( childCursor, prefix, parentId, aname, todo );
+                  for ( nix::Symbol & aname : cursor->getAttrs() )
+                    {
+                      auto sym = syms[aname];
+                      if ( sym == "recurseForDerivations" ) { continue; }
+                      processSingleAttrib( sym,
+                                           cursor->getAttr( aname ),
+                                           prefix,
+                                           parentId,
+                                           subtree,
+                                           todo );
+                    }
+                }
+              catch ( const nix::EvalError & err )
+                {
+                  /* The `getAttrs()` call will throw this on a non-attribute
+                   * set path.  They appear to be infrequent and the penalty
+                   * checking each one appears to be high. Better ask for
+                   * forgiveness than permission?  */
+                  if ( err.info().msg.str().find( "is not an attribute set" )
+                       != std::string::npos )
+                    {
+                      continue;
+                    }
+                  throw;
                 }
             }
-          while ( ! todo.empty() );
 
           this->setPrefixDone( parentPrefix, true );
         }
@@ -546,7 +621,6 @@ PkgDb::scrape( nix::SymbolTable & syms,
 
   if ( lastPage ) { this->setPrefixDone( prefix, true ); }
   return lastPage;
-  ;
 }
 
 

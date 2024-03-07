@@ -15,6 +15,7 @@ flox-init - initialize a Flox environment
 flox [<general-options>] init
      [-n <name>]
      [-d <path>]
+     [--auto-setup]
 ```
 
 # DESCRIPTION
@@ -26,7 +27,7 @@ or `default` if the current directory is `$HOME`.
 The `--name` flag can be used to give the environment a specific name.
 
 By default the environment will be created in the current directory.
-Flox will add a directory `$PWD/.flox` containing all relevant environment 
+Flox will add a directory `$PWD/.flox` containing all relevant environment
 metadata.
 The `--dir` flag can be used to create an environment in another location.
 
@@ -43,6 +44,10 @@ an error is returned.
 
 `-d <path>`, `--dir <path>`
 :   Directory to create the environment in (default: current directory).
+
+`--auto-setup`
+:   Apply Flox recommendations for the environment based on what languages are
+    being used in the containing directory.
 
 ```{.include}
 ./include/general-options.md

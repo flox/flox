@@ -36,7 +36,9 @@
 #include "flox/core/types.hh"
 #include "flox/flox-flake.hh"
 #include "flox/pkgdb/db-package.hh"
+#include "flox/pkgdb/input.hh"
 #include "flox/pkgdb/pkg-query.hh"
+#include "flox/pkgdb/scrape-rules.hh"
 #include "flox/pkgdb/write.hh"
 #include "test.hh"
 
@@ -54,6 +56,24 @@ static const nlohmann::json pkgDescriptorBaseRaw = R"( {
   "semver": "semver"
 } )"_json;
 
+/* -------------------------------------------------------------------------- */
+
+static const std::string_view rulesJSON = R"( {
+  "allowRecursive": [
+    ["legacyPackages", null, "darwin"],
+    ["legacyPackages", null, "swiftPackages", "darwin"]
+  ],
+  "disallowRecursive": [
+    ["legacyPackages", null, "emacsPackages"],
+    ["legacyPackages", null, "python310Packages"]
+  ],
+ "allowPackage": [
+   ["legacyPackages", null, "python310Packages", "pip"]
+ ],
+ "disallowPackage": [
+   ["legacyPackages", null, "gcc"]
+ ]
+} )";
 
 /* -------------------------------------------------------------------------- */
 
@@ -942,6 +962,225 @@ test_getPackages_semver0( flox::pkgdb::PkgDb & db )
   return true;
 }
 
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Ensure parsing @a flox::pkgdb::RulesTreeNode from JSON doesn't throw.
+ */
+bool
+test_RulesTree_parse0()
+{
+  flox::pkgdb::ScrapeRules rules( rulesJSON );
+  return true;
+}
+
+/**
+ * @brief Ensure the hash is generated for the rules and is deterministic.
+ */
+bool
+test_RulesTree_hash()
+{
+  flox::pkgdb::ScrapeRules rules( rulesJSON );
+  auto                     hashStr = rules.hashString();
+  EXPECT_EQ( hashStr, "md5:9d81a5b907db9b19cc84ba41af36150b" );
+  return true;
+}
+
+bool
+test_RulesTree_parse0_badRules()
+{
+  const nlohmann::json badRulesJSON = R"( {
+    "allowRecursive": [
+      ["legacyPackages", null, "darwin"],
+      ["legacyPackages", null, null, "darwin"]
+    ]
+  } )"_json;
+
+  try
+    {
+      flox::pkgdb::RulesTreeNode rules(
+        badRulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
+    }
+  catch ( const flox::FloxException & err )
+    {
+      /* expect this to be thown on account of a bad rule. */
+      return true;
+    }
+  return false;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Ensure parsing @a flox::pkgdb::RulesTreeNode from JSON sets the
+ *        expected fields.
+ */
+bool
+test_RulesTree_parse1()
+{
+  flox::pkgdb::ScrapeRules     scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode   rulesRoot = scrapeRules.getRootNode();
+  flox::pkgdb::RulesTreeNode * node      = &rulesRoot;
+  flox::AttrPath path = { "legacyPackages", "x86_64-linux", "darwin" };
+  for ( const std::string & attr : path )
+    {
+      if ( node->children.find( attr ) == node->children.end() )
+        {
+          EXPECT_FAIL( "RulesTreeNode missing child `" + attr + '\'' );
+        }
+      node = &node->children.at( attr );
+    }
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/** @brief Ensure that a path without a rule uses the _default_ rule. */
+bool
+test_RulesTree_getRule_fallback0()
+{
+  flox::pkgdb::ScrapeRules   scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode rulesRoot = scrapeRules.getRootNode();
+  flox::pkgdb::ScrapeRule    rule
+    = rulesRoot.getRule( flox::AttrPath { "phony" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/** @brief Ensure `null` glob works for all systems. */
+bool
+test_RulesTree_getRule0()
+{
+  flox::pkgdb::ScrapeRules   scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode rulesRoot = scrapeRules.getRootNode();
+
+  flox::pkgdb::ScrapeRule rule
+    = rulesRoot.getRule( flox::AttrPath { "legacyPackages", "x86_64-linux" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+
+  rule = rulesRoot.getRule(
+    flox::AttrPath { "legacyPackages", "x86_64-linux", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+
+  rule = rulesRoot.getRule(
+    flox::AttrPath { "legacyPackages", "x86_64-darwin", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+
+  rule = rulesRoot.getRule(
+    flox::AttrPath { "legacyPackages", "aarch64-linux", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+
+  rule = rulesRoot.getRule(
+    flox::AttrPath { "legacyPackages", "aarch64-darwin", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+
+  rule = rulesRoot.getRule( flox::AttrPath { "legacyPackages",
+                                             "aarch64-darwin",
+                                             "swiftPackages",
+                                             "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Ensure nested `allowPackage` under `disallowRecursive` is preserved.
+ */
+bool
+test_RulesTree_getRule1()
+{
+  flox::pkgdb::ScrapeRules   scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode rulesRoot = scrapeRules.getRootNode();
+
+  flox::pkgdb::ScrapeRule rule = rulesRoot.children.at( "legacyPackages" )
+                                   .children.at( "x86_64-linux" )
+                                   .children.at( "python310Packages" )
+                                   .children.at( "pip" )
+                                   .rule;
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_PACKAGE );
+
+  flox::pkgdb::ScrapeRule rule2
+    = rulesRoot.getRule( flox::AttrPath { "legacyPackages",
+                                          "x86_64-linux",
+                                          "python310Packages",
+                                          "pip" } );
+  EXPECT_EQ( rule2, flox::pkgdb::SR_ALLOW_PACKAGE );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ *  @brief Ensure @a flox::pkgdb::RulesTreeNode::getRule() does not _inherit_
+ *         parent rules.
+ *
+ * Inheritance is the responsibility of
+ * @a flox::pkgdb::RulesTreeNode::applyRules(), while `getRule()` should return
+ * the *exact* value of @a rule at an attribute path.
+ */
+bool
+test_RulesTree_getRule2()
+{
+  flox::pkgdb::ScrapeRules   scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode rulesRoot = scrapeRules.getRootNode();
+
+  flox::pkgdb::ScrapeRule rule = rulesRoot.children.at( "legacyPackages" )
+                                   .children.at( "x86_64-linux" )
+                                   .children.at( "python310Packages" )
+                                   .children.at( "pip" )
+                                   .rule;
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_PACKAGE );
+
+  flox::pkgdb::ScrapeRule rule2
+    = rulesRoot.getRule( flox::AttrPath { "legacyPackages",
+                                          "x86_64-linux",
+                                          "python310Packages",
+                                          "pip" } );
+  EXPECT_EQ( rule2, flox::pkgdb::SR_ALLOW_PACKAGE );
+
+  flox::pkgdb::ScrapeRule rule3
+    = rulesRoot.getRule( flox::AttrPath { "legacyPackages",
+                                          "x86_64-linux",
+                                          "swiftPackages",
+                                          "darwin" } );
+  EXPECT_EQ( rule3, flox::pkgdb::SR_ALLOW_RECURSIVE );
+  return true;
+}
+
+bool
+test_scrapeMemoryUse()
+{
+  using flox::pkgdb::PkgDbInput;
+  const char * envVar              = "FLOX_AVAILABLE_MEMORY";
+  const char * existingMemOverride = getenv( envVar );
+
+  // Using discovered 'available memory' shall be within the min and max
+  // defined.
+  size_t pageSize = PkgDbInput::getScrapingPageSize();
+  EXPECT( pageSize >= PkgDbInput::minPageSize
+          && pageSize <= PkgDbInput::maxPageSize );
+
+  // Limit to lower bound for 1GB availble memory
+  setenv( envVar, std::to_string( 1 * 1024 * 1024 ).c_str(), 1 );
+  EXPECT( PkgDbInput::getScrapingPageSize() == PkgDbInput::minPageSize );
+
+  // Limit to upper bound for 8GB available memory
+  setenv( envVar, std::to_string( 8 * 1024 * 1024 ).c_str(), 1 );
+  EXPECT( PkgDbInput::getScrapingPageSize() == PkgDbInput::maxPageSize );
+
+  // Clear this out for the remainder of the process
+  if ( existingMemOverride ) { setenv( envVar, existingMemOverride, 1 ); }
+  else { unsetenv( envVar ); }
+  return true;
+}
 
 /* -------------------------------------------------------------------------- */
 
@@ -956,7 +1195,10 @@ main( int argc, char * argv[] )
     {
       nix::verbosity = nix::lvlDebug;
     }
-
+  else if ( ( 1 < argc ) && ( std::string_view( argv[1] ) == "-vv" ) )
+    {
+      nix::verbosity = nix::lvlVomit;
+    }
   /* Initialize `nix' */
   flox::NixState nstate;
 
@@ -998,6 +1240,17 @@ main( int argc, char * argv[] )
     RUN_TEST( DbPackage0, db );
 
     RUN_TEST( getPackages_semver0, db );
+
+    RUN_TEST( scrapeMemoryUse );
+
+    RUN_TEST( RulesTree_parse0 );
+    RUN_TEST( RulesTree_parse0_badRules );
+    RUN_TEST( RulesTree_parse1 );
+    RUN_TEST( RulesTree_getRule_fallback0 );
+    RUN_TEST( RulesTree_getRule0 );
+    RUN_TEST( RulesTree_getRule1 );
+    RUN_TEST( RulesTree_getRule2 );
+    RUN_TEST( RulesTree_hash );
   }
 
   /* XXX: You may find it useful to preserve the file and print it for some

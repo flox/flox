@@ -13,13 +13,13 @@
   nlohmann_json,
   pkg-config,
   remake,
-  semver,
   sqlite,
   sqlite3pp,
   toml11,
   yaml-cpp,
-  # For testing
+  cpp-semver,
   bash,
+  # For testing
   yj,
   jq,
   gnugrep,
@@ -45,8 +45,8 @@
     boost_CFLAGS = "-isystem " + boost.dev.outPath + "/include";
     toml_CFLAGS = "-isystem " + toml11.outPath + "/include";
     yaml_PREFIX = yaml-cpp.outPath;
+    semver_PREFIX = cpp-semver.outPath;
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
-    SEMVER_PATH = semver.outPath + "/bin/semver";
     # Used by `buildenv' to provide activation hook extensions.
     PROFILE_D_SCRIPTS_DIR = let
       path = builtins.path {
@@ -90,6 +90,9 @@
       name = "mkContainer.nix";
       path = ../../pkgdb/src/buildenv/assets/mkContainer.nix;
     };
+
+    # The Bash executable to use for `hook.on-activate`
+    FLOX_BASH_BIN = "${bash}/bin/bash";
 
     # Used by `buildenv --container' to access `dockerTools` at a known version
     # When utilities from nixpkgs are used by flox at runtime,
@@ -147,7 +150,7 @@ in
           notIgnored && notResult;
       };
 
-      propagatedBuildInputs = [semver];
+      propagatedBuildInputs = [cpp-semver];
 
       nativeBuildInputs = [pkg-config coreutils gnugrep];
 
@@ -160,6 +163,8 @@ in
         yaml-cpp
         boost
         nix
+        cpp-semver
+        bash
       ];
 
       configurePhase = ''
@@ -173,14 +178,6 @@ in
         runHook postConfigure;
       '';
 
-      # The ld-floxlib.so library only requires libc, which is guaranteed
-      # to either be already loaded or available by way of a default provided
-      # by the linker itself, so to avoid loading a different libc than the
-      # one already loaded we remove RPATH/RUNPATH from the shared library.
-      postFixup = lib.optionalString stdenv.isLinux ''
-        patchelf --remove-rpath $out/lib/ld-floxlib.so
-      '';
-
       # Checks require internet
       doCheck = false;
       doInstallCheck = false;
@@ -191,7 +188,7 @@ in
         inherit
           envs
           nix
-          semver
+          cpp-semver
           ;
 
         ciPackages = [
@@ -199,7 +196,6 @@ in
           batsWith
           yj
           jq
-          bash
           git
           sqlite
           parallel

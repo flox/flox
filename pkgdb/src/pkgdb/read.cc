@@ -145,6 +145,18 @@ PkgDbReadOnly::getDbVersion()
   };
 }
 
+ScrapeMeta
+PkgDbReadOnly::getDbScrapeMeta()
+{
+  sqlite3pp::query qry( this->db,
+                        "SELECT value FROM DbScrapeMeta "
+                        "WHERE key IN ( 'scrape_rules_hash' ) LIMIT 1" );
+  auto             itr       = qry.begin();
+  auto             rulesHash = ( *itr ).get<std::string>( 0 );
+
+  return ScrapeMeta { .rulesHash = rulesHash };
+}
+
 
 /* -------------------------------------------------------------------------- */
 

@@ -1,20 +1,11 @@
-use std::io::Read;
 use std::path::PathBuf;
 
-use derive_more::Constructor;
 use jsonwebtoken::{DecodingKey, Validation};
-use log::debug;
 use once_cell::sync::Lazy;
-use runix::arguments::common::NixCommonArgs;
-use runix::arguments::config::NixConfigArgs;
-use runix::command_line::{DefaultArgs, NixCommandLine};
-use runix::installable::{AttrPath, FlakeAttribute};
-use runix::NixBackend;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use crate::environment::{self, default_nix_subprocess_env};
 pub use crate::models::environment_ref::{self, *};
 
 pub static FLOX_VERSION: Lazy<String> =
@@ -52,156 +43,13 @@ pub struct Flox {
 
     pub floxhub: Floxhub,
 
-    /// Token to authenticate with floxhub.
+    /// Token to authenticate with FloxHub.
     /// It's usually populated from the config during [Flox] initialization.
     /// Checking for [None] can be used to check if the use is logged in.
     pub floxhub_token: Option<FloxhubToken>,
 }
 
-pub trait FloxNixApi: NixBackend {
-    fn new(flox: &Flox, default_nix_args: DefaultArgs) -> Self;
-}
-
-impl FloxNixApi for NixCommandLine {
-    fn new(_: &Flox, default_nix_args: DefaultArgs) -> NixCommandLine {
-        NixCommandLine {
-            nix_bin: Some(environment::NIX_BIN.to_string()),
-            defaults: default_nix_args,
-        }
-    }
-}
-
-#[derive(Debug, Constructor)]
-pub struct ResolvedInstallableMatch {
-    pub flakeref: String,
-    pub prefix: String,
-    pub system: Option<String>,
-    pub explicit_system: bool,
-    pub key: Vec<String>,
-    pub description: Option<String>,
-}
-
-impl ResolvedInstallableMatch {
-    pub fn flake_attribute(self) -> FlakeAttribute {
-        // Join the prefix and key into a safe attrpath, adding the associated system if present
-        let attr_path = {
-            let mut builder = AttrPath::default();
-            // enforce exact attr path (<flakeref>#.<attrpath>)
-            builder.push_attr("").unwrap();
-            builder.push_attr(&self.prefix).unwrap();
-            if let Some(ref system) = self.system {
-                builder.push_attr(system).unwrap();
-            }
-
-            // Build the multi-part key into a Nix-safe single string
-            for key in self.key {
-                builder.push_attr(&key).unwrap();
-            }
-            builder
-        };
-
-        FlakeAttribute {
-            flakeref: self.flakeref.parse().unwrap(),
-            attr_path,
-            outputs: Default::default(),
-        }
-    }
-}
-
-impl Flox {
-    /// Produce a new Nix Backend
-    ///
-    /// This method performs backend independent configuration of nix
-    /// and passes itself and the default config to the constructor of the Nix Backend
-    ///
-    /// The constructor will perform backend specific configuration measures
-    /// and return a fresh initialized backend.
-    pub fn nix<Nix: FloxNixApi>(&self, mut caller_extra_args: Vec<String>) -> Nix {
-        use std::io::Write;
-        use std::os::unix::prelude::OpenOptionsExt;
-
-        let environment = {
-            let config = NixConfigArgs {
-                accept_flake_config: true.into(),
-                warn_dirty: false.into(),
-                extra_experimental_features: ["nix-command", "flakes"]
-                    .map(String::from)
-                    .to_vec()
-                    .into(),
-                extra_substituters: ["https://cache.floxdev.com"]
-                    .map(String::from)
-                    .to_vec()
-                    .into(),
-                extra_trusted_public_keys: [
-                    "flox-store-public-0:8c/B+kjIaQ+BloCmNkRUKwaVPFWkriSAd0JJvuDu4F0=",
-                ]
-                .map(String::from)
-                .to_vec()
-                .into(),
-                extra_access_tokens: self.access_tokens.clone().into(),
-                flake_registry: None,
-                netrc_file: Some(self.netrc_file.clone().into()),
-                connect_timeout: 5.into(),
-                ..Default::default()
-            };
-
-            let nix_config = format!(
-                "# Automatically generated - do not edit.\n{}\n",
-                config.to_config_string()
-            );
-
-            // Write nix.conf file if it does not exist or has changed
-            let global_config_file_path = self.config_dir.join("nix.conf");
-            if !global_config_file_path.exists() || {
-                let mut contents = String::new();
-                std::fs::File::open(&global_config_file_path)
-                    .unwrap()
-                    .read_to_string(&mut contents)
-                    .unwrap();
-
-                contents != nix_config
-            } {
-                let temp_config_file_path = self.temp_dir.join("nix.conf");
-
-                std::fs::File::options()
-                    .mode(0o600)
-                    .create_new(true)
-                    .write(true)
-                    .open(&temp_config_file_path)
-                    .unwrap()
-                    .write_all(nix_config.as_bytes())
-                    .unwrap();
-
-                debug!("Updating nix.conf: {global_config_file_path:?}");
-                std::fs::rename(temp_config_file_path, &global_config_file_path).unwrap()
-            }
-
-            let mut env = default_nix_subprocess_env();
-            let _ = env.insert(
-                "NIX_USER_CONF_FILES".to_string(),
-                global_config_file_path.to_string_lossy().to_string(),
-            );
-            env
-        };
-
-        #[allow(clippy::needless_update)]
-        let common_args = NixCommonArgs {
-            ..Default::default()
-        };
-
-        let mut extra_args = vec!["--quiet".to_string(), "--quiet".to_string()];
-        extra_args.append(&mut caller_extra_args);
-
-        let default_nix_args = DefaultArgs {
-            environment,
-            common_args,
-            extra_args,
-            ..Default::default()
-        };
-
-        Nix::new(self, default_nix_args)
-    }
-}
+impl Flox {}
 
 pub static DEFAULT_FLOXHUB_URL: Lazy<Url> =
     Lazy::new(|| Url::parse("https://hub.flox.dev").unwrap());
@@ -216,7 +64,7 @@ impl AsRef<str> for FloxhubToken {
 }
 
 impl FloxhubToken {
-    /// Create a new floxhub token from a string
+    /// Create a new FloxHub token from a string
     pub fn new(token: String) -> Self {
         FloxhubToken(token)
     }
@@ -271,7 +119,7 @@ impl Floxhub {
         })
     }
 
-    /// Return the base url of the floxhub instance
+    /// Return the base url of the FloxHub instance
     /// might change to a more specific url in the future
     pub fn base_url(&self) -> &Url {
         &self.base_url
@@ -281,11 +129,11 @@ impl Floxhub {
         self.git_url_overridden.then_some(&self.git_url)
     }
 
-    /// Return the url of the floxhub git interface
+    /// Return the url of the FloxHub git interface
     ///
     /// If the environment variable `_FLOX_FLOXHUB_GIT_URL` is set,
-    /// it will be used instead of the derived floxhub host.
-    /// This is useful for testing floxhub locally.
+    /// it will be used instead of the derived FloxHub host.
+    /// This is useful for testing FloxHub locally.
     pub fn git_url(&self) -> &Url {
         &self.git_url
     }
@@ -296,9 +144,9 @@ impl Floxhub {
             .host_str()
             .ok_or(FloxhubError::NoHost(base_url.to_string()))?;
         let without_hub = host
-            .strip_prefix("hub")
+            .strip_prefix("hub.")
             .ok_or(FloxhubError::NoHubPrefix(base_url.to_string()))?;
-        let with_api_prefix = format!("api{}", without_hub);
+        let with_api_prefix = format!("api.{}", without_hub);
         git_url
             .set_host(Some(&with_api_prefix))
             .map_err(|e| FloxhubError::InvalidFloxhubBaseUrl(with_api_prefix, e))?;
@@ -311,7 +159,7 @@ impl Floxhub {
 pub enum FloxhubError {
     #[error("Invalid FloxHub URL: '{0}'. URL must contain a host.")]
     NoHost(String),
-    #[error("Invalid FloxHub URL: '{0}'. URL must begin with 'hub'")]
+    #[error("Invalid FloxHub URL: '{0}'. URL must begin with 'hub.'")]
     NoHubPrefix(String),
     #[error("Couldn't set git URL host to '{0}'")]
     InvalidFloxhubBaseUrl(String, #[source] url::ParseError),
@@ -325,7 +173,7 @@ pub mod tests {
 
     use super::*;
 
-    /// A fake floxhub token
+    /// A fake FloxHub token
     ///
     /// {
     ///  "typ": "JWT",
@@ -370,22 +218,6 @@ pub mod tests {
         (flox, tempdir_handle)
     }
 
-    #[test]
-    fn test_resolved_installable_match_to_installable() {
-        let resolved = ResolvedInstallableMatch::new(
-            "github:flox/flox".to_string(),
-            "packages".to_string(),
-            Some("aarch64-darwin".to_string()),
-            false,
-            vec!["flox".to_string()],
-            None,
-        );
-        assert_eq!(
-            FlakeAttribute::from_str("github:flox/flox#.packages.aarch64-darwin.flox").unwrap(),
-            resolved.flake_attribute(),
-        );
-    }
-
     use crate::models::environment::{global_manifest_path, init_global_manifest};
 
     #[tokio::test]
@@ -405,8 +237,9 @@ pub mod tests {
     #[test]
     fn test_derive_git_url_dev() {
         assert_eq!(
-            Floxhub::derive_git_url(&Url::from_str("https://hub-dev.flox.dev").unwrap()).unwrap(),
-            Url::from_str("https://api-dev.flox.dev/git").unwrap()
+            Floxhub::derive_git_url(&Url::from_str("https://hub.preview.flox.dev").unwrap())
+                .unwrap(),
+            Url::from_str("https://api.preview.flox.dev/git").unwrap()
         );
     }
 }

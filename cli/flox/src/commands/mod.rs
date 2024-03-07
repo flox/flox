@@ -1,6 +1,7 @@
 mod auth;
 mod environment;
 mod general;
+mod init;
 mod search;
 
 use std::collections::VecDeque;
@@ -11,7 +12,14 @@ use std::{env, fmt, fs, mem};
 
 use anyhow::{bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
-use flox_rust_sdk::flox::{EnvironmentRef, Flox, Floxhub, DEFAULT_FLOXHUB_URL, FLOX_VERSION};
+use flox_rust_sdk::flox::{
+    EnvironmentRef,
+    Flox,
+    Floxhub,
+    DEFAULT_FLOXHUB_URL,
+    DEFAULT_NAME,
+    FLOX_VERSION,
+};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
@@ -26,7 +34,6 @@ use flox_rust_sdk::models::environment::{
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::environment_ref;
-use flox_rust_sdk::nix::command_line::NixCommandLine;
 use indoc::{formatdoc, indoc};
 use log::{debug, info};
 use once_cell::sync::Lazy;
@@ -80,7 +87,7 @@ fn vec_not_empty<T>(x: Vec<T>) -> bool {
     !x.is_empty()
 }
 
-#[derive(Bpaf, Clone, Debug)]
+#[derive(Bpaf, Clone, Copy, Debug)]
 pub enum Verbosity {
     Verbose(
         /// Increase logging verbosity
@@ -93,6 +100,15 @@ pub enum Verbosity {
     /// Silence logs except for errors
     #[bpaf(short, long)]
     Quiet,
+}
+
+impl Verbosity {
+    pub fn to_pkgdb_verbosity_level(self) -> usize {
+        match self {
+            Verbosity::Quiet => 0,
+            Verbosity::Verbose(n) => n,
+        }
+    }
 }
 
 impl Default for Verbosity {
@@ -115,7 +131,7 @@ pub struct FloxCli(#[bpaf(external(flox_args))] pub FloxArgs);
 /// and allows to be composed with other parsers.
 ///
 /// To parse the flox CLI, use [`FloxCli`] instead using [`flox_cli()`].
-#[derive(Bpaf)]
+#[derive(Debug, Bpaf)]
 #[bpaf(ignore_rustdoc)] // we don't want this struct to be interpreted as a group
 pub struct FloxArgs {
     /// Verbose mode
@@ -135,6 +151,12 @@ pub struct FloxArgs {
 
     #[bpaf(external(commands), optional)]
     command: Option<Commands>,
+}
+
+impl fmt::Debug for Commands {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Command")
+    }
 }
 
 impl FloxArgs {
@@ -200,9 +222,9 @@ impl FloxArgs {
         let git_url_override = {
             if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
                 message::warning(formatdoc! {"
-                    Using {env_set_host} as floxhub host
+                    Using {env_set_host} as FloxHub host
                     '$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
-                    alternative floxhub hosts are not yet supported!
+                    alternative FloxHub hosts are not yet supported!
                 "});
                 Some(Url::parse(&env_set_host)?)
             } else {
@@ -231,10 +253,6 @@ impl FloxArgs {
             floxhub_token: config.flox.floxhub_token.clone(),
             floxhub,
         };
-
-        // Set the global Nix config via the environment variables in flox.default_args so that
-        // subprocesses called by `flox` (e.g. `parser-util`) can inherit them.
-        flox.nix::<NixCommandLine>(vec![]).export_env_vars();
 
         // in debug mode keep the tempdir to reproduce nix commands
         if self.debug || matches!(self.verbosity, Verbosity::Verbose(1..)) {
@@ -306,7 +324,7 @@ enum LocalDevelopmentCommands {
         long("create"),
         footer("Run 'man flox-init' for more details.")
     )]
-    Init(#[bpaf(external(environment::init))] environment::Init),
+    Init(#[bpaf(external(init::init))] init::Init),
     /// Enter the environment, type 'exit' to leave
     #[bpaf(
         command,
@@ -656,6 +674,15 @@ pub fn detect_environment(
             Some(ref activated @ UninitializedEnvironment::DotFlox(DotFlox { ref path, .. })),
             Some(found),
         ) if path == &found.path => Some(activated.clone()),
+
+        // If both a 'default' environment is activated and an environment is
+        // found in the current directory or git repo, prefer the detected one.
+        (Some(activated), Some(detected))
+            if activated.pointer().name().as_ref() == DEFAULT_NAME =>
+        {
+            Some(UninitializedEnvironment::DotFlox(detected))
+        },
+
         // If there's both an activated environment and an environment in the
         // current directory or git repo, prompt for which to use.
         (Some(activated_env), Some(found)) => {
@@ -810,6 +837,15 @@ impl UninitializedEnvironment {
             },
         }
     }
+
+    fn pointer(&self) -> EnvironmentPointer {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.clone(),
+            UninitializedEnvironment::Remote(pointer) => {
+                EnvironmentPointer::Managed(pointer.clone())
+            },
+        }
+    }
 }
 
 impl Display for UninitializedEnvironment {
@@ -946,6 +982,14 @@ pub(super) async fn ensure_environment_trust(
 
     let trust = config.flox.trusted_environments.get(&env_ref);
 
+    // Official Flox environments are trusted by default
+    // Only applies to the current flox owned FloxHub,
+    // so this rule might need to be revisited in the future.
+    if env_ref.owner().as_str() == "flox" {
+        debug!("Official Flox environment {env_ref} is trusted by default");
+        return Ok(());
+    }
+
     if let Some(ref token) = flox.floxhub_token {
         if token.handle()?.as_str() == env_ref.owner().as_str() {
             debug!("environment {env_ref} is trusted by token");
@@ -1055,4 +1099,8 @@ pub(super) async fn ensure_environment_trust(
             Choices::ShowConfig => eprintln!("{}", environment.manifest_content(flox)?),
         }
     }
+}
+
+pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
+    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
 }

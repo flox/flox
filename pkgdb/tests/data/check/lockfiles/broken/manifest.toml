@@ -1,0 +1,6 @@
+# Expected to fail to lock, because `yi`
+# is marked as broken in nixpkgs
+# and `options.allow.broken == false` by default.
+
+[install]
+yi.pkg-path = "yi"

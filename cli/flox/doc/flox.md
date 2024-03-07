@@ -98,26 +98,6 @@ sharing environments, and administration.
 
 # ENVIRONMENT VARIABLES
 
-`$FLOX_PROMPT_ENVIRONMENTS`
-:   Contains a space-delimited list of the active environments,
-    e.g. `owner1/foo owner2/bar local_env`.
-
-`$_FLOX_ACTIVE_ENVIRONMENTS`
-:   A JSON array containing one object per active environment.
-    This is currently an implementation detail
-    and its contents are subject to change.
-
-`$FLOX_PROMPT_COLOR_{1,2}`
-:   Flox adds text to the beginning of the shell prompt to indicate which
-    environments are active.
-    A set of default colors are used to color this prompt,
-    but the colors may be overridden with the `$FLOX_PROMPT_COLOR_1` and
-    `$FLOX_PROMPT_COLOR_2` environment variables.
-
-    The values of these variables should be integers
-    chosen from the 256-color palette as described in the
-    [xterm-256color chart](https://upload.wikimedia.org/wikipedia/commons/1/15/Xterm_256color_chart.svg).
-
 `$FLOX_DISABLE_METRICS`
 :   Variable for disabling the collection/sending of metrics data.
     If set to `true`, prevents Flox from submitting basic metrics information

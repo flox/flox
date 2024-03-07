@@ -46,7 +46,7 @@ impl FloxmetaV2 {
     /// Clone the floxmeta repository for the given user to the given path
     ///
     /// If access to a remote repository requires authentication,
-    /// the floxhub token must be set in the flox instance.
+    /// the FloxHub token must be set in the flox instance.
     /// The caller is responsible for ensuring that the token is present and valid.
     ///
     /// Most of the time, you want to use [`FloxmetaV2::clone`] instead.
@@ -84,7 +84,7 @@ impl FloxmetaV2 {
     /// Clone the floxmeta repository for the given user to the default path
     ///
     /// If access to a remote repository requires authentication,
-    /// the floxhub token must be set in the flox instance.
+    /// the FloxHub token must be set in the flox instance.
     /// The caller is responsible for ensuring that the token is present and valid.
     ///
     /// Like [`FloxmetaV2::clone_to`], but uses the system path for floxmeta repositories in XDG_DATA_HOME
@@ -101,7 +101,7 @@ impl FloxmetaV2 {
     /// Ideally, these could be passed as parameters.
     ///
     /// If access to a remote repository requires authentication,
-    /// the floxhub token must be set in the flox instance.
+    /// the FloxHub token must be set in the flox instance.
     /// The caller is responsible for ensuring that the token is present and valid.
     ///
     /// In most cases, you want to use [`FloxmetaV2::open`] instead which provides the flox defaults.
@@ -177,10 +177,10 @@ impl FloxmetaV2 {
 /// * Disable global and system config
 ///   to avoid user config interfering with flox operations
 /// * Set required user config (name and email)
-/// * Configure a dynamic origin for the floxhub repository
-///   to allow cloning and fetching from different floxhub hosts per user.
-///   The floxhub host is derived from the floxhub url in the environment pointer.
-/// * Set authentication with the floxhub token using an inline credential helper
+/// * Configure a dynamic origin for the FloxHub repository
+///   to allow cloning and fetching from different FloxHub hosts per user.
+///   The FloxHub host is derived from the FloxHub url in the environment pointer.
+/// * Set authentication with the FloxHub token using an inline credential helper
 ///   if a token is provided.
 pub fn floxmeta_git_options(
     floxhub_git_url: &Url,
@@ -190,7 +190,7 @@ pub fn floxmeta_git_options(
     let mut options = GitCommandOptions::default();
 
     // set the user config
-    // todo: eventually use the user's name and email once integrated with floxhub
+    // todo: eventually use the user's name and email once integrated with FloxHub
     options.add_config_flag("user.name", "Flox User");
     options.add_config_flag("user.email", "floxuser@example.invalid");
 
@@ -200,11 +200,11 @@ pub fn floxmeta_git_options(
 
     // provides a "dynamic" remote "dynamicorigin".
     //
-    // either the floxhub url from the environment pointer
-    // or the default floxhub url if the current operation does not operate on a managed environment.
+    // either the FloxHub url from the environment pointer
+    // or the default FloxHub url if the current operation does not operate on a managed environment.
     //
-    // Local floxmeta repositories may contain environments from different floxhub hosts.
-    // The dynamic origin allows to fetch from different floxhub hosts per environment
+    // Local floxmeta repositories may contain environments from different FloxHub hosts.
+    // The dynamic origin allows to fetch from different FloxHub hosts per environment
     // and reduces the amount of state stored in the local floxmeta repository.
     options.add_config_flag(
         "remote.dynamicorigin.url",
@@ -212,14 +212,14 @@ pub fn floxmeta_git_options(
     );
 
     let token = if let Some(token) = floxhub_token {
-        debug!("using configured floxhub token");
+        debug!("using configured FloxHub token");
         token.secret()
     } else {
-        debug!("no floxhub token configured");
+        debug!("no FloxHub token configured");
         ""
     };
 
-    // Set authentication with the floxhub token using an inline credential helper.
+    // Set authentication with the FloxHub token using an inline credential helper.
     // The credential helper should help avoinding a leak of the token in the process list.
     //
     // If no token is provided, we still set the credential helper and pass an empty string as password
@@ -266,7 +266,7 @@ mod tests {
     }
 
     /// Test whether a floxmeta repository can be successfully cloned
-    /// from a given floxhub host (here a git file:// url pointing to a fake floxmeta repo)
+    /// from a given FloxHub host (here a git file:// url pointing to a fake floxmeta repo)
     /// and opened from an existing clone.
     #[test]
     fn clone_repo() {
@@ -295,7 +295,7 @@ mod tests {
             .expect("Opening a floxmeta repo should succeed");
     }
 
-    ///// Test whether a floxmeta repository can be successfully cloned from floxhub
+    ///// Test whether a floxmeta repository can be successfully cloned from FloxHub
     ///// and other branches are fetched lazily when opened.
     /////
     ///// Finally, verify that non-existent environments correctly fail to be opened.
@@ -304,7 +304,7 @@ mod tests {
     ///// which are prepared on the host `https://git.hub.flox.dev`.
     ///// Tries to authenticate with a test token that grants access to floxtest.
     //
-    // XXX: skip this test since its flaky (floxhub is up and down)
+    // XXX: skip this test since its flaky (FloxHub is up and down)
     //#[test]
     //fn clone_from_floxhub() {
     //    let _ = env_logger::try_init();
@@ -320,7 +320,7 @@ mod tests {
     //    flox.floxhub_host = "https://git.hub.flox.dev".to_string();
 
     //    FloxmetaV2::clone(&flox, &pointer)
-    //        .expect("Cloning a floxmeta repo from floxhub should succeed");
+    //        .expect("Cloning a floxmeta repo from FloxHub should succeed");
 
     //    let pointer_other_success = ManagedPointer::new(
     //        EnvironmentOwner::from_str("floxtest").unwrap(),
@@ -328,7 +328,7 @@ mod tests {
     //    );
 
     //    FloxmetaV2::open(&flox, &pointer_other_success)
-    //        .expect("Should pull other branch 'nondefault' from floxhub");
+    //        .expect("Should pull other branch 'nondefault' from FloxHub");
 
     //    let pointer_other_failure = ManagedPointer::new(
     //        EnvironmentOwner::from_str("floxtest").unwrap(),
@@ -336,6 +336,6 @@ mod tests {
     //    );
 
     //    FloxmetaV2::open(&flox, &pointer_other_failure)
-    //        .expect_err("Should fail pulling branch 'nonexistent' from floxhub");
+    //        .expect_err("Should fail pulling branch 'nonexistent' from FloxHub");
     //}
 }

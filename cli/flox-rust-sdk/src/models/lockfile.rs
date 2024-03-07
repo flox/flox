@@ -8,14 +8,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use flox_types::catalog::System;
-use flox_types::version::Version;
 use log::debug;
 use thiserror::Error;
 
 use super::container_builder::ContainerBuilder;
 use super::environment::{CanonicalizeError, UpdateResult};
 use super::pkgdb::CallPkgDbError;
+use crate::data::{System, Version};
 use crate::flox::Flox;
 use crate::models::environment::{
     global_manifest_lockfile_path,
@@ -23,6 +22,7 @@ use crate::models::environment::{
     CanonicalPath,
 };
 use crate::models::pkgdb::{call_pkgdb, BuildEnvResult, PKGDB_BIN};
+use crate::utils::CommandExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Input {
@@ -66,7 +66,7 @@ impl LockedManifest {
             .arg("--lockfile")
             .arg(existing_lockfile_path);
 
-        debug!("locking manifest with command: {pkgdb_cmd:?}");
+        debug!("locking manifest with command: {}", pkgdb_cmd.display());
         call_pkgdb(pkgdb_cmd)
             .map_err(LockedManifestError::LockManifest)
             .map(Self)
@@ -80,15 +80,19 @@ impl LockedManifest {
         &self,
         pkgdb: &Path,
         gcroot_out_link_path: Option<&Path>,
+        store_path: &Option<PathBuf>,
     ) -> Result<PathBuf, LockedManifestError> {
         let mut pkgdb_cmd = Command::new(pkgdb);
         pkgdb_cmd.arg("buildenv").arg(&self.to_string());
 
         if let Some(gcroot_out_link_path) = gcroot_out_link_path {
             pkgdb_cmd.args(["--out-link", &gcroot_out_link_path.to_string_lossy()]);
+            if let Some(store_path) = store_path {
+                pkgdb_cmd.args(["--store-path", &store_path.to_string_lossy()]);
+            }
         }
 
-        debug!("building environment with command: {pkgdb_cmd:?}");
+        debug!("building environment with command: {}", pkgdb_cmd.display());
 
         let result: BuildEnvResult =
             serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::BuildEnv)?)
@@ -109,7 +113,10 @@ impl LockedManifest {
             .arg("--container")
             .arg(&self.to_string());
 
-        debug!("building container builder with command: {pkgdb_cmd:?}");
+        debug!(
+            "building container builder with command: {}",
+            pkgdb_cmd.display()
+        );
         let result: BuildEnvResult =
             serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::BuildEnv)?)
                 .map_err(LockedManifestError::ParseBuildEnvOutput)?;
@@ -160,11 +167,15 @@ impl LockedManifest {
 
         pkgdb_cmd.args(inputs);
 
-        debug!("updating lockfile with command: {pkgdb_cmd:?}");
+        debug!("updating lockfile with command: {}", pkgdb_cmd.display());
         let lockfile: LockedManifest =
             LockedManifest(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::UpdateFailed)?);
 
-        Ok((old_lockfile, lockfile))
+        Ok(UpdateResult {
+            new_lockfile: lockfile,
+            old_lockfile,
+            store_path: None,
+        })
     }
 
     /// Update global manifest lockfile and write it.
@@ -173,8 +184,11 @@ impl LockedManifest {
         inputs: Vec<String>,
     ) -> Result<UpdateResult, LockedManifestError> {
         let lockfile_path = global_manifest_lockfile_path(flox);
-        let (old_lockfile, new_lockfile) =
-            Self::update_manifest(flox, None::<PathBuf>, &lockfile_path, inputs)?;
+        let UpdateResult {
+            new_lockfile,
+            old_lockfile,
+            store_path,
+        } = Self::update_manifest(flox, None::<PathBuf>, &lockfile_path, inputs)?;
 
         debug!("writing lockfile to {}", lockfile_path.display());
         std::fs::write(
@@ -183,7 +197,11 @@ impl LockedManifest {
                 .map_err(LockedManifestError::SerializeGlobalLockfile)?,
         )
         .map_err(LockedManifestError::WriteGlobalLockfile)?;
-        Ok((old_lockfile, new_lockfile))
+        Ok(UpdateResult {
+            new_lockfile,
+            old_lockfile,
+            store_path,
+        })
     }
 
     /// Creates the global lockfile if it doesn't exist and returns its path.
@@ -199,6 +217,24 @@ impl LockedManifest {
     pub fn read_from_file(path: &CanonicalPath) -> Result<Self, LockedManifestError> {
         let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
         serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
+    }
+
+    pub fn check_lockfile(
+        path: &CanonicalPath,
+    ) -> Result<Vec<LockfileCheckWarning>, LockedManifestError> {
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd
+            .args(["manifest", "check"])
+            .arg("--lockfile")
+            .arg(path.as_os_str());
+
+        debug!("checking lockfile with command: {}", pkgdb_cmd.display());
+
+        let value = call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::CheckLockfile)?;
+        let warnings: Vec<LockfileCheckWarning> =
+            serde_json::from_value(value).map_err(LockedManifestError::ParseCheckWarnings)?;
+
+        Ok(warnings)
     }
 }
 
@@ -266,7 +302,7 @@ pub struct PackageInfo {
     pub license: Option<String>,
     pub pname: String,
     pub unfree: bool,
-    pub version: String,
+    pub version: Option<String>,
 }
 
 impl TryFrom<LockedManifest> for TypedLockedManifest {
@@ -312,8 +348,12 @@ pub struct InstalledPackage {
 pub enum LockedManifestError {
     #[error("failed to lock manifest")]
     LockManifest(#[source] CallPkgDbError),
+    #[error("failed to check lockfile")]
+    CheckLockfile(#[source] CallPkgDbError),
     #[error("failed to build environment")]
     BuildEnv(#[source] CallPkgDbError),
+    #[error("failed to parse check warnings")]
+    ParseCheckWarnings(#[source] serde_json::Error),
     #[error("package is unsupported for this sytem")]
     UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
     #[error("failed to build container builder")]
@@ -340,4 +380,105 @@ pub enum LockedManifestError {
     SerializeGlobalLockfile(#[source] serde_json::Error),
     #[error("could not write global lockfile")]
     WriteGlobalLockfile(#[source] std::io::Error),
+}
+
+/// A warning produced by `pkgdb manifest check`
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct LockfileCheckWarning {
+    pub package: String,
+    pub message: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    /// Validate that the parser for the locked manifest can handle null values
+    /// for the `version`, `license`, and `description` fields.
+    #[test]
+    fn locked_package_tolerates_null_values() {
+        let locked_packages =
+            serde_json::from_value::<HashMap<String, LockedPackage>>(serde_json::json!({
+                    "complete": {
+                        "info": {
+                            "description": "A package",
+                            "broken": false,
+                            "license": "MIT",
+                            "pname": "package1",
+                            "unfree": false,
+                            "version": "1.0.0"
+                        },
+                        "attr-path": ["package1"],
+                        "priority": 0
+                    },
+                    "missing_version": {
+                        "info": {
+                            "description": "Another package",
+                            "broken": false,
+                            "license": "MIT",
+                            "pname": "package2",
+                            "unfree": false,
+                            "version": null
+                        },
+                        "attr-path": ["package2"],
+                        "priority": 0
+                    },
+                    "missing_license": {
+                        "info": {
+                            "description": "Another package",
+                            "broken": false,
+                            "license": null,
+                            "pname": "package3",
+                            "unfree": false,
+                            "version": "1.0.0"
+                        },
+                        "attr-path": ["package3"],
+                        "priority": 0
+                    },
+                    "missing_description": {
+                        "info": {
+                            "description": null,
+                            "broken": false,
+                            "license": "MIT",
+                            "pname": "package4",
+                            "unfree": false,
+                            "version": "1.0.0"
+                        },
+                        "attr-path": ["package4"],
+                        "priority": 0
+                    },
+            }))
+            .unwrap();
+
+        assert_eq!(
+            locked_packages["complete"].info.version.as_deref(),
+            Some("1.0.0")
+        );
+        assert_eq!(
+            locked_packages["complete"].info.license.as_deref(),
+            Some("MIT")
+        );
+        assert_eq!(
+            locked_packages["complete"].info.description.as_deref(),
+            Some("A package")
+        );
+
+        assert_eq!(
+            locked_packages["missing_version"].info.version.as_deref(),
+            None
+        );
+        assert_eq!(
+            locked_packages["missing_license"].info.license.as_deref(),
+            None
+        );
+        assert_eq!(
+            locked_packages["missing_description"]
+                .info
+                .description
+                .as_deref(),
+            None
+        );
+    }
 }

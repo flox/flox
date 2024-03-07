@@ -61,7 +61,7 @@ hook was defined.
     code.
     This presents a security risk,
     so you will be prompted whether to trust the environment.
-    Environments owned by the current user are always trusted.
+    Environments owned by the current user and Flox are always trusted.
     You may set certain environments to always be trusted using the config key
     `trusted_environments."<owner/name>" = (trust | deny)`,
     or via the following command:
@@ -80,6 +80,35 @@ hook was defined.
 
 # ENVIRONMENT VARIABLES
 
+## Variables set by `flox activate`
+
+`$FLOX_PROMPT_ENVIRONMENTS`
+:   Contains a space-delimited list of the active environments,
+    e.g. `owner1/foo owner2/bar local_env`.
+
+`$FLOX_ENV_CACHE`
+:   `activate` sets this variable to a directory that can be used by an
+    environment's hook to store transient files.
+    These files will persist for environments used locally,
+    but they will not be pushed,
+    and they will not persist when using a remote environment with `-r`.
+
+`$FLOX_ENV_PROJECT`
+:   `activate` sets this variable to the directory of the project using the flox
+    environment.
+    For environments stored locally, this is the directory containing the
+    environment.
+    When running `flox activate -r`, this is set to the current working
+    directory.
+    This variable can be used to find project files in environment hooks.
+
+`$_FLOX_ACTIVE_ENVIRONMENTS`
+:   A JSON array containing one object per active environment.
+    This is currently an implementation detail
+    and its contents are subject to change.
+
+## Variables used by `flox activate`
+
 `$FLOX_SHELL`
 :  When launching an interactive sub-shell, Flox launches the shell specified in
    `$FLOX_SHELL` if it is set.
@@ -87,15 +116,6 @@ hook was defined.
 `$SHELL`
 :  When launching an interactive sub-shell, Flox launches the shell specified in
    `$SHELL` if it is set and `$FLOX_SHELL` is not set.
-
-`$FLOX_PROMPT_ENVIRONMENTS`
-:   Contains a space-delimited list of the active environments,
-    e.g. `owner1/foo owner2/bar local_env`.
-
-`$_FLOX_ACTIVE_ENVIRONMENTS`
-:   A JSON array containing one object per active environment.
-    This is currently an implementation detail
-    and its contents are subject to change.
 
 `$FLOX_PROMPT_COLOR_{1,2}`
 :   Flox adds text to the beginning of the shell prompt to indicate which

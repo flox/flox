@@ -29,9 +29,9 @@ project_teardown() {
 # ---------------------------------------------------------------------------- #
 
 setup() {
-  home_setup test
   common_test_setup
   project_setup
+  floxhub_setup "owner"
 
   export FLOX_FLOXHUB_TOKEN=flox_testOAuthToken
   export _FLOX_FLOXHUB_GIT_URL="file://$BATS_TEST_TMPDIR/floxhub"
@@ -40,28 +40,6 @@ teardown() {
   unset _FLOX_FLOXHUB_GIT_URL
   project_teardown
   common_test_teardown
-}
-
-function make_dummy_floxmeta() {
-  OWNER="$1"
-  shift
-
-  FLOXHUB_FLOXMETA_DIR="$BATS_TEST_TMPDIR/floxhub/$OWNER/floxmeta"
-
-  mkdir -p "$FLOXHUB_FLOXMETA_DIR"
-  pushd "$FLOXHUB_FLOXMETA_DIR"
-
-  # todo: fake a real upstream env
-  git init --initial-branch="dummy"
-
-  git config user.name "test"
-  git config user.email "test@email.address"
-
-  touch "dummy"
-  git add .
-  git commit -m "initial commit"
-
-  popd > /dev/null || return
 }
 
 # simulate a dummy env update pushed to floxhub
@@ -86,8 +64,6 @@ function update_dummy_env() {
 
 # bats test_tags=push:h1
 @test "h1: push login: running flox push before user has login metadata prompts the user to login" {
-  make_dummy_floxmeta "owner"
-
   unset FLOX_FLOXHUB_TOKEN # logout, effectively
 
   run "$FLOX_BIN" config
@@ -96,13 +72,11 @@ function update_dummy_env() {
 
   run "$FLOX_BIN" push --owner owner # dummy owner
   assert_failure
-  assert_output --partial 'You are not logged in to floxhub.'
+  assert_output --partial 'You are not logged in to FloxHub.'
 }
 
 # bats test_tags=push:h2
 @test "h2: push login: running flox push before user has login metadata prompts the user to login" {
-  make_dummy_floxmeta "owner"
-
   mkdir -p "machine_a"
   mkdir -p "machine_b"
 
@@ -125,8 +99,6 @@ function update_dummy_env() {
 
 # bats test_tags=push:h5
 @test "h5: unique upstream environments: if you attempt to flox push an environment with the same name but different provenance from upstream then the push should fail with a message." {
-  make_dummy_floxmeta "owner"
-
   mkdir -p "machine_a"
   mkdir -p "machine_b"
 
@@ -153,8 +125,6 @@ function update_dummy_env() {
 
 # bats test_tags=push:h6
 @test "h6: force push upstream: adding -f option to flox push will force push an environment upstream even if an existing environment of the same name exists with different provenance." {
-  make_dummy_floxmeta "owner"
-
   mkdir -p "machine_a" "machine_b" "machine_c"
 
   # Create an environment owner/test on machine_a and push it to floxhub
@@ -183,8 +153,6 @@ function update_dummy_env() {
 
 # bats test_tags=push:broken
 @test "push: broken: if you attempt to flox push an environment that fails to build then the push should fail with a message." {
-  make_dummy_floxmeta "owner"
-
   run "$FLOX_BIN" init
 
   init_system="$(get_system_other_than_current)"

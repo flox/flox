@@ -359,6 +359,8 @@ env_is_activated() {
   # this is confusing:
   SHELL="bash" run "$FLOX_BIN" activate
   assert_success
+  # check that env vars are set for compatibility with nix built software
+  assert_line --partial "export NIX_SSL_CERT_FILE="
   assert_output --regexp "source .*/activate/bash"
 }
 
@@ -366,6 +368,8 @@ env_is_activated() {
 @test "'flox activate' prints script to modify current shell (zsh)" {
   SHELL="zsh" run "$FLOX_BIN" activate
   assert_success
+  # check that env vars are set for compatibility with nix built software
+  assert_line --partial "export NIX_SSL_CERT_FILE="
   assert_output --regexp "source .*/activate/zsh"
 }
 
@@ -463,4 +467,68 @@ env_is_activated() {
   run -- "$FLOX_BIN" activate -- echo PIP_CONFIG_FILE is '$PIP_CONFIG_FILE'
   assert_success
   assert_line "PIP_CONFIG_FILE is /some/other/pip.ini"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate:flox-uses-default-env
+@test "'flox *' uses local environment over 'default' environment" {
+  "$FLOX_BIN" delete
+
+  mkdir default
+  pushd default > /dev/null || return
+  "$FLOX_BIN" init
+  "$FLOX_BIN" install vim
+  popd > /dev/null || return
+
+  "$FLOX_BIN" init
+  "$FLOX_BIN" install emacs
+
+  # sanity check that flox list lists the local environment
+  run -- "$FLOX_BIN" list -n
+  assert_success
+  assert_line "emacs"
+
+  # Run flox list within the default environment.
+  # Flox should choose the local environment over the default environment.
+  run -- "$FLOX_BIN" activate --dir default -- "$FLOX_BIN" list -n
+  assert_success
+  assert_line "emacs"
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate:scripts:on-activate
+@test "'hook.on-activate' runs" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
+  # Run a command that causes the activation scripts to run without putting us
+  # in the interactive shell
+  run "$FLOX_BIN" activate -- echo "hello"
+  # The on-activate script creates a directory whose name is the value of the
+  # "$foo" environment variable.
+  [ -d "$PROJECT_DIR/bar" ]
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate:scripts:on-activate
+@test "'hook.on-activate' doesn't modify environment variables" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
+  # Run a command that causes the activation scripts to run without putting us
+  # in the interactive shell
+  # What this is testing:
+  # - Commands (e.g. echo "$foo") are run after activation scripts run
+  # - The [vars] section sets foo=bar
+  # - The on-activate script exports foo=baz
+  # - If the on-activate script is able to modify variables outside the shell,
+  #   then we should see "baz" here. The expected output is "bar" since that
+  #   script isn't supposed to be able to modify environment variables.
+  run "$FLOX_BIN" activate -- echo '$foo'
+  assert_output "bar"
 }
