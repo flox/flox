@@ -307,7 +307,7 @@ setup_file() {
   assert_output "    nodejs - nodejs@$NODEJS_VERSION_NEW"
   popd
 
-  SHELL=bash run expect -d "$TESTS_DIR/show/prompt-which-environment.exp"
+  SHELL=bash run expect "$TESTS_DIR/show/prompt-which-environment.exp"
   assert_success
   assert_output --partial "nodejs - nodejs@$NODEJS_VERSION_NEW"
 }

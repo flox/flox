@@ -308,7 +308,7 @@ function add_insecure_package() {
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
 
-  run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_SYSTEM_PROMPT" no
+  run -0 expect "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_SYSTEM_PROMPT" no
   assert_success
   assert_output --partial "The environment you are trying to pull is not yet compatible with your system ($NIX_SYSTEM)"
   assert_line --partial "Did not pull the environment."
@@ -323,7 +323,7 @@ function add_insecure_package() {
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
 
-  run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_SYSTEM_PROMPT" yes
+  run -0 expect "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_SYSTEM_PROMPT" yes
   assert_success
 
   run "$FLOX_BIN" list
@@ -385,7 +385,7 @@ function add_insecure_package() {
   update_dummy_env "owner" "name"
   add_incompatible_package "owner" "name"
 
-  run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" no
+  run -0 expect "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" no
   assert_success
   assert_line --partial "package 'extra' is not available for this system ('$NIX_SYSTEM')"
   assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"
@@ -400,7 +400,7 @@ function add_insecure_package() {
   update_dummy_env "owner" "name"
   add_incompatible_package "owner" "name"
 
-  run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" yes
+  run -0 expect "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" yes
   assert_success
   assert_line --partial "package 'extra' is not available for this system ('$NIX_SYSTEM')"
   assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"
@@ -433,7 +433,7 @@ function add_insecure_package() {
   update_dummy_env "owner" "name"
   add_insecure_package "owner" "name"
 
-  run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" no
+  run -0 expect "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" no
   assert_success
   assert_line --partial "package 'extra' failed to evaluate: "
   assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"
@@ -448,7 +448,7 @@ function add_insecure_package() {
   update_dummy_env "owner" "name"
   add_insecure_package "owner" "name"
 
-  run -0 expect -d "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" yes
+  run -0 expect "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" yes
   assert_success
   assert_line --partial "package 'extra' failed to evaluate: "
   assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"

@@ -70,7 +70,7 @@ teardown() {
   touch ./bin/xdg-open
   export PATH="$PWD/bin:$PATH"
 
-  run expect -d "$TESTS_DIR/auth/loginPrompt.exp"
+  run expect "$TESTS_DIR/auth/loginPrompt.exp"
   assert_success
   assert_line --partial "First copy your one-time code:"
   assert_line --regexp "Press enter to open .+ in your browser\.\.\."
@@ -91,7 +91,7 @@ teardown() {
   # emulate ssh environment
   export SSH_TTY="1"
 
-  run expect -d "$TESTS_DIR/auth/loginPrompt.exp"
+  run expect "$TESTS_DIR/auth/loginPrompt.exp"
   assert_success
   assert_line --regexp "Go to .+ in your browser"
   assert_line --partial "Then enter your one-time code: "
