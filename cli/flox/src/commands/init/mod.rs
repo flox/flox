@@ -21,8 +21,10 @@ use crate::utils::dialog::{Dialog, Select, Spinner};
 use crate::utils::message;
 
 mod node;
+mod python;
 
 use node::Node;
+use python::Python;
 
 const AUTO_SETUP_HINT: &str = "Use '--auto-setup' to apply Flox recommendations in the future.";
 
@@ -374,6 +376,7 @@ fn get_default_package_if_compatible(
     }
     Ok(Some(results.results.swap_remove(0)))
 }
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
