@@ -13,6 +13,7 @@
   nlohmann_json,
   pkg-config,
   remake,
+  sentry-native,
   sqlite,
   sqlite3pp,
   toml11,
@@ -44,6 +45,7 @@
     nix_INCDIR = nix.dev.outPath + "/include";
     boost_CFLAGS = "-isystem " + boost.dev.outPath + "/include";
     toml_CFLAGS = "-isystem " + toml11.outPath + "/include";
+    sentry_PREFIX = sentry-native.outPath;
     yaml_PREFIX = yaml-cpp.outPath;
     semver_PREFIX = cpp-semver.outPath;
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
