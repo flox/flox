@@ -760,14 +760,11 @@ impl InitHook for Node {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::flox::test_flox_instance;
-    use flox_rust_sdk::models::lockfile::LockedManifest;
-    use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
-    use tempfile::TempDir;
 
     use super::*;
+    use crate::commands::init::tests::FLOX_INSTANCE;
 
     #[test]
     fn test_parse_nvmrc_version_some() {
@@ -916,14 +913,6 @@ mod tests {
     // and it might be better to mock out do_search().
     // But I'm only seeing 6 tests take ~3 seconds,
     // so at this point I think there are bigger testing efficiency fish to fry.
-
-    static FLOX_INSTANCE: Lazy<(Flox, TempDir)> = Lazy::new(|| {
-        let (flox, _temp_dir_handle) = test_flox_instance();
-        let pkgdb_nixpkgs_rev_new = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
-        std::env::set_var("_PKGDB_GA_REGISTRY_REF_OR_REV", pkgdb_nixpkgs_rev_new);
-        LockedManifest::update_global_manifest(&flox, vec![]).unwrap();
-        (flox, _temp_dir_handle)
-    });
 
     /// Test finding yarn with no constraints succeeds
     #[test]
