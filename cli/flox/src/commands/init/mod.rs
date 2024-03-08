@@ -351,7 +351,7 @@ fn get_default_package(
     flox: &Flox,
 ) -> Result<Option<SearchResult>> {
     let mut query = Query::new(package, Features::parse()?.search_strategy, Some(1), false)?;
-    query.version = version;
+    query.semver = version;
 
     let params = SearchParams {
         manifest: None,
@@ -368,7 +368,7 @@ fn get_default_package(
     Ok(Some(results.results.swap_remove(0)))
 }
 
-/// Get nixpkgs#package optionally verifying that it satisfies a version constraint.
+/// Get nixpkgs#rel_path optionally verifying that it satisfies a version constraint.
 fn get_default_package_if_compatible(
     rel_path: Vec<String>,
     version: Option<String>,
@@ -398,7 +398,10 @@ fn get_default_package_if_compatible(
 
 #[cfg(test)]
 mod tests {
+    use flox_rust_sdk::flox::test_flox_instance;
+    use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
+    use tempfile::TempDir;
 
     use super::*;
 
@@ -474,4 +477,12 @@ mod tests {
             ]),
         });
     }
+
+    pub static FLOX_INSTANCE: Lazy<(Flox, TempDir)> = Lazy::new(|| {
+        let (flox, _temp_dir_handle) = test_flox_instance();
+        let pkgdb_nixpkgs_rev_new = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
+        std::env::set_var("_PKGDB_GA_REGISTRY_REF_OR_REV", pkgdb_nixpkgs_rev_new);
+        LockedManifest::update_global_manifest(&flox, vec![]).unwrap();
+        (flox, _temp_dir_handle)
+    });
 }

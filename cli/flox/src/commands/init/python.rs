@@ -144,6 +144,7 @@ impl InitHook for Python {
             .selected_provider
             .as_ref()
             .map(|p| p.get_init_customization());
+        // self.providers will be empty if prompt_user() was called
         let default = self.providers.iter().find_map(|provider| match provider {
             Provide::Found(provider) => Some(provider.get_init_customization()),
             _ => None,
@@ -195,7 +196,7 @@ trait Provider: Debug {
 
 /// Information gathered from a pyproject.toml file for poetry
 /// <https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/#configuring-setup-py>
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct PoetryPyProject {
     /// Provided python version
     ///
@@ -224,7 +225,11 @@ impl PoetryPyProject {
 
         let content = std::fs::read_to_string(&pyproject_toml)?;
 
-        let toml = toml_edit::Document::from_str(&content)?;
+        Self::from_pyproject_content(&content, flox)
+    }
+
+    fn from_pyproject_content(content: &str, flox: &Flox) -> Result<Option<PoetryPyProject>> {
+        let toml = toml_edit::Document::from_str(content)?;
 
         // poetry _requires_ `tool.poetry.dependencies.python` to be set [1],
         // so we do not resolve a default version here if the key is missing.
@@ -251,7 +256,7 @@ impl PoetryPyProject {
                 break 'version ProvidedVersion::Compatible {
                     compatible: found_version
                         .version
-                        .unwrap_or_else(|| format!("comatible with {required_python_version}")),
+                        .unwrap_or_else(|| format!("compatible with {required_python_version}")),
                     requested: Some(required_python_version),
                 };
             }
@@ -356,7 +361,7 @@ impl Provider for PoetryPyProject {
 
 /// Information gathered from a pyproject.toml file
 /// <https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/#configuring-setup-py>
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct PyProject {
     /// Provided python version
     ///
@@ -391,14 +396,18 @@ impl PyProject {
 
         let content = std::fs::read_to_string(&pyproject_toml)?;
 
-        let toml = toml_edit::Document::from_str(&content)?;
+        Self::from_pyproject_content(&content, flox)
+    }
+
+    fn from_pyproject_content(content: &str, flox: &Flox) -> Result<Option<PyProject>> {
+        let toml = toml_edit::Document::from_str(content)?;
 
         // unlike in poetry, `project.require-python` does not seem to be required
         //
         // TODO: check that this is _not (also)_ a poetry file?
         let required_python_version = toml
             .get("project")
-            .and_then(|project| project.get("require-python"))
+            .and_then(|project| project.get("requires-python"))
             .map(|constraint| constraint.as_str().context("expected a string"))
             .transpose()?
             .map(|s| s.to_string());
@@ -431,7 +440,7 @@ impl PyProject {
                 };
             }
 
-            log::debug!("poetry config requires python version {required_python_version_value}, but no compatible version found in the catalogs");
+            log::debug!("pyproject.toml requires python version {required_python_version_value}, but no compatible version found in the catalogs");
 
             ProvidedVersion::Incompatible {
                 substitute: search_default()?,
@@ -642,7 +651,7 @@ impl Provider for Requirements {
 ///
 /// [ProvidedVersion::Incompatible::substitute] and [ProvidedVersion::Compatible::compatible]
 /// are concrete versions, not semver!
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum ProvidedVersion {
     Compatible {
         requested: Option<String>,
@@ -660,5 +669,238 @@ impl Display for ProvidedVersion {
             Self::Compatible { compatible, .. } => write!(f, "{compatible}"),
             Self::Incompatible { substitute, .. } => write!(f, "{substitute}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use serial_test::serial;
+
+    use super::*;
+    use crate::commands::init::tests::FLOX_INSTANCE;
+
+    #[test]
+    fn test_should_run_true() {
+        let mut python = Python {
+            providers: vec![Provide::Found(Box::new(PoetryPyProject {
+                provided_python_version: ProvidedVersion::Compatible {
+                    requested: None,
+                    compatible: "3.11.6".to_string(),
+                },
+                poetry_version: "1.7.1".to_string(),
+            }))],
+            selected_provider: None,
+        };
+        assert!(python.should_run(Path::new("")).unwrap());
+    }
+
+    #[test]
+    fn test_should_run_false() {
+        let mut python = Python {
+            providers: vec![Provide::Invalid(anyhow!(""))],
+            selected_provider: None,
+        };
+        assert!(!python.should_run(Path::new("")).unwrap());
+    }
+
+    #[test]
+    fn test_get_init_customization_with_providers() {
+        let python = Python {
+            providers: vec![Provide::Found(Box::new(PoetryPyProject {
+                provided_python_version: ProvidedVersion::Compatible {
+                    requested: None,
+                    compatible: "3.11.6".to_string(),
+                },
+                poetry_version: "1.7.1".to_string(),
+            }))],
+            selected_provider: None,
+        };
+        assert_eq!(python.get_init_customization(), todo!());
+    }
+
+    #[test]
+    fn test_get_init_customization_with_selected_provider() {
+        let python = Python {
+            providers: vec![],
+            selected_provider: Some(Box::new(PoetryPyProject {
+                provided_python_version: ProvidedVersion::Compatible {
+                    requested: None,
+                    compatible: "3.11.6".to_string(),
+                },
+                poetry_version: "1.7.1".to_string(),
+            })),
+        };
+        assert_eq!(python.get_init_customization(), todo!());
+    }
+
+    /// An invalid pyproject.toml should return an error
+    #[test]
+    fn test_pyproject_invalid() {
+        let flox = &FLOX_INSTANCE.0;
+
+        let content = indoc! {r#"
+        ,
+        "#};
+
+        let pyproject = PyProject::from_pyproject_content(content, flox);
+
+        assert!(pyproject.is_err());
+    }
+
+    /// ProvidedVersion::Compatible should be returned for an empty pyproject.toml
+    #[test]
+    #[serial]
+    fn test_pyproject_empty() {
+        let flox = &FLOX_INSTANCE.0;
+
+        let pyproject = PyProject::from_pyproject_content("", flox).unwrap();
+
+        assert_eq!(pyproject.unwrap(), PyProject {
+            provided_python_version: ProvidedVersion::Compatible {
+                requested: None,
+                compatible: "3.11.6".to_string(),
+            },
+            pip_version: "23.2.1".to_string(),
+        });
+    }
+
+    /// ProvidedVersion::Compatible should be returned for requires-python = ">=3.8"
+    #[test]
+    #[serial]
+    fn test_pyproject_available_version() {
+        let flox = &FLOX_INSTANCE.0;
+
+        // TODO: python docs have a space in the version (>= 3.8)
+        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
+        // pkgdb currently throws an exception when passed that specifier
+        let content = indoc! {r#"
+        [project]
+        requires-python = ">=3.8"
+        "#};
+
+        let pyproject = PyProject::from_pyproject_content(content, flox).unwrap();
+
+        assert_eq!(pyproject.unwrap(), PyProject {
+            provided_python_version: ProvidedVersion::Compatible {
+                requested: Some(">=3.8".to_string()),
+                compatible: "3.11.6".to_string(),
+            },
+            pip_version: "23.2.1".to_string(),
+        });
+    }
+
+    /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
+    #[test]
+    #[serial]
+    fn test_pyproject_unavailable_version() {
+        let flox = &FLOX_INSTANCE.0;
+
+        // TODO: python docs have a space in the version (>= 3.8)
+        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
+        // pkgdb currently throws an exception when passed that specifier
+        let content = indoc! {r#"
+        [project]
+        requires-python = "1"
+        "#};
+
+        let pyproject = PyProject::from_pyproject_content(content, flox).unwrap();
+
+        assert_eq!(pyproject.unwrap(), PyProject {
+            provided_python_version: ProvidedVersion::Incompatible {
+                requested: "1".to_string(),
+                substitute: "3.11.6".to_string(),
+            },
+            pip_version: "23.2.1".to_string(),
+        });
+    }
+
+    /// An invalid pyproject.toml should return an error
+    #[test]
+    fn test_poetry_pyproject_invalid() {
+        let flox = &FLOX_INSTANCE.0;
+
+        let content = indoc! {r#"
+        ,
+        "#};
+
+        let pyproject = PoetryPyProject::from_pyproject_content(content, flox);
+
+        assert!(pyproject.is_err());
+    }
+
+    /// None should be returned for an empty pyproject.toml
+    #[test]
+    fn test_poetry_pyproject_empty() {
+        let flox = &FLOX_INSTANCE.0;
+
+        let pyproject = PoetryPyProject::from_pyproject_content("", flox).unwrap();
+
+        assert_eq!(pyproject, None);
+    }
+
+    /// Err should be returned for a pyproject.toml with `tool.poetry` but not
+    /// `tool.poetry.dependencies.python`
+    #[test]
+    fn test_poetry_pyproject_no_python() {
+        let flox = &FLOX_INSTANCE.0;
+
+        let content = indoc! {r#"
+        [tool.poetry]
+        "#};
+
+        let pyproject = PoetryPyProject::from_pyproject_content(content, flox);
+
+        assert!(pyproject.is_err());
+    }
+
+    /// ProvidedVersion::Compatible should be returned for python = "^3.7"
+    #[test]
+    #[serial]
+    fn test_poetry_pyproject_available_version() {
+        let flox = &FLOX_INSTANCE.0;
+
+        // TODO: python docs have a space in the version (>= 3.8)
+        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
+        // pkgdb currently throws an exception when passed that specifier
+        let content = indoc! {r#"
+        [tool.poetry.dependencies]
+        python = "^3.7"
+        "#};
+
+        let pyproject = PoetryPyProject::from_pyproject_content(content, flox).unwrap();
+
+        assert_eq!(pyproject.unwrap(), PoetryPyProject {
+            provided_python_version: ProvidedVersion::Compatible {
+                requested: Some("^3.7".to_string()),
+                compatible: "3.11.6".to_string(),
+            },
+            poetry_version: "1.7.1".to_string(),
+        });
+    }
+
+    /// ProvidedVersion::Incompatible should be returned for python = "1"
+    #[test]
+    #[serial]
+    fn test_poetry_pyproject_unavailable_version() {
+        let flox = &FLOX_INSTANCE.0;
+
+        // TODO: python docs have a space in the version (>= 3.8)
+        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
+        // pkgdb currently throws an exception when passed that specifier
+        let content = indoc! {r#"
+        [tool.poetry.dependencies]
+        python = "1"
+        "#};
+
+        let pyproject = PoetryPyProject::from_pyproject_content(content, flox).unwrap();
+
+        assert_eq!(pyproject.unwrap(), PoetryPyProject {
+            provided_python_version: ProvidedVersion::Incompatible {
+                requested: "1".to_string(),
+                substitute: "3.11.6".to_string(),
+            },
+            poetry_version: "1.7.1".to_string(),
+        });
     }
 }
