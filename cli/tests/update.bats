@@ -94,9 +94,9 @@ teardown() {
 @test "update bumps an input but not an already installed package" {
   rm -f "$GLOBAL_MANIFEST_LOCK"
 
-  "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" install hello
+    "$FLOX_BIN" init
+  "$FLOX_BIN" install hello
 
   # nixpkgs and hello are both locked to the old nixpkgs
   run jq -r '.registry.inputs.nixpkgs.from.narHash' .flox/env/manifest.lock

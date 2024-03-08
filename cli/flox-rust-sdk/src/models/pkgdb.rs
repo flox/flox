@@ -1,7 +1,7 @@
 use std::env;
 use std::fmt::Display;
 use std::io::{BufRead, BufReader};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use log::debug;
@@ -9,6 +9,8 @@ use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
+
+use super::lockfile::FlakeRef;
 
 // This is the `PKGDB` path that we actually use.
 // This is set once and prefers the `PKGDB` env variable, but will use
@@ -225,3 +227,23 @@ impl Display for CaughtMsgError {
 }
 
 impl std::error::Error for CaughtMsgError {}
+
+#[derive(Debug, Error)]
+pub enum ScrapeError {
+    #[error(transparent)]
+    CallPkgDb(#[from] CallPkgDbError),
+    #[error("couldn't serialize FlakeRef")]
+    ParseJSON(#[source] serde_json::Error),
+}
+pub fn scrape_input(input: &FlakeRef) -> Result<(), ScrapeError> {
+    let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+    // TODO: this works for nixpkgs, but it won't work for anything else that is not exposing "legacyPackages"
+    pkgdb_cmd
+        .args(["scrape"])
+        .arg(serde_json::to_string(&input).map_err(ScrapeError::ParseJSON)?)
+        .arg("legacyPackages");
+
+    debug!("scraping input: {pkgdb_cmd:?}");
+    call_pkgdb(pkgdb_cmd)?;
+    Ok(())
+}

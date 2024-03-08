@@ -272,8 +272,8 @@ teardown() {
 }
 
 @test "'flox install' creates global lock" {
-  rm -f "$GLOBAL_MANIFEST_LOCK"
   "$FLOX_BIN" init
+  rm -f "$GLOBAL_MANIFEST_LOCK"
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     run "$FLOX_BIN" install hello
   assert_success
