@@ -12,7 +12,8 @@ expect_after {
   "*\r" { exp_continue }
 }
 
-expect -ex "Getting ready to use environment" {}
+# wait until we see the environment "greeting" message
+expect -ex "To stop using this environment, type 'exit'" {}
 
 # cd to directory 2
 send "cd 2\n"
