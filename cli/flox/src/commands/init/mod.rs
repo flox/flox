@@ -7,15 +7,23 @@ use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
-use flox_rust_sdk::models::environment::{CanonicalPath, Environment, PathPointer};
+use flox_rust_sdk::models::environment::{
+    global_manifest_lockfile_path,
+    global_manifest_path,
+    CanonicalPath,
+    Environment,
+    PathPointer,
+};
 use flox_rust_sdk::models::lockfile::{LockedManifest, TypedLockedManifest};
 use flox_rust_sdk::models::manifest::{insert_packages, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::scrape_input;
+use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
 use indoc::{formatdoc, indoc};
 use log::debug;
 use toml_edit::{Document, Formatted, Item, Table, Value};
 
 use crate::commands::{environment_description, ConcreteEnvironment};
+use crate::config::features::Features;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select, Spinner};
 use crate::utils::message;
@@ -146,11 +154,22 @@ impl Init {
 
     /// Run all hooks and return a single combined customization
     fn run_hooks(&self, dir: &Path, flox: &Flox) -> Result<InitCustomization> {
-        let hooks: Vec<Box<dyn InitHook>> = if std::env::var("_FLOX_NODE_HOOK").is_ok() {
-            vec![Box::new(Requirements), Box::new(Node::new(dir, flox)?)]
-        } else {
-            vec![Box::new(Requirements)]
-        };
+        let features = Features::parse()?;
+        let mut hooks: Vec<Box<dyn InitHook>> = vec![];
+
+        if features.init_python {
+            debug!("Enabled python detection");
+
+            let python = Python::new(dir, flox);
+            hooks.push(Box::new(python));
+        }
+
+        if features.init_nodejs {
+            debug!("Enabled nodejs detection");
+
+            let node = Node::new(dir, flox)?;
+            hooks.push(Box::new(node));
+        }
 
         let mut customizations = vec![];
 
