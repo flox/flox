@@ -47,6 +47,7 @@ use crate::models::environment::{
     ENV_DIR_NAME,
     FLOX_HOOK_PLACEHOLDER,
     FLOX_INSTALL_PLACEHOLDER,
+    FLOX_PROFILE_PLACEHOLDER,
     FLOX_SYSTEM_PLACEHOLDER,
     MANIFEST_FILENAME,
 };
@@ -79,10 +80,10 @@ pub struct PathEnvironment {
     pub pointer: PathPointer,
 }
 
-/// A hook or packages to install when initializing an environment
+/// A profile script or list of packages to install when initializing an environment
 #[derive(Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct InitCustomization {
-    pub hook: Option<String>,
+    pub profile: Option<String>,
     pub packages: Option<Vec<PackageToInstall>>,
 }
 
@@ -471,19 +472,27 @@ impl PathEnvironment {
         };
         replaced = replaced.replace(FLOX_INSTALL_PLACEHOLDER, packages);
 
-        // Replace hook
-        let hook = if let Some(ref hook) = customization.hook {
+        // Replace profile
+        let profile = if let Some(ref hook) = customization.profile {
             formatdoc! {r#"
-                script = """
+                common = """
                 {}
                 """"#, indent::indent_all_by(2, hook)}
         } else {
             formatdoc! {r#"
-                # script = """
+                # common = """
                 #   echo "it's gettin flox in here";
                 # """"#}
         };
-        replaced = replaced.replace(FLOX_HOOK_PLACEHOLDER, &hook);
+        replaced = replaced.replace(FLOX_PROFILE_PLACEHOLDER, &profile);
+
+        // Replace the hook
+        let default_hook = formatdoc! {r#"
+            # on-activate = """
+            #     mkdir my_data_dir
+            # """"#};
+
+        let replaced = replaced.replace(FLOX_HOOK_PLACEHOLDER, &default_hook);
 
         debug!(
             "manifest was updated successfully: {}",

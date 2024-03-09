@@ -752,7 +752,7 @@ impl InitHook for Node {
         };
 
         InitCustomization {
-            hook,
+            profile: hook,
             packages: Some(packages),
         }
     }
@@ -840,7 +840,7 @@ mod tests {
                     version: Some("1".to_string()),
                     input: None,
                 }]),
-                hook: Some(YARN_HOOK.to_string()),
+                profile: Some(YARN_HOOK.to_string()),
             }
         );
     }
@@ -876,7 +876,7 @@ mod tests {
                     version: Some("1".to_string()),
                     input: None,
                 }]),
-                hook: Some(NPM_HOOK.to_string()),
+                profile: Some(NPM_HOOK.to_string()),
             }
         );
     }
@@ -904,15 +904,24 @@ mod tests {
                     version: Some("1".to_string()),
                     input: None,
                 }]),
-                hook: None,
+                profile: None,
             }
         );
     }
+
+    static FLOX_INSTANCE: Lazy<(Flox, TempDir)> = Lazy::new(|| {
+        let (flox, _temp_dir_handle) = test_flox_instance();
+        let pkgdb_nixpkgs_rev_new = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
+        std::env::set_var("_PKGDB_GA_REGISTRY_REF_OR_REV", pkgdb_nixpkgs_rev_new);
+        LockedManifest::update_global_manifest(&flox, vec![]).unwrap();
+        (flox, _temp_dir_handle)
+    });
 
     // TODO: all the try_find_compatible_yarn() tests actually hit the database,
     // and it might be better to mock out do_search().
     // But I'm only seeing 6 tests take ~3 seconds,
     // so at this point I think there are bigger testing efficiency fish to fry.
+
 
     /// Test finding yarn with no constraints succeeds
     #[test]

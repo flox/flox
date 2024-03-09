@@ -9,16 +9,32 @@
 
 [install]
 _FLOX_INIT_INSTALL
-# Set an environment variable.
-# These variables may not reference once another
-# and are added to the environment without expansion.
+# Set environment variables in the 'vars' section.
+# These variables may not reference once another, and are added to
+# the environment without first expanding them.
 
 [vars]
 # message = "Howdy"
 # pass-in = "$some-env-var"
 
-# An activation hook will be run when entering the environment.
-# You can define one in the 'hook' table inline via the 'script' field.
+# Profile scripts are sourced by your shell immediately after entering the
+# environment and provide a way to add shell aliases to the environment
+# or dynamically compute environment variables.
+# The `profile.common` script is sourced by all shells, so you must write it to
+# be compatible with all shells. The `profile.bash` and `profile.zsh` scripts
+# will only be sourced by the corresponding shell after sourcing the
+# `profile.common` script.
+
+[profile]
+_FLOX_INIT_PROFILE
+
+# A hook script is run in a non-interactive Bash sub-shell after sourcing the
+# profile scripts. This script inherits all the environment variables set in the
+# `[vars]` and `[profile]` sections, but since it runs in a sub-shell it can't
+# modify them. The output of the hook script is discarded as well.
+# The utility of the `hook` script is that it runs in a consistent shell
+# environment so you don't have to worry about shell compatibility during
+# complicated initilization.
 
 [hook]
 _FLOX_INIT_HOOK

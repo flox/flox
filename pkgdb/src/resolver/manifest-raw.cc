@@ -465,6 +465,81 @@ to_json( nlohmann::json & jto, const EnvBaseRaw & env )
 /* -------------------------------------------------------------------------- */
 
 static void
+from_json( const nlohmann::json & jfrom, ProfileScriptsRaw & profile )
+{
+  assertIsJSONObject<InvalidManifestFileException>(
+    jfrom,
+    "manifest field 'profile'" );
+
+  /* Clear fields */
+  profile.common = std::nullopt;
+  profile.bash   = std::nullopt;
+  profile.zsh    = std::nullopt;
+
+  /* Iterate over keys of the JSON object */
+  for ( const auto & [key, value] : jfrom.items() )
+    {
+      if ( key == "common" )
+        {
+          try
+            {
+              value.get_to( profile.common );
+            }
+          catch ( const nlohmann::json::exception & )
+            {
+              throw InvalidManifestFileException(
+                "failed to parse manifest field 'profile.common' with value: "
+                + value.dump() );
+            }
+        }
+      else if ( key == "bash" )
+        {
+          try
+            {
+              value.get_to( profile.bash );
+            }
+          catch ( const nlohmann::json::exception & )
+            {
+              throw InvalidManifestFileException(
+                "failed to parse manifest field 'profile.bash' with value: "
+                + value.dump() );
+            }
+        }
+      else if ( key == "zsh" )
+        {
+          try
+            {
+              value.get_to( profile.zsh );
+            }
+          catch ( const nlohmann::json::exception & )
+            {
+              throw InvalidManifestFileException(
+                "failed to parse manifest field 'profile.zsh' with value: "
+                + value.dump() );
+            }
+        }
+      else
+        {
+          throw InvalidManifestFileException(
+            "unrecognized manifest field 'profile." + key + "'." );
+        }
+    }
+}
+
+static void
+to_json( nlohmann::json & jto, const ProfileScriptsRaw & profile )
+{
+  // foo
+  jto = nlohmann::json::object();
+  if ( profile.common.has_value() ) { jto["common"] = profile.common.value(); }
+  if ( profile.bash.has_value() ) { jto["bash"] = profile.bash.value(); }
+  if ( profile.zsh.has_value() ) { jto["zsh"] = profile.zsh.value(); }
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+static void
 from_json( const nlohmann::json & jfrom, HookRaw & hook )
 {
   assertIsJSONObject<InvalidManifestFileException>( jfrom,
@@ -636,6 +711,7 @@ from_json( const nlohmann::json & jfrom, ManifestRaw & manifest )
             }
           manifest.vars = varsFromJSON( value );
         }
+      else if ( key == "profile" ) { value.get_to( manifest.profile ); }
       else if ( key == "hook" ) { value.get_to( manifest.hook ); }
       else if ( key == "options" ) { value.get_to( manifest.options ); }
       else if ( key == "env-base" ) { value.get_to( manifest.envBase ); }
@@ -664,6 +740,8 @@ to_json( nlohmann::json & jto, const ManifestRaw & manifest )
   if ( manifest.registry.has_value() ) { jto["registry"] = *manifest.registry; }
 
   if ( manifest.vars.has_value() ) { jto["vars"] = *manifest.vars; }
+
+  if ( manifest.profile.has_value() ) { jto["profile"] = *manifest.profile; }
 
   if ( manifest.hook.has_value() ) { jto["hook"] = *manifest.hook; }
 }

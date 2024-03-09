@@ -360,25 +360,32 @@ createContainerBuilder( nix::EvalState &       state,
 /* -------------------------------------------------------------------------- */
 
 /**
+ * @brief Make a @a RealisedPackage and store path for the activation scripts.
+ * The package contains the activation scripts for *bash* and *zsh*.
+ * @param state Nix state.
+ * @param lockfile Lockfile to extract environment variables and hook script
+ * from.
+ * @return A pair of the realised package and the store path of the activation
+ * scripts.
+ */
+std::pair<buildenv::RealisedPackage, nix::StorePathSet>
+makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile );
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
  * @brief Adds this script to the directory of activation scripts included in
- * the environment and references it from the main activation script.
+ * the environment.
  * @param scriptContents The contents of the script. The particular shell does
  * not matter.
  * @param scriptsDir The path of the scripts directory being assembled.
  * @param scriptName The name to give to the script in the scripts directory.
- * @param mainActivationScriptContents The main activation script being
- * assembled.
- * @param shouldSource In the main actiation script, the newly created script
- * will either be sourced or called in a subshell depending on the value of this
- * parameter. If the script isn't sourced, it will be executed in a Bash
- * subshell.
  */
 void
 addScriptToScriptsDir( const std::string &           scriptContents,
                        const std::filesystem::path & scriptsDir,
-                       const std::string &           scriptName,
-                       std::stringstream & mainActivationScriptContents,
-                       bool                shouldSource );
+                       const std::string &           scriptName );
 
 
 /* -------------------------------------------------------------------------- */

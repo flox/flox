@@ -1,0 +1,10 @@
+[profile]
+common = """
+    export COMMON_VAR="common"
+"""
+bash = """
+    mkdir "$COMMON_VAR"
+"""
+zsh = """
+    mkdir "$COMMON_VAR"
+"""

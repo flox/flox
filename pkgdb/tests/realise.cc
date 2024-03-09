@@ -8,8 +8,10 @@
 
 #include "flox/buildenv/realise.hh"
 #include "flox/core/util.hh"
+#include "flox/resolver/environment.hh"
 #include "flox/resolver/manifest.hh"
 #include "test.hh"
+#include <fstream>
 #include <nix/flake/flake.hh>
 
 /* -------------------------------------------------------------------------- */
@@ -45,6 +47,29 @@ unsupportedPackage( const std::string & system )
     }
 }
 
+
+/* -------------------------------------------------------------------------- */
+
+flox::resolver::Lockfile
+testLockfile()
+{
+  std::string                 json         = R"({
+    "profile": {
+      "common": "echo hello",
+      "bash": "echo hello",
+      "zsh": "echo hello"
+    },
+    "hook": {
+      "on-activate": "echo hello"
+    }
+  })";
+  nlohmann::json              manifestJson = nlohmann::json::parse( json );
+  flox::resolver::ManifestRaw manifestRaw;
+  from_json( manifestJson, manifestRaw );
+  flox::resolver::EnvironmentManifest manifest( manifestRaw );
+  flox::resolver::Environment         env( manifest );
+  return env.createLockfile();
+}
 
 /* -------------------------------------------------------------------------- */
 
@@ -123,22 +148,19 @@ test_unsupportedSystemExceptionForUnsupportedPackage(
 /* -------------------------------------------------------------------------- */
 
 bool
-test_sourcedScriptAddedToActivationScript()
+test_scriptsAreAddedToScriptsDir( nix::ref<nix::EvalState> & state,
+                                  flox::resolver::Lockfile & lockfile )
 {
-  auto              script     = "echo 'hello'";
-  auto              scriptsDir = std::filesystem::path( nix::createTempDir() );
-  auto              scriptName = "hook.sh";
-  std::stringstream mainContents;
-  flox::buildenv::addScriptToScriptsDir( script,
-                                         scriptsDir,
-                                         scriptName,
-                                         mainContents,
-                                         true );
-  auto activationScript = mainContents.str();
-  if ( activationScript.find( "source \"$FLOX_ENV/activate/hook.sh" )
-       == std::string::npos )
+  auto output     = flox::buildenv::makeActivationScripts( *state, lockfile );
+  auto scriptsDir = std::filesystem::path( output.first.path )
+                    / flox::buildenv::ACTIVATION_SUBDIR_NAME;
+  std::vector<std::string> scripts
+    = { "profile-common",   "profile-bash", "profile-zsh",
+        "hook-on-activate", "bash",         "zsh" };
+  for ( const auto & script : scripts )
     {
-      return false;
+      auto path = scriptsDir / script;
+      EXPECT( std::filesystem::exists( path ) );
     }
   return true;
 }
@@ -147,50 +169,44 @@ test_sourcedScriptAddedToActivationScript()
 /* -------------------------------------------------------------------------- */
 
 bool
-test_execedScriptAddedToActivationScript()
+test_scriptsAreSourcedOrCalled( nix::ref<nix::EvalState> & state,
+                                flox::resolver::Lockfile & lockfile )
 {
-  auto              script     = "echo 'hello'";
-  auto              scriptsDir = std::filesystem::path( nix::createTempDir() );
-  auto              scriptName = "hook.sh";
-  std::stringstream mainContents;
-  flox::buildenv::addScriptToScriptsDir( script,
-                                         scriptsDir,
-                                         scriptName,
-                                         mainContents,
-                                         false );
-  auto activationScript = mainContents.str();
-  if ( activationScript.find( "bash \"$FLOX_ENV/activate/hook.sh" )
-       == std::string::npos )
+  auto output     = flox::buildenv::makeActivationScripts( *state, lockfile );
+  auto scriptsDir = std::filesystem::path( output.first.path )
+                    / flox::buildenv::ACTIVATION_SUBDIR_NAME;
+  std::vector<std::string> shells         = { "bash", "zsh" };
+  std::vector<std::string> profileScripts = { "common" };
+  profileScripts.insert( profileScripts.begin(), shells.begin(), shells.end() );
+  for ( const auto & shell : shells )
     {
-      return false;
+      auto              scriptPath = scriptsDir / shell;
+      std::ifstream     file( scriptPath );
+      std::stringstream contents;
+      contents << file.rdbuf();
+      file.close();
+
+      /* Look for 'profile-common'*/
+      auto commonPattern = nix::fmt( "\"$FLOX_ENV/%s/profile-%s\"",
+                                     flox::buildenv::ACTIVATION_SUBDIR_NAME,
+                                     "common" );
+      auto commonPos     = contents.str().find( commonPattern );
+      EXPECT( commonPos != std::string::npos );
+
+      /* Look for 'profile-<shell>'*/
+      auto shellPattern = nix::fmt( "\"$FLOX_ENV/%s/profile-%s\"",
+                                    flox::buildenv::ACTIVATION_SUBDIR_NAME,
+                                    shell );
+      auto shellPos     = contents.str().find( shellPattern );
+      EXPECT( shellPos != std::string::npos );
+
+      /* Look for 'hook-on-activate'*/
+      auto hookPattern = nix::fmt( "bash \"$FLOX_ENV/%s/hook-on-activate\"",
+                                   flox::buildenv::ACTIVATION_SUBDIR_NAME );
+      auto hookPos     = contents.str().find( hookPattern );
+      EXPECT( hookPos != std::string::npos );
     }
   return true;
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-bool
-test_scriptAddedToScriptsDir()
-{
-  auto              script     = "echo 'hello'";
-  auto              scriptsDir = std::filesystem::path( nix::createTempDir() );
-  auto              scriptName = "hook.sh";
-  std::stringstream mainContents;
-  flox::buildenv::addScriptToScriptsDir( script,
-                                         scriptsDir,
-                                         scriptName,
-                                         mainContents,
-                                         true );
-  auto activateSubdir = scriptsDir / flox::buildenv::ACTIVATION_SUBDIR_NAME;
-  for ( const auto & dirEntry :
-        std::filesystem::directory_iterator( activateSubdir ) )
-    {
-      auto isHookScript = dirEntry.is_regular_file()
-                          && ( dirEntry.path().filename() == "hook.sh" );
-      if ( isHookScript ) { return true; }
-    }
-  return false;
 }
 
 
@@ -218,9 +234,10 @@ main( int argc, char * argv[] )
   RUN_TEST( evalFailureForInsecurePackage, state, system );
   RUN_TEST( unsupportedSystemExceptionForUnsupportedPackage, state, system );
 
-  RUN_TEST( sourcedScriptAddedToActivationScript );
-  RUN_TEST( execedScriptAddedToActivationScript );
-  RUN_TEST( scriptAddedToScriptsDir );
+  auto lockfile = testLockfile();
+
+  RUN_TEST( scriptsAreAddedToScriptsDir, state, lockfile );
+  RUN_TEST( scriptsAreSourcedOrCalled, state, lockfile );
 
   return exitCode;
 }
