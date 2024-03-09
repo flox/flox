@@ -56,18 +56,21 @@ prim_getFingerprint( nix::EvalState &  state,
 
 /* -------------------------------------------------------------------------- */
 
-static nix::RegisterPrimOp primop_getFingerprint( { .name  = "__getFingerprint",
-                                                    .args  = { "flakeRef" },
-                                                    .arity = 0,
-                                                    .doc   = R"(
+// NOLINTBEGIN(cert-err58-cpp)
+// This can throw an exception that cannot be caught.
+static const nix::RegisterPrimOp
+  primop_getFingerprint( { .name                = "__getFingerprint",
+                           .args                = { "flakeRef" },
+                           .arity               = 0,
+                           .doc                 = R"(
     This hash uniquely identifies a revision of a locked flake.
     Takes a single argument:
 
     - `flakeRef`: Either an attribute set or string flake-ref.
     )",
-                                                    .fun = prim_getFingerprint,
-                                                    .experimentalFeature
-                                                    = nix::Xp::Flakes } );
+                           .fun                 = prim_getFingerprint,
+                           .experimentalFeature = nix::Xp::Flakes } );
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
 
 
 /* -------------------------------------------------------------------------- */

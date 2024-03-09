@@ -94,10 +94,11 @@ struct RulesTreeNode
 
   RulesTreeNode() = default;
 
-  explicit RulesTreeNode( ScrapeRulesRaw raw );
+  explicit RulesTreeNode( const ScrapeRulesRaw & raw );
 
   explicit RulesTreeNode( const std::filesystem::path & path )
-    : RulesTreeNode( static_cast<ScrapeRulesRaw>( readAndCoerceJSON( path ) ) )
+    : RulesTreeNode(
+      static_cast<const ScrapeRulesRaw &>( readAndCoerceJSON( path ) ) )
   {}
 
   explicit RulesTreeNode( std::string attrName,
