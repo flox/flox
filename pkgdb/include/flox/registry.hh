@@ -162,8 +162,8 @@ struct RegistryInput : public InputPreferences
   [[nodiscard]] bool
   operator==( const RegistryInput & other ) const
   {
-    if ( static_cast<InputPreferences>( *this )
-         != static_cast<InputPreferences>( other ) )
+    if ( *dynamic_cast<InputPreferences const *>( this )
+         != dynamic_cast<const InputPreferences &>( other ) )
       {
         return false;
       }

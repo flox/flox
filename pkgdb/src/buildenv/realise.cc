@@ -252,7 +252,7 @@ getPackageCursor( nix::ref<nix::EvalState> &      state,
                           std::make_shared<nix::flake::LockedFlake>( flake ) );
   auto                     cursor = evalCache->getRoot();
   std::vector<std::string> seen;
-  for ( auto attrName : attrpath )
+  for ( const auto attrName : attrpath )
     {
 
       if ( auto maybeCursor = maybeGetCursor( state, cursor, attrName );
@@ -317,8 +317,8 @@ maybeGetBoolAttr( nix::ref<nix::EvalState> &              state,
     nix::fmt( "getting bool attr '%s.%s", cursor->getAttrPathStr(), attr ) );
   auto maybeCursor = maybeGetCursor( state, cursor, attr );
   if ( ! maybeCursor.has_value() ) { return std::nullopt; }
-  auto b = ( *maybeCursor )->getBool();
-  return b;
+  auto boolAttr = ( *maybeCursor )->getBool();
+  return boolAttr;
 }
 
 
@@ -411,7 +411,7 @@ tryEvaluatePackageOutPath( nix::ref<nix::EvalState> &              state,
             = cursor->forceValue();
           state->forceAttrs( vPackage, nix::noPos, "while evaluating package" );
           // expected to fail
-          auto aOutPath
+          auto * aOutPath
             = vPackage.attrs->get( state->symbols.create( "outPath" ) );
           state->forceString( *aOutPath->value,
                               aOutPath->pos,
@@ -514,7 +514,8 @@ collectRealisedPackages(
   auto internalPriority = 0;
   for ( const auto & [name, outpathStr] : outputsToOutpaths )
     {
-      debugLog( "processing output '" + name + "' of '" + packageName + "'" );
+      debugLog(
+        nix::fmt( "processing output '%s' of '%s'", name, packageName ) );
       auto outpathForOutput = state->store->parseStorePath( outpathStr );
       buildenv::RealisedPackage pkg(
         state->store->printStorePath( outpathForOutput ),

@@ -88,13 +88,13 @@ struct RulesTreeNode
 {
   using Children = std::unordered_map<std::string, RulesTreeNode>;
 
-  std::string attrName = "";
+  std::string attrName;
   ScrapeRule  rule     = SR_DEFAULT;
   Children    children = {};
 
   RulesTreeNode() = default;
 
-  explicit RulesTreeNode( ScrapeRulesRaw rules );
+  explicit RulesTreeNode( ScrapeRulesRaw raw );
 
   explicit RulesTreeNode( const std::filesystem::path & path )
     : RulesTreeNode( static_cast<ScrapeRulesRaw>( readAndCoerceJSON( path ) ) )
@@ -104,7 +104,7 @@ struct RulesTreeNode
                           ScrapeRule  rule     = SR_DEFAULT,
                           Children    children = {} )
     : attrName( std::move( attrName ) )
-    , rule( std::move( rule ) )
+    , rule( rule )
     , children( std::move( children ) )
   {}
 
@@ -194,13 +194,13 @@ public:
    * @brief Returns a hash in string format of the rules tree.
    *
    */
-  const std::string
+  std::string
   hashString() const
   {
     return hash.to_string( nix::Base16, true );
   }
 
-protected:
+private:
 
   RulesTreeNode rootNode;
   nix::Hash     hash;

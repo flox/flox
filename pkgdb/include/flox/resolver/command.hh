@@ -252,6 +252,7 @@ public:
   getLockfile();
 
   CheckCommand();
+  virtual ~CheckCommand() {};
 
   [[nodiscard]] command::VerboseParser &
   getParser()

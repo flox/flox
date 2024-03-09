@@ -138,7 +138,7 @@ struct CheckPackageWarning
 };
 
 void
-to_json( nlohmann::json & j, const CheckPackageWarning & result );
+to_json( nlohmann::json & jto, const CheckPackageWarning & result );
 
 
 /* -------------------------------------------------------------------------- */
@@ -168,7 +168,7 @@ struct LockedPackageRaw
   }
 
 
-  std::vector<CheckPackageWarning>
+  [[nodiscard]] std::vector<CheckPackageWarning>
   check( const std::string & packageId, const Options::Allows & allows ) const;
 }; /* End struct `LockedPackageRaw' */
 

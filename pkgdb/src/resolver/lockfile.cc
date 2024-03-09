@@ -405,9 +405,9 @@ LockedPackageRaw::check( const std::string &     packageId,
 }
 
 void
-to_json( nlohmann::json & j, const CheckPackageWarning & result )
+to_json( nlohmann::json & jto, const CheckPackageWarning & result )
 {
-  j = nlohmann::json {
+  jto = nlohmann::json {
     { "package", result.packageId },
     { "message", result.message },
   };
