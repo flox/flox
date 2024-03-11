@@ -369,10 +369,15 @@ fn get_default_package(
 
 /// Get nixpkgs#rel_path optionally verifying that it satisfies a version constraint.
 fn get_default_package_if_compatible(
-    rel_path: Vec<String>,
+    rel_path: impl IntoIterator<Item = impl ToString>,
     version: Option<String>,
     flox: &Flox,
 ) -> Result<Option<SearchResult>> {
+    let rel_path = rel_path
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<String>>();
+
     let query = Query {
         rel_path: Some(rel_path),
         semver: version,

@@ -264,9 +264,8 @@ impl PoetryPyProject {
 
             log::debug!("poetry config requires python version {required_python_version}, but no compatible version found in the catalogs");
 
-            let default =
-                get_default_package_if_compatible(vec!["python3".to_string()], None, flox)?
-                    .context("No python3 in the catalogs")?;
+            let default = get_default_package_if_compatible(["python3"], None, flox)?
+                .context("No python3 in the catalogs")?;
 
             ProvidedVersion::Incompatible {
                 substitute: default.version.unwrap_or_else(|| "N/A".to_string()),
@@ -274,11 +273,10 @@ impl PoetryPyProject {
             }
         };
 
-        let poetry_version =
-            get_default_package_if_compatible(vec!["poetry".to_string()], None, flox)?
-                .context("Did not find poetry in the catalogs")?
-                .version
-                .unwrap_or_else(|| "N/A".to_string());
+        let poetry_version = get_default_package_if_compatible(["poetry"], None, flox)?
+            .context("Did not find poetry in the catalogs")?
+            .version
+            .unwrap_or_else(|| "N/A".to_string());
 
         Ok(Some(PoetryPyProject {
             provided_python_version,
@@ -415,11 +413,10 @@ impl PyProject {
 
         let provided_python_version = 'version: {
             let search_default = || {
-                let version =
-                    get_default_package_if_compatible(vec!["python3".to_string()], None, flox)?
-                        .context("No python3 in the catalogs")?
-                        .version
-                        .unwrap_or_else(|| "N/A".to_string());
+                let version = get_default_package_if_compatible(["python3"], None, flox)?
+                    .context("No python3 in the catalogs")?
+                    .version
+                    .unwrap_or_else(|| "N/A".to_string());
                 Ok::<_, Error>(version)
             };
 
@@ -432,7 +429,11 @@ impl PyProject {
 
             let required_python_version_value = required_python_version.as_ref().unwrap();
 
-            let compatible = get_default_package("python3", required_python_version.clone(), flox)?;
+            let compatible = get_default_package_if_compatible(
+                ["python3"],
+                required_python_version.clone(),
+                flox,
+            )?;
 
             if let Some(found_version) = compatible {
                 break 'version ProvidedVersion::Compatible {
@@ -449,14 +450,11 @@ impl PyProject {
             }
         };
 
-        let pip_version = get_default_package_if_compatible(
-            vec!["python311Packages".to_string(), "pip".to_string()],
-            None,
-            flox,
-        )?
-        .context("Did not find pip in the catalogs")?
-        .version
-        .unwrap_or_else(|| "N/A".to_string());
+        let pip_version =
+            get_default_package_if_compatible(["python311Packages", "pip"], None, flox)?
+                .context("Did not find pip in the catalogs")?
+                .version
+                .unwrap_or_else(|| "N/A".to_string());
 
         Ok(Some(PyProject {
             provided_python_version,
@@ -558,20 +556,17 @@ impl Requirements {
             return Ok(None);
         }
 
-        let result = get_default_package_if_compatible(vec!["python3".to_string()], None, flox)?
+        let result = get_default_package_if_compatible(["python3"], None, flox)?
             .context("Did not find python3 in the catalogs")?;
         // given our catalog is based on nixpkgs,
         // we can assume that the version is always present.
         let python_version = result.version.unwrap_or_else(|| "N/A".to_string());
 
-        let pip_version = get_default_package_if_compatible(
-            vec!["python311Packages".to_string(), "pip".to_string()],
-            None,
-            flox,
-        )?
-        .context("Did not find pip in the catalogs")?
-        .version
-        .unwrap_or_else(|| "N/A".to_string());
+        let pip_version =
+            get_default_package_if_compatible(["python311Packages", "pip"], None, flox)?
+                .context("Did not find pip in the catalogs")?
+                .version
+                .unwrap_or_else(|| "N/A".to_string());
 
         Ok(Some(Requirements {
             python_version,
