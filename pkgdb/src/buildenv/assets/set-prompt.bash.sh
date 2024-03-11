@@ -13,7 +13,7 @@ _floxPrompt2="${colorPrompt2}[$FLOX_PROMPT_ENVIRONMENTS]"
 # https://git.savannah.gnu.org/cgit/bash.git/tree/bashline.c#n23
 # Note that we set colors even if support for progcomp is compiled in, but it is
 # turned off.
-if [[ $(shopt) =~ progcomp ]]; then
+if [[ $(shopt) =~ progcomp ]] && [[ "${NO_COLOR:-0}" != "0" ]]; then
   _flox=$(echo -e -n "${colorBold}${FLOX_PROMPT-$_floxPrompt1} ${_floxPrompt2}${colorReset} ")
 else
   _flox=$(echo -e -n "${FLOX_PROMPT-flox} [$FLOX_PROMPT_ENVIRONMENTS] ")
