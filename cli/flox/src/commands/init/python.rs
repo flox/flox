@@ -44,6 +44,7 @@ impl InitHook for Python {
     /// [Self::prompt_user] and [Self::get_init_customization]
     /// are expected to be called only if this method returns `true`!
     fn should_run(&mut self, _path: &Path) -> Result<bool> {
+        // TODO: warn about errors (at least send to sentry)
         Ok(self
             .providers
             .iter()
