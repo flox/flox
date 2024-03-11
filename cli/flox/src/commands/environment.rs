@@ -561,9 +561,9 @@ impl Activate {
         let shell = ShellType::detect()?;
 
         let prompt_color_1 = env::var("FLOX_PROMPT_COLOR_1")
-            .unwrap_or(utils::colors::LIGHT_BLUE.to_ansi256().to_string());
+            .unwrap_or(utils::colors::INDIGO_400.to_ansi256().to_string());
         let prompt_color_2 = env::var("FLOX_PROMPT_COLOR_2")
-            .unwrap_or(utils::colors::DARK_PEACH.to_ansi256().to_string());
+            .unwrap_or(utils::colors::INDIGO_300.to_ansi256().to_string());
 
         let mut exports = HashMap::from([
             (FLOX_ENV_VAR, activation_path.to_string_lossy().to_string()),
