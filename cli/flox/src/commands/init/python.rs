@@ -247,6 +247,7 @@ impl PoetryPyProject {
             .ok_or_else(|| {
                 anyhow!("No python version specified at 'tool.poetry.dependencies.python'")
             })?
+            .parse::<semver::VersionReq>()?
             .to_string();
 
         let provided_python_version = 'version: {
@@ -409,7 +410,9 @@ impl PyProject {
             .and_then(|project| project.get("requires-python"))
             .map(|constraint| constraint.as_str().context("expected a string"))
             .transpose()?
-            .map(|s| s.to_string());
+            .map(|s| s.parse::<semver::VersionReq>())
+            .transpose()?
+            .map(|req| req.to_string());
 
         let provided_python_version = 'version: {
             let search_default = || {
@@ -806,6 +809,31 @@ mod tests {
             provided_python_version: ProvidedVersion::Incompatible {
                 requested: "1".to_string(),
                 substitute: "3.11.6".to_string(),
+            },
+            pip_version: "23.2.1".to_string(),
+        });
+    }
+
+    /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
+    #[test]
+    #[serial]
+    fn test_pyproject_parse_version() {
+        let flox = &FLOX_INSTANCE.0;
+
+        // python docs have a space in the version (>= 3.8):
+        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
+        // Expect that version requirement to be parsed and passed on to pkgdb in canonical form.
+        let content = indoc! {r#"
+        [project]
+        requires-python = ">= 3.8" # < with space
+        "#};
+
+        let pyproject = PyProject::from_pyproject_content(content, flox).unwrap();
+
+        assert_eq!(pyproject.unwrap(), PyProject {
+            provided_python_version: ProvidedVersion::Compatible {
+                requested: Some(">=3.8".to_string()), // without space
+                compatible: "3.11.6".to_string(),
             },
             pip_version: "23.2.1".to_string(),
         });
