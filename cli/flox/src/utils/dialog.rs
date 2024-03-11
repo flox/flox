@@ -12,6 +12,7 @@ use super::{colors, TERMINAL_STDERR};
 pub struct Confirm {
     pub default: Option<bool>,
 }
+#[derive(Clone)]
 pub struct Select<T> {
     pub options: Vec<T>,
 }

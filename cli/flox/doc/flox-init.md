@@ -35,6 +35,13 @@ If an environment already exists in the current directory,
 or the path specified using `--dir` exists,
 an error is returned.
 
+`init` will try to detect languages being used in the containing directory,
+and it will prompt with suggestions for packages or activation scripts to be
+added to the environment.
+These suggestions can be taken without prompting by passing `--auto-setup`.
+The suggestions can be accepted but then edited using `flox edit`.
+Currently, suggestions are made for Python and Nodejs.
+
 # OPTIONS
 
 ## Init Options
