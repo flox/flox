@@ -35,6 +35,10 @@
 
 namespace flox {
 
+#ifndef NIXPKGS_CACERT_BUNDLE_CRT
+#  error "NIXPKGS_CACERT_BUNDLE_CRT must be set"
+#endif
+
 /* -------------------------------------------------------------------------- */
 
 /**
@@ -184,6 +188,9 @@ main( int argc, char * argv[] )
           return run( argc, argv );
         }
     }
+
+  // Required to download flakes, but don't override if already set.
+  setenv( "NIX_SSL_CERT_FILE", NIXPKGS_CACERT_BUNDLE_CRT, 0 );
 
   /* Wrap all execution in an error handler that pretty prints exceptions. */
   try
