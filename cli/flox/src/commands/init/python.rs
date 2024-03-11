@@ -138,7 +138,7 @@ impl InitHook for Python {
 
     /// Returns the customization of the selected provider or the first found provider
     ///
-    /// This method assumes that **it is only called if [Self::prompt_user] returned `true`**
+    /// This method assumes that **it is only called if [Self::should_run] returned `true`**
     /// and will panic if no provider was selected or found.
     fn get_init_customization(&self) -> InitCustomization {
         let selected = self
