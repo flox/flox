@@ -212,16 +212,16 @@ impl Dialog<'_, ()> {
 pub fn flox_theme() -> RenderConfig {
     let mut render_config = RenderConfig::default_colored();
 
-    if let (Some(light_peach), Some(light_blue)) = (
-        colors::LIGHT_PEACH.to_inquire(),
-        colors::LIGHT_BLUE.to_inquire(),
+    if let (Some(dark_peach), Some(light_blue)) = (
+        colors::INDIGO_300.to_inquire(),
+        colors::INDIGO_400.to_inquire(),
     ) {
-        render_config.answered_prompt_prefix = Styled::new(">").with_fg(light_peach);
-        render_config.highlighted_option_prefix = Styled::new(">").with_fg(light_peach);
-        render_config.prompt_prefix = Styled::new("!").with_fg(light_peach);
+        render_config.answered_prompt_prefix = Styled::new(">").with_fg(dark_peach);
+        render_config.highlighted_option_prefix = Styled::new(">").with_fg(dark_peach);
+        render_config.prompt_prefix = Styled::new("!").with_fg(dark_peach);
         render_config.prompt = StyleSheet::new().with_attr(Attributes::BOLD);
         render_config.help_message = Styled::new("").with_fg(light_blue).style;
-        render_config.answer = Styled::new("").with_fg(light_peach).style;
+        render_config.answer = Styled::new("").with_fg(dark_peach).style;
     } else {
         render_config.answered_prompt_prefix = Styled::new(">");
         render_config.highlighted_option_prefix = Styled::new(">");
