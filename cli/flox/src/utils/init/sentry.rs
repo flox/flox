@@ -47,7 +47,7 @@ pub fn init_sentry() -> Option<ClientInitGuard> {
         send_default_pii: false,
 
         // Enable debug mode when needed
-        debug: true,
+        debug: false,
 
         // To set a uniform sample rate
         // https://docs.sentry.io/platforms/rust/performance/
