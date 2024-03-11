@@ -179,7 +179,7 @@ teardown() {
   mkdir 2
   "$FLOX_BIN" init --dir 2
 
-  SHELL=bash NO_COLOR=1 run expect -d "$TESTS_DIR/install/last-activated.exp"
+  SHELL=bash NO_COLOR=1 run expect "$TESTS_DIR/install/last-activated.exp"
   assert_success
 }
 
@@ -190,7 +190,7 @@ teardown() {
   mkdir 2
   "$FLOX_BIN" init --dir 2
 
-  SHELL=bash NO_COLOR=1 run -0 expect -d "$TESTS_DIR/install/prompt-which-environment.exp"
+  SHELL=bash NO_COLOR=1 run -0 expect "$TESTS_DIR/install/prompt-which-environment.exp"
 }
 
 @test "'flox install' prompts when an environment is activated and there is an environment in the containing git repo" {
@@ -202,7 +202,7 @@ teardown() {
   git -C 2 init
   mkdir 2/subdirectory
 
-  SHELL=bash NO_COLOR=1 run -0 expect -d "$TESTS_DIR/install/prompt-which-environment-git.exp"
+  SHELL=bash NO_COLOR=1 run -0 expect "$TESTS_DIR/install/prompt-which-environment-git.exp"
 }
 
 @test "i5: download package when install command runs" {
@@ -272,8 +272,8 @@ teardown() {
 }
 
 @test "'flox install' creates global lock" {
-  rm -f "$GLOBAL_MANIFEST_LOCK"
   "$FLOX_BIN" init
+  rm -f "$GLOBAL_MANIFEST_LOCK"
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     run "$FLOX_BIN" install hello
   assert_success

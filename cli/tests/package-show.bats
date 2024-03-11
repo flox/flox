@@ -284,9 +284,9 @@ setup_file() {
 
   mkdir 1
   pushd 1
-  "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" --debug install nodejs
+    "$FLOX_BIN" init
+  "$FLOX_BIN" --debug install nodejs
 
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
   assert_success
@@ -295,11 +295,11 @@ setup_file() {
 
   mkdir 2
   pushd 2
-  "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
     "$FLOX_BIN" update --global
 
   # new environment uses the global lock
+  "$FLOX_BIN" init
   "$FLOX_BIN" install nodejs
 
   run --separate-stderr sh -c "$FLOX_BIN show nodejs|tail -n1"
@@ -307,7 +307,7 @@ setup_file() {
   assert_output "    nodejs - nodejs@$NODEJS_VERSION_NEW"
   popd
 
-  SHELL=bash run expect -d "$TESTS_DIR/show/prompt-which-environment.exp"
+  SHELL=bash run expect "$TESTS_DIR/show/prompt-which-environment.exp"
   assert_success
   assert_output --partial "nodejs - nodejs@$NODEJS_VERSION_NEW"
 }

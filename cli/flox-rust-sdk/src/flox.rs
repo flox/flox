@@ -165,11 +165,45 @@ pub enum FloxhubError {
     InvalidFloxhubBaseUrl(String, #[source] url::ParseError),
 }
 
+use tempfile::TempDir;
+/// Should only be used in the flox crate
+pub fn test_flox_instance() -> (Flox, TempDir) {
+    use std::str::FromStr;
+
+    use crate::models::environment::{global_manifest_path, init_global_manifest};
+
+    let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+
+    let cache_dir = tempdir_handle.path().join("caches");
+    let data_dir = tempdir_handle.path().join(".local/share/flox");
+    let temp_dir = tempdir_handle.path().join("temp");
+    let config_dir = tempdir_handle.path().join("config");
+
+    std::fs::create_dir_all(&cache_dir).unwrap();
+    std::fs::create_dir_all(&temp_dir).unwrap();
+    std::fs::create_dir_all(&config_dir).unwrap();
+
+    let flox = Flox {
+        system: env!("NIX_TARGET_SYSTEM").to_string(),
+        cache_dir,
+        data_dir,
+        temp_dir,
+        config_dir,
+        access_tokens: Default::default(),
+        netrc_file: Default::default(),
+        uuid: Default::default(),
+        floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap(), None).unwrap(),
+        floxhub_token: None,
+    };
+
+    init_global_manifest(&global_manifest_path(&flox)).unwrap();
+
+    (flox, tempdir_handle)
+}
+
 #[cfg(test)]
 pub mod tests {
     use std::str::FromStr;
-
-    use tempfile::TempDir;
 
     use super::*;
 
@@ -188,37 +222,7 @@ pub mod tests {
     /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     const FAKE_TOKEN: &str= "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74";
 
-    pub fn flox_instance() -> (Flox, TempDir) {
-        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
-
-        let cache_dir = tempdir_handle.path().join("caches");
-        let data_dir = tempdir_handle.path().join(".local/share/flox");
-        let temp_dir = tempdir_handle.path().join("temp");
-        let config_dir = tempdir_handle.path().join("config");
-
-        std::fs::create_dir_all(&cache_dir).unwrap();
-        std::fs::create_dir_all(&temp_dir).unwrap();
-        std::fs::create_dir_all(&config_dir).unwrap();
-
-        let flox = Flox {
-            system: env!("NIX_TARGET_SYSTEM").to_string(),
-            cache_dir,
-            data_dir,
-            temp_dir,
-            config_dir,
-            access_tokens: Default::default(),
-            netrc_file: Default::default(),
-            uuid: Default::default(),
-            floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap(), None).unwrap(),
-            floxhub_token: None,
-        };
-
-        init_global_manifest(&global_manifest_path(&flox)).unwrap();
-
-        (flox, tempdir_handle)
-    }
-
-    use crate::models::environment::{global_manifest_path, init_global_manifest};
+    pub use super::test_flox_instance as flox_instance;
 
     #[tokio::test]
     async fn test_get_username() {

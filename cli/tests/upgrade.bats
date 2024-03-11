@@ -58,9 +58,9 @@ teardown() {
 @test "upgrade hello" {
   rm -f "$GLOBAL_MANIFEST_LOCK"
 
-  "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" install hello
+    "$FLOX_BIN" init
+  "$FLOX_BIN" install hello
 
   # nixpkgs and hello are both locked to the old nixpkgs
   run jq -r '.registry.inputs.nixpkgs.from.narHash' "$LOCK_PATH"
@@ -87,14 +87,14 @@ teardown() {
 @test "upgrade by group" {
   rm -f "$GLOBAL_MANIFEST_LOCK"
 
-  "$FLOX_BIN" init
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+   "$FLOX_BIN" init
   cat << "EOF" > "$TMP_MANIFEST_PATH"
 [install]
 hello = { pkg-group = "blue" }
 EOF
 
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
     "$FLOX_BIN" update
@@ -106,9 +106,9 @@ EOF
 }
 
 @test "upgrade toplevel group" {
-  "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" install hello
+    "$FLOX_BIN" init
+  "$FLOX_BIN" install hello
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
     "$FLOX_BIN" update
   assert_old_hello
@@ -121,9 +121,9 @@ EOF
 @test "upgrade by iid" {
   rm -f "$GLOBAL_MANIFEST_LOCK"
 
-  "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" install hello
+    "$FLOX_BIN" init
+  "$FLOX_BIN" install hello
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
     "$FLOX_BIN" update
   assert_old_hello

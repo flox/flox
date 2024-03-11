@@ -147,6 +147,8 @@ pub struct Query {
     pub name: Option<String>,
     /// Match against the `pname` of the package
     pub pname: Option<String>,
+    /// Match against the `relPath` of the package
+    pub rel_path: Option<Vec<String>>,
     /// Match against the explicit version number of the package
     pub version: Option<String>,
     /// Match against a semver specifier
@@ -229,12 +231,13 @@ impl Query {
 /// Which subtree a package is under.
 ///
 /// This identifies which kind of package source a package came from (catalog, flake, or nixpkgs).
-#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Subtree {
     /// The package came from a catalog
     Catalog,
     /// The package came from a nixpkgs checkout
+    #[default]
     LegacyPackages,
     /// The package came from an arbitrary flake
     Packages,
@@ -420,7 +423,7 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
 }
 
 /// A package search result
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     /// Which input the package came from
