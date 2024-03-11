@@ -10,9 +10,5 @@ This release addresses several bugs and adds new improvements, including:
  - In situations where there are multiple enviornments active, Flox will ignore the default enviornment and not prompt for 'which environment' when a user is elsewhere on their machine. This makes it easier to use the default environment in your RC files. You can still update your default enviornment by running commands using the explicit `--dir` and `--remote` options or by being in the directory containing your default enviornment. 
  - Improved error message when an environment is not found during install and uninstall.
 
-
 We especially want to thank all our github.com/flox/flox contributors and
 discourse community members for all your valuable feedback!
-
-- Environments have improved script capabiltiies. Added a `[profile]` section to the manifest
-- Renamed the `hooks.script` property to `hook.on-activate` and force the script to run in bash so it works consistently across users in different shells.
