@@ -736,7 +736,7 @@ mod tests {
     /// An invalid pyproject.toml should return an error
     #[test]
     fn test_pyproject_invalid() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _) = &*FLOX_INSTANCE;
 
         let content = indoc! {r#"
         ,
@@ -751,7 +751,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_pyproject_empty() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _) = &*FLOX_INSTANCE;
 
         let pyproject = PyProject::from_pyproject_content("", flox).unwrap();
 
@@ -768,7 +768,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_pyproject_available_version() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _) = &*FLOX_INSTANCE;
 
         // TODO: python docs have a space in the version (>= 3.8)
         // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
@@ -793,7 +793,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_pyproject_unavailable_version() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _) = &*FLOX_INSTANCE;
 
         // TODO: python docs have a space in the version (>= 3.8)
         // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
@@ -818,7 +818,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_pyproject_parse_version() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _) = &*FLOX_INSTANCE;
 
         // python docs have a space in the version (>= 3.8):
         // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
@@ -842,7 +842,7 @@ mod tests {
     /// An invalid pyproject.toml should return an error
     #[test]
     fn test_poetry_pyproject_invalid() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _) = &*FLOX_INSTANCE;
 
         let content = indoc! {r#"
         ,
@@ -856,7 +856,7 @@ mod tests {
     /// None should be returned for an empty pyproject.toml
     #[test]
     fn test_poetry_pyproject_empty() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _) = &*FLOX_INSTANCE;
 
         let pyproject = PoetryPyProject::from_pyproject_content("", flox).unwrap();
 
@@ -867,7 +867,7 @@ mod tests {
     /// `tool.poetry.dependencies.python`
     #[test]
     fn test_poetry_pyproject_no_python() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _) = &*FLOX_INSTANCE;
 
         let content = indoc! {r#"
         [tool.poetry]
@@ -882,7 +882,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_poetry_pyproject_available_version() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _) = &*FLOX_INSTANCE;
 
         // TODO: python docs have a space in the version (>= 3.8)
         // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
@@ -907,7 +907,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_poetry_pyproject_unavailable_version() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _) = &*FLOX_INSTANCE;
 
         // TODO: python docs have a space in the version (>= 3.8)
         // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
