@@ -544,8 +544,8 @@ PkgDb::processSingleAttrib( const nix::SymbolStr &    sym,
 bool
 PkgDb::scrape( nix::SymbolTable & syms,
                const Target &     target,
-               std::size_t        pageSize,
-               std::size_t        pageIdx )
+               uint               pageSize,
+               uint               pageIdx )
 {
   const auto & [prefix, cursor, parentId] = target;
 
@@ -558,13 +558,13 @@ PkgDb::scrape( nix::SymbolTable & syms,
   debugLog( nix::fmt( "evaluating package set '%s'",
                       concatStringsSep( ".", prefix ) ) );
 
-  auto   allAttribs   = cursor->getAttrs();
-  size_t startIdx     = pageIdx * pageSize;
-  size_t thisPageSize = startIdx + pageSize < allAttribs.size()
-                          ? pageSize
-                          : allAttribs.size() % pageSize;
-  bool   lastPage     = thisPageSize < pageSize;
-  auto   page
+  auto allAttribs   = cursor->getAttrs();
+  uint startIdx     = pageIdx * pageSize;
+  uint thisPageSize = startIdx + pageSize < allAttribs.size()
+                        ? pageSize
+                        : allAttribs.size() % pageSize;
+  bool lastPage     = thisPageSize < pageSize;
+  auto page
     = std::views::counted( allAttribs.begin() + startIdx, thisPageSize );
   Todos todo;
 

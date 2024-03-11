@@ -8,7 +8,6 @@
  * -------------------------------------------------------------------------- */
 
 #include <algorithm>
-#include <assert.h>
 #include <memory>
 #include <optional>
 #include <ostream>

@@ -236,7 +236,7 @@ protected:
    * @throws @a InvalidLockfileException if the lockfile at `path` is invalid.
    */
   void
-  setLockfileRaw( std::filesystem::path path );
+  setLockfileRaw( const std::filesystem::path & path );
 
 
 public:

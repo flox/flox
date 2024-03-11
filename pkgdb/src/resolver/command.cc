@@ -426,7 +426,7 @@ CheckCommand::CheckCommand() : parser( "check" )
 }
 
 void
-CheckCommand::setLockfileRaw( std::filesystem::path path )
+CheckCommand::setLockfileRaw( const std::filesystem::path & path )
 {
   if ( this->lockfile.has_value() )
     {
