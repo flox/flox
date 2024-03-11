@@ -87,7 +87,10 @@ impl Init {
                 .spin_with_delay(Duration::from_secs_f32(0.25))?;
             }
 
-            self.run_hooks(&dir, &flox)?
+            self.run_hooks(&dir, &flox).unwrap_or_else(|e| {
+                message::warning(format!("Failed to generate init suggestions: {}", e));
+                InitCustomization::default()
+            })
         } else {
             debug!("Skipping hooks in home directory");
             InitCustomization::default()
