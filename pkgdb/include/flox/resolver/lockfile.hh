@@ -321,7 +321,7 @@ public:
     this->init();
   }
 
-  explicit Lockfile( const std::filesystem::path &lockfilePath );
+  explicit Lockfile( const std::filesystem::path & lockfilePath );
 
   Lockfile &
   operator=( const Lockfile & )

@@ -252,7 +252,7 @@ getPackageCursor( nix::ref<nix::EvalState> &      state,
                           std::make_shared<nix::flake::LockedFlake>( flake ) );
   auto                     cursor = evalCache->getRoot();
   std::vector<std::string> seen;
-  for ( const auto &attrName : attrpath )
+  for ( const auto & attrName : attrpath )
     {
 
       if ( auto maybeCursor = maybeGetCursor( state, cursor, attrName );

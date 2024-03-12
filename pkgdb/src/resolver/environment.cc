@@ -220,24 +220,24 @@ Environment::groupIsLocked( const GroupName &          name,
           return false;
         }
 
-        auto & [_, oldDescriptor] = *oldDescriptorPair;
+      auto & [_, oldDescriptor] = *oldDescriptorPair;
 
       /* We ignore `priority' and handle `systems' below. */
       if ( ( descriptor.name != oldDescriptor.name )
-            || ( descriptor.pkgPath != oldDescriptor.pkgPath )
-            || ( descriptor.version != oldDescriptor.version )
-            || ( descriptor.semver != oldDescriptor.semver )
-            || ( descriptor.subtree != oldDescriptor.subtree )
-            || ( descriptor.input != oldDescriptor.input )
-            || ( descriptor.group != oldDescriptor.group )
-            || ( descriptor.optional != oldDescriptor.optional ) )
+           || ( descriptor.pkgPath != oldDescriptor.pkgPath )
+           || ( descriptor.version != oldDescriptor.version )
+           || ( descriptor.semver != oldDescriptor.semver )
+           || ( descriptor.subtree != oldDescriptor.subtree )
+           || ( descriptor.input != oldDescriptor.input )
+           || ( descriptor.group != oldDescriptor.group )
+           || ( descriptor.optional != oldDescriptor.optional ) )
         {
           return false;
         }
 
       /* Ignore changes to systems other than the one we're locking. */
       if ( systemSkipped( system, descriptor.systems )
-            != systemSkipped( system, oldDescriptor.systems ) )
+           != systemSkipped( system, oldDescriptor.systems ) )
         {
           return false;
         }
@@ -441,10 +441,10 @@ Environment::lockPackage( const LockedInputRaw & input,
 
 /* -------------------------------------------------------------------------- */
 
-static std::optional<LockedInputRaw>
+std::optional<LockedInputRaw>
 Environment::getGroupInput( const InstallDescriptors & group,
                             const Lockfile &           oldLockfile,
-                            const System &             system )
+                            const System &             system ) const
 {
   auto packages = oldLockfile.getLockfileRaw().packages;
   if ( ! packages.contains( system ) ) { return std::nullopt; }
@@ -688,7 +688,7 @@ Environment::tryResolveGroup( const GroupName &          name,
             }
 
           if ( const InstallID * iid
-                    = std::get_if<InstallID>( &maybeResolved ) )
+               = std::get_if<InstallID>( &maybeResolved ) )
             {
               failure.push_back( std::pair<InstallID, std::string> {
                 *iid,

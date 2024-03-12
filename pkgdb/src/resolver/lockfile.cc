@@ -159,7 +159,7 @@ readLockfileFromPath( const std::filesystem::path & lockfilePath )
 
 /* -------------------------------------------------------------------------- */
 
-Lockfile::Lockfile( const std::filesystem::path &lockfilePath )
+Lockfile::Lockfile( const std::filesystem::path & lockfilePath )
   : lockfileRaw( readLockfileFromPath( lockfilePath ) )
 {
   this->init();
