@@ -46,7 +46,7 @@
 
   # build time environment variables
   envs = let
-    auth0BaseUrl = "https://flox.us.auth0.com";
+    auth0BaseUrl = "https://auth.flox.dev";
   in
     {
       # 3rd party CLIs

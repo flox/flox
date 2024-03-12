@@ -87,7 +87,10 @@ impl Init {
                 .spin_with_delay(Duration::from_secs_f32(0.25))?;
             }
 
-            self.run_hooks(&dir, &flox)?
+            self.run_hooks(&dir, &flox).unwrap_or_else(|e| {
+                message::warning(format!("Failed to generate init suggestions: {}", e));
+                InitCustomization::default()
+            })
         } else {
             debug!("Skipping hooks in home directory");
             InitCustomization::default()
@@ -144,11 +147,8 @@ impl Init {
 
     /// Run all hooks and return a single combined customization
     fn run_hooks(&self, dir: &Path, flox: &Flox) -> Result<InitCustomization> {
-        let hooks: Vec<Box<dyn InitHook>> = if std::env::var("_FLOX_NODE_HOOK").is_ok() {
-            vec![Box::new(Requirements), Box::new(Node::new(dir, flox)?)]
-        } else {
-            vec![Box::new(Requirements)]
-        };
+        let hooks: Vec<Box<dyn InitHook>> =
+            vec![Box::new(Requirements), Box::new(Node::new(dir, flox)?)];
 
         let mut customizations = vec![];
 

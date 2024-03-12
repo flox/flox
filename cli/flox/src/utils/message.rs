@@ -5,8 +5,6 @@ use flox_rust_sdk::models::manifest::PackageToInstall;
 ///
 /// This is a wrapper around `eprintln!` that can be further extended
 /// to include logging, word wrapping, ANSI filtereing etc.
-///
-/// It is not called directly, but through the [message!] macro.
 fn print_message(v: impl Display) {
     eprintln!("{v}");
 }

@@ -42,9 +42,10 @@ namespace flox::search {
 struct SearchQuery
 {
 
-  std::optional<std::string> name;    /**< Filter results by exact `name`. */
-  std::optional<std::string> pname;   /**< Filter results by exact `pname`. */
-  std::optional<flox::AttrPath> relPath; /**< Filter results by exact relPath. */
+  std::optional<std::string> name;  /**< Filter results by exact `name`. */
+  std::optional<std::string> pname; /**< Filter results by exact `pname`. */
+  std::optional<flox::AttrPath>
+                             relPath; /**< Filter results by exact relPath. */
   std::optional<std::string> version; /**< Filter results by exact version. */
   std::optional<std::string> semver;  /**< Filter results by version range. */
   std::optional<uint8_t> limit; /**< Limit to a particular number of results. */
