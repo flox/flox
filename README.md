@@ -101,7 +101,7 @@ software development lifecycles.
 ## 📘 Origins
 
 Flox began its life during the deployment of Nix at
-The D. E. Shaw Group, where it quickly proved invaluable
+the D. E. Shaw group, where it quickly proved invaluable
 by making Nix easier for newcomers and offering centralized
 control over packages. As a result, their successful project
 became one of the largest, most impactful enterprise deployments
