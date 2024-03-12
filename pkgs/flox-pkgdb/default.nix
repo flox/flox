@@ -5,6 +5,7 @@
   doxygen,
   bear,
   boost,
+  cacert,
   ccls,
   clang-tools_16,
   include-what-you-use,
@@ -93,6 +94,10 @@
 
     # The Bash executable to use for `hook.on-activate`
     FLOX_BASH_BIN = "${bash}/bin/bash";
+
+    # used so that `nix` calls that require an SSL cert don't fail
+    NIXPKGS_CACERT_BUNDLE_CRT =
+      cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
     # Used by `buildenv --container' to access `dockerTools` at a known version
     # When utilities from nixpkgs are used by flox at runtime,

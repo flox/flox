@@ -364,6 +364,9 @@ src/buildenv/realise.o: CXXFLAGS +=               \
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DFLOX_BASH_BIN="$(FLOX_BASH_BIN)"'
 
+# Only needed for main.cc
+CXXFLAGS += '-DNIXPKGS_CACERT_BUNDLE_CRT="$(NIXPKGS_CACERT_BUNDLE_CRT)"'
+
 # ---------------------------------------------------------------------------- #
 
 #: Remove build artifacts
