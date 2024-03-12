@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Error, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
@@ -70,22 +70,24 @@ impl Init {
 
         // Don't run hooks in home dir
         let customization = if dir != home_dir || self.auto_setup {
-            // Some hooks run searches,
-            // so run a scrape first
-            let global_lockfile = LockedManifest::ensure_global_lockfile(&flox)?;
-            let lockfile: TypedLockedManifest =
-                LockedManifest::read_from_file(&CanonicalPath::new(&global_lockfile)?)?
-                    .try_into()?;
-
-            // --ga-registry forces a single input
-            if let Some((_, input)) = lockfile.registry().inputs.iter().next() {
-                Dialog {
-                    message: "Generating database for flox packages...",
-                    help_message: None,
-                    typed: Spinner::new(|| scrape_input(&input.from)),
-                }
-                .spin_with_delay(Duration::from_secs_f32(0.25))?;
+            Dialog {
+                message: "Generating database for flox packages...",
+                help_message: None,
+                typed: Spinner::new(|| {
+                    // Some hooks run searches,
+                    // so run a scrape first
+                    let global_lockfile = LockedManifest::ensure_global_lockfile(&flox)?;
+                    let lockfile: TypedLockedManifest =
+                        LockedManifest::read_from_file(&CanonicalPath::new(global_lockfile)?)?
+                            .try_into()?;
+                    // --ga-registry forces a single input
+                    if let Some((_, input)) = lockfile.registry().inputs.iter().next() {
+                        scrape_input(&input.from)?;
+                    };
+                    Ok::<(), Error>(())
+                }),
             }
+            .spin_with_delay(Duration::from_secs_f32(0.25))?;
 
             self.run_hooks(&dir, &flox).unwrap_or_else(|e| {
                 message::warning(format!("Failed to generate init suggestions: {}", e));
