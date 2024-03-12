@@ -18,14 +18,14 @@ use flox_rust_sdk::models::lockfile::{LockedManifest, TypedLockedManifest};
 use flox_rust_sdk::models::manifest::{insert_packages, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::scrape_input;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
-use indoc::{formatdoc, indoc};
+use indoc::formatdoc;
 use log::debug;
 use toml_edit::{Document, Formatted, Item, Table, Value};
 
 use crate::commands::{environment_description, ConcreteEnvironment};
 use crate::config::features::Features;
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Select, Spinner};
+use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
 
 mod node;
@@ -223,94 +223,6 @@ trait InitHook {
     fn get_init_customization(&self) -> InitCustomization;
 }
 
-struct Requirements;
-
-impl InitHook for Requirements {
-    fn should_run(&mut self, path: &Path) -> Result<bool> {
-        Ok(path.join("requirements.txt").exists())
-    }
-
-    fn prompt_user(&mut self, _path: &Path, _flox: &Flox) -> Result<bool> {
-        let message = formatdoc! {"
-            Flox detected a requirements.txt
-
-            Python projects typically need:
-            * python, pip
-            * A Python virtual environment to install dependencies into
-
-            Would you like Flox to set up a standard Python environment?
-            You can always change the environment's manifest with 'flox edit'
-        "};
-
-        let dialog = Dialog {
-            message: &message,
-            help_message: Some(AUTO_SETUP_HINT),
-            typed: Select {
-                options: ["Yes (python 3.11)", "No", "Show suggested modifications"].to_vec(),
-            },
-        };
-
-        let (mut choice, _) = dialog.raw_prompt()?;
-
-        if choice == 2 {
-            let message = formatdoc! {"
-
-                {}
-                Would you like Flox to apply these modifications?
-                You can always change the environment's manifest with 'flox edit'
-            ", format_customization(&self.get_init_customization())?};
-
-            let dialog = Dialog {
-                message: &message,
-                help_message: Some(AUTO_SETUP_HINT),
-                typed: Select {
-                    options: ["Yes (python 3.11)", "No"].to_vec(),
-                },
-            };
-
-            (choice, _) = dialog.raw_prompt()?;
-        }
-
-        Ok(choice == 0)
-    }
-
-    fn get_init_customization(&self) -> InitCustomization {
-        InitCustomization {
-            hook: Some(
-                // TODO: when we support fish, we'll need to source activate.fish
-                indoc! {r#"
-                # Setup a Python virtual environment
-
-                PYTHON_DIR="$FLOX_ENV_CACHE/python"
-                if [ ! -d "$PYTHON_DIR" ]; then
-                  echo "Creating python virtual environment in $PYTHON_DIR"
-                  python -m venv "$PYTHON_DIR"
-                fi
-
-                echo "Activating python virtual environment"
-                source "$PYTHON_DIR/bin/activate"
-
-                pip install -r "$FLOX_ENV_PROJECT/requirements.txt" --quiet"#}
-                .to_string(),
-            ),
-            packages: Some(vec![
-                PackageToInstall {
-                    id: "python3".to_string(),
-                    pkg_path: "python311Packages.python".to_string(),
-                    version: None,
-                    input: None,
-                },
-                PackageToInstall {
-                    id: "pip".to_string(),
-                    pkg_path: "python311Packages.pip".to_string(),
-                    version: None,
-                    input: None,
-                },
-            ]),
-        }
-    }
-}
-
 /// Create a temporary TOML document containing just the contents of the passed
 /// [InitCustomization],
 /// and return it as a string.
@@ -413,6 +325,7 @@ fn try_find_compatible_version(
 #[cfg(test)]
 mod tests {
     use flox_rust_sdk::flox::test_flox_instance;
+    use indoc::indoc;
     use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
@@ -423,7 +336,23 @@ mod tests {
     #[test]
     fn test_combine_customizations() {
         let customizations = vec![
-            Requirements {}.get_init_customization(),
+            InitCustomization {
+                hook: Some("hook1".to_string()),
+                packages: Some(vec![
+                    PackageToInstall {
+                        id: "pip".to_string(),
+                        pkg_path: "python311Packages.pip".to_string(),
+                        version: None,
+                        input: None,
+                    },
+                    PackageToInstall {
+                        id: "package2".to_string(),
+                        pkg_path: "path2".to_string(),
+                        version: None,
+                        input: None,
+                    },
+                ]),
+            },
             InitCustomization {
                 hook: Some("hook2".to_string()),
                 packages: Some(vec![
@@ -451,18 +380,7 @@ mod tests {
                 indoc! {r#"
                         # Autogenerated by flox
 
-                        # Setup a Python virtual environment
-
-                        PYTHON_DIR="$FLOX_ENV_CACHE/python"
-                        if [ ! -d "$PYTHON_DIR" ]; then
-                          echo "Creating python virtual environment in $PYTHON_DIR"
-                          python -m venv "$PYTHON_DIR"
-                        fi
-
-                        echo "Activating python virtual environment"
-                        source "$PYTHON_DIR/bin/activate"
-
-                        pip install -r "$FLOX_ENV_PROJECT/requirements.txt" --quiet
+                        hook1
 
                         hook2
 
@@ -477,14 +395,14 @@ mod tests {
                     input: None,
                 },
                 PackageToInstall {
-                    id: "pip".to_string(),
-                    pkg_path: "python311Packages.pip".to_string(),
+                    id: "package2".to_string(),
+                    pkg_path: "path2".to_string(),
                     version: None,
                     input: None,
                 },
                 PackageToInstall {
-                    id: "python3".to_string(),
-                    pkg_path: "python311Packages.python".to_string(),
+                    id: "pip".to_string(),
+                    pkg_path: "python311Packages.pip".to_string(),
                     version: None,
                     input: None,
                 },
