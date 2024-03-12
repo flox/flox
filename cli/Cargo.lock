@@ -539,7 +539,7 @@ dependencies = [
 
 [[package]]
 name = "flox"
-version = "1.0.0-rc.4"
+version = "1.0.0-rc.5"
 dependencies = [
  "anyhow",
  "bpaf",
