@@ -146,7 +146,7 @@ pub struct FloxArgs {
 
     /// Print the version of the program
     #[allow(dead_code)] // fake arg, `--version` is checked for separately (see [Version])
-    #[bpaf(long)]
+    #[bpaf(long, short('V'))]
     version: bool,
 
     #[bpaf(external(commands), optional)]
@@ -543,7 +543,7 @@ impl Prefix {
 /// such as git always require correct arguments even in the presence of
 /// short circuiting flags such as `--version`
 #[derive(Bpaf, Default)]
-pub struct Version(#[bpaf(long("version"))] bool);
+pub struct Version(#[bpaf(short('V'), long("version"))] bool);
 
 impl Version {
     /// Parses to [Self] and extract the `--version` flag
