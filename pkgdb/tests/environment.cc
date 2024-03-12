@@ -562,11 +562,11 @@ test_groupIsLocked_upgrades()
     }
 
   /* Re-lock when TOPLEVEL_GROUP_NAME is in upgrades list. */
-  environment
-    = TestEnvironment( std::nullopt,
-                       manifest,
-                       lockfile,
-                       std::vector<GroupName> { TOPLEVEL_GROUP_NAME } );
+  environment = TestEnvironment(
+    std::nullopt,
+    manifest,
+    lockfile,
+    std::vector<GroupName> { GroupName( TOPLEVEL_GROUP_NAME ) } );
   for ( const auto & [name, group] : manifest.getGroupedDescriptors() )
     {
       EXPECT( ! environment.groupIsLocked( name, group, lockfile, _system ) );

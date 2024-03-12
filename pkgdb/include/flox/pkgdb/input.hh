@@ -120,8 +120,8 @@ public:
   /** Heuristically determined limits for page size for scraping.  This affects
    * memory usage.  See @a getScrapingPageSize()
    */
-  static const size_t maxPageSize = 100 * 1000;
-  static const size_t minPageSize = 1 * 1000;
+  static constexpr size_t maxPageSize = 100 * 1000L;
+  static constexpr size_t minPageSize = 1 * 1000L;
 
   /**
    * @brief Construct a @a PkgDbInput from a @a RegistryInput and a path to
@@ -231,8 +231,8 @@ public:
   static int
   scrapePrefixWorker( PkgDbInput *     input,
                       const AttrPath & prefix,
-                      const size_t     pageIdx,
-                      const size_t     pageSize );
+                      size_t           pageIdx,
+                      size_t           pageSize );
 
   /** @brief Add/set a shortname for this input. */
   void

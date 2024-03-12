@@ -32,7 +32,7 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-const std::string ACTIVATION_SUBDIR_NAME = "activate";
+static constexpr std::string_view ACTIVATION_SUBDIR_NAME = "activate";
 
 /* -------------------------------------------------------------------------- */
 
@@ -378,7 +378,7 @@ addScriptToScriptsDir( const std::string &           scriptContents,
                        const std::filesystem::path & scriptsDir,
                        const std::string &           scriptName,
                        std::stringstream & mainActivationScriptContents,
-                       const bool          shouldSource );
+                       bool                shouldSource );
 
 
 /* -------------------------------------------------------------------------- */
