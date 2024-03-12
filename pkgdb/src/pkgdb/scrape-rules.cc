@@ -225,7 +225,7 @@ void
 from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules )
 {
   auto addPaths
-    = []( std::string key, std::vector<AttrPathGlob> vect, auto paths )
+    = []( std::string key, std::vector<AttrPathGlob> & vect, auto paths )
   {
     for ( const auto & path : paths )
       {
