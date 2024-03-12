@@ -9,6 +9,7 @@ This release addresses several bugs and adds new improvements, including:
  - Improved performance with better use of cache on subsequent environment activations.  
  - In situations where there are multiple environments active, Flox will ignore the default environment and not prompt for 'which environment' when a user is elsewhere on their machine. This makes it easier to use the default environment in your RC files. You can still update your default enviornment by running commands using the explicit `--dir` and `--remote` options or by being in the directory containing your default environment. 
  - Improved error message when an environment is not found during install and uninstall.
+ - This release is compatible with https://auth.flox.dev and 0.9.0 users must upgrade to it to continue to `flox auth login` from the CLI.
 
 We especially want to thank all our github.com/flox/flox contributors and
 discourse community members for all your valuable feedback!
