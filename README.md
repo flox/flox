@@ -88,7 +88,7 @@ flox [my-project] $ exit    # <- Exit environment 💃.
 
 ## ❓ Why
 
-Modern developers build software on top of a dynamic set of tools,
+We all build software on top of a dynamic set of tools,
 frameworks and packages, allowing them to move quickly and only
 build what’s necessary. However, each new wave of dev tooling
 innovation results in an entirely new set of dependencies that
