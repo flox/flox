@@ -57,14 +57,16 @@ pub fn init_logger(verbosity: Option<Verbosity>) {
     let log_filter = match verbosity {
         // Show only errors
         Verbosity::Quiet => "off,flox=error",
+        // Only show warnings
+        Verbosity::Verbose(0) => "off,flox=warn",
         // Show our own info logs
-        Verbosity::Verbose(0) => "off,flox=info",
+        Verbosity::Verbose(1) => "off,flox=info",
         // Also show debug from our libraries
-        Verbosity::Verbose(1) => "off,flox=debug,flox-rust-sdk=debug",
+        Verbosity::Verbose(2) => "off,flox=debug,flox-rust-sdk=debug",
         // Also show trace from our libraries and POSIX
-        Verbosity::Verbose(2) => "off,flox=trace,flox-rust-sdk=trace",
+        Verbosity::Verbose(3) => "off,flox=trace,flox-rust-sdk=trace",
         // Also show trace from our libraries and POSIX
-        Verbosity::Verbose(3) => "debug,flox=trace,flox-rust-sdk=trace",
+        Verbosity::Verbose(4) => "debug,flox=trace,flox-rust-sdk=trace",
         Verbosity::Verbose(_) => "trace",
     };
 
