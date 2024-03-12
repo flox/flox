@@ -735,36 +735,6 @@ mod tests {
         assert!(!python.should_run(Path::new("")).unwrap());
     }
 
-    #[test]
-    fn test_get_init_customization_with_providers() {
-        let python = Python {
-            providers: vec![Provide::Found(Box::new(PoetryPyProject {
-                provided_python_version: ProvidedVersion::Compatible {
-                    requested: None,
-                    compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
-                },
-                poetry_version: "1.7.1".to_string(),
-            }))],
-            selected_provider: None,
-        };
-        assert_eq!(python.get_init_customization(), todo!());
-    }
-
-    #[test]
-    fn test_get_init_customization_with_selected_provider() {
-        let python = Python {
-            providers: vec![],
-            selected_provider: Some(Box::new(PoetryPyProject {
-                provided_python_version: ProvidedVersion::Compatible {
-                    requested: None,
-                    compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
-                },
-                poetry_version: "1.7.1".to_string(),
-            })),
-        };
-        assert_eq!(python.get_init_customization(), todo!());
-    }
-
     /// An invalid pyproject.toml should return an error
     #[test]
     fn test_pyproject_invalid() {

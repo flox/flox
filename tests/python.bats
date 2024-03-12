@@ -27,10 +27,6 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
-  "$FLOX_BIN" init
-  sed -i \
-    's/from = { type = "github", owner = "NixOS", repo = "nixpkgs" }/from = { type = "github", owner = "NixOS", repo = "nixpkgs", rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1" }/' \
-    "$PROJECT_DIR/.flox/env/manifest.toml"
 }
 
 project_teardown() {
@@ -54,6 +50,11 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 #
 @test "install requests with pip" {
+  "$FLOX_BIN" init
+  sed -i \
+    's/from = { type = "github", owner = "NixOS", repo = "nixpkgs" }/from = { type = "github", owner = "NixOS", repo = "nixpkgs", rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1" }/' \
+    "$PROJECT_DIR/.flox/env/manifest.toml"
+
   run "$FLOX_BIN" install -i pip python310Packages.pip python3
 
   assert_success
@@ -62,4 +63,54 @@ teardown() {
 
   SHELL=bash run expect "$TESTS_DIR/python.exp" "$PROJECT_DIR"
   assert_success
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=python:activate:poetry
+@test "flox activate works with poetry" {
+  export FLOX_FEATURES_INIT_PYTHON=true
+
+  cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
+  cp -r "$TESTS_DIR"/python/single-dependency/poetry/* "$PROJECT_DIR/"
+
+  run "$FLOX_BIN" init --auto-setup
+  assert_success
+  assert_output --partial "'poetry' installed"
+
+  run "$FLOX_BIN" activate -- python -m project
+  assert_success
+  assert_line "<class 'numpy.ndarray'>"
+}
+
+
+# bats test_tags=python:activate:pyproject:pip
+@test "flox activate works with pyproject and pip" {
+  export FLOX_FEATURES_INIT_PYTHON=true
+
+  cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
+  cp -r "$TESTS_DIR"/python/single-dependency/pyproject-pip/* "$PROJECT_DIR/"
+
+  run "$FLOX_BIN" init --auto-setup
+  assert_success
+
+  run "$FLOX_BIN" activate -- python -m project
+  assert_success
+  assert_line "<class 'numpy.ndarray'>"
+}
+
+
+# bats test_tags=python:activate:requirements
+@test "flox activate works with requirements.txt and pip" {
+  export FLOX_FEATURES_INIT_PYTHON=true
+
+  cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
+  cp -r "$TESTS_DIR"/python/single-dependency/requirements/* "$PROJECT_DIR/"
+
+  run "$FLOX_BIN" init --auto-setup
+  assert_success
+
+  run "$FLOX_BIN" activate -- python -m project
+  assert_success
+  assert_line "<class 'numpy.ndarray'>"
 }
