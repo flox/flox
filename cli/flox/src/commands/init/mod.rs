@@ -343,30 +343,6 @@ fn format_customization(customization: &InitCustomization) -> Result<String> {
     Ok(toml.to_string())
 }
 
-/// Get a package as if installed with `flox install {package}`
-fn get_default_package(
-    package: &str,
-    version: Option<String>,
-    flox: &Flox,
-) -> Result<Option<SearchResult>> {
-    let mut query = Query::new(package, Features::parse()?.search_strategy, Some(1), false)?;
-    query.semver = version;
-
-    let params = SearchParams {
-        manifest: None,
-        global_manifest: PathOrJson::Path(global_manifest_path(flox)),
-        lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
-        query,
-    };
-
-    let (mut results, _) = do_search(&params)?;
-
-    if results.results.is_empty() {
-        return Ok(None);
-    }
-    Ok(Some(results.results.swap_remove(0)))
-}
-
 /// Get nixpkgs#rel_path optionally verifying that it satisfies a version constraint.
 fn get_default_package_if_compatible(
     rel_path: impl IntoIterator<Item = impl ToString>,

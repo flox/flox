@@ -12,8 +12,13 @@ use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::debug;
 
-use super::{format_customization, get_default_package_if_compatible, InitHook, AUTO_SETUP_HINT};
-use crate::commands::init::{get_default_package, try_find_compatible_version};
+use super::{
+    format_customization,
+    get_default_package_if_compatible,
+    try_find_compatible_version,
+    InitHook,
+    AUTO_SETUP_HINT,
+};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 
