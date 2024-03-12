@@ -50,6 +50,7 @@ unsupportedPackage( const std::string & system )
 
 /* -------------------------------------------------------------------------- */
 
+/* Create lockfile from a manifest with profile and hook sections */
 flox::resolver::Lockfile
 testLockfile()
 {

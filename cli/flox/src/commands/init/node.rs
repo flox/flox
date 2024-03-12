@@ -908,7 +908,6 @@ mod tests {
             }
         );
     }
-
     static FLOX_INSTANCE: Lazy<(Flox, TempDir)> = Lazy::new(|| {
         let (flox, _temp_dir_handle) = test_flox_instance();
         let pkgdb_nixpkgs_rev_new = "ab5fd150146dcfe41fda501134e6503932cc8dfd";

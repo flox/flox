@@ -15,7 +15,6 @@ _FLOX_INIT_INSTALL
 
 [vars]
 # message = "Howdy"
-# pass-in = "$some-env-var"
 
 # Profile scripts are sourced by your shell immediately after entering the
 # environment and provide a way to add shell aliases to the environment

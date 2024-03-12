@@ -556,7 +556,7 @@ env_is_activated() {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/profile-order.toml"
-  SHELL="bash" run bash -c '"$FLOX_BIN" activate -- mkdir foo'
+  SHELL="bash" run bash -c '"$FLOX_BIN" activate -- true'
   # 'profile.common' sets a var containing "common",
   # 'profile.bash' creates a directory named after the contents of that variable
   [ -d "common" ]
@@ -569,7 +569,7 @@ env_is_activated() {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/profile-order.toml"
-  SHELL="zsh" run zsh -c '"$FLOX_BIN" activate -- mkdir foo'
+  SHELL="zsh" run zsh -c '"$FLOX_BIN" activate -- true'
   # 'profile.common' sets a var containing "common",
   # 'profile.zsh' creates a directory named after the contents of that variable
   [ -d "common" ]
