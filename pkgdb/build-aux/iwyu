@@ -35,10 +35,10 @@ The default \`EXTRA-IWYU-ARGS' are:
 OPTIONS
   -t,--tool-opt OPT   Pass an option(s) to \`iwyu_tool.py'
   -f,--file PATH      Target specific file(s). May be used multiple times.
-  -V,--verbose        Run in verbose mode.
+  -v,--verbose        Run in verbose mode.
   -h,--help           Print help message to STDOUT.
   -u,--usage          Print usage message to STDOUT.
-  -v,--version        Print version information to STDOUT.
+  -V,--version        Print version information to STDOUT.
 
 ENVIRONMENT
   IWYU_TOOL           Command used as \`iwyu_tool.py' executable.
@@ -125,7 +125,7 @@ while [[ "$#" -gt 0 ]]; do
 		fi
 		_SOURCES+=("$1")
 		;;
-	-V | --verbose) _VERBOSE=: ;;
+	-v | --verbose) _VERBOSE=: ;;
 	-u | --usage)
 		usage
 		exit 0
@@ -134,7 +134,7 @@ while [[ "$#" -gt 0 ]]; do
 		usage -f
 		exit 0
 		;;
-	-v | --version)
+	-V | --version)
 		echo "$_version"
 		exit 0
 		;;
