@@ -400,6 +400,40 @@ fn get_default_package_if_compatible(
     Ok(Some(results.results.swap_remove(0)))
 }
 
+/// Searches for a given pname and version, optionally restricting rel_path
+fn try_find_compatible_version(
+    pname: impl Into<String>,
+    version: Option<impl Into<String>>,
+    rel_path: Option<impl IntoIterator<Item = impl Into<String>>>,
+    flox: &Flox,
+) -> Result<Option<SearchResult>> {
+    let rel_path = rel_path.map(|r| r.into_iter().map(|s| s.into()).collect::<Vec<String>>());
+
+    let version = version.map(|v| v.into());
+
+    let query = Query {
+        pname: Some(pname.into()),
+        semver: version,
+        limit: Some(1),
+        deduplicate: false,
+        rel_path,
+        ..Default::default()
+    };
+    let params = SearchParams {
+        manifest: None,
+        global_manifest: PathOrJson::Path(global_manifest_path(flox)),
+        lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
+        query,
+    };
+
+    let (mut results, _) = do_search(&params)?;
+
+    if results.results.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(results.results.swap_remove(0)))
+}
+
 #[cfg(test)]
 mod tests {
     use flox_rust_sdk::flox::test_flox_instance;

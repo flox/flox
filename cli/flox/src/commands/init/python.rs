@@ -13,7 +13,7 @@ use itertools::Itertools;
 use log::debug;
 
 use super::{format_customization, get_default_package_if_compatible, InitHook, AUTO_SETUP_HINT};
-use crate::commands::init::get_default_package;
+use crate::commands::init::{get_default_package, try_find_compatible_version};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 
@@ -252,8 +252,12 @@ impl PoetryPyProject {
             .to_string();
 
         let provided_python_version = 'version: {
-            let compatible =
-                get_default_package("python3", Some(required_python_version.clone()), flox)?;
+            let compatible = try_find_compatible_version(
+                "python3",
+                Some(&required_python_version),
+                None::<Vec<&str>>,
+                flox,
+            )?;
 
             if let Some(found_version) = compatible {
                 break 'version ProvidedVersion::Compatible {
@@ -420,33 +424,32 @@ impl PyProject {
                 Ok::<_, Error>(default)
             };
 
-            if required_python_version.is_none() {
+            let Some(required_python_version) = required_python_version else {
                 break 'version ProvidedVersion::Compatible {
                     compatible: search_default()?,
                     requested: None,
                 };
-            }
+            };
 
-            let required_python_version_value = required_python_version.as_ref().unwrap();
-
-            let compatible = get_default_package_if_compatible(
-                ["python3"],
-                required_python_version.clone(),
+            let compatible = try_find_compatible_version(
+                "python3",
+                Some(required_python_version.clone()),
+                None::<Vec<&str>>,
                 flox,
             )?;
 
             if let Some(found_version) = compatible {
                 break 'version ProvidedVersion::Compatible {
                     compatible: found_version.try_into()?,
-                    requested: required_python_version.clone(),
+                    requested: Some(required_python_version),
                 };
             }
 
-            log::debug!("pyproject.toml requires python version {required_python_version_value}, but no compatible version found in the catalogs");
+            log::debug!("pyproject.toml requires python version {required_python_version}, but no compatible version found in the catalogs");
 
             ProvidedVersion::Incompatible {
                 substitute: search_default()?,
-                requested: required_python_version_value.clone(),
+                requested: required_python_version.clone(),
             }
         };
 
@@ -798,7 +801,7 @@ mod tests {
         // pkgdb currently throws an exception when passed that specifier
         let content = indoc! {r#"
         [project]
-        requires-python = ">=3.8"
+        requires-python = ">= 3.8"
         "#};
 
         let pyproject = PyProject::from_pyproject_content(content, flox).unwrap();
@@ -806,7 +809,7 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: Some(">=3.8".to_string()),
-                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
+                compatible: ProvidedPackage::new("python3", vec!["python39"], "3.9.18"),
             },
         });
     }
@@ -854,7 +857,7 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: Some(">=3.8".to_string()), // without space
-                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
+                compatible: ProvidedPackage::new("python3", vec!["python39"], "3.9.18"),
             }
         });
     }
@@ -917,7 +920,7 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PoetryPyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: Some("^3.7".to_string()),
-                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.10.2"),
+                compatible: ProvidedPackage::new("python3", vec!["python39"], "3.9.18"),
             },
             poetry_version: "1.7.1".to_string(),
         });
@@ -941,7 +944,7 @@ mod tests {
 
         assert_eq!(pyproject.unwrap(), PoetryPyProject {
             provided_python_version: ProvidedVersion::Incompatible {
-                requested: "1".to_string(),
+                requested: "^1".to_string(),
                 substitute: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
             },
             poetry_version: "1.7.1".to_string(),
