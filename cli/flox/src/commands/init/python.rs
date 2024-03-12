@@ -381,9 +381,6 @@ struct PyProject {
     ///
     /// Concrete version, not semver!
     provided_python_version: ProvidedVersion,
-
-    /// Version of poetry found in the catalog
-    pip_version: String,
 }
 
 impl PyProject {
@@ -453,15 +450,8 @@ impl PyProject {
             }
         };
 
-        let pip_version =
-            get_default_package_if_compatible(["python311Packages", "pip"], None, flox)?
-                .context("Did not find pip in the catalogs")?
-                .version
-                .unwrap_or_else(|| "N/A".to_string());
-
         Ok(Some(PyProject {
             provided_python_version,
-            pip_version,
         }))
     }
 }
@@ -477,10 +467,10 @@ impl Provider for PyProject {
 
     fn describe_customization(&self) -> Cow<'static, str> {
         let mut message = formatdoc! {"
-            Installs python ({}) with pip ({})
+            Installs python ({}) with pip bundled.
             Adds a hook to setup a venv.
             Installs the dependencies from the pyproject.toml to the venv.
-        ", self.provided_python_version, self.pip_version };
+        ", self.provided_python_version };
 
         if let ProvidedVersion::Incompatible {
             requested,
@@ -531,12 +521,6 @@ impl Provider for PyProject {
                     version: python_version,
                     input: None,
                 },
-                PackageToInstall {
-                    id: "pip".to_string(),
-                    pkg_path: "python311Packages.pip".to_string(),
-                    version: None,
-                    input: None,
-                },
             ]),
         }
     }
@@ -546,9 +530,6 @@ impl Provider for PyProject {
 pub(super) struct Requirements {
     /// The latest version of python3 found in the catalogs
     python_version: String,
-
-    /// The latest version of pip found in the catalogs
-    pip_version: String,
 }
 
 impl Requirements {
@@ -565,15 +546,8 @@ impl Requirements {
         // we can assume that the version is always present.
         let python_version = result.version.unwrap_or_else(|| "N/A".to_string());
 
-        let pip_version =
-            get_default_package_if_compatible(["python311Packages", "pip"], None, flox)?
-                .context("Did not find pip in the catalogs")?
-                .version
-                .unwrap_or_else(|| "N/A".to_string());
-
         Ok(Some(Requirements {
             python_version,
-            pip_version,
         }))
     }
 }
@@ -590,10 +564,10 @@ impl Provider for Requirements {
 
     fn describe_customization(&self) -> Cow<'static, str> {
         formatdoc! {"
-            Installs latest python ({}) with pip ({}).
+            Installs latest python ({}) with pip bundled.
             Adds hooks to setup and use a venv.
             Installs the dependencies from the requirements.txt to the venv.",
-            self.python_version, self.pip_version,
+            self.python_version,
         }
         .into()
     }
@@ -621,12 +595,6 @@ impl Provider for Requirements {
                 PackageToInstall {
                     id: "python3".to_string(),
                     pkg_path: "python3".to_string(),
-                    version: None,
-                    input: None,
-                },
-                PackageToInstall {
-                    id: "pip".to_string(),
-                    pkg_path: "python311Packages.pip".to_string(),
                     version: None,
                     input: None,
                 },
@@ -760,7 +728,6 @@ mod tests {
                 requested: None,
                 compatible: "3.11.6".to_string(),
             },
-            pip_version: "23.2.1".to_string(),
         });
     }
 
@@ -785,7 +752,6 @@ mod tests {
                 requested: Some(">=3.8".to_string()),
                 compatible: "3.11.6".to_string(),
             },
-            pip_version: "23.2.1".to_string(),
         });
     }
 
@@ -809,8 +775,7 @@ mod tests {
             provided_python_version: ProvidedVersion::Incompatible {
                 requested: "1".to_string(),
                 substitute: "3.11.6".to_string(),
-            },
-            pip_version: "23.2.1".to_string(),
+            }
         });
     }
 
@@ -834,8 +799,7 @@ mod tests {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: Some(">=3.8".to_string()), // without space
                 compatible: "3.11.6".to_string(),
-            },
-            pip_version: "23.2.1".to_string(),
+            }
         });
     }
 
