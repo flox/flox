@@ -93,7 +93,7 @@ frameworks and packages, allowing us to move quickly and only
 build what’s necessary. However, each new wave of dev tooling
 innovation results in an entirely new set of dependencies that
 need to be managed. What starts as a simple app or microservice
-quickly grows complex, and developers find themselves dealing
+quickly grows complex, and
 with the realities of a constantly expanding and diverse supply
 chain. Flox brings reproducibility and consistency to complex
 software development lifecycles.
