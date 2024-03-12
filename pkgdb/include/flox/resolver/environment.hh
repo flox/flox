@@ -260,10 +260,10 @@ protected:
    * @return a locked input related to the group if we can find one,
    *         otherwise `std::nullopt`.
    */
-  [[nodiscard]] std::optional<LockedInputRaw>
+  [[nodiscard]] static std::optional<LockedInputRaw>
   getGroupInput( const InstallDescriptors & group,
                  const Lockfile &           oldLockfile,
-                 const System &             system ) const;
+                 const System &             system );
 
   /**
    * @brief Check if resolutions from @ oldLockfile can be reused for a group.

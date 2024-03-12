@@ -83,11 +83,9 @@ Lockfile::checkGroups() const
                         "invalid group '" + *descriptor->second.group
                         + "' uses multiple inputs" );
                     }
-                  else
-                    {
-                      throw InvalidLockfileException(
-                        "invalid toplevel group uses multiple inputs" );
-                    }
+
+                  throw InvalidLockfileException(
+                    "invalid toplevel group uses multiple inputs" );
                 }
             }
         }
@@ -161,7 +159,7 @@ readLockfileFromPath( const std::filesystem::path & lockfilePath )
 
 /* -------------------------------------------------------------------------- */
 
-Lockfile::Lockfile( std::filesystem::path lockfilePath )
+Lockfile::Lockfile( const std::filesystem::path &lockfilePath )
   : lockfileRaw( readLockfileFromPath( lockfilePath ) )
 {
   this->init();
