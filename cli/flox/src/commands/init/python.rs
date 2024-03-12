@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::fmt::{self, Debug, Display};
+use std::fmt::Debug;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -7,6 +7,7 @@ use anyhow::{anyhow, Context, Error, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::PackageToInstall;
+use flox_rust_sdk::models::search::SearchResult;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::debug;
@@ -256,20 +257,19 @@ impl PoetryPyProject {
 
             if let Some(found_version) = compatible {
                 break 'version ProvidedVersion::Compatible {
-                    compatible: found_version
-                        .version
-                        .unwrap_or_else(|| format!("compatible with {required_python_version}")),
+                    compatible: found_version.try_into()?,
                     requested: Some(required_python_version),
                 };
             }
 
             log::debug!("poetry config requires python version {required_python_version}, but no compatible version found in the catalogs");
 
-            let default = get_default_package_if_compatible(["python3"], None, flox)?
-                .context("No python3 in the catalogs")?;
+            let substitute = get_default_package_if_compatible(["python3"], None, flox)?
+                .context("No python3 in the catalogs")?
+                .try_into()?;
 
             ProvidedVersion::Incompatible {
-                substitute: default.version.unwrap_or_else(|| "N/A".to_string()),
+                substitute,
                 requested: required_python_version,
             }
         };
@@ -299,7 +299,7 @@ impl Provider for PoetryPyProject {
         let mut message = formatdoc! {"
             Installs python ({}) with poetry ({})
             Adds a hook to lock the poetry project and load the poetry environment
-        ", self.provided_python_version, self.poetry_version };
+        ", self.provided_python_version.display_version(), self.poetry_version };
 
         if let ProvidedVersion::Incompatible {
             substitute,
@@ -308,7 +308,8 @@ impl Provider for PoetryPyProject {
         {
             message.push('\n');
             message.push_str(&format!(
-                "Note: Flox could not provide requested version {requested}, but can provide {substitute} instead.",
+                "Note: Flox could not provide requested version {requested}, but can provide {sub_version} instead.",
+                sub_version = substitute.display_version,
             ));
             message.push('\n');
         }
@@ -413,11 +414,10 @@ impl PyProject {
 
         let provided_python_version = 'version: {
             let search_default = || {
-                let version = get_default_package_if_compatible(["python3"], None, flox)?
+                let default = get_default_package_if_compatible(["python3"], None, flox)?
                     .context("No python3 in the catalogs")?
-                    .version
-                    .unwrap_or_else(|| "N/A".to_string());
-                Ok::<_, Error>(version)
+                    .try_into()?;
+                Ok::<_, Error>(default)
             };
 
             if required_python_version.is_none() {
@@ -437,7 +437,7 @@ impl PyProject {
 
             if let Some(found_version) = compatible {
                 break 'version ProvidedVersion::Compatible {
-                    compatible: found_version.version.unwrap_or_else(|| "N/A".to_string()),
+                    compatible: found_version.try_into()?,
                     requested: required_python_version.clone(),
                 };
             }
@@ -470,7 +470,7 @@ impl Provider for PyProject {
             Installs python ({}) with pip bundled.
             Adds a hook to setup a venv.
             Installs the dependencies from the pyproject.toml to the venv.
-        ", self.provided_python_version };
+        ", self.provided_python_version.display_version() };
 
         if let ProvidedVersion::Incompatible {
             requested,
@@ -479,7 +479,8 @@ impl Provider for PyProject {
         {
             message.push('\n');
             message.push_str(&format!(
-                "Note: Flox could not provide requested version {requested}, but can provide {substitute} instead.",
+                "Note: Flox could not provide requested version {requested}, but can provide {sub_version} instead.",
+                sub_version = substitute.display_version,
             ));
             message.push('\n');
         }
@@ -514,14 +515,12 @@ impl Provider for PyProject {
                 pip install -e . --quiet"#}
                 .to_string(),
             ),
-            packages: Some(vec![
-                PackageToInstall {
-                    id: "python3".to_string(),
-                    pkg_path: "python3".to_string(),
-                    version: python_version,
-                    input: None,
-                },
-            ]),
+            packages: Some(vec![PackageToInstall {
+                id: "python3".to_string(),
+                pkg_path: "python3".to_string(),
+                version: python_version,
+                input: None,
+            }]),
         }
     }
 }
@@ -546,9 +545,7 @@ impl Requirements {
         // we can assume that the version is always present.
         let python_version = result.version.unwrap_or_else(|| "N/A".to_string());
 
-        Ok(Some(Requirements {
-            python_version,
-        }))
+        Ok(Some(Requirements { python_version }))
     }
 }
 
@@ -591,14 +588,12 @@ impl Provider for Requirements {
                 pip install -r "$FLOX_ENV_PROJECT/requirements.txt" --quiet"#}
                 .to_string(),
             ),
-            packages: Some(vec![
-                PackageToInstall {
-                    id: "python3".to_string(),
-                    pkg_path: "python3".to_string(),
-                    version: None,
-                    input: None,
-                },
-            ]),
+            packages: Some(vec![PackageToInstall {
+                id: "python3".to_string(),
+                pkg_path: "python3".to_string(),
+                version: None,
+                input: None,
+            }]),
         }
     }
 }
@@ -622,25 +617,86 @@ impl Provider for Requirements {
 enum ProvidedVersion {
     Compatible {
         requested: Option<String>,
-        compatible: String,
+        compatible: ProvidedPackage,
     },
     Incompatible {
         requested: String,
-        substitute: String,
+        substitute: ProvidedPackage,
     },
 }
 
-impl Display for ProvidedVersion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl ProvidedVersion {
+    fn display_version(&self) -> &str {
         match self {
-            Self::Compatible { compatible, .. } => write!(f, "{compatible}"),
-            Self::Incompatible { substitute, .. } => write!(f, "{substitute}"),
+            Self::Compatible { compatible, .. } => &compatible.display_version,
+            Self::Incompatible { substitute, .. } => &substitute.display_version,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct ProvidedPackage {
+    /// Name of the provided package
+    /// pname or the last component of [Self::rel_path]
+    pub name: String,
+    /// Path to the package in the catalog
+    /// Checked to be non-empty
+    pub rel_path: Vec<String>,
+    /// Version of the package in the catalog
+    /// "N/A" if not found
+    ///
+    /// Used for display purposes only,
+    /// version constraints should be added based on the original query.
+    pub display_version: String,
+}
+
+impl TryFrom<SearchResult> for ProvidedPackage {
+    type Error = Error;
+
+    fn try_from(value: SearchResult) -> Result<Self, Self::Error> {
+        let path_name = value
+            .rel_path
+            .last()
+            .ok_or_else(|| anyhow!("invalid search result: 'rel_path' empty in {value:?}"))?;
+
+        let name = value.pname.unwrap_or_else(|| path_name.to_string());
+
+        Ok(ProvidedPackage {
+            name,
+            rel_path: value.rel_path,
+            display_version: value.version.unwrap_or("N/A".to_string()),
+        })
+    }
+}
+
+impl From<ProvidedPackage> for PackageToInstall {
+    fn from(value: ProvidedPackage) -> Self {
+        PackageToInstall {
+            id: value.name,
+            pkg_path: value.rel_path.join("."),
+            input: None,
+            version: None,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+
+    impl ProvidedPackage {
+        fn new(
+            name: impl ToString,
+            rel_path: impl IntoIterator<Item = impl ToString>,
+            display_version: impl ToString,
+        ) -> Self {
+            Self {
+                name: name.to_string(),
+                rel_path: rel_path.into_iter().map(|s| s.to_string()).collect(),
+                display_version: display_version.to_string(),
+            }
+        }
+    }
+
     use pretty_assertions::assert_eq;
     use serial_test::serial;
 
@@ -653,7 +709,7 @@ mod tests {
             providers: vec![Provide::Found(Box::new(PoetryPyProject {
                 provided_python_version: ProvidedVersion::Compatible {
                     requested: None,
-                    compatible: "3.11.6".to_string(),
+                    compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
                 },
                 poetry_version: "1.7.1".to_string(),
             }))],
@@ -677,7 +733,7 @@ mod tests {
             providers: vec![Provide::Found(Box::new(PoetryPyProject {
                 provided_python_version: ProvidedVersion::Compatible {
                     requested: None,
-                    compatible: "3.11.6".to_string(),
+                    compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
                 },
                 poetry_version: "1.7.1".to_string(),
             }))],
@@ -693,7 +749,7 @@ mod tests {
             selected_provider: Some(Box::new(PoetryPyProject {
                 provided_python_version: ProvidedVersion::Compatible {
                     requested: None,
-                    compatible: "3.11.6".to_string(),
+                    compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
                 },
                 poetry_version: "1.7.1".to_string(),
             })),
@@ -726,7 +782,7 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: None,
-                compatible: "3.11.6".to_string(),
+                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
             },
         });
     }
@@ -750,7 +806,7 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: Some(">=3.8".to_string()),
-                compatible: "3.11.6".to_string(),
+                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
             },
         });
     }
@@ -773,8 +829,8 @@ mod tests {
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Incompatible {
-                requested: "1".to_string(),
-                substitute: "3.11.6".to_string(),
+                requested: "^1".to_string(),
+                substitute: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
             }
         });
     }
@@ -798,7 +854,7 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: Some(">=3.8".to_string()), // without space
-                compatible: "3.11.6".to_string(),
+                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
             }
         });
     }
@@ -861,7 +917,7 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PoetryPyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: Some("^3.7".to_string()),
-                compatible: "3.11.6".to_string(),
+                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.10.2"),
             },
             poetry_version: "1.7.1".to_string(),
         });
@@ -886,7 +942,7 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PoetryPyProject {
             provided_python_version: ProvidedVersion::Incompatible {
                 requested: "1".to_string(),
-                substitute: "3.11.6".to_string(),
+                substitute: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
             },
             poetry_version: "1.7.1".to_string(),
         });
