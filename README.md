@@ -86,6 +86,27 @@ Hello world!
 flox [my-project] $ exit    # <- Exit environment 💃.
 ```
 
+## ❓ Why
+
+We all build software on top of a dynamic set of tools,
+frameworks and packages, allowing us to move quickly and only
+build what’s necessary. However, each new wave of dev tooling
+innovation results in an entirely new set of dependencies that
+need to be managed. What starts as a simple app or microservice
+quickly grows complex, and
+turns into a expanding and fragmented supply
+chain. Flox brings reproducibility and consistency to complex
+software development lifecycles.
+
+## 📘 Origins
+
+Flox began its life during the deployment of Nix at
+the D. E. Shaw group, where it quickly proved invaluable
+by making Nix easier for newcomers and offering centralized
+control over packages. As a result, their successful project
+became one of the largest, most impactful enterprise deployments
+of Nix.
+
 ## 📫 Have a question? Want to chat? Ran into a problem?
 
 We are happy to welcome you to our [Discourse forum][discourse] and answer your
