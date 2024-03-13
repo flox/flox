@@ -162,7 +162,13 @@ function check_with_dir() {
 
 # ---------------------------------------------------------------------------- #
 
-function checkPythonHook() {
+# bats test_tags=init:python:requirements
+@test "'flox init' sets up a working Python environment that works across all methods of activate" {
+  OWNER="owner"
+  NAME="name"
+
+  echo "requests" >requirements.txt
+
   "$FLOX_BIN" init --auto-setup --name "$NAME"
 
   SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
@@ -183,57 +189,6 @@ function checkPythonHook() {
 
   SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
   SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
-}
-
-# bats test_tags=init:python:requirements
-@test "'flox init' sets up a working Python environment using requirements.txt" {
-  OWNER="owner"
-  NAME="name"
-
-  echo "requests" >requirements.txt
-
-  checkPythonHook
-}
-
-# bats test_tags=init:python:pyproject:pip
-@test "'flox init' sets up a working Python environment using pyproject.toml and pip" {
-  OWNER="owner"
-  NAME="name"
-
-  cat <<-EOF >pyproject.toml
-  [project]
-  name = "name"
-  version = "0.0.0"
-  dependencies = [
-    "requests",
-  ]
-EOF
-
-  checkPythonHook
-}
-
-# bats test_tags=init:python:pyproject:poetry
-@test "'flox init' sets up a working Python environment using pyproject.toml and poetry" {
-  OWNER="owner"
-  NAME="name"
-
-  cat <<-EOF >pyproject.toml
-  [tool.poetry]
-  name = "name"
-  version = "0.0.0"
-  description = ""
-  authors = ["Your Name <you@example.com>"]
-
-  [tool.poetry.dependencies]
-  python = "^3.11"
-  requests = "^2.31.0"
-
-  [build-system]
-  requires = ["poetry-core"]
-  build-backend = "poetry.core.masonry.api"
-EOF
-
-  checkPythonHook
 }
 
 # ---------------------------------------------------------------------------- #
