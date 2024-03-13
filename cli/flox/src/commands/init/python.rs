@@ -240,11 +240,13 @@ impl PoetryPyProject {
 
         // poetry _requires_ `tool.poetry.dependencies.python` to be set [1],
         // so we do not resolve a default version here if the key is missing.
-        //[1]: <https://python-poetry.org/docs/pyproject/#dependencies-and-dependency-groups>
+        // [1]: <https://python-poetry.org/docs/pyproject/#dependencies-and-dependency-groups>
         let Some(poetry) = toml.get("tool").and_then(|tool| tool.get("poetry")) else {
             return Ok(None);
         };
 
+        // python version constraints may use a looser semver syntax than
+        // pkgdb. We'll parse and convert them to canonical form.
         let required_python_version = poetry
             .get("dependencies")
             .and_then(|dependencies| dependencies.get("python"))
@@ -412,6 +414,10 @@ impl PyProject {
         // unlike in poetry, `project.require-python` does not seem to be required
         //
         // TODO: check that this is _not (also)_ a poetry file?
+        //
+        // python docs have a space in the version (>= 3.8)
+        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
+        // pkgdb currently throws an exception when passed that specifier
         let required_python_version = toml
             .get("project")
             .and_then(|project| project.get("requires-python"))
@@ -771,9 +777,6 @@ mod tests {
     fn test_pyproject_available_version() {
         let (flox, _) = &*FLOX_INSTANCE;
 
-        // TODO: python docs have a space in the version (>= 3.8)
-        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
-        // pkgdb currently throws an exception when passed that specifier
         let content = indoc! {r#"
         [project]
         requires-python = ">= 3.8"
@@ -795,9 +798,6 @@ mod tests {
     fn test_pyproject_unavailable_version() {
         let (flox, _) = &*FLOX_INSTANCE;
 
-        // TODO: python docs have a space in the version (>= 3.8)
-        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
-        // pkgdb currently throws an exception when passed that specifier
         let content = indoc! {r#"
         [project]
         requires-python = "1"
@@ -882,9 +882,6 @@ mod tests {
     fn test_poetry_pyproject_available_version() {
         let (flox, _) = &*FLOX_INSTANCE;
 
-        // TODO: python docs have a space in the version (>= 3.8)
-        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
-        // pkgdb currently throws an exception when passed that specifier
         let content = indoc! {r#"
         [tool.poetry.dependencies]
         python = "^3.7"
@@ -907,9 +904,6 @@ mod tests {
     fn test_poetry_pyproject_unavailable_version() {
         let (flox, _) = &*FLOX_INSTANCE;
 
-        // TODO: python docs have a space in the version (>= 3.8)
-        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
-        // pkgdb currently throws an exception when passed that specifier
         let content = indoc! {r#"
         [tool.poetry.dependencies]
         python = "1"
