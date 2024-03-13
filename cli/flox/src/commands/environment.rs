@@ -1522,6 +1522,7 @@ impl Push {
 
                 To rename your environment: 'flox edit --name <new name>'
                 To pull and manually re-apply your changes: 'flox delete && flox pull -r {owner}/{name}'
+                To overwrite and force update: 'flox push --force'
             "}.into(),
             ManagedEnvironmentError::Build(ref err) => formatdoc! {"
                 {err}
