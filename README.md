@@ -1,9 +1,9 @@
 <h1 align="center">
   <a href="https://flox.dev" target="_blank">
     <picture>
-      <source media="(prefers-color-scheme: dark)"  srcset="img/flox_orange_small.png" />
-      <source media="(prefers-color-scheme: light)" srcset="img/flox_blue_small.png" />
-      <img src="img/flox_blue_small.png" alt="flox logo" />
+      <source media="(prefers-color-scheme: dark)"  srcset="img/flox-logo-white-on-black.png" />
+      <source media="(prefers-color-scheme: light)" srcset="img/flox-logo-black-on-white.png" />
+      <img src="img/flox-logo-black-on-white.png" alt="flox logo" />
     </picture>
   </a>
 </h1>
