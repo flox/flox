@@ -54,34 +54,14 @@
         "type": "github"
       }
     },
-    "floco": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1694873346,
-        "narHash": "sha256-Uvh03bg0a6ZnNWiX1Gb8g+m343wSJ/wb8ryUASt0loc=",
-        "owner": "aakropotkin",
-        "repo": "floco",
-        "rev": "d16bd444ab9d29a6640f52ee4e43a66528e07515",
-        "type": "github"
-      },
-      "original": {
-        "owner": "aakropotkin",
-        "repo": "floco",
-        "type": "github"
-      }
-    },
     "flox-latest": {
       "flake": false,
       "locked": {
-        "lastModified": 1707948038,
-        "narHash": "sha256-2IckJm3741mKayCBEULWpxfDW+k79MlGSHti0bzgy0Y=",
+        "lastModified": 1710260111,
+        "narHash": "sha256-UYfalL+kEnHO6GOJzi5GqFlz8lo/vu7BFLBExNG5xXo=",
         "ref": "latest",
-        "rev": "b6e4ccfe564fdc7300a0f302a2ab50923cb82a06",
-        "revCount": 1025,
+        "rev": "8e5a1c7a38111fddc1ef34052f50919e195151ad",
+        "revCount": 1108,
         "type": "git",
         "url": "ssh://git@github.com/flox/flox"
       },
