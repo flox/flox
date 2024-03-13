@@ -9,13 +9,6 @@ pub struct Features {
     /// Which matching logic to use when searching for packages
     #[serde(default)]
     pub search_strategy: SearchStrategy,
-
-    /// Whether to detect and initialize Python projects
-    #[serde(default)]
-    pub init_python: bool,
-    /// Whether to detect and initialize Node.js projects
-    #[serde(default)]
-    pub init_nodejs: bool,
 }
 
 impl Features {

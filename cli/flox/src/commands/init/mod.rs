@@ -23,7 +23,6 @@ use log::debug;
 use toml_edit::{Document, Formatted, Item, Table, Value};
 
 use crate::commands::{environment_description, ConcreteEnvironment};
-use crate::config::features::Features;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
@@ -157,18 +156,13 @@ impl Init {
 
     /// Run all hooks and return a single combined customization
     fn run_hooks(&self, dir: &Path, flox: &Flox) -> Result<InitCustomization> {
-        let features = Features::parse()?;
         let mut hooks: Vec<Box<dyn InitHook>> = vec![];
 
         let node = Node::new(dir, flox)?;
         hooks.push(Box::new(node));
 
-        if features.init_python {
-            debug!("Enabled python detection");
-
-            let python = Python::new(dir, flox);
-            hooks.push(Box::new(python));
-        }
+        let python = Python::new(dir, flox);
+        hooks.push(Box::new(python));
 
         let mut customizations = vec![];
 

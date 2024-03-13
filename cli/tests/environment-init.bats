@@ -187,7 +187,6 @@ function checkPythonHook() {
 
 # bats test_tags=init:python:requirements
 @test "'flox init' sets up a working Python environment using requirements.txt" {
-  export FLOX_FEATURES_INIT_PYTHON=true
   OWNER="owner"
   NAME="name"
 
@@ -198,8 +197,6 @@ function checkPythonHook() {
 
 # bats test_tags=init:python:pyproject:pip
 @test "'flox init' sets up a working Python environment using pyproject.toml and pip" {
-  export FLOX_FEATURES_INIT_PYTHON=true
-
   OWNER="owner"
   NAME="name"
 
@@ -217,8 +214,6 @@ EOF
 
 # bats test_tags=init:python:pyproject:poetry
 @test "'flox init' sets up a working Python environment using pyproject.toml and poetry" {
-  export FLOX_FEATURES_INIT_PYTHON=true
-
   OWNER="owner"
   NAME="name"
 

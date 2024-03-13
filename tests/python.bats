@@ -26,11 +26,11 @@ project_setup() {
   export PROJECT_NAME="${PROJECT_DIR##*/}"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" > /dev/null || return
+  pushd "$PROJECT_DIR" >/dev/null || return
 }
 
 project_teardown() {
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
   unset PROJECT_NAME
@@ -69,8 +69,6 @@ teardown() {
 
 # bats test_tags=python:activate:poetry
 @test "flox activate works with poetry" {
-  export FLOX_FEATURES_INIT_PYTHON=true
-
   cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
   cp -r "$TESTS_DIR"/python/single-dependency/poetry/* "$PROJECT_DIR/"
 
@@ -83,11 +81,8 @@ teardown() {
   assert_line "<class 'numpy.ndarray'>"
 }
 
-
 # bats test_tags=python:activate:pyproject:pip
 @test "flox activate works with pyproject and pip" {
-  export FLOX_FEATURES_INIT_PYTHON=true
-
   cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
   cp -r "$TESTS_DIR"/python/single-dependency/pyproject-pip/* "$PROJECT_DIR/"
 
@@ -99,11 +94,8 @@ teardown() {
   assert_line "<class 'numpy.ndarray'>"
 }
 
-
 # bats test_tags=python:activate:requirements
 @test "flox activate works with requirements.txt and pip" {
-  export FLOX_FEATURES_INIT_PYTHON=true
-
   cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
   cp -r "$TESTS_DIR"/python/single-dependency/requirements/* "$PROJECT_DIR/"
 
