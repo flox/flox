@@ -43,7 +43,7 @@
   </a>
 </p>
 
-[flox][website] is a virtual environment and package manager all in one. With flox you 
+[Flox][website] is a virtual environment and package manager all in one. With Flox you 
 create environments that layer and replace dependencies just where
 it matters, making them portable across the full software lifecycle
 
@@ -63,9 +63,9 @@ With `flox` you can:<br/>
 </div>
 
 <!-- TODO: Compare with others
-- [flox vs Docker]
-- [flox vs Homebrew]
-- [flox vs Bazel]
+- [Flox vs Docker]
+- [Flox vs Homebrew]
+- [Flox vs Bazel]
 - .. more (point to the website)
 -->
 
@@ -110,7 +110,7 @@ of Nix.
 ## 📫 Have a question? Want to chat? Ran into a problem?
 
 We are happy to welcome you to our [Discourse forum][discourse] and answer your
-questions! You can always reach out to us directly via the [flox twitter
+questions! You can always reach out to us directly via the [Flox twitter
 account][twitter] or chat to us directly on [Matrix][matrix] or
 [Discord][discord].
 
@@ -127,7 +127,7 @@ guide](./CONTRIBUTING.md) first.
 
 ## 🪪 License
 
-The flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
+The Flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
 
 
 [website]: https://flox.dev
