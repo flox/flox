@@ -7,22 +7,31 @@ use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
-use flox_rust_sdk::models::environment::{CanonicalPath, Environment, PathPointer};
+use flox_rust_sdk::models::environment::{
+    global_manifest_lockfile_path,
+    global_manifest_path,
+    CanonicalPath,
+    Environment,
+    PathPointer,
+};
 use flox_rust_sdk::models::lockfile::{LockedManifest, TypedLockedManifest};
 use flox_rust_sdk::models::manifest::{insert_packages, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::scrape_input;
-use indoc::{formatdoc, indoc};
+use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
+use indoc::formatdoc;
 use log::debug;
 use toml_edit::{Document, Formatted, Item, Table, Value};
 
 use crate::commands::{environment_description, ConcreteEnvironment};
 use crate::subcommand_metric;
-use crate::utils::dialog::{Dialog, Select, Spinner};
+use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
 
 mod node;
+mod python;
 
 use node::Node;
+use python::Python;
 
 const AUTO_SETUP_HINT: &str = "Use '--auto-setup' to apply Flox recommendations in the future.";
 
@@ -147,8 +156,13 @@ impl Init {
 
     /// Run all hooks and return a single combined customization
     fn run_hooks(&self, dir: &Path, flox: &Flox) -> Result<InitCustomization> {
-        let hooks: Vec<Box<dyn InitHook>> =
-            vec![Box::new(Requirements), Box::new(Node::new(dir, flox)?)];
+        let mut hooks: Vec<Box<dyn InitHook>> = vec![];
+
+        let node = Node::new(dir, flox)?;
+        hooks.push(Box::new(node));
+
+        let python = Python::new(dir, flox);
+        hooks.push(Box::new(python));
 
         let mut customizations = vec![];
 
@@ -203,94 +217,6 @@ trait InitHook {
     fn get_init_customization(&self) -> InitCustomization;
 }
 
-struct Requirements;
-
-impl InitHook for Requirements {
-    fn should_run(&mut self, path: &Path) -> Result<bool> {
-        Ok(path.join("requirements.txt").exists())
-    }
-
-    fn prompt_user(&mut self, _path: &Path, _flox: &Flox) -> Result<bool> {
-        let message = formatdoc! {"
-            Flox detected a requirements.txt
-
-            Python projects typically need:
-            * python, pip
-            * A Python virtual environment to install dependencies into
-
-            Would you like Flox to set up a standard Python environment?
-            You can always change the environment's manifest with 'flox edit'
-        "};
-
-        let dialog = Dialog {
-            message: &message,
-            help_message: Some(AUTO_SETUP_HINT),
-            typed: Select {
-                options: ["Yes (python 3.11)", "No", "Show suggested modifications"].to_vec(),
-            },
-        };
-
-        let (mut choice, _) = dialog.raw_prompt()?;
-
-        if choice == 2 {
-            let message = formatdoc! {"
-
-                {}
-                Would you like Flox to apply these modifications?
-                You can always change the environment's manifest with 'flox edit'
-            ", format_customization(&self.get_init_customization())?};
-
-            let dialog = Dialog {
-                message: &message,
-                help_message: Some(AUTO_SETUP_HINT),
-                typed: Select {
-                    options: ["Yes (python 3.11)", "No"].to_vec(),
-                },
-            };
-
-            (choice, _) = dialog.raw_prompt()?;
-        }
-
-        Ok(choice == 0)
-    }
-
-    fn get_init_customization(&self) -> InitCustomization {
-        InitCustomization {
-            hook: Some(
-                // TODO: when we support fish, we'll need to source activate.fish
-                indoc! {r#"
-                # Setup a Python virtual environment
-
-                PYTHON_DIR="$FLOX_ENV_CACHE/python"
-                if [ ! -d "$PYTHON_DIR" ]; then
-                  echo "Creating python virtual environment in $PYTHON_DIR"
-                  python -m venv "$PYTHON_DIR"
-                fi
-
-                echo "Activating python virtual environment"
-                source "$PYTHON_DIR/bin/activate"
-
-                pip install -r "$FLOX_ENV_PROJECT/requirements.txt" --quiet"#}
-                .to_string(),
-            ),
-            packages: Some(vec![
-                PackageToInstall {
-                    id: "python3".to_string(),
-                    pkg_path: "python311Packages.python".to_string(),
-                    version: None,
-                    input: None,
-                },
-                PackageToInstall {
-                    id: "pip".to_string(),
-                    pkg_path: "python311Packages.pip".to_string(),
-                    version: None,
-                    input: None,
-                },
-            ]),
-        }
-    }
-}
-
 /// Create a temporary TOML document containing just the contents of the passed
 /// [InitCustomization],
 /// and return it as a string.
@@ -323,9 +249,80 @@ fn format_customization(customization: &InitCustomization) -> Result<String> {
     Ok(toml.to_string())
 }
 
+/// Get nixpkgs#rel_path optionally verifying that it satisfies a version constraint.
+fn get_default_package_if_compatible(
+    rel_path: impl IntoIterator<Item = impl ToString>,
+    version: Option<String>,
+    flox: &Flox,
+) -> Result<Option<SearchResult>> {
+    let rel_path = rel_path
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<String>>();
+
+    let query = Query {
+        rel_path: Some(rel_path),
+        semver: version,
+        limit: Some(1),
+        deduplicate: false,
+        ..Default::default()
+    };
+    let params = SearchParams {
+        manifest: None,
+        global_manifest: PathOrJson::Path(global_manifest_path(flox)),
+        lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
+        query,
+    };
+
+    let (mut results, _) = do_search(&params)?;
+
+    if results.results.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(results.results.swap_remove(0)))
+}
+
+/// Searches for a given pname and version, optionally restricting rel_path
+fn try_find_compatible_version(
+    pname: impl Into<String>,
+    version: Option<impl Into<String>>,
+    rel_path: Option<impl IntoIterator<Item = impl Into<String>>>,
+    flox: &Flox,
+) -> Result<Option<SearchResult>> {
+    let rel_path = rel_path.map(|r| r.into_iter().map(|s| s.into()).collect::<Vec<String>>());
+
+    let version = version.map(|v| v.into());
+
+    let query = Query {
+        pname: Some(pname.into()),
+        semver: version,
+        limit: Some(1),
+        deduplicate: false,
+        rel_path,
+        ..Default::default()
+    };
+    let params = SearchParams {
+        manifest: None,
+        global_manifest: PathOrJson::Path(global_manifest_path(flox)),
+        lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
+        query,
+    };
+
+    let (mut results, _) = do_search(&params)?;
+
+    if results.results.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(results.results.swap_remove(0)))
+}
+
 #[cfg(test)]
 mod tests {
+    use flox_rust_sdk::flox::test_flox_instance;
+    use indoc::indoc;
+    use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
+    use tempfile::TempDir;
 
     use super::*;
 
@@ -333,7 +330,23 @@ mod tests {
     #[test]
     fn test_combine_customizations() {
         let customizations = vec![
-            Requirements {}.get_init_customization(),
+            InitCustomization {
+                hook: Some("hook1".to_string()),
+                packages: Some(vec![
+                    PackageToInstall {
+                        id: "pip".to_string(),
+                        pkg_path: "python311Packages.pip".to_string(),
+                        version: None,
+                        input: None,
+                    },
+                    PackageToInstall {
+                        id: "package2".to_string(),
+                        pkg_path: "path2".to_string(),
+                        version: None,
+                        input: None,
+                    },
+                ]),
+            },
             InitCustomization {
                 hook: Some("hook2".to_string()),
                 packages: Some(vec![
@@ -361,18 +374,7 @@ mod tests {
                 indoc! {r#"
                         # Autogenerated by flox
 
-                        # Setup a Python virtual environment
-
-                        PYTHON_DIR="$FLOX_ENV_CACHE/python"
-                        if [ ! -d "$PYTHON_DIR" ]; then
-                          echo "Creating python virtual environment in $PYTHON_DIR"
-                          python -m venv "$PYTHON_DIR"
-                        fi
-
-                        echo "Activating python virtual environment"
-                        source "$PYTHON_DIR/bin/activate"
-
-                        pip install -r "$FLOX_ENV_PROJECT/requirements.txt" --quiet
+                        hook1
 
                         hook2
 
@@ -387,18 +389,26 @@ mod tests {
                     input: None,
                 },
                 PackageToInstall {
-                    id: "pip".to_string(),
-                    pkg_path: "python311Packages.pip".to_string(),
+                    id: "package2".to_string(),
+                    pkg_path: "path2".to_string(),
                     version: None,
                     input: None,
                 },
                 PackageToInstall {
-                    id: "python3".to_string(),
-                    pkg_path: "python311Packages.python".to_string(),
+                    id: "pip".to_string(),
+                    pkg_path: "python311Packages.pip".to_string(),
                     version: None,
                     input: None,
                 },
             ]),
         });
     }
+
+    pub static FLOX_INSTANCE: Lazy<(Flox, TempDir)> = Lazy::new(|| {
+        let (flox, _temp_dir_handle) = test_flox_instance();
+        let pkgdb_nixpkgs_rev_new = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
+        std::env::set_var("_PKGDB_GA_REGISTRY_REF_OR_REV", pkgdb_nixpkgs_rev_new);
+        LockedManifest::update_global_manifest(&flox, vec![]).unwrap();
+        (flox, _temp_dir_handle)
+    });
 }

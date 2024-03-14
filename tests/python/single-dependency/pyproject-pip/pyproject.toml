@@ -1,0 +1,9 @@
+[project]
+name = "pyproject-pip"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+
+dependencies = [
+    "numpy >= 1.26.4"
+]

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::{env, fs};
 
 use anyhow::{Context, Result};
@@ -115,9 +117,15 @@ pub enum ReadWriteError {
 
 impl Config {
     /// Creates a raw [Config] object and caches it for the lifetime of the program
-    fn raw_config<'a>() -> Result<&'a HierarchicalConfig> {
-        static INSTANCE: OnceCell<HierarchicalConfig> = OnceCell::new();
-        INSTANCE.get_or_try_init(|| {
+    fn raw_config(mut reload: bool) -> Result<HierarchicalConfig> {
+        static INSTANCE: OnceCell<Mutex<HierarchicalConfig>> = OnceCell::new();
+
+        debug!(
+            "reading raw config (initialized: {initialized}, reload: {reload})",
+            initialized = INSTANCE.get().is_some()
+        );
+
+        fn read_raw_cofig() -> Result<HierarchicalConfig> {
             let flox_dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
 
             let cache_dir = flox_dirs.get_cache_home();
@@ -187,14 +195,37 @@ impl Config {
                 );
 
             let final_config = builder.build()?;
-
             Ok(final_config)
-        })
+        }
+
+        let instance = INSTANCE.get_or_try_init(|| {
+            // If we are initializing the config for the first time,
+            // we don't need to reload right after
+            reload = false;
+            let config = read_raw_cofig()?;
+
+            Ok::<_, anyhow::Error>(Mutex::new(config))
+        })?;
+
+        let mut config_guard = instance.lock().expect("config mutex poisoned");
+        if reload {
+            *config_guard = read_raw_cofig()?;
+        }
+
+        return Ok(config_guard.deref().clone());
     }
 
     /// Creates a [Config] from the environment and config file
+    ///
+    /// When running in tests, the config is reloaded on every call.
     pub fn parse() -> Result<Config> {
-        let final_config = Self::raw_config()?;
+        #[cfg(test)]
+        let reload = true;
+
+        #[cfg(not(test))]
+        let reload = false;
+
+        let final_config = Self::raw_config(reload)?;
         let cli_confg: Config = final_config
             .to_owned()
             .try_deserialize()

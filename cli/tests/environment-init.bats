@@ -18,11 +18,11 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" > /dev/null || return
+  pushd "$PROJECT_DIR" >/dev/null || return
 }
 
 project_teardown() {
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -96,7 +96,7 @@ teardown() {
   run "$FLOX_BIN" init
   assert_success
 
-  assert_output - << EOF
+  assert_output - <<EOF
 ✨ Created environment test ($NIX_SYSTEM)
 
 Next:
@@ -160,12 +160,17 @@ function check_with_dir() {
   assert_equal "$init_system" "$NIX_SYSTEM"
 }
 
-@test "'flox init' sets up a working Python environment using requirements.txt" {
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=init:python:requirements
+@test "'flox init' sets up a working Python environment that works across all methods of activate" {
   OWNER="owner"
   NAME="name"
 
-  echo "requests" > requirements.txt
+  echo "requests" >requirements.txt
+
   "$FLOX_BIN" init --auto-setup --name "$NAME"
+
   SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
   SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
 
@@ -173,14 +178,14 @@ function check_with_dir() {
 
   "$FLOX_BIN" push --owner "$OWNER"
 
-  rm -rf .flox
+  "$FLOX_BIN" delete -f
 
   "$FLOX_BIN" pull "$OWNER/$NAME"
 
   SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
   SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
 
-  rm -rf .flox
+  "$FLOX_BIN" delete -f
 
   SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
   SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
