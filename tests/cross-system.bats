@@ -28,7 +28,7 @@ setup_file() {
     skip "FLOXEM_FLOXTEST_TOKEN is not set"
   fi
   export FLOX_FLOXHUB_TOKEN="$FLOXEM_FLOXTEST_TOKEN"
-  export OWNER="floxtest"
+  export OWNER="floxEM"
 }
 
 teardown_file() {
@@ -93,8 +93,7 @@ teardown() {
       ;;
     *)
       # we only run the above two systems consistently in CI
-      echo "unsupported system: $NIX_SYSTEM"
-      return 1
+      skip "unsupported system: $NIX_SYSTEM"
       ;;
   esac
 
