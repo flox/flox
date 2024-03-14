@@ -1,4 +1,3 @@
-
 #! /usr/bin/env bats
 # -*- mode: bats; -*-
 # ============================================================================ #
@@ -24,10 +23,23 @@ load test_support.bash
 setup_file() {
   common_file_setup
   "$FLOX_BIN" config --set floxhub_url "https://hub.preview.flox.dev/"
-  if [ -z "${FLOXEM_FLOXTEST_TOKEN:-}" ]; then
-    skip "FLOXEM_FLOXTEST_TOKEN is not set"
+
+  if [ -z "${AUTH0_FLOX_DEV_CLIENT_SECRET:-}" ]; then
+    skip "AUTH0_FLOX_DEV_CLIENT_SECRET is not set"
   fi
-  export FLOX_FLOXHUB_TOKEN="$FLOXEM_FLOXTEST_TOKEN"
+
+  # Get a token for the `floxEM` user on the development FloxHub instance.
+  export FLOX_FLOXHUB_TOKEN="$(
+    curl --request POST \
+      --url https://flox-dev.us.auth0.com/oauth/token \
+      --header 'content-type: application/x-www-form-urlencoded' \
+      --data "client_id=A77LKKZbtUo7CbeKIeJs4SoqY1v4UZFh" \
+      --data "audience=https://hub.flox.dev/api" \
+      --data "grant_type=client_credentials" \
+      --data "client_secret=$AUTH0_FLOX_DEV_CLIENT_SECRET" \
+      | jq .access_token -r
+  )"
+
   export OWNER="floxEM"
 }
 
