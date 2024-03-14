@@ -61,8 +61,8 @@ use url::Url;
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{
     activated_environments,
-    auth,
     ensure_environment_trust,
+    ensure_floxhub_token,
     environment_description,
     ConcreteEnvironment,
     EnvironmentSelectError,
@@ -105,12 +105,17 @@ pub enum EditAction {
 }
 
 impl Edit {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("edit");
 
         let detected_environment = self
             .environment
             .detect_concrete_environment(&flox, "edit")?;
+
+        // Ensure the user is logged in for the following remote operations
+        if let ConcreteEnvironment::Remote(_) = detected_environment {
+            ensure_floxhub_token(&mut flox).await?;
+        };
 
         match self.action {
             EditAction::EditManifest { file } => {
@@ -1130,7 +1135,7 @@ pub struct PkgWithIdOption {
 }
 
 impl Install {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("install");
 
         debug!(
@@ -1162,6 +1167,12 @@ impl Install {
             Err(e) => Err(e)?,
         };
         let description = environment_description(&concrete_environment)?;
+
+        // Ensure the user is logged in for the following remote operations
+        if let ConcreteEnvironment::Remote(_) = concrete_environment {
+            ensure_floxhub_token(&mut flox).await?;
+        };
+
         let mut environment = concrete_environment.into_dyn_environment();
         let mut packages = self
             .packages
@@ -1281,7 +1292,7 @@ pub struct Uninstall {
 }
 
 impl Uninstall {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("uninstall");
 
         debug!(
@@ -1312,6 +1323,12 @@ impl Uninstall {
             },
             Err(e) => Err(e)?,
         };
+
+        // Ensure the user is logged in for the following remote operations
+        if let ConcreteEnvironment::Remote(_) = concrete_environment {
+            ensure_floxhub_token(&mut flox).await?;
+        };
+
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
 
@@ -1406,25 +1423,8 @@ impl Push {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("push");
 
-        if flox.floxhub_token.is_none() {
-            if !Dialog::can_prompt() {
-                let message = formatdoc! {"
-                    You are not logged in to FloxHub.
-
-                    Can not automatically login to FloxHub in non-interactive context.
-
-                    To login you can either
-                    * login to FloxHub with 'flox auth login',
-                    * set the 'floxhub_token' field to '<your token>' in your config
-                    * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable."
-                };
-                bail!(message);
-            }
-
-            message::plain("You are not logged in to FloxHub. Logging in...");
-
-            auth::login_flox(&mut flox).await?;
-        }
+        // Ensure the user is logged in for the following remote operations
+        ensure_floxhub_token(&mut flox).await?;
 
         let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
@@ -1449,11 +1449,10 @@ impl Push {
                     owner
                 } else {
                     EnvironmentOwner::from_str(
-                        &flox
-                            .floxhub_token
+                        flox.floxhub_token
                             .as_ref()
                             .context("Need to be loggedin")?
-                            .handle()?,
+                            .handle(),
                     )?
                 };
 
@@ -1961,8 +1960,7 @@ impl Pull {
                 let by_current_user = flox
                     .floxhub_token
                     .as_ref()
-                    .and_then(|token| token.handle().ok())
-                    .map(|handle| handle == env_ref.owner().as_str())
+                    .map(|token| token.handle() == env_ref.owner().as_str())
                     .unwrap_or_default();
                 let message = format!("The environment {env_ref} does not exist.");
                 if by_current_user {

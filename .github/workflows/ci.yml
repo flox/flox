@@ -156,7 +156,7 @@ jobs:
         if: ${{ github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
         env:
           RUST_BACKTRACE: 1
-          FLOXEM_FLOXTEST_TOKEN: "${{ secrets.FLOXEM_FLOXTEST_TOKEN }}"
+          AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.AUTH0_FLOX_DEV_CLIENT_SECRET }}"
         run: nix develop -L --no-update-lock-file --command just functional-tests
 
   nix-build:

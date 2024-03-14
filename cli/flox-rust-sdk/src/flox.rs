@@ -1,8 +1,10 @@
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use jsonwebtoken::{DecodingKey, Validation};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use serde_with::DeserializeFromStr;
 use thiserror::Error;
 use url::Url;
 
@@ -54,46 +56,71 @@ impl Flox {}
 pub static DEFAULT_FLOXHUB_URL: Lazy<Url> =
     Lazy::new(|| Url::parse("https://hub.flox.dev").unwrap());
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FloxhubToken(String);
+#[derive(Debug, Clone, Deserialize)]
+struct FloxTokenClaims {
+    #[serde(rename = "https://flox.dev/handle")]
+    handle: String,
+}
 
-impl AsRef<str> for FloxhubToken {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+#[derive(Debug, Clone, DeserializeFromStr)]
+pub struct FloxhubToken {
+    token: String,
+    token_data: FloxTokenClaims,
 }
 
 impl FloxhubToken {
-    /// Create a new FloxHub token from a string
-    pub fn new(token: String) -> Self {
-        FloxhubToken(token)
+    /// Create a new floxhub token from a string
+    pub fn new(token: String) -> Result<Self, FloxhubTokenError> {
+        token.parse()
     }
 
     /// Return the token as a string
     pub fn secret(&self) -> &str {
-        &self.0
+        &self.token
     }
 
-    pub fn handle(&self) -> Result<String, FloxhubTokenError> {
-        #[derive(Debug, Deserialize)]
-        struct Claims {
-            #[serde(rename = "https://flox.dev/handle")]
-            handle: String,
-        }
+    /// Return the handle of the user the token belongs to
+    pub fn handle(&self) -> &str {
+        &self.token_data.handle
+    }
+}
 
+impl Serialize for FloxhubToken {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.token.serialize(serializer)
+    }
+}
+
+impl FromStr for FloxhubToken {
+    type Err = FloxhubTokenError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut validation = Validation::default();
         // we're neither creating or verifying the token on the client side
         validation.insecure_disable_signature_validation();
         validation.validate_aud = false;
         let token =
-            jsonwebtoken::decode::<Claims>(&self.0, &DecodingKey::from_secret(&[]), &validation)
-                .map_err(FloxhubTokenError::InvalidToken)?;
-        Ok(token.claims.handle)
+            jsonwebtoken::decode::<FloxTokenClaims>(s, &DecodingKey::from_secret(&[]), &validation)
+                .map_err(|e| match e.kind() {
+                    jsonwebtoken::errors::ErrorKind::ExpiredSignature => FloxhubTokenError::Expired,
+                    _ => FloxhubTokenError::InvalidToken(e),
+                })?;
+
+        Ok(FloxhubToken {
+            token: s.to_string(),
+            token_data: token.claims,
+        })
     }
 }
 
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum FloxhubTokenError {
+    #[error("token expired")]
+    Expired,
+
     #[error("invalid token")]
     InvalidToken(#[source] jsonwebtoken::errors::Error),
 }
@@ -168,8 +195,6 @@ pub enum FloxhubError {
 use tempfile::TempDir;
 /// Should only be used in the flox crate
 pub fn test_flox_instance() -> (Flox, TempDir) {
-    use std::str::FromStr;
-
     use crate::models::environment::{global_manifest_path, init_global_manifest};
 
     let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -205,6 +230,7 @@ pub fn test_flox_instance() -> (Flox, TempDir) {
 pub mod tests {
     use std::str::FromStr;
 
+    pub use super::test_flox_instance as flox_instance;
     use super::*;
 
     /// A fake FloxHub token
@@ -222,12 +248,32 @@ pub mod tests {
     /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
     const FAKE_TOKEN: &str= "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74";
 
-    pub use super::test_flox_instance as flox_instance;
+    /// A fake floxhub token, that is expired
+    ///
+    /// {
+    ///  "typ": "JWT",
+    ///  "alg": "HS256"
+    /// }
+    /// .
+    /// {
+    ///   "https://flox.dev/handle": "test"
+    ///   "exp": 1704063600,                // 2024-01-01T00:00:00+00:00
+    /// }
+    /// .
+    /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    const FAKE_EXPIRED_TOKEN: &str= "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY";
 
     #[tokio::test]
     async fn test_get_username() {
-        let token = FloxhubToken::new(FAKE_TOKEN.to_string());
-        assert_eq!(token.handle().unwrap(), "test");
+        let token = FloxhubToken::new(FAKE_TOKEN.to_string()).unwrap();
+        assert_eq!(token.handle(), "test");
+    }
+
+    #[tokio::test]
+    async fn test_detect_expired() {
+        let token_error =
+            FloxhubToken::new(FAKE_EXPIRED_TOKEN.to_string()).expect_err("Token should be expired");
+        assert_eq!(token_error, FloxhubTokenError::Expired);
     }
 
     #[test]
