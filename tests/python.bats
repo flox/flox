@@ -76,6 +76,7 @@ teardown() {
   assert_success
   assert_output --partial "'poetry' installed"
 
+  "$FLOX_BIN" install zlib
   run "$FLOX_BIN" activate -- python -m project
   assert_success
   assert_line "<class 'numpy.ndarray'>"
@@ -89,6 +90,7 @@ teardown() {
   run "$FLOX_BIN" init --auto-setup
   assert_success
 
+  "$FLOX_BIN" install zlib
   run "$FLOX_BIN" activate -- python -m project
   assert_success
   assert_line "<class 'numpy.ndarray'>"
@@ -102,6 +104,7 @@ teardown() {
   run "$FLOX_BIN" init --auto-setup
   assert_success
 
+  "$FLOX_BIN" install zlib
   run "$FLOX_BIN" activate -- python -m project
   assert_success
   assert_line "<class 'numpy.ndarray'>"
