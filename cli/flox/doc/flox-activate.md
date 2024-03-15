@@ -29,7 +29,14 @@ interactive shell.
 Launches a subshell non-interactively when invoked with a command
 and arguments.
 May also be invoked as `$(flox activate)` to produce commands to be sourced
-by your current `$SHELL`.
+by the parent shell.
+The parent shell is detected automatically by inspecting the executable path
+of the parent process.
+If Flox can not interpret the path as a shell or a subshell is launched,
+Flox will fall back to `$SHELL`.
+To override the shell explicitly, `$FLOX_SHELL` can be set as an override.
+`flox activate` currently only supports `bash` and `zsh` shells
+for any of the detection mechanisms described above.
 
 When invoked interactively,
 the shell prompt will be modified to display the active environments,
@@ -112,10 +119,15 @@ hook was defined.
 `$FLOX_SHELL`
 :  When launching an interactive sub-shell, Flox launches the shell specified in
    `$FLOX_SHELL` if it is set.
+   When printing a shell for sourcing in the current shell,
+   Flox will produce a script suitable for `$FLOX_SHELL` if it is set.
 
 `$SHELL`
 :  When launching an interactive sub-shell, Flox launches the shell specified in
    `$SHELL` if it is set and `$FLOX_SHELL` is not set.
+   When printing a shell for sourcing in the current shell,
+   Flox will produce a script suitable for `$SHELL` if it is set
+   and `$FLOX_SHELL` is not set.
 
 `$FLOX_PROMPT_COLOR_{1,2}`
 :   Flox adds text to the beginning of the shell prompt to indicate which
