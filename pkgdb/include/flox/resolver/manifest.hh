@@ -89,9 +89,9 @@ protected:
   // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
   /** @brief Initialize @a registryRaw from @a manifestRaw. */
-  template<manifest_raw_type _RawManifestType = RawType>
+  template<manifest_raw_type _rawManifestType = RawType>
   typename std::enable_if<
-    std::derived_from<_RawManifestType, GlobalManifestRaw>,
+    std::derived_from<_rawManifestType, GlobalManifestRaw>,
     void>::type
   initRegistry()
   {
@@ -102,9 +102,9 @@ protected:
   }
 
   /** @brief Initialize @a registryRaw from @a manifestRaw. */
-  template<manifest_raw_type _RawManifestType = RawType>
+  template<manifest_raw_type _rawManifestType = RawType>
   typename std::enable_if<
-    std::derived_from<_RawManifestType, GlobalManifestRawGA>,
+    std::derived_from<_rawManifestType, GlobalManifestRawGA>,
     void>::type
   initRegistry()
   {
