@@ -664,7 +664,7 @@ addScriptToScriptsDir( const std::string &           scriptContents,
 }
 
 std::string
-activationScriptRelativePath( const std::string & scriptName )
+activationScriptEnvironmentPath( const std::string & scriptName )
 {
   return nix::fmt( "\"$FLOX_ENV/%s/%s\"", ACTIVATION_SUBDIR_NAME, scriptName );
 }
@@ -673,7 +673,7 @@ void
 appendSourcedScript( const std::string & scriptName,
                      std::stringstream & mainScript )
 {
-  mainScript << "source " << activationScriptRelativePath( scriptName ) << '\n';
+  mainScript << "source " << activationScriptEnvironmentPath( scriptName ) << '\n';
 }
 
 void
@@ -681,7 +681,7 @@ appendBashCalledScript( const std::string & scriptName,
                         std::stringstream & mainScript )
 {
   mainScript << FLOX_BASH_BIN << " "
-             << activationScriptRelativePath( scriptName ) << '\n';
+             << activationScriptEnvironmentPath( scriptName ) << '\n';
 }
 
 

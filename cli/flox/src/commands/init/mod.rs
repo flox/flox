@@ -222,93 +222,6 @@ trait InitHook {
     fn get_init_customization(&self) -> InitCustomization;
 }
 
-struct Requirements;
-
-impl InitHook for Requirements {
-    fn should_run(&mut self, path: &Path) -> Result<bool> {
-        Ok(path.join("requirements.txt").exists())
-    }
-
-    fn prompt_user(&mut self, _path: &Path, _flox: &Flox) -> Result<bool> {
-        let message = formatdoc! {"
-            Flox detected a requirements.txt
-
-            Python projects typically need:
-            * python, pip
-            * A Python virtual environment to install dependencies into
-
-            Would you like Flox to set up a standard Python environment?
-            You can always change the environment's manifest with 'flox edit'
-        "};
-
-        let dialog = Dialog {
-            message: &message,
-            help_message: Some(AUTO_SETUP_HINT),
-            typed: Select {
-                options: ["Yes (python 3.11)", "No", "Show suggested modifications"].to_vec(),
-            },
-        };
-
-        let (mut choice, _) = dialog.raw_prompt()?;
-
-        if choice == 2 {
-            let message = formatdoc! {"
-
-                {}
-                Would you like Flox to apply these modifications?
-                You can always change the environment's manifest with 'flox edit'
-            ", format_customization(&self.get_init_customization())?};
-
-            let dialog = Dialog {
-                message: &message,
-                help_message: Some(AUTO_SETUP_HINT),
-                typed: Select {
-                    options: ["Yes (python 3.11)", "No"].to_vec(),
-                },
-            };
-
-            (choice, _) = dialog.raw_prompt()?;
-        }
-
-        Ok(choice == 0)
-    }
-
-    fn get_init_customization(&self) -> InitCustomization {
-        InitCustomization {
-            profile: Some(
-                // TODO: when we support fish, we'll need to source activate.fish
-                indoc! {r#"
-                # Setup a Python virtual environment
-
-                PYTHON_DIR="$FLOX_ENV_CACHE/python"
-                if [ ! -d "$PYTHON_DIR" ]; then
-                  echo "Creating python virtual environment in $PYTHON_DIR"
-                  python -m venv "$PYTHON_DIR"
-                fi
-
-                echo "Activating python virtual environment"
-                source "$PYTHON_DIR/bin/activate"
-
-                pip install -r "$FLOX_ENV_PROJECT/requirements.txt" --quiet"#}
-                .to_string(),
-            ),
-            packages: Some(vec![
-                PackageToInstall {
-                    id: "python3".to_string(),
-                    pkg_path: "python311Packages.python".to_string(),
-                    version: None,
-                    input: None,
-                },
-                PackageToInstall {
-                    id: "pip".to_string(),
-                    pkg_path: "python311Packages.pip".to_string(),
-                    version: None,
-                    input: None,
-                },
-            ]),
-        }
-    }
-}
 
 /// Create a temporary TOML document containing just the contents of the passed
 /// [InitCustomization],
@@ -424,7 +337,7 @@ mod tests {
     fn test_combine_customizations() {
         let customizations = vec![
             InitCustomization {
-                hook: Some("hook1".to_string()),
+                profile: Some("hook1".to_string()),
                 packages: Some(vec![
                     PackageToInstall {
                         id: "pip".to_string(),
