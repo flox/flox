@@ -677,8 +677,8 @@ appendSourcedScript( const std::string & scriptName,
 }
 
 void
-appendCalledScript( const std::string & scriptName,
-                    std::stringstream & mainScript )
+appendBashCalledScript( const std::string & scriptName,
+                        std::stringstream & mainScript )
 {
   mainScript << FLOX_BASH_BIN << " "
              << activationScriptRelativePath( scriptName ) << '\n';
@@ -738,24 +738,20 @@ makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile )
       if ( profile->common.has_value() )
         {
           debugLog( "adding 'profile.common' to activation scripts" );
-          addScriptToScriptsDir( profile->common.value(),
-                                 tempDir,
-                                 "profile-common" );
+          addScriptToScriptsDir( *profile->common, tempDir, "profile-common" );
           appendSourcedScript( "profile-common", bashScript );
           appendSourcedScript( "profile-common", zshScript );
         }
       if ( profile->bash.has_value() )
         {
           debugLog( "adding 'profile.bash' to activation scripts" );
-          addScriptToScriptsDir( profile->bash.value(),
-                                 tempDir,
-                                 "profile-bash" );
+          addScriptToScriptsDir( *profile->bash, tempDir, "profile-bash" );
           appendSourcedScript( "profile-bash", bashScript );
         }
       if ( profile->zsh.has_value() )
         {
           debugLog( "adding 'profile.zsh' to activation scripts" );
-          addScriptToScriptsDir( profile->zsh.value(), tempDir, "profile-zsh" );
+          addScriptToScriptsDir( *profile->zsh, tempDir, "profile-zsh" );
           appendSourcedScript( "profile-zsh", zshScript );
         }
     }
@@ -764,21 +760,25 @@ makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile )
   auto hook = manifest.hook;
   if ( hook.has_value() )
     {
+      // [hook.script] is deprecated, in favor of [profile.*].  For now we will
+      // allow it.
+      // TODO: print a warning??
       if ( hook->script.has_value() )
         {
           debugLog( "adding 'hook.script' to activation scripts" );
-          addScriptToScriptsDir( hook->script.value(), tempDir, "hook-script" );
+          addScriptToScriptsDir( *hook->script, tempDir, "hook-script" );
           appendSourcedScript( "hook-script", bashScript );
           appendSourcedScript( "hook-script", zshScript );
         }
-      else if ( hook->onActivate.has_value() )
+
+      if ( hook->onActivate.has_value() )
         {
           debugLog( "adding 'hook.on-activate' to activation scripts" );
-          addScriptToScriptsDir( hook->onActivate.value(),
+          addScriptToScriptsDir( *hook->onActivate,
                                  tempDir,
                                  "hook-on-activate" );
-          appendCalledScript( "hook-on-activate", bashScript );
-          appendCalledScript( "hook-on-activate", zshScript );
+          appendBashCalledScript( "hook-on-activate", bashScript );
+          appendBashCalledScript( "hook-on-activate", zshScript );
         }
     }
 

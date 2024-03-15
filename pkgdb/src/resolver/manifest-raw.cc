@@ -521,7 +521,8 @@ from_json( const nlohmann::json & jfrom, ProfileScriptsRaw & profile )
       else
         {
           throw InvalidManifestFileException(
-            "unrecognized manifest field 'profile." + key + "'." );
+            "unrecognized shell specific profile in manifest 'profile." + key
+            + "'." );
         }
     }
 }
@@ -529,7 +530,6 @@ from_json( const nlohmann::json & jfrom, ProfileScriptsRaw & profile )
 static void
 to_json( nlohmann::json & jto, const ProfileScriptsRaw & profile )
 {
-  // foo
   jto = nlohmann::json::object();
   if ( profile.common.has_value() ) { jto["common"] = profile.common.value(); }
   if ( profile.bash.has_value() ) { jto["bash"] = profile.bash.value(); }
