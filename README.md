@@ -138,7 +138,7 @@ The Flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
 [images]: docs/tutorials/sharing-environments/#sharing-with-containers
 [docs]: https://flox.dev/docs
 [twitter]: https://twitter.com/floxdevelopment
-[slack]: https://floxcommunitygroup.slack.com
+[slack]: https://go.flox.dev/slack
 [discord]: https://discord.gg/5H7hN57eQR
 [new-issue]: https://github.com/flox/flox/issues/new/choose
 [post-nixpkgs]: https://flox.dev/blog/nixpkgs
