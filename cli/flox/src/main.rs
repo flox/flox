@@ -11,7 +11,7 @@ use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentErr
 use flox_rust_sdk::models::environment::{init_global_manifest, EnvironmentError2};
 use log::{debug, warn};
 use utils::init::{init_logger, init_sentry};
-use utils::message;
+use utils::{message, populate_default_nix_env_vars};
 
 use crate::utils::errors::{format_error, format_managed_error, format_remote_error};
 
@@ -24,6 +24,7 @@ async fn run(args: FloxArgs) -> Result<()> {
     init_logger(Some(args.verbosity));
     set_user()?;
     set_parent_process_id();
+    populate_default_nix_env_vars();
     let config = config::Config::parse()?;
     init_global_manifest(&config.flox.config_dir.join("global-manifest.toml"))?;
     args.handle(config).await?;
