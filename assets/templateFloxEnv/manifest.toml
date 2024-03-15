@@ -18,11 +18,7 @@ _FLOX_INIT_INSTALL
 # pass-in = "$some-env-var"
 
 # An activation hook will be run when entering the environment.
-# You can define one in the 'hook' table inline via the 'script' field,
-# or provide a file using the 'file' field.
-# If 'file' is provided, the path should be relative to this file.
-# If both 'file' and 'script' are provided,
-# only the hook defined in 'file' will be run .
+# You can define one in the 'hook' table inline via the 'script' field.
 
 [hook]
 _FLOX_INIT_HOOK
