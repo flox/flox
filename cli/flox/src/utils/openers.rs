@@ -5,7 +5,7 @@ use std::process::Command;
 
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
-use log::{debug, warn};
+use log::debug;
 use sysinfo::{Pid, System};
 
 const OPENERS: &[&str] = &["xdg-open", "gnome-open", "kde-open"];
@@ -108,7 +108,7 @@ impl Shell {
     /// If reading process information of the parent process fails,
     /// or the exe path of the parent process can not be parsed to a known shell,
     /// an error is returned.
-    fn detect_from_parent_process() -> Result<Self> {
+    pub fn detect_from_parent_process() -> Result<Self> {
         // todo: we can narrow down the amount of data collected by sysinfo, for now collect everything
         let system = System::new_all();
 
@@ -133,29 +133,12 @@ impl Shell {
     }
 
     /// Detect the current shell from the {var} environment variable
-    fn detect_from_env(var: &str) -> Result<Self> {
+    pub fn detect_from_env(var: &str) -> Result<Self> {
         env::var(var)
             .with_context(|| format!("{var} environment variable not set"))
             .and_then(|shell| {
                 let path = PathBuf::from(shell);
                 Self::try_from(path.as_path())
-            })
-    }
-
-    /// Detect the executing shell
-    ///
-    /// This function first tries to detect the shell from the parent process,
-    /// and falls back to the SHELL environment variable if that fails.
-    /// If both fail, an error is returned.
-    ///
-    /// Both methods are overridable by setting the FLOX_SHELL environment variable.
-    pub fn detect() -> Result<Self> {
-        Self::detect_from_env("FLOX_SHELL")
-            .or_else(|_| Self::detect_from_parent_process())
-            .or_else(|err| {
-                warn!("Failed to detect shell from parent process: {err}");
-
-                Self::detect_from_env("SHELL")
             })
     }
 

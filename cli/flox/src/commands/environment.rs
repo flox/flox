@@ -53,7 +53,7 @@ use flox_rust_sdk::models::pkgdb::{self, error_codes, CallPkgDbError, PkgDbError
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use log::debug;
+use log::{debug, warn};
 use toml_edit::Document;
 use url::Url;
 
@@ -510,8 +510,6 @@ impl Activate {
             (flox_env_dirs, flox_env_lib_dirs)
         };
 
-        let shell = Shell::detect()?;
-
         let prompt_color_1 = env::var("FLOX_PROMPT_COLOR_1")
             .unwrap_or(utils::colors::INDIGO_400.to_ansi256().to_string());
         let prompt_color_2 = env::var("FLOX_PROMPT_COLOR_2")
@@ -561,10 +559,20 @@ impl Activate {
         //
         //    eval "$(flox activate)"
         if in_place {
+            let shell = Shell::detect_from_env("FLOX_SHELL")
+                .or_else(|_| Shell::detect_from_parent_process())
+                .or_else(|err| {
+                    warn!("Failed to detect shell from parent process: {err}");
+
+                    Shell::detect_from_env("SHELL")
+                })?;
             Self::activate_in_place(&shell, &exports, &activation_path);
 
             return Ok(());
         }
+
+        let shell =
+            Shell::detect_from_env("FLOX_SHELL").or_else(|_| Shell::detect_from_env("SHELL"))?;
 
         let activate_error = if !self.run_args.is_empty() {
             Self::activate_non_interactive(self.run_args, shell, exports, activation_path)
