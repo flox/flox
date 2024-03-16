@@ -21,7 +21,7 @@ fi
 
 unset _esc colorReset colorBold colorPrompt1 colorPrompt2 _floxPrompt1 _floxPrompt2
 
-if [ -n "$_flox" ] && [ -n "${PS1:-}" ]; then
+if [ -n "$_flox" ] && [ -n "${PS1:-}" ] && [ "${FLOX_PROMPT_DISABLE:-}" != "true" ]; then
   # Start by saving the original value of PS1.
   if [ -z "$FLOX_SAVE_PS1" ]; then
     export FLOX_SAVE_PS1="$PS1"

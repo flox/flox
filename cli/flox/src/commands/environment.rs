@@ -375,9 +375,22 @@ pub struct Activate {
     #[bpaf(long("print-script"), short, hide)]
     print_script: bool,
 
+    #[bpaf(external(prompt_switch), optional)]
+    prompt_switch: Option<PromptSwitch>,
+
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
     run_args: Vec<String>,
+}
+
+#[derive(Bpaf, Clone, Debug)]
+enum PromptSwitch {
+    /// Enable prompt modifications (if disabled by current config)
+    #[bpaf(long("prompt"))]
+    Enable,
+    /// Disable prompt modifications
+    #[bpaf(long("no-prompt"))]
+    Disable,
 }
 
 #[derive(Debug)]
@@ -436,6 +449,13 @@ impl ShellType {
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
+
+        if let Some(prompt_switch) = self.prompt_switch {
+            match prompt_switch {
+                PromptSwitch::Enable => config.flox.prompt_disable = false,
+                PromptSwitch::Disable => config.flox.prompt_disable = true,
+            }
+        }
 
         let mut concrete_environment = self.environment.to_concrete_environment(&flox)?;
 
@@ -595,6 +615,10 @@ impl Activate {
             ),
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
+            (
+                "FLOX_PROMPT_DISABLE",
+                config.flox.prompt_disable.to_string(),
+            ),
         ]);
 
         exports.extend(Self::default_subprocess_env_vars());

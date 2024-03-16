@@ -72,6 +72,10 @@ pub struct FloxConfig {
 
     /// The URL of the FloxHub instance to use
     pub floxhub_url: Option<Url>,
+
+    /// Disable the prompt modifications
+    #[serde(default)]
+    pub prompt_disable: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
