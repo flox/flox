@@ -45,7 +45,7 @@
 
 [Flox][website] is a virtual environment and package manager all in one. With Flox you 
 create environments that layer and replace dependencies just where
-it matters, making them portable across the full software lifecycle
+it matters, making them portable across the full software lifecycle.
 
 Install packages from [the biggest open source repository
 (nixpkgs)][post-nixpkgs] that contains **more that 80.000 packages**.
@@ -72,13 +72,13 @@ With `flox` you can:<br/>
 ## ⚡️ Quick start
 
 ``` text
-$ flox init           # <- Create an environment in current directory ✨ .
+$ flox init           # <- Create an environment in the current directory ✨.
 
 $ flox search hello   # <- Search for a package 🚀.
 
 $ flox install hello  # <- Install packages into current directory's environment 🔨.
 
-$ flox activate       # <- Enter the current directory's environment 🎆.
+$ flox activate       # <- Enter current directory's environment 🎆.
 
 flox [my-project] $ hello   # <- Have fun 🎉.
 Hello world!
