@@ -72,13 +72,13 @@ With `flox` you can:<br/>
 ## ⚡️ Quick start
 
 ``` text
-$ flox init           # <- Create an environment in the current directory ✨.
+$ flox init           # <- Create an environment in current directory ✨.
 
 $ flox search hello   # <- Search for a package 🚀.
 
 $ flox install hello  # <- Install packages into current directory's environment 🔨.
 
-$ flox activate       # <- Enter current directory's environment 🎆.
+$ flox activate       # <- Enter the current directory's environment 🎆.
 
 flox [my-project] $ hello   # <- Have fun 🎉.
 Hello world!
