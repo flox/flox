@@ -222,7 +222,6 @@ trait InitHook {
     fn get_init_customization(&self) -> InitCustomization;
 }
 
-
 /// Create a temporary TOML document containing just the contents of the passed
 /// [InitCustomization],
 /// and return it as a string.

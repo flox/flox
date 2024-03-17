@@ -673,7 +673,8 @@ void
 appendSourcedScript( const std::string & scriptName,
                      std::stringstream & mainScript )
 {
-  mainScript << "source " << activationScriptEnvironmentPath( scriptName ) << '\n';
+  mainScript << "source " << activationScriptEnvironmentPath( scriptName )
+             << '\n';
 }
 
 void
