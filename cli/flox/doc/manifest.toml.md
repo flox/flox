@@ -255,12 +255,11 @@ SERVER_PORT = "3000"
 ## `[profile]`
 
 The `[profile]` section of the manifest allows you to specify scripts that will
-be sourced by your shell immediately after activating the environment.
+be *sourced* by your shell immediately after activating the environment.
 These scripts can be used to perform additional setup for a consumer of the
 environment e.g. spawning a background process, dynamically setting environment
-variables, or creating files and directories.
-The environment variables declared in the `[vars]` section can be used in the
-`profile` scripts.
+variables, or creating files and directories.  The environment variables
+declared in the `[vars]` section can be used in the `profile` scripts.
 
 ```toml
 [profile]
@@ -278,30 +277,27 @@ zsh = """
 ```
 
 The `profile.common` script is intended to be common setup that can be sourced
-by any shell,
-but it is your responsibility to make sure that the script is compatible with
-any shells that may consume the environment.
-The `profile.bash` and `profile.zsh` scripts are sourced *after* the
-`profile.common` script,
-and are only sourced by the corresponding shell.
-The shell-specific profile scripts are intended to contain any shell functions, 
-aliases, variables, etc that could be specific to a user's shell.
+by any shell, but it is your responsibility to make sure that the script is
+compatible with any shells that may consume the environment.  The `profile.bash`
+and `profile.zsh` scripts are sourced *after* the `profile.common` script, and
+are only sourced by the corresponding shell.  The shell-specific profile scripts
+are intended to contain any shell functions, aliases, variables, etc that could
+be specific to a user's shell.
 
 ## `[hook]`
 
-The `[hook]` section of the manifest allows you to specify a script that's
+The `[hook]` section of the manifest allows you to specify scripts that are
 *executed* after the `profile` scripts have been sourced.
-Since hooks run after activation
-the environment variables in the `[vars]` section may be referenced within the
-hook.
-
-The `hook.script` and `hook.on-activate` options are mutually exclusive.
+Since hooks run after activation, the environment variables in the `[vars]`
+section may be referenced within the hook, as well as anything sourced from the
+`profile` scripts.  There is currently only one hook defined for use, the
+`on-activate` hook.
 
 ### `on-activate`
-The `on-activate` script is run non-interactively in a Bash subshell after the
-environment is activated.
-This is useful for environment initialization that you want done in a consistent
-shell so that you don't need to worry about shell compatibility.
+The `on-activate` script is *exectuted* non-interactively in a Bash subshell
+after the environment is activated.  This is useful for environment
+initialization that you want done in a consistent shell so that you don't need
+to worry about shell compatibility.
 
 ```toml
 [hook]
@@ -310,13 +306,13 @@ on-activate = """
 """
 ```
 
-Since the script runs in a sub-shell,
-it cannot modify environment variables in the user's shell.
+Since the script runs in a sub-shell, it cannot modify environment variables in
+the user's shell.
 
 ### `script` - DEPRECATED
 This `script` option was previously the only way to define a script that is
-sourced by the user's interactive shell.
-This functionality has been replaced by the `[profile]` section.
+*sourced* by the user's interactive shell.  This functionality has been replaced
+by the `[profile]` section.  It will be removed in a later release.
 
 ## `[options]`
 
