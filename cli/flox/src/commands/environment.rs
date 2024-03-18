@@ -567,7 +567,7 @@ impl Activate {
 
         let shell = Self::detect_shell_for_subshell()?;
         let activate_error = if !self.run_args.is_empty() {
-            Self::activate_non_interactive(self.run_args, shell, exports, activation_path)
+            Self::activate_command(self.run_args, shell, exports, activation_path)
         } else {
             Self::activate_interactive(shell, exports, activation_path, now_active)
         };
@@ -576,7 +576,7 @@ impl Activate {
     }
 
     /// Used for `flox activate -- run_args`
-    fn activate_non_interactive(
+    fn activate_command(
         run_args: Vec<String>,
         shell: Shell,
         exports: HashMap<&str, String>,
