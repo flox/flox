@@ -473,11 +473,11 @@ impl PathEnvironment {
         replaced = replaced.replace(FLOX_INSTALL_PLACEHOLDER, packages);
 
         // Replace profile
-        let profile = if let Some(ref hook) = customization.profile {
+        let profile = if let Some(ref custom_profile) = customization.profile {
             formatdoc! {r#"
                 common = """
                 {}
-                """"#, indent::indent_all_by(2, hook)}
+                """"#, indent::indent_all_by(2, custom_profile)}
         } else {
             formatdoc! {r#"
                 # common = """

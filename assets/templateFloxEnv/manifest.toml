@@ -1,7 +1,7 @@
 #
 # This is a flox environment manifest.
 # Visit flox.dev/docs/concepts/manifest/
-# or see flox-edit(1) for more information
+# or see flox-edit(1), manifest.toml(1) for more information.
 #
 
 # List packages you wish to install in your environment inside
@@ -36,7 +36,8 @@ _FLOX_INIT_PROFILE
 [hook]
 _FLOX_INIT_HOOK
 
-# Additional options can be set in the `[options]` section.
+# Additional options can be set in the `[options]` section.  Refer to
+# manifest.toml(1) for a list of available options.
 [options]
 
 # An environment that works on one system is guaranteed to work on the same type
