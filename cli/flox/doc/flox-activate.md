@@ -20,21 +20,24 @@ flox [<general-options>] activate
 
 # DESCRIPTION
 
-Sets environment variables and aliases,
-runs hooks,
+Sets environment variables and aliases, runs hooks,
 and adds `bin` directories to your `$PATH`.
 
-Launches an interactive subshell when invoked as `flox activate` from an
-interactive shell.
-Launches a subshell non-interactively when invoked with a command
-and arguments.
-May also be invoked as `$(flox activate)` to produce commands to be sourced
-by the parent shell.
-The parent shell is detected automatically by inspecting the executable path
-of the parent process.
-If Flox can not interpret the path as a shell or a subshell is launched,
-Flox will fall back to `$SHELL`.
-To override the shell explicitly, `$FLOX_SHELL` can be set as an override.
+`flox activate` may run in one of three modes:
+
+* interactive: `flox activate` when invoked from an interactive shell
+  Launches an interactive sub-shell.
+  The shell to be launched is determined by `$FLOX_SHELL` or `$SHELL`.
+* command: `flox activate -- CMD`
+  Executes `CMD` in the same environment as if run inside an interactive shell
+  produced by an interactive `flox activate`
+  The shell `CMD` is run by is determined by `$FLOX_SHELL` or `$SHELL`.
+* in-place: `flox activate` when invoked from an non-interactive shell
+  with it's `stdout` redirected e.g. `eval "$(flox activate)"`
+  Produces commands to be sourced by the parent shell.
+  Flox will determine the parent shell from `$FLOX_SHELL` or otherwise
+  automatically determine the parent shell and fall back to `$SHELL`.
+
 `flox activate` currently only supports `bash` and `zsh` shells
 for any of the detection mechanisms described above.
 
@@ -127,7 +130,7 @@ hook was defined.
    `$SHELL` if it is set and `$FLOX_SHELL` is not set.
    When printing a shell for sourcing in the current shell,
    Flox will produce a script suitable for `$SHELL` if it is set
-   and `$FLOX_SHELL` is not set.
+   and `$FLOX_SHELL` is not set and Flox can't detect the parent shell.
 
 `$FLOX_PROMPT_COLOR_{1,2}`
 :   Flox adds text to the beginning of the shell prompt to indicate which
