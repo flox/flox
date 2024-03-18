@@ -12,38 +12,35 @@ const OPENERS: &[&str] = &["xdg-open", "gnome-open", "kde-open"];
 
 const BROWSER_OPENERS: &[&str] = &["www-browser"];
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Browser(PathBuf);
 impl Browser {
-    /// Open a url in the default browser using the system's "opener" command
+    /// Find a system's "opener" command for the purpose of opening a browser.
     /// This is `xdg-open`, `gnome-open`, etc. on linux and `open` on macos
     ///
-    /// In ssh sessions or TTYs without DISPLAY, a browser cannot be opened
+    /// In ssh sessions or TTYs without DISPLAY, a browser cannot be opened,
+    /// so return an error.
     pub fn detect() -> Result<Self, String> {
         // in ssh sessions we can't open a browser
         if std::env::var("SSH_TTY").is_ok() {
             return Err("SSH session detected".into());
         }
 
-        // if X11 or wayland is not available, we can't open a browser
-        if std::env::consts::OS == "linux"
-            && std::env::var("DISPLAY").is_err()
-            && std::env::var("WAYLAND_DISPLAY").is_err()
-        {
-            return Err("No X11 or Wayland display available".into());
-        }
-
         let browser = match std::env::consts::OS {
             "linux" => {
+                // if X11 or wayland is not available, we can't open a browser
+                if std::env::var("DISPLAY").is_err() && std::env::var("WAYLAND_DISPLAY").is_err() {
+                    return Err("No X11 or Wayland display available".into());
+                }
                 let path_var =
                     env::var("PATH").map_err(|_| "Could not read PATH variable".to_string())?;
-                let Some((path, _)) = first_in_path(
+                let Some((path, executable)) = first_in_path(
                     [OPENERS, BROWSER_OPENERS].concat(),
                     env::split_paths(&path_var),
                 ) else {
                     return Err("No opener found in PATH".to_string());
                 };
-                Self(path)
+                Self(path.join(executable))
             },
             "macos" => Self(PathBuf::from("/usr/bin/open")),
             unsupported => {
@@ -173,7 +170,57 @@ where
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
+
+    /// On Linux, Browser::detect() finds xdg-open if it's in path
+    ///
+    /// TODO: we might want to better simulate an actual display and opener
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn browser_detect_finds_opener_in_path() {
+        use std::fs::File;
+
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let xdg_open = temp_dir.path().join("xdg-open");
+        File::create(&xdg_open).unwrap();
+
+        temp_env::with_vars(
+            [
+                ("SSH_TTY", None),
+                ("DISPLAY", Some("1")),
+                (
+                    "PATH",
+                    Some(&format!(
+                        "blah:blah:{}",
+                        xdg_open.parent().unwrap().to_string_lossy()
+                    )),
+                ),
+            ],
+            || {
+                assert_eq!(Browser::detect(), Ok(Browser(xdg_open)));
+            },
+        )
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn browser_detect() {
+        assert_eq!(
+            Browser::detect(),
+            Ok(Browser(PathBuf::from("/usr/bin/open")))
+        );
+    }
+
+    #[test]
+    /// Browser::detect() returns an error if SSH_TTY is set
+    fn browser_detect_respects_ssh_tty() {
+        temp_env::with_var("SSH_TTY", Some("1"), || {
+            assert!(Browser::detect().is_err());
+        });
+    }
 
     /// Test the parsing of the shell from a path
     #[test]
