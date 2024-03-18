@@ -171,8 +171,8 @@ function check_with_dir() {
 
   "$FLOX_BIN" init --auto-setup --name "$NAME"
 
-  SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
-  SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
 
   floxhub_setup "$OWNER"
 
@@ -182,13 +182,13 @@ function check_with_dir() {
 
   "$FLOX_BIN" pull "$OWNER/$NAME"
 
-  SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
-  SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
 
   "$FLOX_BIN" delete -f
 
-  SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
-  SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
+  FLOX_SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
+  FLOX_SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
 }
 
 # ---------------------------------------------------------------------------- #

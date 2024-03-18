@@ -61,7 +61,7 @@ teardown() {
   assert_output --partial "✅ 'pip' installed to environment"
   assert_output --partial "✅ 'python3' installed to environment"
 
-  SHELL=bash run expect "$TESTS_DIR/python.exp" "$PROJECT_DIR"
+  FLOX_SHELL=bash run expect "$TESTS_DIR/python.exp" "$PROJECT_DIR"
   assert_success
 }
 
