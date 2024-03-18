@@ -26,13 +26,13 @@ _FLOX_INIT_INSTALL
 [profile]
 _FLOX_INIT_PROFILE
 
-# The script defined in the `[hook]` section is run in a non-interactive Bash
+# The script defined in `hook.on-activate` is run in a non-interactive Bash
 # sub-shell after sourcing the profile scripts. This script inherits all the
 # environment variables set in the `[vars]` and `[profile]` sections, but since
 # it runs in a sub-shell it can't modify them. The output and exit code of the
-# hook script is discarded.  The utility of the `hook` script is that it runs in
+# hook script is discarded. The utility of the `hook` script is that it runs in
 # a consistent shell environment so you don't have to worry about shell
-# compatibility during complicated initilization.
+# compatibility during complicated initialization.
 [hook]
 _FLOX_INIT_HOOK
 
