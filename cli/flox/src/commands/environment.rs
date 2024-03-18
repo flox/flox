@@ -906,10 +906,12 @@ impl Activate {
 mod activate_tests {
     use super::*;
 
+    #[cfg(target_os = "macos")]
     const PATH: &str =
         "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/flox/env/bin:/nix/store/some/bin";
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_fixup_path() {
         let flox_env_dirs = IndexSet::from(["/flox/env"].map(PathBuf::from));
         let fixed_up_path = Activate::fixup_path_with(PATH, &flox_env_dirs);
