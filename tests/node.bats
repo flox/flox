@@ -88,7 +88,7 @@ EOF
 
       # Ensure we're getting krb5 from the flox package by first checking
       # installation fails
-      "$FLOX_BIN" activate -- bash "$TESTS_DIR/node/krb5-fails.sh"
+      run ! "$FLOX_BIN" activate -- bash "$TESTS_DIR/node/krb5.sh"
 
       "$FLOX_BIN" install krb5
 
@@ -115,7 +115,7 @@ EOF
 
       # Ensure we're getting krb5 from the flox package by first checking
       # installation fails
-      "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/node/krb5-fails.sh"'
+      run ! "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/node/krb5.sh"'
 
       "$FLOX_BIN" install krb5
 
