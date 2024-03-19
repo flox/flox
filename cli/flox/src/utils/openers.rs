@@ -178,7 +178,7 @@ mod tests {
     /// TODO: we might want to better simulate an actual display and opener
     #[test]
     #[cfg(target_os = "linux")]
-    fn browser_detect_finds_opener_in_path() {
+    fn test_browser_detect_finds_opener_in_path() {
         use std::fs::File;
 
         use tempfile::tempdir;
@@ -205,9 +205,10 @@ mod tests {
         )
     }
 
+    /// On macOS, Browser::detect() returns /usr/bin/open
     #[test]
     #[cfg(target_os = "macos")]
-    fn browser_detect() {
+    fn test_browser_detect() {
         assert_eq!(
             Browser::detect(),
             Ok(Browser(PathBuf::from("/usr/bin/open")))
@@ -216,7 +217,7 @@ mod tests {
 
     #[test]
     /// Browser::detect() returns an error if SSH_TTY is set
-    fn browser_detect_respects_ssh_tty() {
+    fn test_browser_detect_respects_ssh_tty() {
         temp_env::with_var("SSH_TTY", Some("1"), || {
             assert!(Browser::detect().is_err());
         });
