@@ -170,10 +170,10 @@ PkgDbInput::getScrapingPageSize()
   // that it could be re-allocated.  The amount of truly *free* memory (at least
   // on linux) is usually relatively low.
   const std::vector<MemThreshold> MemThresholds = {
-    { 6 /* Gb */ * ( 1024 * 1024 ), PkgDbInput::maxPageSize },
-    { 4 /* Gb */ * ( 1024 * 1024 ), 20 * 1000 },
-    { 3 /* Gb */ * ( 1024 * 1024 ), 10 * 1000 },
-    { 2 /* Gb */ * ( 1024 * 1024 ), 4 * 1000 },
+    { 6 /* Gb */ * ( 1024 * 1024L ), PkgDbInput::maxPageSize },
+    { 4 /* Gb */ * ( 1024 * 1024L ), 20 * 1000UL },
+    { 3 /* Gb */ * ( 1024 * 1024L ), 10 * 1000UL },
+    { 2 /* Gb */ * ( 1024 * 1024L ), 4 * 1000UL },
   };
 
   // No override, so use heuristics
@@ -200,6 +200,7 @@ PkgDbInput::getScrapingPageSize()
   return PkgDbInput::minPageSize;
 }
 
+// NOLINTBEGIN cognitive complexity (nesting and logging macros)
 void
 PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
 {
@@ -287,6 +288,7 @@ PkgDbInput::scrapePrefix( const flox::AttrPath & prefix )
         }
     }
 }
+// NOLINTEND
 
 int
 PkgDbInput::scrapePrefixWorker( PkgDbInput *     input,

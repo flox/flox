@@ -467,7 +467,7 @@ displayableGlobbedPath( const AttrPathGlob & attrs );
 
 /** @brief Get available system memory in kb */
 [[nodiscard]] long
-getAvailableSystemMemory( void );
+getAvailableSystemMemory();
 
 /* -------------------------------------------------------------------------- */
 

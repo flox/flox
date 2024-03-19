@@ -16,6 +16,8 @@ use flox_rust_sdk::flox::{
     EnvironmentRef,
     Flox,
     Floxhub,
+    FloxhubToken,
+    FloxhubTokenError,
     DEFAULT_FLOXHUB_URL,
     DEFAULT_NAME,
     FLOX_VERSION,
@@ -241,6 +243,44 @@ impl FloxArgs {
             git_url_override,
         )?;
 
+        let floxhub_token = config
+            .flox
+            .floxhub_token
+            .as_deref()
+            .map(FloxhubToken::from_str)
+            .transpose();
+
+        let floxhub_token = match floxhub_token {
+            Err(FloxhubTokenError::Expired) => {
+                message::warning("Your FloxHub token has expired. You may need to log in again.");
+                if let Err(e) = update_config(
+                    &config.flox.config_dir,
+                    &temp_dir_path,
+                    "floxhub_token",
+                    None::<String>,
+                ) {
+                    log::debug!("Could not remove token from user config: {e}");
+                }
+                None
+            },
+            Err(FloxhubTokenError::InvalidToken(token_error)) => {
+                message::error(formatdoc! {"
+                    Your FloxHub token is invalid: {token_error}
+                    You may need to log in again.
+                "});
+                if let Err(e) = update_config(
+                    &config.flox.config_dir,
+                    &temp_dir_path,
+                    "floxhub_token",
+                    None::<String>,
+                ) {
+                    log::debug!("Could not remove token from user config: {e}");
+                }
+                None
+            },
+            Ok(token) => token,
+        };
+
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
@@ -250,7 +290,7 @@ impl FloxArgs {
             temp_dir: temp_dir_path.clone(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             uuid: init_uuid(&config.flox.data_dir).await?,
-            floxhub_token: config.flox.floxhub_token.clone(),
+            floxhub_token,
             floxhub,
         };
 
@@ -991,7 +1031,7 @@ pub(super) async fn ensure_environment_trust(
     }
 
     if let Some(ref token) = flox.floxhub_token {
-        if token.handle()?.as_str() == env_ref.owner().as_str() {
+        if token.handle() == env_ref.owner().as_str() {
             debug!("environment {env_ref} is trusted by token");
             return Ok(());
         }
@@ -1099,6 +1139,40 @@ pub(super) async fn ensure_environment_trust(
             Choices::ShowConfig => eprintln!("{}", environment.manifest_content(flox)?),
         }
     }
+}
+
+/// Ensure a floxhub_token is present
+///
+/// If the token is not present and we can prompt the user,
+/// run the login flow ([auth::login_flox]).
+pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<()> {
+    match flox.floxhub_token {
+        Some(ref token) => {
+            log::debug!("floxhub token is present; logged in as {}", token.handle());
+        },
+        None if !Dialog::can_prompt() => {
+            log::debug!("floxhub token is not present; can not prompt user");
+            let message = formatdoc! {"
+                You are not logged in to FloxHub.
+
+                Can not automatically login to FloxHub in non-interactive context.
+
+                To login you can either
+                * login to FloxHub with 'flox auth login',
+                * set the 'floxhub_token' field to '<your token>' in your config
+                * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable."
+            };
+            bail!(message);
+        },
+        None => {
+            log::debug!("floxhub token is not present; prompting user");
+
+            message::plain("You are not logged in to FloxHub. Logging in...");
+            auth::login_flox(flox).await?;
+        },
+    };
+
+    Ok(())
 }
 
 pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {

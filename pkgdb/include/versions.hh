@@ -86,7 +86,7 @@ isCoercibleToSemver( const std::string & version );
  * @see flox::resolver::ManifestDescriptor::semver
  */
 bool
-isSemverRange( const std::string & version );
+isSemverRange( const std::string & range );
 
 
 /* -------------------------------------------------------------------------- */

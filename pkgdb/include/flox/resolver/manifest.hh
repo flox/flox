@@ -46,7 +46,7 @@ namespace flox::resolver {
 
 /* -------------------------------------------------------------------------- */
 
-static const GroupName TOPLEVEL_GROUP_NAME = "toplevel";
+static constexpr std::string_view TOPLEVEL_GROUP_NAME = "toplevel";
 
 /** @brief Read a flox::resolver::ManifestBase from a file. */
 template<manifest_raw_type RawType>
@@ -89,9 +89,10 @@ protected:
   // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
   /** @brief Initialize @a registryRaw from @a manifestRaw. */
-  template<manifest_raw_type _RawType = RawType>
-  typename std::enable_if<std::derived_from<_RawType, GlobalManifestRaw>,
-                          void>::type
+  template<manifest_raw_type _RawManifestType = RawType>
+  typename std::enable_if<
+    std::derived_from<_RawManifestType, GlobalManifestRaw>,
+    void>::type
   initRegistry()
   {
     if ( this->manifestRaw.registry.has_value() )
@@ -101,9 +102,10 @@ protected:
   }
 
   /** @brief Initialize @a registryRaw from @a manifestRaw. */
-  template<manifest_raw_type _RawType = RawType>
-  typename std::enable_if<std::derived_from<_RawType, GlobalManifestRawGA>,
-                          void>::type
+  template<manifest_raw_type _RawManifestType = RawType>
+  typename std::enable_if<
+    std::derived_from<_RawManifestType, GlobalManifestRawGA>,
+    void>::type
   initRegistry()
   {
     this->registryRaw = getGARegistry();

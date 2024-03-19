@@ -46,8 +46,9 @@ getGroupedDescriptors( const InstallDescriptors & descriptors )
        * group as any packages without an explicit group. */
       if ( ! desc.group.has_value() )
         {
-          grouped.try_emplace( TOPLEVEL_GROUP_NAME, InstallDescriptors {} );
-          grouped.at( TOPLEVEL_GROUP_NAME ).emplace( iid, desc );
+          grouped.try_emplace( GroupName( TOPLEVEL_GROUP_NAME ),
+                               InstallDescriptors {} );
+          grouped.at( GroupName( TOPLEVEL_GROUP_NAME ) ).emplace( iid, desc );
         }
       else
         {

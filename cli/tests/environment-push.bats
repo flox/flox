@@ -33,7 +33,6 @@ setup() {
   project_setup
   floxhub_setup "owner"
 
-  export FLOX_FLOXHUB_TOKEN=flox_testOAuthToken
   export _FLOX_FLOXHUB_GIT_URL="file://$BATS_TEST_TMPDIR/floxhub"
 }
 teardown() {
@@ -63,7 +62,7 @@ function update_dummy_env() {
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=push:h1
-@test "h1: push login: running flox push before user has login metadata prompts the user to login" {
+@test "h2: push login: running flox push before user has login metadata prompts the user to login" {
   unset FLOX_FLOXHUB_TOKEN # logout, effectively
 
   run "$FLOX_BIN" config
@@ -75,8 +74,21 @@ function update_dummy_env() {
   assert_output --partial 'You are not logged in to FloxHub.'
 }
 
-# bats test_tags=push:h2
-@test "h2: push login: running flox push before user has login metadata prompts the user to login" {
+# bats test_tags=push:h1:expired
+@test "h2: push login: running flox with an expired token prompts the user to login" {
+  # set an expired token
+  export FLOX_FLOXHUB_TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY"
+
+  run "$FLOX_BIN" init
+  assert_output --partial 'Your FloxHub token has expired.'
+
+  run "$FLOX_BIN" push --owner owner # dummy owner
+  assert_failure
+  assert_output --partial 'You are not logged in to FloxHub.'
+}
+
+# bats test_tags=push:h3
+@test "h2: push login: running flox push creates a remotely managed environment stored in the FloxHub" {
   mkdir -p "machine_a"
   mkdir -p "machine_b"
 

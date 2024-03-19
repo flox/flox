@@ -1,9 +1,9 @@
 <h1 align="center">
   <a href="https://flox.dev" target="_blank">
     <picture>
-      <source media="(prefers-color-scheme: dark)"  srcset="img/flox_orange_small.png" />
-      <source media="(prefers-color-scheme: light)" srcset="img/flox_blue_small.png" />
-      <img src="img/flox_blue_small.png" alt="flox logo" />
+      <source media="(prefers-color-scheme: dark)"  srcset="img/flox-logo-white-on-black.png" />
+      <source media="(prefers-color-scheme: light)" srcset="img/flox-logo-black-on-white.png" />
+      <img src="img/flox-logo-black-on-white.png" alt="flox logo" />
     </picture>
   </a>
 </h1>
@@ -43,9 +43,9 @@
   </a>
 </p>
 
-[flox][website] is a virtual environment and package manager all in one. With flox you 
+[Flox][website] is a virtual environment and package manager all in one. With Flox you 
 create environments that layer and replace dependencies just where
-it matters, making them portable across the full software lifecycle
+it matters, making them portable across the full software lifecycle.
 
 Install packages from [the biggest open source repository
 (nixpkgs)][post-nixpkgs] that contains **more that 80.000 packages**.
@@ -63,16 +63,16 @@ With `flox` you can:<br/>
 </div>
 
 <!-- TODO: Compare with others
-- [flox vs Docker]
-- [flox vs Homebrew]
-- [flox vs Bazel]
+- [Flox vs Docker]
+- [Flox vs Homebrew]
+- [Flox vs Bazel]
 - .. more (point to the website)
 -->
 
 ## ⚡️ Quick start
 
 ``` text
-$ flox init           # <- Create an environment in current directory ✨ .
+$ flox init           # <- Create an environment in current directory ✨.
 
 $ flox search hello   # <- Search for a package 🚀.
 
@@ -86,11 +86,32 @@ Hello world!
 flox [my-project] $ exit    # <- Exit environment 💃.
 ```
 
+## ❓ Why
+
+We all build software on top of a dynamic set of tools,
+frameworks and packages, allowing us to move quickly and only
+build what’s necessary. However, each new wave of dev tooling
+innovation results in an entirely new set of dependencies that
+need to be managed. What starts as a simple app or microservice
+quickly grows complex, and
+turns into a expanding and fragmented supply
+chain. Flox brings reproducibility and consistency to complex
+software development lifecycles.
+
+## 📘 Origins
+
+Flox began its life during the deployment of Nix at
+the D. E. Shaw group, where it quickly proved invaluable
+by making Nix easier for newcomers and offering centralized
+control over packages. As a result, their successful project
+became one of the largest, most impactful enterprise deployments
+of Nix.
+
 ## 📫 Have a question? Want to chat? Ran into a problem?
 
 We are happy to welcome you to our [Discourse forum][discourse] and answer your
-questions! You can always reach out to us directly via the [flox twitter
-account][twitter] or chat to us directly on [Matrix][matrix] or
+questions! You can always reach out to us directly via the [Flox twitter
+account][twitter] or chat to us directly on [Slack][slack] or
 [Discord][discord].
 
 ## 🤝 Found a bug? Missing a specific feature?
@@ -106,7 +127,7 @@ guide](./CONTRIBUTING.md) first.
 
 ## 🪪 License
 
-The flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
+The Flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
 
 
 [website]: https://flox.dev
@@ -117,7 +138,7 @@ The flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
 [images]: docs/tutorials/sharing-environments/#sharing-with-containers
 [docs]: https://flox.dev/docs
 [twitter]: https://twitter.com/floxdevelopment
-[matrix]: https://matrix.to/#/#flox:matrix.org
+[slack]: https://go.flox.dev/slack
 [discord]: https://discord.gg/5H7hN57eQR
 [new-issue]: https://github.com/flox/flox/issues/new/choose
 [post-nixpkgs]: https://flox.dev/blog/nixpkgs
