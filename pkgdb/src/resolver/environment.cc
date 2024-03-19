@@ -8,7 +8,6 @@
  * -------------------------------------------------------------------------- */
 
 #include <algorithm>
-#include <assert.h>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -156,7 +155,7 @@ Environment::getOldManifestRaw() const
 bool
 Environment::upgradingGroup( const GroupName & name ) const
 {
-  bool upgrading;
+  bool upgrading = false;
   std::visit( overloaded { [&]( bool upgradeEverything )
                            { upgrading = upgradeEverything; },
 
@@ -209,40 +208,38 @@ Environment::groupIsLocked( const GroupName &          name,
   InstallDescriptors oldDescriptors = oldLockfile.getDescriptors();
 
   /* Check for upgrades. */
-  for ( auto & [iid, descriptor] : group )
+  for ( const auto & [iid, descriptor] : group )
     {
       /* If the descriptor has changed compared to the one in the lockfile
        * manifest, it needs to be locked again. */
-      if ( auto oldDescriptorPair = oldDescriptors.find( iid );
-           oldDescriptorPair == oldDescriptors.end() )
+      auto oldDescriptorPair = oldDescriptors.find( iid );
+      if ( oldDescriptorPair == oldDescriptors.end() )
         {
           /* If the descriptor doesn't even exist in the lockfile manifest, it
            * needs to be locked again. */
           return false;
         }
-      else
+
+      auto & [_, oldDescriptor] = *oldDescriptorPair;
+
+      /* We ignore `priority' and handle `systems' below. */
+      if ( ( descriptor.name != oldDescriptor.name )
+           || ( descriptor.pkgPath != oldDescriptor.pkgPath )
+           || ( descriptor.version != oldDescriptor.version )
+           || ( descriptor.semver != oldDescriptor.semver )
+           || ( descriptor.subtree != oldDescriptor.subtree )
+           || ( descriptor.input != oldDescriptor.input )
+           || ( descriptor.group != oldDescriptor.group )
+           || ( descriptor.optional != oldDescriptor.optional ) )
         {
-          auto & [_, oldDescriptor] = *oldDescriptorPair;
+          return false;
+        }
 
-          /* We ignore `priority' and handle `systems' below. */
-          if ( ( descriptor.name != oldDescriptor.name )
-               || ( descriptor.pkgPath != oldDescriptor.pkgPath )
-               || ( descriptor.version != oldDescriptor.version )
-               || ( descriptor.semver != oldDescriptor.semver )
-               || ( descriptor.subtree != oldDescriptor.subtree )
-               || ( descriptor.input != oldDescriptor.input )
-               || ( descriptor.group != oldDescriptor.group )
-               || ( descriptor.optional != oldDescriptor.optional ) )
-            {
-              return false;
-            }
-
-          /* Ignore changes to systems other than the one we're locking. */
-          if ( systemSkipped( system, descriptor.systems )
-               != systemSkipped( system, oldDescriptor.systems ) )
-            {
-              return false;
-            }
+      /* Ignore changes to systems other than the one we're locking. */
+      if ( systemSkipped( system, descriptor.systems )
+           != systemSkipped( system, oldDescriptor.systems ) )
+        {
+          return false;
         }
 
       /* Check if the descriptor exists in the lockfile lock */
@@ -460,10 +457,10 @@ Environment::getGroupInput( const InstallDescriptors & group,
    * just use _iid_. */
   for ( const auto & [iid, descriptor] : group )
     {
-      if ( auto it = oldSystemPackages.find( iid );
-           it != oldSystemPackages.end() )
+      if ( auto itPackage = oldSystemPackages.find( iid );
+           itPackage != oldSystemPackages.end() )
         {
-          auto & [_, maybeLockedPackage] = *it;
+          auto & [_, maybeLockedPackage] = *itPackage;
           if ( maybeLockedPackage.has_value() )
             {
               if ( auto oldDescriptorPair = oldDescriptors.find( iid );
@@ -655,7 +652,7 @@ Environment::tryResolveGroup( const GroupName &          name,
               if ( const InstallID * iid
                    = std::get_if<InstallID>( &maybeResolved ) )
                 {
-                  failure.push_back( std::pair<InstallID, std::string> {
+                  failure.emplace_back( std::pair<InstallID, std::string> {
                     *iid,
                     oldGroupInput->getDbReadOnly()->lockedRef.string } );
                 }
@@ -689,8 +686,9 @@ Environment::tryResolveGroup( const GroupName &          name,
 
               return *resolved;
             }
-          else if ( const InstallID * iid
-                    = std::get_if<InstallID>( &maybeResolved ) )
+
+          if ( const InstallID * iid
+               = std::get_if<InstallID>( &maybeResolved ) )
             {
               failure.push_back( std::pair<InstallID, std::string> {
                 *iid,

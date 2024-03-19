@@ -91,7 +91,12 @@ BuildEnvCommand::run()
   auto store = this->getStore();
   auto state = this->getState();
 
-  if ( this->storePath.has_value() && this->outLink.has_value() )
+  if ( this->storePath.has_value() && ! this->outLink.has_value() )
+    {
+      throw command::InvalidArgException(
+        "'--store-path' requires the '--out-link' flag" );
+    }
+  else if ( this->storePath.has_value() && this->outLink.has_value() )
     {
       std::filesystem::path path( this->storePath.value() );
       nix::StorePath        storePath( std::string( path.filename() ) );
@@ -105,11 +110,6 @@ BuildEnvCommand::run()
         = { { "store_path", store->printStorePath( storePath ) } };
       std::cout << result.dump() << '\n';
       return EXIT_SUCCESS;
-    }
-  else if ( this->storePath.has_value() && ! this->outLink.has_value() )
-    {
-      throw command::InvalidArgException(
-        "'--store-path' requires the '--out-link' flag" );
     }
 
   debugLog( "building environment" );

@@ -66,3 +66,65 @@ teardown() {
   run "$FLOX_BIN" activate -- yarn run start
   assert_output --partial "86400000"
 }
+
+@test "install krb5 with node" {
+  "$FLOX_BIN" init
+
+  # install a bunch of dependencies needed by npm install krb5 (except for
+  # krb5, which is installed below)
+  case "$NIX_SYSTEM" in
+    *-linux)
+      MANIFEST_CONTENT="$(cat << "EOF"
+        [install]
+        nodejs.pkg-path = "nodejs"
+        python3.pkg-path = "python3"
+        make.pkg-path = "gnumake"
+
+        # Linux only
+        gcc.pkg-path = "gcc"
+EOF
+  )"
+      echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+      # Ensure we're getting krb5 from the flox package by first checking
+      # installation fails
+      run ! "$FLOX_BIN" activate -- bash "$TESTS_DIR/node/krb5.sh"
+
+      "$FLOX_BIN" install krb5
+
+      "$FLOX_BIN" activate -- bash "$TESTS_DIR/node/krb5.sh"
+      ;;
+    *-darwin)
+      MANIFEST_CONTENT="$(cat << "EOF"
+        [install]
+        nodejs.pkg-path = "nodejs"
+        python3.pkg-path = "python3"
+        make.pkg-path = "gnumake"
+
+        # darwin only
+        clang.pkg-path = "clang"
+        cctools = { pkg-path = "darwin.cctools", priority = 6 }
+
+        # TODO: these are only necessary because of how we handle CPATH in
+        # activate
+        libcxx.pkg-path = "libcxx"
+        libcxxabi.pkg-path = "libcxxabi"
+EOF
+  )"
+      echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+      # Ensure we're getting krb5 from the flox package by first checking
+      # installation fails
+      run ! "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/node/krb5.sh"'
+
+      "$FLOX_BIN" install krb5
+
+      # TODO: fix CPATH in activate
+      "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/node/krb5.sh"'
+      ;;
+    *)
+      echo "unsupported system: $NIX_SYSTEM"
+      return 1
+      ;;
+  esac
+}

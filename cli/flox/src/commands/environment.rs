@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::ffi::{OsStr, OsString};
-use std::fmt::Display;
+#[cfg(target_os = "macos")]
+use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{stdin, stdout, Write};
 use std::os::unix::process::CommandExt;
@@ -54,15 +55,15 @@ use flox_rust_sdk::models::pkgdb::{self, error_codes, CallPkgDbError, PkgDbError
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use log::debug;
+use log::{debug, warn};
 use toml_edit::Document;
 use url::Url;
 
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{
     activated_environments,
-    auth,
     ensure_environment_trust,
+    ensure_floxhub_token,
     environment_description,
     ConcreteEnvironment,
     EnvironmentSelectError,
@@ -77,7 +78,12 @@ use crate::utils::errors::{
     format_core_error,
     format_locked_manifest_error,
 };
+<<<<<<< HEAD
 use crate::utils::{default_nix_env_vars, message};
+=======
+use crate::utils::message;
+use crate::utils::openers::Shell;
+>>>>>>> main
 use crate::{subcommand_metric, utils};
 
 // Edit declarative environment configuration
@@ -105,12 +111,17 @@ pub enum EditAction {
 }
 
 impl Edit {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("edit");
 
         let detected_environment = self
             .environment
             .detect_concrete_environment(&flox, "edit")?;
+
+        // Ensure the user is logged in for the following remote operations
+        if let ConcreteEnvironment::Remote(_) = detected_environment {
+            ensure_floxhub_token(&mut flox).await?;
+        };
 
         match self.action {
             EditAction::EditManifest { file } => {
@@ -375,59 +386,6 @@ pub struct Activate {
     run_args: Vec<String>,
 }
 
-#[derive(Debug)]
-enum ShellType {
-    Bash(PathBuf),
-    Zsh(PathBuf),
-}
-
-impl TryFrom<&Path> for ShellType {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &Path) -> std::prelude::v1::Result<Self, Self::Error> {
-        match value.file_name() {
-            Some(name) if name == "bash" => Ok(ShellType::Bash(value.to_owned())),
-            Some(name) if name == "zsh" => Ok(ShellType::Zsh(value.to_owned())),
-            _ => Err(anyhow!("Unsupported shell {value:?}")),
-        }
-    }
-}
-
-impl Display for ShellType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ShellType::Bash(_) => write!(f, "bash"),
-            ShellType::Zsh(_) => write!(f, "zsh"),
-        }
-    }
-}
-
-impl ShellType {
-    /// Detect the current shell from the SHELL environment variable
-    ///
-    /// TODO:
-    /// We want to print an activation script in the format appropriate for the shell that's actually running,
-    /// not whatever `SHELL` might be, as `SHELL` might not always be set correctly.
-    /// We should detect the type of our parent shell from flox' parent process,
-    /// using an approach like [1], rather than blindly trusting `SHELL`.
-    ///
-    /// [1]: <https://github.com/flox/flox/blob/668a80a40ba19d50f8ca304ff351f4b27a886e21/flox-bash/lib/utils.sh#L1432>
-    fn detect() -> Result<Self> {
-        let shell =
-            env::var("FLOX_SHELL").unwrap_or(env::var("SHELL").context("SHELL must be set")?);
-        let shell = Path::new(&shell);
-        let shell = Self::try_from(shell)?;
-        Ok(shell)
-    }
-
-    fn exe_path(&self) -> &Path {
-        match self {
-            ShellType::Bash(path) => path,
-            ShellType::Zsh(path) => path,
-        }
-    }
-}
-
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
@@ -558,8 +516,6 @@ impl Activate {
             (flox_env_dirs, flox_env_lib_dirs)
         };
 
-        let shell = ShellType::detect()?;
-
         let prompt_color_1 = env::var("FLOX_PROMPT_COLOR_1")
             .unwrap_or(utils::colors::INDIGO_400.to_ansi256().to_string());
         let prompt_color_2 = env::var("FLOX_PROMPT_COLOR_2")
@@ -609,13 +565,15 @@ impl Activate {
         //
         //    eval "$(flox activate)"
         if in_place {
+            let shell = Self::detect_shell_for_in_place()?;
             Self::activate_in_place(&shell, &exports, &activation_path);
 
             return Ok(());
         }
 
+        let shell = Self::detect_shell_for_subshell()?;
         let activate_error = if !self.run_args.is_empty() {
-            Self::activate_non_interactive(self.run_args, shell, exports, activation_path)
+            Self::activate_command(self.run_args, shell, exports, activation_path)
         } else {
             Self::activate_interactive(shell, exports, activation_path, now_active)
         };
@@ -624,9 +582,9 @@ impl Activate {
     }
 
     /// Used for `flox activate -- run_args`
-    fn activate_non_interactive(
+    fn activate_command(
         run_args: Vec<String>,
-        shell: ShellType,
+        shell: Shell,
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
     ) -> anyhow::Error {
@@ -663,7 +621,7 @@ impl Activate {
     ///
     /// This function should never return as it replaces the current process
     fn activate_interactive(
-        shell: ShellType,
+        shell: Shell,
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
         now_active: UninitializedEnvironment,
@@ -672,12 +630,12 @@ impl Activate {
         command.envs(exports);
 
         match shell {
-            ShellType::Bash(_) => {
+            Shell::Bash(_) => {
                 command
                     .arg("--rcfile")
                     .arg(activation_path.join("activate").join("bash"));
             },
-            ShellType::Zsh(_) => {
+            Shell::Zsh(_) => {
                 // From man zsh:
                 // Commands are then read from $ZDOTDIR/.zshenv.  If the shell is a
                 // login shell, commands are read from /etc/zprofile and then
@@ -784,6 +742,7 @@ impl Activate {
     /// Patch a given PATH value to undo the effects of `/usr/libexec/path_helper`
     ///
     /// See [Self::fixup_path] for more details.
+    #[cfg(target_os = "macos")]
     fn fixup_path_with(
         path_var: impl AsRef<OsStr>,
         flox_env_dirs: &IndexSet<PathBuf>,
@@ -832,11 +791,7 @@ impl Activate {
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(
-        shell: &ShellType,
-        exports: &HashMap<&str, String>,
-        activation_path: &Path,
-    ) {
+    fn activate_in_place(shell: &Shell, exports: &HashMap<&str, String>, activation_path: &Path) {
         let exports_rendered = exports
             .iter()
             .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
@@ -872,16 +827,95 @@ impl Activate {
             .map(|arg| format!(r#""{}""#, arg.replace('"', r#"\""#)))
             .join(" ")
     }
+
+    /// Explicitly set environment for nix calls
+    ///
+    /// Nixpkgs itself is broken in that the packages it creates depends
+    /// upon a variety of environment variables at runtime.  On NixOS
+    /// these are convenient to set on a system-wide basis but that
+    /// essentially masks the problem, and it's not uncommon to see Nix
+    /// packages trip over the absence of environment variables when
+    /// invoked on other Linux distributions.
+    ///
+    /// For flox specifically, set Nix-provided defaults for certain
+    /// environment variables that we know to be required on the various
+    /// operating systems.
+    /// Setting buildtime variants of these environment variables
+    /// will bundle them in flox' package closure
+    /// and ensure that subprocesses are run with valid known values.
+    fn default_subprocess_env_vars() -> HashMap<&'static str, String> {
+        let mut env_map: HashMap<&str, String> = HashMap::new();
+
+        // use buildtime NIXPKGS_CACERT_BUNDLE_CRT
+        let ssl_cert_file = match env::var("SSL_CERT_FILE") {
+            Ok(v) => v,
+            Err(_) => {
+                let nixpkgs_cacert_bundle_crt = env!("NIXPKGS_CACERT_BUNDLE_CRT");
+                env_map.insert("SSL_CERT_FILE", nixpkgs_cacert_bundle_crt.to_string());
+                nixpkgs_cacert_bundle_crt.to_string()
+            },
+        };
+
+        env_map.insert("NIX_SSL_CERT_FILE", ssl_cert_file);
+
+        // on macos use buildtime NIX_COREFOUNDATION_RPATH and PATH_LOCALE
+        #[cfg(target_os = "macos")]
+        {
+            env_map.insert(
+                "NIX_COREFOUNDATION_RPATH",
+                env!("NIX_COREFOUNDATION_RPATH").to_string(),
+            );
+            env_map.insert("PATH_LOCALE", env!("PATH_LOCALE").to_string());
+        }
+
+        // on linux use buildtime LOCALE_ARCHIVE
+        #[cfg(target_os = "linux")]
+        {
+            env_map.insert("LOCALE_ARCHIVE", env!("LOCALE_ARCHIVE").to_string());
+        }
+
+        env_map
+    }
+
+    /// Detect the shell to use for activation
+    ///
+    /// Used to determine shell for
+    /// `flox activate` and `flox activate -- CMD`
+    fn detect_shell_for_subshell() -> Result<Shell> {
+        Shell::detect_from_env("FLOX_SHELL").or_else(|_| Shell::detect_from_env("SHELL"))
+    }
+
+    /// Detect the shell to use for in-place activation
+    ///
+    /// Used to determine shell for `eval "$(flox activate)"` / `flox activate --print-script`
+    fn detect_shell_for_in_place() -> Result<Shell> {
+        Self::detect_shell_for_in_place_with(Shell::detect_from_parent_process)
+    }
+
+    /// Utility method for testing implementing the logic of shell detection
+    /// for in-place activation, generically over a parent shell detection function.
+    fn detect_shell_for_in_place_with(
+        parent_shell_fn: impl Fn() -> Result<Shell>,
+    ) -> Result<Shell> {
+        Shell::detect_from_env("FLOX_SHELL")
+            .or_else(|_| parent_shell_fn())
+            .or_else(|err| {
+                warn!("Failed to detect shell from environment: {err}");
+                Shell::detect_from_env("SHELL")
+            })
+    }
 }
 
 #[cfg(test)]
 mod activate_tests {
     use super::*;
 
+    #[cfg(target_os = "macos")]
     const PATH: &str =
         "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/flox/env/bin:/nix/store/some/bin";
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn test_fixup_path() {
         let flox_env_dirs = IndexSet::from(["/flox/env"].map(PathBuf::from));
         let fixed_up_path = Activate::fixup_path_with(PATH, &flox_env_dirs);
@@ -892,6 +926,63 @@ mod activate_tests {
             "/flox/env/bin:/nix/store/some/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
             "PATH was not reordered correctly"
         );
+    }
+
+    const SHELL_SET: (&'_ str, Option<&'_ str>) = ("SHELL", Some("/shell/bash"));
+    const FLOX_SHELL_SET: (&'_ str, Option<&'_ str>) = ("FLOX_SHELL", Some("/flox_shell/bash"));
+    const SHELL_UNSET: (&'_ str, Option<&'_ str>) = ("SHELL", None);
+    const FLOX_SHELL_UNSET: (&'_ str, Option<&'_ str>) = ("FLOX_SHELL", None);
+    const PARENT_DETECTED: &dyn Fn() -> Result<Shell> = &|| Ok(Shell::Bash("/parent/bash".into()));
+    const PARENT_UNDETECTED: &dyn Fn() -> Result<Shell> =
+        &|| Err(anyhow::anyhow!("parent shell detection failed"));
+
+    #[test]
+    fn test_detect_shell_for_subshell() {
+        temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_SET], || {
+            let shell = Activate::detect_shell_for_subshell().unwrap();
+            assert_eq!(shell, Shell::Bash("/shell/bash".into()));
+        });
+
+        temp_env::with_vars([FLOX_SHELL_SET, SHELL_SET], || {
+            let shell = Activate::detect_shell_for_subshell().unwrap();
+            assert_eq!(shell, Shell::Bash("/flox_shell/bash".into()));
+        });
+
+        temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_UNSET], || {
+            let shell = Activate::detect_shell_for_subshell();
+            assert!(shell.is_err());
+        });
+    }
+
+    #[test]
+    fn test_detect_shell_for_in_place() {
+        // $SHELL is used as a fallback only if parent detection fails
+        temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_SET], || {
+            let shell = Activate::detect_shell_for_in_place_with(PARENT_DETECTED).unwrap();
+            assert_eq!(shell, Shell::Bash("/parent/bash".into()));
+
+            // fall back to $SHELL if parent detection fails
+            let shell = Activate::detect_shell_for_in_place_with(PARENT_UNDETECTED).unwrap();
+            assert_eq!(shell, Shell::Bash("/shell/bash".into()));
+        });
+
+        // $FLOX_SHELL takes precedence over $SHELL and detected parent shell
+        temp_env::with_vars([FLOX_SHELL_SET, SHELL_SET], || {
+            let shell = Activate::detect_shell_for_in_place_with(PARENT_DETECTED).unwrap();
+            assert_eq!(shell, Shell::Bash("/flox_shell/bash".into()));
+
+            let shell = Activate::detect_shell_for_in_place_with(PARENT_UNDETECTED).unwrap();
+            assert_eq!(shell, Shell::Bash("/flox_shell/bash".into()));
+        });
+
+        // if both $FLOX_SHELL and $SHELL are unset, we should fail iff parent detection fails
+        temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_UNSET], || {
+            let shell = Activate::detect_shell_for_in_place_with(PARENT_DETECTED).unwrap();
+            assert_eq!(shell, Shell::Bash("/parent/bash".into()));
+
+            let shell = Activate::detect_shell_for_in_place_with(PARENT_UNDETECTED);
+            assert!(shell.is_err());
+        });
     }
 }
 
@@ -1081,7 +1172,7 @@ pub struct PkgWithIdOption {
 }
 
 impl Install {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("install");
 
         debug!(
@@ -1113,6 +1204,12 @@ impl Install {
             Err(e) => Err(e)?,
         };
         let description = environment_description(&concrete_environment)?;
+
+        // Ensure the user is logged in for the following remote operations
+        if let ConcreteEnvironment::Remote(_) = concrete_environment {
+            ensure_floxhub_token(&mut flox).await?;
+        };
+
         let mut environment = concrete_environment.into_dyn_environment();
         let mut packages = self
             .packages
@@ -1232,7 +1329,7 @@ pub struct Uninstall {
 }
 
 impl Uninstall {
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("uninstall");
 
         debug!(
@@ -1263,6 +1360,12 @@ impl Uninstall {
             },
             Err(e) => Err(e)?,
         };
+
+        // Ensure the user is logged in for the following remote operations
+        if let ConcreteEnvironment::Remote(_) = concrete_environment {
+            ensure_floxhub_token(&mut flox).await?;
+        };
+
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
 
@@ -1357,25 +1460,8 @@ impl Push {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("push");
 
-        if flox.floxhub_token.is_none() {
-            if !Dialog::can_prompt() {
-                let message = formatdoc! {"
-                    You are not logged in to FloxHub.
-
-                    Can not automatically login to FloxHub in non-interactive context.
-
-                    To login you can either
-                    * login to FloxHub with 'flox auth login',
-                    * set the 'floxhub_token' field to '<your token>' in your config
-                    * set the '$FLOX_FLOXHUB_TOKEN=<your_token>' environment variable."
-                };
-                bail!(message);
-            }
-
-            message::plain("You are not logged in to FloxHub. Logging in...");
-
-            auth::login_flox(&mut flox).await?;
-        }
+        // Ensure the user is logged in for the following remote operations
+        ensure_floxhub_token(&mut flox).await?;
 
         let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
@@ -1400,11 +1486,10 @@ impl Push {
                     owner
                 } else {
                     EnvironmentOwner::from_str(
-                        &flox
-                            .floxhub_token
+                        flox.floxhub_token
                             .as_ref()
                             .context("Need to be loggedin")?
-                            .handle()?,
+                            .handle(),
                     )?
                 };
 
@@ -1473,6 +1558,7 @@ impl Push {
 
                 To rename your environment: 'flox edit --name <new name>'
                 To pull and manually re-apply your changes: 'flox delete && flox pull -r {owner}/{name}'
+                To overwrite and force update: 'flox push --force'
             "}.into(),
             ManagedEnvironmentError::Build(ref err) => formatdoc! {"
                 {err}
@@ -1911,8 +1997,7 @@ impl Pull {
                 let by_current_user = flox
                     .floxhub_token
                     .as_ref()
-                    .and_then(|token| token.handle().ok())
-                    .map(|handle| handle == env_ref.owner().as_str())
+                    .map(|token| token.handle() == env_ref.owner().as_str())
                     .unwrap_or_default();
                 let message = format!("The environment {env_ref} does not exist.");
                 if by_current_user {

@@ -90,11 +90,12 @@ RulesTreeNode::addRule( AttrPathGlob & relPath, ScrapeRule rule )
   //       Removing from the front is inefficient for `std::vector'.
   relPath.erase( relPath.begin() );
 
-  if ( auto it = this->children.find( attrName ); it != this->children.end() )
+  if ( auto itChild = this->children.find( attrName );
+       itChild != this->children.end() )
     {
       traceLog( "found existing child '" + attrName + '\'' );
       /* Add to existing child node. */
-      it->second.addRule( relPath, rule );
+      itChild->second.addRule( relPath, rule );
     }
   else if ( relPath.empty() )
     {
@@ -144,11 +145,11 @@ RulesTreeNode::applyRules( const AttrPath & path ) const
   if ( rule == SR_DEFAULT )
     {
       AttrPath pathCopy = path;
-      do {
+      while ( ( rule == SR_DEFAULT ) && ( ! pathCopy.empty() ) )
+        {
           pathCopy.pop_back();
           rule = this->getRule( pathCopy );
         }
-      while ( ( rule == SR_DEFAULT ) && ( ! pathCopy.empty() ) );
     }
 
   switch ( rule )
@@ -192,27 +193,27 @@ to_json( nlohmann::json & jto, const RulesTreeNode & rules )
 
 /* -------------------------------------------------------------------------- */
 
-RulesTreeNode::RulesTreeNode( ScrapeRulesRaw raw )
+RulesTreeNode::RulesTreeNode( const ScrapeRulesRaw & raw )
 {
   /* Add rules in order of precedence */
   for ( const auto & path : raw.allowPackage )
     {
-      AttrPathGlob pathCopy( std::move( path ) );
+      AttrPathGlob pathCopy( path );
       this->addRule( pathCopy, SR_ALLOW_PACKAGE );
     }
   for ( const auto & path : raw.disallowPackage )
     {
-      AttrPathGlob pathCopy( std::move( path ) );
+      AttrPathGlob pathCopy( path );
       this->addRule( pathCopy, SR_DISALLOW_PACKAGE );
     }
   for ( const auto & path : raw.allowRecursive )
     {
-      AttrPathGlob pathCopy( std::move( path ) );
+      AttrPathGlob pathCopy( path );
       this->addRule( pathCopy, SR_ALLOW_RECURSIVE );
     }
   for ( const auto & path : raw.disallowRecursive )
     {
-      AttrPathGlob pathCopy( std::move( path ) );
+      AttrPathGlob pathCopy( path );
       this->addRule( pathCopy, SR_DISALLOW_RECURSIVE );
     }
 }
@@ -223,72 +224,40 @@ RulesTreeNode::RulesTreeNode( ScrapeRulesRaw raw )
 void
 from_json( const nlohmann::json & jfrom, ScrapeRulesRaw & rules )
 {
+  auto addPaths
+    = []( std::string key, std::vector<AttrPathGlob> & vect, auto paths )
+  {
+    for ( const auto & path : paths )
+      {
+        try
+          {
+            vect.emplace_back( path );
+          }
+        catch ( nlohmann::json::exception & err )
+          {
+            throw PkgDbException( "couldn't interpret field '" + key + "': ",
+                                  flox::extract_json_errmsg( err ) );
+          }
+      }
+  };
+
   for ( const auto & [key, value] : jfrom.items() )
     {
       if ( key == "allowPackage" )
         {
-          for ( const auto & path : value )
-            {
-              try
-                {
-                  rules.allowPackage.emplace_back( path );
-                }
-              catch ( nlohmann::json::exception & err )
-                {
-                  throw PkgDbException(
-                    "couldn't interpret field 'allowPackage." + key + "': ",
-                    flox::extract_json_errmsg( err ) );
-                }
-            }
+          addPaths( key, rules.allowPackage, value );
         }
       else if ( key == "disallowPackage" )
         {
-          for ( const auto & path : value )
-            {
-              try
-                {
-                  rules.disallowPackage.emplace_back( path );
-                }
-              catch ( nlohmann::json::exception & err )
-                {
-                  throw PkgDbException(
-                    "couldn't interpret field 'disallowPackage." + key + "': ",
-                    flox::extract_json_errmsg( err ) );
-                }
-            }
+          addPaths( key, rules.disallowPackage, value );
         }
       else if ( key == "allowRecursive" )
         {
-          for ( const auto & path : value )
-            {
-              try
-                {
-                  rules.allowRecursive.emplace_back( path );
-                }
-              catch ( nlohmann::json::exception & err )
-                {
-                  throw PkgDbException(
-                    "couldn't interpret field 'allowRecursive." + key + "': ",
-                    flox::extract_json_errmsg( err ) );
-                }
-            }
+          addPaths( key, rules.allowRecursive, value );
         }
       else if ( key == "disallowRecursive" )
         {
-          for ( const auto & path : value )
-            {
-              try
-                {
-                  rules.disallowRecursive.emplace_back( path );
-                }
-              catch ( nlohmann::json::exception & err )
-                {
-                  throw PkgDbException(
-                    "couldn't interpret field 'disallowRecursive'." + key
-                      + "': ",
-                    flox::extract_json_errmsg( err ) );
-                }
-            }
+          addPaths( key, rules.disallowRecursive, value );
         }
       else { throw FloxException( "unknown scrape rule: '" + key + "'" ); }
     }

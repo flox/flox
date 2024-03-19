@@ -12,11 +12,13 @@ labels: bug
 2.
 3.
 
-Result: 
+Result:
 
-Expected: 
+Expected:
 
 
 **Screenshots/terminal output (if relevant):**
 
 ** flox Version (run `flox --version` if possible): **
+
+** `uname -a` output: **

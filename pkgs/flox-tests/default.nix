@@ -1,15 +1,14 @@
 {
-  self,
   gcc,
   runCommandCC,
   stdenv,
-  darwin,
   lib,
   bash,
   zsh,
   dash,
   bats,
   coreutils,
+  curl,
   entr,
   expect,
   findutils,
@@ -49,6 +48,7 @@
       dash
       batsWith
       coreutils
+      curl
       entr
       expect
       findutils

@@ -33,10 +33,10 @@ namespace flox::resolver {
  * @param value An allocated `nix::Value` to store the result in.
  */
 void
-prim_resolve( nix::EvalState &  state,
-              const nix::PosIdx pos,
-              nix::Value **     args,
-              nix::Value &      value );
+prim_resolve( nix::EvalState & state,
+              nix::PosIdx      pos,
+              nix::Value **    args,
+              nix::Value &     value );
 
 
 /* -------------------------------------------------------------------------- */

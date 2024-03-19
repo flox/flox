@@ -74,7 +74,7 @@ FLOX_DEFINE_EXCEPTION( NixException, EC_NIX, "caught a nix exception" )
 void
 setVerbosityFromEnv()
 {
-  auto valueChars = std::getenv( "_FLOX_PKGDB_VERBOSITY" );
+  auto * valueChars = std::getenv( "_FLOX_PKGDB_VERBOSITY" );
   if ( valueChars == nullptr ) { return; }
   std::string value( valueChars );
   if ( value == std::string( "0" ) ) { nix::verbosity = nix::lvlError; }

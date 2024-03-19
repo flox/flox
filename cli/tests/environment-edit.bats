@@ -111,7 +111,7 @@ EOF
 
   sed "s/\[hook\]/${HOOK//$'\n'/\\n}/" "$MANIFEST_PATH" > "$TMP_MANIFEST_PATH"
 
-  SHELL=bash run expect "$TESTS_DIR/edit/re-activate.exp" "$TMP_MANIFEST_PATH"
+  FLOX_SHELL=bash run expect "$TESTS_DIR/edit/re-activate.exp" "$TMP_MANIFEST_PATH"
   assert_success
 }
 
