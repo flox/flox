@@ -150,10 +150,15 @@ jobs:
       - name: "Build"
         run: nix develop -L --no-update-lock-file --command just build-cli
 
-      - name: "CLI Tests"
+      - name: "CLI Unit Tests"
         env:
           RUST_BACKTRACE: 1
-        run: nix develop -L --no-update-lock-file --command just test-cli
+        run: nix develop -L --no-update-lock-file --command just impure-tests
+
+      - name: "CLI Integration Tests"
+        env:
+          RUST_BACKTRACE: 1
+        run: nix develop -L --no-update-lock-file --command just integ-tests -- -j 4
 
       - name: "Functional Tests"
         if: ${{ github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
@@ -360,4 +365,5 @@ jobs:
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests'
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests' \
+                -- -- -j 4
