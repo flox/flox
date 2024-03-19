@@ -706,6 +706,7 @@ mod tests {
     #[cfg(feature = "impure-unit-tests")]
     use crate::models::environment::init_global_manifest;
 
+    /// Create a CoreEnvironment with an empty manifest
     fn empty_core_environment() -> (CoreEnvironment, Flox, TempDir) {
         let (flox, tempdir) = flox_instance();
 

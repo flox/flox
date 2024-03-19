@@ -1190,7 +1190,6 @@ mod tests {
     /// is_active() behaves as expected when using set_last_active()
     #[test]
     fn test_is_active() {
-
         let env1 = UninitializedEnvironment::DotFlox(DotFlox {
             path: PathBuf::new(),
             pointer: EnvironmentPointer::Path(PathPointer::new(
@@ -1210,7 +1209,6 @@ mod tests {
         assert!(active.is_active(&env1));
         assert!(!active.is_active(&env2));
     }
-
 
     /// Simulate setting an active environment in one flox invocation and then
     /// checking if it's active in a second.
