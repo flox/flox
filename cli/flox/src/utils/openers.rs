@@ -215,8 +215,8 @@ mod tests {
         );
     }
 
-    #[test]
     /// Browser::detect() returns an error if SSH_TTY is set
+    #[test]
     fn test_browser_detect_respects_ssh_tty() {
         temp_env::with_var("SSH_TTY", Some("1"), || {
             assert!(Browser::detect().is_err());
