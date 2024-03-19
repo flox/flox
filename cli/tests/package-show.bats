@@ -37,15 +37,18 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
 }
+
 teardown() {
   common_test_teardown
 }
 
 setup_file() {
-  rm -f "$GLOBAL_MANIFEST_LOCK"
-  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
-    "$FLOX_BIN" update --global
+  :
 }
 
 # ---------------------------------------------------------------------------- #

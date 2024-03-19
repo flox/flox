@@ -30,13 +30,11 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox
   project_setup
   floxhub_setup "owner"
-
-  export _FLOX_FLOXHUB_GIT_URL="file://$BATS_TEST_TMPDIR/floxhub"
 }
 teardown() {
-  unset _FLOX_FLOXHUB_GIT_URL
   project_teardown
   common_test_teardown
 }
