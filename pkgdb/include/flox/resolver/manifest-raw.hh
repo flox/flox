@@ -292,6 +292,23 @@ struct HookRaw
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Declares scripts to be sourced by the user's interactive shell after
+ * activating the environment.*/
+struct ProfileScriptsRaw
+{
+  /** @brief A script intended to be sourced by all shells. */
+  std::optional<std::string> common;
+
+  /** @brief A script intended to be sourced only in Bash shells. */
+  std::optional<std::string> bash;
+
+  /** @brief A script intended to be sourced only in Zsh shells. */
+  std::optional<std::string> zsh;
+};
+
+
+/* -------------------------------------------------------------------------- */
+
 /**
  * @brief A _raw_ description of an environment to be read from a file.
  *
@@ -311,6 +328,8 @@ struct ManifestRaw : public GlobalManifestRaw
     install;
 
   std::optional<std::unordered_map<std::string, std::string>> vars;
+
+  std::optional<ProfileScriptsRaw> profile;
 
   std::optional<HookRaw> hook;
 
@@ -374,6 +393,7 @@ struct ManifestRaw : public GlobalManifestRaw
     this->install = std::nullopt;
     this->vars    = std::nullopt;
     this->hook    = std::nullopt;
+    this->profile = std::nullopt;
   }
 
   /**
@@ -499,6 +519,8 @@ struct ManifestRawGA : public GlobalManifestRawGA
 
   std::optional<std::unordered_map<std::string, std::string>> vars;
 
+  std::optional<ProfileScriptsRaw> profile;
+
   std::optional<HookRaw> hook;
 
 
@@ -556,6 +578,7 @@ struct ManifestRawGA : public GlobalManifestRawGA
     /* From `ManifestRawGA' */
     this->install = std::nullopt;
     this->vars    = std::nullopt;
+    this->profile = std::nullopt;
     this->hook    = std::nullopt;
   }
 
@@ -574,6 +597,7 @@ struct ManifestRawGA : public GlobalManifestRawGA
     raw.options  = this->options;
     raw.install  = this->install;
     raw.vars     = this->vars;
+    raw.profile  = this->profile;
     raw.hook     = this->hook;
     return raw;
   }

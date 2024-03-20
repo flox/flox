@@ -49,12 +49,13 @@ flox [env1 env2 env3] <normal prompt>
 ```
 
 When multiple environments are activated each of their shell hooks
-(`hook.script` or `hook.file`)
+(`profile` and `hook` scripts)
 are executed in the context of the environment that they come from.
 This means that for each shell hook various environment variables such as
 `PATH`, `MANPATH`, `PKG_CONFIG_PATH`, `PYTHONPATH`, etc,
 are set to the appropriate values for the environment in which the shell
 hook was defined.
+See [`manifest.toml(1)`](./manifest.toml.md) for more details on shell hooks.
 
 # OPTIONS
 

@@ -629,9 +629,7 @@ getRealisedPackages( nix::ref<nix::EvalState> &         state,
 void
 addScriptToScriptsDir( const std::string &           scriptContents,
                        const std::filesystem::path & scriptsDir,
-                       const std::string &           scriptName,
-                       std::stringstream & mainActivationScriptContents,
-                       const bool          shouldSource )
+                       const std::string &           scriptName )
 {
   /* Ensure that the "activate" subdirectory exists. */
   std::filesystem::create_directories( scriptsDir / ACTIVATION_SUBDIR_NAME );
@@ -663,47 +661,54 @@ addScriptToScriptsDir( const std::string &           scriptContents,
   std::filesystem::permissions( scriptPath,
                                 std::filesystem::perms::owner_exec,
                                 std::filesystem::perm_options::add );
+}
 
-  /* Reference the script from the main activation script. */
-  auto scriptRelativePath
-    = nix::fmt( "\"$FLOX_ENV/%s/%s\"", ACTIVATION_SUBDIR_NAME, scriptName );
-  if ( shouldSource )
-    {
-      mainActivationScriptContents << "source " << scriptRelativePath << '\n';
-    }
-  else
-    {
-      mainActivationScriptContents << FLOX_BASH_BIN << " " << scriptRelativePath
-                                   << '\n';
-    }
+std::string
+activationScriptEnvironmentPath( const std::string & scriptName )
+{
+  return nix::fmt( "\"$FLOX_ENV/%s/%s\"", ACTIVATION_SUBDIR_NAME, scriptName );
+}
+
+void
+appendSourcedScript( const std::string & scriptName,
+                     std::stringstream & mainScript )
+{
+  mainScript << "source " << activationScriptEnvironmentPath( scriptName )
+             << '\n';
+}
+
+void
+appendBashCalledScript( const std::string & scriptName,
+                        std::stringstream & mainScript )
+{
+  mainScript << FLOX_BASH_BIN << " "
+             << activationScriptEnvironmentPath( scriptName ) << '\n';
 }
 
 
 /* -------------------------------------------------------------------------- */
 
-/**
- * @brief Make a @a RealisedPackage and store path for the activation scripts.
- * The package contains the activation scripts for *bash* and *zsh*.
- * @param state Nix state.
- * @param lockfile Lockfile to extract environment variables and hook script
- * from.
- * @return A pair of the realised package and the store path of the activation
- * scripts.
- */
-static std::pair<buildenv::RealisedPackage, nix::StorePathSet>
+std::pair<buildenv::RealisedPackage, nix::StorePathSet>
 makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile )
 {
   std::vector<nix::StorePath> activationScripts;
-  /* verbatim content of the activate script common to all shells */
-  std::stringstream commonActivate;
-
   auto tempDir = std::filesystem::path( nix::createTempDir() );
   std::filesystem::create_directories( tempDir / "activate" );
 
-  /* Add environment variables.
-   * Read environment variables from the manifest and add them as exports to the
-   * activate script. */
-  if ( auto vars = lockfile.getManifest().getManifestRaw().vars )
+  /* Create the shell-specific activation scripts */
+  std::stringstream bashScript;
+  std::stringstream zshScript;
+
+  /* Add the preambles */
+  bashScript << BASH_ACTIVATE_SCRIPT << "\n";
+  bashScript << "source " << SET_PROMPT_BASH_SH << "\n";
+  zshScript << ZSH_ACTIVATE_SCRIPT << "\n";
+  zshScript << "source " << SET_PROMPT_ZSH_SH << "\n";
+
+  auto manifest = lockfile.getManifest().getManifestRaw();
+
+  /* Add environment variables. */
+  if ( auto vars = manifest.vars )
     {
 
       for ( auto [name, value] : vars.value() )
@@ -722,51 +727,65 @@ makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile )
               indexOfQuoteChar += 4;
             }
 
-          commonActivate << nix::fmt( "export %s='%s'\n", name, value );
+          bashScript << nix::fmt( "export %s='%s'\n", name, value );
+          zshScript << nix::fmt( "export %s='%s'\n", name, value );
+        }
+    }
+
+  /* Add profile scripts */
+  auto profile = manifest.profile;
+  if ( profile.has_value() )
+    {
+      if ( profile->common.has_value() )
+        {
+          debugLog( "adding 'profile.common' to activation scripts" );
+          addScriptToScriptsDir( *profile->common, tempDir, "profile-common" );
+          appendSourcedScript( "profile-common", bashScript );
+          appendSourcedScript( "profile-common", zshScript );
+        }
+      if ( profile->bash.has_value() )
+        {
+          debugLog( "adding 'profile.bash' to activation scripts" );
+          addScriptToScriptsDir( *profile->bash, tempDir, "profile-bash" );
+          appendSourcedScript( "profile-bash", bashScript );
+        }
+      if ( profile->zsh.has_value() )
+        {
+          debugLog( "adding 'profile.zsh' to activation scripts" );
+          addScriptToScriptsDir( *profile->zsh, tempDir, "profile-zsh" );
+          appendSourcedScript( "profile-zsh", zshScript );
         }
     }
 
   /* Add 'on-activate' script. */
-  auto hook = lockfile.getManifest().getManifestRaw().hook;
+  auto hook = manifest.hook;
   if ( hook.has_value() )
     {
+      // [hook.script] is deprecated, in favor of [profile.*].  For now we will
+      // allow it.
+      // TODO: print a warning??
       if ( hook->script.has_value() )
         {
           debugLog( "adding 'hook.script' to activation scripts" );
-          addScriptToScriptsDir( hook->script.value(),
-                                 tempDir,
-                                 "hook.sh",
-                                 commonActivate,
-                                 true );
+          addScriptToScriptsDir( *hook->script, tempDir, "hook-script" );
+          appendSourcedScript( "hook-script", bashScript );
+          appendSourcedScript( "hook-script", zshScript );
         }
-      else if ( hook->onActivate.has_value() )
+
+      if ( hook->onActivate.has_value() )
         {
           debugLog( "adding 'hook.on-activate' to activation scripts" );
-          addScriptToScriptsDir( hook->onActivate.value(),
+          addScriptToScriptsDir( *hook->onActivate,
                                  tempDir,
-                                 "on-activate.sh",
-                                 commonActivate,
-                                 false );
+                                 "hook-on-activate" );
+          appendBashCalledScript( "hook-on-activate", bashScript );
+          appendBashCalledScript( "hook-on-activate", zshScript );
         }
     }
 
-  /* Add bash activation script. */
-  std::ofstream bashActivate( tempDir / "activate" / "bash" );
-  /* If this gets bigger, we could factor this out into a file that gets
-   * sourced, like we do for zsh. */
-  bashActivate << BASH_ACTIVATE_SCRIPT << "\n";
-  bashActivate << "source " << SET_PROMPT_BASH_SH << "\n";
-  bashActivate << commonActivate.str();
-  bashActivate.close();
-
-  /* Add zsh activation script.
-   * Functionality shared between all environments is
-   * in `flox.zdotdir/.zshrc'. */
-  std::ofstream zshActivate( tempDir / "activate" / "zsh" );
-  zshActivate << ZSH_ACTIVATE_SCRIPT << "\n";
-  zshActivate << "source " << SET_PROMPT_ZSH_SH << "\n";
-  zshActivate << commonActivate.str();
-  zshActivate.close();
+  /* Add the shell-specific scripts to the scripts directory */
+  addScriptToScriptsDir( bashScript.str(), tempDir, "bash" );
+  addScriptToScriptsDir( zshScript.str(), tempDir, "zsh" );
 
   debugLog( "adding activation scripts to store" );
   auto activationStorePath

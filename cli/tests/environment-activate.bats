@@ -35,19 +35,19 @@ foo = "baz"
 EOF
   )
 
-  export HELLO_HOOK=$(
+  export HELLO_PROFILE_SCRIPT=$(
     cat <<- EOF
-[hook]
-script = """
+[profile]
+common = """
   echo "Welcome to your flox environment!";
 """
 EOF
   )
 
-  export VARS_HOOK=$(
+  export VARS_PROFILE_SCRIPT=$(
     cat << EOF
-[hook]
-script = """
+[profile]
+common = """
   echo \$foo;
 """
 EOF
@@ -129,8 +129,9 @@ env_is_activated() {
 
 # ---------------------------------------------------------------------------- #
 # bats test_tags=activate,activate:hook:bash
-@test "bash: activate runs hook" {
-  sed -i -e "s/\[hook\]/${HELLO_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+@test "bash: activate runs 'profile.common'" {
+  # calls init
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_SHELL=bash NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR"
   assert_output --partial "Welcome to your flox environment!"
@@ -142,8 +143,8 @@ env_is_activated() {
 
 # ---------------------------------------------------------------------------- #
 # bats test_tags=activate,activate:hook:zsh
-@test "zsh: activate runs hook" {
-  sed -i -e "s/\[hook\]/${HELLO_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+@test "zsh: activate runs 'profile.common'" {
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
@@ -183,7 +184,7 @@ env_is_activated() {
 # ---------------------------------------------------------------------------- #
 # bats test_tags=activate,activate:envVar:bash
 @test "bash: activate sets env var" {
-  sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_SHELL=bash NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
@@ -197,7 +198,7 @@ env_is_activated() {
 # bats test_tags=activate,activate:envVar:zsh
 @test "zsh: activate sets env var" {
 
-  sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
@@ -214,8 +215,8 @@ env_is_activated() {
 
 # bats test_tags=activate,activate:envVar-before-hook:zsh
 @test "zsh and bash: activate sets env var before hook" {
-  sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  sed -i -e "s/\[hook\]/${VARS_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[profile\]/${VARS_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
@@ -377,9 +378,9 @@ env_is_activated() {
 @test "'flox activate' modifies the current shell (bash)" {
 
   # set a hook
-  sed -i -e "s/\[hook\]/${HELLO_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set vars
-  sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   "$FLOX_BIN" install hello
 
   run bash -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
@@ -396,9 +397,9 @@ env_is_activated() {
 @test "'flox activate' modifies the current shell (zsh)" {
 
   # set a hook
-  sed -i -e "s/\[hook\]/${HELLO_HOOK//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set vars
-  sed -i -e "s/\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   "$FLOX_BIN" install hello
 
   run zsh -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
@@ -411,8 +412,23 @@ env_is_activated() {
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:inplace-reactivate
-@test "'flox activate' only patches PATH when already activated" {
-  run bash -c 'eval "$("$FLOX_BIN" activate --print-script)"; "$FLOX_BIN" activate --print-script'
+@test "bash: 'flox activate' only patches PATH when already activated" {
+  SHELL="bash" run bash -c 'eval "$("$FLOX_BIN" activate --print-script)"; "$FLOX_BIN" activate --print-script'
+  assert_success
+  # on macos activating an already activated environment using
+  # `eval "$(flox activate [--print-script])"
+  # will only fix the PATH
+  if [[ -e /usr/libexec/path_helper ]]; then
+    assert_output --regexp "^(export PATH=.+)$"
+  else
+    # on linux reactivation is ignored
+    assert_output ""
+  fi
+}
+
+# bats test_tags=activate,activate:inplace-reactivate
+@test "zsh: 'flox activate' only patches PATH when already activated" {
+  SHELL="zsh" run zsh -c 'eval "$("$FLOX_BIN" activate --print-script)"; "$FLOX_BIN" activate --print-script'
   assert_success
   # on macos activating an already activated environment using
   # `eval "$(flox activate [--print-script])"
@@ -531,4 +547,32 @@ env_is_activated() {
   #   script isn't supposed to be able to modify environment variables.
   run "$FLOX_BIN" activate -- echo '$foo'
   assert_output "bar"
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "bash: 'profile.common' is sourced before 'profile.bash'" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/profile-order.toml"
+  SHELL="bash" run bash -c '"$FLOX_BIN" activate -- true'
+  # 'profile.common' sets a var containing "common",
+  # 'profile.bash' creates a directory named after the contents of that
+  # variable, suffixed by '-bash'
+  [ -d "common-bash" ]
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+@test "zsh: 'profile.common' is sourced before 'profile.zsh'" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/profile-order.toml"
+  SHELL="zsh" run zsh -c '"$FLOX_BIN" activate -- true'
+  # 'profile.common' sets a var containing "common",
+  # 'profile.zsh' creates a directory named after the contents of that variable,
+  # suffixed by '-zsh'
+  [ -d "common-zsh" ]
 }

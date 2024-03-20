@@ -93,16 +93,18 @@ setup_file() {
   run "$PKGDB_BIN" buildenv "$LOCKFILES/hook-script/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/hook.sh"
-  run "$CAT" "$BATS_TEST_TMPDIR/env/activate/hook.sh"
+  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/hook-script"
+  run "$CAT" "$BATS_TEST_TMPDIR/env/activate/hook-script"
   assert_output "script"
 }
+
+# ---------------------------------------------------------------------------- #
 
 @test "Built environment includes 'on-activate' script" {
   run "$PKGDB_BIN" buildenv "$LOCKFILES/on-activate/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/on-activate.sh"
+  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/hook-on-activate"
 }
 
 # --------------------------------------------------------------------------- #
