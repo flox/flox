@@ -70,9 +70,10 @@ PkgDbInput::initDbRO()
         this->getFlake()->lockedFlake.getFingerprint(),
         this->dbPath.string() );
     }
-  catch ( ... )
+  catch ( const std::exception & e )
     {
-      throw PkgDbException( "couldn't initialize read-only package database" );
+      throw PkgDbException( "couldn't initialize read-only package database",
+                            e.what() );
     }
 
   return isFresh;
