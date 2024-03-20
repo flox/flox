@@ -217,11 +217,31 @@ PkgDb::PkgDb( const nix::flake::LockedFlake & flake, std::string_view dbPath )
   this->dbPath      = dbPath;
   this->fingerprint = flake.getFingerprint();
   this->connect();
+
+  /**
+   * As soon as we have a connection, we need
+   * 1) create the database file, so that other processes know not to create it
+   * 2) lock the database for writing such that the current process is
+   *    the only process initializing the database.
+   *
+   * We use an `EXCLUSIVE` transaction to ensure "that a write transaction
+   * is started immediately" and "prevent other database connections from
+   * reading the database while the transaction is underway"
+   * (in case we are not already using WAL mode?).
+   * -- https://www.sqlite.org/lang_transaction.html
+   *
+   * Since database files seem to only be created when the first instruction is
+   * executed, starting a transaction also doubles as a file creation step (1).
+   */
+  this->db.execute( "BEGIN EXCLUSIVE TRANSACTION;" );
+
   this->init();
   this->lockedRef
     = { flake.flake.lockedRef.to_string(),
         nix::fetchers::attrsToJSON( flake.flake.lockedRef.toAttrs() ) };
   writeInput( *this );
+
+  this->db.execute( "COMMIT TRANSACTION;" );
 }
 
 
