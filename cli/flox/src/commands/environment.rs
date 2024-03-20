@@ -57,6 +57,7 @@ use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, warn};
 use toml_edit::Document;
+use tracing::instrument;
 use url::Url;
 
 use super::{environment_select, EnvironmentSelect};
@@ -107,6 +108,7 @@ pub enum EditAction {
 }
 
 impl Edit {
+    #[instrument(name = "edit", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("edit");
 
@@ -121,9 +123,14 @@ impl Edit {
 
         match self.action {
             EditAction::EditManifest { file } => {
+                // TODO: differentiate between interactive edits and replacement
+                let span = tracing::info_span!("edit");
+                let _guard = span.enter();
                 Self::edit_manifest(&flox, detected_environment, file).await?
             },
             EditAction::Rename { name } => {
+                let span = tracing::info_span!("rename");
+                let _guard = span.enter();
                 if let ConcreteEnvironment::Path(mut environment) = detected_environment {
                     let old_name = environment.name();
                     if name == old_name {
@@ -317,6 +324,7 @@ pub struct Delete {
 }
 
 impl Delete {
+    #[instrument(name = "delete", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("delete");
         let environment = self
@@ -384,6 +392,13 @@ pub struct Activate {
 
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+        let mode = match self.environment {
+            EnvironmentSelect::Dir(_) => "dir",
+            EnvironmentSelect::Remote(_) => "remote",
+            EnvironmentSelect::Unspecified => "unspecified",
+        };
+        let span = tracing::info_span!("activate", mode, shell = tracing::field::Empty);
+        let _guard = span.enter();
         subcommand_metric!("activate");
 
         let mut concrete_environment = self.environment.to_concrete_environment(&flox)?;
@@ -482,6 +497,7 @@ impl Activate {
                 bail!("Environment '{now_active}' is already active.");
             }
             debug!("Environment is already active: environment={now_active}. Ignoring activation (may patch PATH)");
+            drop(_guard); // don't want to record the time inside the environment
             Self::reactivate_in_place(fixed_up_original_path_joined)?;
             return Ok(());
         }
@@ -562,15 +578,21 @@ impl Activate {
         //    eval "$(flox activate)"
         if in_place {
             let shell = Self::detect_shell_for_in_place()?;
+            // The shell type isn't known when the span is created, so we fill it in afterwards
+            span.record("shell", shell.to_string());
             Self::activate_in_place(&shell, &exports, &activation_path);
 
             return Ok(());
         }
 
         let shell = Self::detect_shell_for_subshell()?;
+        // The shell type isn't known when the span is created, so we fill it in afterwards
+        span.record("shell", shell.to_string());
         let activate_error = if !self.run_args.is_empty() {
+            drop(_guard); // don't want to record the time inside the command
             Self::activate_command(self.run_args, shell, exports, activation_path)
         } else {
+            drop(_guard); // don't want to record the time inside the environment
             Self::activate_interactive(shell, exports, activation_path, now_active)
         };
         // If we get here, exec failed!
@@ -963,6 +985,7 @@ pub enum ListMode {
 }
 
 impl List {
+    #[instrument(name = "list", fields(mode), skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("list");
 
@@ -973,6 +996,7 @@ impl List {
 
         let manifest_contents = env.manifest_content(&flox)?;
         if self.list_mode == ListMode::Config {
+            tracing::Span::current().record("mode", "config");
             println!("{}", manifest_contents);
             return Ok(());
         }
@@ -992,9 +1016,18 @@ impl List {
         }
 
         match self.list_mode {
-            ListMode::NameOnly => Self::print_name_only(&packages),
-            ListMode::Extended => Self::print_extended(&packages),
-            ListMode::All => Self::print_detail(&packages),
+            ListMode::NameOnly => {
+                tracing::Span::current().record("mode", "name");
+                Self::print_name_only(&packages);
+            },
+            ListMode::Extended => {
+                tracing::Span::current().record("mode", "extended");
+                Self::print_extended(&packages);
+            },
+            ListMode::All => {
+                tracing::Span::current().record("mode", "all");
+                Self::print_detail(&packages);
+            },
             ListMode::Config => unreachable!(),
         }
 
@@ -1119,6 +1152,7 @@ pub struct PkgWithIdOption {
 }
 
 impl Install {
+    #[instrument(name = "install", fields(packages), skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("install");
 
@@ -1173,6 +1207,10 @@ impl Install {
             bail!("Must specify at least one package");
         }
 
+        // We don't know the contents of the packages field when the span is created
+        tracing::Span::current()
+            .record("packages", Install::format_packages_for_tracing(&packages));
+
         let installation = Dialog {
             message: &format!("Installing packages to environment {description}..."),
             help_message: None,
@@ -1214,6 +1252,11 @@ impl Install {
             }
         }
         Ok(())
+    }
+
+    fn format_packages_for_tracing(packages: &[PackageToInstall]) -> String {
+        // TODO: settle on a real format for the contents of this string (JSON, etc)
+        packages.iter().map(|p| p.pkg_path.clone()).join(",")
     }
 
     fn handle_error(
@@ -1276,8 +1319,12 @@ pub struct Uninstall {
 }
 
 impl Uninstall {
+    #[instrument(name = "uninstall", fields(packages), skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("uninstall");
+
+        // We don't know the contents of the packages field when the span is created
+        tracing::Span::current().record("packages", self.packages.iter().join(","));
 
         debug!(
             "uninstalling packages [{}] from {:?}",
@@ -1404,11 +1451,16 @@ pub struct Push {
 }
 
 impl Push {
+    #[instrument(name = "push", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("push");
 
         // Ensure the user is logged in for the following remote operations
         ensure_floxhub_token(&mut flox).await?;
+
+        // Start a span that doesn't include authentication
+        let span = tracing::info_span!("post-auth");
+        let _guard = span.enter();
 
         let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
@@ -1600,6 +1652,7 @@ pub struct Pull {
 }
 
 impl Pull {
+    #[instrument(name = "pull", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("pull");
 
@@ -2031,11 +2084,15 @@ pub struct Update {
     inputs: Vec<String>,
 }
 impl Update {
+    #[instrument(name = "update", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("update");
 
         let (old_lockfile, new_lockfile, global, description) = match self.environment_or_global {
             EnvironmentOrGlobalSelect::Environment(ref environment_select) => {
+                let span = tracing::info_span!("environment");
+                let _guard = span.enter();
+
                 let concrete_environment =
                     environment_select.detect_concrete_environment(&flox, "update")?;
 
@@ -2061,6 +2118,9 @@ impl Update {
                 )
             },
             EnvironmentOrGlobalSelect::Global => {
+                let span = tracing::info_span!("global");
+                let _guard = span.enter();
+
                 let UpdateResult {
                     new_lockfile,
                     old_lockfile,
@@ -2155,6 +2215,8 @@ impl Update {
         }
 
         // TODO: make this async when scraping multiple inputs
+        let span = tracing::info_span!("scrape");
+        let _guard = span.enter();
         let results: Vec<Result<(), ScrapeError>> = Dialog {
             message: "Generating databases for updated inputs...",
             help_message: (inputs_to_scrape.len() > 1).then_some("This may take a while."),
@@ -2198,6 +2260,7 @@ pub struct Upgrade {
     groups_or_iids: Vec<String>,
 }
 impl Upgrade {
+    #[instrument(name = "upgrade", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("upgrade");
 
@@ -2251,6 +2314,7 @@ pub struct Containerize {
     output: Option<PathBuf>,
 }
 impl Containerize {
+    #[instrument(name = "containerize", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("containerize");
 

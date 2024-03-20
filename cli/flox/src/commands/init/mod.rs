@@ -21,6 +21,7 @@ use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, 
 use indoc::formatdoc;
 use log::debug;
 use toml_edit::{Document, Formatted, Item, Table, Value};
+use tracing::instrument;
 
 use crate::commands::{environment_description, ConcreteEnvironment};
 use crate::subcommand_metric;
@@ -55,6 +56,7 @@ pub struct Init {
 }
 
 impl Init {
+    #[instrument(name = "init", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("init");
 

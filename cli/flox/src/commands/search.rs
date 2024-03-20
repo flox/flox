@@ -17,6 +17,7 @@ use flox_rust_sdk::models::search::{
 };
 use indoc::formatdoc;
 use log::debug;
+use tracing::instrument;
 
 use crate::config::features::Features;
 use crate::config::Config;
@@ -39,7 +40,7 @@ const FLOX_SHOW_HINT: &str = "Use 'flox show <package>' to see available version
 pub struct ChannelArgs {}
 
 // Search for packages to install
-#[derive(Bpaf, Clone)]
+#[derive(Debug, Bpaf, Clone)]
 pub struct Search {
     /// Display search results as a JSON array
     #[bpaf(long)]
@@ -67,6 +68,7 @@ pub struct Search {
 // which is TODO.
 // Luckily most flakes don't.
 impl Search {
+    #[instrument(name = "search")]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("search", search_term = &self.search_term);
 
@@ -165,7 +167,7 @@ fn render_search_results_json(search_results: SearchResults) -> Result<()> {
 }
 
 // Show detailed package information
-#[derive(Bpaf, Clone)]
+#[derive(Debug, Bpaf, Clone)]
 pub struct Show {
     /// Whether to show all available package versions
     #[bpaf(long)]
@@ -178,6 +180,7 @@ pub struct Show {
 }
 
 impl Show {
+    #[instrument(name = "show")]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
 
