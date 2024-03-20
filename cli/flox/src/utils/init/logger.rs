@@ -1,9 +1,8 @@
 use log::{debug, error};
 use once_cell::sync::OnceCell;
-use tracing_subscriber::filter::Filtered;
-use tracing_subscriber::fmt::Layer;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::Registry;
+use tracing_subscriber::reload::Handle;
+use tracing_subscriber::{EnvFilter, Registry};
 
 use crate::commands::Verbosity;
 use crate::utils::metrics::MetricsLayer;
@@ -36,21 +35,7 @@ impl std::io::Write for LockingTerminalStderr {
 }
 
 #[allow(clippy::type_complexity)]
-static LOGGER_HANDLE: OnceCell<
-    tracing_subscriber::reload::Handle<
-        Filtered<
-            Layer<
-                Registry,
-                tracing_subscriber::fmt::format::DefaultFields,
-                tracing_subscriber::fmt::format::Format,
-                LockingTerminalStderr,
-            >,
-            tracing_subscriber::EnvFilter,
-            Registry,
-        >,
-        Registry,
-    >,
-> = OnceCell::new();
+static LOGGER_HANDLE: OnceCell<Handle<EnvFilter, Registry>> = OnceCell::new();
 pub fn init_logger(verbosity: Option<Verbosity>) {
     let verbosity = verbosity.unwrap_or_default();
 
@@ -83,31 +68,35 @@ pub fn init_logger(verbosity: Option<Verbosity>) {
         // Logs are being passed through by the `log` crate and correctly filtered by `tracing`.
         let filter = tracing_subscriber::filter::EnvFilter::try_new("trace").unwrap();
 
-        let fmt_filtered = tracing_subscriber::fmt::layer()
+        let (filter, filter_reload_handle) = tracing_subscriber::reload::Layer::new(filter);
+
+        let log_layer = tracing_subscriber::fmt::layer()
             .with_writer(LockingTerminalStderr)
             .event_format(tracing_subscriber::fmt::format())
             .with_filter(filter);
 
-        let (fmt_filtered, fmt_reload_handle) =
-            tracing_subscriber::reload::Layer::new(fmt_filtered);
-
         let metrics_layer = MetricsLayer::new();
         let sentry_layer = sentry::integrations::tracing::layer();
 
+        // Filtered layer must come first.
+        // This appears to be the only way to avoid logs of the `flox_command` trace
+        // which is processed by the `log_layer` irrepective of the filter applied to it.
+        // My current understanding is, that it because the `metrics_layer` (at least) is
+        // registering `Interest` for the event and that somehow bypasses the filter?!
         tracing_subscriber::registry()
-            .with(fmt_filtered)
+            .with(log_layer)
             .with(metrics_layer)
             .with(sentry_layer)
             .init();
 
-        fmt_reload_handle
+        filter_reload_handle
     });
 
     let result = filter_handle.modify(|layer| {
         match tracing_subscriber::filter::EnvFilter::try_from_default_env()
             .or_else(|_| tracing_subscriber::EnvFilter::try_new(log_filter))
         {
-            Ok(new_filter) => *layer.filter_mut() = new_filter,
+            Ok(new_filter) => *layer = new_filter,
             Err(err) => {
                 error!("Updating logger filter failed: {}", err);
             },
