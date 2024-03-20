@@ -127,11 +127,6 @@ setup_isolated_flox() {
   export FLOX_CONFIG_DIR="${BATS_TEST_TMPDIR?}/flox-config"
   export FLOX_DATA_DIR="${BATS_TEST_TMPDIR?}/flox-data"
   export FLOX_CACHE_DIR="${BATS_TEST_TMPDIR?}/flox-cache"
-  # pkgdb database creation is not concurrency safe:
-  #
-  #    ERROR: error running pkgdb: couldn't initialize read-only package database
-  export PKGDB_CACHEDIR="${BATS_TEST_TMPDIR?}/pkgdb-cache"
-
   export GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_DIR/global-manifest.lock"
 }
 
