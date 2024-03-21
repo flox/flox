@@ -57,7 +57,7 @@ With `flox` you can:<br/>
 &rarr; [... and much more][docs]<br/>
 
 <div align="center">
-  <a href="https://flox.dev/docs/#install-flox">
+  <a href="https://flox.dev/docs/install-flox">
     <img alt="install flox" src="https://img.shields.io/badge/Install-flox-brightgreen?style=for-the-badge"/>
   </a>
 </div>
