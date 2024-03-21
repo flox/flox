@@ -579,6 +579,11 @@ impl Activate {
             let shell = Self::detect_shell_for_in_place()?;
             // The shell type isn't known when the span is created, so we fill it in afterwards
             span.record("shell", shell.to_string());
+            drop(_guard);
+            if let Some(client) = sentry::Hub::main().client() {
+                client.flush(None);
+                client.close(None);
+            }
             Self::activate_in_place(&shell, &exports, &activation_path);
 
             return Ok(());
@@ -589,9 +594,17 @@ impl Activate {
         span.record("shell", shell.to_string());
         let activate_error = if !self.run_args.is_empty() {
             drop(_guard); // don't want to record the time inside the command
+            if let Some(client) = sentry::Hub::main().client() {
+                client.flush(None);
+                client.close(None);
+            }
             Self::activate_command(self.run_args, shell, exports, activation_path)
         } else {
             drop(_guard); // don't want to record the time inside the environment
+            if let Some(client) = sentry::Hub::main().client() {
+                client.flush(None);
+                client.close(None);
+            }
             Self::activate_interactive(shell, exports, activation_path, now_active)
         };
         // If we get here, exec failed!
