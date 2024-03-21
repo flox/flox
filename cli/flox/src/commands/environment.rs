@@ -124,7 +124,7 @@ impl Edit {
         match self.action {
             EditAction::EditManifest { file } => {
                 // TODO: differentiate between interactive edits and replacement
-                let span = tracing::info_span!("edit");
+                let span = tracing::info_span!("edit_file");
                 let _guard = span.enter();
                 Self::edit_manifest(&flox, detected_environment, file).await?
             },
@@ -497,7 +497,6 @@ impl Activate {
                 bail!("Environment '{now_active}' is already active.");
             }
             debug!("Environment is already active: environment={now_active}. Ignoring activation (may patch PATH)");
-            drop(_guard); // don't want to record the time inside the environment
             Self::reactivate_in_place(fixed_up_original_path_joined)?;
             return Ok(());
         }
@@ -2090,7 +2089,7 @@ impl Update {
 
         let (old_lockfile, new_lockfile, global, description) = match self.environment_or_global {
             EnvironmentOrGlobalSelect::Environment(ref environment_select) => {
-                let span = tracing::info_span!("environment");
+                let span = tracing::info_span!("update_local");
                 let _guard = span.enter();
 
                 let concrete_environment =
@@ -2118,7 +2117,7 @@ impl Update {
                 )
             },
             EnvironmentOrGlobalSelect::Global => {
-                let span = tracing::info_span!("global");
+                let span = tracing::info_span!("update_global");
                 let _guard = span.enter();
 
                 let UpdateResult {

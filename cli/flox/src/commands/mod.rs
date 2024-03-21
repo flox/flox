@@ -43,7 +43,6 @@ use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use thiserror::Error;
 use toml_edit::Key;
-use tracing::instrument;
 use url::Url;
 
 use crate::commands::general::update_config;
@@ -164,7 +163,6 @@ impl fmt::Debug for Commands {
 
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
-    #[instrument(name = "cli", skip_all)]
     pub async fn handle(self, mut config: crate::config::Config) -> Result<()> {
         // Given no command, skip initialization and print welcome message
         if self.command.is_none() {

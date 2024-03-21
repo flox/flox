@@ -6,6 +6,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
 
 use crate::commands::Verbosity;
+use crate::utils::dialog::Dialog;
 use crate::utils::metrics::MetricsLayer;
 use crate::utils::TERMINAL_STDERR;
 
@@ -94,8 +95,10 @@ pub fn create_registry_and_filter_reload_handle() -> (
     // Logs are being passed through by the `log` crate and correctly filtered by `tracing`.
     let filter = tracing_subscriber::filter::EnvFilter::try_new("trace").unwrap();
     let (filter, filter_reload_handle) = tracing_subscriber::reload::Layer::new(filter);
+    let use_colors = Dialog::can_prompt();
     let log_layer = tracing_subscriber::fmt::layer()
         .with_writer(LockingTerminalStderr)
+        .with_ansi(use_colors)
         .event_format(tracing_subscriber::fmt::format())
         .with_filter(filter);
     let metrics_layer = MetricsLayer::new();

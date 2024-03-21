@@ -68,7 +68,7 @@ pub struct Search {
 // which is TODO.
 // Luckily most flakes don't.
 impl Search {
-    #[instrument(name = "search")]
+    #[instrument(name = "search", fields(json = self.json, show_all = self.all, search_term = self.search_term), skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("search", search_term = &self.search_term);
 
@@ -180,7 +180,7 @@ pub struct Show {
 }
 
 impl Show {
-    #[instrument(name = "show")]
+    #[instrument(name = "show", fields(show_all = self.all, search_term = self.search_term), skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
 
