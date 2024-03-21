@@ -44,6 +44,8 @@ jobs:
   pkgdb-dev:
     name: "Pkgdb"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.pkgdb == 'true' }}
     needs:
       - "changes"
@@ -107,6 +109,7 @@ jobs:
   cli-dev:
     name: "Flox CLI Tests"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
 
     strategy:
       fail-fast: false
@@ -162,6 +165,7 @@ jobs:
   nix-build:
     name: "Nix build"
     runs-on: "ubuntu-latest"
+    timeout-minutes: 120
 
     outputs:
       closure-size: ${{ steps.closure.outputs.closure-size }}
@@ -229,6 +233,7 @@ jobs:
     name: "Build installers"
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
     runs-on: "ubuntu-latest"
+    timeout-minutes: 120
 
     needs:
       - "nix-build"
