@@ -55,7 +55,7 @@ use crate::utils::init::{
     telemetry_opt_out_needs_migration,
 };
 use crate::utils::message;
-use crate::utils::metrics::METRICS_UUID_FILE_NAME;
+use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FILE_NAME};
 
 static FLOX_DESCRIPTION: &'_ str = indoc! {"
     flox is a virtual environment and package manager all in one.\n\n
@@ -205,6 +205,9 @@ impl FloxArgs {
 
         if !config.flox.disable_metrics {
             init_telemetry(&config.flox.data_dir, &config.flox.cache_dir).await?;
+            let connection = AWSDatalakeConnection::default();
+            let client = Client::new_with_config(&config, connection)?;
+            Hub::global().set_client(client);
         } else {
             debug!("Metrics collection disabled");
             env::set_var("FLOX_DISABLE_METRICS", "true");
