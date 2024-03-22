@@ -699,11 +699,22 @@ mod tests {
 
     #[cfg(feature = "impure-unit-tests")]
     use serial_test::serial;
+    use tempfile::TempDir;
 
     use super::*;
     use crate::flox::tests::flox_instance;
     #[cfg(feature = "impure-unit-tests")]
     use crate::models::environment::init_global_manifest;
+
+    /// Create a CoreEnvironment with an empty manifest
+    fn empty_core_environment() -> (CoreEnvironment, Flox, TempDir) {
+        let (flox, tempdir) = flox_instance();
+
+        let env_path = tempfile::tempdir_in(&tempdir).unwrap().into_path();
+        fs::write(env_path.join(MANIFEST_FILENAME), "").unwrap();
+
+        (CoreEnvironment::new(&env_path), flox, tempdir)
+    }
 
     /// Check that `edit` updates the manifest and creates a lockfile
     #[test]
@@ -727,6 +738,48 @@ mod tests {
 
         assert_eq!(env_view.manifest_content().unwrap(), new_env_str);
         assert!(env_view.env_dir.join(LOCKFILE_FILENAME).exists());
+    }
+
+    /// A no-op with edit returns EditResult::Unchanged
+    #[test]
+    fn edit_no_op_returns_unchanged() {
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+
+        let result = env_view.edit(&flox, "".to_string()).unwrap();
+
+        assert!(matches!(result, EditResult::Unchanged));
+    }
+
+    /// Installing hello with edit returns EditResult::Success
+    #[test]
+    fn edit_adding_package_returns_success() {
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+
+        let new_env_str = r#"
+        [install]
+        hello = {}
+        "#;
+
+        let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
+
+        assert!(matches!(result, EditResult::Success { store_path: _ }));
+    }
+
+    /// Adding a hook with edit returns EditResult::ReActivateRequired
+    #[test]
+    fn edit_adding_hook_returns_re_activate_required() {
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+
+        let new_env_str = r#"
+        [hook]
+        on-activate = ""
+        "#;
+
+        let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
+
+        assert!(matches!(result, EditResult::ReActivateRequired {
+            store_path: _
+        }));
     }
 
     /// replacing an environment should fail if a backup exists
