@@ -392,13 +392,6 @@ pub struct Activate {
 
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
-        let mode = match self.environment {
-            EnvironmentSelect::Dir(_) => "dir",
-            EnvironmentSelect::Remote(_) => "remote",
-            EnvironmentSelect::Unspecified => "unspecified",
-        };
-        let span = tracing::info_span!("activate", mode, shell = tracing::field::Empty);
-        let _guard = span.enter();
         subcommand_metric!("activate");
 
         let mut concrete_environment = self.environment.to_concrete_environment(&flox)?;
@@ -577,34 +570,15 @@ impl Activate {
         //    eval "$(flox activate)"
         if in_place {
             let shell = Self::detect_shell_for_in_place()?;
-            // The shell type isn't known when the span is created, so we fill it in afterwards
-            span.record("shell", shell.to_string());
-            drop(_guard);
-            if let Some(client) = sentry::Hub::main().client() {
-                client.flush(None);
-                client.close(None);
-            }
             Self::activate_in_place(&shell, &exports, &activation_path);
 
             return Ok(());
         }
 
         let shell = Self::detect_shell_for_subshell()?;
-        // The shell type isn't known when the span is created, so we fill it in afterwards
-        span.record("shell", shell.to_string());
         let activate_error = if !self.run_args.is_empty() {
-            drop(_guard); // don't want to record the time inside the command
-            if let Some(client) = sentry::Hub::main().client() {
-                client.flush(None);
-                client.close(None);
-            }
             Self::activate_command(self.run_args, shell, exports, activation_path)
         } else {
-            drop(_guard); // don't want to record the time inside the environment
-            if let Some(client) = sentry::Hub::main().client() {
-                client.flush(None);
-                client.close(None);
-            }
             Self::activate_interactive(shell, exports, activation_path, now_active)
         };
         // If we get here, exec failed!
