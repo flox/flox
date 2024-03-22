@@ -57,7 +57,7 @@ With `flox` you can:<br/>
 &rarr; [... and much more][docs]<br/>
 
 <div align="center">
-  <a href="https://flox.dev/docs/#install-flox">
+  <a href="https://flox.dev/docs/install-flox">
     <img alt="install flox" src="https://img.shields.io/badge/Install-flox-brightgreen?style=for-the-badge"/>
   </a>
 </div>
@@ -117,7 +117,7 @@ account][twitter] or chat to us directly on [Slack][slack] or
 ## 🤝 Found a bug? Missing a specific feature?
 
 Feel free to [file a new issue][new-issue] with a respective title and
-description on the the `flox/flox` repository. If you already found a solution
+description on the `flox/flox` repository. If you already found a solution
 to your problem, we would love to review your pull request!
 
 ## ⭐️ Contribute

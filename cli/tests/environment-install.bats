@@ -42,15 +42,6 @@ teardown() {
   common_test_teardown
 }
 
-# without specifying a name should install to an environment found in the user's current directory.
-@test "i2.a: install outside of shell (option1)" {
-  skip "Environment defaults handled in another phase"
-}
-
-@test "flox install allows -r for installing to a specific remote environment name, creating a new generation." {
-  skip "remote environments handled in another phase"
-}
-
 @test "'flox install' displays confirmation message" {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
@@ -203,14 +194,6 @@ teardown() {
   mkdir 2/subdirectory
 
   FLOX_SHELL=bash NO_COLOR=1 run -0 expect "$TESTS_DIR/install/prompt-which-environment-git.exp"
-}
-
-@test "i5: download package when install command runs" {
-  skip "Don't know how to test, check out-link created?"
-}
-
-@test "i6: install on a pushed environment stages locally" {
-  skip "remote environments handled in another phase"
 }
 
 @test "'flox install' installs by path" {

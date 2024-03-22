@@ -1178,3 +1178,62 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<()> {
 pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
     Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
 }
+
+#[cfg(test)]
+mod tests {
+
+    use flox_rust_sdk::flox::EnvironmentName;
+    use flox_rust_sdk::models::environment::PathPointer;
+
+    use super::*;
+
+    /// is_active() behaves as expected when using set_last_active()
+    #[test]
+    fn test_is_active() {
+        let env1 = UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::new(),
+            pointer: EnvironmentPointer::Path(PathPointer::new(
+                EnvironmentName::from_str("env1").unwrap(),
+            )),
+        });
+        let env2 = UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::new(),
+            pointer: EnvironmentPointer::Path(PathPointer::new(
+                EnvironmentName::from_str("env2").unwrap(),
+            )),
+        });
+
+        let mut active = ActiveEnvironments::default();
+        active.set_last_active(env1.clone());
+
+        assert!(active.is_active(&env1));
+        assert!(!active.is_active(&env2));
+    }
+
+    /// Simulate setting an active environment in one flox invocation and then
+    /// checking if it's active in a second.
+    #[test]
+    fn test_is_active_round_trip_from_env() {
+        let uninitialized = UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::new(),
+            pointer: EnvironmentPointer::Path(PathPointer::new(
+                EnvironmentName::from_str("test").unwrap(),
+            )),
+        });
+        let mut first_active = temp_env::with_var(
+            FLOX_ACTIVE_ENVIRONMENTS_VAR,
+            None::<&str>,
+            activated_environments,
+        );
+
+        first_active.set_last_active(uninitialized.clone());
+
+        let second_active = temp_env::with_var(
+            FLOX_ACTIVE_ENVIRONMENTS_VAR,
+            Some(first_active.to_string()),
+            activated_environments,
+        );
+
+        assert!(second_active.is_active(&uninitialized));
+    }
+}

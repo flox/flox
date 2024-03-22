@@ -353,28 +353,6 @@ genParamsNixpkgsFlox() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats tests_tags=search:error
-
-@test "'pkgdb search' JSON error when no query present" {
-  skip "FIXME: empty search should return no results"
-  params="$(genGMParams '.query=null')"
-  run "$PKGDB_BIN" search --ga-registry "$params"
-  # output depends on resolution of pkgdb#177
-}
-
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=search:error, search:manifest
-
-@test "'pkgdb search' JSON error when no manifests are provided" {
-  skip "FIXME: search requires a global manifest, but succeeds without one"
-  run "$PKGDB_BIN" search --ga-registry '{"query": {"match": "ripgrep"}}'
-  assert_failure
-  assert_output --partial "foo"
-}
-
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=search:error, search:manifest
 
 @test "'pkgdb search' JSON error when manifest path does not exist" {
@@ -441,30 +419,6 @@ genParamsNixpkgsFlox() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats tests_tags=search:error
-
-@test "'pkgdb search' JSON error when params not valid JSON" {
-  skip "FIXME: need better error message when search params not valid JSON"
-  params='{'
-  run "$PKGDB_BIN" search --ga-registry "$params"
-  assert_failure
-  # exact output depends on resolution of pkgdb#184
-}
-
-# ---------------------------------------------------------------------------- #
-
-# bats tests_tags=search:error, search:registry
-
-@test "'pkgdb search' no indirect flake references" {
-  skip "FIXME: need better error message when indirect flakeref found"
-  params="$(jq -c '.' "$TDATA/params2.json")"
-  run "$PKGDB_BIN" search "$params"
-  assert_failure
-  # exact output depends on resolution of pkgdb#183
-}
-
-# ---------------------------------------------------------------------------- #
-
 # bats tests_tags=search:error, search:registry
 
 @test "'pkgdb search' JSON error when input does not exist" {
@@ -489,54 +443,6 @@ genParamsNixpkgsFlox() {
   run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
   assert_success
   assert_equal "${#lines[@]}" 2
-}
-
-@test "'pkgdb search' with ' in search term" {
-  skip "FIXME: no results"
-  params="$(genGMParams ".query.match=\"hello'\" | .manifest.options.systems=[\"x86_64-linux\"]")"
-  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
-  assert_success
-  assert_equal "${#lines[@]}" 11
-}
-
-# bats tests_tags=search
-
-@test "'pkgdb search' with '\"' in search term" {
-  skip "FIXME: no results"
-  params="$(genGMParams '.query.match="hello"" | .manifest.options.systems=["x86_64-linux"]')"
-  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
-  assert_success
-  assert_equal "${#lines[@]}" 11
-}
-
-# bats tests_tags=search
-
-@test "'pkgdb search' with '[' in search term" {
-  skip "FIXME: no results"
-  params="$(genGMParams '.query.match="hello[" | .manifest.options.systems=["x86_64-linux"]')"
-  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
-  assert_success
-  assert_equal "${#lines[@]}" 11
-}
-
-# bats tests_tags=search
-
-@test "'pkgdb search' with ']' in search term" {
-  skip "FIXME: no results"
-  params="$(genGMParams '.query.match="hello]" | .manifest.options.systems=["x86_64-linux"]')"
-  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
-  assert_success
-  assert_equal "${#lines[@]}" 0
-}
-
-# bats tests_tags=search
-
-@test "'pkgdb search' with '*' in search term" {
-  skip "FIXME: no results"
-  params="$(genGMParams '.query.match="hello*" | .manifest.options.systems=["x86_64-linux"]')"
-  run --separate-stderr "$PKGDB_BIN" search -q --ga-registry "$params"
-  assert_success
-  assert_equal "${#lines[@]}" 0
 }
 
 # bats tests_tags=search

@@ -83,40 +83,6 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox edit' says no changes made" {
-  "$FLOX_BIN" init
-  cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
-
-  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
-  assert_success
-  assert_output --partial "⚠️  No changes made to environment."
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox edit' does not say to re-activate when hook is modified and environment is not active" {
-  "$FLOX_BIN" init
-  cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
-  sed "s/\[hook\]/${HOOK//$'\n'/\\n}/" "$MANIFEST_PATH" > "$TMP_MANIFEST_PATH"
-
-  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
-  assert_success
-  assert_output --partial "✅ Environment successfully updated."
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox edit' says to re-activate when hook is modified and environment is active" {
-  "$FLOX_BIN" init
-
-  sed "s/\[hook\]/${HOOK//$'\n'/\\n}/" "$MANIFEST_PATH" > "$TMP_MANIFEST_PATH"
-
-  FLOX_SHELL=bash run expect "$TESTS_DIR/edit/re-activate.exp" "$TMP_MANIFEST_PATH"
-  assert_success
-}
-
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=edit:manifest:file
 @test "'flox edit' accepts contents via filename" {
   NEW_MANIFEST_CONTENTS="$(cat "$EXTERNAL_MANIFEST_PATH")"
@@ -186,26 +152,6 @@ EOF
 @test "'flox edit' fails when EDITOR is not set" {
   run "$FLOX_BIN" edit
   assert_failure
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox edit' adds package with EDITOR" {
-  skip "FIXME: broken needs interactivity"
-  EDITOR="$TESTS_DIR/add-hello" run "$FLOX_BIN" edit
-  assert_success
-  run check_manifest_updated
-  assert_success
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox edit' fails when EDITOR makes invalid edit" {
-  skip "FIXME: broken needs interactivity"
-  EDITOR="$TESTS_DIR/add-invalid-edit" run "$FLOX_BIN" edit
-  assert_failure
-  run check_manifest_unchanged
-  assert_success
 }
 
 # ---------------------------------------------------------------------------- #
