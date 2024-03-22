@@ -713,11 +713,11 @@ pub fn detect_environment(
         // current directory or git repo, prompt for which to use.
         (Some(activated_env), Some(found)) => {
             let type_of_directory = if found.path == current_dir {
-                "current directory's flox environment"
+                "current directory"
             } else {
-                "flox environment detected in git repo"
+                "detected in git repo"
             };
-            let message = format!("Do you want to {message} the {type_of_directory} or the current active flox environment?");
+            let message = format!("{message} which environment?");
             let found = UninitializedEnvironment::DotFlox(found);
 
             if !Dialog::can_prompt() {
@@ -731,10 +731,7 @@ pub fn detect_environment(
                 typed: Select {
                     options: vec![
                         format!("{type_of_directory} [{}]", found.prompt_description()?),
-                        format!(
-                            "current active flox environment [{}]",
-                            activated_env.prompt_description()?
-                        ),
+                        format!("currently active [{}]", activated_env.prompt_description()?),
                     ],
                 },
             };
