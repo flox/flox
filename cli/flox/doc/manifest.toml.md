@@ -27,6 +27,7 @@ tables:
 
 - [`[install]`](#install)
 - [`[vars]`](#vars)
+- [`[profile]`](#profile)
 - [`[hook]`](#hook)
 - [`[options]`](#options)
 
@@ -294,7 +295,7 @@ section may be referenced within the hook, as well as anything sourced from the
 `on-activate` hook.
 
 ### `on-activate`
-The `on-activate` script is *exectuted* non-interactively in a Bash subshell
+The `on-activate` script is *executed* non-interactively in a Bash subshell
 after the environment is activated.  This is useful for environment
 initialization that you want done in a consistent shell so that you don't need
 to worry about shell compatibility.
