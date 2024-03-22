@@ -78,8 +78,8 @@ use crate::utils::errors::{
     format_core_error,
     format_locked_manifest_error,
 };
-use crate::utils::{default_nix_env_vars, message};
 use crate::utils::openers::Shell;
+use crate::utils::{default_nix_env_vars, message};
 use crate::{subcommand_metric, utils};
 
 // Edit declarative environment configuration
@@ -385,8 +385,17 @@ pub struct Activate {
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
+        let mut concrete_environment = match self.environment.to_concrete_environment(&flox) {
+            Ok(concrete_environment) => concrete_environment,
+            Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
+                bail!(formatdoc! {"
+            {e}
 
-        let mut concrete_environment = self.environment.to_concrete_environment(&flox)?;
+            Create an environment with 'flox init'"
+                })
+            },
+            Err(e) => Err(e)?,
+        };
 
         // TODO could move this to a pretty print method on the Environment trait?
         let prompt_name = match concrete_environment {
