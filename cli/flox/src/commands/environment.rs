@@ -78,8 +78,8 @@ use crate::utils::errors::{
     format_core_error,
     format_locked_manifest_error,
 };
-use crate::utils::{default_nix_env_vars, message};
 use crate::utils::openers::Shell;
+use crate::utils::{default_nix_env_vars, message};
 use crate::{subcommand_metric, utils};
 
 // Edit declarative environment configuration

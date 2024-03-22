@@ -618,7 +618,7 @@ pub enum EnvironmentSelect {
 pub enum EnvironmentSelectError {
     #[error(transparent)]
     Environment(#[from] EnvironmentError2),
-    #[error("Did not find an environment in the current directory.")]
+    #[error("Did not find an environment in the current directory.\nRun 'flox init' to create an environment.")]
     EnvNotFoundInCurrentDirectory,
     #[error(transparent)]
     Anyhow(#[from] anyhow::Error),
