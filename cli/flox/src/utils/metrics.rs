@@ -24,7 +24,7 @@ use crate::config::Config;
 pub const METRICS_EVENTS_FILE_NAME: &str = "metrics-events-v2.json";
 pub const METRICS_UUID_FILE_NAME: &str = "metrics-uuid";
 pub const METRICS_LOCK_FILE_NAME: &str = "metrics-lock";
-const DEFAULT_BUFFER_EXPIRY: Duration = Duration::hours(2);
+const DEFAULT_BUFFER_EXPIRY: Duration = Duration::minutes(2);
 const DEFAULT_TIMEOUT: TimeoutDuration = TimeoutDuration::from_secs(2);
 
 pub static METRICS_EVENTS_URL: Lazy<String> = Lazy::new(|| {
