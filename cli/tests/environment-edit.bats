@@ -156,26 +156,6 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox edit' adds package with EDITOR" {
-  skip "FIXME: broken needs interactivity"
-  EDITOR="$TESTS_DIR/add-hello" run "$FLOX_BIN" edit
-  assert_success
-  run check_manifest_updated
-  assert_success
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox edit' fails when EDITOR makes invalid edit" {
-  skip "FIXME: broken needs interactivity"
-  EDITOR="$TESTS_DIR/add-invalid-edit" run "$FLOX_BIN" edit
-  assert_failure
-  run check_manifest_unchanged
-  assert_success
-}
-
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=edit:rename
 @test "'flox edit --name' edits .flox/env.json" {
   "$FLOX_BIN" init --name "before"

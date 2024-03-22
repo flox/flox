@@ -51,21 +51,6 @@ teardown() {
   assert_output --partial '"name": "test"'
 }
 
-@test "c2: If the user is in ~ the environment should be called 'default'." {
-
-  skip "Can't mock user / home dir"
-
-  export HOME="$PROJECT_DIR"
-
-  run "$FLOX_BIN" init
-  assert_success
-
-  run cat .flox/env.json
-  assert_success
-  assert_output --partial '"name": "default"'
-
-}
-
 @test "c4: custom name option 1: flox init accepts -n for a user defined name" {
   run "$FLOX_BIN" init -n "other-test"
   assert_success

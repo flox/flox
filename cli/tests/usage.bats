@@ -86,7 +86,3 @@ EOF
   run "$FLOX_BIN" --help
   refute_output --partial "--stability"
 }
-
-@test "f7: remove debug: don't show debug in flox and only show in flox --help" {
-  skip "Unclear"
-}
