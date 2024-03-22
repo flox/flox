@@ -127,10 +127,10 @@ impl Edit {
                 if let ConcreteEnvironment::Path(mut environment) = detected_environment {
                     let old_name = environment.name();
                     if name == old_name {
-                        bail!("environment already named {name}");
+                        bail!("environment already named '{name}'");
                     }
                     environment.rename(name.clone())?;
-                    message::updated(format!("renamed environment {old_name} to {name}"));
+                    message::updated(format!("renamed environment '{old_name}' to '{name}'"));
                 } else {
                     // todo: handle remote environments in the future
                     bail!("Cannot rename environments on FloxHub");
@@ -163,7 +163,7 @@ impl Edit {
 
         // outside the match to avoid rustfmt falling on its face
         let reactivate_required_note = indoc! {"
-            Your manifest has changes that cannot be automatically applied to your current environment.
+            Your manifest has changes that cannot be automatically applied.
 
             Please 'exit' the environment and run 'flox activate' to see these changes.
        "};

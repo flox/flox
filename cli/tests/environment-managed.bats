@@ -76,7 +76,7 @@ dot_flox_exists() {
 
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output --partial "environment $OWNER/project-managed-${BATS_TEST_NUMBER}" # managed env output
+  assert_output --partial "environment '$OWNER/project-managed-${BATS_TEST_NUMBER}'" # managed env output
 
   run --separate-stderr "$FLOX_BIN" list --name
   assert_success

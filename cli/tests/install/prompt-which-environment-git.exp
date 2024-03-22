@@ -21,14 +21,14 @@ send "cd 2/subdirectory\n"
 # install hello and expect an interactive prompt
 send "$flox install hello\n"
 expect -ex "Do you want to install to the flox environment detected in git repo or the current active flox environment?" {}
-expect -re {flox environment detected in git repo \[2 at .*2\]} {}
-expect -re {current active flox environment \[1 at .*1\]} {}
+expect -re {flox environment detected in git repo \[2\]} {}
+expect -re {current active flox environment \[1\]} {}
 expect -re "type to filter.*\n"
 
 # choose the first option and expect the corresponding installation
 send "\r"
 # install hello and check it's installed to environment 2
-expect -re "✅ 'hello' installed to environment 2 at .*2" {}
+expect -re "✅ 'hello' installed to environment '2'" {}
 
 send "exit\n"
 expect eof

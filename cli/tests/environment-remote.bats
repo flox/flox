@@ -94,7 +94,7 @@ function make_empty_remote_env() {
 
   run "$FLOX_BIN" install hello --remote "$OWNER/test"
   assert_success
-  assert_output --partial "environment $OWNER/test (remote)" # managed env output
+  assert_output --partial "environment '$OWNER/test' (remote)" # managed env output
 
   run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
   assert_success

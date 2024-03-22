@@ -135,7 +135,7 @@ impl Init {
         };
 
         message::created(format!(
-            "Created environment {name} ({system})",
+            "Created environment '{name}' ({system})",
             name = env.name(),
             system = flox.system
         ));
