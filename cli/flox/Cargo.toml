@@ -44,10 +44,10 @@ indexmap.workspace = true
 url.workspace = true
 chrono.workspace = true
 oauth2.workspace = true
-textwrap = {workspace = true, features = ["terminal_size"]}
+textwrap = { workspace = true, features = ["terminal_size"] }
 indent.workspace = true
 semver.workspace = true
-sentry = {workspace = true, features = ["anyhow", "tracing", "debug-logs"]}
+sentry = { workspace = true, features = ["anyhow", "tracing", "debug-logs"] }
 serial_test.workspace = true
 
 [dev-dependencies]
