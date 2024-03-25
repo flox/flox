@@ -1309,7 +1309,8 @@ impl Uninstall {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("uninstall");
 
-        // We don't know the contents of the packages field when the span is created
+        // Vec<T> doesn't implement tracing::Value, so you have to join the strings
+        // yourself.
         tracing::Span::current().record("packages", self.packages.iter().join(","));
 
         debug!(
@@ -2215,6 +2216,7 @@ impl Update {
             }),
         }
         .spin();
+        drop(_guard);
 
         for result in results {
             result?;
