@@ -9,6 +9,7 @@ use indoc::indoc;
 use serde::Serialize;
 use tokio::fs;
 use toml_edit::Key;
+use tracing::instrument;
 
 use crate::config::{Config, ReadWriteError, FLOX_CONFIG_FILE};
 use crate::subcommand_metric;
@@ -23,6 +24,7 @@ use crate::utils::metrics::{
 #[derive(Bpaf, Clone)]
 pub struct ResetMetrics {}
 impl ResetMetrics {
+    #[instrument(name = "reset-metrics", skip_all)]
     pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("reset-metrics");
         let mut metrics_lock = LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
@@ -82,6 +84,7 @@ pub enum ConfigArgs {
 
 impl ConfigArgs {
     /// handle config flags like commands
+    #[instrument(name = "config", skip_all)]
     pub async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("config");
         match self {

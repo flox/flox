@@ -60,8 +60,8 @@ fn main() -> ExitCode {
             .unwrap_or_default()
     };
 
-    init_logger(Some(verbosity));
     let _sentry_guard = init_sentry();
+    init_logger(Some(verbosity));
 
     // Pass down the verbosity level to all pkgdb calls
     std::env::set_var(
