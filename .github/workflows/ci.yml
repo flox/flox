@@ -158,7 +158,7 @@ jobs:
       - name: "CLI Integration Tests"
         env:
           RUST_BACKTRACE: 1
-        run: nix develop -L --no-update-lock-file --command just integ-tests -- -j 4
+        run: nix develop -L --no-update-lock-file --command just integ-tests
 
       - name: "Functional Tests"
         if: ${{ github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
@@ -365,5 +365,4 @@ jobs:
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests' \
-                -- -- -j 4
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests'
