@@ -348,8 +348,8 @@ impl Help {
         // todo: just `run()` this -- we might not need the expl;icit error handling anymore
         match flox_cli().run_inner(&*args) {
             Ok(_) => unreachable!(),
-            Err(ParseFailure::Completion(comp)) => print!("{comp}"),
-            Err(ParseFailure::Stdout(doc, _)) => message::plain(doc),
+            Err(ParseFailure::Completion(comp)) => print!("{comp:80}"),
+            Err(ParseFailure::Stdout(doc, _)) => message::plain(format!("{doc:80}")),
             Err(ParseFailure::Stderr(err)) => message::error(err),
         }
     }
