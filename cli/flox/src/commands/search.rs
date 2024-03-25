@@ -51,9 +51,9 @@ pub struct Search {
 
     /// The package to search for in the format '<pkg-path>[@<semver-range>]' using 'node-semver' syntax.
     ///
-    /// ex.) python310Packages.pip
+    /// ex. python310Packages.pip
     ///
-    /// ex.) 'node@>=16' # quotes needed to prevent '>' redirection
+    /// ex. 'node@>=16' # quotes needed to prevent '>' redirection
     #[bpaf(positional("search-term"))]
     pub search_term: String,
 }

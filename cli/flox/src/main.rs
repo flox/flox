@@ -85,11 +85,11 @@ fn main() -> ExitCode {
     if let Some(parse_err) = args.as_ref().err() {
         match parse_err {
             bpaf::ParseFailure::Stdout(m, _) => {
-                print!("{m}");
+                print!("{m:80}");
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {
-                message::error(m);
+                message::error(format!("{m:80}"));
                 return ExitCode::from(1);
             },
             bpaf::ParseFailure::Completion(c) => {
