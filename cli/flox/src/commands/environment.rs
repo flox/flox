@@ -1366,61 +1366,6 @@ impl Uninstall {
     }
 }
 
-// Delete builds of non-current versions of an environment
-#[derive(Bpaf, Clone)]
-pub struct WipeHistory {
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    _environment: EnvironmentSelect,
-}
-
-impl WipeHistory {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("wipe-history");
-
-        todo!("this command is planned for a future release");
-    }
-}
-
-// List environment generations with contents
-#[derive(Bpaf, Clone)]
-pub struct Generations {
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long)]
-    json: bool,
-
-    #[allow(unused)] // Command currently forwarded
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
-}
-
-impl Generations {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("generations");
-
-        todo!("this command is planned for a future release")
-    }
-}
-
-// Show all versions of an environment
-#[derive(Bpaf, Clone)]
-pub struct History {
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long, short)]
-    oneline: bool,
-
-    #[allow(unused)] // Command currently forwarded
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
-}
-
-impl History {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("history");
-
-        todo!("this command is planned for a future release")
-    }
-}
-
 // Send environment to FloxHub
 #[derive(Bpaf, Clone)]
 pub struct Push {
@@ -2002,48 +1947,6 @@ impl Pull {
             },
             _ => err.into(),
         }
-    }
-}
-
-// Rollback to the previous generation of an environment
-#[derive(Bpaf, Clone)]
-pub struct Rollback {
-    #[bpaf(long, short, argument("ENV"))]
-    #[allow(dead_code)] // not yet handled in impl
-    environment: Option<EnvironmentRef>,
-
-    /// Generation to roll back to.
-    ///
-    /// If omitted, defaults to the previous generation.
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(argument("GENERATION"))]
-    to: Option<u32>,
-}
-impl Rollback {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("rollback");
-
-        todo!("this command is planned for a future release")
-    }
-}
-
-// Switch to a specific generation of an environment
-#[derive(Bpaf, Clone)]
-pub struct SwitchGeneration {
-    #[allow(unused)] // Command currently forwarded
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
-
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(positional("GENERATION"))]
-    generation: u32,
-}
-
-impl SwitchGeneration {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("switch-generation");
-
-        todo!("this command is planned for a future release")
     }
 }
 
