@@ -730,8 +730,8 @@ pub fn detect_environment(
                 help_message: None,
                 typed: Select {
                     options: vec![
-                        format!("{type_of_directory} [{}]", found.prompt_description()?),
-                        format!("currently active [{}]", activated_env.prompt_description()?),
+                        format!("{type_of_directory} [{}]", found.bare_description()?),
+                        format!("currently active [{}]", activated_env.bare_description()?),
                     ],
                 },
             };
@@ -912,19 +912,25 @@ impl UninitializedEnvironment {
 
     /// Returns true if the environment is a managed environment
     pub fn is_managed(&self) -> bool {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.owner().is_some(),
-            UninitializedEnvironment::Remote(_) => false,
-        }
+        matches!(
+            self,
+            UninitializedEnvironment::DotFlox(DotFlox {
+                path: _,
+                pointer: EnvironmentPointer::Managed(_)
+            })
+        )
     }
 
     /// Returns true if the environment is a path environment
     #[allow(dead_code)]
     pub fn is_path_env(&self) -> bool {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.owner().is_none(),
-            UninitializedEnvironment::Remote(_) => false,
-        }
+        matches!(
+            self,
+            UninitializedEnvironment::DotFlox(DotFlox {
+                path: _,
+                pointer: EnvironmentPointer::Path(_)
+            })
+        )
     }
 
     /// Returns true if the environment is a remote environment
@@ -936,15 +942,21 @@ impl UninitializedEnvironment {
     }
 
     /// The environment description when displayed in a prompt
-    pub fn prompt_description(&self) -> Result<String> {
+    pub fn bare_description(&self) -> Result<String> {
         if self.is_remote() {
             Ok(format!(
                 "{}/{} (remote)",
-                self.owner().unwrap(),
+                self.owner()
+                    .context("remote environments should have an owner")?,
                 self.name()
             ))
         } else if self.is_managed() {
-            Ok(format!("{}/{}", self.owner().unwrap(), self.name()))
+            Ok(format!(
+                "{}/{}",
+                self.owner()
+                    .context("managed environments should have an owner")?,
+                self.name()
+            ))
         } else {
             Ok(format!("{}", self.name()))
         }
@@ -955,30 +967,25 @@ impl UninitializedEnvironment {
         if self.is_remote() {
             Ok(format!(
                 "'{}/{}' (remote)",
-                self.owner().unwrap(),
+                self.owner()
+                    .context("remote environments should have an owner")?,
                 self.name()
             ))
         } else if self.is_managed() {
-            Ok(format!("'{}/{}'", self.owner().unwrap(), self.name()))
+            Ok(format!(
+                "'{}/{}'",
+                self.owner()
+                    .context("managed environments should have an owner")?,
+                self.name()
+            ))
         } else if self
             .is_current_dir()
-            .expect("couldn't read current directory")
+            .context("couldn't read current directory")?
         {
             Ok(String::from("in current directory"))
         } else {
             Ok(format!("'{}'", self.name()))
         }
-    }
-}
-
-impl Display for UninitializedEnvironment {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.message_description()
-                .expect("couldn't get environment description")
-        )
     }
 }
 
@@ -1242,7 +1249,7 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<()> {
 }
 
 pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
-    UninitializedEnvironment::from_concrete_environment(environment)?.message_description()
+    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.message_description()?)
 }
 
 #[cfg(test)]

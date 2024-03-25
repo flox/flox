@@ -35,7 +35,7 @@ pub fn manifest_and_lockfile(flox: &Flox, message: &str) -> Result<(Option<PathB
             (None, None)
         },
         Some(uninitialized) => {
-            debug!("using environment {uninitialized}");
+            debug!("using environment {}", uninitialized.bare_description()?);
 
             let environment = uninitialized
                 .into_concrete_environment(flox)?

@@ -424,7 +424,10 @@ impl Activate {
             environment.activation_path(&flox)
         } else {
             Dialog {
-                message: &format!("Preparing environment {now_active}..."),
+                message: &format!(
+                    "Preparing environment {}...",
+                    now_active.message_description()?
+                ),
                 help_message: None,
                 typed: Spinner::new(|| environment.activation_path(&flox)),
             }
@@ -485,9 +488,12 @@ impl Activate {
         if flox_active_environments.is_active(&now_active) {
             if !in_place {
                 // Error if interactive and already active
-                bail!("Environment '{now_active}' is already active.");
+                bail!(
+                    "Environment '{}' is already active.",
+                    now_active.bare_description()?
+                );
             }
-            debug!("Environment is already active: environment={now_active}. Ignoring activation (may patch PATH)");
+            debug!("Environment is already active: environment={}. Ignoring activation (may patch PATH)", now_active.bare_description()?);
             Self::reactivate_in_place(fixed_up_original_path_joined)?;
             return Ok(());
         }
@@ -580,7 +586,7 @@ impl Activate {
             Self::activate_interactive(shell, exports, activation_path, now_active)
         };
         // If we get here, exec failed!
-        Err(activate_error)
+        activate_error
     }
 
     /// Used for `flox activate -- run_args`
@@ -589,16 +595,16 @@ impl Activate {
         shell: Shell,
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
-    ) -> anyhow::Error {
+    ) -> Result<()> {
         let mut command = Command::new(shell.exe_path());
 
         command.envs(exports);
 
+        // TODO: the activation script sets prompt, which isn't necessary
         let script = formatdoc! {r#"
                 # to avoid infinite recursion sourcing bashrc
                 export FLOX_SOURCED_FROM_SHELL_RC=1
 
-                # TODO: this script sets prompt, which isn't necessary
                 source {activation_path}/activate/{shell}
 
                 unset FLOX_SOURCED_FROM_SHELL_RC
@@ -615,7 +621,7 @@ impl Activate {
         debug!("running activation command: {:?}", command);
 
         // exec should never return
-        command.exec().into()
+        Err(command.exec().into())
     }
 
     /// Activate the environment interactively by spawning a new shell
@@ -627,7 +633,7 @@ impl Activate {
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
         now_active: UninitializedEnvironment,
-    ) -> anyhow::Error {
+    ) -> Result<()> {
         let mut command = Command::new(shell.exe_path());
         command.envs(exports);
 
@@ -674,12 +680,12 @@ impl Activate {
         debug!("running activation command: {:?}", command);
 
         let message = formatdoc! {"
-                You are now using the environment {now_active}.
-                To stop using this environment, type 'exit'\n"};
+                You are now using the environment {}.
+                To stop using this environment, type 'exit'\n", now_active.message_description()?};
         message::updated(message);
 
         // exec should never return
-        command.exec().into()
+        Err(command.exec().into())
     }
 
     /// Patch the PATH to undo the effects of `/usr/libexec/path_helper`
