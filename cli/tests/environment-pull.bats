@@ -355,7 +355,7 @@ function add_insecure_package() {
 
   run "$FLOX_BIN" activate --remote owner/name --trust
   assert_failure
-  assert_output --partial "Environment not yet compatible with your system ($NIX_SYSTEM)"
+  assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
 }
 
 # ---------------------------------------------------------------------------- #

@@ -442,7 +442,7 @@ impl Activate {
                 })),
             ))) => {
                 let mut message = format!(
-                    "Environment not yet compatible with your system ({system}).",
+                    "This environment is not yet compatible with your system ({system}).",
                     system = flox.system
                 );
 
