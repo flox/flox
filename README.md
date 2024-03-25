@@ -111,7 +111,7 @@ of Nix.
 
 We are happy to welcome you to our [Discourse forum][discourse] and answer your
 questions! You can always reach out to us directly via the [Flox twitter
-account][twitter] or chat to us directly on [Slack][slack].
+account][twitter] or chat with us directly on [Slack][slack].
 
 ## 🤝 Found a bug? Missing a specific feature?
 
