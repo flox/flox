@@ -481,12 +481,6 @@ enum AdditionalCommands {
     /// View and set configuration options
     #[bpaf(command, hide, footer("Run 'man flox-config' for more details."))]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
-    /// Delete builds of non-current versions of an environment
-    #[bpaf(command("wipe-history"), hide)]
-    WipeHistory(#[bpaf(external(environment::wipe_history))] environment::WipeHistory),
-    /// Show all versions of an environment
-    #[bpaf(command, hide)]
-    History(#[bpaf(external(environment::history))] environment::History),
 }
 
 impl AdditionalCommands {
@@ -502,8 +496,6 @@ impl AdditionalCommands {
             AdditionalCommands::Update(args) => args.handle(flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
             AdditionalCommands::Config(args) => args.handle(config, flox).await?,
-            AdditionalCommands::WipeHistory(args) => args.handle(flox).await?,
-            AdditionalCommands::History(args) => args.handle(flox).await?,
         }
         Ok(())
     }
@@ -524,17 +516,6 @@ enum InternalCommands {
     /// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
     #[bpaf(command("reset-metrics"))]
     ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
-    /// List environment generations with contents
-    #[bpaf(command)]
-    Generations(#[bpaf(external(environment::generations))] environment::Generations),
-    /// Switch to a specific generation of an environment
-    #[bpaf(command("switch-generation"))]
-    SwitchGeneration(
-        #[bpaf(external(environment::switch_generation))] environment::SwitchGeneration,
-    ),
-    /// Rollback to the previous generation of an environment
-    #[bpaf(command)]
-    Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
     /// FloxHub authentication commands
     #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
     Auth(#[bpaf(external(auth::auth))] auth::Auth),
@@ -544,9 +525,6 @@ impl InternalCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
-            InternalCommands::Generations(args) => args.handle(flox).await?,
-            InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
-            InternalCommands::Rollback(args) => args.handle(flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
         }
         Ok(())
