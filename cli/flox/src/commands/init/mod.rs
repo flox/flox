@@ -27,9 +27,11 @@ use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
 
+mod go;
 mod node;
 mod python;
 
+use go::Go;
 use node::Node;
 use python::Python;
 
@@ -165,6 +167,9 @@ impl Init {
 
         let python = Python::new(dir, flox);
         hooks.push(Box::new(python));
+
+        let go = Go::new(dir, flox)?;
+        hooks.push(Box::new(go));
 
         let mut customizations = vec![];
 
