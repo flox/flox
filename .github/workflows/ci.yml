@@ -150,10 +150,15 @@ jobs:
       - name: "Build"
         run: nix develop -L --no-update-lock-file --command just build-cli
 
-      - name: "CLI Tests"
+      - name: "CLI Unit Tests"
         env:
           RUST_BACKTRACE: 1
-        run: nix develop -L --no-update-lock-file --command just test-cli
+        run: nix develop -L --no-update-lock-file --command just impure-tests
+
+      - name: "CLI Integration Tests"
+        env:
+          RUST_BACKTRACE: 1
+        run: nix develop -L --no-update-lock-file --command just integ-tests
 
       - name: "Functional Tests"
         if: ${{ github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}

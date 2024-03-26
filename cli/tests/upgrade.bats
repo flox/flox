@@ -48,6 +48,7 @@ assert_new_hello() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox
   project_setup
 }
 teardown() {

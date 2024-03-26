@@ -78,7 +78,7 @@ ScrapeCommand::run()
   /* Print path to database. */
   std::cout << nlohmann::json(
                  { { "database-path",
-                     static_cast<std::string>( *this->dbPath ) } } )
+                     static_cast<std::string>( this->input->getDbPath() ) } } )
                  .dump()
             << std::endl;
   return EXIT_SUCCESS; /* GG, GG */
