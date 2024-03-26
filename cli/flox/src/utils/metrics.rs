@@ -378,7 +378,7 @@ pub trait Connection: Debug + Any + Send + Sync {
 
     /// A helper trampoline to downcast [Box<dyn Connection>] to a known type
     ///
-    /// This is used in tests to retrieve [TestConnection] from a [Client]
+    /// This is used in tests to retrieve [tests::TestConnection] from a [Client]
     fn into_any(self: Box<Self>) -> Box<dyn Any>;
 }
 
@@ -491,22 +491,6 @@ impl Default for AWSDatalakeConnection {
     }
 }
 
-#[derive(Debug, Default)]
-struct TestConnection {
-    pub sent: Vec<Vec<MetricEntry>>,
-}
-
-impl Connection for TestConnection {
-    fn send(&mut self, data: Vec<&MetricEntry>) -> Result<()> {
-        self.sent.push(data.into_iter().cloned().collect());
-        Ok(())
-    }
-
-    fn into_any(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
-}
-
 #[derive(Debug)]
 pub struct Client {
     pub uuid: Uuid,
@@ -578,6 +562,23 @@ mod tests {
     use super::*;
     use crate::config::FloxConfig;
     use crate::utils::init::{create_registry_and_filter_reload_handle, update_filters};
+
+    #[derive(Debug, Default)]
+    pub(super) struct TestConnection {
+        pub sent: Vec<Vec<MetricEntry>>,
+    }
+
+    impl Connection for TestConnection {
+        /// Store the sent metrics in memory
+        fn send(&mut self, data: Vec<&MetricEntry>) -> Result<()> {
+            self.sent.push(data.into_iter().cloned().collect());
+            Ok(())
+        }
+
+        fn into_any(self: Box<Self>) -> Box<dyn Any> {
+            self
+        }
+    }
 
     /// Create a new client with test defaults
     fn create_client() -> (Client, TempDir) {
