@@ -8,7 +8,7 @@ This release addresses several bugs and adds new improvements, including:
  - Error messages improved: Added the `pull --force` suggestion to diverging branch error and improved the `flox activate` error when there is no environment.
  - Made several long messages from Flox shorter, making them easier to read. Along the same lines, as an homage to the punch card (and default terminal window sizes), `--help` commands wrap to 80 characters.
  - Removed a not-yet-functional `--file` option hint from the default manifest template and also removed unimplemented commands.
- - We began to implement anonymous tracing telemetry to better support Flox without having to rely on our users manually opening issues. The opt-out mechanism is the same that prints when you first use Flox so, if you've already disabled telemetry, you don't need to do anything.
+ - We began to implement additional anonymous tracing telemetry to better support Flox without having to rely on our users manually opening issues. You can always opt out of any telemetry by setting `disable_metrics` in your `flox config` (but we hope you keep it on so we can make Flox better!).
 
 We especially want to thank all our github.com/flox/flox contributors and
 [slack community members](https://go.flox.dev/slack) for all your valuable feedback!
