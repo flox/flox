@@ -324,11 +324,8 @@ fn try_find_compatible_version(
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::flox::test_flox_instance;
     use indoc::indoc;
-    use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
-    use tempfile::TempDir;
 
     use super::*;
 
@@ -409,12 +406,4 @@ mod tests {
             ]),
         });
     }
-
-    pub static FLOX_INSTANCE: Lazy<(Flox, TempDir)> = Lazy::new(|| {
-        let (flox, _temp_dir_handle) = test_flox_instance();
-        let pkgdb_nixpkgs_rev_new = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
-        std::env::set_var("_PKGDB_GA_REGISTRY_REF_OR_REV", pkgdb_nixpkgs_rev_new);
-        LockedManifest::update_global_manifest(&flox, vec![]).unwrap();
-        (flox, _temp_dir_handle)
-    });
 }

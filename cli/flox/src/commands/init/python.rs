@@ -711,11 +711,11 @@ mod tests {
         }
     }
 
+    use flox_rust_sdk::flox::test_helpers::flox_instance_with_global_lock;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
 
     use super::*;
-    use crate::commands::init::tests::FLOX_INSTANCE;
 
     #[test]
     fn test_should_run_true() {
@@ -744,13 +744,13 @@ mod tests {
     /// An invalid pyproject.toml should return an error
     #[test]
     fn test_pyproject_invalid() {
-        let (flox, _) = &*FLOX_INSTANCE;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
         ,
         "#};
 
-        let pyproject = PyProject::from_pyproject_content(content, flox);
+        let pyproject = PyProject::from_pyproject_content(content, &flox);
 
         assert!(pyproject.is_err());
     }
@@ -759,9 +759,9 @@ mod tests {
     #[test]
     #[serial]
     fn test_pyproject_empty() {
-        let (flox, _) = &*FLOX_INSTANCE;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
-        let pyproject = PyProject::from_pyproject_content("", flox).unwrap();
+        let pyproject = PyProject::from_pyproject_content("", &flox).unwrap();
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
@@ -775,14 +775,14 @@ mod tests {
     #[test]
     #[serial]
     fn test_pyproject_available_version() {
-        let (flox, _) = &*FLOX_INSTANCE;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
         [project]
         requires-python = ">= 3.8"
         "#};
 
-        let pyproject = PyProject::from_pyproject_content(content, flox).unwrap();
+        let pyproject = PyProject::from_pyproject_content(content, &flox).unwrap();
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
@@ -796,14 +796,14 @@ mod tests {
     #[test]
     #[serial]
     fn test_pyproject_unavailable_version() {
-        let (flox, _) = &*FLOX_INSTANCE;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
         [project]
         requires-python = "1"
         "#};
 
-        let pyproject = PyProject::from_pyproject_content(content, flox).unwrap();
+        let pyproject = PyProject::from_pyproject_content(content, &flox).unwrap();
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Incompatible {
@@ -817,7 +817,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_pyproject_parse_version() {
-        let (flox, _) = &*FLOX_INSTANCE;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         // python docs have a space in the version (>= 3.8):
         // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
@@ -827,7 +827,7 @@ mod tests {
         requires-python = ">= 3.8" # < with space
         "#};
 
-        let pyproject = PyProject::from_pyproject_content(content, flox).unwrap();
+        let pyproject = PyProject::from_pyproject_content(content, &flox).unwrap();
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
@@ -840,13 +840,13 @@ mod tests {
     /// An invalid pyproject.toml should return an error
     #[test]
     fn test_poetry_pyproject_invalid() {
-        let (flox, _) = &*FLOX_INSTANCE;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
         ,
         "#};
 
-        let pyproject = PoetryPyProject::from_pyproject_content(content, flox);
+        let pyproject = PoetryPyProject::from_pyproject_content(content, &flox);
 
         assert!(pyproject.is_err());
     }
@@ -854,9 +854,9 @@ mod tests {
     /// None should be returned for an empty pyproject.toml
     #[test]
     fn test_poetry_pyproject_empty() {
-        let (flox, _) = &*FLOX_INSTANCE;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
-        let pyproject = PoetryPyProject::from_pyproject_content("", flox).unwrap();
+        let pyproject = PoetryPyProject::from_pyproject_content("", &flox).unwrap();
 
         assert_eq!(pyproject, None);
     }
@@ -865,13 +865,13 @@ mod tests {
     /// `tool.poetry.dependencies.python`
     #[test]
     fn test_poetry_pyproject_no_python() {
-        let (flox, _) = &*FLOX_INSTANCE;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
         [tool.poetry]
         "#};
 
-        let pyproject = PoetryPyProject::from_pyproject_content(content, flox);
+        let pyproject = PoetryPyProject::from_pyproject_content(content, &flox);
 
         assert!(pyproject.is_err());
     }
@@ -880,14 +880,14 @@ mod tests {
     #[test]
     #[serial]
     fn test_poetry_pyproject_available_version() {
-        let (flox, _) = &*FLOX_INSTANCE;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
         [tool.poetry.dependencies]
         python = "^3.7"
         "#};
 
-        let pyproject = PoetryPyProject::from_pyproject_content(content, flox).unwrap();
+        let pyproject = PoetryPyProject::from_pyproject_content(content, &flox).unwrap();
 
         assert_eq!(pyproject.unwrap(), PoetryPyProject {
             provided_python_version: ProvidedVersion::Compatible {
@@ -902,14 +902,14 @@ mod tests {
     #[test]
     #[serial]
     fn test_poetry_pyproject_unavailable_version() {
-        let (flox, _) = &*FLOX_INSTANCE;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
         [tool.poetry.dependencies]
         python = "1"
         "#};
 
-        let pyproject = PoetryPyProject::from_pyproject_content(content, flox).unwrap();
+        let pyproject = PoetryPyProject::from_pyproject_content(content, &flox).unwrap();
 
         assert_eq!(pyproject.unwrap(), PoetryPyProject {
             provided_python_version: ProvidedVersion::Incompatible {

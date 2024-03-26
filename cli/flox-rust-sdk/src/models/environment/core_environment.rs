@@ -735,7 +735,6 @@ impl CoreEnvironmentError {
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
-    use std::result;
 
     use indoc::formatdoc;
     #[cfg(feature = "impure-unit-tests")]
@@ -743,13 +742,16 @@ mod tests {
     use tempfile::{tempdir_in, TempDir};
 
     use super::*;
-    use crate::flox::tests::flox_instance;
+    use crate::flox::test_helpers::{flox_instance, flox_instance_with_global_lock};
     #[cfg(feature = "impure-unit-tests")]
     use crate::models::environment::init_global_manifest;
 
     /// Create a CoreEnvironment with an empty manifest
+    ///
+    /// This calls flox_instance_with_global_lock(),
+    /// so the resulting environment can be built without incurring a pkgdb scrape.
     fn empty_core_environment() -> (CoreEnvironment, Flox, TempDir) {
-        let (flox, tempdir) = flox_instance();
+        let (flox, tempdir) = flox_instance_with_global_lock();
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap().into_path();
         fs::write(env_path.join(MANIFEST_FILENAME), "").unwrap();
@@ -791,6 +793,8 @@ mod tests {
         assert!(matches!(result, EditResult::Unchanged));
     }
 
+    /// Trying to build a manifest with a system other than the current one
+    /// results in an error that is_incompatible_system_error()
     #[test]
     fn build_incompatible_system() {
         #[cfg(target_os = "macos")]
@@ -818,6 +822,8 @@ mod tests {
         assert!(result.is_incompatible_system_error());
     }
 
+    /// Trying to build a manifest with a package that is incompatible with the current system
+    /// results in an error that is_incompatible_package_error()
     #[test]
     fn build_incompatible_package() {
         #[cfg(target_os = "macos")]
