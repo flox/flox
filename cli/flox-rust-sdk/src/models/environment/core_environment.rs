@@ -825,7 +825,7 @@ mod tests {
     #[test]
     #[serial]
     fn build_incompatible_package() {
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
         let manifest_contents = formatdoc! {r#"
         [install]
         glibc.pkg-path = "glibc"
@@ -834,13 +834,31 @@ mod tests {
         systems = ["aarch64-darwin"]
         "#};
 
-        #[cfg(target_os = "linux")]
+        #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+        let manifest_contents = formatdoc! {r#"
+        [install]
+        glibc.pkg-path = "glibc"
+
+        [options]
+        systems = ["x86_64-darwin"]
+        "#};
+
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
         let manifest_contents = formatdoc! {r#"
         [install]
         ps.pkg-path = "darwin.ps"
 
         [options]
         systems = ["x86_64-linux"]
+        "#};
+
+        #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+        let manifest_contents = formatdoc! {r#"
+        [install]
+        ps.pkg-path = "darwin.ps"
+
+        [options]
+        systems = ["aarch64-linux"]
         "#};
 
         let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
