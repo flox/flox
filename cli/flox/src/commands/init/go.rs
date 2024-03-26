@@ -38,7 +38,7 @@ pub(super) struct Go {
     /// [Self::get_init_customization].
     ///
     /// Initialized in [Self::new] and potentially modified by [Self::prompt_user].
-    module_system: GoModuleSystemKind,
+    module_system: Option<GoModuleSystemKind>,
 }
 
 impl Go {
@@ -50,16 +50,16 @@ impl Go {
 
     /// Since go.work files declare workspaces comprised of multiple
     /// go.mod files, they precede over any other go.mod file found.
-    fn detect_module_system(path: &Path) -> Result<GoModuleSystemKind> {
+    fn detect_module_system(path: &Path) -> Result<Option<GoModuleSystemKind>> {
         if let Some(go_work) = GoWorkspace::try_new_from_path(path)? {
-            return Ok(GoModuleSystemKind::Workspace(go_work));
+            return Ok(Some(GoModuleSystemKind::Workspace(go_work)));
         }
 
         if let Some(go_mod) = GoModule::try_new_from_path(path)? {
-            return Ok(GoModuleSystemKind::Module(go_mod));
+            return Ok(Some(GoModuleSystemKind::Module(go_mod)));
         }
 
-        Ok(GoModuleSystemKind::None)
+        Ok(None)
     }
 }
 
@@ -69,14 +69,14 @@ impl InitHook for Go {
     /// [Self::prompt_user] and [Self::get_init_customization]
     /// are expected to be called only if this method returns `true`!
     fn should_run(&mut self, _path: &Path) -> Result<bool> {
-        Ok(self.module_system != GoModuleSystemKind::None)
+        todo!("Ensure that the module system has a valid, specified version");
     }
 
     fn prompt_user(&mut self, path: &Path, flox: &Flox) -> Result<bool> {
         let module_system: &dyn GoModuleSystem = match &self.module_system {
-            GoModuleSystemKind::Module(_mod) => _mod,
-            GoModuleSystemKind::Workspace(_work) => _work,
-            GoModuleSystemKind::None => unreachable!(),
+            Some(GoModuleSystemKind::Module(_mod)) => _mod,
+            Some(GoModuleSystemKind::Workspace(_work)) => _work,
+            None => unreachable!(),
         };
 
         message::plain(formatdoc! {
@@ -126,7 +126,7 @@ impl InitHook for Go {
     }
 
     fn get_init_customization(&self) -> InitCustomization {
-        let mut package = PackageToInstall {
+        let package = PackageToInstall {
             id: "go".to_string(),
             pkg_path: "".to_string(),
             version: Some("".to_string()),
@@ -155,7 +155,7 @@ enum GoVersion {
 
 impl GoVersion {
     fn from_module_system_contents(contents: String) -> Self {
-        let mut version = GoVersion::Unspecified;
+        let version = GoVersion::Unspecified;
         let Some(version_str) = GoVersion::get_version_from_contents(&contents) else {
             return version;
         };
@@ -180,8 +180,6 @@ impl GoVersion {
 /// Represents Go module system files.
 #[derive(PartialEq)]
 enum GoModuleSystemKind {
-    /// No Go module system file.
-    None,
     /// Go module file [GoMod].
     Module(GoModule),
     /// Go workspace file [GoWork].
