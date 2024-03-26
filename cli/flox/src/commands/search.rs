@@ -74,7 +74,7 @@ impl Search {
 
         debug!("performing search for term: {}", self.search_term);
 
-        let (manifest, lockfile) = manifest_and_lockfile(&flox, "search for packages using")
+        let (manifest, lockfile) = manifest_and_lockfile(&flox, "Search using")
             .context("failed while looking for manifest and lockfile")?;
 
         let manifest = manifest.map(|p| p.try_into()).transpose()?;
@@ -122,8 +122,10 @@ impl Search {
             );
 
             if results.results.is_empty() {
-                let mut message =
-                    format!("No packages matched this search term: {}", self.search_term);
+                let mut message = format!(
+                    "No packages matched this search term: '{}'",
+                    self.search_term
+                );
                 if suggestion.has_suggestions() {
                     message = formatdoc! {"
                         {message}
@@ -184,7 +186,7 @@ impl Show {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
 
-        let (manifest, lockfile) = manifest_and_lockfile(&flox, "show packages using")
+        let (manifest, lockfile) = manifest_and_lockfile(&flox, "Show using")
             .context("failed while looking for manifest and lockfile")?;
         let search_params = construct_show_params(
             &self.search_term,
@@ -196,7 +198,10 @@ impl Show {
         let (search_results, exit_status) = do_search(&search_params)?;
 
         if search_results.results.is_empty() {
-            bail!("no packages matched this search term: {}", self.search_term);
+            bail!(
+                "no packages matched this search term: '{}'",
+                self.search_term
+            );
         }
         // Render what we have no matter what, then indicate whether we encountered an error.
         // FIXME: We may have warnings on `stderr` even with a successful call to `pkgdb`.

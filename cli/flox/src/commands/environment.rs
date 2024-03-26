@@ -114,7 +114,7 @@ impl Edit {
 
         let detected_environment = self
             .environment
-            .detect_concrete_environment(&flox, "edit")?;
+            .detect_concrete_environment(&flox, "Edit")?;
 
         // Ensure the user is logged in for the following remote operations
         if let ConcreteEnvironment::Remote(_) = detected_environment {
@@ -329,7 +329,7 @@ impl Delete {
         subcommand_metric!("delete");
         let environment = self
             .environment
-            .detect_concrete_environment(&flox, "delete")?;
+            .detect_concrete_environment(&flox, "Delete")?;
 
         let description = environment_description(&environment)?;
 
@@ -343,9 +343,7 @@ impl Delete {
         }
 
         let comfirm = Dialog {
-            message: &format!(
-                "You are about to delete your environment {description}. Are you sure?"
-            ),
+            message: "Are you sure?",
             help_message: Some("Use `-f` to force deletion"),
             typed: Confirm {
                 default: Some(false),
@@ -426,7 +424,10 @@ impl Activate {
             environment.activation_path(&flox)
         } else {
             Dialog {
-                message: &format!("Getting ready to use environment {now_active}..."),
+                message: &format!(
+                    "Preparing environment {}...",
+                    now_active.message_description()?
+                ),
                 help_message: None,
                 typed: Spinner::new(|| environment.activation_path(&flox)),
             }
@@ -487,9 +488,12 @@ impl Activate {
         if flox_active_environments.is_active(&now_active) {
             if !in_place {
                 // Error if interactive and already active
-                bail!("Environment '{now_active}' is already active.");
+                bail!(
+                    "Environment '{}' is already active.",
+                    now_active.bare_description()?
+                );
             }
-            debug!("Environment is already active: environment={now_active}. Ignoring activation (may patch PATH)");
+            debug!("Environment is already active: environment={}. Ignoring activation (may patch PATH)", now_active.bare_description()?);
             Self::reactivate_in_place(fixed_up_original_path_joined)?;
             return Ok(());
         }
@@ -582,7 +586,7 @@ impl Activate {
             Self::activate_interactive(shell, exports, activation_path, now_active)
         };
         // If we get here, exec failed!
-        Err(activate_error)
+        activate_error
     }
 
     /// Used for `flox activate -- run_args`
@@ -591,16 +595,16 @@ impl Activate {
         shell: Shell,
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
-    ) -> anyhow::Error {
+    ) -> Result<()> {
         let mut command = Command::new(shell.exe_path());
 
         command.envs(exports);
 
+        // TODO: the activation script sets prompt, which isn't necessary
         let script = formatdoc! {r#"
                 # to avoid infinite recursion sourcing bashrc
                 export FLOX_SOURCED_FROM_SHELL_RC=1
 
-                # TODO: this script sets prompt, which isn't necessary
                 source {activation_path}/activate/{shell}
 
                 unset FLOX_SOURCED_FROM_SHELL_RC
@@ -617,7 +621,7 @@ impl Activate {
         debug!("running activation command: {:?}", command);
 
         // exec should never return
-        command.exec().into()
+        Err(command.exec().into())
     }
 
     /// Activate the environment interactively by spawning a new shell
@@ -629,7 +633,7 @@ impl Activate {
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
         now_active: UninitializedEnvironment,
-    ) -> anyhow::Error {
+    ) -> Result<()> {
         let mut command = Command::new(shell.exe_path());
         command.envs(exports);
 
@@ -676,12 +680,12 @@ impl Activate {
         debug!("running activation command: {:?}", command);
 
         let message = formatdoc! {"
-                You are now using the environment {now_active}.
-                To stop using this environment, type 'exit'\n"};
+                You are now using the environment {}.
+                To stop using this environment, type 'exit'\n", now_active.message_description()?};
         message::updated(message);
 
         // exec should never return
-        command.exec().into()
+        Err(command.exec().into())
     }
 
     /// Patch the PATH to undo the effects of `/usr/libexec/path_helper`
@@ -977,7 +981,7 @@ impl List {
 
         let mut env = self
             .environment
-            .detect_concrete_environment(&flox, "list using")?
+            .detect_concrete_environment(&flox, "List using")?
             .into_dyn_environment();
 
         let manifest_contents = env.manifest_content(&flox)?;
@@ -1149,7 +1153,7 @@ impl Install {
         );
         let concrete_environment = match self
             .environment
-            .detect_concrete_environment(&flox, "install to")
+            .detect_concrete_environment(&flox, "Install to")
         {
             Ok(concrete_environment) => concrete_environment,
             Err(EnvironmentSelectError::Environment(
@@ -1320,7 +1324,7 @@ impl Uninstall {
         );
         let concrete_environment = match self
             .environment
-            .detect_concrete_environment(&flox, "uninstall from")
+            .detect_concrete_environment(&flox, "Uninstall from")
         {
             Ok(concrete_environment) => concrete_environment,
             Err(EnvironmentSelectError::Environment(
@@ -1984,7 +1988,7 @@ impl Update {
                 let _guard = span.enter();
 
                 let concrete_environment =
-                    environment_select.detect_concrete_environment(&flox, "update")?;
+                    environment_select.detect_concrete_environment(&flox, "Update")?;
 
                 let description = Some(environment_description(&concrete_environment)?);
                 let UpdateResult {
@@ -2157,7 +2161,7 @@ impl Upgrade {
 
         let concrete_environment = self
             .environment
-            .detect_concrete_environment(&flox, "upgrade")?;
+            .detect_concrete_environment(&flox, "Upgrade")?;
 
         let description = environment_description(&concrete_environment)?;
 
@@ -2211,7 +2215,7 @@ impl Containerize {
 
         let mut env = self
             .environment
-            .detect_concrete_environment(&flox, "upgrade")?
+            .detect_concrete_environment(&flox, "Upgrade")?
             .into_dyn_environment();
 
         let output_path = match self.output {

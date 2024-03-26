@@ -183,7 +183,7 @@ setup_file() {
 @test "'flox search' error message when no results" {
   run "$FLOX_BIN" search surely_doesnt_exist
   assert_equal "${#lines[@]}" 1
-  assert_output --partial "No packages matched this search term: surely_doesnt_exist"
+  assert_output --partial "No packages matched this search term: 'surely_doesnt_exist'"
 }
 
 # ---------------------------------------------------------------------------- #

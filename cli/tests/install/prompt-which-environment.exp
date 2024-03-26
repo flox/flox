@@ -21,9 +21,9 @@ expect "cd 2" {}
 
 # install hello and expect an interactive prompt
 send "$flox install hello\n"
-expect -ex "Do you want to install to the current directory's flox environment or the current active flox environment?" {}
-expect -re {current directory's flox environment \[2\]} {}
-expect -re {current active flox environment \[1\]} {}
+expect -ex "Install to which environment?" {}
+expect -re {current directory \[2\]} {}
+expect -re {currently active \[1\]} {}
 expect -re "type to filter.*\n"
 
 # choose the first option and expect the corresponding installation

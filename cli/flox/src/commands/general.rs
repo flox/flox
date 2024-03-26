@@ -49,7 +49,7 @@ impl ResetMetrics {
         let notice = indoc! {"
             Sucessfully reset telemetry ID for this machine!
 
-            A new ID will be assigned next time you use flox.
+            A new ID will be assigned next time you use Flox.
 
             The collection of metrics can be disabled in the following ways:
 
