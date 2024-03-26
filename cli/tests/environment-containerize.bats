@@ -46,6 +46,7 @@ podman_cache_reset() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox
   project_setup
   env_setup
 

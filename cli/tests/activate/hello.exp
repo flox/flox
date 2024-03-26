@@ -15,7 +15,7 @@ expect_after {
   "*\n" { exp_continue }
   "*\r" { exp_continue }
 }
-expect "Getting ready to use environment"
+expect "Preparing environment"
 
 # check for hello
 send "{ command -v hello||which hello||type -P hello || echo not found ; } 2>&1\n"

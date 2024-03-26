@@ -50,13 +50,13 @@ project_setup() {
   # Create environment (verbosely for the logs), specifying a pinned
   # nixpkgs revision, although it has no effect (see below).
   sh -xc "_PKGDB_GA_REGISTRY_REF_OR_REV=${PKGDB_NIXPKGS_REV_OLDER?} \
-    $FLOX_BIN init";
+    $FLOX_BIN init"
 
   # "Update" lock for this one environment to use a pinned nixpkgs revision
   # containing old versions of nix (2.10.3) and glibc (2.34) for use in tests.
   # (Would be preferable if the previous init could honor the revision.)
   sh -xc "_PKGDB_GA_REGISTRY_REF_OR_REV=${PKGDB_NIXPKGS_REV_OLDER?} \
-    $FLOX_BIN update";
+    $FLOX_BIN update"
 
   # Install packages, including boost, curl and libarchive that are
   # compilation and runtime dependencies of libnixmain.so. Use `flox edit`

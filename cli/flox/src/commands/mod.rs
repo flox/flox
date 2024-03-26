@@ -6,13 +6,15 @@ mod search;
 
 use std::collections::VecDeque;
 use std::fmt::Display;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{env, fmt, fs, mem};
 
 use anyhow::{bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
 use flox_rust_sdk::flox::{
+    EnvironmentName,
+    EnvironmentOwner,
     EnvironmentRef,
     Flox,
     Floxhub,
@@ -50,12 +52,12 @@ use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::init::{
     init_access_tokens,
-    init_telemetry,
+    init_telemetry_uuid,
     init_uuid,
     telemetry_opt_out_needs_migration,
 };
 use crate::utils::message;
-use crate::utils::metrics::METRICS_UUID_FILE_NAME;
+use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FILE_NAME};
 
 static FLOX_DESCRIPTION: &'_ str = indoc! {"
     flox is a virtual environment and package manager all in one.\n\n
@@ -204,7 +206,13 @@ impl FloxArgs {
         }
 
         if !config.flox.disable_metrics {
-            init_telemetry(&config.flox.data_dir, &config.flox.cache_dir).await?;
+            debug!("Metrics collection enabled");
+
+            init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)?;
+
+            let connection = AWSDatalakeConnection::default();
+            let client = Client::new_with_config(&config, connection)?;
+            Hub::global().set_client(client);
         } else {
             debug!("Metrics collection disabled");
             env::set_var("FLOX_DISABLE_METRICS", "true");
@@ -481,12 +489,6 @@ enum AdditionalCommands {
     /// View and set configuration options
     #[bpaf(command, hide, footer("Run 'man flox-config' for more details."))]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
-    /// Delete builds of non-current versions of an environment
-    #[bpaf(command("wipe-history"), hide)]
-    WipeHistory(#[bpaf(external(environment::wipe_history))] environment::WipeHistory),
-    /// Show all versions of an environment
-    #[bpaf(command, hide)]
-    History(#[bpaf(external(environment::history))] environment::History),
 }
 
 impl AdditionalCommands {
@@ -502,8 +504,6 @@ impl AdditionalCommands {
             AdditionalCommands::Update(args) => args.handle(flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
             AdditionalCommands::Config(args) => args.handle(config, flox).await?,
-            AdditionalCommands::WipeHistory(args) => args.handle(flox).await?,
-            AdditionalCommands::History(args) => args.handle(flox).await?,
         }
         Ok(())
     }
@@ -524,17 +524,6 @@ enum InternalCommands {
     /// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
     #[bpaf(command("reset-metrics"))]
     ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
-    /// List environment generations with contents
-    #[bpaf(command)]
-    Generations(#[bpaf(external(environment::generations))] environment::Generations),
-    /// Switch to a specific generation of an environment
-    #[bpaf(command("switch-generation"))]
-    SwitchGeneration(
-        #[bpaf(external(environment::switch_generation))] environment::SwitchGeneration,
-    ),
-    /// Rollback to the previous generation of an environment
-    #[bpaf(command)]
-    Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
     /// FloxHub authentication commands
     #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
     Auth(#[bpaf(external(auth::auth))] auth::Auth),
@@ -544,9 +533,6 @@ impl InternalCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
-            InternalCommands::Generations(args) => args.handle(flox).await?,
-            InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
-            InternalCommands::Rollback(args) => args.handle(flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
         }
         Ok(())
@@ -727,11 +713,11 @@ pub fn detect_environment(
         // current directory or git repo, prompt for which to use.
         (Some(activated_env), Some(found)) => {
             let type_of_directory = if found.path == current_dir {
-                "current directory's flox environment"
+                "current directory"
             } else {
-                "flox environment detected in git repo"
+                "detected in git repo"
             };
-            let message = format!("Do you want to {message} the {type_of_directory} or the current active flox environment?");
+            let message = format!("{message} which environment?");
             let found = UninitializedEnvironment::DotFlox(found);
 
             if !Dialog::can_prompt() {
@@ -744,8 +730,8 @@ pub fn detect_environment(
                 help_message: None,
                 typed: Select {
                     options: vec![
-                        format!("{type_of_directory} [{found}]",),
-                        format!("current active flox environment [{activated_env}]",),
+                        format!("{type_of_directory} [{}]", found.bare_description()?),
+                        format!("currently active [{}]", activated_env.bare_description()?),
                     ],
                 },
             };
@@ -886,32 +872,119 @@ impl UninitializedEnvironment {
             },
         }
     }
-}
 
-impl Display for UninitializedEnvironment {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    /// If the environment is remote or managed, the name of the owner
+    pub fn owner(&self) -> Option<&EnvironmentOwner> {
         match self {
+            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.owner(),
+            UninitializedEnvironment::Remote(pointer) => Some(&pointer.owner),
+        }
+    }
+
+    /// The name of the environment
+    pub fn name(&self) -> &EnvironmentName {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.name(),
+            UninitializedEnvironment::Remote(pointer) => &pointer.name,
+        }
+    }
+
+    /// Returns true if the environment is in the current directory
+    pub fn is_current_dir(&self) -> Result<bool> {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => {
+                let current_dir = std::env::current_dir()?;
+                let is_current = current_dir.canonicalize()? == path.canonicalize()?;
+                Ok(is_current)
+            },
+            UninitializedEnvironment::Remote(_) => Ok(false),
+        }
+    }
+
+    /// Returns the path to the environment if it isn't remote
+    #[allow(dead_code)]
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => Some(path),
+            UninitializedEnvironment::Remote(_) => None,
+        }
+    }
+
+    /// Returns true if the environment is a managed environment
+    pub fn is_managed(&self) -> bool {
+        matches!(
+            self,
             UninitializedEnvironment::DotFlox(DotFlox {
-                path,
-                pointer: EnvironmentPointer::Managed(managed_pointer),
-            }) => {
-                write!(
-                    f,
-                    "{}/{} at {}",
-                    managed_pointer.owner,
-                    managed_pointer.name,
-                    path.to_string_lossy(),
-                )
-            },
+                path: _,
+                pointer: EnvironmentPointer::Managed(_)
+            })
+        )
+    }
+
+    /// Returns true if the environment is a path environment
+    #[allow(dead_code)]
+    pub fn is_path_env(&self) -> bool {
+        matches!(
+            self,
             UninitializedEnvironment::DotFlox(DotFlox {
-                path,
-                pointer: EnvironmentPointer::Path(path_pointer),
-            }) => {
-                write!(f, "{} at {}", path_pointer.name, path.to_string_lossy())
-            },
-            UninitializedEnvironment::Remote(pointer) => {
-                write!(f, "{}/{} (remote)", pointer.owner, pointer.name,)
-            },
+                path: _,
+                pointer: EnvironmentPointer::Path(_)
+            })
+        )
+    }
+
+    /// Returns true if the environment is a remote environment
+    pub fn is_remote(&self) -> bool {
+        match self {
+            UninitializedEnvironment::DotFlox(_) => false,
+            UninitializedEnvironment::Remote(_) => true,
+        }
+    }
+
+    /// The environment description when displayed in a prompt
+    pub fn bare_description(&self) -> Result<String> {
+        if self.is_remote() {
+            Ok(format!(
+                "{}/{} (remote)",
+                self.owner()
+                    .context("remote environments should have an owner")?,
+                self.name()
+            ))
+        } else if self.is_managed() {
+            Ok(format!(
+                "{}/{}",
+                self.owner()
+                    .context("managed environments should have an owner")?,
+                self.name()
+            ))
+        } else {
+            Ok(format!("{}", self.name()))
+        }
+    }
+
+    /// The environment description when displayed in messages
+    pub fn message_description(&self) -> Result<String> {
+        if self.is_remote() {
+            Ok(format!(
+                "'{}/{}' (remote)",
+                self.owner()
+                    .context("remote environments should have an owner")?,
+                self.name()
+            ))
+        } else if self.is_managed() {
+            Ok(format!(
+                "'{}/{}'",
+                self.owner()
+                    .context("managed environments should have an owner")?,
+                self.name()
+            ))
+        } else if self
+            .is_current_dir()
+            .context("couldn't read current directory")?
+        {
+            Ok(String::from("in current directory"))
+        } else {
+            Ok(format!("'{}'", self.name()))
         }
     }
 }
@@ -1176,7 +1249,7 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<()> {
 }
 
 pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
-    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
+    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.message_description()?)
 }
 
 #[cfg(test)]

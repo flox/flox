@@ -40,6 +40,7 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox
   project_setup
   floxhub_setup owner
 }
@@ -85,7 +86,7 @@ function make_empty_remote_env() {
   run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
   assert_success
 
-  assert [ -h "$FLOX_CACHE_HOME/run/$OWNER/test" ]
+  assert [ -h "$FLOX_CACHE_DIR/run/$OWNER/test" ]
 }
 
 # bats test_tags=install,remote,remote:install
@@ -94,7 +95,7 @@ function make_empty_remote_env() {
 
   run "$FLOX_BIN" install hello --remote "$OWNER/test"
   assert_success
-  assert_output --partial "environment $OWNER/test (remote)" # managed env output
+  assert_output --partial "environment '$OWNER/test' (remote)" # managed env output
 
   run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
   assert_success
@@ -147,7 +148,7 @@ EOF
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
   FLOX_SHELL=bash USER="$REAL_USER" run -0 expect "$TESTS_DIR/activate/remote-hello.exp" "$OWNER/test"
-  assert_output --partial "$FLOX_CACHE_HOME/remote/owner/test/.flox/run/bin/hello"
+  assert_output --partial "$FLOX_CACHE_DIR/remote/owner/test/.flox/run/bin/hello"
   refute_output "not found"
 }
 

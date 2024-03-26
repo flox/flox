@@ -107,6 +107,30 @@ floxhub_setup() {
   export _FLOX_FLOXHUB_GIT_URL="file://$FLOX_FLOXHUB_PATH"
 }
 
+# Isolate flox config, data, and cache from the potentially shared
+# xdg directories.
+# This is necessary as other wisemultiple tests contest for the same
+# resources, e.g.:
+# * the global manifest and lockfile
+#   + created by multiple processes
+#   + deleted by some but assumed present by others
+#   + updated, upgraded, reset
+# * floxmeta clones for managed environments
+#   + same _owner_ and project name being reused
+#   + environments are created/deleted/edited concurrently
+#     -> git errors, and just plain data corruption
+# * local ephemeral environments by `--remote` commands.
+#   + git concurrency
+#
+# nix caches and pkgdb caches remain shared, since they are effectively read-only.
+setup_isolated_flox() {
+  export FLOX_CONFIG_DIR="${BATS_TEST_TMPDIR?}/flox-config"
+  export FLOX_DATA_DIR="${BATS_TEST_TMPDIR?}/flox-data"
+  export FLOX_CACHE_DIR="${BATS_TEST_TMPDIR?}/flox-cache"
+  export GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_DIR/global-manifest.lock"
+}
+
+
 # ---------------------------------------------------------------------------- #
 
 # common_file_setup [HOME_STYLE ::= (suite|file|test)]

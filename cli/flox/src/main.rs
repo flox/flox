@@ -14,6 +14,7 @@ use utils::init::{init_logger, init_sentry};
 use utils::{message, populate_default_nix_env_vars};
 
 use crate::utils::errors::{format_error, format_managed_error, format_remote_error};
+use crate::utils::metrics::Hub;
 
 mod build;
 mod commands;
@@ -62,6 +63,8 @@ fn main() -> ExitCode {
 
     let _sentry_guard = init_sentry();
     init_logger(Some(verbosity));
+
+    let _metrics_guard = Hub::global().try_guard().ok();
 
     // Pass down the verbosity level to all pkgdb calls
     std::env::set_var(
