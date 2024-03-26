@@ -6,13 +6,15 @@ mod search;
 
 use std::collections::VecDeque;
 use std::fmt::Display;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{env, fmt, fs, mem};
 
 use anyhow::{bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
 use flox_rust_sdk::flox::{
+    EnvironmentName,
+    EnvironmentOwner,
     EnvironmentRef,
     Flox,
     Floxhub,
@@ -722,8 +724,11 @@ pub fn detect_environment(
                 help_message: None,
                 typed: Select {
                     options: vec![
-                        format!("{type_of_directory} [{found}]",),
-                        format!("current active flox environment [{activated_env}]",),
+                        format!("{type_of_directory} [{}]", found.prompt_description()?),
+                        format!(
+                            "current active flox environment [{}]",
+                            activated_env.prompt_description()?
+                        ),
                     ],
                 },
             };
@@ -864,33 +869,113 @@ impl UninitializedEnvironment {
             },
         }
     }
+
+    /// If the environment is remote or managed, the name of the owner
+    pub fn owner(&self) -> Option<&EnvironmentOwner> {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.owner(),
+            UninitializedEnvironment::Remote(pointer) => Some(&pointer.owner),
+        }
+    }
+
+    /// The name of the environment
+    pub fn name(&self) -> &EnvironmentName {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.name(),
+            UninitializedEnvironment::Remote(pointer) => &pointer.name,
+        }
+    }
+
+    /// Returns true if the environment is in the current directory
+    pub fn is_current_dir(&self) -> Result<bool> {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => {
+                let current_dir = std::env::current_dir()?;
+                let is_current = current_dir.canonicalize()? == path.canonicalize()?;
+                Ok(is_current)
+            },
+            UninitializedEnvironment::Remote(_) => Ok(false),
+        }
+    }
+
+    /// Returns the path to the environment if it isn't remote
+    #[allow(dead_code)]
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => Some(path),
+            UninitializedEnvironment::Remote(_) => None,
+        }
+    }
+
+    /// Returns true if the environment is a managed environment
+    pub fn is_managed(&self) -> bool {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.owner().is_some(),
+            UninitializedEnvironment::Remote(_) => false,
+        }
+    }
+
+    /// Returns true if the environment is a path environment
+    #[allow(dead_code)]
+    pub fn is_path_env(&self) -> bool {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.owner().is_none(),
+            UninitializedEnvironment::Remote(_) => false,
+        }
+    }
+
+    /// Returns true if the environment is a remote environment
+    pub fn is_remote(&self) -> bool {
+        match self {
+            UninitializedEnvironment::DotFlox(_) => false,
+            UninitializedEnvironment::Remote(_) => true,
+        }
+    }
+
+    /// The environment description when displayed in a prompt
+    pub fn prompt_description(&self) -> Result<String> {
+        if self.is_remote() {
+            Ok(format!(
+                "{}/{} (remote)",
+                self.owner().unwrap(),
+                self.name()
+            ))
+        } else if self.is_managed() {
+            Ok(format!("{}/{}", self.owner().unwrap(), self.name()))
+        } else {
+            Ok(format!("{}", self.name()))
+        }
+    }
+
+    /// The environment description when displayed in messages
+    pub fn message_description(&self) -> Result<String> {
+        if self.is_remote() {
+            Ok(format!(
+                "'{}/{}' (remote)",
+                self.owner().unwrap(),
+                self.name()
+            ))
+        } else if self.is_managed() {
+            Ok(format!("'{}/{}'", self.owner().unwrap(), self.name()))
+        } else if self
+            .is_current_dir()
+            .expect("couldn't read current directory")
+        {
+            Ok(String::from("in current directory"))
+        } else {
+            Ok(format!("'{}'", self.name()))
+        }
+    }
 }
 
 impl Display for UninitializedEnvironment {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UninitializedEnvironment::DotFlox(DotFlox {
-                path,
-                pointer: EnvironmentPointer::Managed(managed_pointer),
-            }) => {
-                write!(
-                    f,
-                    "{}/{} at {}",
-                    managed_pointer.owner,
-                    managed_pointer.name,
-                    path.to_string_lossy(),
-                )
-            },
-            UninitializedEnvironment::DotFlox(DotFlox {
-                path,
-                pointer: EnvironmentPointer::Path(path_pointer),
-            }) => {
-                write!(f, "{} at {}", path_pointer.name, path.to_string_lossy())
-            },
-            UninitializedEnvironment::Remote(pointer) => {
-                write!(f, "{}/{} (remote)", pointer.owner, pointer.name,)
-            },
-        }
+        write!(
+            f,
+            "{}",
+            self.message_description()
+                .expect("couldn't get environment description")
+        )
     }
 }
 
@@ -1154,7 +1239,7 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<()> {
 }
 
 pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
-    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
+    UninitializedEnvironment::from_concrete_environment(environment)?.message_description()
 }
 
 #[cfg(test)]

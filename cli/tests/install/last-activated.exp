@@ -22,7 +22,7 @@ expect -ex "Getting ready to use environment" {}
 # install hello and check it's installed to environment 2
 set cmd "$flox install hello"
 send "$cmd\n"
-expect -re "✅ 'hello' installed to environment 2 at .*2" {}
+expect -re "✅ 'hello' installed to environment '2'" {}
 send "hello\n"
 expect -ex "Hello, world!" {}
 
