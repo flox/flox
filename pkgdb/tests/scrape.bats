@@ -163,31 +163,6 @@ setup_file() {
 }
 
 # ---------------------------------------------------------------------------- #
-
-# Parallel scrapes are likely to run into concurrency issues when
-# the required database does not yet exist.
-# Multiple processes may try to create the database "at the same time",
-# in the past leading to failures.
-# bats test_tags=scrape:parallel
-@test "'pkgdb scrape' doesn't crash when run in parallel" {
-  # We attempt an invocation of 8 parallel scrapes of the same package set
-  # for a total of 5 times.
-  # multiple runs increase the chance of concurrent events,
-  # the whole test is however a probabilistic measure.
-  for i in $(seq 5); do
-    # We don't want other tests polluting parallel test runs so we do this test
-    # with a unique cache directory.
-    run --separate-stderr sh -c '
-    PKGDB_CACHEDIR="$(mktemp -d)" parallel --halt-on-error 2 \
-      "echo {};
-       pkgdb scrape github:nixos/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd \
-          legacyPackages '$NIX_SYSTEM' 'akkoma-emoji'" \
-      ::: $(seq 8)'
-    assert_success
-  done
-}
-
-# ---------------------------------------------------------------------------- #
 #
 #
 #

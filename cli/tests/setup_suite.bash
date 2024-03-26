@@ -452,7 +452,6 @@ common_suite_setup() {
   gitconfig_setup
   # setup pkgdb and populate cache
   pkgdb_vars_setup
-  populate_scrape_cache
   {
     print_var FLOX_TEST_HOME
     print_var HOME
@@ -478,11 +477,6 @@ common_suite_setup() {
     print_var PKGDB_NIXPKGS_REF_OLD
     print_var _PKGDB_GA_REGISTRY_REF_OR_REV
   } >&3
-}
-
-populate_scrape_cache() {
-  "$PKGDB_BIN" scrape "$PKGDB_NIXPKGS_REF_NEW" legacyPackages
-  "$PKGDB_BIN" scrape "$PKGDB_NIXPKGS_REF_OLD" legacyPackages
 }
 
 # Recognized by `bats'.
