@@ -26,7 +26,14 @@ use crate::models::manifest::{
     PackageToInstall,
     TomlEditError,
 };
-use crate::models::pkgdb::{CallPkgDbError, UpgradeResult, UpgradeResultJSON, PKGDB_BIN};
+use crate::models::pkgdb::{
+    error_codes,
+    CallPkgDbError,
+    PkgDbError,
+    UpgradeResult,
+    UpgradeResultJSON,
+    PKGDB_BIN,
+};
 use crate::utils::CommandExt;
 
 pub struct ReadOnly {}
@@ -693,13 +700,47 @@ pub enum CoreEnvironmentError {
     ContainerizeUnsupportedSystem(String),
 }
 
+impl CoreEnvironmentError {
+    pub fn is_incompatible_system_error(&self) -> bool {
+        matches!(
+            self,
+            CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
+                CallPkgDbError::PkgDbError(PkgDbError {
+                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
+                    ..
+                })
+            ),)
+        )
+    }
+
+    pub fn is_incompatible_package_error(&self) -> bool {
+        #[allow(clippy::match_like_matches_macro)] // rustfmt can't handle this as a match!
+        match self {
+            CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
+                CallPkgDbError::PkgDbError(PkgDbError { exit_code, .. }),
+            )) if [
+                error_codes::PACKAGE_BUILD_FAILURE,
+                error_codes::PACKAGE_EVAL_FAILURE,
+                error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+            ]
+            .contains(exit_code) =>
+            {
+                true
+            },
+            _ => false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
+    use std::result;
 
+    use indoc::formatdoc;
     #[cfg(feature = "impure-unit-tests")]
     use serial_test::serial;
-    use tempfile::TempDir;
+    use tempfile::{tempdir_in, TempDir};
 
     use super::*;
     use crate::flox::tests::flox_instance;
@@ -748,6 +789,66 @@ mod tests {
         let result = env_view.edit(&flox, "".to_string()).unwrap();
 
         assert!(matches!(result, EditResult::Unchanged));
+    }
+
+    #[test]
+    fn build_incompatible_system() {
+        #[cfg(target_os = "macos")]
+        let manifest_contents = formatdoc! {r#"
+        [options]
+        systems = ["x86_64-linux"]
+        "#};
+
+        #[cfg(target_os = "linux")]
+        let manifest_contents = formatdoc! {r#"
+        [options]
+        systems = ["aarch64-darwin"]
+        "#};
+
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+        let mut temp_env = env_view
+            .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
+            .unwrap();
+        temp_env.update_manifest(&manifest_contents).unwrap();
+        env_view.lock(&flox).unwrap();
+        env_view.replace_with(temp_env).unwrap();
+
+        let result = env_view.build(&flox).unwrap_err();
+
+        assert!(result.is_incompatible_system_error());
+    }
+
+    #[test]
+    fn build_incompatible_package() {
+        #[cfg(target_os = "macos")]
+        let manifest_contents = formatdoc! {r#"
+        [install]
+        glibc.pkg-path = "glibc"
+
+        [options]
+        systems = ["aarch64-darwin"]
+        "#};
+
+        #[cfg(target_os = "linux")]
+        let manifest_contents = formatdoc! {r#"
+        [install]
+        ps.pkg-path = "darwin.ps"
+
+        [options]
+        systems = ["x86_64-linux"]
+        "#};
+
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+        let mut temp_env = env_view
+            .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
+            .unwrap();
+        temp_env.update_manifest(&manifest_contents).unwrap();
+        env_view.lock(&flox).unwrap();
+        env_view.replace_with(temp_env).unwrap();
+
+        let result = env_view.build(&flox).unwrap_err();
+
+        assert!(result.is_incompatible_package_error());
     }
 
     /// Installing hello with edit returns EditResult::Success

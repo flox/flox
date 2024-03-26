@@ -1738,12 +1738,7 @@ impl Pull {
 
         match result {
             Ok(_) => {},
-            Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
-                LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
-                    ..
-                })),
-            ))) => {
+            Err(EnvironmentError2::Core(e)) if e.is_incompatible_system_error() => {
                 let hint = formatdoc! {"
                     Use 'flox pull --force' to add your system to the manifest.
                     For more on managing systems for your environment, visit the documentation:
@@ -1782,22 +1777,14 @@ impl Pull {
                     });
                 };
             },
-            Err(
-                ref e @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
-                    ref builder_error @ LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(
-                        PkgDbError { exit_code, .. },
-                    )),
-                )),
-            ) if [
-                error_codes::PACKAGE_BUILD_FAILURE,
-                error_codes::PACKAGE_EVAL_FAILURE,
-                error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-            ]
-            .contains(&exit_code) =>
-            {
+            Err(EnvironmentError2::Core(
+                ref core_err @ CoreEnvironmentError::LockedManifest(
+                    ref builder_error @ LockedManifestError::BuildEnv(_),
+                ),
+            )) if core_err.is_incompatible_package_error() => {
                 debug!(
                     "environment contains package incompatible with the current system: {err}",
-                    err = display_chain(e)
+                    err = display_chain(core_err)
                 );
 
                 let pkgdb_error = format_locked_manifest_error(builder_error);
