@@ -50,7 +50,7 @@ use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::init::{
     init_access_tokens,
-    init_telemetry,
+    init_telemetry_uuid,
     init_uuid,
     telemetry_opt_out_needs_migration,
 };
@@ -204,7 +204,10 @@ impl FloxArgs {
         }
 
         if !config.flox.disable_metrics {
-            init_telemetry(&config.flox.data_dir, &config.flox.cache_dir).await?;
+            debug!("Metrics collection enabled");
+
+            init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)?;
+
             let connection = AWSDatalakeConnection::default();
             let client = Client::new_with_config(&config, connection)?;
             Hub::global().set_client(client);
