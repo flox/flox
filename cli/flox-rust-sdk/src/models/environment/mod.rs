@@ -27,7 +27,7 @@ use crate::providers::git::{
 use crate::utils::copy_file_without_permissions;
 
 mod core_environment;
-pub use core_environment::{CoreEnvironmentError, EditResult};
+pub use core_environment::{test_helpers, CoreEnvironmentError, EditResult};
 
 pub mod generations;
 pub mod managed_environment;
