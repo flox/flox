@@ -12,5 +12,3 @@ This release addresses several bugs and adds new improvements, including:
 
 We especially want to thank all our github.com/flox/flox contributors and
 [slack community members](https://go.flox.dev/slack) for all your valuable feedback!
-
-
