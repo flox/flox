@@ -5,12 +5,12 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Context, Error, Result};
 use bpaf::Bpaf;
+use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{
     global_manifest_lockfile_path,
     global_manifest_path,
-    CanonicalPath,
     Environment,
     PathPointer,
 };

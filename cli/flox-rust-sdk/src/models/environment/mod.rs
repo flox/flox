@@ -17,7 +17,7 @@ use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::LockedManifest;
 use super::manifest::PackageToInstall;
 use super::pkgdb::UpgradeResult;
-use crate::data::Version;
+use crate::data::{CanonicalPath, CanonicalizeError, Version};
 use crate::flox::{Flox, Floxhub};
 use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{
@@ -72,45 +72,6 @@ pub struct UpdateResult {
     pub new_lockfile: LockedManifest,
     pub old_lockfile: Option<LockedManifest>,
     pub store_path: Option<PathBuf>,
-}
-
-/// A path that is guaranteed to be canonicalized
-///
-/// [`ManagedEnvironment`] uses this to refer to the path of its `.flox` directory.
-/// [`ManagedEnvironment::encode`] is used to uniquely identify the environment
-/// by encoding the canonicalized path.
-/// This encoding is used to create a unique branch name in the floxmeta repository.
-/// Thus, rather than canonicalizing the path every time we need to encode it,
-/// we store the path as a [`CanonicalPath`].
-#[derive(Debug, Clone, derive_more::Deref, derive_more::AsRef)]
-#[deref(forward)]
-#[as_ref(forward)]
-pub struct CanonicalPath(PathBuf);
-
-#[derive(Debug, Error)]
-#[error("couldn't canonicalize path {path:?}: {err}")]
-pub struct CanonicalizeError {
-    pub path: PathBuf,
-    #[source]
-    pub err: std::io::Error,
-}
-
-impl CanonicalPath {
-    pub fn new(path: impl AsRef<Path>) -> Result<Self, CanonicalizeError> {
-        let canonicalized = std::fs::canonicalize(&path).map_err(|e| CanonicalizeError {
-            path: path.as_ref().to_path_buf(),
-            err: e,
-        })?;
-        Ok(Self(canonicalized))
-    }
-
-    pub fn path(&self) -> PathBuf {
-        self.0.clone()
-    }
-
-    pub fn into_path_buf(self) -> PathBuf {
-        self.0
-    }
 }
 
 /// The result of an installation attempt that contains the new manifest contents

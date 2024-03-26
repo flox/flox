@@ -1,10 +1,10 @@
+use flox_rust_sdk::data::CanonicalizeError;
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironmentError,
     GENERATION_LOCK_FILENAME,
 };
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::{
-    CanonicalizeError,
     CoreEnvironmentError,
     EnvironmentError,
     ENVIRONMENT_POINTER_FILENAME,

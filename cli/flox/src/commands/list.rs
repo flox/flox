@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
+use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{CanonicalPath, Environment};
+use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::lockfile::{
     InstalledPackage,
     LockedManifest,

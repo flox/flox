@@ -23,7 +23,6 @@ use log::debug;
 
 use super::core_environment::CoreEnvironment;
 use super::{
-    CanonicalPath,
     CanonicalizeError,
     EditResult,
     Environment,
@@ -39,7 +38,7 @@ use super::{
     GCROOTS_DIR_NAME,
     LOCKFILE_FILENAME,
 };
-use crate::data::System;
+use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::env_registry::{deregister, ensure_registered};
