@@ -737,14 +737,11 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     use indoc::formatdoc;
-    #[cfg(feature = "impure-unit-tests")]
     use serial_test::serial;
     use tempfile::{tempdir_in, TempDir};
 
     use super::*;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_global_lock};
-    #[cfg(feature = "impure-unit-tests")]
-    use crate::models::environment::init_global_manifest;
 
     /// Create a CoreEnvironment with an empty manifest
     ///
@@ -764,8 +761,7 @@ mod tests {
     #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn edit_env_creates_manifest_and_lockfile() {
-        let (flox, tempdir) = flox_instance();
-        init_global_manifest(&global_manifest_path(&flox)).unwrap();
+        let (flox, tempdir) = flox_instance_with_global_lock();
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
         fs::write(env_path.path().join(MANIFEST_FILENAME), "").unwrap();
@@ -785,6 +781,7 @@ mod tests {
 
     /// A no-op with edit returns EditResult::Unchanged
     #[test]
+    #[serial]
     fn edit_no_op_returns_unchanged() {
         let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
 
@@ -796,6 +793,7 @@ mod tests {
     /// Trying to build a manifest with a system other than the current one
     /// results in an error that is_incompatible_system_error()
     #[test]
+    #[serial]
     fn build_incompatible_system() {
         #[cfg(target_os = "macos")]
         let manifest_contents = formatdoc! {r#"
@@ -825,6 +823,7 @@ mod tests {
     /// Trying to build a manifest with a package that is incompatible with the current system
     /// results in an error that is_incompatible_package_error()
     #[test]
+    #[serial]
     fn build_incompatible_package() {
         #[cfg(target_os = "macos")]
         let manifest_contents = formatdoc! {r#"
@@ -859,6 +858,7 @@ mod tests {
 
     /// Installing hello with edit returns EditResult::Success
     #[test]
+    #[serial]
     fn edit_adding_package_returns_success() {
         let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
 
@@ -874,6 +874,7 @@ mod tests {
 
     /// Adding a hook with edit returns EditResult::ReActivateRequired
     #[test]
+    #[serial]
     fn edit_adding_hook_returns_re_activate_required() {
         let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
 
@@ -942,8 +943,7 @@ mod tests {
     #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn build_flox_environment_and_links() {
-        let (flox, tempdir) = flox_instance();
-        init_global_manifest(&global_manifest_path(&flox)).unwrap();
+        let (flox, tempdir) = flox_instance_with_global_lock();
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
         fs::write(
