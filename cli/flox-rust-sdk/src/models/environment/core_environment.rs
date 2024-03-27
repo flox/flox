@@ -715,19 +715,29 @@ impl CoreEnvironmentError {
 
     pub fn is_incompatible_package_error(&self) -> bool {
         #[allow(clippy::match_like_matches_macro)] // rustfmt can't handle this as a match!
-        match self {
-            CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
-                CallPkgDbError::PkgDbError(PkgDbError { exit_code, .. }),
-            )) if [
-                error_codes::PACKAGE_BUILD_FAILURE,
-                error_codes::PACKAGE_EVAL_FAILURE,
-                error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-            ]
-            .contains(exit_code) =>
+        match self.pkgdb_exit_code() {
+            Some(exit_code)
+                if [
+                    error_codes::PACKAGE_BUILD_FAILURE,
+                    error_codes::PACKAGE_EVAL_FAILURE,
+                    error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+                ]
+                .contains(exit_code) =>
             {
                 true
             },
             _ => false,
+        }
+    }
+
+    /// If the error contains a PkgDbError with an exit_code, return it.
+    /// Otherwise return None.
+    pub fn pkgdb_exit_code(&self) -> Option<&u64> {
+        match self {
+            CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
+                CallPkgDbError::PkgDbError(PkgDbError { exit_code, .. }),
+            )) => Some(exit_code),
+            _ => None,
         }
     }
 }
