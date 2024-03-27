@@ -245,7 +245,7 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::flox::tests::flox_instance;
+    use crate::flox::test_helpers::flox_instance;
     use crate::flox::DEFAULT_FLOXHUB_URL;
     use crate::providers::git::GitProvider;
 

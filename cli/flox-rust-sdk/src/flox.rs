@@ -192,45 +192,80 @@ pub enum FloxhubError {
     InvalidFloxhubBaseUrl(String, #[source] url::ParseError),
 }
 
-use tempfile::TempDir;
-/// Should only be used in the flox crate
-pub fn test_flox_instance() -> (Flox, TempDir) {
-    use crate::models::environment::{global_manifest_path, init_global_manifest};
+pub mod test_helpers {
+    use tempfile::TempDir;
 
-    let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+    use super::*;
+    use crate::models::environment::global_manifest_lockfile_path;
+    use crate::models::lockfile::LockedManifest;
 
-    let cache_dir = tempdir_handle.path().join("caches");
-    let data_dir = tempdir_handle.path().join(".local/share/flox");
-    let temp_dir = tempdir_handle.path().join("temp");
-    let config_dir = tempdir_handle.path().join("config");
+    /// Get an instance of Flox that has a locked global manifest.
+    ///
+    /// This means any operations that use pkgdb should use the same nixpkgs
+    /// revision.
+    pub fn flox_instance_with_global_lock() -> (Flox, TempDir) {
+        // Scrape nixpkgs once and then store the resulting global lockfile in memory
+        static GLOBAL_LOCKFILE: Lazy<LockedManifest> = Lazy::new(|| {
+            let (flox, _temp_dir_handle) = flox_instance();
+            let pkgdb_nixpkgs_rev_new = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
+            std::env::set_var("_PKGDB_GA_REGISTRY_REF_OR_REV", pkgdb_nixpkgs_rev_new);
+            LockedManifest::update_global_manifest(&flox, vec![])
+                .unwrap()
+                .new_lockfile
+        });
 
-    std::fs::create_dir_all(&cache_dir).unwrap();
-    std::fs::create_dir_all(&temp_dir).unwrap();
-    std::fs::create_dir_all(&config_dir).unwrap();
+        let (flox, tempdir_handle) = flox_instance();
 
-    let flox = Flox {
-        system: env!("NIX_TARGET_SYSTEM").to_string(),
-        cache_dir,
-        data_dir,
-        temp_dir,
-        config_dir,
-        access_tokens: Default::default(),
-        netrc_file: Default::default(),
-        uuid: Default::default(),
-        floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap(), None).unwrap(),
-        floxhub_token: None,
-    };
+        // All Flox instances created by flox_instance() have the same global
+        // manifest,
+        // so we can use the same lockfile.
+        let lockfile_path = global_manifest_lockfile_path(&flox);
+        std::fs::write(
+            lockfile_path,
+            serde_json::to_string_pretty(&*GLOBAL_LOCKFILE).unwrap(),
+        )
+        .unwrap();
 
-    init_global_manifest(&global_manifest_path(&flox)).unwrap();
+        (flox, tempdir_handle)
+    }
 
-    (flox, tempdir_handle)
+    pub fn flox_instance() -> (Flox, TempDir) {
+        use crate::models::environment::{global_manifest_path, init_global_manifest};
+
+        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+
+        let cache_dir = tempdir_handle.path().join("caches");
+        let data_dir = tempdir_handle.path().join(".local/share/flox");
+        let temp_dir = tempdir_handle.path().join("temp");
+        let config_dir = tempdir_handle.path().join("config");
+
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&config_dir).unwrap();
+
+        let flox = Flox {
+            system: env!("NIX_TARGET_SYSTEM").to_string(),
+            cache_dir,
+            data_dir,
+            temp_dir,
+            config_dir,
+            access_tokens: Default::default(),
+            netrc_file: Default::default(),
+            uuid: Default::default(),
+            floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap(), None).unwrap(),
+            floxhub_token: None,
+        };
+
+        init_global_manifest(&global_manifest_path(&flox)).unwrap();
+
+        (flox, tempdir_handle)
+    }
 }
 
 #[cfg(test)]
 pub mod tests {
     use std::str::FromStr;
 
-    pub use super::test_flox_instance as flox_instance;
     use super::*;
 
     /// A fake FloxHub token

@@ -1154,7 +1154,7 @@ mod test {
     use url::Url;
 
     use super::*;
-    use crate::flox::tests::flox_instance;
+    use crate::flox::test_helpers::flox_instance;
     use crate::models::environment::{DOT_FLOX, ENVIRONMENT_POINTER_FILENAME};
     use crate::models::floxmetav2::floxmeta_dir;
     use crate::providers::git::tests::commit_file;

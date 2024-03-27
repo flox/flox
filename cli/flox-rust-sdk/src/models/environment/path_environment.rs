@@ -535,7 +535,7 @@ impl PathEnvironment {
 mod tests {
 
     use super::*;
-    use crate::flox::tests::flox_instance;
+    use crate::flox::test_helpers::flox_instance;
 
     #[test]
     fn create_env() {
