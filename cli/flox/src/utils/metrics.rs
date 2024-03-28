@@ -259,7 +259,7 @@ impl MetricsBuffer {
     }
 }
 
-fn read_metrics_uuid(config: &Config) -> Result<Uuid> {
+pub fn read_metrics_uuid(config: &Config) -> Result<Uuid> {
     let data_dir = &config.flox.data_dir;
     let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
 
