@@ -1696,7 +1696,7 @@ impl Pull {
         force: bool,
         message: &str,
     ) -> Result<()> {
-        if dot_flox_path.exists() {
+        if dot_flox_path.exists() && !force {
             bail!("Cannot pull a new environment into an existing one")
         }
 
