@@ -27,7 +27,7 @@ const GO_HOOK: &str = indoc! {"
 /// - [Self::new]: Detects [GoModuleSystem] files in the current working directory.
 /// - [Self::should_run]: Returns whether a valid module system was detected
 ///   in the current working directory, i.e. `false` if the [Self::module_system]
-///   is [GoModuleSystemKind::NonExistent], else returns `true`.
+///   is [GoModuleSystemKind::None], else returns `true`.
 /// - [Self::prompt_user]: Prints the customization from [Self::get_init_customization]
 ///   if user commands to do so. Else, return true or false based on whether
 ///   the user wants the customization.
@@ -59,7 +59,7 @@ impl Go {
             return Ok(GoModuleSystemKind::Module(go_mod));
         }
 
-        Ok(GoModuleSystemKind::NonExistent)
+        Ok(GoModuleSystemKind::None)
     }
 }
 
@@ -70,14 +70,14 @@ impl InitHook for Go {
     /// are expected to be called only if this method returns `true`!
     fn should_run(&mut self, _path: &Path) -> Result<bool> {
         todo!("Ensure that the module system has a valid, specified version");
-        Ok(self.module_system != GoModuleSystemKind::NonExistent)
+        Ok(self.module_system != GoModuleSystemKind::None)
     }
 
     fn prompt_user(&mut self, path: &Path, flox: &Flox) -> Result<bool> {
         let module_system: &dyn GoModuleSystemMode = match &self.module_system {
             GoModuleSystemKind::Module(_mod) => _mod,
             GoModuleSystemKind::Workspace(_work) => _work,
-            GoModuleSystemKind::NonExistent => unreachable!(),
+            GoModuleSystemKind::None => unreachable!(),
         };
 
         message::plain(formatdoc! {
@@ -99,7 +99,6 @@ impl InitHook for Go {
         let cancel_options = ["No".to_string()];
         let cancel_options_offset = accept_options_offset + cancel_options.len() - 1;
 
-        // TODO: see: cli/flox-rust-sdk/src/models/environment/generations.rs:90
         let show_environment_manifest_option = ["Show environment manifest".to_string()];
 
         let options = accept_options
@@ -151,119 +150,14 @@ impl InitHook for Go {
     }
 }
 
-/// Distinguish compatible versions from default or incompatible versions
-///
-/// [ProvidedVersion::Compatible] if search yielded a compatible version to the requested version.
-/// [ProvidedVersion::Incompatible::requested] may be [None] if no version was requested.
-/// In that case any version found in the catalogs is considered compatible.
-///
-/// [ProvidedVersion::Incompatible] if no compatible version was found,
-/// but another substitute was found.
-///
-/// [ProvidedVersion::Incompatible::requested] and [ProvidedVersion::Compatible::requested]
-/// may be semver'ish, e.g. ">=3.6".
-///
-/// [ProvidedVersion::Incompatible::substitute] and [ProvidedVersion::Compatible::compatible]
-/// are concrete versions, not semver!
-#[derive(Debug, PartialEq)]
-enum ProvidedVersion {
-    Compatible {
-        requested: Option<String>,
-        compatible: ProvidedPackage,
-    },
-    Incompatible {
-        requested: String,
-        substitute: ProvidedPackage,
-    },
-}
-
-impl ProvidedVersion {
-    fn display_version(&self) -> &str {
-        match self {
-            Self::Compatible { compatible, .. } => &compatible.display_version,
-            Self::Incompatible { substitute, .. } => &substitute.display_version,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-struct ProvidedPackage {
-    /// Name of the provided package
-    /// pname or the last component of [Self::rel_path]
-    pub name: String,
-    /// Path to the package in the catalog
-    /// Checked to be non-empty
-    pub rel_path: Vec<String>,
-    /// Version of the package in the catalog
-    /// "N/A" if not found
-    ///
-    /// Used for display purposes only,
-    /// version constraints should be added based on the original query.
-    pub display_version: String,
-}
-
-impl TryFrom<SearchResult> for ProvidedPackage {
-    type Error = Error;
-
-    fn try_from(value: SearchResult) -> Result<Self, Self::Error> {
-        let path_name = value
-            .rel_path
-            .last()
-            .ok_or_else(|| anyhow!("invalid search result: 'rel_path' empty in {value:?}"))?;
-
-        let name = value.pname.unwrap_or_else(|| path_name.to_string());
-
-        Ok(ProvidedPackage {
-            name,
-            rel_path: value.rel_path,
-            display_version: value.version.unwrap_or("N/A".to_string()),
-        })
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-enum GoPackage {
-    Compatible {
-        requested: Option<String>,
-        compatible: ProvidedPackage,
-    },
-    Incompatible {
-        requested: String,
-        substitute: ProvidedPackage,
-    },
-}
-
-impl GoPackage {
-    fn from_module_system_contents(contents: String) -> Option<Self> {
-        let Some(version_str) = GoPackage::get_package_from_contents(&contents) else {
-            return None;
-        };
-
-        todo!()
-    }
-
-    fn get_package_from_contents<'a>(contents: &'a String) -> Option<&'a str> {
-        let Some(version_line) = contents
-            .lines()
-            .skip_while(|line| (**line).trim_start().starts_with("go"))
-            .next()
-        else {
-            return None;
-        };
-
-        let version_str = version_line.split_whitespace().nth(1);
-        version_str
-    }
-}
-
 /// Represents Go module system files.
 #[derive(PartialEq)]
 enum GoModuleSystemKind {
-    /// Not a Go module system, or just nothing at all
-    NonExistent,
-    /// Single module based system [GoModuleSystem]
+    /// Not a Go module system, or just nothing at all.
+    None,
+    /// Single module based system [GoModuleSystem].
     Module(GoModuleSystem),
-    /// Workspace system [GoWorkspaceSystem]
+    /// Workspace system [GoWorkspaceSystem].
     Workspace(GoWorkspaceSystem),
 }
 
@@ -343,6 +237,122 @@ impl GoModuleSystemMode for GoWorkspaceSystem {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+enum GoPackage {
+    Compatible {
+        requested: Option<String>,
+        compatible: ProvidedPackage,
+    },
+    Incompatible {
+        requested: String,
+        substitute: ProvidedPackage,
+    },
+}
+
+impl GoPackage {
+    fn from_module_system_contents(contents: String) -> Option<Self> {
+        let Some(version_str) = GoPackage::get_package_from_contents(&contents) else {
+            return None;
+        };
+
+        todo!()
+    }
+
+    fn get_package_from_contents<'a>(contents: &'a String) -> Option<&'a str> {
+        let Some(version_line) = contents
+            .lines()
+            .skip_while(|line| (**line).trim_start().starts_with("go"))
+            .next()
+        else {
+            return None;
+        };
+
+        let version_str = version_line.split_whitespace().nth(1);
+        version_str
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+struct ProvidedPackage {
+    /// Name of the provided package
+    /// pname or the last component of [Self::rel_path]
+    pub name: String,
+    /// Path to the package in the catalog
+    /// Checked to be non-empty
+    pub rel_path: Vec<String>,
+    /// Version of the package in the catalog
+    /// "N/A" if not found
+    ///
+    /// Used for display purposes only,
+    /// version constraints should be added based on the original query.
+    pub display_version: String,
+}
+
+impl TryFrom<SearchResult> for ProvidedPackage {
+    type Error = Error;
+
+    fn try_from(value: SearchResult) -> Result<Self, Self::Error> {
+        let path_name = value
+            .rel_path
+            .last()
+            .ok_or_else(|| anyhow!("invalid search result: 'rel_path' empty in {value:?}"))?;
+
+        let name = value.pname.unwrap_or_else(|| path_name.to_string());
+
+        Ok(ProvidedPackage {
+            name,
+            rel_path: value.rel_path,
+            display_version: value.version.unwrap_or("N/A".to_string()),
+        })
+    }
+}
+
+impl From<ProvidedPackage> for PackageToInstall {
+    fn from(value: ProvidedPackage) -> Self {
+        PackageToInstall {
+            id: value.name,
+            pkg_path: value.rel_path.join("."),
+            input: None,
+            version: None,
+        }
+    }
+}
+
+/// Distinguish compatible versions from default or incompatible versions
+///
+/// [ProvidedVersion::Compatible] if search yielded a compatible version to the requested version.
+/// [ProvidedVersion::Incompatible::requested] may be [None] if no version was requested.
+/// In that case any version found in the catalogs is considered compatible.
+///
+/// [ProvidedVersion::Incompatible] if no compatible version was found,
+/// but another substitute was found.
+///
+/// [ProvidedVersion::Incompatible::requested] and [ProvidedVersion::Compatible::requested]
+/// may be semver'ish, e.g. ">=3.6".
+///
+/// [ProvidedVersion::Incompatible::substitute] and [ProvidedVersion::Compatible::compatible]
+/// are concrete versions, not semver!
+#[derive(Debug, PartialEq)]
+enum ProvidedVersion {
+    Compatible {
+        requested: Option<String>,
+        compatible: ProvidedPackage,
+    },
+    Incompatible {
+        requested: String,
+        substitute: ProvidedPackage,
+    },
+}
+
+impl ProvidedVersion {
+    fn display_version(&self) -> &str {
+        match self {
+            Self::Compatible { compatible, .. } => &compatible.display_version,
+            Self::Incompatible { substitute, .. } => &substitute.display_version,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -359,6 +369,7 @@ mod tests {
         assert!(go.should_run(Path::new("")).unwrap());
     }
 
+    #[test]
     fn test_should_run_returns_true_on_valid_workspace() {
         let mut go = Go {
             module_system: GoModuleSystemKind::Workspace(GoWorkspaceSystem { package: todo!() }),
@@ -367,9 +378,9 @@ mod tests {
     }
 
     #[test]
-    fn test_should_run_returns_false_on_nonexistent() {
+    fn test_should_run_returns_false_on_none_system() {
         let mut go = Go {
-            module_system: GoModuleSystemKind::NonExistent,
+            module_system: GoModuleSystemKind::None,
         };
         assert!(!go.should_run(Path::new("")).unwrap());
     }
