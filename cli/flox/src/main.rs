@@ -27,6 +27,15 @@ async fn run(args: FloxArgs) -> Result<()> {
     set_parent_process_id();
     populate_default_nix_env_vars();
     let config = config::Config::parse()?;
+    let uuid = utils::metrics::read_metrics_uuid(&config)
+        .map(|u| Some(u.to_string()))
+        .unwrap_or(None);
+    sentry::configure_scope(|scope| {
+        scope.set_user(Some(sentry::User {
+            id: uuid,
+            ..Default::default()
+        }));
+    });
     init_global_manifest(&config.flox.config_dir.join("global-manifest.toml"))?;
     args.handle(config).await?;
     Ok(())
