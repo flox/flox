@@ -131,13 +131,7 @@ pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
     match stdout_contents {
         Ok(json) => match serde_json::from_str::<PkgDbError>(&json) {
             Ok(pkgdb_err) => Err(CallPkgDbError::PkgDbError(pkgdb_err)),
-            Err(e) => {
-                if let Ok(value) = serde_json::from_str(&json) {
-                    Ok(value)
-                } else {
-                    Err(CallPkgDbError::ParseJSON(e))
-                }
-            },
+            Err(e) => serde_json::from_str(&json).map_err(CallPkgDbError::ParseJSON),
         },
         Err(e) => Err(CallPkgDbError::PkgDbCall(e)),
     }
