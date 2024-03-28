@@ -66,6 +66,7 @@ use crate::commands::{
     ensure_environment_trust,
     ensure_floxhub_token,
     environment_description,
+    open_path,
     ConcreteEnvironment,
     EnvironmentSelectError,
     UninitializedEnvironment,
@@ -1697,7 +1698,32 @@ impl Pull {
         message: &str,
     ) -> Result<()> {
         if dot_flox_path.exists() {
-            bail!("Cannot pull a new environment into an existing one")
+            if force {
+                match open_path(flox, &dot_flox_path) {
+                    Ok(concrete_env) => match concrete_env {
+                        ConcreteEnvironment::Path(env) => {
+                            env.delete(flox)
+                                .context("Failed to delete existing environment")?;
+                        },
+                        ConcreteEnvironment::Managed(env) => {
+                            env.delete(flox)
+                                .context("Failed to delete existing environment")?;
+                        },
+                        ConcreteEnvironment::Remote(_) => {},
+                    },
+                    Err(_) => {
+                        fs::remove_dir_all(&dot_flox_path).context(format!(
+                            "Failed to remove existing .flox directory at {:?}",
+                            dot_flox_path
+                        ))?;
+                    },
+                }
+            } else {
+                bail!(
+                    "An environment already exists at {:?}. Use --force to overwrite.",
+                    dot_flox_path
+                );
+            }
         }
 
         // region: write pointer

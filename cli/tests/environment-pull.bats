@@ -297,6 +297,29 @@ function add_insecure_package() {
   assert_success
 }
 
+# bats test_tags=pull:add-system-flag
+# pulling an environment without packages for the current platform
+#should fail with an error
+@test "pull environment inside the same environment without the '--force' flag" {
+  update_dummy_env "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name
+  assert_success
+  run "$FLOX_BIN" pull --remote owner/name
+  assert_failure
+}
+
+# bats test_tags=pull:add-system-flag
+# pulling an environment without packages for the current platform
+@test "pull environment inside the same environment with '--force' flag" {
+  update_dummy_env "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name
+  assert_success
+  run "$FLOX_BIN" pull --remote owner/name --force
+  assert_success
+}
+
 # bats test_tags=pull:unsupported:prompt-fail
 # pulling an environment without packages for the current platform
 # should fail with an error
