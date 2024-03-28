@@ -297,6 +297,17 @@ function add_insecure_package() {
   assert_success
 }
 
+# bats test_tags=pull:unsupported
+# pulling an environment without packages for the current platform
+@test "pull environment inside the same environment with '--force' flag" {
+  update_dummy_env "owner" "name"
+  make_incompatible "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name
+  run "$FLOX_BIN" pull --remote owner/name --force
+  assert_success
+}
+
 # bats test_tags=pull:unsupported:prompt-fail
 # pulling an environment without packages for the current platform
 # should fail with an error
