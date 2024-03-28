@@ -27,6 +27,8 @@
    <a href="https://flox.dev/blog"><b>Blog</b></a>
    &emsp; | &emsp;  
    <a href="https://twitter.com/floxdevelopment"><b>Twitter</b></a>
+   &emsp; | &emsp; 
+   <a href="https://go.flox.dev/slack"><b>Slack</b></a>
    &emsp;
 </h3>
 
