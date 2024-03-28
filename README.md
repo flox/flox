@@ -48,7 +48,7 @@ create environments that layer and replace dependencies just where
 it matters, making them portable across the full software lifecycle.
 
 Install packages from [the biggest open source repository
-(nixpkgs)][post-nixpkgs] that contains **more that 80.000 packages**.
+(nixpkgs)][post-nixpkgs] that contains **more than 80.000 packages**.
 
 With `flox` you can:<br/>
 &rarr; [Create environments](https://flox.dev/docs/tutorials/creating-environments)<br/>
