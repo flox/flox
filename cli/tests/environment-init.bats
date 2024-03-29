@@ -178,6 +178,48 @@ function check_with_dir() {
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=init:go:module
+@test "'flox init' sets up a working Go module environment that works across all methods of activate" {
+  OWNER="owner"
+  NAME="name"
+  GO_BUILD_COMMAND="go build ."
+
+  cat > go.mod <<EOF
+  module go-module
+
+  go 1.21.0
+  EOF
+
+  cat > main.go <<EOF
+  package main
+
+  func main() {}
+  EOF
+
+  "$FLOX_BIN" init --auto-setup --name "$NAME"
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate -- $GO_BUILD_COMMAND
+  FLOX_SHELL=zsh "$FLOX_BIN" activate -- $GO_BUILD_COMMAND
+
+  floxhub_setup "$OWNER"
+
+  "$FLOX_BIN" push --owner "$OWNER"
+
+  "$FLOX_BIN" delete -f
+
+  "$FLOX_BIN" pull "$OWNER/$NAME"
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate -- $GO_BUILD_COMMAND
+  FLOX_SHELL=zsh "$FLOX_BIN" activate -- $GO_BUILD_COMMAND
+
+  "$FLOX_BIN" delete -f
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- $GO_BUILD_COMMAND
+  FLOX_SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- $GO_BUILD_COMMAND
+}
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #
