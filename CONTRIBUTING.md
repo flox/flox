@@ -47,7 +47,7 @@ to help enforcing those rules.
 
 -----
 
-For starters: commit messages shold have to follow the pattern:
+For starters: commit messages should follow the pattern:
 
 ```
 <type>[optional scope]: <description>
@@ -58,9 +58,9 @@ For starters: commit messages shold have to follow the pattern:
 ```
 
 The commit contains the following structural elements,
-to communicate intent to the consumers of your library:
+to communicate the intent of the change:
 
-1. **fix**: a commit of the type `fix` patches a bug in your codebase
+1. **fix**: a commit of the type `fix` patches a bug in the codebase
    (this correlates with PATCH in Semantic Versioning).
 2. **feat**: a commit of the type feat introduces a new feature to the codebase
    (this correlates with MINOR in Semantic Versioning).
@@ -365,4 +365,4 @@ updated by rebasing and resolving conflicts regularly to avoid messy merges.
 Merges to `main` should be squashed and *ff-only* back to `main` using GitHub
 PRs.  Or, if they represent multiple bigger changes, squashed into multiple
 distinct change sets.  Also be sure to run all tests before creating a mergable
-PR (See [below](#testing)).
+PR (See [above](#testing)).
