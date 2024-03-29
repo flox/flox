@@ -30,6 +30,7 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox
   project_setup
   floxhub_setup "owner"
   make_dummy_env "owner" "name"
@@ -260,11 +261,6 @@ function add_insecure_package() {
 
   assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_FIRST_AFTER_PULL" ]
   assert [ "$LOCKED_FIRST_AFTER_PULL" == "$LOCKED_SECOND" ]
-}
-
-# bats test_tags=pull:l6,pull:l6:b
-@test "l6.b: installing in one directory doesn't show in the other until it is pushed and pulled again" {
-  skip "pulling is not yet implemtened"
 }
 
 # bats test_tags=pull:floxhub

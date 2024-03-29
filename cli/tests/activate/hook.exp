@@ -11,7 +11,7 @@ expect_after {
   "*\n" { exp_continue }
   "*\r" { exp_continue }
 }
-expect "Getting ready to use environment"
+expect "Preparing environment"
 
 send "exit\n"
 expect eof

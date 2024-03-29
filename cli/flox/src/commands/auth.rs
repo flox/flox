@@ -21,6 +21,7 @@ use oauth2::{
     TokenUrl,
 };
 use serde::Serialize;
+use tracing::instrument;
 use url::Url;
 
 use crate::commands::general::update_config;
@@ -184,15 +185,20 @@ pub enum Auth {
 }
 
 impl Auth {
+    #[instrument(name = "auth", skip_all)]
     pub async fn handle(self, config: Config, mut flox: Flox) -> Result<()> {
         subcommand_metric!("auth2");
 
         match self {
             Auth::Login => {
+                let span = tracing::info_span!("login");
+                let _guard = span.enter();
                 login_flox(&mut flox).await?;
                 Ok(())
             },
             Auth::Logout => {
+                let span = tracing::info_span!("logout");
+                let _guard = span.enter();
                 if config.flox.floxhub_token.is_none() {
                     message::warning("You are not logged in");
                     return Ok(());
@@ -206,6 +212,8 @@ impl Auth {
                 Ok(())
             },
             Auth::Status => {
+                let span = tracing::info_span!("status");
+                let _guard = span.enter();
                 let Some(token) = flox.floxhub_token else {
                     message::warning("You are not currently logged in to FloxHub.");
                     return Ok(());

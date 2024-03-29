@@ -37,15 +37,18 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
 }
+
 teardown() {
   common_test_teardown
 }
 
 setup_file() {
-  rm -f "$GLOBAL_MANIFEST_LOCK"
-  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
-    "$FLOX_BIN" update --global
+  :
 }
 
 # ---------------------------------------------------------------------------- #
@@ -57,28 +60,8 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox show' accepts specific input" {
-  skip DEPRECATED
-  run "$FLOX_BIN" show nixpkgs-flox:hello
-  assert_success
-  # TODO: better testing once the formatting is implemented
-}
-
-# ---------------------------------------------------------------------------- #
-
 @test "'flox show' accepts search output without separator" {
   run "$FLOX_BIN" search hello
-  assert_success
-  first_result="${lines[0]%% *}"
-  run "$FLOX_BIN" show "$first_result"
-  assert_success
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox show' accepts search output with separator" {
-  skip DEPRECATED
-  run "$FLOX_BIN" search nixpkgs-flox:hello
   assert_success
   first_result="${lines[0]%% *}"
   run "$FLOX_BIN" show "$first_result"

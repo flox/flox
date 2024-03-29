@@ -1,6 +1,6 @@
 [package]
 name = "flox"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -44,10 +44,10 @@ indexmap.workspace = true
 url.workspace = true
 chrono.workspace = true
 oauth2.workspace = true
-textwrap = {workspace = true, features = ["terminal_size"]}
+textwrap = { workspace = true, features = ["terminal_size"] }
 indent.workspace = true
 semver.workspace = true
-sentry = {workspace = true, features = ["anyhow", "tracing", "debug-logs"]}
+sentry = { workspace = true, features = ["anyhow", "tracing", "debug-logs"] }
 serial_test.workspace = true
 
 [dev-dependencies]

@@ -26,7 +26,14 @@ use crate::models::manifest::{
     PackageToInstall,
     TomlEditError,
 };
-use crate::models::pkgdb::{CallPkgDbError, UpgradeResult, UpgradeResultJSON, PKGDB_BIN};
+use crate::models::pkgdb::{
+    error_codes,
+    CallPkgDbError,
+    PkgDbError,
+    UpgradeResult,
+    UpgradeResultJSON,
+    PKGDB_BIN,
+};
 use crate::utils::CommandExt;
 
 pub struct ReadOnly {}
@@ -693,25 +700,78 @@ pub enum CoreEnvironmentError {
     ContainerizeUnsupportedSystem(String),
 }
 
+impl CoreEnvironmentError {
+    pub fn is_incompatible_system_error(&self) -> bool {
+        matches!(
+            self,
+            CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
+                CallPkgDbError::PkgDbError(PkgDbError {
+                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
+                    ..
+                })
+            ),)
+        )
+    }
+
+    pub fn is_incompatible_package_error(&self) -> bool {
+        #[allow(clippy::match_like_matches_macro)] // rustfmt can't handle this as a match!
+        match self.pkgdb_exit_code() {
+            Some(exit_code)
+                if [
+                    error_codes::PACKAGE_BUILD_FAILURE,
+                    error_codes::PACKAGE_EVAL_FAILURE,
+                    error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+                ]
+                .contains(exit_code) =>
+            {
+                true
+            },
+            _ => false,
+        }
+    }
+
+    /// If the error contains a PkgDbError with an exit_code, return it.
+    /// Otherwise return None.
+    pub fn pkgdb_exit_code(&self) -> Option<&u64> {
+        match self {
+            CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
+                CallPkgDbError::PkgDbError(PkgDbError { exit_code, .. }),
+            )) => Some(exit_code),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
 
-    #[cfg(feature = "impure-unit-tests")]
+    use indoc::formatdoc;
     use serial_test::serial;
+    use tempfile::{tempdir_in, TempDir};
 
     use super::*;
-    use crate::flox::tests::flox_instance;
-    #[cfg(feature = "impure-unit-tests")]
-    use crate::models::environment::init_global_manifest;
+    use crate::flox::test_helpers::{flox_instance, flox_instance_with_global_lock};
+
+    /// Create a CoreEnvironment with an empty manifest
+    ///
+    /// This calls flox_instance_with_global_lock(),
+    /// so the resulting environment can be built without incurring a pkgdb scrape.
+    fn empty_core_environment() -> (CoreEnvironment, Flox, TempDir) {
+        let (flox, tempdir) = flox_instance_with_global_lock();
+
+        let env_path = tempfile::tempdir_in(&tempdir).unwrap().into_path();
+        fs::write(env_path.join(MANIFEST_FILENAME), "").unwrap();
+
+        (CoreEnvironment::new(&env_path), flox, tempdir)
+    }
 
     /// Check that `edit` updates the manifest and creates a lockfile
     #[test]
     #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn edit_env_creates_manifest_and_lockfile() {
-        let (flox, tempdir) = flox_instance();
-        init_global_manifest(&global_manifest_path(&flox)).unwrap();
+        let (flox, tempdir) = flox_instance_with_global_lock();
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
         fs::write(env_path.path().join(MANIFEST_FILENAME), "").unwrap();
@@ -727,6 +787,135 @@ mod tests {
 
         assert_eq!(env_view.manifest_content().unwrap(), new_env_str);
         assert!(env_view.env_dir.join(LOCKFILE_FILENAME).exists());
+    }
+
+    /// A no-op with edit returns EditResult::Unchanged
+    #[test]
+    #[serial]
+    fn edit_no_op_returns_unchanged() {
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+
+        let result = env_view.edit(&flox, "".to_string()).unwrap();
+
+        assert!(matches!(result, EditResult::Unchanged));
+    }
+
+    /// Trying to build a manifest with a system other than the current one
+    /// results in an error that is_incompatible_system_error()
+    #[test]
+    #[serial]
+    fn build_incompatible_system() {
+        #[cfg(target_os = "macos")]
+        let manifest_contents = formatdoc! {r#"
+        [options]
+        systems = ["x86_64-linux"]
+        "#};
+
+        #[cfg(target_os = "linux")]
+        let manifest_contents = formatdoc! {r#"
+        [options]
+        systems = ["aarch64-darwin"]
+        "#};
+
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+        let mut temp_env = env_view
+            .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
+            .unwrap();
+        temp_env.update_manifest(&manifest_contents).unwrap();
+        env_view.lock(&flox).unwrap();
+        env_view.replace_with(temp_env).unwrap();
+
+        let result = env_view.build(&flox).unwrap_err();
+
+        assert!(result.is_incompatible_system_error());
+    }
+
+    /// Trying to build a manifest with a package that is incompatible with the current system
+    /// results in an error that is_incompatible_package_error()
+    #[test]
+    #[serial]
+    fn build_incompatible_package() {
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        let manifest_contents = formatdoc! {r#"
+        [install]
+        glibc.pkg-path = "glibc"
+
+        [options]
+        systems = ["aarch64-darwin"]
+        "#};
+
+        #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+        let manifest_contents = formatdoc! {r#"
+        [install]
+        glibc.pkg-path = "glibc"
+
+        [options]
+        systems = ["x86_64-darwin"]
+        "#};
+
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        let manifest_contents = formatdoc! {r#"
+        [install]
+        ps.pkg-path = "darwin.ps"
+
+        [options]
+        systems = ["x86_64-linux"]
+        "#};
+
+        #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+        let manifest_contents = formatdoc! {r#"
+        [install]
+        ps.pkg-path = "darwin.ps"
+
+        [options]
+        systems = ["aarch64-linux"]
+        "#};
+
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+        let mut temp_env = env_view
+            .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
+            .unwrap();
+        temp_env.update_manifest(&manifest_contents).unwrap();
+        env_view.lock(&flox).unwrap();
+        env_view.replace_with(temp_env).unwrap();
+
+        let result = env_view.build(&flox).unwrap_err();
+
+        assert!(result.is_incompatible_package_error());
+    }
+
+    /// Installing hello with edit returns EditResult::Success
+    #[test]
+    #[serial]
+    fn edit_adding_package_returns_success() {
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+
+        let new_env_str = r#"
+        [install]
+        hello = {}
+        "#;
+
+        let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
+
+        assert!(matches!(result, EditResult::Success { store_path: _ }));
+    }
+
+    /// Adding a hook with edit returns EditResult::ReActivateRequired
+    #[test]
+    #[serial]
+    fn edit_adding_hook_returns_re_activate_required() {
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+
+        let new_env_str = r#"
+        [hook]
+        on-activate = ""
+        "#;
+
+        let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
+
+        assert!(matches!(result, EditResult::ReActivateRequired {
+            store_path: _
+        }));
     }
 
     /// replacing an environment should fail if a backup exists
@@ -782,8 +971,7 @@ mod tests {
     #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn build_flox_environment_and_links() {
-        let (flox, tempdir) = flox_instance();
-        init_global_manifest(&global_manifest_path(&flox)).unwrap();
+        let (flox, tempdir) = flox_instance_with_global_lock();
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
         fs::write(

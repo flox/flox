@@ -57,6 +57,7 @@ use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, warn};
 use toml_edit::Document;
+use tracing::instrument;
 use url::Url;
 
 use super::{environment_select, EnvironmentSelect};
@@ -107,12 +108,13 @@ pub enum EditAction {
 }
 
 impl Edit {
+    #[instrument(name = "edit", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("edit");
 
         let detected_environment = self
             .environment
-            .detect_concrete_environment(&flox, "edit")?;
+            .detect_concrete_environment(&flox, "Edit")?;
 
         // Ensure the user is logged in for the following remote operations
         if let ConcreteEnvironment::Remote(_) = detected_environment {
@@ -121,16 +123,21 @@ impl Edit {
 
         match self.action {
             EditAction::EditManifest { file } => {
+                // TODO: differentiate between interactive edits and replacement
+                let span = tracing::info_span!("edit_file");
+                let _guard = span.enter();
                 Self::edit_manifest(&flox, detected_environment, file).await?
             },
             EditAction::Rename { name } => {
+                let span = tracing::info_span!("rename");
+                let _guard = span.enter();
                 if let ConcreteEnvironment::Path(mut environment) = detected_environment {
                     let old_name = environment.name();
                     if name == old_name {
-                        bail!("environment already named {name}");
+                        bail!("environment already named '{name}'");
                     }
                     environment.rename(name.clone())?;
-                    message::updated(format!("renamed environment {old_name} to {name}"));
+                    message::updated(format!("renamed environment '{old_name}' to '{name}'"));
                 } else {
                     // todo: handle remote environments in the future
                     bail!("Cannot rename environments on FloxHub");
@@ -163,7 +170,7 @@ impl Edit {
 
         // outside the match to avoid rustfmt falling on its face
         let reactivate_required_note = indoc! {"
-            Your manifest has changes that cannot be automatically applied to your current environment.
+            Your manifest has changes that cannot be automatically applied.
 
             Please 'exit' the environment and run 'flox activate' to see these changes.
        "};
@@ -317,11 +324,12 @@ pub struct Delete {
 }
 
 impl Delete {
+    #[instrument(name = "delete", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("delete");
         let environment = self
             .environment
-            .detect_concrete_environment(&flox, "delete")?;
+            .detect_concrete_environment(&flox, "Delete")?;
 
         let description = environment_description(&environment)?;
 
@@ -335,9 +343,7 @@ impl Delete {
         }
 
         let comfirm = Dialog {
-            message: &format!(
-                "You are about to delete your environment {description}. Are you sure?"
-            ),
+            message: "Are you sure?",
             help_message: Some("Use `-f` to force deletion"),
             typed: Confirm {
                 default: Some(false),
@@ -427,7 +433,10 @@ impl Activate {
             environment.activation_path(&flox)
         } else {
             Dialog {
-                message: &format!("Getting ready to use environment {now_active}..."),
+                message: &format!(
+                    "Preparing environment {}...",
+                    now_active.message_description()?
+                ),
                 help_message: None,
                 typed: Spinner::new(|| environment.activation_path(&flox)),
             }
@@ -488,9 +497,12 @@ impl Activate {
         if flox_active_environments.is_active(&now_active) {
             if !in_place {
                 // Error if interactive and already active
-                bail!("Environment '{now_active}' is already active.");
+                bail!(
+                    "Environment '{}' is already active.",
+                    now_active.bare_description()?
+                );
             }
-            debug!("Environment is already active: environment={now_active}. Ignoring activation (may patch PATH)");
+            debug!("Environment is already active: environment={}. Ignoring activation (may patch PATH)", now_active.bare_description()?);
             Self::reactivate_in_place(fixed_up_original_path_joined)?;
             return Ok(());
         }
@@ -583,7 +595,7 @@ impl Activate {
             Self::activate_interactive(shell, exports, activation_path, now_active)
         };
         // If we get here, exec failed!
-        Err(activate_error)
+        activate_error
     }
 
     /// Used for `flox activate -- run_args`
@@ -592,16 +604,16 @@ impl Activate {
         shell: Shell,
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
-    ) -> anyhow::Error {
+    ) -> Result<()> {
         let mut command = Command::new(shell.exe_path());
 
         command.envs(exports);
 
+        // TODO: the activation script sets prompt, which isn't necessary
         let script = formatdoc! {r#"
                 # to avoid infinite recursion sourcing bashrc
                 export FLOX_SOURCED_FROM_SHELL_RC=1
 
-                # TODO: this script sets prompt, which isn't necessary
                 source {activation_path}/activate/{shell}
 
                 unset FLOX_SOURCED_FROM_SHELL_RC
@@ -618,7 +630,7 @@ impl Activate {
         debug!("running activation command: {:?}", command);
 
         // exec should never return
-        command.exec().into()
+        Err(command.exec().into())
     }
 
     /// Activate the environment interactively by spawning a new shell
@@ -630,7 +642,7 @@ impl Activate {
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
         now_active: UninitializedEnvironment,
-    ) -> anyhow::Error {
+    ) -> Result<()> {
         let mut command = Command::new(shell.exe_path());
         command.envs(exports);
 
@@ -677,12 +689,12 @@ impl Activate {
         debug!("running activation command: {:?}", command);
 
         let message = formatdoc! {"
-                You are now using the environment {now_active}.
-                To stop using this environment, type 'exit'\n"};
+                You are now using the environment {}.
+                To stop using this environment, type 'exit'\n", now_active.message_description()?};
         message::updated(message);
 
         // exec should never return
-        command.exec().into()
+        Err(command.exec().into())
     }
 
     /// Patch the PATH to undo the effects of `/usr/libexec/path_helper`
@@ -972,16 +984,18 @@ pub enum ListMode {
 }
 
 impl List {
+    #[instrument(name = "list", fields(mode), skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("list");
 
         let mut env = self
             .environment
-            .detect_concrete_environment(&flox, "list using")?
+            .detect_concrete_environment(&flox, "List using")?
             .into_dyn_environment();
 
         let manifest_contents = env.manifest_content(&flox)?;
         if self.list_mode == ListMode::Config {
+            tracing::Span::current().record("mode", "config");
             println!("{}", manifest_contents);
             return Ok(());
         }
@@ -1001,9 +1015,18 @@ impl List {
         }
 
         match self.list_mode {
-            ListMode::NameOnly => Self::print_name_only(&packages),
-            ListMode::Extended => Self::print_extended(&packages),
-            ListMode::All => Self::print_detail(&packages),
+            ListMode::NameOnly => {
+                tracing::Span::current().record("mode", "name");
+                Self::print_name_only(&packages);
+            },
+            ListMode::Extended => {
+                tracing::Span::current().record("mode", "extended");
+                Self::print_extended(&packages);
+            },
+            ListMode::All => {
+                tracing::Span::current().record("mode", "all");
+                Self::print_detail(&packages);
+            },
             ListMode::Config => unreachable!(),
         }
 
@@ -1128,6 +1151,7 @@ pub struct PkgWithIdOption {
 }
 
 impl Install {
+    #[instrument(name = "install", fields(packages), skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("install");
 
@@ -1138,7 +1162,7 @@ impl Install {
         );
         let concrete_environment = match self
             .environment
-            .detect_concrete_environment(&flox, "install to")
+            .detect_concrete_environment(&flox, "Install to")
         {
             Ok(concrete_environment) => concrete_environment,
             Err(EnvironmentSelectError::Environment(
@@ -1182,6 +1206,10 @@ impl Install {
             bail!("Must specify at least one package");
         }
 
+        // We don't know the contents of the packages field when the span is created
+        tracing::Span::current()
+            .record("packages", Install::format_packages_for_tracing(&packages));
+
         let installation = Dialog {
             message: &format!("Installing packages to environment {description}..."),
             help_message: None,
@@ -1223,6 +1251,11 @@ impl Install {
             }
         }
         Ok(())
+    }
+
+    fn format_packages_for_tracing(packages: &[PackageToInstall]) -> String {
+        // TODO: settle on a real format for the contents of this string (JSON, etc)
+        packages.iter().map(|p| p.pkg_path.clone()).join(",")
     }
 
     fn handle_error(
@@ -1285,8 +1318,13 @@ pub struct Uninstall {
 }
 
 impl Uninstall {
+    #[instrument(name = "uninstall", fields(packages), skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("uninstall");
+
+        // Vec<T> doesn't implement tracing::Value, so you have to join the strings
+        // yourself.
+        tracing::Span::current().record("packages", self.packages.iter().join(","));
 
         debug!(
             "uninstalling packages [{}] from {:?}",
@@ -1295,7 +1333,7 @@ impl Uninstall {
         );
         let concrete_environment = match self
             .environment
-            .detect_concrete_environment(&flox, "uninstall from")
+            .detect_concrete_environment(&flox, "Uninstall from")
         {
             Ok(concrete_environment) => concrete_environment,
             Err(EnvironmentSelectError::Environment(
@@ -1341,61 +1379,6 @@ impl Uninstall {
     }
 }
 
-// Delete builds of non-current versions of an environment
-#[derive(Bpaf, Clone)]
-pub struct WipeHistory {
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    _environment: EnvironmentSelect,
-}
-
-impl WipeHistory {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("wipe-history");
-
-        todo!("this command is planned for a future release");
-    }
-}
-
-// List environment generations with contents
-#[derive(Bpaf, Clone)]
-pub struct Generations {
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long)]
-    json: bool,
-
-    #[allow(unused)] // Command currently forwarded
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
-}
-
-impl Generations {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("generations");
-
-        todo!("this command is planned for a future release")
-    }
-}
-
-// Show all versions of an environment
-#[derive(Bpaf, Clone)]
-pub struct History {
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(long, short)]
-    oneline: bool,
-
-    #[allow(unused)] // Command currently forwarded
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
-}
-
-impl History {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("history");
-
-        todo!("this command is planned for a future release")
-    }
-}
-
 // Send environment to FloxHub
 #[derive(Bpaf, Clone)]
 pub struct Push {
@@ -1413,11 +1396,16 @@ pub struct Push {
 }
 
 impl Push {
+    #[instrument(name = "push", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("push");
 
         // Ensure the user is logged in for the following remote operations
         ensure_floxhub_token(&mut flox).await?;
+
+        // Start a span that doesn't include authentication
+        let span = tracing::info_span!("post-auth");
+        let _guard = span.enter();
 
         let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
@@ -1609,6 +1597,7 @@ pub struct Pull {
 }
 
 impl Pull {
+    #[instrument(name = "pull", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("pull");
 
@@ -1762,12 +1751,7 @@ impl Pull {
 
         match result {
             Ok(_) => {},
-            Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
-                LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
-                    ..
-                })),
-            ))) => {
+            Err(EnvironmentError2::Core(e)) if e.is_incompatible_system_error() => {
                 let hint = formatdoc! {"
                     Use 'flox pull --force' to add your system to the manifest.
                     For more on managing systems for your environment, visit the documentation:
@@ -1806,22 +1790,14 @@ impl Pull {
                     });
                 };
             },
-            Err(
-                ref e @ EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
-                    ref builder_error @ LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(
-                        PkgDbError { exit_code, .. },
-                    )),
-                )),
-            ) if [
-                error_codes::PACKAGE_BUILD_FAILURE,
-                error_codes::PACKAGE_EVAL_FAILURE,
-                error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-            ]
-            .contains(&exit_code) =>
-            {
+            Err(EnvironmentError2::Core(
+                ref core_err @ CoreEnvironmentError::LockedManifest(
+                    ref builder_error @ LockedManifestError::BuildEnv(_),
+                ),
+            )) if core_err.is_incompatible_package_error() => {
                 debug!(
                     "environment contains package incompatible with the current system: {err}",
-                    err = display_chain(e)
+                    err = display_chain(core_err)
                 );
 
                 let pkgdb_error = format_locked_manifest_error(builder_error);
@@ -1974,48 +1950,6 @@ impl Pull {
     }
 }
 
-// Rollback to the previous generation of an environment
-#[derive(Bpaf, Clone)]
-pub struct Rollback {
-    #[bpaf(long, short, argument("ENV"))]
-    #[allow(dead_code)] // not yet handled in impl
-    environment: Option<EnvironmentRef>,
-
-    /// Generation to roll back to.
-    ///
-    /// If omitted, defaults to the previous generation.
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(argument("GENERATION"))]
-    to: Option<u32>,
-}
-impl Rollback {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("rollback");
-
-        todo!("this command is planned for a future release")
-    }
-}
-
-// Switch to a specific generation of an environment
-#[derive(Bpaf, Clone)]
-pub struct SwitchGeneration {
-    #[allow(unused)] // Command currently forwarded
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
-
-    #[allow(dead_code)] // not yet handled in impl
-    #[bpaf(positional("GENERATION"))]
-    generation: u32,
-}
-
-impl SwitchGeneration {
-    pub async fn handle(self, _flox: Flox) -> Result<()> {
-        subcommand_metric!("switch-generation");
-
-        todo!("this command is planned for a future release")
-    }
-}
-
 #[derive(Debug, Bpaf, Clone)]
 pub enum EnvironmentOrGlobalSelect {
     /// Update the global base catalog
@@ -2040,13 +1974,17 @@ pub struct Update {
     inputs: Vec<String>,
 }
 impl Update {
+    #[instrument(name = "update", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("update");
 
         let (old_lockfile, new_lockfile, global, description) = match self.environment_or_global {
             EnvironmentOrGlobalSelect::Environment(ref environment_select) => {
+                let span = tracing::info_span!("update_local");
+                let _guard = span.enter();
+
                 let concrete_environment =
-                    environment_select.detect_concrete_environment(&flox, "update")?;
+                    environment_select.detect_concrete_environment(&flox, "Update")?;
 
                 let description = Some(environment_description(&concrete_environment)?);
                 let UpdateResult {
@@ -2070,6 +2008,9 @@ impl Update {
                 )
             },
             EnvironmentOrGlobalSelect::Global => {
+                let span = tracing::info_span!("update_global");
+                let _guard = span.enter();
+
                 let UpdateResult {
                     new_lockfile,
                     old_lockfile,
@@ -2164,6 +2105,8 @@ impl Update {
         }
 
         // TODO: make this async when scraping multiple inputs
+        let span = tracing::info_span!("scrape");
+        let _guard = span.enter();
         let results: Vec<Result<(), ScrapeError>> = Dialog {
             message: "Generating databases for updated inputs...",
             help_message: (inputs_to_scrape.len() > 1).then_some("This may take a while."),
@@ -2176,6 +2119,7 @@ impl Update {
             }),
         }
         .spin();
+        drop(_guard);
 
         for result in results {
             result?;
@@ -2207,12 +2151,13 @@ pub struct Upgrade {
     groups_or_iids: Vec<String>,
 }
 impl Upgrade {
+    #[instrument(name = "upgrade", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("upgrade");
 
         let concrete_environment = self
             .environment
-            .detect_concrete_environment(&flox, "upgrade")?;
+            .detect_concrete_environment(&flox, "Upgrade")?;
 
         let description = environment_description(&concrete_environment)?;
 
@@ -2260,12 +2205,13 @@ pub struct Containerize {
     output: Option<PathBuf>,
 }
 impl Containerize {
+    #[instrument(name = "containerize", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("containerize");
 
         let mut env = self
             .environment
-            .detect_concrete_environment(&flox, "upgrade")?
+            .detect_concrete_environment(&flox, "Upgrade")?
             .into_dyn_environment();
 
         let output_path = match self.output {

@@ -44,6 +44,8 @@ jobs:
   pkgdb-dev:
     name: "Pkgdb"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.pkgdb == 'true' }}
     needs:
       - "changes"
@@ -107,6 +109,7 @@ jobs:
   cli-dev:
     name: "Flox CLI Tests"
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
 
     strategy:
       fail-fast: false
@@ -147,10 +150,15 @@ jobs:
       - name: "Build"
         run: nix develop -L --no-update-lock-file --command just build-cli
 
-      - name: "CLI Tests"
+      - name: "CLI Unit Tests"
         env:
           RUST_BACKTRACE: 1
-        run: nix develop -L --no-update-lock-file --command just test-cli
+        run: nix develop -L --no-update-lock-file --command just impure-tests
+
+      - name: "CLI Integration Tests"
+        env:
+          RUST_BACKTRACE: 1
+        run: nix develop -L --no-update-lock-file --command just integ-tests
 
       - name: "Functional Tests"
         if: ${{ github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
@@ -162,6 +170,7 @@ jobs:
   nix-build:
     name: "Nix build"
     runs-on: "ubuntu-latest"
+    timeout-minutes: 120
 
     outputs:
       closure-size: ${{ steps.closure.outputs.closure-size }}
@@ -229,6 +238,7 @@ jobs:
     name: "Build installers"
     if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
     runs-on: "ubuntu-latest"
+    timeout-minutes: 120
 
     needs:
       - "nix-build"

@@ -74,6 +74,7 @@ activate_local_env() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox # concurrent pkgdb database creation
   project_setup
 }
 teardown() {
@@ -227,106 +228,6 @@ env_is_activated() {
   FLOX_SHELL=bash NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
   assert_success
   assert_output --partial "baz"
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "a1: 'flox develop' aliases to 'flox activate'" {
-  skip FIXME
-  run "$FLOX_BIN" develop
-  assert_success
-  is_activated=$(env_is_activated "$PROJECT_NAME")
-  assert_equal "$is_activated" "1"
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "a2: activates environment in current dir by default" {
-  skip FIXME
-  run "$FLOX_BIN" activate
-  assert_success
-  is_activated=$(env_is_activated "$PROJECT_NAME")
-  assert_equal "$is_activated" "1"
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "a3: 'flox activate' accepts explicit environment name" {
-  skip FIXME
-  run "$FLOX_BIN" activate -d "$PROJECT_DIR"
-  assert_success
-  is_activated=$(env_is_activated "$PROJECT_NAME")
-  assert_equal "$is_activated" "1"
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "a4: 'flox activate' modifies shell prompt with 'bash'" {
-  skip FIXME
-  prompt_before="${PS1@P}"
-  bash -c '"$FLOX_BIN" activate -d "$PROJECT_DIR"'
-  assert_success
-  prompt_after="${PS1@P}"
-  assert_not_equal prompt_before prompt_after
-  assert_regex prompt_after "flox \[.*$PROJECT_NAME.*\]"
-}
-
-# ---------------------------------------------------------------------------- #
-
-# Commented out until someone decides to make this test pass,
-# otherwise shellcheck complains.
-# @test "a4: 'flox activate' modifies shell prompt with 'zsh'" {
-#   skip FIXME;
-#   prompt_before="${(%%)PS1}";
-#   zsh -c '"$FLOX_BIN" activate -d "$PROJECT_DIR"';
-#   assert_success;
-#   prompt_after="${(%%)PS1}";
-#   assert_not_equal prompt_before prompt_after;
-#   assert_regex prompt_after "\[.*$PROJECT_NAME.*\]"
-# }
-
-# ---------------------------------------------------------------------------- #
-
-@test "a5: multiple activations are layered" {
-  skip FIXME
-  # Steps
-  # - Activate env1
-  # - Activate env2
-  # - Read activated envs with `activated_envs`
-  # - Ensure that env2 (the last activated env) appears on the left
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "a6: activate an environment by path" {
-  skip FIXME
-  # Steps
-  # - Activate an environment with the -d option
-  # - Ensure that the environment is activated with `env_is_activated`
-  is_activated=$(env_is_activated "$PROJECT_NAME")
-  assert_equal "$is_activated" "1"
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "a7: language specifics are set" {
-  skip FIXME
-  # Steps
-  # - Unset the PYTHON_PATH variable
-  # - Install Python to the local environment
-  # - Activate the environment
-  # - Verify that PYTHON_PATH is set
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "active environment is removed from active list after deactivating" {
-  skip FIXME
-  # Steps
-  # - Active an environment
-  # - Verify that it appears in the list of active environments
-  # - Exit the environment
-  # - Ensure that it no longer appears in the list of active environments
 }
 
 # ---------------------------------------------------------------------------- #
@@ -512,7 +413,6 @@ env_is_activated() {
   assert_line "emacs"
 }
 
-
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate:scripts:on-activate
@@ -527,7 +427,6 @@ env_is_activated() {
   # "$foo" environment variable.
   [ -d "$PROJECT_DIR/bar" ]
 }
-
 
 # ---------------------------------------------------------------------------- #
 

@@ -19,7 +19,7 @@ expect "cd 2" {}
 # search for hello and expect an interactive prompt
 set cmd "$flox show nodejs"
 send "$flox show nodejs\n"
-expect "Do you want to show packages using the current directory's flox environment or the current active flox environment?" {}
+expect "Show using which environment?" {}
 expect -re "type to filter.*\n"
 
 # choose the first option and expect the corresponding installation

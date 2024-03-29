@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::Path;
 
 use anyhow::Result;
@@ -47,12 +48,15 @@ pub async fn telemetry_opt_out_needs_migration(
 ///
 /// If a metrics-uuid file is present, assume telemetry is already set up.
 /// Any migration concerning user opt-out should be handled before using [telemetry_denial_need_migration].
-pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Path>) -> Result<()> {
-    tokio::fs::create_dir_all(&data_dir).await?;
-    tokio::fs::create_dir_all(&cache_dir).await?;
+pub fn init_telemetry_uuid(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Path>) -> Result<()> {
+    fs::create_dir_all(&data_dir)?;
+    fs::create_dir_all(&cache_dir)?;
 
+    // set a lock to avoid initializing telemetry multiple times from concurrent processes
+    // the lock is released when the `metrics_lock` is dropped.
     let mut metrics_lock = LockFile::open(&cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME))?;
-    tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
+    metrics_lock.lock()?;
+
     let uuid_path = data_dir.as_ref().join(METRICS_UUID_FILE_NAME);
 
     // we already have a uuid, so lets use that
@@ -85,10 +89,7 @@ pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pa
 
     message::plain(notice);
 
-    let mut file = tokio::fs::File::create(&uuid_path).await?;
-    file.write_all(telemetry_uuid.to_string().as_bytes())
-        .await?;
-    file.flush().await?;
+    fs::write(uuid_path, telemetry_uuid.to_string())?;
     Ok(())
 }
 
@@ -179,13 +180,11 @@ mod tests {
         assert_eq!(need_migration, false);
     }
 
-    #[tokio::test]
-    async fn test_init_telemetry() {
+    #[test]
+    fn test_init_telemetry() {
         let tempdir = TempDir::new().unwrap();
         let uuid_file_path = tempdir.path().join("data").join(METRICS_UUID_FILE_NAME);
-        init_telemetry(tempdir.path().join("data"), tempdir.path().join("cache"))
-            .await
-            .unwrap();
+        init_telemetry_uuid(tempdir.path().join("data"), tempdir.path().join("cache")).unwrap();
         assert!(uuid_file_path.exists());
 
         let uuid_str = std::fs::read_to_string(uuid_file_path).unwrap();

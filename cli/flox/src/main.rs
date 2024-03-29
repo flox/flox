@@ -14,6 +14,7 @@ use utils::init::{init_logger, init_sentry};
 use utils::{message, populate_default_nix_env_vars};
 
 use crate::utils::errors::{format_error, format_managed_error, format_remote_error};
+use crate::utils::metrics::Hub;
 
 mod build;
 mod commands;
@@ -26,6 +27,15 @@ async fn run(args: FloxArgs) -> Result<()> {
     set_parent_process_id();
     populate_default_nix_env_vars();
     let config = config::Config::parse()?;
+    let uuid = utils::metrics::read_metrics_uuid(&config)
+        .map(|u| Some(u.to_string()))
+        .unwrap_or(None);
+    sentry::configure_scope(|scope| {
+        scope.set_user(Some(sentry::User {
+            id: uuid,
+            ..Default::default()
+        }));
+    });
     init_global_manifest(&config.flox.config_dir.join("global-manifest.toml"))?;
     args.handle(config).await?;
     Ok(())
@@ -60,8 +70,10 @@ fn main() -> ExitCode {
             .unwrap_or_default()
     };
 
-    init_logger(Some(verbosity));
     let _sentry_guard = init_sentry();
+    init_logger(Some(verbosity));
+
+    let _metrics_guard = Hub::global().try_guard().ok();
 
     // Pass down the verbosity level to all pkgdb calls
     std::env::set_var(
@@ -85,11 +97,11 @@ fn main() -> ExitCode {
     if let Some(parse_err) = args.as_ref().err() {
         match parse_err {
             bpaf::ParseFailure::Stdout(m, _) => {
-                print!("{m}");
+                print!("{m:80}");
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {
-                message::error(m);
+                message::error(format!("{m:80}"));
                 return ExitCode::from(1);
             },
             bpaf::ParseFailure::Completion(c) => {

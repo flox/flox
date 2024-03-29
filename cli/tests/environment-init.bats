@@ -18,11 +18,11 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" >/dev/null || return
+  pushd "$PROJECT_DIR" > /dev/null || return
 }
 
 project_teardown() {
-  popd >/dev/null || return
+  popd > /dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -31,6 +31,7 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox
   project_setup
 }
 
@@ -49,21 +50,6 @@ teardown() {
   run cat .flox/env.json
   assert_success
   assert_output --partial '"name": "test"'
-}
-
-@test "c2: If the user is in ~ the environment should be called 'default'." {
-
-  skip "Can't mock user / home dir"
-
-  export HOME="$PROJECT_DIR"
-
-  run "$FLOX_BIN" init
-  assert_success
-
-  run cat .flox/env.json
-  assert_success
-  assert_output --partial '"name": "default"'
-
 }
 
 @test "c4: custom name option 1: flox init accepts -n for a user defined name" {
@@ -97,7 +83,7 @@ teardown() {
   assert_success
 
   assert_output - <<EOF
-✨ Created environment test ($NIX_SYSTEM)
+✨ Created environment 'test' ($NIX_SYSTEM)
 
 Next:
   $ flox search <package>    <- Search for a package
@@ -167,7 +153,7 @@ function check_with_dir() {
   OWNER="owner"
   NAME="name"
 
-  echo "requests" >requirements.txt
+  echo "requests" > requirements.txt
 
   "$FLOX_BIN" init --auto-setup --name "$NAME"
 
