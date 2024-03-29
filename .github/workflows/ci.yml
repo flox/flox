@@ -207,7 +207,7 @@ jobs:
       - name: "Build"
         id: "build"
         run: |
-          for package in '.#flox-pkgdb' '.#flox-cli' '.#flox' ; do
+          for package in '.#packages.${{ matrix.system }}.flox-pkgdb' '.#packages.${{ matrix.system }}.flox-cli' '.#packages.${{ matrix.system }}.flox' ; do
             echo "Building $package ..."
             git clean -xfd .
             if nix path-info                 \
