@@ -6,10 +6,9 @@ use anyhow::{anyhow, Error, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::PackageToInstall;
-use flox_rust_sdk::models::search::SearchResult;
 use indoc::{formatdoc, indoc};
 
-use super::{format_customization, InitHook, AUTO_SETUP_HINT};
+use super::{format_customization, InitHook, ProvidedPackage, ProvidedVersion, AUTO_SETUP_HINT};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 
@@ -64,30 +63,25 @@ impl Go {
 }
 
 impl InitHook for Go {
-    /// Returns `true` if any valid module system file was found
+    /// Returns `true` if any valid module system file was found.
     ///
     /// [Self::prompt_user] and [Self::get_init_customization]
     /// are expected to be called only if this method returns `true`!
     fn should_run(&mut self, _path: &Path) -> Result<bool> {
-        todo!("Ensure that the module system has a valid, specified version");
-        Ok(self.module_system != GoModuleSystemKind::None)
+        Ok(self.module_system == GoModuleSystemKind::None)
     }
 
-    fn prompt_user(&mut self, path: &Path, flox: &Flox) -> Result<bool> {
-        let module_system: &dyn GoModuleSystemMode = match &self.module_system {
-            GoModuleSystemKind::Module(_mod) => _mod,
-            GoModuleSystemKind::Workspace(_work) => _work,
-            GoModuleSystemKind::None => unreachable!(),
+    fn prompt_user(&mut self, _path: &Path, _flox: &Flox) -> Result<bool> {
+        let Some(module_system) = self.module_system.get_system() else {
+            return Ok(false);
         };
 
-        message::plain(formatdoc! {
-            "
+        message::plain(formatdoc! {"
             Flox detected a {} file in the current directory.
 
             Go projects typically need:
             * Go
-            * A shell hook to apply environment variables
-
+            * A shell hook to apply environment variables\n
         ", module_system.get_filename()});
 
         let message = formatdoc! {"
@@ -161,8 +155,18 @@ enum GoModuleSystemKind {
     Workspace(GoWorkspaceSystem),
 }
 
+impl GoModuleSystemKind {
+    fn get_system(&self) -> Option<&dyn GoModuleSystemMode> {
+        match self {
+            GoModuleSystemKind::Workspace(workspace) => Some(workspace),
+            GoModuleSystemKind::Module(module) => Some(module),
+            GoModuleSystemKind::None => None,
+        }
+    }
+}
+
 trait GoModuleSystemMode {
-    fn new(module_contents: String) -> Self
+    fn try_new_from_contents(module_contents: String) -> Option<Self>
     where
         Self: Sized;
     fn try_new_from_path(path: &Path) -> Result<Option<Self>>
@@ -170,18 +174,21 @@ trait GoModuleSystemMode {
         Self: Sized;
 
     fn get_filename(&self) -> Cow<'static, str>;
-    fn get_package(&self) -> Option<GoPackage>;
+    fn get_version(&self) -> ProvidedVersion;
 }
 
 #[derive(PartialEq)]
 struct GoModuleSystem {
-    package: Option<GoPackage>,
+    version: ProvidedVersion,
 }
 
 impl GoModuleSystemMode for GoModuleSystem {
-    fn new(module_contents: String) -> Self {
-        let package = GoPackage::from_module_system_contents(module_contents);
-        Self { package }
+    fn try_new_from_contents(module_contents: String) -> Option<Self> {
+        let Some(version) = ProvidedVersion::from_module_system_contents(module_contents) else {
+            return None;
+        };
+
+        Some(Self { version })
     }
 
     fn try_new_from_path(path: &Path) -> Result<Option<Self>> {
@@ -191,8 +198,8 @@ impl GoModuleSystemMode for GoModuleSystem {
         }
 
         let mod_contents = fs::read_to_string(mod_path)?;
-        let go_module = Self::new(mod_contents);
-        Ok(Some(go_module))
+        let go_module = Self::try_new_from_contents(mod_contents);
+        Ok(go_module)
     }
 
     #[inline(always)]
@@ -200,31 +207,34 @@ impl GoModuleSystemMode for GoModuleSystem {
         GO_MOD_FILENAME.into()
     }
 
-    fn get_package(&self) -> Option<GoPackage> {
-        self.package.clone()
+    fn get_version(&self) -> ProvidedVersion {
+        self.version.clone()
     }
 }
 
 #[derive(PartialEq)]
 struct GoWorkspaceSystem {
-    package: Option<GoPackage>,
+    version: ProvidedVersion,
 }
 
 impl GoModuleSystemMode for GoWorkspaceSystem {
-    fn new(workspace_contents: String) -> Self {
-        let package = GoPackage::from_module_system_contents(workspace_contents);
-        Self { package }
+    fn try_new_from_contents(workspace_contents: String) -> Option<Self> {
+        let Some(version) = ProvidedVersion::from_module_system_contents(workspace_contents) else {
+            return None;
+        };
+        Some(Self { version })
     }
 
+    /// Go commands ignore directories called [GO_WORK_FILENAME].
     fn try_new_from_path(path: &Path) -> Result<Option<Self>> {
         let work_path = path.join(GO_WORK_FILENAME);
-        if !work_path.exists() {
+        if !work_path.exists() || work_path.is_dir() {
             return Ok(None);
         }
 
         let work_contents = fs::read_to_string(work_path)?;
-        let go_workspace = Self::new(work_contents);
-        Ok(Some(go_workspace))
+        let go_workspace = Self::try_new_from_contents(work_contents);
+        Ok(go_workspace)
     }
 
     #[inline(always)]
@@ -232,139 +242,46 @@ impl GoModuleSystemMode for GoWorkspaceSystem {
         GO_WORK_FILENAME.into()
     }
 
-    fn get_package(&self) -> Option<GoPackage> {
-        self.package.clone()
+    fn get_version(&self) -> ProvidedVersion {
+        self.version.clone()
     }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-enum GoPackage {
-    Compatible {
-        requested: Option<String>,
-        compatible: ProvidedPackage,
-    },
-    Incompatible {
-        requested: String,
-        substitute: ProvidedPackage,
-    },
-}
-
-impl GoPackage {
-    fn from_module_system_contents(contents: String) -> Option<Self> {
-        let Some(version_str) = GoPackage::get_package_from_contents(&contents) else {
-            return None;
-        };
-
-        todo!()
-    }
-
-    fn get_package_from_contents<'a>(contents: &'a String) -> Option<&'a str> {
-        let Some(version_line) = contents
-            .lines()
-            .skip_while(|line| (**line).trim_start().starts_with("go"))
-            .next()
-        else {
-            return None;
-        };
-
-        let version_str = version_line.split_whitespace().nth(1);
-        version_str
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-struct ProvidedPackage {
-    /// Name of the provided package
-    /// pname or the last component of [Self::rel_path]
-    pub name: String,
-    /// Path to the package in the catalog
-    /// Checked to be non-empty
-    pub rel_path: Vec<String>,
-    /// Version of the package in the catalog
-    /// "N/A" if not found
-    ///
-    /// Used for display purposes only,
-    /// version constraints should be added based on the original query.
-    pub display_version: String,
-}
-
-impl TryFrom<SearchResult> for ProvidedPackage {
-    type Error = Error;
-
-    fn try_from(value: SearchResult) -> Result<Self, Self::Error> {
-        let path_name = value
-            .rel_path
-            .last()
-            .ok_or_else(|| anyhow!("invalid search result: 'rel_path' empty in {value:?}"))?;
-
-        let name = value.pname.unwrap_or_else(|| path_name.to_string());
-
-        Ok(ProvidedPackage {
-            name,
-            rel_path: value.rel_path,
-            display_version: value.version.unwrap_or("N/A".to_string()),
-        })
-    }
-}
-
-impl From<ProvidedPackage> for PackageToInstall {
-    fn from(value: ProvidedPackage) -> Self {
-        PackageToInstall {
-            id: value.name,
-            pkg_path: value.rel_path.join("."),
-            input: None,
-            version: None,
-        }
-    }
-}
-
-/// Distinguish compatible versions from default or incompatible versions
-///
-/// [ProvidedVersion::Compatible] if search yielded a compatible version to the requested version.
-/// [ProvidedVersion::Incompatible::requested] may be [None] if no version was requested.
-/// In that case any version found in the catalogs is considered compatible.
-///
-/// [ProvidedVersion::Incompatible] if no compatible version was found,
-/// but another substitute was found.
-///
-/// [ProvidedVersion::Incompatible::requested] and [ProvidedVersion::Compatible::requested]
-/// may be semver'ish, e.g. ">=3.6".
-///
-/// [ProvidedVersion::Incompatible::substitute] and [ProvidedVersion::Compatible::compatible]
-/// are concrete versions, not semver!
-#[derive(Debug, PartialEq)]
-enum ProvidedVersion {
-    Compatible {
-        requested: Option<String>,
-        compatible: ProvidedPackage,
-    },
-    Incompatible {
-        requested: String,
-        substitute: ProvidedPackage,
-    },
 }
 
 impl ProvidedVersion {
-    fn display_version(&self) -> &str {
-        match self {
-            Self::Compatible { compatible, .. } => &compatible.display_version,
-            Self::Incompatible { substitute, .. } => &substitute.display_version,
-        }
+    fn from_module_system_contents(contents: String) -> Option<Self> {
+        let Some(version_str) = ProvidedVersion::get_package_from_contents(&contents) else {
+            return None;
+        };
+
+        Some(Self::Compatible {
+            requested: todo!(),
+            compatible: todo!(),
+        })
+    }
+
+    fn get_package_from_contents<'a>(contents: &'a String) -> Option<&'a str> {
+        contents
+            .lines()
+            .skip_while(|line| (**line).trim_start().starts_with("go"))
+            .next()
+            .and_then(|line| line.split_whitespace().nth(1))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
-    use serial_test::serial;
-
     use super::*;
-    use crate::commands::init::tests::FLOX_INSTANCE;
+    use crate::commands::init::ProvidedPackage;
 
     #[test]
     fn test_should_run_returns_true_on_valid_module() {
         let mut go = Go {
-            module_system: GoModuleSystemKind::Module(GoModuleSystem { package: todo!() }),
+            module_system: GoModuleSystemKind::Module(GoModuleSystem {
+                version: ProvidedVersion::Compatible {
+                    requested: None,
+                    compatible: ProvidedPackage::new("go", vec!["go"], "1.21.0"),
+                },
+            }),
         };
         assert!(go.should_run(Path::new("")).unwrap());
     }
@@ -372,7 +289,7 @@ mod tests {
     #[test]
     fn test_should_run_returns_true_on_valid_workspace() {
         let mut go = Go {
-            module_system: GoModuleSystemKind::Workspace(GoWorkspaceSystem { package: todo!() }),
+            module_system: GoModuleSystemKind::Workspace(GoWorkspaceSystem { version: todo!() }),
         };
         assert!(go.should_run(Path::new("")).unwrap());
     }
@@ -388,7 +305,7 @@ mod tests {
     #[test]
     fn test_should_run_returns_false_on_invalid_system() {
         let mut go = Go {
-            module_system: GoModuleSystemKind::Module(GoModuleSystem { package: todo!() }),
+            module_system: GoModuleSystemKind::Module(GoModuleSystem { version: todo!() }),
         };
         assert!(!go.should_run(Path::new("")).unwrap());
     }
