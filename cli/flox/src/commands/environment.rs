@@ -66,6 +66,7 @@ use crate::commands::{
     ensure_environment_trust,
     ensure_floxhub_token,
     environment_description,
+    open_path,
     ConcreteEnvironment,
     EnvironmentSelectError,
     UninitializedEnvironment,
@@ -391,8 +392,17 @@ pub struct Activate {
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
+        let mut concrete_environment = match self.environment.to_concrete_environment(&flox) {
+            Ok(concrete_environment) => concrete_environment,
+            Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
+                bail!(formatdoc! {"
+            {e}
 
-        let mut concrete_environment = self.environment.to_concrete_environment(&flox)?;
+            Create an environment with 'flox init'"
+                })
+            },
+            Err(e) => Err(e)?,
+        };
 
         // TODO could move this to a pretty print method on the Environment trait?
         let prompt_name = match concrete_environment {
@@ -1697,7 +1707,32 @@ impl Pull {
         message: &str,
     ) -> Result<()> {
         if dot_flox_path.exists() {
-            bail!("Cannot pull a new environment into an existing one")
+            if force {
+                match open_path(flox, &dot_flox_path) {
+                    Ok(concrete_env) => match concrete_env {
+                        ConcreteEnvironment::Path(env) => {
+                            env.delete(flox)
+                                .context("Failed to delete existing environment")?;
+                        },
+                        ConcreteEnvironment::Managed(env) => {
+                            env.delete(flox)
+                                .context("Failed to delete existing environment")?;
+                        },
+                        ConcreteEnvironment::Remote(_) => {},
+                    },
+                    Err(_) => {
+                        fs::remove_dir_all(&dot_flox_path).context(format!(
+                            "Failed to remove existing .flox directory at {:?}",
+                            dot_flox_path
+                        ))?;
+                    },
+                }
+            } else {
+                bail!(
+                    "An environment already exists at {:?}. Use --force to overwrite.",
+                    dot_flox_path
+                );
+            }
         }
 
         // region: write pointer
