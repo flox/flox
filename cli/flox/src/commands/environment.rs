@@ -590,13 +590,12 @@ impl Activate {
         }
 
         let shell = Self::detect_shell_for_subshell()?;
-        let activate_error = if !self.run_args.is_empty() {
+        // These functions will only return if exec fails
+        if !self.run_args.is_empty() {
             Self::activate_command(self.run_args, shell, exports, activation_path)
         } else {
             Self::activate_interactive(shell, exports, activation_path, now_active)
-        };
-        // If we get here, exec failed!
-        activate_error
+        }
     }
 
     /// Used for `flox activate -- run_args`

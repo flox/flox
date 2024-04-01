@@ -1249,7 +1249,7 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<()> {
 }
 
 pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
-    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.message_description()?)
+    UninitializedEnvironment::from_concrete_environment(environment)?.message_description()
 }
 
 #[cfg(test)]
