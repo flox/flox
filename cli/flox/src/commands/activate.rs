@@ -16,7 +16,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     Environment,
-    EnvironmentError2,
+    EnvironmentError,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
     FLOX_ENV_CACHE_VAR,
     FLOX_ENV_DIRS_VAR,
@@ -124,7 +124,7 @@ impl Activate {
         };
 
         let activation_path = match activation_path_result {
-            Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+            Err(EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
                     exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
                     ..

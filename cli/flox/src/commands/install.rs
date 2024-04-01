@@ -7,7 +7,7 @@ use flox_rust_sdk::models::environment::{
     CanonicalPath,
     CoreEnvironmentError,
     Environment,
-    EnvironmentError2,
+    EnvironmentError,
 };
 use flox_rust_sdk::models::lockfile::{LockedManifest, LockedManifestError};
 use flox_rust_sdk::models::manifest::PackageToInstall;
@@ -77,7 +77,7 @@ impl Install {
         {
             Ok(concrete_environment) => concrete_environment,
             Err(EnvironmentSelectError::Environment(
-                ref e @ EnvironmentError2::DotFloxNotFound(ref dir),
+                ref e @ EnvironmentError::DotFloxNotFound(ref dir),
             )) => {
                 bail!(formatdoc! {"
                 {e}
@@ -170,7 +170,7 @@ impl Install {
     }
 
     fn handle_error(
-        err: EnvironmentError2,
+        err: EnvironmentError,
         flox: &Flox,
         environment: &dyn Environment,
         packages: &[PackageToInstall],
@@ -184,7 +184,7 @@ impl Install {
 
         match err {
             // Try to make suggestions when a package isn't found
-            EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+            EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::LockManifest(
                     flox_rust_sdk::models::pkgdb::CallPkgDbError::PkgDbError(pkgdberr),
                 ),

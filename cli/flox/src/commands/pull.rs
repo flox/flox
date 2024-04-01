@@ -12,7 +12,7 @@ use flox_rust_sdk::models::environment::managed_environment::{
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     Environment,
-    EnvironmentError2,
+    EnvironmentError,
     EnvironmentPointer,
     ManagedPointer,
     DOT_FLOX,
@@ -164,7 +164,7 @@ impl Pull {
         dot_flox_path: PathBuf,
         pointer: ManagedPointer,
         force: bool,
-    ) -> Result<PullResult, EnvironmentError2> {
+    ) -> Result<PullResult, EnvironmentError> {
         let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)?;
         let state = env.pull(force)?;
         // only build if the environment was updated
@@ -276,7 +276,7 @@ impl Pull {
     /// [Some] represents when the user should be prompted with the provided functions.
     fn handle_pull_result(
         flox: &Flox,
-        result: Result<(), EnvironmentError2>,
+        result: Result<(), EnvironmentError>,
         dot_flox_path: &PathBuf,
         force: bool,
         mut env: ManagedEnvironment,
@@ -284,7 +284,7 @@ impl Pull {
     ) -> Result<()> {
         match result {
             Ok(_) => {},
-            Err(EnvironmentError2::Core(e)) if e.is_incompatible_system_error() => {
+            Err(EnvironmentError::Core(e)) if e.is_incompatible_system_error() => {
                 let hint = formatdoc! {"
                     Use 'flox pull --force' to add your system to the manifest.
                     For more on managing systems for your environment, visit the documentation:
@@ -325,7 +325,7 @@ impl Pull {
                     });
                 };
             },
-            Err(EnvironmentError2::Core(
+            Err(EnvironmentError::Core(
                 ref core_err @ CoreEnvironmentError::LockedManifest(
                     ref builder_error @ LockedManifestError::BuildEnv(_),
                 ),
@@ -502,8 +502,8 @@ mod tests {
 
     use super::*;
 
-    fn incompatible_system_result() -> Result<(), EnvironmentError2> {
-        Err(EnvironmentError2::Core(
+    fn incompatible_system_result() -> Result<(), EnvironmentError> {
+        Err(EnvironmentError::Core(
             CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
                 CallPkgDbError::PkgDbError(PkgDbError {
                     exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
@@ -514,8 +514,8 @@ mod tests {
         ))
     }
 
-    fn incompatible_package_result() -> Result<(), EnvironmentError2> {
-        Err(EnvironmentError2::Core(
+    fn incompatible_package_result() -> Result<(), EnvironmentError> {
+        Err(EnvironmentError::Core(
             CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
                 CallPkgDbError::PkgDbError(PkgDbError {
                     exit_code: PACKAGE_BUILD_FAILURE,
@@ -529,7 +529,7 @@ mod tests {
     #[test]
     fn ensure_valid_mock_incompatible_system_result() {
         match incompatible_system_result() {
-            Err(EnvironmentError2::Core(core_err)) if core_err.is_incompatible_system_error() => {},
+            Err(EnvironmentError::Core(core_err)) if core_err.is_incompatible_system_error() => {},
             _ => panic!(),
         }
     }
@@ -537,8 +537,7 @@ mod tests {
     #[test]
     fn ensure_valid_mock_incompatible_package_result() {
         match incompatible_package_result() {
-            Err(EnvironmentError2::Core(core_err)) if core_err.is_incompatible_package_error() => {
-            },
+            Err(EnvironmentError::Core(core_err)) if core_err.is_incompatible_package_error() => {},
             _ => panic!(),
         }
     }

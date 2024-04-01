@@ -11,7 +11,7 @@ use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     EditResult,
     Environment,
-    EnvironmentError2,
+    EnvironmentError,
 };
 use itertools::Itertools;
 use log::debug;
@@ -180,7 +180,7 @@ impl Edit {
             .map_err(apply_doc_link_for_unsupported_packages);
 
             match result {
-                Err(EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(e))) => {
+                Err(EnvironmentError::Core(CoreEnvironmentError::LockedManifest(e))) => {
                     message::error(format_locked_manifest_error(&e));
 
                     if !Dialog::can_prompt() {

@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::EnvironmentError2;
+use flox_rust_sdk::models::environment::EnvironmentError;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
@@ -49,7 +49,7 @@ impl Uninstall {
         {
             Ok(concrete_environment) => concrete_environment,
             Err(EnvironmentSelectError::Environment(
-                ref e @ EnvironmentError2::DotFloxNotFound(ref dir),
+                ref e @ EnvironmentError::DotFloxNotFound(ref dir),
             )) => {
                 bail!(formatdoc! {"
                 {e}

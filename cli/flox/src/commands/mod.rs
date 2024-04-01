@@ -41,7 +41,7 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     DotFlox,
     Environment,
-    EnvironmentError2,
+    EnvironmentError,
     EnvironmentPointer,
     ManagedPointer,
     DOT_FLOX,
@@ -615,7 +615,7 @@ pub enum EnvironmentSelect {
 #[derive(Debug, Error)]
 pub enum EnvironmentSelectError {
     #[error(transparent)]
-    Environment(#[from] EnvironmentError2),
+    Environment(#[from] EnvironmentError),
     #[error("Did not find an environment in the current directory.")]
     EnvNotFoundInCurrentDirectory,
     #[error(transparent)]
@@ -762,7 +762,7 @@ pub fn detect_environment(
 }
 
 /// Open an environment defined in `{path}/.flox`
-fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError2> {
+fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError> {
     DotFlox::open(path)
         .map(UninitializedEnvironment::DotFlox)?
         .into_concrete_environment(flox)
@@ -848,7 +848,7 @@ impl UninitializedEnvironment {
     pub fn into_concrete_environment(
         self,
         flox: &Flox,
-    ) -> Result<ConcreteEnvironment, EnvironmentError2> {
+    ) -> Result<ConcreteEnvironment, EnvironmentError> {
         match self {
             UninitializedEnvironment::DotFlox(dot_flox) => {
                 let dot_flox_path = dot_flox.path.join(DOT_FLOX);
