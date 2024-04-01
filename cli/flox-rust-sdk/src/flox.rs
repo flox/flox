@@ -193,17 +193,45 @@ pub enum FloxhubError {
 }
 
 pub mod test_helpers {
-    use tempfile::TempDir;
+    use std::fs;
+
+    use tempfile::{tempdir_in, TempDir};
 
     use super::*;
-    use crate::models::environment::global_manifest_lockfile_path;
+    use crate::models::environment::{
+        global_manifest_lockfile_path,
+        global_manifest_path,
+        init_global_manifest,
+    };
     use crate::models::lockfile::LockedManifest;
+    use crate::providers::git::{GitCommandProvider, GitProvider};
+
+    /// Get an instance of Flox that has both a locked global manifest and a git
+    /// repo mocking FloxHub.
+    ///
+    /// Having a locked global manifest means any operations that use pkgdb
+    /// should use the same nixpkgs revision.
+    ///
+    /// The mock version of FloxHub allows testing push/pull operations for the provided owner.
+    /// No other owners will work.
+    pub fn flox_instance_with_global_lock_and_floxhub(owner: &EnvironmentOwner) -> (Flox, TempDir) {
+        flox_instance_with_global_lock_with_optional_floxhub(Some(owner))
+    }
 
     /// Get an instance of Flox that has a locked global manifest.
     ///
     /// This means any operations that use pkgdb should use the same nixpkgs
     /// revision.
     pub fn flox_instance_with_global_lock() -> (Flox, TempDir) {
+        flox_instance_with_global_lock_with_optional_floxhub(None)
+    }
+
+    /// If owner is None, no mock FloxHub is setup.
+    /// If it is Some, a mock FloxHub with a repo for that owner will be setup,
+    /// but no other owners will work.
+    fn flox_instance_with_global_lock_with_optional_floxhub(
+        owner: Option<&EnvironmentOwner>,
+    ) -> (Flox, TempDir) {
         // Scrape nixpkgs once and then store the resulting global lockfile in memory
         static GLOBAL_LOCKFILE: Lazy<LockedManifest> = Lazy::new(|| {
             let (flox, _temp_dir_handle) = flox_instance();
@@ -214,7 +242,7 @@ pub mod test_helpers {
                 .new_lockfile
         });
 
-        let (flox, tempdir_handle) = flox_instance();
+        let (flox, tempdir_handle) = flox_instance_with_optional_floxhub(owner);
 
         // All Flox instances created by flox_instance() have the same global
         // manifest,
@@ -230,8 +258,13 @@ pub mod test_helpers {
     }
 
     pub fn flox_instance() -> (Flox, TempDir) {
-        use crate::models::environment::{global_manifest_path, init_global_manifest};
+        flox_instance_with_optional_floxhub(None)
+    }
 
+    /// If owner is None, no mock FloxHub is setup.
+    /// If it is Some, a mock FloxHub with a repo for that owner will be setup,
+    /// but no other owners will work.
+    fn flox_instance_with_optional_floxhub(owner: Option<&EnvironmentOwner>) -> (Flox, TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
         let cache_dir = tempdir_handle.path().join("caches");
@@ -243,6 +276,14 @@ pub mod test_helpers {
         std::fs::create_dir_all(&temp_dir).unwrap();
         std::fs::create_dir_all(&config_dir).unwrap();
 
+        let git_url_override = owner.map(|owner| {
+            let mock_floxhub_git_dir = tempdir_in(&temp_dir).unwrap().into_path();
+            let floxmeta_dir = mock_floxhub_git_dir.join(owner.as_str()).join("floxmeta");
+            fs::create_dir_all(&floxmeta_dir).unwrap();
+            GitCommandProvider::init(floxmeta_dir, true).unwrap();
+            Url::from_directory_path(mock_floxhub_git_dir).unwrap()
+        });
+
         let flox = Flox {
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             cache_dir,
@@ -252,7 +293,11 @@ pub mod test_helpers {
             access_tokens: Default::default(),
             netrc_file: Default::default(),
             uuid: Default::default(),
-            floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap(), None).unwrap(),
+            floxhub: Floxhub::new(
+                Url::from_str("https://hub.flox.dev").unwrap(),
+                git_url_override,
+            )
+            .unwrap(),
             floxhub_token: None,
         };
 

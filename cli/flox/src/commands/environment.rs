@@ -1597,6 +1597,14 @@ pub struct Pull {
     pull_select: PullSelect,
 }
 
+/// Functions that are used to prompt the user in handle_pull_result
+///
+/// These are passed to allow testing without prompting
+struct QueryFunctions {
+    query_add_system: fn(&str) -> Result<bool>,
+    query_ignore_build_errors: fn() -> Result<bool>,
+}
+
 impl Pull {
     #[instrument(name = "pull", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
@@ -1775,6 +1783,31 @@ impl Pull {
         }
         .spin();
 
+        Self::handle_pull_result(
+            flox,
+            result,
+            &dot_flox_path,
+            force,
+            env,
+            Dialog::can_prompt().then_some(QueryFunctions {
+                query_add_system: Self::query_add_system,
+                query_ignore_build_errors: Self::query_ignore_build_errors,
+            }),
+        )
+    }
+
+    /// Helper function for [Self::pull_new_environment] that can be unit tested.
+    ///
+    /// A value of [None] for query_functions represents when the user cannot be prompted.
+    /// [Some] represents when the user should be prompted with the provided functions.
+    fn handle_pull_result(
+        flox: &Flox,
+        result: Result<(), EnvironmentError2>,
+        dot_flox_path: &PathBuf,
+        force: bool,
+        mut env: ManagedEnvironment,
+        query_functions: Option<QueryFunctions>,
+    ) -> Result<()> {
         match result {
             Ok(_) => {},
             Err(EnvironmentError2::Core(e)) if e.is_incompatible_system_error() => {
@@ -1783,8 +1816,8 @@ impl Pull {
                     For more on managing systems for your environment, visit the documentation:
                     https://flox.dev/docs/tutorials/multi-arch-environments
                 "};
-                if !force && !Dialog::can_prompt() {
-                    fs::remove_dir_all(&dot_flox_path)
+                if !force && query_functions.is_none() {
+                    fs::remove_dir_all(dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
                     bail!("{}", formatdoc! {"
                             This environment is not yet compatible with your system ({system}).
@@ -1793,11 +1826,13 @@ impl Pull {
                     , system = flox.system});
                 }
 
-                // will return OK if the user chose to abort the pull
-                let force = force || Self::query_add_system(&flox.system)?;
+                // Will return OK if the user chose to abort the pull.
+                // The unwrap() is only reached if !force,
+                // and we return above if !force and query_functions.is_none()
+                let force = force || (query_functions.unwrap().query_add_system)(&flox.system)?;
                 if !force {
                     // prompt available, user chose to abort
-                    fs::remove_dir_all(&dot_flox_path)
+                    fs::remove_dir_all(dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
                     bail!(formatdoc! {"
                         Did not pull the environment.
@@ -1828,29 +1863,29 @@ impl Pull {
 
                 let pkgdb_error = format_locked_manifest_error(builder_error);
 
-                if !force && !Dialog::can_prompt() {
-                    fs::remove_dir_all(&dot_flox_path)
+                if !force && query_functions.is_none() {
+                    fs::remove_dir_all(dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
                     bail!("{pkgdb_error}");
                 }
 
                 message::error(pkgdb_error);
 
-                if force || Self::query_ignore_build_errors()? {
+                // The unwrap() is only reached if !force,
+                // and we return above if !force and query_functions.is_none()
+                if force || (query_functions.unwrap().query_ignore_build_errors)()? {
                     message::warning("Ignoring build errors and pulling the environment anyway.");
                 } else {
-                    fs::remove_dir_all(&dot_flox_path)
+                    fs::remove_dir_all(dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
                     bail!("Did not pull the environment.");
                 }
             },
             Err(e) => {
-                fs::remove_dir_all(&dot_flox_path)
-                    .context("Could not clean up .flox/ directory")?;
+                fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
                 bail!(e)
             },
-        }
-
+        };
         Ok(())
     }
 
@@ -2287,7 +2322,60 @@ impl Containerize {
 #[cfg(test)]
 mod tests {
 
+    use flox_rust_sdk::flox::test_helpers::{
+        flox_instance,
+        flox_instance_with_global_lock_and_floxhub,
+    };
+    use flox_rust_sdk::models::environment::managed_environment::test_helpers::{
+        mock_managed_environment,
+        unusable_mock_managed_environment,
+    };
+    use flox_rust_sdk::models::environment::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
+    use flox_rust_sdk::models::pkgdb::error_codes::PACKAGE_BUILD_FAILURE;
+    use tempfile::tempdir_in;
+
     use super::*;
+
+    fn incompatible_system_result() -> Result<(), EnvironmentError2> {
+        Err(EnvironmentError2::Core(
+            CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
+                CallPkgDbError::PkgDbError(PkgDbError {
+                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
+                    category_message: "category_message".to_string(),
+                    context_message: None,
+                }),
+            )),
+        ))
+    }
+
+    fn incompatible_package_result() -> Result<(), EnvironmentError2> {
+        Err(EnvironmentError2::Core(
+            CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
+                CallPkgDbError::PkgDbError(PkgDbError {
+                    exit_code: PACKAGE_BUILD_FAILURE,
+                    category_message: "category_message".to_string(),
+                    context_message: None,
+                }),
+            )),
+        ))
+    }
+
+    #[test]
+    fn ensure_valid_mock_incompatible_system_result() {
+        match incompatible_system_result() {
+            Err(EnvironmentError2::Core(core_err)) if core_err.is_incompatible_system_error() => {},
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn ensure_valid_mock_incompatible_package_result() {
+        match incompatible_package_result() {
+            Err(EnvironmentError2::Core(core_err)) if core_err.is_incompatible_package_error() => {
+            },
+            _ => panic!(),
+        }
+    }
 
     #[test]
     fn test_quote_run_args() {
@@ -2295,5 +2383,155 @@ mod tests {
             Activate::quote_run_args(&["a b".to_string(), '"'.to_string()]),
             r#""a b" "\"""#
         )
+    }
+
+    // Pulling an environment without packages for the current platform should
+    // fail with an error and remove the pulled environment
+    #[test]
+    fn test_handle_pull_result_1() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+
+        assert!(Pull::handle_pull_result(
+            &flox,
+            incompatible_system_result(),
+            &dot_flox_path,
+            false,
+            unusable_mock_managed_environment(),
+            None
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("This environment is not yet compatible with your system"));
+
+        assert!(!dot_flox_path.exists());
+    }
+
+    /// Pulling an environment without packages for the current platform should
+    /// succeed if force is passed
+    #[test]
+    fn test_handle_pull_result_2() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+
+        Pull::handle_pull_result(
+            &flox,
+            incompatible_system_result(),
+            &dot_flox_path,
+            true,
+            mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            None,
+        )
+        .unwrap();
+
+        assert!(dot_flox_path.exists());
+    }
+
+    /// Pulling an environment without packages for the current platform should
+    /// prompt about adding system
+    /// When the user does not confirm, the environment should be removed
+    #[test]
+    fn test_handle_pull_result_3() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+
+        assert!(Pull::handle_pull_result(
+            &flox,
+            incompatible_system_result(),
+            &dot_flox_path,
+            false,
+            unusable_mock_managed_environment(),
+            Some(QueryFunctions {
+                query_add_system: |_| Ok(false),
+                query_ignore_build_errors: || panic!(),
+            })
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("Did not pull the environment"));
+
+        assert!(!dot_flox_path.exists());
+    }
+
+    /// Pulling an environment without packages for the current platform should
+    /// prompt about adding system
+    /// When the user confirms, the environment should not be removed
+    #[test]
+    fn test_handle_pull_result_4() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+
+        Pull::handle_pull_result(
+            &flox,
+            incompatible_system_result(),
+            &dot_flox_path,
+            false,
+            mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            Some(QueryFunctions {
+                query_add_system: |_| Ok(true),
+                query_ignore_build_errors: || panic!(),
+            }),
+        )
+        .unwrap();
+
+        assert!(dot_flox_path.exists());
+    }
+
+    /// Pulling an environment with a package that is not available for the
+    /// current platform should prompt to ignore the error.
+    /// When answering no, an error should be shown and the environment should be removed.
+    #[test]
+    fn test_handle_pull_result_5() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+
+        assert!(Pull::handle_pull_result(
+            &flox,
+            incompatible_package_result(),
+            &dot_flox_path,
+            false,
+            unusable_mock_managed_environment(),
+            Some(QueryFunctions {
+                query_add_system: |_| panic!(),
+                query_ignore_build_errors: || Ok(false),
+            })
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("Did not pull the environment"));
+
+        assert!(!dot_flox_path.exists());
+    }
+
+    /// Pulling an environment with a package that is not available for the
+    /// current platform should prompt to ignore the error.
+    /// When answering yes, the environment should not be removed.
+    #[test]
+    fn test_handle_pull_result_6() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+
+        Pull::handle_pull_result(
+            &flox,
+            incompatible_package_result(),
+            &dot_flox_path,
+            false,
+            unusable_mock_managed_environment(),
+            Some(QueryFunctions {
+                query_add_system: |_| panic!(),
+                query_ignore_build_errors: || Ok(true),
+            }),
+        )
+        .unwrap();
+
+        assert!(dot_flox_path.exists());
     }
 }

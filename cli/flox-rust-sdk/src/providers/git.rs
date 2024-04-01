@@ -976,12 +976,7 @@ impl GitProvider for GitCommandProvider {
     }
 }
 
-#[cfg(test)]
-pub mod tests {
-
-    use std::fs;
-
-    use pretty_assertions::assert_eq;
+pub mod test_helpers {
 
     use super::*;
 
@@ -993,6 +988,16 @@ pub mod tests {
             path: PathBuf::from("/does-not-exist"),
         }
     }
+}
+
+#[cfg(test)]
+pub mod tests {
+
+    use std::fs;
+
+    use pretty_assertions::assert_eq;
+
+    use super::*;
 
     fn init_temp_repo(bare: bool) -> (GitCommandProvider, tempfile::TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();

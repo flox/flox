@@ -966,7 +966,6 @@ impl ManagedEnvironment {
     ) -> Result<Self, ManagedEnvironmentError> {
         // path of the original .flox directory
         let dot_flox_path = path_environment.path.clone();
-        let path_pointer = path_environment.pointer.clone();
         let name = path_environment.name();
 
         let mut core_environment = path_environment.into_core_environment();
@@ -976,7 +975,23 @@ impl ManagedEnvironment {
             .build(flox)
             .map_err(ManagedEnvironmentError::Build)?;
 
-        let pointer = ManagedPointer::new(owner, name, &flox.floxhub);
+        Self::push_new_without_building(flox, owner, name, force, dot_flox_path, core_environment)
+    }
+
+    /// Push an environment and open the resulting [ManagedEnvironment],
+    /// but don't build the environment first.
+    ///
+    /// This is split out for the purposes of testing -
+    /// some tests need an environment that has build errors.
+    fn push_new_without_building(
+        flox: &Flox,
+        owner: EnvironmentOwner,
+        name: EnvironmentName,
+        force: bool,
+        dot_flox_path: CanonicalPath,
+        mut core_environment: CoreEnvironment,
+    ) -> Result<Self, ManagedEnvironmentError> {
+        let pointer = ManagedPointer::new(owner, name.clone(), &flox.floxhub);
 
         let checkedout_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
         let temp_floxmeta_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
@@ -993,7 +1008,7 @@ impl ManagedEnvironment {
             checkedout_floxmeta_path,
             temp_floxmeta_path,
             remote_branch_name(&pointer),
-            &path_pointer,
+            &name,
         )
         .map_err(ManagedEnvironmentError::InitializeFloxmeta)?;
 
@@ -1146,6 +1161,59 @@ impl ManagedEnvironment {
     }
 }
 
+pub mod test_helpers {
+
+    use tempfile::tempdir_in;
+
+    use super::*;
+    use crate::flox::{Floxhub, DEFAULT_FLOXHUB_URL};
+    use crate::models::environment::core_environment::test_helpers::new_core_environment;
+    use crate::models::floxmetav2::test_helpers::unusable_mock_floxmeta;
+
+    /// Get a [ManagedEnvironment] that is invalid but can be used in tests
+    /// where methods on [ManagedEnvironment] will never be called.
+    ///
+    /// For a [ManagedEnvironment] with methods that can be called use
+    /// [mock_managed_environment].
+    pub fn unusable_mock_managed_environment() -> ManagedEnvironment {
+        let floxhub = Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None).unwrap();
+        ManagedEnvironment {
+            path: CanonicalPath::new(PathBuf::from("/")).unwrap(),
+            out_link: PathBuf::new(),
+            pointer: ManagedPointer::new(
+                "owner".parse().unwrap(),
+                "test".parse().unwrap(),
+                &floxhub,
+            ),
+            floxmeta: unusable_mock_floxmeta(),
+        }
+    }
+
+    /// Get a [ManagedEnvironment] that has been pushed to (a mock) FloxHub and
+    /// can be built.
+    ///
+    /// This should be passed a [Flox] instance created with
+    /// flox_instance_with_global_lock_and_floxhub()
+    ///
+    /// If a [ManagedEnvironment] will be unused in tests, use
+    /// [unusable_mock_managed_environment] instead.
+    pub fn mock_managed_environment(
+        flox: &Flox,
+        contents: &str,
+        owner: EnvironmentOwner,
+    ) -> ManagedEnvironment {
+        ManagedEnvironment::push_new_without_building(
+            flox,
+            owner,
+            "name".parse().unwrap(),
+            false,
+            CanonicalPath::new(tempdir_in(&flox.temp_dir).unwrap().into_path()).unwrap(),
+            new_core_environment(flox, contents),
+        )
+        .unwrap()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
@@ -1155,17 +1223,19 @@ mod test {
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
-    use crate::models::environment::{DOT_FLOX, ENVIRONMENT_POINTER_FILENAME};
+    use crate::models::environment::DOT_FLOX;
     use crate::models::floxmetav2::floxmeta_dir;
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
-    fn make_test_pointer(remote_path: &Path) -> ManagedPointer {
+    fn make_test_pointer(mock_floxhub_git_path: &Path) -> ManagedPointer {
         ManagedPointer {
             owner: EnvironmentOwner::from_str("owner").unwrap(),
             name: EnvironmentName::from_str("name").unwrap(),
             floxhub_url: Url::from_str("https://hub.flox.dev").unwrap(),
-            floxhub_git_url_override: Some(Url::from_directory_path(remote_path).unwrap()),
+            floxhub_git_url_override: Some(
+                Url::from_directory_path(mock_floxhub_git_path).unwrap(),
+            ),
             version: Version::<1> {},
         }
     }
@@ -1193,6 +1263,12 @@ mod test {
         CanonicalPath::new(dot_flox_path).unwrap()
     }
 
+    /// Clone a git repo specified by remote_path into the floxmeta dir
+    /// corresponding to test_pointer,
+    /// and open that as a FloxmetaV2
+    ///
+    /// TODO: creating the remote repo should probably be pulled into this
+    /// function
     fn create_floxmeta(
         flox: &Flox,
         remote_path: &Path,
