@@ -11,6 +11,7 @@ mod pull;
 mod push;
 mod search;
 mod uninstall;
+mod update;
 
 use std::collections::VecDeque;
 use std::fmt::Display;
@@ -478,7 +479,7 @@ enum AdditionalCommands {
     ),
     /// Update environment's base catalog or the global base catalog
     #[bpaf(command, hide, footer("Run 'man flox-update' for more details."))]
-    Update(#[bpaf(external(environment::update))] environment::Update),
+    Update(#[bpaf(external(update::update))] update::Update),
     /// Upgrade packages in an environment
     #[bpaf(command, hide, footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
         When no arguments are specified, all packages in the environment are upgraded.\n\n
