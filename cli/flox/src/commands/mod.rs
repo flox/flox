@@ -5,6 +5,7 @@ mod edit;
 mod environment;
 mod general;
 mod init;
+mod install;
 mod list;
 mod search;
 
@@ -396,7 +397,7 @@ enum LocalDevelopmentCommands {
         short('i'),
         footer("Run 'man flox-install' for more details.")
     )]
-    Install(#[bpaf(external(environment::install))] environment::Install),
+    Install(#[bpaf(external(install::install))] install::Install),
     /// Uninstall installed packages from an environment
     #[bpaf(
         command,
