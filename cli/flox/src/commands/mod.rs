@@ -8,6 +8,7 @@ mod init;
 mod install;
 mod list;
 mod search;
+mod uninstall;
 
 use std::collections::VecDeque;
 use std::fmt::Display;
@@ -405,7 +406,7 @@ enum LocalDevelopmentCommands {
         long("rm"),
         footer("Run 'man flox-uninstall' for more details.")
     )]
-    Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
+    Uninstall(#[bpaf(external(uninstall::uninstall))] uninstall::Uninstall),
     /// Edit declarative environment configuration file
     #[bpaf(command, footer("Run 'man flox-edit' for more details."))]
     Edit(#[bpaf(external(edit::edit))] edit::Edit),
