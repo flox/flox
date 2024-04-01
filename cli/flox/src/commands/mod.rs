@@ -5,6 +5,7 @@ mod edit;
 mod environment;
 mod general;
 mod init;
+mod list;
 mod search;
 
 use std::collections::VecDeque;
@@ -409,7 +410,7 @@ enum LocalDevelopmentCommands {
     Edit(#[bpaf(external(edit::edit))] edit::Edit),
     /// List packages installed in an environment
     #[bpaf(command, footer("Run 'man flox-list' for more details."))]
-    List(#[bpaf(external(environment::list))] environment::List),
+    List(#[bpaf(external(list::list))] list::List),
     /// Delete an environment
     #[bpaf(
         command,
