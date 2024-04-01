@@ -1,4 +1,5 @@
 mod auth;
+mod edit;
 mod environment;
 mod general;
 mod init;
@@ -403,7 +404,7 @@ enum LocalDevelopmentCommands {
     Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
     /// Edit declarative environment configuration file
     #[bpaf(command, footer("Run 'man flox-edit' for more details."))]
-    Edit(#[bpaf(external(environment::edit))] environment::Edit),
+    Edit(#[bpaf(external(edit::edit))] edit::Edit),
     /// List packages installed in an environment
     #[bpaf(command, footer("Run 'man flox-list' for more details."))]
     List(#[bpaf(external(environment::list))] environment::List),
