@@ -532,11 +532,15 @@ pub fn global_manifest_lockfile_path(flox: &Flox) -> PathBuf {
     path
 }
 
+/// Stores a found DotFlox and whether it was found in the starting directory
+pub type FoundDotFlox = (DotFlox, bool);
+
 /// Searches for a `.flox` directory and attempts to parse env.json
 ///
-/// The search first looks whether the current directory contains a `.flox` directory,
-/// and if not, it searches upwards, stopping at the root directory.
-pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentError> {
+/// The search first looks whether the current directory contains a `.flox` directory.
+/// If not, it checks if the current directory is contained by a git repo,
+/// and if it is, it searches upwards, stopping at the repo toplevel.
+pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<FoundDotFlox>, EnvironmentError> {
     let path = CanonicalPath::new(initial_dir).map_err(EnvironmentError::StartDiscoveryDir)?;
 
     let tentative_dot_flox = path.join(DOT_FLOX);
@@ -551,7 +555,7 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
             source: Box::new(err),
         })?;
         debug!(".flox found: path={}", tentative_dot_flox.display());
-        return Ok(Some(pointer));
+        return Ok(Some((pointer, true)));
     }
 
     // Check if we're in a git repo.
@@ -582,7 +586,7 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
                     source: Box::new(err),
                 })?;
             debug!(".flox found: path={}", tentative_dot_flox.display());
-            return Ok(Some(pointer));
+            return Ok(Some((pointer, false)));
         }
     }
     Ok(None)
@@ -701,10 +705,16 @@ mod test {
         let found_environment = find_dot_flox(temp_dir.path())
             .unwrap()
             .expect("expected to find dot flox");
-        assert_eq!(found_environment, DotFlox {
-            path: temp_dir.path().canonicalize().unwrap(),
-            pointer: (*MANAGED_ENV_POINTER).clone()
-        });
+        assert_eq!(
+            found_environment,
+            (
+                DotFlox {
+                    path: temp_dir.path().canonicalize().unwrap(),
+                    pointer: (*MANAGED_ENV_POINTER).clone()
+                },
+                true
+            )
+        );
     }
 
     /// An environment is found upwards, but only if it is within a git repo.
@@ -725,13 +735,19 @@ mod test {
 
         GitCommandProvider::init(temp_dir.path(), false).unwrap();
 
-        let found_environment = find_dot_flox(temp_dir.path())
+        let found_environment = find_dot_flox(&start_path)
             .unwrap()
             .expect("expected to find dot flox");
-        assert_eq!(found_environment, DotFlox {
-            path: temp_dir.path().canonicalize().unwrap(),
-            pointer: (*MANAGED_ENV_POINTER).clone()
-        });
+        assert_eq!(
+            found_environment,
+            (
+                DotFlox {
+                    path: temp_dir.path().canonicalize().unwrap(),
+                    pointer: (*MANAGED_ENV_POINTER).clone()
+                },
+                false
+            )
+        );
     }
 
     /// An environment is found upwards and adjacent, but only if it is within
@@ -763,10 +779,16 @@ mod test {
         let found_environment = find_dot_flox(&start_path)
             .unwrap()
             .expect("expected to find dot flox");
-        assert_eq!(found_environment, DotFlox {
-            path: temp_dir.path().canonicalize().unwrap(),
-            pointer: (*MANAGED_ENV_POINTER).clone()
-        });
+        assert_eq!(
+            found_environment,
+            (
+                DotFlox {
+                    path: temp_dir.path().canonicalize().unwrap(),
+                    pointer: (*MANAGED_ENV_POINTER).clone()
+                },
+                false
+            )
+        );
     }
 
     /// An environment is found upwards and adjacent when it is a subdirectory
@@ -801,10 +823,16 @@ mod test {
         let found_environment = find_dot_flox(&start_path)
             .unwrap()
             .expect("expected to find dot flox");
-        assert_eq!(found_environment, DotFlox {
-            path: foo.canonicalize().unwrap(),
-            pointer: (*MANAGED_ENV_POINTER).clone()
-        });
+        assert_eq!(
+            found_environment,
+            (
+                DotFlox {
+                    path: foo.canonicalize().unwrap(),
+                    pointer: (*MANAGED_ENV_POINTER).clone()
+                },
+                false
+            )
+        );
     }
 
     /// An environment above a git repo is not found.

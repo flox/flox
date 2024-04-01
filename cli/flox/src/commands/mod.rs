@@ -43,6 +43,7 @@ use flox_rust_sdk::models::environment::{
     Environment,
     EnvironmentError,
     EnvironmentPointer,
+    FoundDotFlox,
     ManagedPointer,
     DOT_FLOX,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -640,7 +641,7 @@ impl EnvironmentSelect {
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_found_environment = find_dot_flox(&current_dir)?;
                 match maybe_found_environment {
-                    Some(found) => {
+                    Some((found, _)) => {
                         Ok(UninitializedEnvironment::DotFlox(found)
                             .into_concrete_environment(flox)?)
                     },
@@ -710,55 +711,66 @@ pub fn detect_environment(
     let found = match (maybe_activated, maybe_found_environment) {
         (
             Some(ref activated @ UninitializedEnvironment::DotFlox(DotFlox { ref path, .. })),
-            Some(found),
+            Some((found, _)),
         ) if path == &found.path => Some(activated.clone()),
 
         // If both a 'default' environment is activated and an environment is
         // found in the current directory or git repo, prefer the detected one.
-        (Some(activated), Some(detected))
+        (Some(activated), Some((detected, _)))
             if activated.pointer().name().as_ref() == DEFAULT_NAME =>
         {
             Some(UninitializedEnvironment::DotFlox(detected))
         },
 
+        // If we can't prompt, use the environment found in the current directory or git repo
+        (Some(_), Some((found, _))) if !Dialog::can_prompt() => {
+            debug!("No TTY detected, using the environment {found:?} found in the current directory or an ancestor directory");
+            Some(UninitializedEnvironment::DotFlox(found))
+        },
         // If there's both an activated environment and an environment in the
         // current directory or git repo, prompt for which to use.
         (Some(activated_env), Some(found)) => {
-            let type_of_directory = if found.path == current_dir {
-                "current directory"
-            } else {
-                "detected in git repo"
-            };
-            let message = format!("{message} which environment?");
-            let found = UninitializedEnvironment::DotFlox(found);
-
-            if !Dialog::can_prompt() {
-                debug!("No TTY detected, using the environment {found:?} found in the current directory or an ancestor directory");
-                return Ok(Some(found));
-            }
-
-            let dialog = Dialog {
-                message: &message,
-                help_message: None,
-                typed: Select {
-                    options: vec![
-                        format!("{type_of_directory} [{}]", found.bare_description()?),
-                        format!("currently active [{}]", activated_env.bare_description()?),
-                    ],
-                },
-            };
-            let (index, _) = dialog.raw_prompt().map_err(anyhow::Error::new)?;
-            match index {
-                0 => Some(found),
-                1 => Some(activated_env),
-                _ => unreachable!(),
-            }
+            Some(query_which_environment(message, activated_env, found)?)
         },
         (Some(activated_env), None) => Some(activated_env),
-        (None, Some(found)) => Some(UninitializedEnvironment::DotFlox(found)),
+        (None, Some((found, _))) => Some(UninitializedEnvironment::DotFlox(found)),
         (None, None) => None,
     };
     Ok(found)
+}
+
+/// Helper function for [detect_environment]
+fn query_which_environment(
+    message: &str,
+    activated_env: UninitializedEnvironment,
+    found: FoundDotFlox,
+) -> Result<UninitializedEnvironment> {
+    let (found, found_in_current_dir) = found;
+    let type_of_directory = if found_in_current_dir {
+        "current directory"
+    } else {
+        "detected in git repo"
+    };
+    let found = UninitializedEnvironment::DotFlox(found);
+
+    let message = format!("{message} which environment?");
+
+    let dialog = Dialog {
+        message: &message,
+        help_message: None,
+        typed: Select {
+            options: vec![
+                format!("{type_of_directory} [{}]", found.bare_description()?),
+                format!("currently active [{}]", activated_env.bare_description()?),
+            ],
+        },
+    };
+    let (index, _) = dialog.raw_prompt().map_err(anyhow::Error::new)?;
+    match index {
+        0 => Ok(found),
+        1 => Ok(activated_env),
+        _ => unreachable!(),
+    }
 }
 
 /// Open an environment defined in `{path}/.flox`
@@ -1320,5 +1332,32 @@ mod tests {
         );
 
         assert!(second_active.is_active(&uninitialized));
+    }
+
+    #[test]
+    fn test_last_activated() {
+        let env1 = UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::new(),
+            pointer: EnvironmentPointer::Path(PathPointer::new(
+                EnvironmentName::from_str("env1").unwrap(),
+            )),
+        });
+        let env2 = UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::new(),
+            pointer: EnvironmentPointer::Path(PathPointer::new(
+                EnvironmentName::from_str("env2").unwrap(),
+            )),
+        });
+
+        let mut active = ActiveEnvironments::default();
+        active.set_last_active(env1);
+        active.set_last_active(env2.clone());
+
+        let last_active = temp_env::with_var(
+            FLOX_ACTIVE_ENVIRONMENTS_VAR,
+            Some(active.to_string()),
+            last_activated_environment,
+        );
+        assert_eq!(last_active.unwrap(), env2)
     }
 }

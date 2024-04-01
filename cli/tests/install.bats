@@ -164,39 +164,6 @@ teardown() {
   assert_output --partial "couldn't uninstall 'hello', wasn't previously installed"
 }
 
-@test "'flox install' uses last activated environment" {
-  mkdir 1
-  "$FLOX_BIN" init --dir 1
-
-  mkdir 2
-  "$FLOX_BIN" init --dir 2
-
-  FLOX_SHELL=bash NO_COLOR=1 run expect "$TESTS_DIR/install/last-activated.exp"
-  assert_success
-}
-
-@test "'flox install' prompts when an environment is activated and there is an environment in the current directory" {
-  mkdir 1
-  "$FLOX_BIN" init --dir 1
-
-  mkdir 2
-  "$FLOX_BIN" init --dir 2
-
-  FLOX_SHELL=bash NO_COLOR=1 run -0 expect "$TESTS_DIR/install/prompt-which-environment.exp"
-}
-
-@test "'flox install' prompts when an environment is activated and there is an environment in the containing git repo" {
-  mkdir 1
-  "$FLOX_BIN" init --dir 1
-
-  mkdir 2
-  "$FLOX_BIN" init --dir 2
-  git -C 2 init
-  mkdir 2/subdirectory
-
-  FLOX_SHELL=bash NO_COLOR=1 run -0 expect "$TESTS_DIR/install/prompt-which-environment-git.exp"
-}
-
 @test "'flox install' installs by path" {
   run "$FLOX_BIN" init
   assert_success

@@ -11,7 +11,7 @@ use flox_rust_sdk::models::lockfile::LockedManifest;
 use flox_rust_sdk::models::search::{PathOrJson, Query, SearchParams, SearchResult, SearchResults};
 use log::debug;
 
-use crate::commands::detect_environment;
+use crate::commands::{detect_environment, UninitializedEnvironment};
 use crate::config::features::Features;
 
 pub const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
@@ -32,7 +32,15 @@ pub const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
 /// since a freshly cloned user repo with a [ManagedEnvironment] may not have a
 /// manifest or lockfile in floxmeta unless the environment is initialized.
 pub fn manifest_and_lockfile(flox: &Flox, message: &str) -> Result<(Option<PathBuf>, PathBuf)> {
-    let (manifest_path, lockfile_path) = match detect_environment(message)? {
+    manifest_and_lockfile_from_detected_environment(flox, detect_environment(message)?)
+}
+
+/// Helper function for [manifest_and_lockfile] that can be unit tested.
+fn manifest_and_lockfile_from_detected_environment(
+    flox: &Flox,
+    detected_environment: Option<UninitializedEnvironment>,
+) -> Result<(Option<PathBuf>, PathBuf)> {
+    let (manifest_path, lockfile_path) = match detected_environment {
         None => {
             debug!("no environment found");
             (None, None)
@@ -289,5 +297,81 @@ impl DisplaySearchResults {
                 n_results = self.n_results,
                 search_term = self.search_term
             ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use flox_rust_sdk::flox::test_helpers::flox_instance_with_global_lock;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
+    use flox_rust_sdk::models::environment::{global_manifest_lockfile_path, Environment};
+    use serial_test::serial;
+
+    use super::*;
+    use crate::commands::ConcreteEnvironment;
+
+    /// When no environment has been detected, the global lockfile is used.
+    #[test]
+    #[serial]
+    fn test_manifest_and_lockfile_global_lock() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        assert_eq!(
+            manifest_and_lockfile_from_detected_environment(&flox, None).unwrap(),
+            (None, global_manifest_lockfile_path(&flox))
+        );
+    }
+
+    /// When an environment has been detected but has no lockfile, the
+    /// environment's manifest and the global lockfile are used.
+    #[test]
+    #[serial]
+    fn test_manifest_and_lockfile_environment_manifest() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let environment = new_path_environment(&flox, "");
+        let (manifest, lockfile) = manifest_and_lockfile_from_detected_environment(
+            &flox,
+            Some(
+                UninitializedEnvironment::from_concrete_environment(&ConcreteEnvironment::Path(
+                    environment,
+                ))
+                .unwrap(),
+            ),
+        )
+        .unwrap();
+
+        let manifest = manifest.unwrap();
+
+        assert!(manifest.starts_with(flox.temp_dir.canonicalize().unwrap()));
+        assert!(manifest.ends_with(".flox/env/manifest.toml"));
+
+        assert_eq!(lockfile, global_manifest_lockfile_path(&flox));
+    }
+
+    /// When an environment has been detected and has a lockfile, that lockfile
+    /// should be used
+    #[test]
+    #[serial]
+    fn test_manifest_and_lockfile_environment_lock() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let mut environment = new_path_environment(&flox, "");
+        environment.lock(&flox).unwrap();
+        let (manifest, lockfile) = manifest_and_lockfile_from_detected_environment(
+            &flox,
+            Some(
+                UninitializedEnvironment::from_concrete_environment(&ConcreteEnvironment::Path(
+                    environment,
+                ))
+                .unwrap(),
+            ),
+        )
+        .unwrap();
+
+        let manifest = manifest.unwrap();
+
+        assert!(manifest.starts_with(flox.temp_dir.canonicalize().unwrap()));
+        assert!(manifest.ends_with(".flox/env/manifest.toml"));
+
+        assert!(lockfile.starts_with(flox.temp_dir.canonicalize().unwrap()));
+        assert!(lockfile.ends_with(".flox/env/manifest.lock"));
     }
 }
