@@ -70,7 +70,7 @@ use crate::commands::{
     UninitializedEnvironment,
 };
 use crate::config::Config;
-use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
+use crate::utils::dialog::{Dialog, Select, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::{
     apply_doc_link_for_unsupported_packages,
@@ -81,60 +81,6 @@ use crate::utils::errors::{
 use crate::utils::openers::Shell;
 use crate::utils::{default_nix_env_vars, message};
 use crate::{subcommand_metric, utils};
-
-// Delete an environment
-#[derive(Bpaf, Clone)]
-pub struct Delete {
-    /// Delete an environment without confirmation.
-    #[bpaf(short, long)]
-    force: bool,
-
-    #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
-}
-
-impl Delete {
-    #[instrument(name = "delete", skip_all)]
-    pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("delete");
-        let environment = self
-            .environment
-            .detect_concrete_environment(&flox, "Delete")?;
-
-        let description = environment_description(&environment)?;
-
-        if matches!(environment, ConcreteEnvironment::Remote(_)) {
-            let message = formatdoc! {"
-                Environment {description} was not deleted.
-
-                Remote environments on FloxHub can not yet be deleted.
-            "};
-            bail!("{message}")
-        }
-
-        let comfirm = Dialog {
-            message: "Are you sure?",
-            help_message: Some("Use `-f` to force deletion"),
-            typed: Confirm {
-                default: Some(false),
-            },
-        };
-
-        if !self.force && Dialog::can_prompt() && !comfirm.prompt().await? {
-            bail!("Environment deletion cancelled");
-        }
-
-        match environment {
-            ConcreteEnvironment::Path(environment) => environment.delete(&flox),
-            ConcreteEnvironment::Managed(environment) => environment.delete(&flox),
-            ConcreteEnvironment::Remote(_) => unreachable!(),
-        }?;
-
-        message::deleted(format!("environment {description} deleted"));
-
-        Ok(())
-    }
-}
 
 /// When called with no arguments 'flox activate' will look for a '.flox' directory
 /// in the current directory. Calling 'flox activate' in your home directory will

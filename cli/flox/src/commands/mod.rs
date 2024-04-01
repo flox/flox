@@ -1,4 +1,5 @@
 mod auth;
+mod delete;
 mod edit;
 mod environment;
 mod general;
@@ -414,7 +415,7 @@ enum LocalDevelopmentCommands {
         long("destroy"),
         footer("Run 'man flox-delete' for more details.")
     )]
-    Delete(#[bpaf(external(environment::delete))] environment::Delete),
+    Delete(#[bpaf(external(delete::delete))] delete::Delete),
 }
 
 impl LocalDevelopmentCommands {
