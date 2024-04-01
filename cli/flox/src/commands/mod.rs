@@ -1,3 +1,4 @@
+mod activate;
 mod auth;
 mod delete;
 mod edit;
@@ -381,7 +382,7 @@ enum LocalDevelopmentCommands {
         long("develop"),
         footer("Run 'man flox-activate' for more details.")
     )]
-    Activate(#[bpaf(external(environment::activate))] environment::Activate),
+    Activate(#[bpaf(external(activate::activate))] activate::Activate),
     /// Search for system or library packages to install
     #[bpaf(command, footer("Run 'man flox-search' for more details."))]
     Search(#[bpaf(external(search::search))] search::Search),
