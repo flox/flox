@@ -1,8 +1,8 @@
 mod activate;
 mod auth;
+mod containerize;
 mod delete;
 mod edit;
-mod environment;
 mod general;
 mod init;
 mod install;
@@ -12,6 +12,7 @@ mod push;
 mod search;
 mod uninstall;
 mod update;
+mod upgrade;
 
 use std::collections::VecDeque;
 use std::fmt::Display;
@@ -357,6 +358,7 @@ struct Help {
     #[bpaf(positional("cmd"))]
     cmd: Option<String>,
 }
+
 impl Help {
     fn handle(self) {
         let mut args = Vec::from_iter(self.cmd.as_deref());
@@ -458,8 +460,9 @@ enum SharingCommands {
         footer("Run 'man flox-containerize' for more details."),
         header("This command is experimental and its behaviour is subject to change")
     )]
-    Containerize(#[bpaf(external(environment::containerize))] environment::Containerize),
+    Containerize(#[bpaf(external(containerize::containerize))] containerize::Containerize),
 }
+
 impl SharingCommands {
     async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         match self {
@@ -494,7 +497,7 @@ enum AdditionalCommands {
         The packages in that group can be upgraded without updating any other
         groups by passing 'toplevel' as the group name.
     "}))]
-    Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
+    Upgrade(#[bpaf(external(upgrade::upgrade))] upgrade::Upgrade),
     /// View and set configuration options
     #[bpaf(command, hide, footer("Run 'man flox-config' for more details."))]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
