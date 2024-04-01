@@ -7,6 +7,7 @@ mod general;
 mod init;
 mod install;
 mod list;
+mod pull;
 mod push;
 mod search;
 mod uninstall;
@@ -448,7 +449,7 @@ enum SharingCommands {
     Push(#[bpaf(external(push::push))] push::Push),
     /// Pull an environment from FloxHub
     #[bpaf(command, footer("Run 'man flox-pull' for more details."))]
-    Pull(#[bpaf(external(environment::pull))] environment::Pull),
+    Pull(#[bpaf(external(pull::pull))] pull::Pull),
     /// Containerize an environment
     #[bpaf(
         command,
