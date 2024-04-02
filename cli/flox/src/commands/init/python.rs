@@ -16,9 +16,9 @@ use super::{
     get_default_package_if_compatible,
     try_find_compatible_version,
     InitHook,
+    ProvidedVersion,
     AUTO_SETUP_HINT,
 };
-use crate::commands::init::ProvidedVersion;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 
