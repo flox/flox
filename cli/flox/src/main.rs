@@ -8,7 +8,7 @@ use commands::{FloxArgs, FloxCli, Prefix, Version};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
-use flox_rust_sdk::models::environment::{init_global_manifest, EnvironmentError2};
+use flox_rust_sdk::models::environment::{init_global_manifest, EnvironmentError};
 use log::{debug, warn};
 use utils::init::{init_logger, init_sentry};
 use utils::{message, populate_default_nix_env_vars};
@@ -54,7 +54,7 @@ fn main() -> ExitCode {
 
     // Quit early if `--version` is present
     if Version::check() {
-        println!("Version: {}", *FLOX_VERSION);
+        println!("{}", *FLOX_VERSION);
         return ExitCode::from(0);
     }
 
@@ -129,7 +129,7 @@ fn main() -> ExitCode {
                 return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;
             }
 
-            if let Some(e) = e.downcast_ref::<EnvironmentError2>() {
+            if let Some(e) = e.downcast_ref::<EnvironmentError>() {
                 message::error(format_error(e));
                 return ExitCode::from(1);
             }
