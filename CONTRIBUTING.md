@@ -110,7 +110,6 @@ Currently this repo houses three rust crates:
 - `flox`: the flox binary and reimplementation of the `bash` based flox.
 - `flox-rust-sdk`: A library layer implementing flox's capabilities independent
   of the frontend.
-- `floxd`: a potential flox daemon
 
 ## Development
 
