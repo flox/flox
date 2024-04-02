@@ -99,9 +99,9 @@ impl InitHook for Go {
         You can always revisit the environment's declaration with 'flox edit'"};
 
         let accept_options = ["Yes".to_string()];
-        let accept_options_offset = accept_options.len() - 1;
+        let accept_options_offset = accept_options.len();
         let cancel_options = ["No".to_string()];
-        let cancel_options_offset = accept_options_offset + cancel_options.len() - 1;
+        let cancel_options_offset = accept_options_offset + cancel_options.len();
 
         let show_environment_manifest_option = ["Show environment manifest".to_string()];
 
@@ -125,8 +125,8 @@ impl InitHook for Go {
             let (choice, _) = dialog.raw_prompt()?;
 
             match choice {
-                accept if accept <= accept_options_offset => return Ok(true),
-                cancel if cancel <= cancel_options_offset => return Ok(false),
+                accept if accept < accept_options_offset => return Ok(true),
+                cancel if cancel < cancel_options_offset => return Ok(false),
                 show_environment if show_environment < n_options => {
                     message::plain(format_customization(&self.get_init_customization())?);
                 },
