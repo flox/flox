@@ -24,7 +24,7 @@ use super::{
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
+use crate::models::floxmeta::{FloxMeta, FloxMetaError};
 use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
@@ -37,7 +37,7 @@ pub enum RemoteEnvironmentError {
     OpenManagedEnvironment(#[source] ManagedEnvironmentError),
 
     #[error("could not get latest version of environment")]
-    GetLatestVersion(#[source] FloxmetaV2Error),
+    GetLatestVersion(#[source] FloxMetaError),
 
     #[error("could not reset managed environment")]
     ResetManagedEnvironment(#[source] ManagedEnvironmentError),
@@ -77,12 +77,11 @@ impl RemoteEnvironment {
         path: impl AsRef<Path>,
         pointer: ManagedPointer,
     ) -> Result<Self, RemoteEnvironmentError> {
-        let floxmeta = match FloxmetaV2::open(flox, &pointer) {
+        let floxmeta = match FloxMeta::open(flox, &pointer) {
             Ok(floxmeta) => floxmeta,
-            Err(FloxmetaV2Error::NotFound(_)) => {
+            Err(FloxMetaError::NotFound(_)) => {
                 debug!("cloning floxmeta for {}", pointer.owner);
-                FloxmetaV2::clone(flox, &pointer)
-                    .map_err(RemoteEnvironmentError::GetLatestVersion)?
+                FloxMeta::clone(flox, &pointer).map_err(RemoteEnvironmentError::GetLatestVersion)?
             },
             Err(e) => Err(RemoteEnvironmentError::GetLatestVersion(e))?,
         };

@@ -28,7 +28,7 @@ use crate::data::Version;
 use crate::flox::{EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
-use crate::models::floxmetav2::{floxmeta_git_options, FloxmetaV2, FloxmetaV2Error};
+use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
 use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
@@ -49,13 +49,13 @@ pub struct ManagedEnvironment {
     pub path: CanonicalPath,
     out_link: PathBuf,
     pointer: ManagedPointer,
-    floxmeta: FloxmetaV2,
+    floxmeta: FloxMeta,
 }
 
 #[derive(Debug, Error)]
 pub enum ManagedEnvironmentError {
     #[error("failed to open floxmeta git repo: {0}")]
-    OpenFloxmeta(FloxmetaV2Error),
+    OpenFloxmeta(FloxMetaError),
     #[error("failed to fetch environment: {0}")]
     Fetch(GitRemoteCommandError),
     #[error("failed to check for git revision: {0}")]
@@ -530,18 +530,18 @@ impl ManagedEnvironment {
         pointer: ManagedPointer,
         dot_flox_path: impl AsRef<Path>,
     ) -> Result<Self, ManagedEnvironmentError> {
-        let floxmeta = match FloxmetaV2::open(flox, &pointer) {
+        let floxmeta = match FloxMeta::open(flox, &pointer) {
             Ok(floxmeta) => floxmeta,
-            Err(FloxmetaV2Error::NotFound(_)) => {
+            Err(FloxMetaError::NotFound(_)) => {
                 debug!("cloning floxmeta for {}", pointer.owner);
-                FloxmetaV2::clone(flox, &pointer).map_err(ManagedEnvironmentError::OpenFloxmeta)?
+                FloxMeta::clone(flox, &pointer).map_err(ManagedEnvironmentError::OpenFloxmeta)?
             },
-            Err(FloxmetaV2Error::CloneBranch(GitRemoteCommandError::AccessDenied))
-            | Err(FloxmetaV2Error::FetchBranch(GitRemoteCommandError::AccessDenied)) => {
+            Err(FloxMetaError::CloneBranch(GitRemoteCommandError::AccessDenied))
+            | Err(FloxMetaError::FetchBranch(GitRemoteCommandError::AccessDenied)) => {
                 return Err(ManagedEnvironmentError::AccessDenied)
             },
-            Err(FloxmetaV2Error::CloneBranch(GitRemoteCommandError::RefNotFound(_)))
-            | Err(FloxmetaV2Error::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
+            Err(FloxMetaError::CloneBranch(GitRemoteCommandError::RefNotFound(_)))
+            | Err(FloxMetaError::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
                 return Err(ManagedEnvironmentError::UpstreamNotFound(
                     pointer.into(),
                     flox.floxhub.base_url().to_string(),
@@ -566,7 +566,7 @@ impl ManagedEnvironment {
     /// This method is primarily useful for testing.
     /// In most cases, you want to use [`ManagedEnvironment::open`] instead which provides the flox defaults.
     pub fn open_with(
-        floxmeta: FloxmetaV2,
+        floxmeta: FloxMeta,
         flox: &Flox,
         pointer: ManagedPointer,
         dot_flox_path: CanonicalPath,
@@ -602,7 +602,7 @@ impl ManagedEnvironment {
     fn ensure_locked(
         pointer: &ManagedPointer,
         dot_flox_path: &CanonicalPath,
-        floxmeta: &FloxmetaV2,
+        floxmeta: &FloxMeta,
     ) -> Result<GenerationLock, ManagedEnvironmentError> {
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let maybe_lock = GenerationLock::read_maybe(&lock_path)?;
@@ -709,7 +709,7 @@ impl ManagedEnvironment {
     fn ensure_branch(
         branch: &str,
         lock: &GenerationLock,
-        floxmeta: &FloxmetaV2,
+        floxmeta: &FloxMeta,
     ) -> Result<(), ManagedEnvironmentError> {
         let current_rev = lock.local_rev.as_ref().unwrap_or(&lock.rev);
         match floxmeta.git.branch_hash(branch) {
@@ -853,7 +853,7 @@ impl ManagedEnvironment {
 /// That's undesirable, and rev should always be in local_rev's history.
 fn write_pointer_lockfile(
     lock_path: PathBuf,
-    floxmeta: &FloxmetaV2,
+    floxmeta: &FloxMeta,
     remote_ref: String,
     local_ref: Option<String>,
 ) -> Result<GenerationLock, ManagedEnvironmentError> {
@@ -1044,7 +1044,7 @@ impl ManagedEnvironment {
 
         write_pointer_lockfile(
             dot_flox_path.join(GENERATION_LOCK_FILENAME),
-            &FloxmetaV2 {
+            &FloxMeta {
                 git: temp_floxmeta_git,
             },
             remote_branch_name(&pointer),
@@ -1168,7 +1168,7 @@ pub mod test_helpers {
     use super::*;
     use crate::flox::{Floxhub, DEFAULT_FLOXHUB_URL};
     use crate::models::environment::core_environment::test_helpers::new_core_environment;
-    use crate::models::floxmetav2::test_helpers::unusable_mock_floxmeta;
+    use crate::models::floxmeta::test_helpers::unusable_mock_floxmeta;
 
     /// Get a [ManagedEnvironment] that is invalid but can be used in tests
     /// where methods on [ManagedEnvironment] will never be called.
@@ -1224,7 +1224,7 @@ mod test {
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::environment::DOT_FLOX;
-    use crate::models::floxmetav2::floxmeta_dir;
+    use crate::models::floxmeta::floxmeta_dir;
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
@@ -1274,7 +1274,7 @@ mod test {
         remote_path: &Path,
         test_pointer: &ManagedPointer,
         branch: &str,
-    ) -> FloxmetaV2 {
+    ) -> FloxMeta {
         let user_floxmeta_dir = floxmeta_dir(flox, &test_pointer.owner);
         fs::create_dir_all(&user_floxmeta_dir).unwrap();
         GitCommandProvider::clone_branch(
@@ -1285,7 +1285,7 @@ mod test {
         )
         .unwrap();
 
-        FloxmetaV2::open(flox, test_pointer).unwrap()
+        FloxMeta::open(flox, test_pointer).unwrap()
     }
 
     /// Test that when ensure_locked has input state of:
@@ -1768,7 +1768,7 @@ mod test {
         )
         .unwrap();
 
-        let floxmeta = FloxmetaV2::open(&flox, &test_pointer).unwrap();
+        let floxmeta = FloxMeta::open(&flox, &test_pointer).unwrap();
 
         let lock = GenerationLock {
             rev: hash_1,
