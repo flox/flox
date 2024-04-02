@@ -49,24 +49,28 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox init' sets up a local working Go module environment" {
-  GO_BUILD_COMMAND="go build ."
+  cp -r "$TESTS_DIR"/go/single-dependency/module/* "$PROJECT_DIR/"
 
-  cat > go.mod <<EOF
-  module go-module
+  run "$FLOX_BIN" init --auto-setup
+  assert_success
+  assert_line --partial "'go' installed"
 
-  go 1.21.0
-  EOF
-
-  cat > main.go <<EOF
-  package main
-
-  func main() {}
-  EOF
-
-  "$FLOX_BIN" init --auto-setup
-
-  FLOX_SHELL=bash "$FLOX_BIN" activate -- $GO_BUILD_COMMAND
-  FLOX_SHELL=zsh "$FLOX_BIN" activate -- $GO_BUILD_COMMAND
+  run "$FLOX_BIN" activate -- go version
+  assert_success
+  assert_line --partial "go version go1."
 }
 
 # ---------------------------------------------------------------------------- #
+
+@test "'flox init' sets up a local working Go workspace environment" {
+  GO_VERSION_COMMAND="go version"
+  cp -r "$TESTS_DIR"/go/single-dependency/workspace/* "$PROJECT_DIR/"
+
+  run "$FLOX_BIN" init --auto-setup
+  assert_success
+  assert_line --partial "'go' installed"
+
+  run "$FLOX_BIN" activate -- go version
+  assert_success
+  assert_line --partial "go version go1."
+}
