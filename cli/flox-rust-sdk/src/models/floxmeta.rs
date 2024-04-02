@@ -20,12 +20,12 @@ use crate::providers::git::{
 pub const FLOXMETA_DIR_NAME: &str = "meta";
 
 #[derive(Debug)]
-pub struct FloxmetaV2 {
+pub struct FloxMeta {
     pub(super) git: GitCommandProvider,
 }
 
 #[derive(Error, Debug)]
-pub enum FloxmetaV2Error {
+pub enum FloxMetaError {
     #[error("floxmeta for {0} not found")]
     NotFound(String),
     #[error("Could not open user environment directory {0}")]
@@ -42,7 +42,7 @@ pub enum FloxmetaV2Error {
     FloxhubError(FloxhubError),
 }
 
-impl FloxmetaV2 {
+impl FloxMeta {
     /// Clone the floxmeta repository for the given user to the given path
     ///
     /// If access to a remote repository requires authentication,
@@ -55,14 +55,14 @@ impl FloxmetaV2 {
         path: impl AsRef<Path>,
         flox: &Flox,
         pointer: &ManagedPointer,
-    ) -> Result<Self, FloxmetaV2Error> {
+    ) -> Result<Self, FloxMetaError> {
         let token = flox.floxhub_token.as_ref();
 
         let floxhub = Floxhub::new(
             pointer.floxhub_url.to_owned(),
             pointer.floxhub_git_url_override.clone(),
         )
-        .map_err(FloxmetaV2Error::FloxhubError)?;
+        .map_err(FloxMetaError::FloxhubError)?;
 
         let git_url = floxhub.git_url();
 
@@ -76,9 +76,9 @@ impl FloxmetaV2 {
             branch,
             true,
         )
-        .map_err(FloxmetaV2Error::CloneBranch)?;
+        .map_err(FloxMetaError::CloneBranch)?;
 
-        Ok(FloxmetaV2 { git })
+        Ok(FloxMeta { git })
     }
 
     /// Clone the floxmeta repository for the given user to the default path
@@ -88,7 +88,7 @@ impl FloxmetaV2 {
     /// The caller is responsible for ensuring that the token is present and valid.
     ///
     /// Like [`FloxmetaV2::clone_to`], but uses the system path for floxmeta repositories in XDG_DATA_HOME
-    pub fn clone(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxmetaV2Error> {
+    pub fn clone(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxMetaError> {
         Self::clone_to(floxmeta_dir(flox, &pointer.owner), flox, pointer)
     }
 
@@ -109,41 +109,41 @@ impl FloxmetaV2 {
         user_floxmeta_dir: impl AsRef<Path>,
         flox: &Flox,
         pointer: &ManagedPointer,
-    ) -> Result<Self, FloxmetaV2Error> {
+    ) -> Result<Self, FloxMetaError> {
         let token = flox.floxhub_token.as_ref();
 
         let floxhub = Floxhub::new(
             pointer.floxhub_url.to_owned(),
             pointer.floxhub_git_url_override.clone(),
         )
-        .map_err(FloxmetaV2Error::FloxhubError)?;
+        .map_err(FloxMetaError::FloxhubError)?;
 
         let git_url = floxhub.git_url();
 
         let git_options = floxmeta_git_options(git_url, &pointer.owner, token);
 
         if !user_floxmeta_dir.as_ref().exists() {
-            Err(FloxmetaV2Error::NotFound(pointer.owner.to_string()))?
+            Err(FloxMetaError::NotFound(pointer.owner.to_string()))?
         }
 
         let git = GitCommandProvider::open_with(git_options, user_floxmeta_dir)
-            .map_err(FloxmetaV2Error::Open)?;
+            .map_err(FloxMetaError::Open)?;
         let branch: String = remote_branch_name(pointer);
         if !git
             .has_branch(&branch)
-            .map_err(FloxmetaV2Error::CheckForBranch)?
+            .map_err(FloxMetaError::CheckForBranch)?
         {
             git.fetch_branch("dynamicorigin", &branch)
-                .map_err(FloxmetaV2Error::FetchBranch)?;
+                .map_err(FloxMetaError::FetchBranch)?;
         }
 
-        Ok(FloxmetaV2 { git })
+        Ok(FloxMeta { git })
     }
 
     /// Open a floxmeta repository for a given user
     ///
     /// Like [`FloxmetaV2::open_at`], but uses the system path for floxmeta repositories in XDG_DATA_HOME.
-    pub fn open(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxmetaV2Error> {
+    pub fn open(flox: &Flox, pointer: &ManagedPointer) -> Result<Self, FloxMetaError> {
         let user_floxmeta_dir = floxmeta_dir(flox, &pointer.owner);
         Self::open_at(user_floxmeta_dir, flox, pointer)
     }
@@ -152,14 +152,14 @@ impl FloxmetaV2 {
         user_floxmeta_dir: impl AsRef<Path>,
         flox: &Flox,
         pointer: &ManagedPointer,
-    ) -> Result<Self, FloxmetaV2Error> {
+    ) -> Result<Self, FloxMetaError> {
         let token = flox.floxhub_token.as_ref();
 
         let floxhub = Floxhub::new(
             pointer.floxhub_url.to_owned(),
             pointer.floxhub_git_url_override.clone(),
         )
-        .map_err(FloxmetaV2Error::FloxhubError)?;
+        .map_err(FloxMetaError::FloxhubError)?;
 
         let git_url = floxhub.git_url();
 
@@ -168,7 +168,7 @@ impl FloxmetaV2 {
         let git = GitCommandProvider::init_with(git_options, user_floxmeta_dir, false).unwrap();
         git.rename_branch(&remote_branch_name(pointer)).unwrap();
 
-        Ok(FloxmetaV2 { git })
+        Ok(FloxMeta { git })
     }
 }
 
@@ -243,8 +243,8 @@ pub mod test_helpers {
     use super::*;
     use crate::providers::git::test_helpers::mock_provider;
 
-    pub fn unusable_mock_floxmeta() -> FloxmetaV2 {
-        FloxmetaV2 {
+    pub fn unusable_mock_floxmeta() -> FloxMeta {
+        FloxMeta {
             git: mock_provider(),
         }
     }
@@ -300,53 +300,9 @@ mod tests {
 
         create_fake_floxmeta(&source_path, &flox, &pointer);
 
-        FloxmetaV2::clone_to(tempdir.path().join("dest"), &flox, &pointer)
+        FloxMeta::clone_to(tempdir.path().join("dest"), &flox, &pointer)
             .expect("Cloning a floxmeta repo should succeed");
-        FloxmetaV2::open_at(tempdir.path().join("dest"), &flox, &pointer)
+        FloxMeta::open_at(tempdir.path().join("dest"), &flox, &pointer)
             .expect("Opening a floxmeta repo should succeed");
     }
-
-    ///// Test whether a floxmeta repository can be successfully cloned from FloxHub
-    ///// and other branches are fetched lazily when opened.
-    /////
-    ///// Finally, verify that non-existent environments correctly fail to be opened.
-    /////
-    ///// Uses the environments `floxtest/default` and `floxtest/nondefault`
-    ///// which are prepared on the host `https://git.hub.flox.dev`.
-    ///// Tries to authenticate with a test token that grants access to floxtest.
-    //
-    // XXX: skip this test since its flaky (FloxHub is up and down)
-    //#[test]
-    //fn clone_from_floxhub() {
-    //    let _ = env_logger::try_init();
-
-    //    let (mut flox, _) = flox_instance();
-
-    //    let pointer = ManagedPointer::new(
-    //        EnvironmentOwner::from_str("floxtest").unwrap(),
-    //        EnvironmentName::from_str("default").unwrap(),
-    //    );
-
-    //    flox.floxhub_token = Some("flox_testOAuthToken".to_string());
-    //    flox.floxhub_host = "https://git.hub.flox.dev".to_string();
-
-    //    FloxmetaV2::clone(&flox, &pointer)
-    //        .expect("Cloning a floxmeta repo from FloxHub should succeed");
-
-    //    let pointer_other_success = ManagedPointer::new(
-    //        EnvironmentOwner::from_str("floxtest").unwrap(),
-    //        EnvironmentName::from_str("nondefault").unwrap(),
-    //    );
-
-    //    FloxmetaV2::open(&flox, &pointer_other_success)
-    //        .expect("Should pull other branch 'nondefault' from FloxHub");
-
-    //    let pointer_other_failure = ManagedPointer::new(
-    //        EnvironmentOwner::from_str("floxtest").unwrap(),
-    //        EnvironmentName::from_str("nonexistent").unwrap(),
-    //    );
-
-    //    FloxmetaV2::open(&flox, &pointer_other_failure)
-    //        .expect_err("Should fail pulling branch 'nonexistent' from FloxHub");
-    //}
 }
