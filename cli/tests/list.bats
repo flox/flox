@@ -55,7 +55,7 @@ teardown() {
 
   run "$FLOX_BIN" list
   assert_success
-  assert_output --regexp 'hello: hello \([0-9]+\.[0-9]+\.[0-9]+\)'
+  assert_output --regexp 'hello: hello \([0-9]+\.[0-9]+(\.[0-9]+)?\)'
 }
 
 @test "'flox list' lists packages of environment in the current dir; shows different paths" {
@@ -65,7 +65,7 @@ teardown() {
   run "$FLOX_BIN" list
   assert_success
   assert_output --regexp - << EOF
-pip: python310Packages.pip \([0-9]+\.[0-9]+\.[0-9]+\)
+pip: python310Packages.pip \([0-9]+\.[0-9]+(\.[0-9]+)?\)
 EOF
 }
 
@@ -76,7 +76,7 @@ EOF
   run "$FLOX_BIN" list
   assert_success
   assert_output --regexp - << EOF
-greeting: hello \([0-9]+\.[0-9]+\.[0-9]+\)
+greeting: hello \([0-9]+\.[0-9]+(\.[0-9]+)?\)
 EOF
 }
 

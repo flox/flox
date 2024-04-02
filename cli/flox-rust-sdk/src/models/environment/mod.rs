@@ -127,63 +127,63 @@ pub struct UninstallationAttempt {
 
 pub trait Environment: Send {
     /// Build the environment and create a result link as gc-root
-    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2>;
+    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError>;
 
     /// Resolve the environment and return the lockfile
-    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2>;
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError>;
 
     /// Create a container image from the environment
-    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError2>;
+    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError>;
 
     /// Install packages to the environment atomically
     fn install(
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
-    ) -> Result<InstallationAttempt, EnvironmentError2>;
+    ) -> Result<InstallationAttempt, EnvironmentError>;
 
     /// Uninstall packages from the environment atomically
     fn uninstall(
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<UninstallationAttempt, EnvironmentError2>;
+    ) -> Result<UninstallationAttempt, EnvironmentError>;
 
     /// Atomically edit this environment, ensuring that it still builds
-    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2>;
+    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError>;
 
     /// Atomically update this environment's inputs
     fn update(
         &mut self,
         flox: &Flox,
         inputs: Vec<String>,
-    ) -> Result<UpdateResult, EnvironmentError2>;
+    ) -> Result<UpdateResult, EnvironmentError>;
 
     /// Atomically upgrade packages in this environment
     fn upgrade(
         &mut self,
         flox: &Flox,
         groups_or_iids: &[String],
-    ) -> Result<UpgradeResult, EnvironmentError2>;
+    ) -> Result<UpgradeResult, EnvironmentError>;
 
     /// Extract the current content of the manifest
     ///
     /// Implementations may use process context from [Flox]
     /// to determine the current content of the manifest.
-    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError2>;
+    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError>;
 
     /// Return a path containing the built environment and its activation script.
     ///
     /// This should be a link to a store path so that it can be swapped
     /// dynamically, i.e. so that install/edit can modify the environment
     /// without requiring reactivation.
-    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
+    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
 
     /// Return a path that environment hooks should use to store transient data.
-    fn cache_path(&self) -> Result<PathBuf, EnvironmentError2>;
+    fn cache_path(&self) -> Result<PathBuf, EnvironmentError>;
 
     /// Return a path that should be used as the project root for environment hooks.
-    fn project_path(&self) -> Result<PathBuf, EnvironmentError2>;
+    fn project_path(&self) -> Result<PathBuf, EnvironmentError>;
 
     /// Directory containing .flox
     ///
@@ -191,7 +191,7 @@ pub trait Environment: Send {
     /// stored in _FLOX_ACTIVE_ENVIRONMENTS and printed to users so that users
     /// don't have to see the trailing .flox
     /// TODO: figure out what to store for remote environments
-    fn parent_path(&self) -> Result<PathBuf, EnvironmentError2>;
+    fn parent_path(&self) -> Result<PathBuf, EnvironmentError>;
 
     /// Path to the environment definition file
     ///
@@ -200,7 +200,7 @@ pub trait Environment: Send {
     ///
     /// [Environment::manifest_path] and [Environment::lockfile_path]
     /// may be located in different directories.
-    fn manifest_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
+    fn manifest_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
 
     /// Path to the lockfile. The path may not exist.
     ///
@@ -209,19 +209,19 @@ pub trait Environment: Send {
     ///
     /// [Environment::manifest_path] and [Environment::lockfile_path]
     /// may be located in different directories.
-    fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError2>;
+    fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
 
     /// Returns the environment name
     fn name(&self) -> EnvironmentName;
 
     /// Delete the Environment
-    fn delete(self, flox: &Flox) -> Result<(), EnvironmentError2>
+    fn delete(self, flox: &Flox) -> Result<(), EnvironmentError>
     where
         Self: Sized;
 
     /// Remove gc-roots
     // TODO consider renaming or removing - we might not support this for PathEnvironment
-    fn delete_symlinks(&self) -> Result<bool, EnvironmentError2> {
+    fn delete_symlinks(&self) -> Result<bool, EnvironmentError> {
         Ok(false)
     }
 }
@@ -294,11 +294,11 @@ impl EnvironmentPointer {
     /// Use this method to determine the type of an environment at a given path.
     /// The result should be used to call the appropriate `open` method
     /// on either [PathEnvironment] or [ManagedEnvironment].
-    pub fn open(path: impl AsRef<Path>) -> Result<EnvironmentPointer, EnvironmentError2> {
+    pub fn open(path: impl AsRef<Path>) -> Result<EnvironmentPointer, EnvironmentError> {
         let dot_flox_path = path.as_ref().join(DOT_FLOX);
         if !dot_flox_path.exists() {
             debug!("couldn't find .flox at {}", dot_flox_path.display());
-            Err(EnvironmentError2::DotFloxNotFound(
+            Err(EnvironmentError::DotFloxNotFound(
                 dot_flox_path
                     .parent()
                     .unwrap_or(&dot_flox_path)
@@ -311,13 +311,13 @@ impl EnvironmentPointer {
             Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => {
                     debug!("couldn't find env.json at {}", pointer_path.display());
-                    Err(EnvironmentError2::EnvPointerNotFound)?
+                    Err(EnvironmentError::EnvPointerNotFound)?
                 },
-                _ => Err(EnvironmentError2::ReadEnvironmentMetadata(err))?,
+                _ => Err(EnvironmentError::ReadEnvironmentMetadata(err))?,
             },
         };
 
-        serde_json::from_slice(&pointer_contents).map_err(EnvironmentError2::ParseEnvJson)
+        serde_json::from_slice(&pointer_contents).map_err(EnvironmentError::ParseEnvJson)
     }
 
     pub fn name(&self) -> &EnvironmentName {
@@ -352,7 +352,7 @@ pub struct DotFlox {
 }
 
 impl DotFlox {
-    pub fn open(path: impl AsRef<Path>) -> Result<Self, EnvironmentError2> {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, EnvironmentError> {
         Ok(Self {
             path: path.as_ref().to_path_buf(),
             pointer: EnvironmentPointer::open(&path)?,
@@ -361,7 +361,7 @@ impl DotFlox {
 }
 
 #[derive(Debug, Error)]
-pub enum EnvironmentError2 {
+pub enum EnvironmentError {
     // todo: candidate for impl specific error
     // * only path and managed env are defined in .Flox
     // region: path env open
@@ -507,13 +507,13 @@ fn copy_dir_recursive(
 }
 
 /// Initialize the global manifest if it doesn't exist already
-pub fn init_global_manifest(global_manifest_path: &Path) -> Result<(), EnvironmentError2> {
+pub fn init_global_manifest(global_manifest_path: &Path) -> Result<(), EnvironmentError> {
     if !global_manifest_path.exists() {
         let global_manifest_template_contents =
             std::fs::read_to_string(Path::new(GLOBAL_MANIFEST_TEMPLATE))
-                .map_err(EnvironmentError2::ReadGlobalManifestTemplate)?;
+                .map_err(EnvironmentError::ReadGlobalManifestTemplate)?;
         std::fs::write(global_manifest_path, global_manifest_template_contents)
-            .map_err(EnvironmentError2::InitGlobalManifest)?;
+            .map_err(EnvironmentError::InitGlobalManifest)?;
     }
     Ok(())
 }
@@ -536,8 +536,8 @@ pub fn global_manifest_lockfile_path(flox: &Flox) -> PathBuf {
 ///
 /// The search first looks whether the current directory contains a `.flox` directory,
 /// and if not, it searches upwards, stopping at the root directory.
-pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentError2> {
-    let path = CanonicalPath::new(initial_dir).map_err(EnvironmentError2::StartDiscoveryDir)?;
+pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentError> {
+    let path = CanonicalPath::new(initial_dir).map_err(EnvironmentError::StartDiscoveryDir)?;
 
     let tentative_dot_flox = path.join(DOT_FLOX);
     debug!(
@@ -546,7 +546,7 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
     );
     // Look for an immediate child named `.flox`
     if tentative_dot_flox.exists() {
-        let pointer = DotFlox::open(&path).map_err(|err| EnvironmentError2::InvalidDotFlox {
+        let pointer = DotFlox::open(&path).map_err(|err| EnvironmentError::InvalidDotFlox {
             path: tentative_dot_flox.clone(),
             source: Box::new(err),
         })?;
@@ -561,7 +561,7 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
         // Assume we're not in a git repo.
         // TODO: could not_found() correspond to some other error?
         Err(e) if e.not_found() => return Ok(None),
-        Err(e) => Err(EnvironmentError2::DiscoverGitDirectory(e))?,
+        Err(e) => Err(EnvironmentError::DiscoverGitDirectory(e))?,
     };
 
     // We already checked the immediate child.
@@ -577,7 +577,7 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
 
         if tentative_dot_flox.exists() {
             let pointer =
-                DotFlox::open(ancestor).map_err(|err| EnvironmentError2::InvalidDotFlox {
+                DotFlox::open(ancestor).map_err(|err| EnvironmentError::InvalidDotFlox {
                     path: ancestor.to_path_buf(),
                     source: Box::new(err),
                 })?;
@@ -682,7 +682,7 @@ mod test {
         std::fs::create_dir_all(actual_dot_flox).unwrap();
         assert!(matches!(
             find_dot_flox(temp_dir.path()),
-            Err(EnvironmentError2::InvalidDotFlox { .. })
+            Err(EnvironmentError::InvalidDotFlox { .. })
         ))
     }
 

@@ -1,8 +1,18 @@
+mod activate;
 mod auth;
-mod environment;
+mod containerize;
+mod delete;
+mod edit;
 mod general;
 mod init;
+mod install;
+mod list;
+mod pull;
+mod push;
 mod search;
+mod uninstall;
+mod update;
+mod upgrade;
 
 use std::collections::VecDeque;
 use std::fmt::Display;
@@ -31,7 +41,7 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     DotFlox,
     Environment,
-    EnvironmentError2,
+    EnvironmentError,
     EnvironmentPointer,
     ManagedPointer,
     DOT_FLOX,
@@ -348,6 +358,7 @@ struct Help {
     #[bpaf(positional("cmd"))]
     cmd: Option<String>,
 }
+
 impl Help {
     fn handle(self) {
         let mut args = Vec::from_iter(self.cmd.as_deref());
@@ -379,7 +390,7 @@ enum LocalDevelopmentCommands {
         long("develop"),
         footer("Run 'man flox-activate' for more details.")
     )]
-    Activate(#[bpaf(external(environment::activate))] environment::Activate),
+    Activate(#[bpaf(external(activate::activate))] activate::Activate),
     /// Search for system or library packages to install
     #[bpaf(command, footer("Run 'man flox-search' for more details."))]
     Search(#[bpaf(external(search::search))] search::Search),
@@ -392,7 +403,7 @@ enum LocalDevelopmentCommands {
         short('i'),
         footer("Run 'man flox-install' for more details.")
     )]
-    Install(#[bpaf(external(environment::install))] environment::Install),
+    Install(#[bpaf(external(install::install))] install::Install),
     /// Uninstall installed packages from an environment
     #[bpaf(
         command,
@@ -400,20 +411,20 @@ enum LocalDevelopmentCommands {
         long("rm"),
         footer("Run 'man flox-uninstall' for more details.")
     )]
-    Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
+    Uninstall(#[bpaf(external(uninstall::uninstall))] uninstall::Uninstall),
     /// Edit declarative environment configuration file
     #[bpaf(command, footer("Run 'man flox-edit' for more details."))]
-    Edit(#[bpaf(external(environment::edit))] environment::Edit),
+    Edit(#[bpaf(external(edit::edit))] edit::Edit),
     /// List packages installed in an environment
     #[bpaf(command, footer("Run 'man flox-list' for more details."))]
-    List(#[bpaf(external(environment::list))] environment::List),
+    List(#[bpaf(external(list::list))] list::List),
     /// Delete an environment
     #[bpaf(
         command,
         long("destroy"),
         footer("Run 'man flox-delete' for more details.")
     )]
-    Delete(#[bpaf(external(environment::delete))] environment::Delete),
+    Delete(#[bpaf(external(delete::delete))] delete::Delete),
 }
 
 impl LocalDevelopmentCommands {
@@ -438,10 +449,10 @@ impl LocalDevelopmentCommands {
 enum SharingCommands {
     /// Send an environment to FloxHub
     #[bpaf(command, footer("Run 'man flox-push' for more details."))]
-    Push(#[bpaf(external(environment::push))] environment::Push),
+    Push(#[bpaf(external(push::push))] push::Push),
     /// Pull an environment from FloxHub
     #[bpaf(command, footer("Run 'man flox-pull' for more details."))]
-    Pull(#[bpaf(external(environment::pull))] environment::Pull),
+    Pull(#[bpaf(external(pull::pull))] pull::Pull),
     /// Containerize an environment
     #[bpaf(
         command,
@@ -449,8 +460,9 @@ enum SharingCommands {
         footer("Run 'man flox-containerize' for more details."),
         header("This command is experimental and its behaviour is subject to change")
     )]
-    Containerize(#[bpaf(external(environment::containerize))] environment::Containerize),
+    Containerize(#[bpaf(external(containerize::containerize))] containerize::Containerize),
 }
+
 impl SharingCommands {
     async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         match self {
@@ -470,7 +482,7 @@ enum AdditionalCommands {
     ),
     /// Update environment's base catalog or the global base catalog
     #[bpaf(command, hide, footer("Run 'man flox-update' for more details."))]
-    Update(#[bpaf(external(environment::update))] environment::Update),
+    Update(#[bpaf(external(update::update))] update::Update),
     /// Upgrade packages in an environment
     #[bpaf(command, hide, footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
         When no arguments are specified, all packages in the environment are upgraded.\n\n
@@ -485,7 +497,7 @@ enum AdditionalCommands {
         The packages in that group can be upgraded without updating any other
         groups by passing 'toplevel' as the group name.
     "}))]
-    Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
+    Upgrade(#[bpaf(external(upgrade::upgrade))] upgrade::Upgrade),
     /// View and set configuration options
     #[bpaf(command, hide, footer("Run 'man flox-config' for more details."))]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
@@ -603,7 +615,7 @@ pub enum EnvironmentSelect {
 #[derive(Debug, Error)]
 pub enum EnvironmentSelectError {
     #[error(transparent)]
-    Environment(#[from] EnvironmentError2),
+    Environment(#[from] EnvironmentError),
     #[error("Did not find an environment in the current directory.")]
     EnvNotFoundInCurrentDirectory,
     #[error(transparent)]
@@ -750,7 +762,7 @@ pub fn detect_environment(
 }
 
 /// Open an environment defined in `{path}/.flox`
-fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError2> {
+fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError> {
     DotFlox::open(path)
         .map(UninitializedEnvironment::DotFlox)?
         .into_concrete_environment(flox)
@@ -836,7 +848,7 @@ impl UninitializedEnvironment {
     pub fn into_concrete_environment(
         self,
         flox: &Flox,
-    ) -> Result<ConcreteEnvironment, EnvironmentError2> {
+    ) -> Result<ConcreteEnvironment, EnvironmentError> {
         match self {
             UninitializedEnvironment::DotFlox(dot_flox) => {
                 let dot_flox_path = dot_flox.path.join(DOT_FLOX);

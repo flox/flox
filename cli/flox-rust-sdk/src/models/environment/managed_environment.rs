@@ -16,7 +16,7 @@ use super::{
     CoreEnvironmentError,
     EditResult,
     Environment,
-    EnvironmentError2,
+    EnvironmentError,
     InstallationAttempt,
     ManagedPointer,
     UninstallationAttempt,
@@ -163,7 +163,7 @@ impl GenerationLock {
 }
 
 impl Environment for ManagedEnvironment {
-    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
+    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError> {
         let generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -178,7 +178,7 @@ impl Environment for ManagedEnvironment {
         Ok(())
     }
 
-    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2> {
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
         let generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -190,7 +190,7 @@ impl Environment for ManagedEnvironment {
         Ok(temporary.lock(flox)?)
     }
 
-    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError2> {
+    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError> {
         let generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -208,7 +208,7 @@ impl Environment for ManagedEnvironment {
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
-    ) -> Result<InstallationAttempt, EnvironmentError2> {
+    ) -> Result<InstallationAttempt, EnvironmentError> {
         let mut generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -234,7 +234,7 @@ impl Environment for ManagedEnvironment {
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<UninstallationAttempt, EnvironmentError2> {
+    ) -> Result<UninstallationAttempt, EnvironmentError> {
         let mut generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -256,7 +256,7 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2> {
+    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
         let mut generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -289,7 +289,7 @@ impl Environment for ManagedEnvironment {
         &mut self,
         flox: &Flox,
         inputs: Vec<String>,
-    ) -> Result<UpdateResult, EnvironmentError2> {
+    ) -> Result<UpdateResult, EnvironmentError> {
         let mut generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -318,7 +318,7 @@ impl Environment for ManagedEnvironment {
         &mut self,
         flox: &Flox,
         groups_or_iids: &[String],
-    ) -> Result<UpgradeResult, EnvironmentError2> {
+    ) -> Result<UpgradeResult, EnvironmentError> {
         let mut generations = self
             .generations()
             .writable(flox.temp_dir.clone())
@@ -346,7 +346,7 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Extract the current content of the manifest
-    fn manifest_content(&self, _flox: &Flox) -> Result<String, EnvironmentError2> {
+    fn manifest_content(&self, _flox: &Flox) -> Result<String, EnvironmentError> {
         let manifest = self
             .generations()
             .current_gen_manifest()
@@ -354,7 +354,7 @@ impl Environment for ManagedEnvironment {
         Ok(manifest)
     }
 
-    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         let pointer_lock_path = self.path.join(GENERATION_LOCK_FILENAME);
 
         let pointer_lock_modified_at = mtime_of(pointer_lock_path);
@@ -373,30 +373,30 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Returns .flox/cache
-    fn cache_path(&self) -> Result<PathBuf, EnvironmentError2> {
+    fn cache_path(&self) -> Result<PathBuf, EnvironmentError> {
         let cache_dir = self.path.join(CACHE_DIR_NAME);
         if !cache_dir.exists() {
-            std::fs::create_dir_all(&cache_dir).map_err(EnvironmentError2::CreateCacheDir)?;
+            std::fs::create_dir_all(&cache_dir).map_err(EnvironmentError::CreateCacheDir)?;
         }
         Ok(cache_dir)
     }
 
     /// Returns parent of .flox
-    fn project_path(&self) -> Result<PathBuf, EnvironmentError2> {
+    fn project_path(&self) -> Result<PathBuf, EnvironmentError> {
         self.parent_path()
     }
 
-    fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
+    fn parent_path(&self) -> Result<PathBuf, EnvironmentError> {
         self.path
             .parent()
-            .ok_or(EnvironmentError2::InvalidPath(self.path.to_path_buf()))
+            .ok_or(EnvironmentError::InvalidPath(self.path.to_path_buf()))
             .map(|p| p.to_path_buf())
     }
 
     /// Path to the environment definition file
     ///
     /// Path will not share a common prefix with the path returned by [`ManagedEnvironment::lockfile_path`]
-    fn manifest_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+    fn manifest_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         let path = self.get_current_generation(flox)?.manifest_path();
         Ok(path)
     }
@@ -404,7 +404,7 @@ impl Environment for ManagedEnvironment {
     /// Path to the lockfile. The path may not exist.
     ///
     /// Path will not share a common prefix with the path returned by [`ManagedEnvironment::manifest_path`]
-    fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+    fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         let path = self.get_current_generation(flox)?.lockfile_path();
         Ok(path)
     }
@@ -415,7 +415,7 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Delete the Environment
-    fn delete(self, flox: &Flox) -> Result<(), EnvironmentError2> {
+    fn delete(self, flox: &Flox) -> Result<(), EnvironmentError> {
         fs::remove_dir_all(&self.path)
             .map_err(|e| ManagedEnvironmentError::DeleteEnvironment(self.path.to_path_buf(), e))?;
 
@@ -752,7 +752,7 @@ impl ManagedEnvironment {
         &mut self,
         flox: &Flox,
         contents: String,
-    ) -> Result<Result<EditResult, CoreEnvironmentError>, EnvironmentError2> {
+    ) -> Result<Result<EditResult, CoreEnvironmentError>, EnvironmentError> {
         let mut generations = self
             .generations()
             .writable(flox.temp_dir.clone())
