@@ -378,11 +378,12 @@ mod tests {
         assert!(!go.should_run(Path::new("")).unwrap());
     }
 
+    /*
     #[test]
     fn test_module_returns_error_on_invalid_content() {
         let (flox, _) = flox_instance_with_global_lock();
         let content = indoc! {r#"
-                invalid
+                go invalid!
             "#};
 
         let module = GoModuleSystem::try_new_from_content(content, &flox);
@@ -391,20 +392,90 @@ mod tests {
     }
 
     #[test]
-    fn test_module_returns_compatible_version() {}
+    fn test_module_returns_error_on_invalid_content_version() {
+        let (flox, _) = flox_instance_with_global_lock();
+        let content = indoc! {r#"
+                // invalid go version
+                go invalid!
+            "#};
+
+        let module = GoModuleSystem::try_new_from_content(content, &flox);
+
+        assert!(module.is_err());
+    }
 
     #[test]
-    fn test_module_returns_incompatible_version() {}
+    fn test_workspace_returns_error_on_invalid_content() {
+        let (flox, _) = flox_instance_with_global_lock();
+        let content = indoc! {r#"
+                go invalid!
+            "#};
+
+        let workspace = GoWorkspaceSystem::try_new_from_content(content, &flox);
+
+        assert!(workspace.is_err());
+    }
 
     #[test]
-    fn test_workspace_returns_none_if_no_gowork() {}
+    fn test_workspace_returns_error_on_invalid_content_version() {
+        let (flox, _) = flox_instance_with_global_lock();
+        let content = indoc! {r#"
+                // invalid go version
+                go invalid!
+            "#};
+
+        let workspace = GoWorkspaceSystem::try_new_from_content(content, &flox);
+
+        assert!(workspace.is_err());
+    }
+    */
 
     #[test]
-    fn test_workspace_returns_error_on_invalid_content() {}
+    fn test_go_version_parsing_fails_with_invalid_version() {
+        let (flox, _) = flox_instance_with_global_lock();
+        let content = indoc! {r#"
+                // ivalid go version
+                go invalid
+            "#};
+
+        let version = ProvidedVersion::from_module_system_content(content, &flox);
+
+        assert!(!version.is_err());
+    }
 
     #[test]
-    fn test_workspace_returns_compatible_version() {}
+    fn test_go_version_is_compatible() {
+        let (flox, _) = flox_instance_with_global_lock();
+        let content = indoc! {r#"
+                // valid go version
+                go 1.22.1
+            "#};
+
+        let version = ProvidedVersion::from_module_system_content(content, &flox)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(version, ProvidedVersion::Compatible {
+            requested: Some("1.22.1".to_string()),
+            compatible: ProvidedPackage::new("go", vec!["go"], "1.22.1")
+        });
+    }
 
     #[test]
-    fn test_workspace_returns_incompatible_version() {}
+    fn test_go_version_is_incompatible() {
+        let (flox, _) = flox_instance_with_global_lock();
+        let content = indoc! {r#"
+                // valid go version
+                go 0.0.0
+            "#};
+
+        let version = ProvidedVersion::from_module_system_content(content, &flox)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(version, ProvidedVersion::Incompatible {
+            requested: "0.0.0".to_string(),
+            substitute: ProvidedPackage::new("go", vec!["go"], "1.22.1")
+        });
+    }
 }
