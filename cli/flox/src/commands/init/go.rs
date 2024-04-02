@@ -142,18 +142,22 @@ impl InitHook for Go {
             unreachable!();
         }
 
-        let package = PackageToInstall {
-            id: "go".to_string(),
-            pkg_path: "".to_string(),
-            version: Some("".to_string()),
-            input: None,
-        };
-
-        let profile = Some(GO_HOOK.to_string());
+        let go_version =
+            self.module_system
+                .get_system()
+                .and_then(|system| match system.get_version() {
+                    ProvidedVersion::Compatible { requested, .. } => requested,
+                    ProvidedVersion::Incompatible { .. } => None,
+                });
 
         InitCustomization {
-            profile,
-            packages: Some(vec![package]),
+            profile: Some(GO_HOOK.to_string()),
+            packages: Some(vec![PackageToInstall {
+                id: "go".to_string(),
+                pkg_path: "go".to_string(),
+                version: go_version,
+                input: None,
+            }]),
         }
     }
 }
