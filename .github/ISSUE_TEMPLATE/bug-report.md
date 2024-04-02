@@ -19,6 +19,6 @@ Expected:
 
 **Screenshots/terminal output (if relevant):**
 
-** flox Version (run `flox --version` if possible): **
+**flox Version (run `flox --version` if possible):**
 
-** `uname -a` output: **
+**`uname -a` output:**
