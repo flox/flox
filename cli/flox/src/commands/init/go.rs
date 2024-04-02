@@ -432,23 +432,22 @@ mod tests {
 
     #[test]
     fn test_go_version_parsing_fails_with_invalid_version() {
-        let (flox, _) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
-                // ivalid go version
+                // invalid go version
                 go invalid
             "#};
 
         let version = ProvidedVersion::from_module_system_content(content, &flox);
 
-        assert!(!version.is_err());
+        assert!(version.is_err());
     }
 
     #[test]
     fn test_go_version_is_compatible() {
-        let (flox, _) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
-                // valid go version
-                go 1.22.1
+                go 1.21.4
             "#};
 
         let version = ProvidedVersion::from_module_system_content(content, &flox)
@@ -456,16 +455,15 @@ mod tests {
             .unwrap();
 
         assert_eq!(version, ProvidedVersion::Compatible {
-            requested: Some("1.22.1".to_string()),
-            compatible: ProvidedPackage::new("go", vec!["go"], "1.22.1")
+            requested: Some("^1.21.4".to_string()),
+            compatible: ProvidedPackage::new("go", vec!["go"], "1.21.4")
         });
     }
 
     #[test]
     fn test_go_version_is_incompatible() {
-        let (flox, _) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
-                // valid go version
                 go 0.0.0
             "#};
 
@@ -474,8 +472,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(version, ProvidedVersion::Incompatible {
-            requested: "0.0.0".to_string(),
-            substitute: ProvidedPackage::new("go", vec!["go"], "1.22.1")
+            requested: "^0.0.0".to_string(),
+            substitute: ProvidedPackage::new("go", vec!["go"], "1.21.4")
         });
     }
 }
