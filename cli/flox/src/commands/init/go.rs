@@ -319,7 +319,7 @@ impl ProvidedVersion {
     fn get_version_string_from_content(content: &str) -> Result<Option<String>> {
         content
             .lines()
-            .skip_while(|line| (**line).trim_start().starts_with("go"))
+            .skip_while(|line| !line.trim_start().starts_with("go"))
             .next()
             .and_then(|line| line.split_whitespace().nth(1))
             .and_then(|version| {
