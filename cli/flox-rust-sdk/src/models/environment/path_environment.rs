@@ -28,7 +28,7 @@ use super::{
     CanonicalizeError,
     EditResult,
     Environment,
-    EnvironmentError2,
+    EnvironmentError,
     EnvironmentPointer,
     InstallationAttempt,
     PathPointer,
@@ -98,28 +98,26 @@ impl PathEnvironment {
         dot_flox_path: impl AsRef<Path>,
         pointer: PathPointer,
         temp_dir: impl AsRef<Path>,
-    ) -> Result<Self, EnvironmentError2> {
+    ) -> Result<Self, EnvironmentError> {
         let dot_flox_path =
             CanonicalPath::new(dot_flox_path).map_err(|CanonicalizeError { path, err }| {
-                EnvironmentError2::InvalidDotFlox {
+                EnvironmentError::InvalidDotFlox {
                     path,
                     source: Box::new(err),
                 }
             })?;
 
         if &*dot_flox_path == Path::new("/") {
-            return Err(EnvironmentError2::InvalidPath(
-                dot_flox_path.into_path_buf(),
-            ));
+            return Err(EnvironmentError::InvalidPath(dot_flox_path.into_path_buf()));
         }
 
         let env_path = dot_flox_path.join(ENV_DIR_NAME);
         if !env_path.exists() {
-            Err(EnvironmentError2::EnvDirNotFound)?;
+            Err(EnvironmentError::EnvDirNotFound)?;
         }
 
         if !env_path.join(MANIFEST_FILENAME).exists() {
-            Err(EnvironmentError2::ManifestNotFound)?
+            Err(EnvironmentError::ManifestNotFound)?
         }
 
         Ok(Self {
@@ -142,10 +140,10 @@ impl PathEnvironment {
     /// since it was last built and therefore may no longer build. Thus, the presence of
     /// this path doesn't guarantee that the current environment can be built,
     /// just that it built at some point in the past.
-    fn out_link(&self, system: &System) -> Result<PathBuf, EnvironmentError2> {
+    fn out_link(&self, system: &System) -> Result<PathBuf, EnvironmentError> {
         let run_dir = self.path.join(GCROOTS_DIR_NAME);
         if !run_dir.exists() {
-            std::fs::create_dir_all(&run_dir).map_err(EnvironmentError2::CreateGcRootDir)?;
+            std::fs::create_dir_all(&run_dir).map_err(EnvironmentError::CreateGcRootDir)?;
         }
         Ok(run_dir.join([system.clone(), self.name().to_string()].join(".")))
     }
@@ -159,22 +157,22 @@ impl PathEnvironment {
         CoreEnvironment::new(self.path.join(ENV_DIR_NAME))
     }
 
-    pub fn rename(&mut self, new_name: EnvironmentName) -> Result<(), EnvironmentError2> {
+    pub fn rename(&mut self, new_name: EnvironmentName) -> Result<(), EnvironmentError> {
         self.pointer.name = new_name;
         let pointer_content = serde_json::to_string_pretty(&self.pointer)
-            .map_err(EnvironmentError2::SerializeEnvJson)?;
+            .map_err(EnvironmentError::SerializeEnvJson)?;
 
         let mut tempfile =
-            tempfile::NamedTempFile::new_in(&self.path).map_err(EnvironmentError2::WriteEnvJson)?;
+            tempfile::NamedTempFile::new_in(&self.path).map_err(EnvironmentError::WriteEnvJson)?;
 
         tempfile
             .write_all(pointer_content.as_bytes())
-            .map_err(EnvironmentError2::WriteEnvJson)?;
+            .map_err(EnvironmentError::WriteEnvJson)?;
 
         tempfile
             .persist(self.path.join(ENVIRONMENT_POINTER_FILENAME))
             .map_err(|e| e.error)
-            .map_err(EnvironmentError2::WriteEnvJson)?;
+            .map_err(EnvironmentError::WriteEnvJson)?;
 
         Ok(())
     }
@@ -186,7 +184,7 @@ impl Environment for PathEnvironment {
     /// - Create a result link as gc-root.
     /// - Create a lockfile if one doesn't already exist, updating it with
     ///   any new packages.
-    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
+    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let store_path = env_view.build(flox)?;
         env_view.link(flox, self.out_link(&flox.system)?, &Some(store_path))?;
@@ -194,12 +192,12 @@ impl Environment for PathEnvironment {
         Ok(())
     }
 
-    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2> {
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         Ok(env_view.lock(flox)?)
     }
 
-    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError2> {
+    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let builder = env_view.build_container(flox)?;
         Ok(builder)
@@ -217,7 +215,7 @@ impl Environment for PathEnvironment {
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
-    ) -> Result<InstallationAttempt, EnvironmentError2> {
+    ) -> Result<InstallationAttempt, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.install(packages, flox)?;
         env_view.link(flox, self.out_link(&flox.system)?, &result.store_path)?;
@@ -234,7 +232,7 @@ impl Environment for PathEnvironment {
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<UninstallationAttempt, EnvironmentError2> {
+    ) -> Result<UninstallationAttempt, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.uninstall(packages, flox)?;
         env_view.link(flox, self.out_link(&flox.system)?, &result.store_path)?;
@@ -243,7 +241,7 @@ impl Environment for PathEnvironment {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2> {
+    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.edit(flox, contents)?;
         if result != EditResult::Unchanged {
@@ -257,7 +255,7 @@ impl Environment for PathEnvironment {
         &mut self,
         flox: &Flox,
         inputs: Vec<String>,
-    ) -> Result<UpdateResult, EnvironmentError2> {
+    ) -> Result<UpdateResult, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.update(flox, inputs)?;
         env_view.link(flox, self.out_link(&flox.system)?, &result.store_path)?;
@@ -270,7 +268,7 @@ impl Environment for PathEnvironment {
         &mut self,
         flox: &Flox,
         groups_or_iids: &[String],
-    ) -> Result<UpgradeResult, EnvironmentError2> {
+    ) -> Result<UpgradeResult, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         let result = env_view.upgrade(flox, groups_or_iids)?;
         env_view.link(flox, self.out_link(&flox.system)?, &result.store_path)?;
@@ -279,8 +277,8 @@ impl Environment for PathEnvironment {
     }
 
     /// Read the environment definition file as a string
-    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError2> {
-        fs::read_to_string(self.manifest_path(flox)?).map_err(EnvironmentError2::ReadManifest)
+    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError> {
+        fs::read_to_string(self.manifest_path(flox)?).map_err(EnvironmentError::ReadManifest)
     }
 
     /// Returns the environment name
@@ -289,19 +287,19 @@ impl Environment for PathEnvironment {
     }
 
     /// Delete the Environment
-    fn delete(self, _flox: &Flox) -> Result<(), EnvironmentError2> {
+    fn delete(self, _flox: &Flox) -> Result<(), EnvironmentError> {
         let dot_flox = &self.path;
         if Some(OsStr::new(".flox")) == dot_flox.file_name() {
-            std::fs::remove_dir_all(dot_flox).map_err(EnvironmentError2::DeleteEnvironment)?;
+            std::fs::remove_dir_all(dot_flox).map_err(EnvironmentError::DeleteEnvironment)?;
         } else {
-            return Err(EnvironmentError2::DotFloxNotFound(
+            return Err(EnvironmentError::DotFloxNotFound(
                 self.path.parent().unwrap_or(&self.path).to_path_buf(),
             ));
         }
         Ok(())
     }
 
-    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         let out_link = self.out_link(&flox.system)?;
 
         if self.needs_rebuild(flox)? {
@@ -312,36 +310,36 @@ impl Environment for PathEnvironment {
     }
 
     /// Returns .flox/cache
-    fn cache_path(&self) -> Result<PathBuf, EnvironmentError2> {
+    fn cache_path(&self) -> Result<PathBuf, EnvironmentError> {
         let cache_dir = self.path.join(CACHE_DIR_NAME);
         if !cache_dir.exists() {
-            std::fs::create_dir_all(&cache_dir).map_err(EnvironmentError2::CreateCacheDir)?;
+            std::fs::create_dir_all(&cache_dir).map_err(EnvironmentError::CreateCacheDir)?;
         }
         Ok(cache_dir)
     }
 
     /// Returns parent path of .flox
-    fn project_path(&self) -> Result<PathBuf, EnvironmentError2> {
+    fn project_path(&self) -> Result<PathBuf, EnvironmentError> {
         self.parent_path()
     }
 
     /// Path to the environment's parent directory
-    fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
+    fn parent_path(&self) -> Result<PathBuf, EnvironmentError> {
         let mut path = self.path.to_path_buf();
         if path.pop() {
             Ok(path)
         } else {
-            Err(EnvironmentError2::InvalidPath(path))
+            Err(EnvironmentError::InvalidPath(path))
         }
     }
 
     /// Path to the environment definition file
-    fn manifest_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+    fn manifest_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         Ok(self.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME))
     }
 
     /// Path to the lockfile. The path may not exist.
-    fn lockfile_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+    fn lockfile_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         Ok(self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME))
     }
 }
@@ -355,11 +353,11 @@ impl PathEnvironment {
         pointer: PathPointer,
         dot_flox_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
-    ) -> Result<Self, EnvironmentError2> {
+    ) -> Result<Self, EnvironmentError> {
         let dot_flox = dot_flox_path.as_ref();
         log::debug!("attempting to open .flox directory: {}", dot_flox.display());
         if !dot_flox.exists() {
-            Err(EnvironmentError2::DotFloxNotFound(
+            Err(EnvironmentError::DotFloxNotFound(
                 dot_flox.parent().unwrap_or(dot_flox).to_path_buf(),
             ))?;
         }
@@ -377,48 +375,48 @@ impl PathEnvironment {
         system: impl AsRef<str>,
         customization: &InitCustomization,
         flox: &Flox,
-    ) -> Result<Self, EnvironmentError2> {
+    ) -> Result<Self, EnvironmentError> {
         let system: &str = system.as_ref();
         match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
-            Err(EnvironmentError2::DotFloxNotFound(_)) => {},
+            Err(EnvironmentError::DotFloxNotFound(_)) => {},
             Err(e) => Err(e)?,
-            Ok(_) => Err(EnvironmentError2::EnvironmentExists(
+            Ok(_) => Err(EnvironmentError::EnvironmentExists(
                 dot_flox_parent_path.as_ref().to_path_buf(),
             ))?,
         }
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
         let env_dir = dot_flox_path.join(ENV_DIR_NAME);
         debug!("creating env dir: {}", env_dir.display());
-        std::fs::create_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
+        std::fs::create_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
         let pointer_content =
-            serde_json::to_string_pretty(&pointer).map_err(EnvironmentError2::SerializeEnvJson)?;
+            serde_json::to_string_pretty(&pointer).map_err(EnvironmentError::SerializeEnvJson)?;
         let template_path = env!("FLOX_ENV_TEMPLATE");
         debug!(
             "copying environment template from {} to {}",
             template_path,
             env_dir.display()
         );
-        copy_dir_recursive(&template_path, &env_dir, false).map_err(EnvironmentError2::InitEnv)?;
+        copy_dir_recursive(&template_path, &env_dir, false).map_err(EnvironmentError::InitEnv)?;
         let manifest_path = env_dir.join(MANIFEST_FILENAME);
         debug!(
             "replacing placeholder system in manifest: path={}, system={}",
             manifest_path.display(),
             system
         );
-        let contents = fs::read_to_string(&manifest_path).map_err(EnvironmentError2::ReadManifest);
+        let contents = fs::read_to_string(&manifest_path).map_err(EnvironmentError::ReadManifest);
         if let Err(e) = contents {
             debug!("couldn't open manifest to replace placeholder system");
-            fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
+            fs::remove_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
             return Err(e);
         }
 
         let replaced = Self::replace_placeholders(&contents.unwrap(), system, customization);
 
         let write_res =
-            fs::write(&manifest_path, replaced).map_err(EnvironmentError2::WriteManifest);
+            fs::write(&manifest_path, replaced).map_err(EnvironmentError::WriteManifest);
         if let Err(e) = write_res {
             debug!("overwriting manifest did not complete successfully");
-            fs::remove_dir_all(&env_dir).map_err(EnvironmentError2::InitEnv)?;
+            fs::remove_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
             return Err(e);
         }
 
@@ -427,8 +425,8 @@ impl PathEnvironment {
             dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
             pointer_content,
         ) {
-            fs::remove_dir_all(env_dir).map_err(EnvironmentError2::InitEnv)?;
-            Err(EnvironmentError2::WriteEnvJson(e))?;
+            fs::remove_dir_all(env_dir).map_err(EnvironmentError::InitEnv)?;
+            Err(EnvironmentError::WriteEnvJson(e))?;
         }
 
         // write "run" and "cache" to .flox/.gitignore
@@ -436,7 +434,7 @@ impl PathEnvironment {
             {GCROOTS_DIR_NAME}/
             {CACHE_DIR_NAME}/
             "})
-        .map_err(EnvironmentError2::WriteGitignore)?;
+        .map_err(EnvironmentError::WriteGitignore)?;
 
         let mut environment = Self::open(pointer, dot_flox_path, temp_dir)?;
 
@@ -518,7 +516,7 @@ impl PathEnvironment {
     /// the modification time of the manifest will change triggering a rebuild although nothing changed.
     ///
     /// Similarly, if any adjacent files are modified, the environment will not be rebuilt.
-    fn needs_rebuild(&self, flox: &Flox) -> Result<bool, EnvironmentError2> {
+    fn needs_rebuild(&self, flox: &Flox) -> Result<bool, EnvironmentError> {
         let manifest_modified_at = mtime_of(self.manifest_path(flox)?);
         let out_link_modified_at = mtime_of(self.out_link(&flox.system)?);
 
@@ -550,7 +548,7 @@ mod tests {
         );
 
         assert!(
-            matches!(before, Err(EnvironmentError2::EnvDirNotFound)),
+            matches!(before, Err(EnvironmentError::EnvDirNotFound)),
             "{before:?}"
         );
 

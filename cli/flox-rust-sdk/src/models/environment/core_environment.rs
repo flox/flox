@@ -576,7 +576,7 @@ impl CoreEnvironment<ReadOnly> {
 /// This is not public to enforce that environments are only edited atomically.
 impl CoreEnvironment<ReadWrite> {
     /// Updates the environment manifest with the provided contents
-    fn update_manifest(&mut self, contents: &impl AsRef<str>) -> Result<(), CoreEnvironmentError> {
+    fn update_manifest(&mut self, contents: impl AsRef<str>) -> Result<(), CoreEnvironmentError> {
         debug!("writing new manifest to {}", self.manifest_path().display());
         let mut manifest_file = std::fs::OpenOptions::new()
             .write(true)
@@ -590,7 +590,7 @@ impl CoreEnvironment<ReadWrite> {
     }
 
     /// Updates the environment lockfile with the provided contents
-    fn update_lockfile(&mut self, contents: &impl AsRef<str>) -> Result<(), CoreEnvironmentError> {
+    fn update_lockfile(&mut self, contents: impl AsRef<str>) -> Result<(), CoreEnvironmentError> {
         debug!("writing lockfile to {}", self.lockfile_path().display());
         std::fs::write(self.lockfile_path(), contents.as_ref())
             .map_err(CoreEnvironmentError::WriteLockfile)?;
@@ -709,7 +709,7 @@ impl CoreEnvironmentError {
                     exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
                     ..
                 })
-            ),)
+            ))
         )
     }
 
@@ -742,14 +742,42 @@ impl CoreEnvironmentError {
     }
 }
 
+pub mod test_helpers {
+    use indoc::indoc;
+
+    use super::*;
+    use crate::flox::Flox;
+
+    #[cfg(target_os = "macos")]
+    pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
+        [options]
+        systems = ["x86_64-linux"]
+        "#};
+
+    #[cfg(target_os = "linux")]
+    pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
+        [options]
+        systems = ["aarch64-darwin"]
+        "#};
+
+    pub fn new_core_environment(flox: &Flox, contents: &str) -> CoreEnvironment {
+        let env_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
+        fs::write(env_path.join(MANIFEST_FILENAME), contents).unwrap();
+
+        CoreEnvironment::new(&env_path)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
 
-    use indoc::formatdoc;
+    use indoc::{formatdoc, indoc};
     use serial_test::serial;
     use tempfile::{tempdir_in, TempDir};
+    use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
 
+    use self::test_helpers::new_core_environment;
     use super::*;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_global_lock};
 
@@ -760,10 +788,7 @@ mod tests {
     fn empty_core_environment() -> (CoreEnvironment, Flox, TempDir) {
         let (flox, tempdir) = flox_instance_with_global_lock();
 
-        let env_path = tempfile::tempdir_in(&tempdir).unwrap().into_path();
-        fs::write(env_path.join(MANIFEST_FILENAME), "").unwrap();
-
-        (CoreEnvironment::new(&env_path), flox, tempdir)
+        (new_core_environment(&flox, ""), flox, tempdir)
     }
 
     /// Check that `edit` updates the manifest and creates a lockfile
@@ -805,23 +830,13 @@ mod tests {
     #[test]
     #[serial]
     fn build_incompatible_system() {
-        #[cfg(target_os = "macos")]
-        let manifest_contents = formatdoc! {r#"
-        [options]
-        systems = ["x86_64-linux"]
-        "#};
-
-        #[cfg(target_os = "linux")]
-        let manifest_contents = formatdoc! {r#"
-        [options]
-        systems = ["aarch64-darwin"]
-        "#};
-
         let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
         let mut temp_env = env_view
             .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
             .unwrap();
-        temp_env.update_manifest(&manifest_contents).unwrap();
+        temp_env
+            .update_manifest(MANIFEST_INCOMPATIBLE_SYSTEM)
+            .unwrap();
         env_view.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 
@@ -876,6 +891,29 @@ mod tests {
             .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
             .unwrap();
         temp_env.update_manifest(&manifest_contents).unwrap();
+        env_view.lock(&flox).unwrap();
+        env_view.replace_with(temp_env).unwrap();
+
+        let result = env_view.build(&flox).unwrap_err();
+
+        assert!(result.is_incompatible_package_error());
+    }
+
+    /// Trying to build a manifest with an insecure package results in an error
+    /// that is_incompatible_package_error()
+    #[test]
+    #[serial]
+    fn build_insecure_package() {
+        let manifest_content = indoc! {r#"
+            [install]
+            python2.pkg-path = "python2"
+            "#
+        };
+        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+        let mut temp_env = env_view
+            .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
+            .unwrap();
+        temp_env.update_manifest(manifest_content).unwrap();
         env_view.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 

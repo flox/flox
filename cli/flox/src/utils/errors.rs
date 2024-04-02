@@ -6,7 +6,7 @@ use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentErr
 use flox_rust_sdk::models::environment::{
     CanonicalizeError,
     CoreEnvironmentError,
-    EnvironmentError2,
+    EnvironmentError,
     ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::lockfile::LockedManifestError;
@@ -16,8 +16,8 @@ use log::{debug, trace};
 
 /// Convert to an error variant that directs the user to the docs if the provided error is
 /// due to a package not being supported on the current system.
-pub fn apply_doc_link_for_unsupported_packages(err: EnvironmentError2) -> EnvironmentError2 {
-    if let EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+pub fn apply_doc_link_for_unsupported_packages(err: EnvironmentError) -> EnvironmentError {
+    if let EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
         LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
             exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
             category_message,
@@ -26,7 +26,7 @@ pub fn apply_doc_link_for_unsupported_packages(err: EnvironmentError2) -> Enviro
     )) = err
     {
         debug!("incompatible package, directing user to docs");
-        EnvironmentError2::Core(CoreEnvironmentError::LockedManifest(
+        EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
             LockedManifestError::UnsupportedPackageWithDocLink(CallPkgDbError::PkgDbError(
                 PkgDbError {
                     exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
@@ -41,14 +41,14 @@ pub fn apply_doc_link_for_unsupported_packages(err: EnvironmentError2) -> Enviro
     }
 }
 
-pub fn format_error(err: &EnvironmentError2) -> String {
+pub fn format_error(err: &EnvironmentError) -> String {
     trace!("formatting environment_error: {err:?}");
 
     match err {
-        EnvironmentError2::DotFloxNotFound(_) => display_chain(err),
+        EnvironmentError::DotFloxNotFound(_) => display_chain(err),
 
         // todo: enrich with a path?
-        EnvironmentError2::EnvDirNotFound => formatdoc! {"
+        EnvironmentError::EnvDirNotFound => formatdoc! {"
             Found a '.flox' directory but unable to locate an environment directory.
 
             This is likely due to a corrupt environment.
@@ -58,7 +58,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
             `.flox/env/maifest.toml` is commited to the version control system.
         "},
         // todo: enrich with a path?
-        EnvironmentError2::EnvPointerNotFound => formatdoc! {"
+        EnvironmentError::EnvPointerNotFound => formatdoc! {"
             Found a '.flox' directory but unable to locate an 'env.json' in it.
 
             This is likely due to a corrupt environment.
@@ -69,7 +69,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
         "},
 
         // todo: enrich with a path?
-        EnvironmentError2::ManifestNotFound => formatdoc! {"
+        EnvironmentError::ManifestNotFound => formatdoc! {"
             Found a '.flox' directory but unable to locate a manifest file.
 
             This is likely due to a corrupt environment.
@@ -81,7 +81,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
 
         // todo: enrich with a path?
         // see also the notes on [EnvironmentError2::InitEnv]
-        EnvironmentError2::InitEnv(err) => formatdoc! {"
+        EnvironmentError::InitEnv(err) => formatdoc! {"
             Failed to initialize environment.
             Could not prepare a '.flox' directory: {err}
 
@@ -89,7 +89,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
         "},
 
         // todo: update when we implement `flox init --force`
-        EnvironmentError2::EnvironmentExists(path) => formatdoc! {"
+        EnvironmentError::EnvironmentExists(path) => formatdoc! {"
             Found an existing environment at {path:?}.
 
             Please initialize a new environment in a different directory.
@@ -100,10 +100,10 @@ pub fn format_error(err: &EnvironmentError2) -> String {
 
         // This should rarely happen.
         // At this point we already proved that we can write to the directory.
-        EnvironmentError2::WriteGitignore(_) => display_chain(err),
+        EnvironmentError::WriteGitignore(_) => display_chain(err),
 
         // todo: enrich with a path?
-        EnvironmentError2::ReadEnvironmentMetadata(error) => formatdoc! {"
+        EnvironmentError::ReadEnvironmentMetadata(error) => formatdoc! {"
             Failed to read environment metadata: {error}
 
             This is likely due to a corrupt environment.
@@ -119,7 +119,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
         //   * new version of the file format and we don't support it yet
         //     or not anymore with the current version of flox
         //     (this should be catched earlier but you never know...)
-        EnvironmentError2::ParseEnvJson(error) => formatdoc! {"
+        EnvironmentError::ParseEnvJson(error) => formatdoc! {"
             Failed to parse environment metadata: {error}
 
             This is likely due to a corrupt environment.
@@ -132,21 +132,21 @@ pub fn format_error(err: &EnvironmentError2) -> String {
         // the user can likely not do anything about it
         // todo: add a note to user to report this as a bug?
         // todo: enrich with path
-        EnvironmentError2::SerializeEnvJson(_) => display_chain(err),
-        EnvironmentError2::WriteEnvJson(error) => formatdoc! {"
+        EnvironmentError::SerializeEnvJson(_) => display_chain(err),
+        EnvironmentError::WriteEnvJson(error) => formatdoc! {"
             Failed to write environment metadata: {error}
 
             Please ensure that you have write permissions to write '.flox/env.json'.
         "},
 
         // todo: enrich with global manifest path
-        EnvironmentError2::InitGlobalManifest(err) => formatdoc! {"
+        EnvironmentError::InitGlobalManifest(err) => formatdoc! {"
             Failed to initialize global manifest: {err}
 
             Please ensure that you have write permissions
             to write '~/.config/flox/global-manifest.toml'.
         "},
-        EnvironmentError2::ReadGlobalManifestTemplate(err) => formatdoc! {"
+        EnvironmentError::ReadGlobalManifestTemplate(err) => formatdoc! {"
             Failed to read global manifest template: {err}
 
             Please ensure that you have read permissions
@@ -154,20 +154,20 @@ pub fn format_error(err: &EnvironmentError2) -> String {
         "},
         // todo: where in the control flow does this happen?
         //       do we want a separate error type for this (likely)
-        EnvironmentError2::StartDiscoveryDir(CanonicalizeError { path, err }) => formatdoc! {"
+        EnvironmentError::StartDiscoveryDir(CanonicalizeError { path, err }) => formatdoc! {"
             Failed to start discovery for flox environments in {path:?}: {err}
 
             Please ensure that the path exists and that you have read permissions.
         "},
         // unreachable when using the cli
-        EnvironmentError2::InvalidPath(_) => display_chain(err),
+        EnvironmentError::InvalidPath(_) => display_chain(err),
 
         // todo: where in the control flow does this happen?
         //       do we want a separate error type for this (likely)
         // Its also a somewhat weird to downcast to this error type
         // better to separate this into a separate error types.
-        EnvironmentError2::InvalidDotFlox { path, source } => {
-            let source = if let Some(source) = source.downcast_ref::<EnvironmentError2>() {
+        EnvironmentError::InvalidDotFlox { path, source } => {
+            let source = if let Some(source) = source.downcast_ref::<EnvironmentError>() {
                 format_error(source)
             } else {
                 display_chain(&**source)
@@ -181,19 +181,19 @@ pub fn format_error(err: &EnvironmentError2) -> String {
             "}
         },
         // todo: how to surface these internal errors?
-        EnvironmentError2::DiscoverGitDirectory(_) => formatdoc! {"
+        EnvironmentError::DiscoverGitDirectory(_) => formatdoc! {"
             Failed to discover git directory.
 
             See the run again with `--verbose` for more information.
         "},
         // todo: enrich with path
-        EnvironmentError2::DeleteEnvironment(err) => formatdoc! {"
+        EnvironmentError::DeleteEnvironment(err) => formatdoc! {"
             Failed to delete environment .flox directory: {err}
 
             Try manually deleting the '.flox' directory.
         "},
         // todo: enrich with path
-        EnvironmentError2::ReadManifest(err) => formatdoc! {"
+        EnvironmentError::ReadManifest(err) => formatdoc! {"
             Failed to read manifest: {err}
 
             Please make sure that '.flox/env/manifest.toml' exists
@@ -201,7 +201,7 @@ pub fn format_error(err: &EnvironmentError2) -> String {
         "},
 
         // todo: enrich with path
-        EnvironmentError2::WriteManifest(err) => formatdoc! {"
+        EnvironmentError::WriteManifest(err) => formatdoc! {"
             Failed to write manifest: {err}
 
             Please make sure that '.flox/env/manifest.toml' exists
@@ -209,14 +209,14 @@ pub fn format_error(err: &EnvironmentError2) -> String {
         "},
 
         // todo: enrich with path
-        EnvironmentError2::CreateGcRootDir(err) => format! {"
+        EnvironmentError::CreateGcRootDir(err) => format! {"
             Failed to create '.flox/run' directory: {err}
 
             Please make sure that you have write permissions to '.flox'.
         "},
-        EnvironmentError2::Core(core_error) => format_core_error(core_error),
-        EnvironmentError2::ManagedEnvironment(managed_error) => format_managed_error(managed_error),
-        EnvironmentError2::RemoteEnvironment(remote_error) => format_remote_error(remote_error),
+        EnvironmentError::Core(core_error) => format_core_error(core_error),
+        EnvironmentError::ManagedEnvironment(managed_error) => format_managed_error(managed_error),
+        EnvironmentError::RemoteEnvironment(remote_error) => format_remote_error(remote_error),
         _ => display_chain(err),
     }
 }
