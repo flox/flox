@@ -37,16 +37,16 @@ const GO_HOOK: &str = indoc! {"
 /// - [Self::new]: Detects [GoModuleSystem] files in the current working directory.
 /// - [Self::should_run]: Returns whether a valid module system was detected
 ///   in the current working directory, i.e. `false` if the [Self::module_system]
-///   is [GoModuleSystemKind::None], else returns `true`.
+///   is [None], else returns `true`.
 /// - [Self::prompt_user]: Prints the customization from [Self::get_init_customization]
 ///   if user commands to do so. Else, return true or false based on whether
 ///   the user wants the customization.
 /// - [Self::get_init_customization]: Returns a customization based on [Self::module_system].
 pub(super) struct Go {
-    /// Stores the customization values required to generate a customization with
+    /// Stores the version required to generate a customization with
     /// [Self::get_init_customization].
     /// Is initialized in [Self::new].
-    module_system: GoModuleSystemKind,
+    module_system: Option<GoModuleSystemKind>,
 }
 
 impl Go {
@@ -60,16 +60,16 @@ impl Go {
     /// Determines which [GoModuleSystemKind] is being used.
     /// Since the [GO_WORK_FILENAME] file declares a multiple module based workspace, it takes
     /// precedence over any other [GO_MOD_FILENAME] file that could possibly be found.
-    fn detect_module_system(path: &Path, flox: &Flox) -> Result<GoModuleSystemKind> {
+    fn detect_module_system(path: &Path, flox: &Flox) -> Result<Option<GoModuleSystemKind>> {
         if let Some(go_work) = GoWorkspaceSystem::try_new_from_path(path, flox)? {
-            return Ok(GoModuleSystemKind::Workspace(go_work));
+            return Ok(Some(GoModuleSystemKind::Workspace(go_work)));
         }
 
         if let Some(go_mod) = GoModuleSystem::try_new_from_path(path, flox)? {
-            return Ok(GoModuleSystemKind::Module(go_mod));
+            return Ok(Some(GoModuleSystemKind::Module(go_mod)));
         }
 
-        Ok(GoModuleSystemKind::None)
+        Ok(None)
     }
 }
 
@@ -79,15 +79,22 @@ impl InitHook for Go {
     /// [Self::prompt_user] and [Self::get_init_customization]
     /// are expected to be called only if this method returns `true`!
     fn should_run(&mut self, _path: &Path) -> Result<bool> {
-        Ok(self.module_system != GoModuleSystemKind::None)
+        Ok(self.module_system.is_some())
     }
 
     /// Returns `true` if the user accepts the prompt. In that case,
     /// the hook customizes the manifest with the default Go environment.
     fn prompt_user(&mut self, _path: &Path, _flox: &Flox) -> Result<bool> {
-        let Some(module_system) = self.module_system.get_system() else {
-            unreachable!();
-        };
+        let module_system = &mut self
+            .module_system
+            .as_ref()
+            .map(|module_system| module_system.get_system())
+            .unwrap_or_else(|| {
+                unreachable!(
+                    "called `prompt_user` without `should_run` called or \
+                        having returned `false`"
+                )
+            });
 
         message::plain(formatdoc! {"
             Flox detected a {} file in the current directory.
@@ -138,20 +145,18 @@ impl InitHook for Go {
         }
     }
 
-    /// Returns an [InitCustomization] with the customization of the detected Go module system.
+    /// Returns an [InitCustomization] with the customization of the detected Go
+    /// module system.
     /// This method will panic if no module system was detected, or if it was corrupted.
     fn get_init_customization(&self) -> InitCustomization {
-        if self.module_system == GoModuleSystemKind::None {
-            unreachable!();
-        }
-
-        let go_version =
-            self.module_system
-                .get_system()
-                .and_then(|system| match system.get_version() {
-                    ProvidedVersion::Compatible { requested, .. } => requested,
-                    ProvidedVersion::Incompatible { .. } => None,
-                });
+        let go_version = self
+            .module_system
+            .as_ref()
+            .map(|sys| sys.get_system())
+            .and_then(|system| match system.get_version() {
+                ProvidedVersion::Compatible { requested, .. } => requested,
+                ProvidedVersion::Incompatible { .. } => None,
+            });
 
         InitCustomization {
             profile: Some(GO_HOOK.to_string()),
@@ -168,8 +173,6 @@ impl InitHook for Go {
 /// Represents Go module system files.
 #[derive(PartialEq)]
 enum GoModuleSystemKind {
-    /// Not a Go module system, or just nothing at all.
-    None,
     /// Single module based system [GoModuleSystem].
     Module(GoModuleSystem),
     /// Workspace system [GoWorkspaceSystem].
@@ -179,11 +182,10 @@ enum GoModuleSystemKind {
 impl GoModuleSystemKind {
     /// Resolves the enum as an option for either [GoModuleSystemKind::None] and
     /// any other valid Go module system.
-    fn get_system(&self) -> Option<&dyn GoModuleSystemMode> {
+    fn get_system(&self) -> &dyn GoModuleSystemMode {
         match self {
-            GoModuleSystemKind::Workspace(workspace) => Some(workspace),
-            GoModuleSystemKind::Module(module) => Some(module),
-            GoModuleSystemKind::None => None,
+            GoModuleSystemKind::Workspace(workspace) => workspace,
+            GoModuleSystemKind::Module(module) => module,
         }
     }
 }
@@ -351,12 +353,12 @@ mod tests {
     #[test]
     fn test_should_run_returns_true_on_valid_module() {
         let mut go = Go {
-            module_system: GoModuleSystemKind::Module(GoModuleSystem {
+            module_system: Some(GoModuleSystemKind::Module(GoModuleSystem {
                 version: ProvidedVersion::Compatible {
                     requested: None,
                     compatible: ProvidedPackage::new("go", vec!["go"], "1.22.1"),
                 },
-            }),
+            })),
         };
         assert!(go.should_run(Path::new("")).unwrap());
     }
@@ -364,12 +366,12 @@ mod tests {
     #[test]
     fn test_should_run_returns_true_on_valid_workspace() {
         let mut go = Go {
-            module_system: GoModuleSystemKind::Workspace(GoWorkspaceSystem {
+            module_system: Some(GoModuleSystemKind::Workspace(GoWorkspaceSystem {
                 version: ProvidedVersion::Compatible {
                     requested: None,
                     compatible: ProvidedPackage::new("go", vec!["go"], "1.22.1"),
                 },
-            }),
+            })),
         };
         assert!(go.should_run(Path::new("")).unwrap());
     }
@@ -377,7 +379,7 @@ mod tests {
     #[test]
     fn test_should_run_returns_false_on_none_system() {
         let mut go = Go {
-            module_system: GoModuleSystemKind::None,
+            module_system: None,
         };
         assert!(!go.should_run(Path::new("")).unwrap());
     }
