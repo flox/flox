@@ -1,6 +1,5 @@
+// Example go workspace file
 go 1.21.0
-
-use ../module
 
 use (
 	.
