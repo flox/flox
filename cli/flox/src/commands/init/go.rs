@@ -24,6 +24,9 @@ const GO_MOD_FILENAME: &str = "go.mod";
 const GO_WORK_FILENAME: &str = "go.work";
 
 const GO_HOOK: &str = indoc! {"
+    # Point GOENV to Flox environment cache
+    export GOENV=\"$FLOX_ENV_CACHE/goenv\"
+
     # Install Go depedencies
     go get ."
 };
