@@ -225,7 +225,7 @@ impl GoModuleSystemMode for GoModuleSystem {
     /// This method should return `true` when there isn't any valid `go` versioning
     /// statements inside the module content.
     fn try_new_from_content(module_content: &str, flox: &Flox) -> Result<Option<Self>> {
-        match ProvidedVersion::from_module_system_content(module_content, flox)? {
+        match GoVersion::from_content(module_content, flox)? {
             Some(version) => Ok(Some(Self { version })),
             None => Ok(None),
         }
@@ -262,7 +262,7 @@ struct GoWorkspaceSystem {
 /// Represents the functionality for the multi-module workspace mode.
 impl GoModuleSystemMode for GoWorkspaceSystem {
     fn try_new_from_content(workspace_content: &str, flox: &Flox) -> Result<Option<Self>> {
-        match ProvidedVersion::from_module_system_content(workspace_content, flox)? {
+        match GoVersion::from_content(workspace_content, flox)? {
             Some(version) => Ok(Some(Self { version })),
             None => Ok(None),
         }
@@ -289,10 +289,11 @@ impl GoModuleSystemMode for GoWorkspaceSystem {
     }
 }
 
-impl ProvidedVersion {
-    fn from_module_system_content(content: &str, flox: &Flox) -> Result<Option<Self>> {
-        let Some(required_go_version) = ProvidedVersion::get_version_string_from_content(content)?
-        else {
+struct GoVersion;
+
+impl GoVersion {
+    fn from_content(content: &str, flox: &Flox) -> Result<Option<ProvidedVersion>> {
+        let Some(required_go_version) = Self::parse_content_version_string(content)? else {
             return Ok(None);
         };
 
@@ -305,7 +306,7 @@ impl ProvidedVersion {
                 return Ok(None);
             };
 
-            return Ok(Some(Self::Compatible {
+            return Ok(Some(ProvidedVersion::Compatible {
                 requested: Some(required_go_version),
                 compatible: found_go_version,
             }));
@@ -317,13 +318,13 @@ impl ProvidedVersion {
             return Ok(None);
         };
 
-        Ok(Some(Self::Incompatible {
+        Ok(Some(ProvidedVersion::Incompatible {
             requested: required_go_version,
             substitute: substitute_go_version,
         }))
     }
 
-    fn get_version_string_from_content(content: &str) -> Result<Option<String>> {
+    fn parse_content_version_string(content: &str) -> Result<Option<String>> {
         content
             .lines()
             .skip_while(|line| !line.trim_start().starts_with("go"))
@@ -441,7 +442,7 @@ mod tests {
                 go invalid
             "#};
 
-        let version = ProvidedVersion::from_module_system_content(content, &flox);
+        let version = GoVersion::from_content(content, &flox);
 
         assert!(version.is_err());
     }
@@ -453,9 +454,7 @@ mod tests {
                 go 1.21.4
             "#};
 
-        let version = ProvidedVersion::from_module_system_content(content, &flox)
-            .unwrap()
-            .unwrap();
+        let version = GoVersion::from_content(content, &flox).unwrap().unwrap();
 
         assert_eq!(version, ProvidedVersion::Compatible {
             requested: Some("^1.21.4".to_string()),
@@ -470,9 +469,7 @@ mod tests {
                 go 0.0.0
             "#};
 
-        let version = ProvidedVersion::from_module_system_content(content, &flox)
-            .unwrap()
-            .unwrap();
+        let version = GoVersion::from_content(content, &flox).unwrap().unwrap();
 
         assert_eq!(version, ProvidedVersion::Incompatible {
             requested: "^0.0.0".to_string(),
