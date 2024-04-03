@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::fs;
 use std::path::Path;
 
@@ -101,7 +100,8 @@ impl InitHook for Go {
 
             Go projects typically need:
             * Go
-            * A shell hook to apply environment variables\n
+            * A shell hook to apply environment variables
+
         ", module_system.get_filename()});
 
         let message = formatdoc! {"
@@ -140,14 +140,13 @@ impl InitHook for Go {
                 show_environment if show_environment < n_options => {
                     message::plain(format_customization(&self.get_init_customization())?);
                 },
-                _ => unreachable!(),
+                _ => unreachable!("Option selection is out of valid option bounds"),
             }
         }
     }
 
     /// Returns an [InitCustomization] with the customization of the detected Go
     /// module system.
-    /// This method will panic if no module system was detected, or if it was corrupted.
     fn get_init_customization(&self) -> InitCustomization {
         let go_version = self
             .module_system
@@ -199,6 +198,7 @@ trait GoModuleSystemMode {
     fn try_new_from_content(module_content: &str, flox: &Flox) -> Result<Option<Self>>
     where
         Self: Sized;
+
     /// Detects and returns the possible instance of a Go module or workspace system
     /// from a given filesystem path. If the detected system inside is a directory,
     /// it must be rejected and return `None`.
@@ -208,7 +208,8 @@ trait GoModuleSystemMode {
 
     /// Returns the filename of the module system mode. It can either be `go.mod`
     /// (for single module systems) or `go.work` (for multi-module workspace systems).
-    fn get_filename(&self) -> Cow<'static, str>;
+    fn get_filename(&self) -> &'static str;
+
     /// Returns the provided version obtained from the module system file.
     fn get_version(&self) -> ProvidedVersion;
 }
@@ -245,7 +246,7 @@ impl GoModuleSystemMode for GoModuleSystem {
     }
 
     #[inline(always)]
-    fn get_filename(&self) -> Cow<'static, str> {
+    fn get_filename(&self) -> &'static str {
         GO_MOD_FILENAME.into()
     }
 
@@ -282,7 +283,7 @@ impl GoModuleSystemMode for GoWorkspaceSystem {
     }
 
     #[inline(always)]
-    fn get_filename(&self) -> Cow<'static, str> {
+    fn get_filename(&self) -> &'static str {
         GO_WORK_FILENAME.into()
     }
 
