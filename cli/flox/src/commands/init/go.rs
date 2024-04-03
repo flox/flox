@@ -382,58 +382,6 @@ mod tests {
         assert!(!go.should_run(Path::new("")).unwrap());
     }
 
-    /*
-    #[test]
-    fn test_module_returns_error_on_invalid_content() {
-        let (flox, _) = flox_instance_with_global_lock();
-        let content = indoc! {r#"
-                go invalid!
-            "#};
-
-        let module = GoModuleSystem::try_new_from_content(content, &flox);
-
-        assert!(module.is_err());
-    }
-
-    #[test]
-    fn test_module_returns_error_on_invalid_content_version() {
-        let (flox, _) = flox_instance_with_global_lock();
-        let content = indoc! {r#"
-                // invalid go version
-                go invalid!
-            "#};
-
-        let module = GoModuleSystem::try_new_from_content(content, &flox);
-
-        assert!(module.is_err());
-    }
-
-    #[test]
-    fn test_workspace_returns_error_on_invalid_content() {
-        let (flox, _) = flox_instance_with_global_lock();
-        let content = indoc! {r#"
-                go invalid!
-            "#};
-
-        let workspace = GoWorkspaceSystem::try_new_from_content(content, &flox);
-
-        assert!(workspace.is_err());
-    }
-
-    #[test]
-    fn test_workspace_returns_error_on_invalid_content_version() {
-        let (flox, _) = flox_instance_with_global_lock();
-        let content = indoc! {r#"
-                // invalid go version
-                go invalid!
-            "#};
-
-        let workspace = GoWorkspaceSystem::try_new_from_content(content, &flox);
-
-        assert!(workspace.is_err());
-    }
-    */
-
     #[test]
     fn test_go_version_parsing_fails_with_invalid_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
