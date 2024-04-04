@@ -32,18 +32,17 @@ const GO_HOOK: &str = indoc! {"
 /// The Go hook handles installation and configuration suggestions for projects using Go.
 /// The general flow of the Go hook is:
 ///
-/// - [Self::new]: Detects [GoModuleSystem] files in the current working directory.
-/// - [Self::should_run]: Returns whether a valid module system was detected
-///   in the current working directory, i.e. `false` if the [Self::module_system]
+/// - [Self::new]: Detects files of type [GoModuleSystemKind] in the current working directory.
+/// - [Self::should_run]: Returns whether a valid module system containing a compatible version
+///   was detected in the current working directory, i.e. `false` if the [Self::module_system]
 ///   is [None], else returns `true`.
 /// - [Self::prompt_user]: Prints the customization from [Self::get_init_customization]
-///   if user commands to do so. Else, return true or false based on whether
-///   the user wants the customization.
-/// - [Self::get_init_customization]: Returns a customization based on [Self::module_system].
+///   if user commands to do so. Else, return `true` or `false` based on whether
+///   the user desires or not the presented customization.
+/// - [Self::get_init_customization]: Returns a Go specific customization based on [Self::module_system].
 pub(super) struct Go {
-    /// Stores the version required to generate a customization with
-    /// [Self::get_init_customization].
-    /// Is initialized in [Self::new].
+    /// Stores the version required to generate a customization with [Self::get_init_customization].
+    /// Becomes initialized in [Self::new].
     module_system: Option<GoModuleSystemKind>,
 }
 
@@ -144,8 +143,8 @@ impl InitHook for Go {
         }
     }
 
-    /// Returns an [InitCustomization] with the customization of the detected Go
-    /// module system.
+    /// Returns an [InitCustomization] with the customization associated to the Go
+    /// module system detected.
     fn get_init_customization(&self) -> InitCustomization {
         let go_version = self
             .module_system
@@ -174,15 +173,14 @@ impl InitHook for Go {
 /// Represents Go module system files.
 #[derive(PartialEq)]
 enum GoModuleSystemKind {
-    /// Single module based system [GoModuleSystem].
+    /// Single module based system [GoModSystem].
     Module(GoModSystem),
-    /// Workspace system [GoWorkspaceSystem].
+    /// Workspace system [GoWorkSystem].
     Workspace(GoWorkSystem),
 }
 
 impl GoModuleSystemKind {
-    /// Resolves the enum as an option for either [GoModuleSystemKind::None] and
-    /// any other valid Go module system.
+    /// Resolves the enum to any of the contained Go module systems.
     fn get_system(&self) -> &dyn GoModuleSystemMode {
         match self {
             GoModuleSystemKind::Workspace(workspace) => workspace,
@@ -294,9 +292,13 @@ impl GoModuleSystemMode for GoWorkSystem {
     }
 }
 
+/// Represents a scoped implementation of version related functionality that
+/// parses and encapsulate raw versions into [ProvidedVersion] objects.
 struct GoVersion;
 
 impl GoVersion {
+    /// Returns the version contained in the content of a Go module system file
+    /// as a [ProvidedVersion].
     fn from_content(flox: &Flox, content: &str) -> Result<Option<ProvidedVersion>> {
         let Some(required_go_version) = Self::parse_content_version_string(content)? else {
             return Ok(None);
@@ -318,6 +320,7 @@ impl GoVersion {
         Ok(None)
     }
 
+    /// Parses the content of a Go module system file and returns the version as a [String].
     fn parse_content_version_string(content: &str) -> Result<Option<String>> {
         content
             .lines()
