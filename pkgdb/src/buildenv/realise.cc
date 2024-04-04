@@ -80,13 +80,9 @@ then
 fi
 
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
-  declare -a _prof_scripts;
-  _prof_scripts=( $(
-    shopt -s nullglob;
-    echo "$FLOX_ENV/etc/profile.d"/*.sh;
-  ) );
-  for p in "${_prof_scripts[@]}"; do . "$p"; done
-  unset _prof_scripts;
+  while IFS= read -r -d '' profile_script; do
+    . "$profile_script"
+  done < <(find "$FLOX_ENV/etc/profile.d" -name '*.sh' -print0)
 fi
 
 # Disable command hashing to allow for newly installed flox packages to be found
@@ -98,12 +94,9 @@ set +h
 // unlike bash, zsh activation calls this script from the user's shell rcfile
 const char * const ZSH_ACTIVATE_SCRIPT = R"(
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
-  declare -a _prof_scripts;
-  _prof_scripts=( $(
-    echo "$FLOX_ENV/etc/profile.d"/*.sh;
-  ) );
-  for p in "${_prof_scripts[@]}"; do . "$p"; done
-  unset _prof_scripts;
+  while IFS= read -r -d '' profile_script; do
+    . "$profile_script"
+  done < <(find "$FLOX_ENV/etc/profile.d" -name '*.sh' -print0)
 fi
 
 # Disable command hashing to allow for newly installed flox packages to be found

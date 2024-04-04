@@ -475,3 +475,27 @@ env_is_activated() {
   # suffixed by '-zsh'
   [ -d "common-zsh" ]
 }
+
+# ---------------------------------------------------------------------------- #
+
+@test "bash: tolerates paths containing spaces" {
+  "$FLOX_BIN" delete -f
+  bad_dir="contains space/project"
+  mkdir -p "$PWD/$bad_dir"
+  cd "$PWD/$bad_dir"
+  "$FLOX_BIN" init
+  SHELL="bash" run bash -c '"$FLOX_BIN" activate -- true'
+  assert_success
+  refute_output --partial "no such file or directory"
+}
+
+@test "zsh: tolerates paths containing spaces" {
+  "$FLOX_BIN" delete -f
+  bad_dir="contains space/project"
+  mkdir -p "$PWD/$bad_dir"
+  cd "$PWD/$bad_dir"
+  "$FLOX_BIN" init
+  FLOX_SHELL="zsh" run zsh -c '"$FLOX_BIN" activate -- true'
+  assert_success
+  refute_output --partial "no such file or directory"
+}
