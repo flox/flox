@@ -9,7 +9,6 @@ use indoc::{formatdoc, indoc};
 
 use super::{
     format_customization,
-    get_default_package_if_compatible,
     try_find_compatible_version,
     InitHook,
     ProvidedPackage,
@@ -154,7 +153,10 @@ impl InitHook for Go {
             .map(|sys| sys.get_system())
             .and_then(|system| match system.get_version() {
                 ProvidedVersion::Compatible { requested, .. } => requested,
-                ProvidedVersion::Incompatible { .. } => None,
+                ProvidedVersion::Incompatible { .. } => unreachable!(
+                    "The Go hook should not be running if the requested module system \
+                    version is incompatible"
+                ),
             });
 
         InitCustomization {
@@ -315,16 +317,7 @@ impl GoVersion {
             }));
         }
 
-        let Ok(substitute_go_version) = get_default_package_if_compatible(["go"], None, flox)
-            .and_then(|version| TryInto::<ProvidedPackage>::try_into(version.unwrap_or_default()))
-        else {
-            return Ok(None);
-        };
-
-        Ok(Some(ProvidedVersion::Incompatible {
-            requested: required_go_version,
-            substitute: substitute_go_version,
-        }))
+        Ok(None)
     }
 
     fn parse_content_version_string(content: &str) -> Result<Option<String>> {
@@ -414,17 +407,14 @@ mod tests {
     }
 
     #[test]
-    fn test_go_version_is_incompatible() {
+    fn test_go_version_is_none() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
                 go 0.0.0
             "#};
 
-        let version = GoVersion::from_content(&flox, content).unwrap().unwrap();
+        let version = GoVersion::from_content(&flox, content).unwrap();
 
-        assert_eq!(version, ProvidedVersion::Incompatible {
-            requested: "^0.0.0".to_string(),
-            substitute: ProvidedPackage::new("go", vec!["go"], "1.21.4")
-        });
+        assert_eq!(version, None);
     }
 }
