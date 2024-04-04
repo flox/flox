@@ -57,5 +57,3 @@ textwrap = "0.16.0"
 indent = { version = "0.1.1" }
 semver = "1.0.22"
 serial_test = "3.0.0"
-
-[patch.crates-io]
