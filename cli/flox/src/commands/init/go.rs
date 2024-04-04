@@ -303,13 +303,10 @@ impl GoVersion {
         };
 
         let provided_go_version =
-            try_find_compatible_version("go", Some(&required_go_version), None::<Vec<&str>>, flox);
+            try_find_compatible_version("go", Some(&required_go_version), None::<Vec<&str>>, flox)?;
 
-        if let Ok(Some(found_go_version)) = provided_go_version {
-            let Ok(found_go_version) = TryInto::<ProvidedPackage>::try_into(found_go_version)
-            else {
-                return Ok(None);
-            };
+        if let Some(found_go_version) = provided_go_version {
+            let found_go_version = TryInto::<ProvidedPackage>::try_into(found_go_version)?;
 
             return Ok(Some(ProvidedVersion::Compatible {
                 requested: Some(required_go_version),
@@ -317,6 +314,7 @@ impl GoVersion {
             }));
         }
 
+        // Returning this means that the version is incompatible
         Ok(None)
     }
 
