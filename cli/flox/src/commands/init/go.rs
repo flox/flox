@@ -377,22 +377,10 @@ mod tests {
     }
 
     #[test]
-    fn test_go_version_parsing_fails_with_invalid_version() {
+    fn test_go_version_from_content_returns_compatible_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
-                // invalid go version
-                go invalid
-            "#};
-
-        let version = GoVersion::from_content(&flox, content);
-
-        assert!(version.is_err());
-    }
-
-    #[test]
-    fn test_go_version_is_compatible() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let content = indoc! {r#"
+                // valid go version
                 go 1.21.4
             "#};
 
@@ -405,14 +393,54 @@ mod tests {
     }
 
     #[test]
-    fn test_go_version_is_none() {
+    fn test_go_version_from_content_returns_none_on_incompatible_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
+                // incompatible go version
                 go 0.0.0
             "#};
 
         let version = GoVersion::from_content(&flox, content).unwrap();
 
         assert_eq!(version, None);
+    }
+
+    #[test]
+    fn test_go_version_from_content_returns_error_on_invalid_version() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let content = indoc! {r#"
+                // invalid go version
+                go invalid
+            "#};
+
+        let version = GoVersion::from_content(&flox, content);
+
+        assert!(version.is_err());
+    }
+
+    #[test]
+    fn test_go_version_string_parsing_succeeds_with_valid_version() {
+        let content = indoc! {r#"
+                // valid go version
+                go 1.21.0
+            "#};
+
+        let version = GoVersion::parse_content_version_string(content)
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(version, "^1.21.0");
+    }
+
+    #[test]
+    fn test_go_version_string_parsing_fails_with_invalid_version() {
+        let content = indoc! {r#"
+                // invalid go version
+                go invalid
+            "#};
+
+        let version = GoVersion::parse_content_version_string(content);
+
+        assert!(version.is_err());
     }
 }
