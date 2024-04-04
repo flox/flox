@@ -60,11 +60,11 @@ impl Go {
     /// Since the [GO_WORK_FILENAME] file declares a multiple module based workspace, it takes
     /// precedence over any other [GO_MOD_FILENAME] file that could possibly be found.
     fn detect_module_system(path: &Path, flox: &Flox) -> Result<Option<GoModuleSystemKind>> {
-        if let Some(go_work) = GoWorkspaceSystem::try_new_from_path(path, flox)? {
+        if let Some(go_work) = GoWorkSystem::try_new_from_path(path, flox)? {
             return Ok(Some(GoModuleSystemKind::Workspace(go_work)));
         }
 
-        if let Some(go_mod) = GoModuleSystem::try_new_from_path(path, flox)? {
+        if let Some(go_mod) = GoModSystem::try_new_from_path(path, flox)? {
             return Ok(Some(GoModuleSystemKind::Module(go_mod)));
         }
 
@@ -173,9 +173,9 @@ impl InitHook for Go {
 #[derive(PartialEq)]
 enum GoModuleSystemKind {
     /// Single module based system [GoModuleSystem].
-    Module(GoModuleSystem),
+    Module(GoModSystem),
     /// Workspace system [GoWorkspaceSystem].
-    Workspace(GoWorkspaceSystem),
+    Workspace(GoWorkSystem),
 }
 
 impl GoModuleSystemKind {
@@ -216,13 +216,13 @@ trait GoModuleSystemMode {
 
 /// Represents the single-module system from the content of `go.mod` files.
 #[derive(PartialEq)]
-struct GoModuleSystem {
+struct GoModSystem {
     /// Represents the version obtained from the `go` statement inside the `go.mod` file.
     version: ProvidedVersion,
 }
 
 /// Represents the functionality for the single-module system mode.
-impl GoModuleSystemMode for GoModuleSystem {
+impl GoModuleSystemMode for GoModSystem {
     /// Returns the possible instance of a Go module system, from the content
     /// of a module file.
     /// This method should return `true` when there isn't any valid `go` versioning
@@ -257,13 +257,13 @@ impl GoModuleSystemMode for GoModuleSystem {
 
 /// Represents the multi-module workspace system from the content of `go.work` files.
 #[derive(PartialEq)]
-struct GoWorkspaceSystem {
+struct GoWorkSystem {
     /// Represents the version obtained from the `go` statement inside the `go.work` file.
     version: ProvidedVersion,
 }
 
 /// Represents the functionality for the multi-module workspace mode.
-impl GoModuleSystemMode for GoWorkspaceSystem {
+impl GoModuleSystemMode for GoWorkSystem {
     fn try_new_from_content(workspace_content: &str, flox: &Flox) -> Result<Option<Self>> {
         match GoVersion::from_content(workspace_content, flox)? {
             Some(version) => Ok(Some(Self { version })),
@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn test_should_run_returns_true_on_valid_module() {
         let mut go = Go {
-            module_system: Some(GoModuleSystemKind::Module(GoModuleSystem {
+            module_system: Some(GoModuleSystemKind::Module(GoModSystem {
                 version: ProvidedVersion::Compatible {
                     requested: None,
                     compatible: ProvidedPackage::new("go", vec!["go"], "1.22.1"),
@@ -367,7 +367,7 @@ mod tests {
     #[test]
     fn test_should_run_returns_true_on_valid_workspace() {
         let mut go = Go {
-            module_system: Some(GoModuleSystemKind::Workspace(GoWorkspaceSystem {
+            module_system: Some(GoModuleSystemKind::Workspace(GoWorkSystem {
                 version: ProvidedVersion::Compatible {
                     requested: None,
                     compatible: ProvidedPackage::new("go", vec!["go"], "1.22.1"),
