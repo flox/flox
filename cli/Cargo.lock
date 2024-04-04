@@ -570,7 +570,6 @@ dependencies = [
  "bpaf",
  "chrono",
  "config",
- "console",
  "crossterm 0.26.1",
  "derive_more",
  "dirs",

@@ -4,7 +4,7 @@ use std::io::stdout;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use console::style;
+use crossterm::style::Stylize;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::lockfile::LockedManifest;
@@ -233,7 +233,7 @@ impl Display for DisplaySearchResults {
             if self.use_bold {
                 name.replace(
                     &self.search_term,
-                    &format!("{}", style(&self.search_term).bold()),
+                    &format!("{}", self.search_term.clone().bold()),
                 )
             } else {
                 name.to_string()

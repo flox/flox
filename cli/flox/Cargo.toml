@@ -49,7 +49,6 @@ indent.workspace = true
 semver.workspace = true
 sentry = { workspace = true, features = ["anyhow", "tracing", "debug-logs"] }
 serial_test.workspace = true
-console = "0.15.8"
 
 [dev-dependencies]
 temp-env = "0.3.2"
