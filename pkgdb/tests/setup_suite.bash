@@ -70,7 +70,7 @@ reals_setup() {
 # Lookup system pair recognized by `nix' for this system.
 nix_system_setup() {
   if [[ -z "${NIX_SYSTEM:-}" ]]; then
-    NIX_SYSTEM="$(nix eval --impure --expr builtins.currentSystem --raw)"
+    NIX_SYSTEM="$(nix --experimental-features nix-command eval --impure --expr builtins.currentSystem --raw)"
   fi
   export NIX_SYSTEM
 }
