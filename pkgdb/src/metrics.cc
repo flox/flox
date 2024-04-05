@@ -15,7 +15,7 @@ sentryReporting::init( bool debug )
   // This is also the default-path. For further information and recommendations:
   // https://docs.sentry.io/platforms/native/configuration/options/#database-path
   sentry_options_set_database_path( options, ".sentry-native" );
-  sentry_options_set_release(options, "my-project-name@2.3.12");
+  sentry_options_set_release( options, "my-project-name@2.3.12" );
   sentry_options_set_debug( options, debug ? 1 : 0 );
   sentry_init( options );
 
@@ -24,14 +24,16 @@ sentryReporting::init( bool debug )
 }
 
 void
-sentryReporting::report_message(const sentry_level_t level,  const std::string& logger, const std::string& message)
+sentryReporting::report_message( const sentry_level_t level,
+                                 const std::string &  logger,
+                                 const std::string &  message )
 {
-    sentry_capture_event(sentry_value_new_message_event(
-        level, logger.c_str(), message.c_str()
-        // /*   level */ SENTRY_LEVEL_INFO,
-        // /*  logger */ "custom",
-        // /* message */ "It works!"
-    ));
+  sentry_capture_event(
+    sentry_value_new_message_event( level, logger.c_str(), message.c_str()
+                                    // /*   level */ SENTRY_LEVEL_INFO,
+                                    // /*  logger */ "custom",
+                                    // /* message */ "It works!"
+                                    ) );
 }
 
 void

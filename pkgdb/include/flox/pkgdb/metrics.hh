@@ -39,7 +39,9 @@ public:
   init( bool debug );
 
   virtual void
-    report_message(const sentry_level_t level,  const std::string& logger, const std::string& message);
+  report_message( const sentry_level_t level,
+                  const std::string &  logger,
+                  const std::string &  message );
 
   virtual void
   shutdown();
