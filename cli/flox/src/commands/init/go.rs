@@ -326,7 +326,7 @@ impl GoVersion {
             .lines()
             .skip_while(|line| !line.trim_start().starts_with("go"))
             .next()
-            .and_then(|line| line.split_whitespace().nth(1))
+            .and_then(|line| line.trim().split_whitespace().nth(1))
             .and_then(|version| {
                 version
                     .parse::<semver::VersionReq>()
