@@ -321,6 +321,10 @@ impl GoVersion {
     }
 
     /// Parses the content of a Go module system file and returns the version as a [String].
+    ///
+    /// NOTE: future major releases of Go (e.g. go 2.x.y) are not contemplated in this code,
+    /// but would be satisfied by a previous major release.
+    /// See: https://github.com/flox/flox/pull/1227#discussion_r1548737251
     fn parse_content_version_string(content: &str) -> Result<Option<String>> {
         content
             .lines()
