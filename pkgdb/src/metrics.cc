@@ -19,7 +19,8 @@ sentryReporting::init( bool debug )
   sentry_options_set_debug( options, debug ? 1 : 0 );
   sentry_init( options );
 
-  report_message(SENTRY_LEVEL_INFO, "pkgdb", "Hello world from pkgdb!");
+  // Example usage for reporting a message
+  //   report_message(SENTRY_LEVEL_INFO, "pkgdb", "Hello world from pkgdb!");
 }
 
 void
@@ -27,7 +28,6 @@ sentryReporting::report_message(const sentry_level_t level,  const std::string& 
 {
     sentry_capture_event(sentry_value_new_message_event(
         level, logger.c_str(), message.c_str()
-
         // /*   level */ SENTRY_LEVEL_INFO,
         // /*  logger */ "custom",
         // /* message */ "It works!"
