@@ -284,6 +284,13 @@ toml_CFLAGS ?=                                                                \
   $(shell $(NIX) build --no-link --print-out-paths 'nixpkgs#toml11')/include
 toml_CFLAGS := $(toml_CFLAGS)
 
+sentry_PREFIX ?=                                                        \
+	$(shell $(NIX) build --no-link --print-out-paths '.#sentry-native')
+sentry_PREFIX := $(sentry_PREFIX)
+sentry_CFLAGS  = -isystem $(sentry_PREFIX)/include
+sentry_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs sentry-native)
+sentry_LDFLAGS = -L$(sentry_PREFIX)/lib -lsentry
+
 sqlite3_CFLAGS ?=                                                     \
 	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags sqlite3))
 sqlite3_CFLAGS  := $(sqlite3_CFLAGS)
@@ -335,10 +342,12 @@ CXXFLAGS += $(nljson_CFLAGS)
 CXXFLAGS += $(toml_CFLAGS)
 CXXFLAGS += $(yaml_CFLAGS)
 CXXFLAGS += $(semver_CFLAGS)
+CXXFLAGS += $(sentry_CFLAGS)
 
 LDFLAGS += $(nix_LDFLAGS)
 LDFLAGS += $(sqlite3_LDFLAGS)
 LDFLAGS += $(yaml_LDFLAGS)
+LDFLAGS += $(sentry_LDFLAGS)
 
 
 # ---------------------------------------------------------------------------- #

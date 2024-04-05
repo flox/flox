@@ -26,6 +26,7 @@
 #include "flox/eval.hh"
 #include "flox/parse/command.hh"
 #include "flox/pkgdb/command.hh"
+#include "flox/pkgdb/metrics.hh"
 #include "flox/repl.hh"
 #include "flox/resolver/command.hh"
 #include "flox/search/command.hh"
@@ -38,6 +39,8 @@ namespace flox {
 #ifndef NIXPKGS_CACERT_BUNDLE_CRT
 #  error "NIXPKGS_CACERT_BUNDLE_CRT must be set"
 #endif
+
+static sentryReporting theSentryReporting = sentryReporting();
 
 /* -------------------------------------------------------------------------- */
 
@@ -140,6 +143,8 @@ run( int argc, char * argv[] )
 
   /* Set the verbosity level requested by flox */
   setVerbosityFromEnv();
+
+  flox::theSentryReporting.init( nix::verbosity >= nix::lvlDebug );
 
   /* Run subcommand */
   if ( prog.is_subcommand_used( "scrape" ) ) { return cmdScrape.run(); }
