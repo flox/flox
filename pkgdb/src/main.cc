@@ -145,6 +145,7 @@ run( int argc, char * argv[] )
   setVerbosityFromEnv();
 
   flox::theSentryReporting.init( nix::verbosity >= nix::lvlDebug );
+  flox::theSentryReporting.shutdown();
 
   /* Run subcommand */
   if ( prog.is_subcommand_used( "scrape" ) ) { return cmdScrape.run(); }

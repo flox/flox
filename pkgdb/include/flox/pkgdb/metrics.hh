@@ -6,6 +6,8 @@
  *
  *
  * -------------------------------------------------------------------------- */
+#include <sentry.h>
+#include <string>
 
 #pragma once
 
@@ -21,9 +23,7 @@ public:
   virtual void
   init( bool debug )
     = 0;
-  virtual void
-  report()
-    = 0;
+
   virtual void
   shutdown()
     = 0;
@@ -37,8 +37,10 @@ public:
 
   virtual void
   init( bool debug );
+
   virtual void
-  report();
+    report_message(const sentry_level_t level,  const std::string& logger, const std::string& message);
+
   virtual void
   shutdown();
 
