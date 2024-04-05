@@ -231,7 +231,7 @@ impl Edit {
             let mut file: Box<dyn std::io::Read + Send> = if file == Path::new("-") {
                 Box::new(stdin())
             } else {
-                Box::new(File::open(file).unwrap())
+                Box::new(File::open(file)?)
             };
 
             let mut contents = String::new();
