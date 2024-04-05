@@ -327,6 +327,7 @@ mod tests {
     #[serial]
     fn test_manifest_and_lockfile_environment_manifest() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        std::fs::create_dir_all(&flox.data_dir).unwrap();
         let environment = new_path_environment(&flox, "");
         let (manifest, lockfile) = manifest_and_lockfile_from_detected_environment(
             &flox,
@@ -353,6 +354,7 @@ mod tests {
     #[serial]
     fn test_manifest_and_lockfile_environment_lock() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        std::fs::create_dir_all(&flox.data_dir).unwrap();
         let mut environment = new_path_environment(&flox, "");
         environment.lock(&flox).unwrap();
         let (manifest, lockfile) = manifest_and_lockfile_from_detected_environment(

@@ -42,6 +42,7 @@ use super::{
 use crate::data::System;
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
+use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{
     ENV_DIR_NAME,
     FLOX_HOOK_PLACEHOLDER,
@@ -286,7 +287,7 @@ impl Environment for PathEnvironment {
     }
 
     /// Delete the Environment
-    fn delete(self, _flox: &Flox) -> Result<(), EnvironmentError> {
+    fn delete(self, flox: &Flox) -> Result<(), EnvironmentError> {
         let dot_flox = &self.path;
         if Some(OsStr::new(".flox")) == dot_flox.file_name() {
             std::fs::remove_dir_all(dot_flox).map_err(EnvironmentError::DeleteEnvironment)?;
@@ -295,6 +296,7 @@ impl Environment for PathEnvironment {
                 self.path.parent().unwrap_or(&self.path).to_path_buf(),
             ));
         }
+        deregister(flox, &self.path, &EnvironmentPointer::Path(self.pointer))?;
         Ok(())
     }
 
@@ -349,6 +351,7 @@ impl PathEnvironment {
     ///
     /// Ensure that the path exists and contains files that "look" like an environment
     pub fn open(
+        flox: &Flox,
         pointer: PathPointer,
         dot_flox_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
@@ -360,6 +363,17 @@ impl PathEnvironment {
                 dot_flox.parent().unwrap_or(dot_flox).to_path_buf(),
             ))?;
         }
+
+        let canonical_dot_flox =
+            CanonicalPath::new(&dot_flox_path).map_err(|e| EnvironmentError::CanonicalDotFlox {
+                err: e,
+                path: dot_flox_path.as_ref().to_path_buf(),
+            })?;
+        ensure_registered(
+            flox,
+            &canonical_dot_flox,
+            &EnvironmentPointer::Path(pointer.clone()),
+        )?;
 
         PathEnvironment::new(dot_flox, pointer, temp_dir)
     }
@@ -390,8 +404,13 @@ impl PathEnvironment {
         let manifest_contents =
             Self::replace_placeholders(&template_contents, system, customization);
 
-        let mut environment =
-            Self::write_new(pointer, dot_flox_parent_path, temp_dir, &manifest_contents)?;
+        let mut environment = Self::write_new(
+            flox,
+            pointer,
+            dot_flox_parent_path,
+            temp_dir,
+            &manifest_contents,
+        )?;
 
         if let Some(ref packages) = customization.packages {
             // Ignore the result, because we know there can't be packages already installed
@@ -418,6 +437,7 @@ impl PathEnvironment {
     ///
     /// This functionality is shared between [PathEnvironment::init] and tests.
     fn write_new(
+        flox: &Flox,
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
@@ -456,7 +476,7 @@ impl PathEnvironment {
             "})
         .map_err(EnvironmentError::WriteGitignore)?;
 
-        Self::open(pointer, dot_flox_path, temp_dir)
+        Self::open(flox, pointer, dot_flox_path, temp_dir)
     }
 
     /// Replace all placeholders in the manifest file contents
@@ -549,6 +569,7 @@ pub mod test_helpers {
     pub fn new_path_environment(flox: &Flox, contents: &str) -> PathEnvironment {
         let pointer = PathPointer::new("name".parse().unwrap());
         PathEnvironment::write_new(
+            flox,
             pointer,
             tempdir_in(&flox.temp_dir).unwrap().into_path(),
             &flox.temp_dir,
@@ -563,6 +584,7 @@ mod tests {
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::env_registry::{env_registry_path, read_environment_registry};
 
     #[test]
     fn create_env() {
@@ -570,7 +592,9 @@ mod tests {
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
         let pointer = PathPointer::new("test".parse().unwrap());
 
+        std::fs::create_dir_all(&flox.data_dir).unwrap();
         let before = PathEnvironment::open(
+            &flox,
             pointer.clone(),
             environment_temp_dir.path(),
             temp_dir.path(),
@@ -615,6 +639,7 @@ mod tests {
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
         let pointer = PathPointer::new("test".parse().unwrap());
 
+        std::fs::create_dir_all(&flox.data_dir).unwrap();
         let mut env = PathEnvironment::init(
             pointer,
             environment_temp_dir.path(),
@@ -636,5 +661,81 @@ mod tests {
         let file = fs::write(env.manifest_path(&flox).unwrap(), "");
         drop(file);
         assert!(env.needs_rebuild(&flox).unwrap());
+    }
+
+    #[test]
+    fn registers_on_init() {
+        let (flox, tmp_dir) = flox_instance();
+        std::fs::create_dir_all(&flox.data_dir).unwrap();
+        let environment_temp_dir = tempfile::tempdir_in(&tmp_dir).unwrap();
+        let ptr = PathPointer::new("test".parse().unwrap());
+        let _env = PathEnvironment::init(
+            ptr,
+            environment_temp_dir.path(),
+            tmp_dir.path(),
+            &flox.system,
+            &InitCustomization::default(),
+            &flox,
+        )
+        .unwrap();
+        let reg_path = env_registry_path(&flox);
+        assert!(reg_path.exists());
+        let reg = read_environment_registry(&reg_path).unwrap().unwrap();
+        assert!(matches!(
+            reg.entries[0].envs[0].pointer,
+            EnvironmentPointer::Path(_)
+        ));
+    }
+
+    #[test]
+    fn registers_on_open() {
+        let (flox, tmp_dir) = flox_instance();
+        std::fs::create_dir_all(&flox.data_dir).unwrap();
+        let environment_temp_dir = tempfile::tempdir_in(&tmp_dir).unwrap();
+        // Create an environment so that the .flox directory is populated and we can open it later
+        let ptr = PathPointer::new("test".parse().unwrap());
+        let env = PathEnvironment::init(
+            ptr.clone(),
+            environment_temp_dir.path(),
+            tmp_dir.path(),
+            &flox.system,
+            &InitCustomization::default(),
+            &flox,
+        )
+        .unwrap();
+        let reg_path = env_registry_path(&flox);
+        assert!(reg_path.exists());
+        // Delete the registry so we can confirm that opening the environment creates it
+        std::fs::remove_file(&reg_path).unwrap();
+        let _env = PathEnvironment::open(&flox, ptr, env.path, tmp_dir.path()).unwrap();
+        let reg = read_environment_registry(&reg_path).unwrap().unwrap();
+        assert!(matches!(
+            reg.entries[0].envs[0].pointer,
+            EnvironmentPointer::Path(_)
+        ));
+    }
+
+    #[test]
+    fn deregisters_on_delete() {
+        let (flox, tmp_dir) = flox_instance();
+        std::fs::create_dir_all(&flox.data_dir).unwrap();
+        let environment_temp_dir = tempfile::tempdir_in(&tmp_dir).unwrap();
+        // Create an environment so that the .flox directory is populated and we can open it later
+        let ptr = PathPointer::new("test".parse().unwrap());
+        let env = PathEnvironment::init(
+            ptr.clone(),
+            environment_temp_dir.path(),
+            tmp_dir.path(),
+            &flox.system,
+            &InitCustomization::default(),
+            &flox,
+        )
+        .unwrap();
+        let reg_path = env_registry_path(&flox);
+        assert!(reg_path.exists());
+        env.delete(&flox).unwrap();
+        assert!(reg_path.exists());
+        let reg = read_environment_registry(&reg_path).unwrap().unwrap();
+        assert!(reg.entries.is_empty());
     }
 }

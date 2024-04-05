@@ -287,19 +287,24 @@ EOF
   # Hence, use a clean home directory, for this test rather than the shared one.
   home_setup test
 
+  # Note: this creates two envs in one entry in the registry:
+  # 1. The initial env created by `flox init`
+  # 2. The managed environment created by pushing the path environment
   make_empty_remote_env
 
   run dot_flox_exists
   assert_success
 
+  # After this we're still left with the path environment
   run "$FLOX_BIN" delete
   assert_success
 
   run dot_flox_exists
   assert_failure
 
-  run ls -lA "$FLOX_DATA_DIR/links"
-  assert_output "total 0"
+  # We should only see the path environnment
+  run jq '.entries[0].envs | length' "$FLOX_DATA_DIR/env-registry.json"
+  assert_output "1"
 }
 
 # test that non-pushed environments can be deleted

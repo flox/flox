@@ -465,6 +465,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         ManagedEnvironmentError::Build(core_environment_error) => {
             format_core_error(core_environment_error)
         },
+        ManagedEnvironmentError::Registry(_) => display_chain(err),
     }
 }
 
@@ -716,6 +717,7 @@ fn format_pkgdb_error(
     }
 }
 
+/// Displays and formats a chain of errors connected via their `source` attribute.
 pub fn display_chain(mut err: &dyn std::error::Error) -> String {
     let mut fmt = err.to_string();
     while let Some(source) = err.source() {

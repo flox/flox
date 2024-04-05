@@ -873,6 +873,7 @@ impl UninitializedEnvironment {
                     EnvironmentPointer::Path(path_pointer) => {
                         debug!("detected concrete environment type: path");
                         ConcreteEnvironment::Path(PathEnvironment::open(
+                            flox,
                             path_pointer,
                             dot_flox_path,
                             &flox.temp_dir,
