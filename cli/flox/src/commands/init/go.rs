@@ -237,7 +237,7 @@ impl GoModuleSystemMode for GoModSystem {
     /// This method returns `None` if [GO_MOD_FILENAME] is a directory.
     fn try_new_from_path(flox: &Flox, path: &Path) -> Result<Option<Self>> {
         let mod_path = path.join(GO_MOD_FILENAME);
-        if !mod_path.exists() {
+        if !mod_path.exists() || mod_path.is_dir() {
             return Ok(None);
         }
 
