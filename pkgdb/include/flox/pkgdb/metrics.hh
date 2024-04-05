@@ -15,27 +15,34 @@ class metricsReporting
 {
 public:
 
-    metricsReporting() {}
-    virtual ~metricsReporting() = default;
+  metricsReporting() {}
+  virtual ~metricsReporting() = default;
 
-    virtual void init(bool debug) = 0;
-    virtual void report() = 0;
-    virtual void shutdown() = 0;
-
+  virtual void
+  init( bool debug )
+    = 0;
+  virtual void
+  report()
+    = 0;
+  virtual void
+  shutdown()
+    = 0;
 };
 
 class sentryReporting : public metricsReporting
 {
 public:
 
-    sentryReporting() : metricsReporting() {}
+  sentryReporting() : metricsReporting() {}
 
-    virtual void init(bool debug);
-    virtual void report();
-    virtual void shutdown();
+  virtual void
+  init( bool debug );
+  virtual void
+  report();
+  virtual void
+  shutdown();
 
-    virtual ~sentryReporting() { shutdown(); }
-
+  virtual ~sentryReporting() { shutdown(); }
 };
 
-}
+}  // namespace flox
