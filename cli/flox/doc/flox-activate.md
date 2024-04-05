@@ -96,6 +96,9 @@ See [`manifest.toml(1)`](./manifest.toml.md) for more details on shell hooks.
 `$FLOX_PROMPT_ENVIRONMENTS`
 :   Contains a space-delimited list of the active environments,
     e.g. `owner1/foo owner2/bar local_env`.
+    This is set to an _empty string_ if the config value for `shell_prompt`
+    is `hide-all` or `hide-default` and only environments named 'default'
+    are active.
 
 `$FLOX_ENV_CACHE`
 :   `activate` sets this variable to a directory that can be used by an
