@@ -50,6 +50,7 @@ url.workspace = true
 uuid.workspace = true
 xdg.workspace = true
 path-dedot = "3.1.1"
+proctitle = "0.1.1"
 
 [dev-dependencies]
 pretty_assertions.workspace = true
@@ -61,3 +62,6 @@ tempfile.workspace = true
 [features]
 extra-tests = ["impure-unit-tests"]
 impure-unit-tests = []
+
+[target.'cfg(target_os = "macos")'.dependencies]
+kqueue = "1.0.8"

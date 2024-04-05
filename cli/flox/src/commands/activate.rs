@@ -40,6 +40,7 @@ use crate::commands::{ensure_environment_trust, ConcreteEnvironment, Environment
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::openers::Shell;
+use crate::utils::watchdog::in_watchdog_process;
 use crate::utils::{default_nix_env_vars, message};
 use crate::{subcommand_metric, utils};
 
@@ -260,11 +261,22 @@ impl Activate {
         }
 
         let shell = Self::detect_shell_for_subshell()?;
-        // These functions will only return if exec fails
-        if !self.run_args.is_empty() {
-            Self::activate_command(self.run_args, shell, exports, activation_path)
+
+        // The remaining codepaths exec() a new process which robs us of
+        // the chance to exercise destructors, so take this opportunity
+        // to start the watchdog process.
+        if in_watchdog_process() {
+            // The watchdog process will have blocked until its parent process
+            // died, so simply carry on to perform the normal post-processing.
+            Ok(())
         } else {
-            Self::activate_interactive(shell, exports, activation_path, now_active)
+            // Parent process proceeds to exec() the activation shell or cmd.
+            if !self.run_args.is_empty() {
+                Self::activate_command(self.run_args, shell, exports, activation_path)
+            } else {
+                Self::activate_interactive(shell, exports, activation_path, now_active)
+            }
+            // TODO: Not reached ... should we check and return an error here?
         }
     }
 
