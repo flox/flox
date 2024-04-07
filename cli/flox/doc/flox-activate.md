@@ -25,15 +25,15 @@ and adds `bin` directories to your `$PATH`.
 
 `flox activate` may run in one of three modes:
 
-* interactive: `flox activate` when invoked from an interactive shell
+* interactive: `flox activate` when invoked from an interactive shell\
   Launches an interactive sub-shell.
   The shell to be launched is determined by `$FLOX_SHELL` or `$SHELL`.
-* command: `flox activate -- CMD`
+* command: `flox activate -- CMD`\
   Executes `CMD` in the same environment as if run inside an interactive shell
   produced by an interactive `flox activate`
   The shell `CMD` is run by is determined by `$FLOX_SHELL` or `$SHELL`.
 * in-place: `flox activate` when invoked from an non-interactive shell
-  with it's `stdout` redirected e.g. `eval "$(flox activate)"`
+  with it's `stdout` redirected e.g. `eval "$(flox activate)"`\
   Produces commands to be sourced by the parent shell.
   Flox will determine the parent shell from `$FLOX_SHELL` or otherwise
   automatically determine the parent shell and fall back to `$SHELL`.

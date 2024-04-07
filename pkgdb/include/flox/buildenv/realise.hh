@@ -25,6 +25,28 @@
 #include <nix/get-drvs.hh>
 #include <nix/path-with-outputs.hh>
 
+/* -------------------------------------------------------------------------- */
+
+// Macro for appending a "default value" environment variable assignment to a
+// bash script. This is useful for adding a default value to an environment
+// variable, but only if it is not already set.
+//
+// E.g. 'defaultValue("FOO", "bar")' returns: 'export FOO="${FOO:-bar}"\n'
+#define defaultValue( var, value ) \
+  "export " var "=\"${" var ":-" value "}\"" << std::endl
+
+// Macro for appending a conditional action to a bash or zsh script.
+//
+// E.g. 'posixIfThen("[ -t 1 ]", "echo interactive")' returns:
+//   'if [ -t 1 ]; then echo interactive; fi' (with newlines)
+#define posixIfThen( cond, action ) \
+  "if " cond "; then\n  " action "\nfi" << std::endl
+
+// Macro for setting and exporting an environment variable in bash or zsh.
+//
+// E.g. 'posixSetEnv("foo", "bar")' returns:
+//   'foo=bar; export foo;' (with newlines)
+#define posixSetEnv( var, value ) var "=" value "\nexport " var ";" << std::endl
 
 /* -------------------------------------------------------------------------- */
 
@@ -32,7 +54,8 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-static constexpr std::string_view ACTIVATION_SUBDIR_NAME = "activate";
+static constexpr std::string_view ACTIVATION_SCRIPT_NAME = "activate";
+static constexpr std::string_view ACTIVATION_SUBDIR_NAME = "activate.d";
 
 /* -------------------------------------------------------------------------- */
 
@@ -374,6 +397,15 @@ makeActivationScripts( nix::EvalState &              state,
 
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Adds this script to the directory of activation scripts included in
+ * the environment.
+ * @param scriptContents The contents of the script, including the shebang.
+ * @param tempDir The temporary scripts directory being assembled.
+ */
+void
+addActivationScript( const std::filesystem::path & tempDir );
 
 /**
  * @brief Adds this script to the directory of activation scripts included in

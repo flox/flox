@@ -5,8 +5,7 @@ hello.pkg-path = "hello"
 foo = "bar"
 
 [hook]
-script = """
-    echo "$foo"
+on-activate = """
     command -v hello
     hello
 """

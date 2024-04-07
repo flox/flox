@@ -1,0 +1,35 @@
+# Activate a project environment using --dir and check an alias is loaded from
+# ~/.bashrc
+
+set dir [lindex $argv 0]
+set flox $env(FLOX_BIN)
+
+set timeout 30
+spawn $flox activate --dir $dir
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
+  "*\r" { exp_continue }
+}
+
+# The Linux prompt on NixOS is split across two lines, so python venv
+# will prepend the "(python)" part to a different line so we look for
+# it separately.
+expect -re "\\\(python\\\)" {}
+
+# The prompt will be "(python) flox [name] (python) ..." if the venv is
+# activated twice, so specifically check that the first character after
+# "[name]" is not a "(".
+expect -re "flox \\\[name\\\] \[^\(\]" {}
+
+# Assert some things we know to be true when in an activated venv.
+send "test -n \"\$PYTHON_DIR\" || exit 1\r"
+send "test -f \"\$PYTHON_DIR/bin/activate\" || exit 1\r"
+send "test -n \"\$VIRTUAL_ENV_PROMPT\" || exit 1\r"
+
+# Identify where the deactivate() function is coming from for inspection
+# from init.bats, then exit.
+send "type deactivate || exit 1\r"
+send "exit\r"
+expect eof

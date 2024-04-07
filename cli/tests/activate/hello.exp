@@ -1,6 +1,6 @@
 # Activate a project environment using --dir and check
 # - hello is installed
-# - prompt is set
+# - prompt is set ### XXX how exactly? I don't see it doing this.
 # Assume throughout that the project is named project-\d+
 
 set dir [lindex $argv 0]
@@ -18,11 +18,11 @@ expect_after {
 expect "Preparing environment"
 
 # check for hello
-send "{ command -v hello||which hello||type -P hello || echo not found ; } 2>&1\n"
+send "command -v hello||which hello||type -P hello || echo not found\n"
 
 # check for hello after changing directory
 send "cd ..\n"
-send "{ command -v hello||which hello||type -P hello || echo not found ; } 2>&1\n"
+send "command -v hello||which hello||type -P hello || echo not found\n"
 
 send "exit\n"
 expect eof
