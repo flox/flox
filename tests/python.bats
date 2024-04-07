@@ -61,7 +61,7 @@ teardown() {
   assert_output --partial "✅ 'pip' installed to environment"
   assert_output --partial "✅ 'python3' installed to environment"
 
-  FLOX_SHELL=bash "$FLOX_BIN" activate -- source "$TESTS_DIR/python/requests-with-pip.sh"
+  FLOX_SHELL=bash "$FLOX_BIN" activate -- bash "$TESTS_DIR/python/requests-with-pip.sh"
 }
 
 # ---------------------------------------------------------------------------- #

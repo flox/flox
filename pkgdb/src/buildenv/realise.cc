@@ -60,25 +60,46 @@ namespace flox::buildenv {
 #  error "COMMON_NIXPKGS_URL must be set to a locked flakeref of nixpkgs to use"
 #endif
 
-#ifndef FLOX_BASH_BIN
-#  error "FLOX_BASH_BIN must be set to the path of a Bash executable"
+#ifndef FLOX_BASH_PKG
+#  error "FLOX_BASH_PKG must be set to the path of the nix bash package"
+#endif
+
+#ifndef FLOX_COREUTILS_PKG
+#  error "FLOX_COREUTILS_PKG must be set to the path of the nix coreutils package"
+#endif
+
+#ifndef FLOX_GNUSED_PKG
+#  error "FLOX_GNUSED_PKG must be set to the path of the nix gnused package"
+#endif
+
+#ifndef FLOX_PROCPS_PKG
+#  error "FLOX_PROCPS_PKG must be set to the path of the nix procps package"
 #endif
 
 /* -------------------------------------------------------------------------- */
 
-/* We disable command hashing so a `flox install` will be reflected immediately
- * in the shell.  Sometimes `hash` is used to detect if something is installed,
- * and with hashing disabled, that fails.  Therefore, disable that at the end,
- * in case it's used in the prior scripts (e.g. ~/.bashrc).
- */
-const char * const BASH_ACTIVATE_SCRIPT = R"(
-# We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
-# so source that here.
-if [ -f ~/.bashrc -a "${FLOX_SOURCED_FROM_SHELL_RC:-}" != 1 ]
-then
-    source ~/.bashrc
-fi
+// Top-level activate script, always invoked with nix bash.
+const char * const ACTIVATE_SCRIPT = R"_(
+# Flox environment activation script.
+[ ${_FLOX_PKGDB_VERBOSITY:-0} -eq 0 ] || set -x
 
+# Capture starting environment.
+_start_env="$($_coreutils/bin/mktemp --suffix=.start-env)"
+_end_env="$($_coreutils/bin/mktemp --suffix=.end-env)"
+export | $_coreutils/bin/sort > "$_start_env"
+
+function cleanup() {
+  $_coreutils/bin/rm -f "$_start_env" "$_end_env"
+}
+
+# Set FLOX_ENV as the path by which all flox scripts can make reference to
+# the environment to which they belong. Use this to define the path to the
+# activation scripts directory.
+FLOX_ENV="$( $_coreutils/bin/dirname -- "${BASH_SOURCE[0]}" )"
+export FLOX_ENV
+
+# Process the flox environment customizations, which includes (amongst
+# other things) prepending this environment's bin directory to the PATH.
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _prof_scripts;
   _prof_scripts=( $(
@@ -90,6 +111,119 @@ if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   unset _prof_scripts;
 fi
 
+# Set static environment variables from the manifest.
+if [ -f "$FLOX_ENV/activate.d/envrc" ]; then
+  source "$FLOX_ENV/activate.d/envrc"
+fi
+
+# Source the hook-on-activate script if it exists.
+if [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
+  # Nothing good can come from output printed to stdout in the
+  # user-provided hook scripts because these can get interpreted
+  # as configuration statements by the "in-place" activation
+  # mode. So, we'll redirect stdout to stderr.
+  source "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
+elif [ -e "$FLOX_ENV/activate.d/hook-script" ]; then
+  # [hook.script] is deprecated - print warning and source it.
+  echo "WARNING: [hook.script] is deprecated, use [hook.on-activate] instead." >&2
+  source "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
+fi
+
+# From this point on the activation process depends on the mode:
+
+# 1. "command" mode: simply exec the provided command and args
+if [ $# -gt 0 ]; then
+  cleanup
+  # The colon is a no-op command that returns true so don't
+  # attempt to execute it as a command.
+  if [ "$1" = ":" ]; then
+    exit 0
+  else
+    exec "$@"
+  fi
+fi
+
+# The remaining modes require that $FLOX_SHELL be set by the rust CLI.
+[ -n "$FLOX_SHELL" ] || {
+  echo "FLOX_SHELL not set .. defaulting to ${SHELL}" >&2
+  FLOX_SHELL="${SHELL}"
+}
+
+# 2. "interactive" mode: invoke the user's shell with args that:
+#   a. defeat the shell's normal startup scripts
+#   b. source the relevant activation script
+if [ -t 1 ]; then
+  cleanup
+  case "$FLOX_SHELL" in
+    *bash)
+      exec "$FLOX_SHELL" --rcfile "$FLOX_ENV/activate.d/bash"
+      ;;
+    *zsh)
+      export ZDOTDIR="$FLOX_ZDOTDIR"
+      export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
+      exec "$FLOX_SHELL"
+      ;;
+    *fish)
+      # TODO: test fish support
+      exec "$FLOX_SHELL" "$FLOX_ENV/activate.d/fish"
+      ;;
+    *)
+      echo "Unsupported shell: $FLOX_SHELL" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+# 3. "in-place" mode: emit activation commands in correct shell dialect
+
+# Start by comparing the starting and ending environments and
+# emit commands to delete and add environment variables as needed.
+export | $_coreutils/bin/sort > "$_end_env"
+case "$FLOX_SHELL" in
+  *bash|*zsh)
+    # Use "unset" for env deletions.
+    # TODO: weed out unset statements for the exports to follow.
+    $_coreutils/bin/comm -23 "$_start_env" "$_end_env" | \
+      $_gnused/bin/sed -e 's/declare -x/unset/' -e 's/=.*//'
+    # Use "export" for env additions.
+    $_coreutils/bin/comm -13 "$_start_env" "$_end_env" | \
+      $_gnused/bin/sed -e 's/declare -x/export/'
+    ;;
+  *fish)
+    echo TODO: fish support
+    ;;
+  *)
+    echo "Unsupported shell: $FLOX_SHELL" >&2
+    exit 1
+    ;;
+esac
+
+# Finish by echoing the contents of the shell-specific activation script.
+case "$FLOX_SHELL" in
+  *bash) echo "$( <"$FLOX_ENV/activate.d/bash" )";;
+  *zsh)  echo "$( <"$FLOX_ENV/activate.d/zsh"  )";;
+  *fish) echo "$( <"$FLOX_ENV/activate.d/fish" )";;
+  *)     echo "unsupported shell: $FLOX_SHELL" >&2; exit 1;;
+esac
+
+cleanup
+)_";
+
+/* We disable command hashing so a `flox install` will be reflected immediately
+ * in the shell.  Sometimes `hash` is used to detect if something is installed,
+ * and with hashing disabled, that fails.  Therefore, disable that at the end,
+ * in case it's used in the prior scripts (e.g. ~/.bashrc).
+ */
+const char * const BASH_ACTIVATE_SCRIPT = R"(
+[ ${_FLOX_PKGDB_VERBOSITY:-0} -le 1 ] || set -x
+
+# We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
+# so source that here.
+if [ -f ~/.bashrc -a "${FLOX_SOURCED_FROM_SHELL_RC:-}" != 1 ]
+then
+    source ~/.bashrc
+fi
+
 # Disable command hashing to allow for newly installed flox packages to be found
 # immediately.
 set +h
@@ -98,15 +232,7 @@ set +h
 
 // unlike bash, zsh activation calls this script from the user's shell rcfile
 const char * const ZSH_ACTIVATE_SCRIPT = R"(
-if [ -d "$FLOX_ENV/etc/profile.d" ]; then
-  declare -a _prof_scripts;
-  _prof_scripts=( $(
-    cd "$FLOX_ENV/etc/profile.d";
-    echo *.sh;
-  ) );
-  for p in "${_prof_scripts[@]}"; do . "$FLOX_ENV/etc/profile.d/$p"; done
-  unset _prof_scripts;
-fi
+[ ${_FLOX_PKGDB_VERBOSITY:-0} -le 1 ] || set -x
 
 # Disable command hashing to allow for newly installed flox packages to be found
 # immediately.
@@ -630,11 +756,48 @@ getRealisedPackages( nix::ref<nix::EvalState> &         state,
 /* -------------------------------------------------------------------------- */
 
 void
+addActivationScript( const std::filesystem::path & tempDir )
+{
+  /* Write the script to a temporary file. */
+  std::filesystem::path scriptTempPath( nix::createTempFile().second );
+  debugLog(
+    nix::fmt( "created tempfile for activation script: script=%s, path=%s",
+              ACTIVATION_SCRIPT_NAME,
+              scriptTempPath ) );
+  std::ofstream scriptTmpFile( scriptTempPath );
+  if ( ! scriptTmpFile.is_open() )
+    {
+      throw ActivationScriptBuildFailure( std::string( strerror( errno ) ) );
+    }
+  scriptTmpFile << "#!" << FLOX_BASH_PKG << "/bin/bash" << std::endl;
+  // Create variables for Nix-provided tooling.
+  scriptTmpFile << "_coreutils=" << FLOX_COREUTILS_PKG << std::endl;
+  scriptTmpFile << "_gnused=" << FLOX_GNUSED_PKG << std::endl;
+  scriptTmpFile << "_procps=" << FLOX_PROCPS_PKG << std::endl;
+  scriptTmpFile << ACTIVATE_SCRIPT;
+  if ( scriptTmpFile.fail() )
+    {
+      throw ActivationScriptBuildFailure( std::string( strerror( errno ) ) );
+    }
+  scriptTmpFile.close();
+
+  /* Copy the script to the temp directory. */
+  auto scriptPath = tempDir / ACTIVATION_SCRIPT_NAME;
+  debugLog( nix::fmt( "copying script to scripts dir: src=%s, dest=%s",
+                      scriptTempPath,
+                      scriptPath ) );
+  std::filesystem::copy_file( scriptTempPath, scriptPath );
+  std::filesystem::permissions( scriptPath,
+                                std::filesystem::perms::owner_exec,
+                                std::filesystem::perm_options::add );
+}
+
+void
 addScriptToScriptsDir( const std::string &           scriptContents,
                        const std::filesystem::path & scriptsDir,
                        const std::string &           scriptName )
 {
-  /* Ensure that the "activate" subdirectory exists. */
+  /* Ensure that the "activate.d" subdirectory exists. */
   std::filesystem::create_directories( scriptsDir / ACTIVATION_SUBDIR_NAME );
 
   /* Write the script to a temporary file. */
@@ -648,7 +811,7 @@ addScriptToScriptsDir( const std::string &           scriptContents,
     {
       throw ActivationScriptBuildFailure( std::string( strerror( errno ) ) );
     }
-  scriptTmpFile << scriptContents << std::endl;
+  scriptTmpFile << scriptContents;
   if ( scriptTmpFile.fail() )
     {
       throw ActivationScriptBuildFailure( std::string( strerror( errno ) ) );
@@ -661,9 +824,6 @@ addScriptToScriptsDir( const std::string &           scriptContents,
                       scriptTempPath,
                       scriptPath ) );
   std::filesystem::copy_file( scriptTempPath, scriptPath );
-  std::filesystem::permissions( scriptPath,
-                                std::filesystem::perms::owner_exec,
-                                std::filesystem::perm_options::add );
 }
 
 std::string
@@ -680,15 +840,6 @@ appendSourcedScript( const std::string & scriptName,
              << '\n';
 }
 
-void
-appendBashCalledScript( const std::string & scriptName,
-                        std::stringstream & mainScript )
-{
-  mainScript << FLOX_BASH_BIN << " "
-             << activationScriptEnvironmentPath( scriptName ) << '\n';
-}
-
-
 /* -------------------------------------------------------------------------- */
 
 std::pair<buildenv::RealisedPackage, nix::StorePathSet>
@@ -697,15 +848,19 @@ makeActivationScripts( nix::EvalState &              state,
 {
   std::vector<nix::StorePath> activationScripts;
   auto tempDir = std::filesystem::path( nix::createTempDir() );
-  std::filesystem::create_directories( tempDir / "activate" );
+  std::filesystem::create_directories( tempDir / ACTIVATION_SUBDIR_NAME );
 
   /* Create the shell-specific activation scripts */
   std::stringstream bashScript;
+  std::stringstream envrcScript;
+  std::stringstream fishScript;
   std::stringstream zshScript;
 
   /* Add the preambles */
   bashScript << BASH_ACTIVATE_SCRIPT << "\n";
   bashScript << "source " << SET_PROMPT_BASH_SH << "\n";
+  // fishScript << FISH_ACTIVATE_SCRIPT << "\n";
+  // fishScript << "source " << SET_PROMPT_FISH_SH << "\n";
   zshScript << ZSH_ACTIVATE_SCRIPT << "\n";
   zshScript << "source " << SET_PROMPT_ZSH_SH << "\n";
 
@@ -714,7 +869,7 @@ makeActivationScripts( nix::EvalState &              state,
   /* Add environment variables. */
   if ( auto vars = manifest.vars )
     {
-
+      envrcScript << "# Static environment variables" << std::endl;
       for ( auto [name, value] : vars.value() )
         {
           /* Single quote value and replace ' with '\''.
@@ -730,10 +885,15 @@ makeActivationScripts( nix::EvalState &              state,
               value.replace( indexOfQuoteChar, 1, "'\\''" );
               indexOfQuoteChar += 4;
             }
-
-          bashScript << nix::fmt( "export %s='%s'\n", name, value );
-          zshScript << nix::fmt( "export %s='%s'\n", name, value );
+          envrcScript << nix::fmt( "export %s='%s'\n", name, value );
         }
+    }
+
+  /* Add envrc script */
+  if ( envrcScript.str().size() > 0 )
+    {
+      debugLog( "adding 'envrc' to activation scripts" );
+      addScriptToScriptsDir( envrcScript.str(), tempDir, "envrc" );
     }
 
   /* Add profile scripts */
@@ -761,7 +921,7 @@ makeActivationScripts( nix::EvalState &              state,
         }
     }
 
-  /* Add 'on-activate' script. */
+  /* Add 'hook-on-activate' script. */
   auto hook = manifest.hook;
   if ( hook.has_value() )
     {
@@ -782,14 +942,15 @@ makeActivationScripts( nix::EvalState &              state,
           addScriptToScriptsDir( *hook->onActivate,
                                  tempDir,
                                  "hook-on-activate" );
-          appendBashCalledScript( "hook-on-activate", bashScript );
-          appendBashCalledScript( "hook-on-activate", zshScript );
         }
     }
 
   /* Add the shell-specific scripts to the scripts directory */
   addScriptToScriptsDir( bashScript.str(), tempDir, "bash" );
   addScriptToScriptsDir( zshScript.str(), tempDir, "zsh" );
+
+  /* Add top-level activate script */
+  addActivationScript( tempDir );
 
   debugLog( "adding activation scripts to store" );
   auto activationStorePath
@@ -802,7 +963,10 @@ makeActivationScripts( nix::EvalState &              state,
   references.insert( activationStorePath );
   references.insert( state.store->parseStorePath( SET_PROMPT_BASH_SH ) );
   references.insert( state.store->parseStorePath( SET_PROMPT_ZSH_SH ) );
-
+  references.insert( state.store->parseStorePath( FLOX_BASH_PKG ) );
+  references.insert( state.store->parseStorePath( FLOX_COREUTILS_PKG ) );
+  references.insert( state.store->parseStorePath( FLOX_GNUSED_PKG ) );
+  references.insert( state.store->parseStorePath( FLOX_PROCPS_PKG ) );
 
   return { realised, references };
 }

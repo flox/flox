@@ -169,7 +169,7 @@ EOF
   make_empty_remote_env
   "$FLOX_BIN" install hello --remote "$OWNER/test"
 
-  run "$FLOX_BIN" activate --remote "$OWNER/test" --trust -- exit
+  run "$FLOX_BIN" activate --remote "$OWNER/test" --trust -- :
   assert_success
 }
 
@@ -181,7 +181,7 @@ EOF
   "$FLOX_BIN" install hello --remote "$OWNER/test"
 
   run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/test'" "trust"
-  run "$FLOX_BIN" activate --remote "$OWNER/test" -- exit
+  run "$FLOX_BIN" activate --remote "$OWNER/test" -- :
   assert_success
 }
 
@@ -194,10 +194,10 @@ EOF
 
   run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/test'" "deny"
 
-  run "$FLOX_BIN" activate --remote "$OWNER/test" -- exit
+  run "$FLOX_BIN" activate --remote "$OWNER/test" -- :
   assert_failure
 
-  run "$FLOX_BIN" activate --remote "$OWNER/test" --trust -- exit
+  run "$FLOX_BIN" activate --remote "$OWNER/test" --trust -- :
   assert_success
 }
 
@@ -213,7 +213,7 @@ EOF
   floxhub_setup "$OWNER"
   make_empty_remote_env
 
-  run "$FLOX_BIN" activate --remote "$OWNER/test" -- exit
+  run "$FLOX_BIN" activate --remote "$OWNER/test" -- :
   assert_success
 }
 
@@ -228,7 +228,7 @@ EOF
   floxhub_setup "flox"
   OWNER=flox make_empty_remote_env
 
-  run "$FLOX_BIN" activate --remote "flox/test" -- exit
+  run "$FLOX_BIN" activate --remote "flox/test" -- :
   assert_success
 }
 

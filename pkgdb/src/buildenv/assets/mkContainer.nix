@@ -45,11 +45,11 @@
         "FLOX_PROMPT_COLOR_2" = "141";
         "_FLOX_ACTIVE_ENVIRONMENTS" = "[]";
         "FLOX_SOURCED_FROM_SHELL_RC" = "1"; # don't source from shell rc (again)
-        "BASH_ENV" = "${environment}/activate/bash";
+        "BASH_ENV" = "${environment}/activate";
       };
 
       # source original .bashrc, then start another shell that runs activation
-      Cmd = ["-i" "${containerPkgs.bashInteractive}/bin/bash --rcfile ${environment}/activate/bash"];
+      Cmd = ["-i" "${containerPkgs.bashInteractive}/bin/bash -c ${environment}/activate"];
     };
   };
 in

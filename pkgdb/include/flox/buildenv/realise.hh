@@ -32,7 +32,8 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-static constexpr std::string_view ACTIVATION_SUBDIR_NAME = "activate";
+static constexpr std::string_view ACTIVATION_SCRIPT_NAME = "activate";
+static constexpr std::string_view ACTIVATION_SUBDIR_NAME = "activate.d";
 
 /* -------------------------------------------------------------------------- */
 
@@ -374,6 +375,15 @@ makeActivationScripts( nix::EvalState &              state,
 
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Adds this script to the directory of activation scripts included in
+ * the environment.
+ * @param scriptContents The contents of the script, including the shebang.
+ * @param tempDir The temporary scripts directory being assembled.
+ */
+void
+addActivationScript( const std::filesystem::path & tempDir );
 
 /**
  * @brief Adds this script to the directory of activation scripts included in
