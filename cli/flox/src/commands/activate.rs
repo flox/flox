@@ -277,7 +277,7 @@ impl Activate {
     }
 
     /// Used for `flox activate -- run_args`
-    fn activate_command(
+    fn old_activate_command(
         run_args: Vec<String>,
         shell: Shell,
         exports: HashMap<&str, String>,
@@ -311,11 +311,39 @@ impl Activate {
         Err(command.exec().into())
     }
 
+    /// Used for `flox activate -- run_args`
+    fn activate_command(
+        run_args: Vec<String>,
+        shell: Shell,
+        exports: HashMap<&str, String>,
+        activation_path: PathBuf,
+    ) -> Result<()> {
+        // Previous versions of pkgdb rendered activation scripts into a
+        // subdirectory called "activate", but now that path is occupied by
+        // the activation script itself. The new activation scripts are in a
+        // subdirectory called "activate.d". If we find that the "activate"
+        // path is a directory, we assume it's the old style and invoke the
+        // old_activate_command function.
+        let activate_path = activation_path.join("activate");
+        if activate_path.is_dir() {
+            return Self::old_activate_command(run_args, shell, exports, activation_path);
+        }
+
+        let mut command = Command::new(activate_path);
+        command.args(run_args);
+        command.envs(exports);
+
+        debug!("running activation command: {:?}", command);
+
+        // exec should never return
+        Err(command.exec().into())
+    }
+
     /// Activate the environment interactively by spawning a new shell
     /// and running the respective activation scripts.
     ///
     /// This function should never return as it replaces the current process
-    fn activate_interactive(
+    fn old_activate_interactive(
         shell: Shell,
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
@@ -363,6 +391,42 @@ impl Activate {
                     .arg("--no-globalrcs");
             },
         };
+
+        debug!("running activation command: {:?}", command);
+
+        let message = formatdoc! {"
+                You are now using the environment {}.
+                To stop using this environment, type 'exit'\n", now_active.message_description()?};
+        message::updated(message);
+
+        // exec should never return
+        Err(command.exec().into())
+    }
+
+    /// Activate the environment interactively by spawning a new shell
+    /// and running the respective activation scripts.
+    ///
+    /// This function should never return as it replaces the current process
+    fn activate_interactive(
+        shell: Shell,
+        exports: HashMap<&str, String>,
+        activation_path: PathBuf,
+        now_active: UninitializedEnvironment,
+    ) -> Result<()> {
+        // Previous versions of pkgdb rendered activation scripts into a
+        // subdirectory called "activate", but now that path is occupied by
+        // the activation script itself. The new activation scripts are in a
+        // subdirectory called "activate.d". If we find that the "activate"
+        // path is a directory, we assume it's the old style and invoke the
+        // old_activate_interactive function.
+        let activate_path = activation_path.join("activate");
+        if activate_path.is_dir() {
+            return Self::old_activate_interactive(shell, exports, activation_path, now_active);
+        }
+
+        let mut command = Command::new(activate_path);
+        command.env("FLOX_SHELL", shell.exe_path());
+        command.envs(exports);
 
         debug!("running activation command: {:?}", command);
 
@@ -486,7 +550,11 @@ impl Activate {
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(shell: &Shell, exports: &HashMap<&str, String>, activation_path: &Path) {
+    fn old_activate_in_place(
+        shell: &Shell,
+        exports: &HashMap<&str, String>,
+        activation_path: &Path,
+    ) {
         let exports_rendered = exports
             .iter()
             .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
@@ -508,6 +576,53 @@ impl Activate {
         };
 
         println!("{script}");
+    }
+
+    /// Used for `eval "$(flox activate)"`
+    fn activate_in_place(shell: &Shell, exports: &HashMap<&str, String>, activation_path: &Path) {
+        // Previous versions of pkgdb rendered activation scripts into a
+        // subdirectory called "activate", but now that path is occupied by
+        // the activation script itself. The new activation scripts are in a
+        // subdirectory called "activate.d". If we find that the "activate"
+        // path is a directory, we assume it's the old style and invoke the
+        // old_activate_in_place function.
+        let activate_path = activation_path.join("activate");
+        if activate_path.is_dir() {
+            return Self::old_activate_in_place(shell, exports, activation_path);
+        }
+
+        let mut command = Command::new(&activate_path);
+        command.env("FLOX_SHELL", shell.exe_path());
+        command.envs(exports);
+
+        debug!("running activation command: {:?}", command);
+
+        let output = command.output().expect("failed to run activation script");
+        eprint!("{}", String::from_utf8_lossy(&output.stderr));
+
+        // XXX BUG TODO: this is not correct, we need to know the value of
+        // $FLOX_SHELL in order to know the correct syntax for exporting
+        // variables in the local shell dialect. Turn this into a function
+        // that can do that.
+        let exports_rendered = exports
+            .iter()
+            .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
+            .map(|(key, value)| format!("export {key}={value}",))
+            .join("\n");
+
+        let script = formatdoc! {"
+            # Common flox environment variables
+            {exports_rendered}
+
+            # to avoid infinite recursion sourcing bashrc
+            export FLOX_SOURCED_FROM_SHELL_RC=1
+            {output}
+            unset FLOX_SOURCED_FROM_SHELL_RC
+        ",
+        output = String::from_utf8_lossy(&output.stdout),
+        };
+
+        print!("{script}");
     }
 
     /// Quote run args so that words don't get split,
