@@ -29,11 +29,9 @@ indent.workspace = true
 shell-escape.workspace = true
 
 [dev-dependencies]
-anyhow = "1.0.65"
-dotenv = "0.15.0"
-env_logger = "0.10"
+anyhow.workspace = true
 pretty_assertions.workspace = true
-serial_test = "2.0.0"
+serial_test.workspace = true
 
 [features]
 extra-tests = ["impure-unit-tests"]
