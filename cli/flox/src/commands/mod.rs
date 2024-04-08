@@ -1,18 +1,30 @@
+mod activate;
 mod auth;
-mod environment;
+mod containerize;
+mod delete;
+mod edit;
 mod general;
 mod init;
+mod install;
+mod list;
+mod pull;
+mod push;
 mod search;
+mod uninstall;
+mod update;
+mod upgrade;
 
 use std::collections::VecDeque;
 use std::fmt::Display;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{env, fmt, fs, mem};
 
 use anyhow::{bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
 use flox_rust_sdk::flox::{
+    EnvironmentName,
+    EnvironmentOwner,
     EnvironmentRef,
     Flox,
     Floxhub,
@@ -29,7 +41,7 @@ use flox_rust_sdk::models::environment::{
     find_dot_flox,
     DotFlox,
     Environment,
-    EnvironmentError2,
+    EnvironmentError,
     EnvironmentPointer,
     ManagedPointer,
     DOT_FLOX,
@@ -50,12 +62,12 @@ use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::init::{
     init_access_tokens,
-    init_telemetry,
+    init_telemetry_uuid,
     init_uuid,
     telemetry_opt_out_needs_migration,
 };
 use crate::utils::message;
-use crate::utils::metrics::METRICS_UUID_FILE_NAME;
+use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FILE_NAME};
 
 static FLOX_DESCRIPTION: &'_ str = indoc! {"
     flox is a virtual environment and package manager all in one.\n\n
@@ -204,7 +216,13 @@ impl FloxArgs {
         }
 
         if !config.flox.disable_metrics {
-            init_telemetry(&config.flox.data_dir, &config.flox.cache_dir).await?;
+            debug!("Metrics collection enabled");
+
+            init_telemetry_uuid(&config.flox.data_dir, &config.flox.cache_dir)?;
+
+            let connection = AWSDatalakeConnection::default();
+            let client = Client::new_with_config(&config, connection)?;
+            Hub::global().set_client(client);
         } else {
             debug!("Metrics collection disabled");
             env::set_var("FLOX_DISABLE_METRICS", "true");
@@ -340,6 +358,7 @@ struct Help {
     #[bpaf(positional("cmd"))]
     cmd: Option<String>,
 }
+
 impl Help {
     fn handle(self) {
         let mut args = Vec::from_iter(self.cmd.as_deref());
@@ -348,8 +367,8 @@ impl Help {
         // todo: just `run()` this -- we might not need the expl;icit error handling anymore
         match flox_cli().run_inner(&*args) {
             Ok(_) => unreachable!(),
-            Err(ParseFailure::Completion(comp)) => print!("{comp}"),
-            Err(ParseFailure::Stdout(doc, _)) => message::plain(doc),
+            Err(ParseFailure::Completion(comp)) => print!("{comp:80}"),
+            Err(ParseFailure::Stdout(doc, _)) => message::plain(format!("{doc:80}")),
             Err(ParseFailure::Stderr(err)) => message::error(err),
         }
     }
@@ -371,7 +390,7 @@ enum LocalDevelopmentCommands {
         long("develop"),
         footer("Run 'man flox-activate' for more details.")
     )]
-    Activate(#[bpaf(external(environment::activate))] environment::Activate),
+    Activate(#[bpaf(external(activate::activate))] activate::Activate),
     /// Search for system or library packages to install
     #[bpaf(command, footer("Run 'man flox-search' for more details."))]
     Search(#[bpaf(external(search::search))] search::Search),
@@ -384,7 +403,7 @@ enum LocalDevelopmentCommands {
         short('i'),
         footer("Run 'man flox-install' for more details.")
     )]
-    Install(#[bpaf(external(environment::install))] environment::Install),
+    Install(#[bpaf(external(install::install))] install::Install),
     /// Uninstall installed packages from an environment
     #[bpaf(
         command,
@@ -392,20 +411,20 @@ enum LocalDevelopmentCommands {
         long("rm"),
         footer("Run 'man flox-uninstall' for more details.")
     )]
-    Uninstall(#[bpaf(external(environment::uninstall))] environment::Uninstall),
+    Uninstall(#[bpaf(external(uninstall::uninstall))] uninstall::Uninstall),
     /// Edit declarative environment configuration file
     #[bpaf(command, footer("Run 'man flox-edit' for more details."))]
-    Edit(#[bpaf(external(environment::edit))] environment::Edit),
+    Edit(#[bpaf(external(edit::edit))] edit::Edit),
     /// List packages installed in an environment
     #[bpaf(command, footer("Run 'man flox-list' for more details."))]
-    List(#[bpaf(external(environment::list))] environment::List),
+    List(#[bpaf(external(list::list))] list::List),
     /// Delete an environment
     #[bpaf(
         command,
         long("destroy"),
         footer("Run 'man flox-delete' for more details.")
     )]
-    Delete(#[bpaf(external(environment::delete))] environment::Delete),
+    Delete(#[bpaf(external(delete::delete))] delete::Delete),
 }
 
 impl LocalDevelopmentCommands {
@@ -430,10 +449,10 @@ impl LocalDevelopmentCommands {
 enum SharingCommands {
     /// Send an environment to FloxHub
     #[bpaf(command, footer("Run 'man flox-push' for more details."))]
-    Push(#[bpaf(external(environment::push))] environment::Push),
+    Push(#[bpaf(external(push::push))] push::Push),
     /// Pull an environment from FloxHub
     #[bpaf(command, footer("Run 'man flox-pull' for more details."))]
-    Pull(#[bpaf(external(environment::pull))] environment::Pull),
+    Pull(#[bpaf(external(pull::pull))] pull::Pull),
     /// Containerize an environment
     #[bpaf(
         command,
@@ -441,8 +460,9 @@ enum SharingCommands {
         footer("Run 'man flox-containerize' for more details."),
         header("This command is experimental and its behaviour is subject to change")
     )]
-    Containerize(#[bpaf(external(environment::containerize))] environment::Containerize),
+    Containerize(#[bpaf(external(containerize::containerize))] containerize::Containerize),
 }
+
 impl SharingCommands {
     async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         match self {
@@ -462,7 +482,7 @@ enum AdditionalCommands {
     ),
     /// Update environment's base catalog or the global base catalog
     #[bpaf(command, hide, footer("Run 'man flox-update' for more details."))]
-    Update(#[bpaf(external(environment::update))] environment::Update),
+    Update(#[bpaf(external(update::update))] update::Update),
     /// Upgrade packages in an environment
     #[bpaf(command, hide, footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
         When no arguments are specified, all packages in the environment are upgraded.\n\n
@@ -477,16 +497,10 @@ enum AdditionalCommands {
         The packages in that group can be upgraded without updating any other
         groups by passing 'toplevel' as the group name.
     "}))]
-    Upgrade(#[bpaf(external(environment::upgrade))] environment::Upgrade),
+    Upgrade(#[bpaf(external(upgrade::upgrade))] upgrade::Upgrade),
     /// View and set configuration options
     #[bpaf(command, hide, footer("Run 'man flox-config' for more details."))]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
-    /// Delete builds of non-current versions of an environment
-    #[bpaf(command("wipe-history"), hide)]
-    WipeHistory(#[bpaf(external(environment::wipe_history))] environment::WipeHistory),
-    /// Show all versions of an environment
-    #[bpaf(command, hide)]
-    History(#[bpaf(external(environment::history))] environment::History),
 }
 
 impl AdditionalCommands {
@@ -502,8 +516,6 @@ impl AdditionalCommands {
             AdditionalCommands::Update(args) => args.handle(flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
             AdditionalCommands::Config(args) => args.handle(config, flox).await?,
-            AdditionalCommands::WipeHistory(args) => args.handle(flox).await?,
-            AdditionalCommands::History(args) => args.handle(flox).await?,
         }
         Ok(())
     }
@@ -524,17 +536,6 @@ enum InternalCommands {
     /// Reset the metrics queue (if any), reset metrics ID, and re-prompt for consent
     #[bpaf(command("reset-metrics"))]
     ResetMetrics(#[bpaf(external(general::reset_metrics))] general::ResetMetrics),
-    /// List environment generations with contents
-    #[bpaf(command)]
-    Generations(#[bpaf(external(environment::generations))] environment::Generations),
-    /// Switch to a specific generation of an environment
-    #[bpaf(command("switch-generation"))]
-    SwitchGeneration(
-        #[bpaf(external(environment::switch_generation))] environment::SwitchGeneration,
-    ),
-    /// Rollback to the previous generation of an environment
-    #[bpaf(command)]
-    Rollback(#[bpaf(external(environment::rollback))] environment::Rollback),
     /// FloxHub authentication commands
     #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
     Auth(#[bpaf(external(auth::auth))] auth::Auth),
@@ -544,9 +545,6 @@ impl InternalCommands {
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
-            InternalCommands::Generations(args) => args.handle(flox).await?,
-            InternalCommands::SwitchGeneration(args) => args.handle(flox).await?,
-            InternalCommands::Rollback(args) => args.handle(flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
         }
         Ok(())
@@ -617,7 +615,7 @@ pub enum EnvironmentSelect {
 #[derive(Debug, Error)]
 pub enum EnvironmentSelectError {
     #[error(transparent)]
-    Environment(#[from] EnvironmentError2),
+    Environment(#[from] EnvironmentError),
     #[error("Did not find an environment in the current directory.")]
     EnvNotFoundInCurrentDirectory,
     #[error(transparent)]
@@ -727,11 +725,11 @@ pub fn detect_environment(
         // current directory or git repo, prompt for which to use.
         (Some(activated_env), Some(found)) => {
             let type_of_directory = if found.path == current_dir {
-                "current directory's flox environment"
+                "current directory"
             } else {
-                "flox environment detected in git repo"
+                "detected in git repo"
             };
-            let message = format!("Do you want to {message} the {type_of_directory} or the current active flox environment?");
+            let message = format!("{message} which environment?");
             let found = UninitializedEnvironment::DotFlox(found);
 
             if !Dialog::can_prompt() {
@@ -744,8 +742,8 @@ pub fn detect_environment(
                 help_message: None,
                 typed: Select {
                     options: vec![
-                        format!("{type_of_directory} [{found}]",),
-                        format!("current active flox environment [{activated_env}]",),
+                        format!("{type_of_directory} [{}]", found.bare_description()?),
+                        format!("currently active [{}]", activated_env.bare_description()?),
                     ],
                 },
             };
@@ -764,7 +762,7 @@ pub fn detect_environment(
 }
 
 /// Open an environment defined in `{path}/.flox`
-fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError2> {
+fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError> {
     DotFlox::open(path)
         .map(UninitializedEnvironment::DotFlox)?
         .into_concrete_environment(flox)
@@ -850,7 +848,7 @@ impl UninitializedEnvironment {
     pub fn into_concrete_environment(
         self,
         flox: &Flox,
-    ) -> Result<ConcreteEnvironment, EnvironmentError2> {
+    ) -> Result<ConcreteEnvironment, EnvironmentError> {
         match self {
             UninitializedEnvironment::DotFlox(dot_flox) => {
                 let dot_flox_path = dot_flox.path.join(DOT_FLOX);
@@ -886,32 +884,119 @@ impl UninitializedEnvironment {
             },
         }
     }
-}
 
-impl Display for UninitializedEnvironment {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    /// If the environment is remote or managed, the name of the owner
+    pub fn owner(&self) -> Option<&EnvironmentOwner> {
         match self {
+            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.owner(),
+            UninitializedEnvironment::Remote(pointer) => Some(&pointer.owner),
+        }
+    }
+
+    /// The name of the environment
+    pub fn name(&self) -> &EnvironmentName {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { pointer, .. }) => pointer.name(),
+            UninitializedEnvironment::Remote(pointer) => &pointer.name,
+        }
+    }
+
+    /// Returns true if the environment is in the current directory
+    pub fn is_current_dir(&self) -> Result<bool> {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => {
+                let current_dir = std::env::current_dir()?;
+                let is_current = current_dir.canonicalize()? == path.canonicalize()?;
+                Ok(is_current)
+            },
+            UninitializedEnvironment::Remote(_) => Ok(false),
+        }
+    }
+
+    /// Returns the path to the environment if it isn't remote
+    #[allow(dead_code)]
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => Some(path),
+            UninitializedEnvironment::Remote(_) => None,
+        }
+    }
+
+    /// Returns true if the environment is a managed environment
+    pub fn is_managed(&self) -> bool {
+        matches!(
+            self,
             UninitializedEnvironment::DotFlox(DotFlox {
-                path,
-                pointer: EnvironmentPointer::Managed(managed_pointer),
-            }) => {
-                write!(
-                    f,
-                    "{}/{} at {}",
-                    managed_pointer.owner,
-                    managed_pointer.name,
-                    path.to_string_lossy(),
-                )
-            },
+                path: _,
+                pointer: EnvironmentPointer::Managed(_)
+            })
+        )
+    }
+
+    /// Returns true if the environment is a path environment
+    #[allow(dead_code)]
+    pub fn is_path_env(&self) -> bool {
+        matches!(
+            self,
             UninitializedEnvironment::DotFlox(DotFlox {
-                path,
-                pointer: EnvironmentPointer::Path(path_pointer),
-            }) => {
-                write!(f, "{} at {}", path_pointer.name, path.to_string_lossy())
-            },
-            UninitializedEnvironment::Remote(pointer) => {
-                write!(f, "{}/{} (remote)", pointer.owner, pointer.name,)
-            },
+                path: _,
+                pointer: EnvironmentPointer::Path(_)
+            })
+        )
+    }
+
+    /// Returns true if the environment is a remote environment
+    pub fn is_remote(&self) -> bool {
+        match self {
+            UninitializedEnvironment::DotFlox(_) => false,
+            UninitializedEnvironment::Remote(_) => true,
+        }
+    }
+
+    /// The environment description when displayed in a prompt
+    pub fn bare_description(&self) -> Result<String> {
+        if self.is_remote() {
+            Ok(format!(
+                "{}/{} (remote)",
+                self.owner()
+                    .context("remote environments should have an owner")?,
+                self.name()
+            ))
+        } else if self.is_managed() {
+            Ok(format!(
+                "{}/{}",
+                self.owner()
+                    .context("managed environments should have an owner")?,
+                self.name()
+            ))
+        } else {
+            Ok(format!("{}", self.name()))
+        }
+    }
+
+    /// The environment description when displayed in messages
+    pub fn message_description(&self) -> Result<String> {
+        if self.is_remote() {
+            Ok(format!(
+                "'{}/{}' (remote)",
+                self.owner()
+                    .context("remote environments should have an owner")?,
+                self.name()
+            ))
+        } else if self.is_managed() {
+            Ok(format!(
+                "'{}/{}'",
+                self.owner()
+                    .context("managed environments should have an owner")?,
+                self.name()
+            ))
+        } else if self
+            .is_current_dir()
+            .context("couldn't read current directory")?
+        {
+            Ok(String::from("in current directory"))
+        } else {
+            Ok(format!("'{}'", self.name()))
         }
     }
 }
@@ -1176,7 +1261,7 @@ pub(super) async fn ensure_floxhub_token(flox: &mut Flox) -> Result<()> {
 }
 
 pub fn environment_description(environment: &ConcreteEnvironment) -> Result<String> {
-    Ok(UninitializedEnvironment::from_concrete_environment(environment)?.to_string())
+    UninitializedEnvironment::from_concrete_environment(environment)?.message_description()
 }
 
 #[cfg(test)]

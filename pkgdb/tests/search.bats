@@ -484,6 +484,7 @@ genParamsNixpkgsFlox() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=search:parallel
 @test "'pkgdb search' doesn't crash when run in parallel" {
   # We don't want other tests polluting parallel test runs so we do this test
   # with a unique cache directory.

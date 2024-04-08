@@ -27,6 +27,8 @@
    <a href="https://flox.dev/blog"><b>Blog</b></a>
    &emsp; | &emsp;  
    <a href="https://twitter.com/floxdevelopment"><b>Twitter</b></a>
+   &emsp; | &emsp; 
+   <a href="https://go.flox.dev/slack"><b>Slack</b></a>
    &emsp;
 </h3>
 
@@ -111,8 +113,7 @@ of Nix.
 
 We are happy to welcome you to our [Discourse forum][discourse] and answer your
 questions! You can always reach out to us directly via the [Flox twitter
-account][twitter] or chat to us directly on [Slack][slack] or
-[Discord][discord].
+account][twitter] or chat with us directly on [Slack][slack].
 
 ## 🤝 Found a bug? Missing a specific feature?
 
@@ -139,6 +140,5 @@ The Flox CLI is licensed under the GPLv2. See [LICENSE](./LICENSE).
 [docs]: https://flox.dev/docs
 [twitter]: https://twitter.com/floxdevelopment
 [slack]: https://go.flox.dev/slack
-[discord]: https://discord.gg/5H7hN57eQR
 [new-issue]: https://github.com/flox/flox/issues/new/choose
 [post-nixpkgs]: https://flox.dev/blog/nixpkgs

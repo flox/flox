@@ -1,6 +1,6 @@
 use std::env;
 use std::fmt::Display;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -81,6 +81,8 @@ pub enum CallPkgDbError {
     PkgDbStdout,
     #[error("couldn't get pkgdb stderr")]
     PkgDbStderr,
+    #[error("internal error: {0}")]
+    SomethingElse(String),
 }
 
 /// Call pkgdb and try to parse JSON or error JSON.
@@ -94,23 +96,44 @@ pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
         .map_err(CallPkgDbError::PkgDbCall)?;
     let stderr = proc.stderr.take().expect("couldn't get stderr handle");
     let stderr_reader = BufReader::new(stderr);
-    stderr_reader
-        .lines()
-        .map_while(Result::ok)
-        .for_each(|line| {
-            debug!(target: "pkgdb", "{line}");
+    let stdout = proc.stdout.take().expect("couldn't get stdout handle");
+    let mut stdout_reader = BufReader::new(stdout);
+
+    let pkgdb_output = std::thread::scope(|s| {
+        let stderr_thread = s.spawn(move || {
+            stderr_reader
+                .lines()
+                .map_while(Result::ok)
+                .for_each(|line| {
+                    debug!(target: "pkgdb", "{line}");
+                });
         });
-    let output = proc.wait_with_output().map_err(CallPkgDbError::PkgDbCall)?;
-    // If command fails, try to parse stdout as a PkgDbError
-    if !output.status.success() {
-        match serde_json::from_slice::<PkgDbError>(&output.stdout) {
-            Ok(pkgdb_err) => Err(pkgdb_err)?,
-            Err(e) => Err(CallPkgDbError::ParsePkgDbError(e))?,
-        }
-    // If the command succeeds, try to parse stdout as a JSON value
-    } else {
-        let json = serde_json::from_slice(&output.stdout).map_err(CallPkgDbError::ParseJSON)?;
-        Ok(json)
+        let stdout_thread = s.spawn(move || {
+            let mut contents = String::new();
+            tracing::debug!("reading pkgdb stdout");
+            let bytes_read = stdout_reader.read_to_string(&mut contents);
+            bytes_read.map(|_| contents)
+        });
+        tracing::trace!("waiting for background threads to finish");
+        let _ = stderr_thread.join();
+        let stdout_res = stdout_thread.join();
+        tracing::trace!("done waiting for background threads");
+        stdout_res
+    });
+    let Ok(stdout_contents) = pkgdb_output else {
+        // Something went wrong in one of the background threads
+        return Err(CallPkgDbError::SomethingElse(
+            "failed to process pkgdb output".into(),
+        ));
+    };
+    tracing::trace!("waiting for the pkgdb process to exit");
+    let _wait_res = proc.wait();
+    match stdout_contents {
+        Ok(json) => match serde_json::from_str::<PkgDbError>(&json) {
+            Ok(pkgdb_err) => Err(CallPkgDbError::PkgDbError(pkgdb_err)),
+            Err(_) => serde_json::from_str(&json).map_err(CallPkgDbError::ParseJSON),
+        },
+        Err(e) => Err(CallPkgDbError::PkgDbCall(e)),
     }
 }
 

@@ -35,6 +35,7 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox
   project_setup
 }
 teardown() {

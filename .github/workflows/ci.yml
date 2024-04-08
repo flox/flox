@@ -150,10 +150,15 @@ jobs:
       - name: "Build"
         run: nix develop -L --no-update-lock-file --command just build-cli
 
-      - name: "CLI Tests"
+      - name: "CLI Unit Tests"
         env:
           RUST_BACKTRACE: 1
-        run: nix develop -L --no-update-lock-file --command just test-cli
+        run: nix develop -L --no-update-lock-file --command just impure-tests
+
+      - name: "CLI Integration Tests"
+        env:
+          RUST_BACKTRACE: 1
+        run: nix develop -L --no-update-lock-file --command just integ-tests
 
       - name: "Functional Tests"
         if: ${{ github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
@@ -202,7 +207,7 @@ jobs:
       - name: "Build"
         id: "build"
         run: |
-          for package in '.#flox-pkgdb' '.#flox-cli' '.#flox' ; do
+          for package in '.#packages.${{ matrix.system }}.flox-pkgdb' '.#packages.${{ matrix.system }}.flox-cli' '.#packages.${{ matrix.system }}.flox' ; do
             echo "Building $package ..."
             git clean -xfd .
             if nix path-info                 \

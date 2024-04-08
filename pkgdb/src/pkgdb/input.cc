@@ -48,14 +48,52 @@ PkgDbInput::initDbRO()
 {
   bool isFresh = false;
 
-  /* Initialize DB if missing. */
+  /**
+   * Initialize DB if missing.
+   *
+   * Databases are initialized as a temporary file,
+   * then hard linked to the final location.
+   * The hard link is atomic, and the temporary file is removed.
+   *
+   * This way, we should be able to prevent other processes opening the
+   * partially initialized database.
+   */
   if ( ! std::filesystem::exists( this->dbPath ) )
     {
       std::filesystem::create_directories( this->dbPath.parent_path() );
       nix::logger->log(
         nix::lvlTalkative,
         nix::fmt( "Creating database '%s'", this->dbPath.string() ) );
-      PkgDb( this->getFlake()->lockedFlake, this->dbPath.string() );
+
+      // random 8 char suffix
+      std::string tempSuffix = "";
+      for ( int i = 0; i < 8; i++ ) { tempSuffix += 'a' + ( rand() % 25 ); }
+
+      auto tempDbPath = std::filesystem::path( this->dbPath )
+                          .replace_extension( this->dbPath.extension().string()
+                                              + "." + tempSuffix );
+
+      debugLog(
+        nix::fmt( "Creating temporary database '%s'", tempDbPath.string() ) );
+
+      PkgDb( this->getFlake()->lockedFlake, tempDbPath.string() );
+
+      try
+        {
+
+          debugLog( nix::fmt( "Moving intialized database '%s' -> %s",
+                              tempDbPath.string(),
+                              this->dbPath.string() ) );
+          std::filesystem::create_hard_link( tempDbPath, this->dbPath );
+        }
+      catch ( const std::exception & e )
+        {
+          debugLog(
+            "Failed to create link, db file created by other process?" );
+        }
+
+      std::filesystem::remove( tempDbPath );
+
       isFresh = true;
     }
 
@@ -70,9 +108,10 @@ PkgDbInput::initDbRO()
         this->getFlake()->lockedFlake.getFingerprint(),
         this->dbPath.string() );
     }
-  catch ( ... )
+  catch ( const std::exception & e )
     {
-      throw PkgDbException( "couldn't initialize read-only package database" );
+      throw PkgDbException( "couldn't initialize read-only package database",
+                            e.what() );
     }
 
   return isFresh;

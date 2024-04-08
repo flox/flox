@@ -12,7 +12,7 @@ use super::{
     CanonicalizeError,
     EditResult,
     Environment,
-    EnvironmentError2,
+    EnvironmentError,
     InstallationAttempt,
     ManagedPointer,
     UninstallationAttempt,
@@ -24,7 +24,7 @@ use super::{
 use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::floxmetav2::{FloxmetaV2, FloxmetaV2Error};
+use crate::models::floxmeta::{FloxMeta, FloxMetaError};
 use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::PackageToInstall;
 use crate::models::pkgdb::UpgradeResult;
@@ -37,7 +37,7 @@ pub enum RemoteEnvironmentError {
     OpenManagedEnvironment(#[source] ManagedEnvironmentError),
 
     #[error("could not get latest version of environment")]
-    GetLatestVersion(#[source] FloxmetaV2Error),
+    GetLatestVersion(#[source] FloxMetaError),
 
     #[error("could not reset managed environment")]
     ResetManagedEnvironment(#[source] ManagedEnvironmentError),
@@ -77,12 +77,11 @@ impl RemoteEnvironment {
         path: impl AsRef<Path>,
         pointer: ManagedPointer,
     ) -> Result<Self, RemoteEnvironmentError> {
-        let floxmeta = match FloxmetaV2::open(flox, &pointer) {
+        let floxmeta = match FloxMeta::open(flox, &pointer) {
             Ok(floxmeta) => floxmeta,
-            Err(FloxmetaV2Error::NotFound(_)) => {
+            Err(FloxMetaError::NotFound(_)) => {
                 debug!("cloning floxmeta for {}", pointer.owner);
-                FloxmetaV2::clone(flox, &pointer)
-                    .map_err(RemoteEnvironmentError::GetLatestVersion)?
+                FloxMeta::clone(flox, &pointer).map_err(RemoteEnvironmentError::GetLatestVersion)?
             },
             Err(e) => Err(RemoteEnvironmentError::GetLatestVersion(e))?,
         };
@@ -154,7 +153,7 @@ impl RemoteEnvironment {
         flox: &Flox,
         out_link: &Path,
         inner: &mut ManagedEnvironment,
-    ) -> Result<(), EnvironmentError2> {
+    ) -> Result<(), EnvironmentError> {
         let new_link_path = inner
             .activation_path(flox)?
             .read_link()
@@ -173,16 +172,16 @@ impl RemoteEnvironment {
 
 impl Environment for RemoteEnvironment {
     /// Build the environment and create a result link as gc-root
-    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError2> {
+    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError> {
         self.inner.build(flox)
     }
 
     /// Lock the environment and return the lockfile contents
-    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError2> {
+    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
         self.inner.lock(flox)
     }
 
-    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError2> {
+    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError> {
         self.inner.build_container(flox)
     }
 
@@ -191,7 +190,7 @@ impl Environment for RemoteEnvironment {
         &mut self,
         packages: &[PackageToInstall],
         flox: &Flox,
-    ) -> Result<InstallationAttempt, EnvironmentError2> {
+    ) -> Result<InstallationAttempt, EnvironmentError> {
         let result = self.inner.install(packages, flox)?;
         self.inner
             .push(flox, false)
@@ -206,7 +205,7 @@ impl Environment for RemoteEnvironment {
         &mut self,
         packages: Vec<String>,
         flox: &Flox,
-    ) -> Result<UninstallationAttempt, EnvironmentError2> {
+    ) -> Result<UninstallationAttempt, EnvironmentError> {
         let result = self.inner.uninstall(packages, flox)?;
         self.inner
             .push(flox, false)
@@ -217,7 +216,7 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Atomically edit this environment, ensuring that it still builds
-    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError2> {
+    fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError> {
         let result = self.inner.edit(flox, contents)?;
         if result == EditResult::Unchanged {
             return Ok(result);
@@ -235,7 +234,7 @@ impl Environment for RemoteEnvironment {
         &mut self,
         flox: &Flox,
         inputs: Vec<String>,
-    ) -> Result<UpdateResult, EnvironmentError2> {
+    ) -> Result<UpdateResult, EnvironmentError> {
         let result = self.inner.update(flox, inputs)?;
         self.inner
             .push(flox, false)
@@ -250,7 +249,7 @@ impl Environment for RemoteEnvironment {
         &mut self,
         flox: &Flox,
         groups_or_iids: &[String],
-    ) -> Result<UpgradeResult, EnvironmentError2> {
+    ) -> Result<UpgradeResult, EnvironmentError> {
         let result = self.inner.upgrade(flox, groups_or_iids)?;
         self.inner
             .push(flox, false)
@@ -261,11 +260,11 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Extract the current content of the manifest
-    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError2> {
+    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError> {
         self.inner.manifest_content(flox)
     }
 
-    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         Self::update_out_link(flox, &self.out_link, &mut self.inner)?;
         Ok(self.out_link.clone())
     }
@@ -274,26 +273,26 @@ impl Environment for RemoteEnvironment {
     ///
     /// Remote environments shouldn't have state of any kind, so this just
     /// returns a temporary directory.
-    fn cache_path(&self) -> Result<PathBuf, EnvironmentError2> {
-        let tempdir = TempDir::new().map_err(EnvironmentError2::CreateTempDir)?;
+    fn cache_path(&self) -> Result<PathBuf, EnvironmentError> {
+        let tempdir = TempDir::new().map_err(EnvironmentError::CreateTempDir)?;
         Ok(tempdir.into_path())
     }
 
-    fn project_path(&self) -> Result<PathBuf, EnvironmentError2> {
-        std::env::current_dir().map_err(EnvironmentError2::GetCurrentDir)
+    fn project_path(&self) -> Result<PathBuf, EnvironmentError> {
+        std::env::current_dir().map_err(EnvironmentError::GetCurrentDir)
     }
 
-    fn parent_path(&self) -> Result<PathBuf, EnvironmentError2> {
+    fn parent_path(&self) -> Result<PathBuf, EnvironmentError> {
         self.inner.parent_path()
     }
 
     /// Path to the environment definition file
-    fn manifest_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+    fn manifest_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         self.inner.manifest_path(flox)
     }
 
     /// Path to the lockfile. The path may not exist.
-    fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError2> {
+    fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         self.inner.lockfile_path(flox)
     }
 
@@ -307,7 +306,7 @@ impl Environment for RemoteEnvironment {
     /// The local version of this is rather ... useless.
     /// It just deletes the temporary directory.
     /// When extended to delete upstream environments, this will be more useful.
-    fn delete(self, flox: &Flox) -> Result<(), EnvironmentError2> {
+    fn delete(self, flox: &Flox) -> Result<(), EnvironmentError> {
         self.inner.delete(flox)
     }
 }

@@ -192,45 +192,125 @@ pub enum FloxhubError {
     InvalidFloxhubBaseUrl(String, #[source] url::ParseError),
 }
 
-use tempfile::TempDir;
-/// Should only be used in the flox crate
-pub fn test_flox_instance() -> (Flox, TempDir) {
-    use crate::models::environment::{global_manifest_path, init_global_manifest};
+pub mod test_helpers {
+    use std::fs;
 
-    let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+    use tempfile::{tempdir_in, TempDir};
 
-    let cache_dir = tempdir_handle.path().join("caches");
-    let data_dir = tempdir_handle.path().join(".local/share/flox");
-    let temp_dir = tempdir_handle.path().join("temp");
-    let config_dir = tempdir_handle.path().join("config");
-
-    std::fs::create_dir_all(&cache_dir).unwrap();
-    std::fs::create_dir_all(&temp_dir).unwrap();
-    std::fs::create_dir_all(&config_dir).unwrap();
-
-    let flox = Flox {
-        system: env!("NIX_TARGET_SYSTEM").to_string(),
-        cache_dir,
-        data_dir,
-        temp_dir,
-        config_dir,
-        access_tokens: Default::default(),
-        netrc_file: Default::default(),
-        uuid: Default::default(),
-        floxhub: Floxhub::new(Url::from_str("https://hub.flox.dev").unwrap(), None).unwrap(),
-        floxhub_token: None,
+    use super::*;
+    use crate::models::environment::{
+        global_manifest_lockfile_path,
+        global_manifest_path,
+        init_global_manifest,
     };
+    use crate::models::lockfile::LockedManifest;
+    use crate::providers::git::{GitCommandProvider, GitProvider};
 
-    init_global_manifest(&global_manifest_path(&flox)).unwrap();
+    /// Get an instance of Flox that has both a locked global manifest and a git
+    /// repo mocking FloxHub.
+    ///
+    /// Having a locked global manifest means any operations that use pkgdb
+    /// should use the same nixpkgs revision.
+    ///
+    /// The mock version of FloxHub allows testing push/pull operations for the provided owner.
+    /// No other owners will work.
+    pub fn flox_instance_with_global_lock_and_floxhub(owner: &EnvironmentOwner) -> (Flox, TempDir) {
+        flox_instance_with_global_lock_with_optional_floxhub(Some(owner))
+    }
 
-    (flox, tempdir_handle)
+    /// Get an instance of Flox that has a locked global manifest.
+    ///
+    /// This means any operations that use pkgdb should use the same nixpkgs
+    /// revision.
+    pub fn flox_instance_with_global_lock() -> (Flox, TempDir) {
+        flox_instance_with_global_lock_with_optional_floxhub(None)
+    }
+
+    /// If owner is None, no mock FloxHub is setup.
+    /// If it is Some, a mock FloxHub with a repo for that owner will be setup,
+    /// but no other owners will work.
+    fn flox_instance_with_global_lock_with_optional_floxhub(
+        owner: Option<&EnvironmentOwner>,
+    ) -> (Flox, TempDir) {
+        // Scrape nixpkgs once and then store the resulting global lockfile in memory
+        static GLOBAL_LOCKFILE: Lazy<LockedManifest> = Lazy::new(|| {
+            let (flox, _temp_dir_handle) = flox_instance();
+            let pkgdb_nixpkgs_rev_new = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
+            std::env::set_var("_PKGDB_GA_REGISTRY_REF_OR_REV", pkgdb_nixpkgs_rev_new);
+            LockedManifest::update_global_manifest(&flox, vec![])
+                .unwrap()
+                .new_lockfile
+        });
+
+        let (flox, tempdir_handle) = flox_instance_with_optional_floxhub(owner);
+
+        // All Flox instances created by flox_instance() have the same global
+        // manifest,
+        // so we can use the same lockfile.
+        let lockfile_path = global_manifest_lockfile_path(&flox);
+        std::fs::write(
+            lockfile_path,
+            serde_json::to_string_pretty(&*GLOBAL_LOCKFILE).unwrap(),
+        )
+        .unwrap();
+
+        (flox, tempdir_handle)
+    }
+
+    pub fn flox_instance() -> (Flox, TempDir) {
+        flox_instance_with_optional_floxhub(None)
+    }
+
+    /// If owner is None, no mock FloxHub is setup.
+    /// If it is Some, a mock FloxHub with a repo for that owner will be setup,
+    /// but no other owners will work.
+    fn flox_instance_with_optional_floxhub(owner: Option<&EnvironmentOwner>) -> (Flox, TempDir) {
+        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+
+        let cache_dir = tempdir_handle.path().join("caches");
+        let data_dir = tempdir_handle.path().join(".local/share/flox");
+        let temp_dir = tempdir_handle.path().join("temp");
+        let config_dir = tempdir_handle.path().join("config");
+
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        std::fs::create_dir_all(&config_dir).unwrap();
+
+        let git_url_override = owner.map(|owner| {
+            let mock_floxhub_git_dir = tempdir_in(&temp_dir).unwrap().into_path();
+            let floxmeta_dir = mock_floxhub_git_dir.join(owner.as_str()).join("floxmeta");
+            fs::create_dir_all(&floxmeta_dir).unwrap();
+            GitCommandProvider::init(floxmeta_dir, true).unwrap();
+            Url::from_directory_path(mock_floxhub_git_dir).unwrap()
+        });
+
+        let flox = Flox {
+            system: env!("NIX_TARGET_SYSTEM").to_string(),
+            cache_dir,
+            data_dir,
+            temp_dir,
+            config_dir,
+            access_tokens: Default::default(),
+            netrc_file: Default::default(),
+            uuid: Default::default(),
+            floxhub: Floxhub::new(
+                Url::from_str("https://hub.flox.dev").unwrap(),
+                git_url_override,
+            )
+            .unwrap(),
+            floxhub_token: None,
+        };
+
+        init_global_manifest(&global_manifest_path(&flox)).unwrap();
+
+        (flox, tempdir_handle)
+    }
 }
 
 #[cfg(test)]
 pub mod tests {
     use std::str::FromStr;
 
-    pub use super::test_flox_instance as flox_instance;
     use super::*;
 
     /// A fake FloxHub token

@@ -365,10 +365,14 @@ pkgdb_vars_setup() {
   # so that we get consistent packages and improved caching.
   _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_NEW"
 
-  export PKGDB_NIXPKGS_REV_OLD PKGDB_NIXPKGS_REV_NEW \
+  export \
+    PKGDB_NIXPKGS_REV_OLD \
+    PKGDB_NIXPKGS_REV_NEW \
     PKGDB_NIXPKGS_REV_OLDER \
-    PKGDB_NIXPKGS_REF_OLD PKGDB_NIXPKGS_REF_NEW \
-    _PKGDB_GA_REGISTRY_REF_OR_REV PKGDB_NIXPKGS_NAR_HASH_OLD \
+    PKGDB_NIXPKGS_REF_OLD \
+    PKGDB_NIXPKGS_REF_NEW \
+    _PKGDB_GA_REGISTRY_REF_OR_REV \
+    PKGDB_NIXPKGS_NAR_HASH_OLD \
     PKGDB_NIXPKGS_NAR_HASH_NEW
 
   export __FT_RAN_PKGDB_VARS_SETUP=:
@@ -440,13 +444,14 @@ common_suite_setup() {
   nix_system_setup
   misc_vars_setup
   flox_cli_vars_setup
-  pkgdb_vars_setup
   # Generate configs and auth.
   ssh_key_setup
   floxtest_gitforge_setup
   # TODO: fix gpg setup and re-enable along with `gpgsign.bats' tests.
   #gpg_key_setup;
   gitconfig_setup
+  # setup pkgdb and populate cache
+  pkgdb_vars_setup
   {
     print_var FLOX_TEST_HOME
     print_var HOME

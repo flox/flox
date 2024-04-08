@@ -38,6 +38,7 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox
   project_setup
   floxhub_setup "$OWNER"
 }
@@ -76,7 +77,7 @@ dot_flox_exists() {
 
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output --partial "environment $OWNER/project-managed-${BATS_TEST_NUMBER}" # managed env output
+  assert_output --partial "environment '$OWNER/project-managed-${BATS_TEST_NUMBER}'" # managed env output
 
   run --separate-stderr "$FLOX_BIN" list --name
   assert_success
@@ -273,7 +274,7 @@ EOF
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
   FLOX_SHELL=bash USER="$REAL_USER" run -0 expect "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR"
-  assert_output --regexp "$FLOX_CACHE_HOME/run/owner/.+\..+\..+/bin/hello"
+  assert_output --regexp "$FLOX_CACHE_DIR/run/owner/.+\..+\..+/bin/hello"
   refute_output "not found"
 }
 
@@ -297,7 +298,7 @@ EOF
   run dot_flox_exists
   assert_failure
 
-  run ls -lA "$FLOX_DATA_HOME/links"
+  run ls -lA "$FLOX_DATA_DIR/links"
   assert_output "total 0"
 }
 
@@ -326,7 +327,7 @@ EOF
 
 @test "sanity check upgrade works for managed environments" {
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-  make_empty_remote_env
+    make_empty_remote_env
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" install hello

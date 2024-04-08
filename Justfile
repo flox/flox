@@ -73,8 +73,11 @@ build: build-cli
 
 # Run the CLI integration test suite
 @integ-tests +bats_args="": build
-    flox-cli-tests --pkgdb "{{PKGDB_BIN}}" \
-     --flox "{{FLOX_BIN}}" --ld-floxlib "{{LD_FLOXLIB}}" {{bats_args}}
+    flox-cli-tests \
+        --pkgdb "{{PKGDB_BIN}}" \
+        --flox "{{FLOX_BIN}}" \
+        --ld-floxlib "{{LD_FLOXLIB}}" \
+        {{bats_args}}
 
 # Run a specific CLI integration test file by name (not path)
 @integ-file +bats_args="": build

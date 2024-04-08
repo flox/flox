@@ -30,6 +30,7 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox
   project_setup
   floxhub_setup "owner"
   make_dummy_env "owner" "name"
@@ -273,55 +274,26 @@ function add_insecure_package() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=pull:unsupported
+# bats test_tags=pull:add-system-flag
 # pulling an environment without packages for the current platform
 #should fail with an error
-@test "pull environment without packages for the current platform fails" {
+@test "pull environment inside the same environment without the '--force' flag" {
   update_dummy_env "owner" "name"
-  make_incompatible "owner" "name"
 
   run "$FLOX_BIN" pull --remote owner/name
+  assert_success
+  run "$FLOX_BIN" pull --remote owner/name
   assert_failure
-  assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
 }
 
 # bats test_tags=pull:add-system-flag
 # pulling an environment without packages for the current platform
-#should fail with an error
-@test "pull environment without packages for the current platform succeeds with '--force' flag" {
+@test "pull environment inside the same environment with '--force' flag" {
   update_dummy_env "owner" "name"
-  make_incompatible "owner" "name"
 
+  run "$FLOX_BIN" pull --remote owner/name
+  assert_success
   run "$FLOX_BIN" pull --remote owner/name --force
-  assert_success
-}
-
-# bats test_tags=pull:unsupported:prompt-fail
-# pulling an environment without packages for the current platform
-# should fail with an error
-@test "pull environment without packages for the current platform prompts for about adding system" {
-  update_dummy_env "owner" "name"
-  make_incompatible "owner" "name"
-
-  run -0 expect "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_SYSTEM_PROMPT" no
-  assert_success
-  assert_output --partial "The environment you are trying to pull is not yet compatible with your system ($NIX_SYSTEM)"
-  assert_line --partial "Did not pull the environment."
-
-  assert [ ! -e ".flox/" ]
-}
-
-# bats test_tags=pull:unsupported:prompt-success
-# pulling an environment without packages for the current platform
-# should fail with an error
-@test "pull environment without packages for the current platform prompts for about adding system: produces env" {
-  update_dummy_env "owner" "name"
-  make_incompatible "owner" "name"
-
-  run -0 expect "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_SYSTEM_PROMPT" yes
-  assert_success
-
-  run "$FLOX_BIN" list
   assert_success
 }
 
@@ -372,39 +344,6 @@ function add_insecure_package() {
   assert_line --partial "package 'extra' is not available for this system ('$NIX_SYSTEM')"
 }
 
-# bats test_tags=pull:unsupported-package:prompt-fail
-# pulling an environment with a package that is not available for the current platform
-# should prompt to ignore the error and pull the environment anyway.
-# When answering no, an error should be shown and the environment should not be pulled.
-@test "pull unsupported package prompt and abort cleanly" {
-  update_dummy_env "owner" "name"
-  add_incompatible_package "owner" "name"
-
-  run -0 expect "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" no
-  assert_success
-  assert_line --partial "package 'extra' is not available for this system ('$NIX_SYSTEM')"
-  assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"
-  assert_line --partial "Did not pull the environment."
-}
-
-# bats test_tags=pull:unsupported-package:prompt-success
-# pulling an environment with a package that is not available for the current platform
-# should prompt to ignore the error and pull the environment anyway.
-# When answering yes, the environment should be pulled in a potentially broken state.
-@test "pull unsupported package prompt and ignore" {
-  update_dummy_env "owner" "name"
-  add_incompatible_package "owner" "name"
-
-  run -0 expect "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" yes
-  assert_success
-  assert_line --partial "package 'extra' is not available for this system ('$NIX_SYSTEM')"
-  assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"
-
-  run "$FLOX_BIN" list
-  assert_success
-}
-
-
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=pull:eval-failure
@@ -419,39 +358,6 @@ function add_insecure_package() {
   assert_failure
   assert_line --partial "package 'extra' failed to evaluate:"
 }
-
-# bats test_tags=pull:eval-failure:prompt-fail
-# pulling an environment with an insecure package that fails to evaluate
-# should prompt to ignore the error and pull the environment anyway.
-# When answering no, an error should be shown and the environment should not be pulled.
-@test "pull environment with insecure package prompts to abort or ignore -- aborts cleanly" {
-  update_dummy_env "owner" "name"
-  add_insecure_package "owner" "name"
-
-  run -0 expect "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" no
-  assert_success
-  assert_line --partial "package 'extra' failed to evaluate: "
-  assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"
-  assert_line --partial "Did not pull the environment."
-}
-
-# bats test_tags=pull:eval-failure:prompt-success
-# pulling an environment with a package that fails to evaluate
-# should prompt to ignore the error and pull the environment anyway.
-# When answering yes, the environment should be pulled in a potentially broken state.
-@test "pull environment with insecure package prompts to abort or ignore -- ignores" {
-  update_dummy_env "owner" "name"
-  add_insecure_package "owner" "name"
-
-  run -0 expect "$TESTS_DIR/pull/answerPrompt.exp" owner/name "$UNSUPPORTED_PACKAGE_PROMPT" yes
-  assert_success
-  assert_line --partial "package 'extra' failed to evaluate: "
-  assert_output --partial "$UNSUPPORTED_PACKAGE_PROMPT"
-
-  run "$FLOX_BIN" list
-  assert_success
-}
-
 
 # ---------------------------------------------------------------------------- #
 

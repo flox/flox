@@ -1,8 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
+use std::io::stdout;
 use std::path::PathBuf;
 
 use anyhow::Result;
+use crossterm::style::Stylize;
+use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::lockfile::LockedManifest;
 use flox_rust_sdk::models::search::{PathOrJson, Query, SearchParams, SearchResult, SearchResults};
@@ -35,7 +38,7 @@ pub fn manifest_and_lockfile(flox: &Flox, message: &str) -> Result<(Option<PathB
             (None, None)
         },
         Some(uninitialized) => {
-            debug!("using environment {uninitialized}");
+            debug!("using environment {}", uninitialized.bare_description()?);
 
             let environment = uninitialized
                 .into_concrete_environment(flox)?
@@ -190,6 +193,8 @@ pub struct DisplaySearchResults {
     count: Option<u64>,
     /// number of actual results (including duplicates)
     n_results: u64,
+    /// Whether to bold the search term matches in the output
+    use_bold: bool,
 }
 
 /// A struct that wraps the functionality needed to print [SearchResults] to a
@@ -210,21 +215,35 @@ impl DisplaySearchResults {
 
         let display_items: DisplayItems = search_results.results.into();
 
+        let use_bold = stdout().is_tty();
+
         Ok(DisplaySearchResults {
             search_term: search_term.to_string(),
             display_items,
             count: search_results.count,
             n_results: n_results as u64,
+            use_bold,
         })
     }
 }
 
 impl Display for DisplaySearchResults {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let format_name = |name: &str| {
+            if self.use_bold {
+                name.replace(
+                    &self.search_term,
+                    &format!("{}", self.search_term.clone().bold()),
+                )
+            } else {
+                name.to_string()
+            }
+        };
+
         let column_width = self
             .display_items
             .iter()
-            .map(|d| d.to_string().len())
+            .map(|d| format_name(&d.to_string()).len())
             .max()
             .unwrap_or_default();
 
@@ -233,12 +252,16 @@ impl Display for DisplaySearchResults {
 
         while let Some(d) = items.next() {
             let desc = d.description.as_deref().unwrap_or(DEFAULT_DESCRIPTION);
-            write!(f, "{d:<column_width$}  {desc}", d = d.to_string())?;
+            let name = format_name(&d.to_string());
+
+            // The two spaces here provide visual breathing room.
+            write!(f, "{name:<column_width$}  {desc}", name = name)?;
             // Only print a newline if there are more items to print
             if items.peek().is_some() {
                 writeln!(f)?;
             }
         }
+
         Ok(())
     }
 }

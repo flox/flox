@@ -99,12 +99,28 @@ PkgDbReadOnly::loadLockedFlake()
   sqlite3pp::query qry(
     this->db,
     "SELECT fingerprint, string, attrs FROM LockedFlake LIMIT 1" );
-  auto      rsl            = *qry.begin();
-  auto      fingerprintStr = rsl.get<std::string>( 0 );
+  auto rsl = qry.begin();
+  if ( rsl == qry.end() )
+    {
+      /**
+       * It is apparently possible for one process to read the scrape db
+       * in just the timeframe between creation and insertion of the
+       * `LockedFlake` row.
+       * In that case, `qry` will return no results and we can _not_ expect to
+       * be able safely dereference `rsl`.
+       */
+      throw PkgDbException( "No LockedFlake row." );
+    }
+
+  auto fingerprintStr = ( *rsl ).get<std::string>( 0 );
+
   nix::Hash fingerprint
     = nix::Hash::parseNonSRIUnprefixed( fingerprintStr, nix::htSHA256 );
-  this->lockedRef.string = rsl.get<std::string>( 1 );
-  this->lockedRef.attrs  = nlohmann::json::parse( rsl.get<std::string>( 2 ) );
+
+  this->lockedRef.string = ( *rsl ).get<std::string>( 1 );
+  this->lockedRef.attrs
+    = nlohmann::json::parse( ( *rsl ).get<std::string>( 2 ) );
+
   /* Check to see if our fingerprint is already known.
    * If it isn't load it, otherwise assert it matches. */
   if ( this->fingerprint == nix::Hash( nix::htSHA256 ) )

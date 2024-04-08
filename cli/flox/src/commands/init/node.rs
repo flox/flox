@@ -760,11 +760,11 @@ impl InitHook for Node {
 
 #[cfg(test)]
 mod tests {
+    use flox_rust_sdk::flox::test_helpers::flox_instance_with_global_lock;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
 
     use super::*;
-    use crate::commands::init::tests::FLOX_INSTANCE;
 
     #[test]
     fn test_parse_nvmrc_version_some() {
@@ -918,13 +918,13 @@ mod tests {
     #[test]
     #[serial]
     fn test_try_find_compatible_yarn_no_constraints() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let yarn_install = Node::try_find_compatible_yarn(
             &PackageJSONVersions {
                 yarn: None,
                 node: None,
             },
-            flox,
+            &flox,
         )
         .unwrap()
         .unwrap();
@@ -937,13 +937,13 @@ mod tests {
     #[test]
     #[serial]
     fn test_try_find_compatible_yarn_node_available() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let yarn_install = Node::try_find_compatible_yarn(
             &PackageJSONVersions {
                 yarn: None,
                 node: Some("18".to_string()),
             },
-            flox,
+            &flox,
         )
         .unwrap()
         .unwrap();
@@ -958,13 +958,13 @@ mod tests {
     #[test]
     #[serial]
     fn test_try_find_compatible_yarn_node_unavailable() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let yarn_install = Node::try_find_compatible_yarn(
             &PackageJSONVersions {
                 yarn: None,
                 node: Some("20".to_string()),
             },
-            flox,
+            &flox,
         )
         .unwrap();
 
@@ -975,13 +975,13 @@ mod tests {
     #[test]
     #[serial]
     fn test_try_find_compatible_yarn_yarn_available() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let yarn_install = Node::try_find_compatible_yarn(
             &PackageJSONVersions {
                 yarn: Some("1".to_string()),
                 node: None,
             },
-            flox,
+            &flox,
         )
         .unwrap()
         .unwrap();
@@ -996,13 +996,13 @@ mod tests {
     #[test]
     #[serial]
     fn test_try_find_compatible_yarn_yarn_unavailable() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let yarn_install = Node::try_find_compatible_yarn(
             &PackageJSONVersions {
                 yarn: Some("2".to_string()),
                 node: None,
             },
-            flox,
+            &flox,
         )
         .unwrap();
 
@@ -1014,13 +1014,13 @@ mod tests {
     #[test]
     #[serial]
     fn test_try_find_compatible_yarn_both_available() {
-        let flox = &FLOX_INSTANCE.0;
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let yarn_install = Node::try_find_compatible_yarn(
             &PackageJSONVersions {
                 yarn: Some("1".to_string()),
                 node: Some("18".to_string()),
             },
-            flox,
+            &flox,
         )
         .unwrap()
         .unwrap();
