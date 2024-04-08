@@ -395,8 +395,8 @@ impl PathEnvironment {
 
         if let Some(ref packages) = customization.packages {
             // Ignore the result, because we know there can't be packages already installed
-            // TODO: once we use toml_edit for replace_placeholders, 
-            // we should add packages using insert_packages() in replace_placeholders 
+            // TODO: once we use toml_edit for replace_placeholders,
+            // we should add packages using insert_packages() in replace_placeholders
             // and then do a build instead of calling `install`.
             environment.install(packages, flox)?;
         }

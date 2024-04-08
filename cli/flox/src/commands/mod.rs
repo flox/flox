@@ -43,7 +43,6 @@ use flox_rust_sdk::models::environment::{
     Environment,
     EnvironmentError,
     EnvironmentPointer,
-    FoundDotFlox,
     ManagedPointer,
     DOT_FLOX,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
@@ -641,7 +640,7 @@ impl EnvironmentSelect {
                 let current_dir = env::current_dir().context("could not get current directory")?;
                 let maybe_found_environment = find_dot_flox(&current_dir)?;
                 match maybe_found_environment {
-                    Some((found, _)) => {
+                    Some(found) => {
                         Ok(UninitializedEnvironment::DotFlox(found)
                             .into_concrete_environment(flox)?)
                     },
@@ -711,29 +710,35 @@ pub fn detect_environment(
     let found = match (maybe_activated, maybe_found_environment) {
         (
             Some(ref activated @ UninitializedEnvironment::DotFlox(DotFlox { ref path, .. })),
-            Some((found, _)),
+            Some(found),
         ) if path == &found.path => Some(activated.clone()),
 
         // If both a 'default' environment is activated and an environment is
         // found in the current directory or git repo, prefer the detected one.
-        (Some(activated), Some((detected, _)))
+        (Some(activated), Some(detected))
             if activated.pointer().name().as_ref() == DEFAULT_NAME =>
         {
             Some(UninitializedEnvironment::DotFlox(detected))
         },
 
         // If we can't prompt, use the environment found in the current directory or git repo
-        (Some(_), Some((found, _))) if !Dialog::can_prompt() => {
+        (Some(_), Some(found)) if !Dialog::can_prompt() => {
             debug!("No TTY detected, using the environment {found:?} found in the current directory or an ancestor directory");
             Some(UninitializedEnvironment::DotFlox(found))
         },
         // If there's both an activated environment and an environment in the
         // current directory or git repo, prompt for which to use.
         (Some(activated_env), Some(found)) => {
-            Some(query_which_environment(message, activated_env, found)?)
+            let found_in_current_dir = found.path == current_dir;
+            Some(query_which_environment(
+                message,
+                activated_env,
+                found,
+                found_in_current_dir,
+            )?)
         },
         (Some(activated_env), None) => Some(activated_env),
-        (None, Some((found, _))) => Some(UninitializedEnvironment::DotFlox(found)),
+        (None, Some(found)) => Some(UninitializedEnvironment::DotFlox(found)),
         (None, None) => None,
     };
     Ok(found)
@@ -743,9 +748,9 @@ pub fn detect_environment(
 fn query_which_environment(
     message: &str,
     activated_env: UninitializedEnvironment,
-    found: FoundDotFlox,
+    found: DotFlox,
+    found_in_current_dir: bool,
 ) -> Result<UninitializedEnvironment> {
-    let (found, found_in_current_dir) = found;
     let type_of_directory = if found_in_current_dir {
         "current directory"
     } else {
