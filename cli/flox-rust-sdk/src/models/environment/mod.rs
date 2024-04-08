@@ -767,7 +767,7 @@ mod test {
         assert_eq!(found_environment, DotFlox {
             path: temp_dir.path().canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
-        },);
+        });
     }
 
     /// An environment is found upwards and adjacent when it is a subdirectory
@@ -805,7 +805,7 @@ mod test {
         assert_eq!(found_environment, DotFlox {
             path: foo.canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
-        },);
+        });
     }
 
     /// An environment above a git repo is not found.
