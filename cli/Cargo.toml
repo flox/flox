@@ -18,7 +18,7 @@ fslock = "0.2.1"
 futures = "0.3"
 indexmap = { version = "2.2.6", features = ["serde"] }
 indoc = "2.0.1"
-inquire = "0.6.0"
+inquire = "0.7.4"
 indicatif = "0.17"
 itertools = "0.12.1"
 log = "0.4.17"
