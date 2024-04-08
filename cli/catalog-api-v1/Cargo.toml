@@ -1,0 +1,25 @@
+[package]
+name = "catalog-api-v1"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+futures.workspace = true
+progenitor-client.workspace = true
+reqwest = { workspace = true, features = ["json", "stream"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+# Dependencies for the generated mock code.
+#
+# Can't be in the [dev-dependencies] section,
+# because we can't mark the mock code as `cfg(test)` across crates.
+httpmock.workspace = true
+regex.workspace = true
+
+[build-dependencies]
+prettyplease.workspace = true
+progenitor.workspace = true
+serde_json.workspace = true
+syn.workspace = true
+openapiv3.workspace = true

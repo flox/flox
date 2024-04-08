@@ -1,5 +1,5 @@
 [workspace]
-members = ["flox", "flox-rust-sdk"]
+members = ["flox", "flox-rust-sdk", "catalog-api-v1"]
 default-members = ["flox"]
 
 resolver = "2"
@@ -8,6 +8,7 @@ resolver = "2"
 anyhow = "1"
 blake3 = "1.5.0"
 bpaf = { version = "0.9.8", features = ["derive", "autocomplete"] }
+catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.24", features = ["serde"] }
 config = "0.14.0"
 crossterm = "0.27"
@@ -16,15 +17,20 @@ dirs = "5.0.0"
 flox-rust-sdk = { path = "flox-rust-sdk" }
 fslock = "0.2.1"
 futures = "0.3"
+indent = "0.1.1"
 indexmap = { version = "2.2.6", features = ["serde"] }
 indoc = "2.0.1"
 inquire = "0.6.0"
 indicatif = "0.17"
 itertools = "0.12.1"
+jsonwebtoken = "9.2"
 log = "0.4.17"
 nix = { version = "0.28", features = ["process", "user"] }
+oauth2 = "4.4"
 once_cell = "1.16.0"
+progenitor-client = "0.6"
 reqwest = { version = "0.11", features = ["json", "blocking"] }
+semver = "1.0.22"
 sentry = "0.32.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
@@ -38,6 +44,7 @@ sysinfo = "0.30.7"
 # TODO: review if we need this
 sys-info = "0.9"
 tempfile = "3.4.0"
+textwrap = "0.16.0"
 thiserror = "1"
 time = { version = "0.3", features = ["serde", "formatting"] }
 tokio = { version = "1", features = ["full"] }
@@ -50,13 +57,16 @@ url = { version = "2.4", features = ["serde"] }
 uuid = { version = "1.2", features = ["serde", "v4"] }
 walkdir = "2"
 xdg = "2.4"
-oauth2 = "4.4"
-jsonwebtoken = "9.2"
-textwrap = "0.16.0"
-indent = { version = "0.1.1" }
-semver = "1.0.22"
+httpmock = "0.7"
+regex = "1.5"
 
 # dev dependencies
 pretty_assertions = "1.3"
 serial_test = "3.0.0"
 temp-env = "0.3.2"
+
+# build(.rs) dependencies
+prettyplease = "0.2"
+progenitor = "0.6"
+syn = "2.0"
+openapiv3 = "2.0"
