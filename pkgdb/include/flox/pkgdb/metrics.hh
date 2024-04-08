@@ -17,7 +17,7 @@ class metricsReporting
 {
 public:
 
-  metricsReporting() {}
+  metricsReporting() : sentryInitialized(false) {}
   virtual ~metricsReporting() = default;
 
   virtual void
@@ -27,6 +27,9 @@ public:
   virtual void
   shutdown()
     = 0;
+
+  protected:
+    bool  sentryInitialized;
 };
 
 class sentryReporting : public metricsReporting
