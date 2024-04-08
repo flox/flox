@@ -281,8 +281,6 @@ mod tests {
     /// and opened from an existing clone.
     #[test]
     fn clone_repo() {
-        let _ = env_logger::try_init();
-
         let (flox, tempdir) = flox_instance();
         let source_path = tempdir.path().join("source");
 
