@@ -395,16 +395,28 @@ impl PathEnvironment {
 
         if let Some(ref packages) = customization.packages {
             // Ignore the result, because we know there can't be packages already installed
-            // TODO: once we use toml_edit for replace_placeholders, we should add packages using insert_packages() in replace_placeholders and then do a build instead of calling installnser.
+            // TODO: once we use toml_edit for replace_placeholders, 
+            // we should add packages using insert_packages() in replace_placeholders 
+            // and then do a build instead of calling `install`.
             environment.install(packages, flox)?;
         }
 
         Ok(environment)
     }
 
-    /// Write a new PathEnvironment to dot_flox_parent_path
+    /// Write files for a [PathEnvironment] to `dot_flox_parent_path` unchecked.
     ///
-    /// This functionality is shared between PathEnvironment::init and tests.
+    /// * write the .flox directory
+    /// * write the environment pointer to `.flox/env.json`
+    /// * write the manifest to `.flox/env/manifest.toml`
+    ///
+    /// Note: The directory and the written environment are **not verified**.
+    ///       This function may override any existing env,
+    ///       or write nonsense content to the manifest.
+    ///       [PathEnvironment::init] implements the relevant checks
+    ///       to make this safe in practice.
+    ///
+    /// This functionality is shared between [PathEnvironment::init] and tests.
     fn write_new(
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
