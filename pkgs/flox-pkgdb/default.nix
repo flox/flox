@@ -76,6 +76,10 @@
 
           substituteInPlace $out/activate.d/bash \
             --replace "@gnused@" "${gnused}"
+          substituteInPlace $out/activate.d/fish \
+            --replace "@gnused@" "${gnused}"
+          substituteInPlace $out/activate.d/tcsh \
+            --replace "@gnused@" "${gnused}"
           substituteInPlace $out/activate.d/zsh \
             --replace "@gnused@" "${gnused}"
 

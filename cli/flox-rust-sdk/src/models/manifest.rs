@@ -147,6 +147,8 @@ impl RawManifest {
             InitCustomization {
                 profile_common: None,
                 profile_bash: None,
+                profile_fish: None,
+                profile_tcsh: None,
                 profile_zsh: None,
                 ..
             } => {
@@ -168,6 +170,18 @@ impl RawManifest {
                     profile_table.insert(
                         "bash",
                         toml_edit::value(indent::indent_all_by(2, profile_bash)),
+                    );
+                }
+                if let Some(profile_fish) = &customization.profile_fish {
+                    profile_table.insert(
+                        "fish",
+                        toml_edit::value(indent::indent_all_by(2, profile_fish)),
+                    );
+                }
+                if let Some(profile_tcsh) = &customization.profile_tcsh {
+                    profile_table.insert(
+                        "tcsh",
+                        toml_edit::value(indent::indent_all_by(2, profile_tcsh)),
                     );
                 }
                 if let Some(profile_zsh) = &customization.profile_zsh {
@@ -863,6 +877,8 @@ pub(super) mod test {
             hook_on_activate: None,
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: None,
         };
@@ -929,6 +945,8 @@ pub(super) mod test {
             hook_on_activate: None,
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: Some(vec![]),
         };
@@ -996,6 +1014,8 @@ pub(super) mod test {
             hook_on_activate: None,
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: Some(vec![PackageToInstall {
                 id: "python3".to_string(),
@@ -1075,6 +1095,8 @@ pub(super) mod test {
             ),
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: None,
         };
@@ -1145,6 +1167,8 @@ pub(super) mod test {
                 .to_string(),
             ),
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: None,
         };

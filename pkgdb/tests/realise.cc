@@ -58,6 +58,8 @@ testLockfile()
     "profile": {
       "common": "echo hello",
       "bash": "echo hello",
+      "fish": "echo hello",
+      "tcsh": "echo hello",
       "zsh": "echo hello"
     },
     "hook": {
@@ -158,7 +160,8 @@ test_scriptsAreAddedToScriptsDir( nix::ref<nix::EvalState> & state,
   auto scriptsDir = std::filesystem::path( output.first.path )
                     / flox::buildenv::ACTIVATION_SUBDIR_NAME;
   std::vector<std::string> scripts
-    = { "profile-common", "profile-bash", "profile-zsh", "hook-on-activate" };
+    = { "profile-common", "profile-bash", "profile-zsh",
+        "profile-fish",   "profile-tcsh", "hook-on-activate" };
   for ( const auto & script : scripts )
     {
       auto path = scriptsDir / script;

@@ -474,6 +474,8 @@ from_json( const nlohmann::json & jfrom, ProfileScriptsRaw & profile )
   /* Clear fields */
   profile.common = std::nullopt;
   profile.bash   = std::nullopt;
+  profile.fish   = std::nullopt;
+  profile.tcsh   = std::nullopt;
   profile.zsh    = std::nullopt;
 
   /* Iterate over keys of the JSON object */
@@ -505,6 +507,32 @@ from_json( const nlohmann::json & jfrom, ProfileScriptsRaw & profile )
                 + value.dump() );
             }
         }
+      else if ( key == "fish" )
+        {
+          try
+            {
+              value.get_to( profile.fish );
+            }
+          catch ( const nlohmann::json::exception & )
+            {
+              throw InvalidManifestFileException(
+                "failed to parse manifest field 'profile.fish' with value: "
+                + value.dump() );
+            }
+        }
+      else if ( key == "tcsh" )
+        {
+          try
+            {
+              value.get_to( profile.tcsh );
+            }
+          catch ( const nlohmann::json::exception & )
+            {
+              throw InvalidManifestFileException(
+                "failed to parse manifest field 'profile.tcsh' with value: "
+                + value.dump() );
+            }
+        }
       else if ( key == "zsh" )
         {
           try
@@ -533,6 +561,8 @@ to_json( nlohmann::json & jto, const ProfileScriptsRaw & profile )
   jto = nlohmann::json::object();
   if ( profile.common.has_value() ) { jto["common"] = profile.common.value(); }
   if ( profile.bash.has_value() ) { jto["bash"] = profile.bash.value(); }
+  if ( profile.fish.has_value() ) { jto["fish"] = profile.fish.value(); }
+  if ( profile.tcsh.has_value() ) { jto["tcsh"] = profile.tcsh.value(); }
   if ( profile.zsh.has_value() ) { jto["zsh"] = profile.zsh.value(); }
 }
 

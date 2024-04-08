@@ -38,7 +38,7 @@ and adds `bin` directories to your `$PATH`.
   Flox will determine the parent shell from `$FLOX_SHELL` or otherwise
   automatically determine the parent shell and fall back to `$SHELL`.
 
-`flox activate` currently only supports `bash` and `zsh` shells
+`flox activate` currently supports `bash`, `fish`, `tcsh` and `zsh` shells
 for any of the detection mechanisms described above.
 
 When invoked interactively,

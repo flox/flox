@@ -78,6 +78,8 @@ pub struct InitCustomization {
     pub hook_on_activate: Option<String>,
     pub profile_common: Option<String>,
     pub profile_bash: Option<String>,
+    pub profile_fish: Option<String>,
+    pub profile_tcsh: Option<String>,
     pub profile_zsh: Option<String>,
     pub packages: Option<Vec<PackageToInstall>>,
 }

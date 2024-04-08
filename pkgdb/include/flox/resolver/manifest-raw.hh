@@ -317,6 +317,12 @@ struct ProfileScriptsRaw
   /** @brief A script intended to be sourced only in Bash shells. */
   std::optional<std::string> bash;
 
+  /** @brief A script intended to be sourced only in Fish shells. */
+  std::optional<std::string> fish;
+
+  /** @brief A script intended to be sourced only in Tcsh shells. */
+  std::optional<std::string> tcsh;
+
   /** @brief A script intended to be sourced only in Zsh shells. */
   std::optional<std::string> zsh;
 };

@@ -6,7 +6,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
@@ -365,6 +365,12 @@ impl Activate {
                     .arg("--rcfile")
                     .arg(activation_path.join("activate").join("bash"));
             },
+            Shell::Fish(_) => {
+                return Err(anyhow!("Unsupported shell: fish"));
+            },
+            Shell::Tcsh(_) => {
+                return Err(anyhow!("Unsupported shell: tcsh"));
+            },
             Shell::Zsh(_) => {
                 // From man zsh:
                 // Commands are then read from $ZDOTDIR/.zshenv.  If the shell is a
@@ -516,6 +522,8 @@ impl Activate {
             .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
             .map(|(key, value)| match shell {
                 Shell::Bash(_) => format!("export {key}={value};",),
+                Shell::Fish(_) => format!("set -gx {key} {value};",),
+                Shell::Tcsh(_) => format!("setenv {key} {value};",),
                 Shell::Zsh(_) => format!("export {key}={value};",),
             })
             .join("\n");
