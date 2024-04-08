@@ -16,7 +16,7 @@ dirs = "5.0.0"
 flox-rust-sdk = { path = "flox-rust-sdk" }
 fslock = "0.2.1"
 futures = "0.3"
-indexmap = { version = "1.9", features = ["serde"] }
+indexmap = { version = "2.2.6", features = ["serde"] }
 indoc = "2.0.1"
 inquire = "0.6.0"
 indicatif = "0.17"
