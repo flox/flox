@@ -23,7 +23,6 @@ use log::debug;
 
 use super::core_environment::CoreEnvironment;
 use super::{
-    copy_dir_recursive,
     CanonicalPath,
     CanonicalizeError,
     EditResult,
@@ -384,49 +383,70 @@ impl PathEnvironment {
                 dot_flox_parent_path.as_ref().to_path_buf(),
             ))?,
         }
+
+        let template_contents = fs::read_to_string(env!("MANIFEST_TEMPLATE"))
+            .map_err(EnvironmentError::ReadManifest)?;
+
+        let manifest_contents =
+            Self::replace_placeholders(&template_contents, system, customization);
+
+        let mut environment =
+            Self::write_new(pointer, dot_flox_parent_path, temp_dir, &manifest_contents)?;
+
+        if let Some(ref packages) = customization.packages {
+            // Ignore the result, because we know there can't be packages already installed
+            // TODO: once we use toml_edit for replace_placeholders,
+            // we should add packages using insert_packages() in replace_placeholders
+            // and then do a build instead of calling `install`.
+            environment.install(packages, flox)?;
+        }
+
+        Ok(environment)
+    }
+
+    /// Write files for a [PathEnvironment] to `dot_flox_parent_path` unchecked.
+    ///
+    /// * write the .flox directory
+    /// * write the environment pointer to `.flox/env.json`
+    /// * write the manifest to `.flox/env/manifest.toml`
+    ///
+    /// Note: The directory and the written environment are **not verified**.
+    ///       This function may override any existing env,
+    ///       or write nonsense content to the manifest.
+    ///       [PathEnvironment::init] implements the relevant checks
+    ///       to make this safe in practice.
+    ///
+    /// This functionality is shared between [PathEnvironment::init] and tests.
+    fn write_new(
+        pointer: PathPointer,
+        dot_flox_parent_path: impl AsRef<Path>,
+        temp_dir: impl AsRef<Path>,
+        manifest_contents: &str,
+    ) -> Result<Self, EnvironmentError> {
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
         let env_dir = dot_flox_path.join(ENV_DIR_NAME);
+        let manifest_path = env_dir.join(MANIFEST_FILENAME);
         debug!("creating env dir: {}", env_dir.display());
         std::fs::create_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
-        let pointer_content =
-            serde_json::to_string_pretty(&pointer).map_err(EnvironmentError::SerializeEnvJson)?;
-        let template_path = env!("FLOX_ENV_TEMPLATE");
-        debug!(
-            "copying environment template from {} to {}",
-            template_path,
-            env_dir.display()
-        );
-        copy_dir_recursive(&template_path, &env_dir, false).map_err(EnvironmentError::InitEnv)?;
-        let manifest_path = env_dir.join(MANIFEST_FILENAME);
-        debug!(
-            "replacing placeholder system in manifest: path={}, system={}",
-            manifest_path.display(),
-            system
-        );
-        let contents = fs::read_to_string(&manifest_path).map_err(EnvironmentError::ReadManifest);
-        if let Err(e) = contents {
-            debug!("couldn't open manifest to replace placeholder system");
-            fs::remove_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
-            return Err(e);
-        }
-
-        let replaced = Self::replace_placeholders(&contents.unwrap(), system, customization);
-
-        let write_res =
-            fs::write(&manifest_path, replaced).map_err(EnvironmentError::WriteManifest);
-        if let Err(e) = write_res {
-            debug!("overwriting manifest did not complete successfully");
-            fs::remove_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
-            return Err(e);
-        }
 
         // Write the `env.json` file
+        let pointer_content =
+            serde_json::to_string_pretty(&pointer).map_err(EnvironmentError::SerializeEnvJson)?;
         if let Err(e) = fs::write(
             dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
             pointer_content,
         ) {
-            fs::remove_dir_all(env_dir).map_err(EnvironmentError::InitEnv)?;
+            fs::remove_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
             Err(EnvironmentError::WriteEnvJson(e))?;
+        }
+
+        // Write `manifest.toml`
+        let write_res =
+            fs::write(manifest_path, manifest_contents).map_err(EnvironmentError::WriteManifest);
+        if let Err(e) = write_res {
+            debug!("writing manifest did not complete successfully");
+            fs::remove_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
+            return Err(e);
         }
 
         // write "run" and "cache" to .flox/.gitignore
@@ -436,15 +456,7 @@ impl PathEnvironment {
             "})
         .map_err(EnvironmentError::WriteGitignore)?;
 
-        let mut environment = Self::open(pointer, dot_flox_path, temp_dir)?;
-
-        if let Some(ref packages) = customization.packages {
-            // Ignore the result, because we know there can't be packages already installed
-            // TODO: once we use toml_edit for replace_placeholders, we should add packages using insert_packages() in replace_placeholders and then do a build instead of calling installnser.
-            environment.install(packages, flox)?;
-        }
-
-        Ok(environment)
+        Self::open(pointer, dot_flox_path, temp_dir)
     }
 
     /// Replace all placeholders in the manifest file contents
@@ -526,6 +538,23 @@ impl PathEnvironment {
         );
 
         Ok(manifest_modified_at >= out_link_modified_at)
+    }
+}
+
+pub mod test_helpers {
+    use tempfile::tempdir_in;
+
+    use super::*;
+
+    pub fn new_path_environment(flox: &Flox, contents: &str) -> PathEnvironment {
+        let pointer = PathPointer::new("name".parse().unwrap());
+        PathEnvironment::write_new(
+            pointer,
+            tempdir_in(&flox.temp_dir).unwrap().into_path(),
+            &flox.temp_dir,
+            contents,
+        )
+        .unwrap()
     }
 }
 

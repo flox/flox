@@ -534,8 +534,9 @@ pub fn global_manifest_lockfile_path(flox: &Flox) -> PathBuf {
 
 /// Searches for a `.flox` directory and attempts to parse env.json
 ///
-/// The search first looks whether the current directory contains a `.flox` directory,
-/// and if not, it searches upwards, stopping at the root directory.
+/// The search first looks whether the current directory contains a `.flox` directory.
+/// If not, it checks if the current directory is contained by a git repo,
+/// and if it is, it searches upwards, stopping at the repo toplevel.
 pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentError> {
     let path = CanonicalPath::new(initial_dir).map_err(EnvironmentError::StartDiscoveryDir)?;
 
@@ -725,7 +726,7 @@ mod test {
 
         GitCommandProvider::init(temp_dir.path(), false).unwrap();
 
-        let found_environment = find_dot_flox(temp_dir.path())
+        let found_environment = find_dot_flox(&start_path)
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_environment, DotFlox {
