@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use log::debug;
 use serde::Deserialize;
-use toml_edit::{self, Document, Formatted, InlineTable, Item, Table, Value};
+use toml_edit::{self, DocumentMut, Formatted, InlineTable, Item, Table, Value};
 
 use crate::models::pkgdb::PKGDB_BIN;
 
@@ -55,7 +55,7 @@ pub enum TomlEditError {
 /// Records the result of trying to install a collection of packages to the
 #[derive(Debug)]
 pub struct PackageInsertion {
-    pub new_toml: Option<Document>,
+    pub new_toml: Option<DocumentMut>,
     pub already_installed: HashMap<String, bool>,
 }
 
@@ -94,7 +94,7 @@ pub fn insert_packages(
     debug!("attempting to insert packages into manifest");
     let mut already_installed: HashMap<String, bool> = HashMap::new();
     let mut toml = manifest_contents
-        .parse::<Document>()
+        .parse::<DocumentMut>()
         .map_err(TomlEditError::ParseManifest)?;
 
     let install_table = {
@@ -148,10 +148,10 @@ pub fn insert_packages(
 pub fn remove_packages(
     manifest_contents: &str,
     pkgs: &[String],
-) -> Result<Document, TomlEditError> {
+) -> Result<DocumentMut, TomlEditError> {
     debug!("attempting to remove packages from the manifest");
     let mut toml = manifest_contents
-        .parse::<Document>()
+        .parse::<DocumentMut>()
         .map_err(TomlEditError::ParseManifest)?;
 
     let installs_table = {
@@ -182,7 +182,7 @@ pub fn remove_packages(
 
 /// Check whether a TOML document contains a line declaring that the provided package
 /// should be installed.
-pub fn contains_package(toml: &Document, pkg_name: &str) -> Result<bool, TomlEditError> {
+pub fn contains_package(toml: &DocumentMut, pkg_name: &str) -> Result<bool, TomlEditError> {
     if let Some(installs) = toml.get("install") {
         if let Item::Table(installs_table) = installs {
             Ok(installs_table.contains_key(pkg_name))
@@ -197,9 +197,9 @@ pub fn contains_package(toml: &Document, pkg_name: &str) -> Result<bool, TomlEdi
 }
 
 /// Add a `system` to the `[options.systems]` array of a manifest
-pub fn add_system(toml: &str, system: &str) -> Result<Document, TomlEditError> {
+pub fn add_system(toml: &str, system: &str) -> Result<DocumentMut, TomlEditError> {
     let mut doc = toml
-        .parse::<Document>()
+        .parse::<DocumentMut>()
         .map_err(TomlEditError::ParseManifest)?;
 
     // extract the `[options]` table
@@ -347,7 +347,7 @@ ripgrep = {}
     #[test]
     fn insert_adds_new_package() {
         let test_packages = vec![PackageToInstall::from_str("python").unwrap()];
-        let pre_addition_toml = DUMMY_MANIFEST.parse::<Document>().unwrap();
+        let pre_addition_toml = DUMMY_MANIFEST.parse::<DocumentMut>().unwrap();
         assert!(!contains_package(&pre_addition_toml, &test_packages[0].id).unwrap());
         let insertion =
             insert_packages(DUMMY_MANIFEST, &test_packages).expect("couldn't add package");
@@ -361,7 +361,7 @@ ripgrep = {}
     #[test]
     fn no_change_adding_existing_package() {
         let test_packages = vec![PackageToInstall::from_str("hello").unwrap()];
-        let pre_addition_toml = DUMMY_MANIFEST.parse::<Document>().unwrap();
+        let pre_addition_toml = DUMMY_MANIFEST.parse::<DocumentMut>().unwrap();
         assert!(contains_package(&pre_addition_toml, &test_packages[0].id).unwrap());
         let insertion = insert_packages(DUMMY_MANIFEST, &test_packages).unwrap();
         assert!(
@@ -437,7 +437,7 @@ ripgrep = {}
     fn inserts_package_needing_quotes() {
         let attrs = r#"foo."bar.baz".qux"#;
         let test_packages = vec![PackageToInstall::from_str(attrs).unwrap()];
-        let pre_addition_toml = DUMMY_MANIFEST.parse::<Document>().unwrap();
+        let pre_addition_toml = DUMMY_MANIFEST.parse::<DocumentMut>().unwrap();
         assert!(!contains_package(&pre_addition_toml, &test_packages[0].id).unwrap());
         let insertion =
             insert_packages(DUMMY_MANIFEST, &test_packages).expect("couldn't add package");

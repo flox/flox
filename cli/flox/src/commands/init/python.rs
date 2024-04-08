@@ -236,7 +236,7 @@ impl PoetryPyProject {
     }
 
     fn from_pyproject_content(content: &str, flox: &Flox) -> Result<Option<PoetryPyProject>> {
-        let toml = toml_edit::Document::from_str(content)?;
+        let toml = toml_edit::DocumentMut::from_str(content)?;
 
         // poetry _requires_ `tool.poetry.dependencies.python` to be set [1],
         // so we do not resolve a default version here if the key is missing.
@@ -409,7 +409,7 @@ impl PyProject {
     }
 
     fn from_pyproject_content(content: &str, flox: &Flox) -> Result<Option<PyProject>> {
-        let toml = toml_edit::Document::from_str(content)?;
+        let toml = toml_edit::DocumentMut::from_str(content)?;
 
         // unlike in poetry, `project.require-python` does not seem to be required
         //

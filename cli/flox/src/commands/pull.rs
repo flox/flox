@@ -22,7 +22,7 @@ use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::manifest;
 use indoc::formatdoc;
 use log::debug;
-use toml_edit::Document;
+use toml_edit::DocumentMut;
 use tracing::instrument;
 use url::Url;
 
@@ -420,7 +420,7 @@ impl Pull {
     fn amend_current_system(
         env: &ManagedEnvironment,
         flox: &Flox,
-    ) -> Result<Document, anyhow::Error> {
+    ) -> Result<DocumentMut, anyhow::Error> {
         manifest::add_system(&env.manifest_content(flox)?, &flox.system)
             .context("Could not add system to manifest")
     }

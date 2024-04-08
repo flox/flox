@@ -20,7 +20,7 @@ use flox_rust_sdk::models::pkgdb::scrape_input;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
 use indoc::formatdoc;
 use log::debug;
-use toml_edit::{Document, Formatted, Item, Table, Value};
+use toml_edit::{DocumentMut, Formatted, Item, Table, Value};
 use tracing::instrument;
 
 use crate::commands::{environment_description, ConcreteEnvironment};
@@ -229,9 +229,9 @@ trait InitHook {
 fn format_customization(customization: &InitCustomization) -> Result<String> {
     let mut toml = if let Some(packages) = &customization.packages {
         let with_packages = insert_packages("", packages)?;
-        with_packages.new_toml.unwrap_or(Document::new())
+        with_packages.new_toml.unwrap_or(DocumentMut::new())
     } else {
-        Document::new()
+        DocumentMut::new()
     };
 
     if let Some(hook) = &customization.profile {
