@@ -488,7 +488,14 @@ impl PathEnvironment {
         // Replace profile
         let profile = formatdoc! {r#"
             # common = """
-            #   echo "it's gettin flox in here";
+            #     fortune | lolcat
+            # """
+            # bash = """
+            #     set -o vi
+            # """
+            # zsh = """
+            #     bindkey -v
+            #     bindkey "^R" history-incremental-search-backward
             # """"#};
         replaced = replaced.replace(FLOX_PROFILE_PLACEHOLDER, &profile);
 
@@ -502,6 +509,8 @@ impl PathEnvironment {
             formatdoc! {r#"
                 # on-activate = """
                 #     mkdir my_data_dir
+                #     # Start daemons which set env vars via stdout, e.g. a familiar example:
+                #     eval $(ssh-agent)
                 # """"#}
         };
         let replaced = replaced.replace(FLOX_HOOK_PLACEHOLDER, &default_hook);
