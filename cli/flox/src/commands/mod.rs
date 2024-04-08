@@ -739,7 +739,7 @@ pub fn detect_environment(
     Ok(found)
 }
 
-/// Helper function for [detect_environment]
+/// Helper function for [detect_environment] which handles the user prompt to decide which environment to use for the current operation.
 fn query_which_environment(
     message: &str,
     activated_env: UninitializedEnvironment,
