@@ -65,7 +65,8 @@ namespace flox::buildenv {
 #endif
 
 #ifndef FLOX_COREUTILS_PKG
-#  error "FLOX_COREUTILS_PKG must be set to the path of the nix coreutils package"
+#  error \
+    "FLOX_COREUTILS_PKG must be set to the path of the nix coreutils package"
 #endif
 
 #ifndef FLOX_GNUSED_PKG

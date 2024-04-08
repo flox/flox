@@ -83,7 +83,7 @@ pub struct PathEnvironment {
 /// A profile script or list of packages to install when initializing an environment
 #[derive(Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct InitCustomization {
-    pub profile: Option<String>,
+    pub script: Option<String>,
     pub packages: Option<Vec<PackageToInstall>>,
 }
 
@@ -503,25 +503,24 @@ impl PathEnvironment {
         replaced = replaced.replace(FLOX_INSTALL_PLACEHOLDER, packages);
 
         // Replace profile
-        let profile = if let Some(ref custom_profile) = customization.profile {
-            formatdoc! {r#"
-                common = """
-                {}
-                """"#, indent::indent_all_by(2, custom_profile)}
-        } else {
-            formatdoc! {r#"
-                # common = """
-                #   echo "it's gettin flox in here";
-                # """"#}
-        };
+        let profile = formatdoc! {r#"
+            # common = """
+            #   echo "it's gettin flox in here";
+            # """"#};
         replaced = replaced.replace(FLOX_PROFILE_PLACEHOLDER, &profile);
 
         // Replace the hook
-        let default_hook = formatdoc! {r#"
-            # on-activate = """
-            #     mkdir my_data_dir
-            # """"#};
-
+        let default_hook = if let Some(ref custom_script) = customization.script {
+            formatdoc! {r#"
+                on-activate = """
+                {}
+                """"#, indent::indent_all_by(2, custom_script)}
+        } else {
+            formatdoc! {r#"
+                # on-activate = """
+                #     mkdir my_data_dir
+                # """"#}
+        };
         let replaced = replaced.replace(FLOX_HOOK_PLACEHOLDER, &default_hook);
 
         debug!(
