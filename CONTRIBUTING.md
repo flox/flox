@@ -226,28 +226,68 @@ section refers to settings from that plugin.
 
 ### Unit tests
 
-Unit test are ran with `cargo`.
-These cover code authored in Rust, but does not explicitly cover code authored
-in `<flox>/flox-bash/`.
+Most changes should be unit tested.
+If it's possible to test logic with a unit test, a unit test is preferred to any
+other kind of test.
+Unit tests should be added throughout the Rust code in `./cli`.
+
+Unit tests can be run with `just`:
 
 ```console
-$ nix develop --command 'just test-all';
+$ nix develop
+$ just impure-tests
+$ just impure-tests models::environment::test
 ```
 
 ### Integration tests
 
-Integration tests are written with `bats` and `expect`.
-They are located in the `<flox>/tests` folder.
-To run them:
+Integration tests are written with `bats`.
+`expect` can be used for `activate` tests that require testing an interactive
+shell,
+but in general `expect` should be avoided.
+Integration tests are located in the `./cli/tests` folder.
+
+Integration tests currently test:
+- CLI flags
+- A lot of things that should be unit tests
+- Integration (no way!?) with:
+  - The nix-daemon
+  - The shell
+  - github:NixOS/nixpkgs
+  - cache.nixos.org
+
+We're trying to move towards more cleanly separating unit/integration/functional
+tests,
+but for now, tests should be added as integration tests if they should be run on
+every commit but they can't be made unit tests.
+
+Integration tests can be run with `just`:
 
 ```console
-$ nix develop --command 'just build';
-$ nix develop --command 'just integ-tests';
+$ nix develop
+$ just integ-tests
 ```
 
-**Important** the `flox-tests` option `--tests` must point to the
-`<flox>/tests/` directory root which is used to locate various resources within
-test environments.
+### Functional tests
+
+Functional tests are written with `bats`.
+They are located in the `./tests` folder.
+
+Functional tests should be used for testing:
+- Integration with external Flox services like FloxHub
+- Integration with language ecosystems
+
+Functional tests are not run on every commit on PRs.
+They are run in the merge queue or if a CI workflow is triggered manually on a
+branch from
+[Actions](https://github.com/flox/flox/actions).
+
+Functional tests can be run with `just`:
+
+```console
+$ nix develop
+$ just functional-tests
+```
 
 #### Continuous testing
 When working on the test you would probably want to run them continuously on
