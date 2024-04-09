@@ -82,29 +82,3 @@ teardown() {
   run "$FLOX_BIN" activate -- go build
   assert_success
 }
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox init' ignores go.mod directories" {
-  mkdir "$PROJECT_DIR/go.mod"
-
-  run "$FLOX_BIN" init --auto-setup
-  assert_success
-
-  run "$FLOX_BIN" activate -- go version
-  assert_failure
-  assert_line --partial "go: command not found"
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox init' ignores go.work directories" {
-  mkdir "$PROJECT_DIR/go.work"
-
-  run "$FLOX_BIN" init --auto-setup
-  assert_success
-
-  run "$FLOX_BIN" activate -- go version
-  assert_failure
-  assert_line --partial "go: command not found"
-}

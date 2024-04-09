@@ -384,6 +384,24 @@ mod tests {
     }
 
     #[test]
+    fn test_go_mod_system_returns_none_if_gomod_is_dir() {
+        let (flox, temp_dir_handle) = flox_instance_with_global_lock();
+        std::fs::create_dir_all(temp_dir_handle.path().join("go.mod/")).unwrap();
+
+        let module_system = GoModSystem::try_new_from_path(&flox, temp_dir_handle.path()).unwrap();
+        assert!(module_system.is_none());
+    }
+
+    #[test]
+    fn test_go_work_system_returns_none_if_gowork_is_dir() {
+        let (flox, temp_dir_handle) = flox_instance_with_global_lock();
+        std::fs::create_dir_all(temp_dir_handle.path().join("go.work/")).unwrap();
+
+        let module_system = GoWorkSystem::try_new_from_path(&flox, temp_dir_handle.path()).unwrap();
+        assert!(module_system.is_none());
+    }
+
+    #[test]
     fn test_go_version_from_content_returns_compatible_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
