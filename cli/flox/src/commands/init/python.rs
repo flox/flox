@@ -7,7 +7,6 @@ use anyhow::{anyhow, Context, Error, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::PackageToInstall;
-use flox_rust_sdk::models::search::SearchResult;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::debug;
@@ -17,6 +16,7 @@ use super::{
     get_default_package_if_compatible,
     try_find_compatible_version,
     InitHook,
+    ProvidedVersion,
     AUTO_SETUP_HINT,
 };
 use crate::utils::dialog::{Dialog, Select};
@@ -612,110 +612,14 @@ impl Provider for Requirements {
     }
 }
 
-/// Distinguish compatible versions from default or incompatible versions
-///
-///
-/// [ProvidedVersion::Compatible] if search yielded a compatible version to the requested version.
-/// [ProvidedVersion::Incompatible::requested] may be [None] if no version was requested.
-/// In that case any version found in the catalogs is considered compatible.
-///
-/// [ProvidedVersion::Incompatible] if no compatible version was found,
-/// but another substitute was found.
-///
-/// [ProvidedVersion::Incompatible::requested] and [ProvidedVersion::Compatible::requested]
-/// may be semver'ish, e.g. ">=3.6".
-///
-/// [ProvidedVersion::Incompatible::substitute] and [ProvidedVersion::Compatible::compatible]
-/// are concrete versions, not semver!
-#[derive(Debug, PartialEq)]
-enum ProvidedVersion {
-    Compatible {
-        requested: Option<String>,
-        compatible: ProvidedPackage,
-    },
-    Incompatible {
-        requested: String,
-        substitute: ProvidedPackage,
-    },
-}
-
-impl ProvidedVersion {
-    fn display_version(&self) -> &str {
-        match self {
-            Self::Compatible { compatible, .. } => &compatible.display_version,
-            Self::Incompatible { substitute, .. } => &substitute.display_version,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-struct ProvidedPackage {
-    /// Name of the provided package
-    /// pname or the last component of [Self::rel_path]
-    pub name: String,
-    /// Path to the package in the catalog
-    /// Checked to be non-empty
-    pub rel_path: Vec<String>,
-    /// Version of the package in the catalog
-    /// "N/A" if not found
-    ///
-    /// Used for display purposes only,
-    /// version constraints should be added based on the original query.
-    pub display_version: String,
-}
-
-impl TryFrom<SearchResult> for ProvidedPackage {
-    type Error = Error;
-
-    fn try_from(value: SearchResult) -> Result<Self, Self::Error> {
-        let path_name = value
-            .rel_path
-            .last()
-            .ok_or_else(|| anyhow!("invalid search result: 'rel_path' empty in {value:?}"))?;
-
-        let name = value.pname.unwrap_or_else(|| path_name.to_string());
-
-        Ok(ProvidedPackage {
-            name,
-            rel_path: value.rel_path,
-            display_version: value.version.unwrap_or("N/A".to_string()),
-        })
-    }
-}
-
-impl From<ProvidedPackage> for PackageToInstall {
-    fn from(value: ProvidedPackage) -> Self {
-        PackageToInstall {
-            id: value.name,
-            pkg_path: value.rel_path.join("."),
-            input: None,
-            version: None,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-
-    impl ProvidedPackage {
-        fn new(
-            name: impl ToString,
-            rel_path: impl IntoIterator<Item = impl ToString>,
-            display_version: impl ToString,
-        ) -> Self {
-            Self {
-                name: name.to_string(),
-                rel_path: rel_path.into_iter().map(|s| s.to_string()).collect(),
-                display_version: display_version.to_string(),
-            }
-        }
-    }
-
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_global_lock;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
 
     use super::*;
+    use crate::commands::init::ProvidedPackage;
 
     #[test]
     fn test_should_run_true() {

@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
-use anyhow::{Context, Error, Result};
+use anyhow::{anyhow, Context, Error, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
@@ -28,9 +28,11 @@ use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
 
+mod go;
 mod node;
 mod python;
 
+use go::Go;
 use node::Node;
 use python::Python;
 
@@ -168,6 +170,9 @@ impl Init {
         let python = Python::new(dir, flox);
         hooks.push(Box::new(python));
 
+        let go = Go::new(dir, flox)?;
+        hooks.push(Box::new(go));
+
         let mut customizations = vec![];
 
         for mut hook in hooks {
@@ -255,6 +260,88 @@ fn format_customization(customization: &InitCustomization) -> Result<String> {
     Ok(toml.to_string())
 }
 
+/// Distinguish compatible versions from default or incompatible versions
+///
+///
+/// [ProvidedVersion::Compatible] if search yielded a compatible version to the requested version.
+/// [ProvidedVersion::Incompatible::requested] may be [None] if no version was requested.
+/// In that case any version found in the catalogs is considered compatible.
+///
+/// [ProvidedVersion::Incompatible] if no compatible version was found,
+/// but another substitute was found.
+///
+/// [ProvidedVersion::Incompatible::requested] and [ProvidedVersion::Compatible::requested]
+/// may be semver'ish, e.g. ">=3.6".
+///
+/// [ProvidedVersion::Incompatible::substitute] and [ProvidedVersion::Compatible::compatible]
+/// are concrete versions, not semver!
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) enum ProvidedVersion {
+    Compatible {
+        requested: Option<String>,
+        compatible: ProvidedPackage,
+    },
+    Incompatible {
+        requested: String,
+        substitute: ProvidedPackage,
+    },
+}
+
+impl ProvidedVersion {
+    pub(crate) fn display_version(&self) -> &str {
+        match self {
+            Self::Compatible { compatible, .. } => &compatible.display_version,
+            Self::Incompatible { substitute, .. } => &substitute.display_version,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) struct ProvidedPackage {
+    /// Name of the provided package
+    /// pname or the last component of [Self::rel_path]
+    pub name: String,
+    /// Path to the package in the catalog
+    /// Checked to be non-empty
+    pub rel_path: Vec<String>,
+    /// Version of the package in the catalog
+    /// "N/A" if not found
+    ///
+    /// Used for display purposes only,
+    /// version constraints should be added based on the original query.
+    pub display_version: String,
+}
+
+impl TryFrom<SearchResult> for ProvidedPackage {
+    type Error = Error;
+
+    fn try_from(value: SearchResult) -> Result<Self, Self::Error> {
+        let path_name = value
+            .rel_path
+            .last()
+            .ok_or_else(|| anyhow!("invalid search result: 'rel_path' empty in {value:?}"))?;
+
+        let name = value.pname.unwrap_or_else(|| path_name.to_string());
+
+        Ok(ProvidedPackage {
+            name,
+            rel_path: value.rel_path,
+            display_version: value.version.unwrap_or("N/A".to_string()),
+        })
+    }
+}
+
+impl From<ProvidedPackage> for PackageToInstall {
+    fn from(value: ProvidedPackage) -> Self {
+        PackageToInstall {
+            id: value.name,
+            pkg_path: value.rel_path.join("."),
+            input: None,
+            version: None,
+        }
+    }
+}
+
 /// Get nixpkgs#rel_path optionally verifying that it satisfies a version constraint.
 fn get_default_package_if_compatible(
     rel_path: impl IntoIterator<Item = impl ToString>,
@@ -324,6 +411,20 @@ fn try_find_compatible_version(
 
 #[cfg(test)]
 mod tests {
+    impl ProvidedPackage {
+        pub(crate) fn new(
+            name: impl ToString,
+            rel_path: impl IntoIterator<Item = impl ToString>,
+            display_version: impl ToString,
+        ) -> Self {
+            Self {
+                name: name.to_string(),
+                rel_path: rel_path.into_iter().map(|s| s.to_string()).collect(),
+                display_version: display_version.to_string(),
+            }
+        }
+    }
+
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
