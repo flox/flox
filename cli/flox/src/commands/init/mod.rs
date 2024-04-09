@@ -239,21 +239,22 @@ fn format_customization(customization: &InitCustomization) -> Result<String> {
         DocumentMut::new()
     };
 
-    if let Some(hook) = &customization.profile {
-        let hook_table = {
-            let hook_field = toml
-                .entry("hook")
+    if let Some(profile) = &customization.profile {
+        let profile_table = {
+            let profile_field = toml
+                .entry("profile")
                 .or_insert_with(|| Item::Table(Table::new()));
-            let hook_field_type = hook_field.type_name();
-            hook_field.as_table_mut().context(format!(
-                "'install' must be a table, but found {hook_field_type} instead"
+            let profile_field_type = profile_field.type_name();
+            profile_field.as_table_mut().context(format!(
+                "'profile' must be a table, but found {profile_field_type} instead"
             ))?
         };
-        hook_table.insert(
-            "script",
+
+        profile_table.insert(
+            "common",
             Item::Value(Value::String(Formatted::new(formatdoc! {r#"
                 {}
-            "#, indent::indent_all_by(2, hook)}))),
+            "#, indent::indent_all_by(2, profile)}))),
         );
     }
 

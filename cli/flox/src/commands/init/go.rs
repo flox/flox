@@ -25,7 +25,7 @@ const GO_HOOK: &str = indoc! {"
     # Point GOENV to Flox environment cache
     export GOENV=\"$FLOX_ENV_CACHE/goenv\"
 
-    # Install Go depedencies
+    # Install Go dependencies
     go get ."
 };
 
@@ -103,7 +103,7 @@ impl InitHook for Go {
         ", module_system.get_filename()});
 
         let message = formatdoc! {"
-        Would you like Flox to apply the standard Go environment? 
+        Would you like Flox to apply the standard Go environment?
         You can always revisit the environment's declaration with 'flox edit'"};
 
         let accept_options = ["Yes".to_string()];
