@@ -13,7 +13,7 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tempfile::PersistError;
 use thiserror::Error;
-use toml_edit::{Document, Item, Key, Table, TableLike};
+use toml_edit::{DocumentMut, Item, Key, Table, TableLike};
 use url::Url;
 use xdg::BaseDirectories;
 
@@ -244,7 +244,7 @@ impl Config {
     ///
     /// Values in the context should be read from the [Config] type instead!
     pub fn get(&self, path: &[Key]) -> Result<String, ReadWriteError> {
-        let document: toml_edit::Document = toml_edit::ser::to_document(self)?;
+        let document: toml_edit::DocumentMut = toml_edit::ser::to_document(self)?;
 
         if path.is_empty() {
             return Ok(document.to_string());
@@ -283,8 +283,8 @@ impl Config {
         let mut validation_document = toml_edit::ser::to_document(&Config::default())?;
 
         let mut document = match config_file {
-            Some(content) => content.parse::<Document>()?,
-            None => Document::new(),
+            Some(content) => content.parse::<DocumentMut>()?,
+            None => DocumentMut::new(),
         };
 
         let (mut handle, mut validation) =

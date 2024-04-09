@@ -95,9 +95,9 @@
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
 
-      # flox env template used to create new environments
-      FLOX_ENV_TEMPLATE = builtins.path {
-        path = ../../assets/templateFloxEnv;
+      # manifest template used to create new environments
+      MANIFEST_TEMPLATE = builtins.path {
+        path = ../../assets/manifest_template.toml;
       };
 
       # The global manifest we generate if one does not exist

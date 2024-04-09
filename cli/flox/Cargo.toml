@@ -48,11 +48,11 @@ textwrap = { workspace = true, features = ["terminal_size"] }
 indent.workspace = true
 semver.workspace = true
 sentry = { workspace = true, features = ["anyhow", "tracing", "debug-logs"] }
-serial_test.workspace = true
 
 [dev-dependencies]
-temp-env = "0.3.2"
 pretty_assertions.workspace = true
+serial_test.workspace = true
+temp-env.workspace = true
 
 
 [features]
