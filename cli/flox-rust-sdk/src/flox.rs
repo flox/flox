@@ -12,6 +12,8 @@ pub use crate::models::environment_ref::{self, *};
 
 pub static FLOX_VERSION: Lazy<String> =
     Lazy::new(|| std::env::var("FLOX_VERSION").unwrap_or(env!("FLOX_VERSION").to_string()));
+pub static FLOX_SENTRY_ENV: Lazy<Option<String>> =
+    Lazy::new(|| std::env::var("FLOX_SENTRY_ENV").ok());
 
 /// The main API struct for our flox implementation
 ///
