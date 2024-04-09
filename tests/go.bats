@@ -49,8 +49,8 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox init' sets up a local working Go module environment" {
-  cp -r "$TESTS_DIR"/go/single-dependency/common/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/go/single-dependency/module/* "$PROJECT_DIR/"
+  cp -r "$TESTS_DIR"/go/module-systems/common/* "$PROJECT_DIR/"
+  cp -r "$TESTS_DIR"/go/module-systems/module/* "$PROJECT_DIR/"
 
   run "$FLOX_BIN" init --auto-setup
   assert_success
@@ -67,9 +67,9 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox init' sets up a local working Go workspace environment" {
-  cp -r "$TESTS_DIR"/go/single-dependency/common/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/go/single-dependency/module/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/go/single-dependency/workspace/* "$PROJECT_DIR/"
+  cp -r "$TESTS_DIR"/go/module-systems/common/* "$PROJECT_DIR/"
+  cp -r "$TESTS_DIR"/go/module-systems/module/* "$PROJECT_DIR/"
+  cp -r "$TESTS_DIR"/go/module-systems/workspace/* "$PROJECT_DIR/"
 
   run "$FLOX_BIN" init --auto-setup
   assert_success
