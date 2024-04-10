@@ -82,10 +82,11 @@ fi
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _prof_scripts;
   _prof_scripts=( $(
+    cd "$FLOX_ENV/etc/profile.d";
     shopt -s nullglob;
-    echo "$FLOX_ENV/etc/profile.d"/*.sh;
+    echo *.sh;
   ) );
-  for p in "${_prof_scripts[@]}"; do . "$p"; done
+  for p in "${_prof_scripts[@]}"; do . "$FLOX_ENV/etc/profile.d/$p"; done
   unset _prof_scripts;
 fi
 
@@ -100,9 +101,10 @@ const char * const ZSH_ACTIVATE_SCRIPT = R"(
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _prof_scripts;
   _prof_scripts=( $(
-    echo "$FLOX_ENV/etc/profile.d"/*.sh;
+    cd "$FLOX_ENV/etc/profile.d";
+    echo *.sh;
   ) );
-  for p in "${_prof_scripts[@]}"; do . "$p"; done
+  for p in "${_prof_scripts[@]}"; do . "$FLOX_ENV/etc/profile.d/$p"; done
   unset _prof_scripts;
 fi
 
