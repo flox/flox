@@ -6,9 +6,7 @@
  *
  *
  * -------------------------------------------------------------------------- */
-#ifndef __APPLE__
-#  include <sentry.h>
-#endif
+#include <sentry.h>
 #include <string>
 
 #pragma once

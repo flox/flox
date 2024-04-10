@@ -1,8 +1,5 @@
 #include "flox/pkgdb/metrics.hh"
-
-#ifndef __APPLE__
-#  include <sentry.h>
-#endif
+#include <sentry.h>
 #include <string>
 
 namespace flox {
@@ -13,7 +10,6 @@ sentryReporting::init( bool debug )
 // Sentry reporting on Darwin will take more effort, including getting the
 // Sentry libs into nix, as well as looking at the backend needs (breakpad or
 // inproc). See https://github.com/flox/flox/issues/1056 for details.
-#ifndef __APPLE__
   std::string dsn;
 
   if ( const char * dsnVal = std::getenv( "FLOX_SENTRY_DSN" );
@@ -51,7 +47,6 @@ sentryReporting::init( bool debug )
 
 // Example usage for reporting a message
 //   report_message(SENTRY_LEVEL_INFO, "pkgdb", "Hello world from pkgdb!");
-#endif
 }
 
 void
@@ -59,24 +54,20 @@ sentryReporting::report_message( const sentry_level_t level,
                                  const std::string &  logger,
                                  const std::string &  message )
 {
-#ifndef __APPLE__
   if ( sentryInitialized )
     {
       sentry_capture_event( sentry_value_new_message_event( level,
                                                             logger.c_str(),
                                                             message.c_str() ) );
     }
-#endif
 }
 
 void
 sentryReporting::shutdown()
 {
-#ifndef __APPLE__
   // make sure everything flushes
   if ( sentryInitialized ) { sentry_close(); }
   sentryInitialized = false;
-#endif
 }
 
 }  // namespace flox

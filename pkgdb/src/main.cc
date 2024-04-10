@@ -26,7 +26,11 @@
 #include "flox/eval.hh"
 #include "flox/parse/command.hh"
 #include "flox/pkgdb/command.hh"
+
+#ifndef __APPLE__
 #include "flox/pkgdb/metrics.hh"
+#endif
+
 #include "flox/repl.hh"
 #include "flox/resolver/command.hh"
 #include "flox/search/command.hh"
@@ -40,7 +44,9 @@ namespace flox {
 #  error "NIXPKGS_CACERT_BUNDLE_CRT must be set"
 #endif
 
+#ifndef __APPLE__
 static sentryReporting theSentryReporting = sentryReporting();
+#endif
 
 /* -------------------------------------------------------------------------- */
 
@@ -145,8 +151,9 @@ run( int argc, char * argv[] )
   setVerbosityFromEnv();
 
   // We wait to init here so we have verbosity.
+#ifndef __APPLE__
   flox::theSentryReporting.init( nix::verbosity >= nix::lvlDebug );
-
+#endif
   /* Run subcommand */
   if ( prog.is_subcommand_used( "scrape" ) ) { return cmdScrape.run(); }
   if ( prog.is_subcommand_used( "get" ) ) { return cmdGet.run(); }
@@ -223,7 +230,9 @@ main( int argc, char * argv[] )
         flox::CaughtException( "running pkgdb subcommand", err.what() ) );
     }
 
+#ifndef __APPLE__
   flox::theSentryReporting.shutdown();
+#endif
   return exit_code;
 }
 
