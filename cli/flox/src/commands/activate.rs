@@ -383,7 +383,10 @@ impl Activate {
                     command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
                 }
                 command
-                    .env("ZDOTDIR", env!("FLOX_ZDOTDIR"))
+                    .env(
+                        "ZDOTDIR",
+                        activation_path.join("activate.d").join("zdotdir"),
+                    )
                     .env(
                         "FLOX_ZSH_INIT_SCRIPT",
                         activation_path.join("activate").join("zsh"),
