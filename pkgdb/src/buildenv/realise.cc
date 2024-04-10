@@ -80,9 +80,14 @@ then
 fi
 
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
-  while IFS= read -r -d '' profile_script; do
-    . "$profile_script"
-  done < <(find "$FLOX_ENV/etc/profile.d" -name '*.sh' -print0)
+  declare -a _prof_scripts;
+  _prof_scripts=( $(
+    cd "$FLOX_ENV/etc/profile.d";
+    shopt -s nullglob;
+    echo *.sh;
+  ) );
+  for p in "${_prof_scripts[@]}"; do . "$FLOX_ENV/etc/profile.d/$p"; done
+  unset _prof_scripts;
 fi
 
 # Disable command hashing to allow for newly installed flox packages to be found
