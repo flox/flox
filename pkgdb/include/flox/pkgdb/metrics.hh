@@ -6,19 +6,21 @@
  *
  *
  * -------------------------------------------------------------------------- */
-#include <sentry.h>
+#ifdef __linux__
+#  include <sentry.h>
+#endif
 #include <string>
 
 #pragma once
 
 namespace flox {
 
-class metricsReporting
+class MetricsReporting
 {
 public:
 
-  metricsReporting() : sentryInitialized( false ) {}
-  virtual ~metricsReporting() = default;
+  MetricsReporting() : sentryInitialized( false ) {}
+  virtual ~MetricsReporting() = default;
 
   virtual void
   init( bool debug )
@@ -33,24 +35,26 @@ protected:
   bool sentryInitialized;
 };
 
-class sentryReporting : public metricsReporting
+class SentryReporting : public MetricsReporting
 {
 public:
 
-  sentryReporting() : metricsReporting() {}
+  SentryReporting() : MetricsReporting() {}
 
   virtual void
   init( bool debug );
 
+#ifdef __linux__
   virtual void
   report_message( const sentry_level_t level,
                   const std::string &  logger,
                   const std::string &  message );
+#endif
 
   virtual void
   shutdown();
 
-  virtual ~sentryReporting() {}
+  virtual ~SentryReporting() {}
 };
 
 }  // namespace flox

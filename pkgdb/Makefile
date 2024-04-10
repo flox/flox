@@ -174,18 +174,8 @@ rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2)        \
 # ---------------------------------------------------------------------------- #
 
 # Various file and target lists
-ifeq (Linux,$(OS))
 HEADERS        = $(call rwildcard,include,*.hh)
-else
-HEADERS        = $(filter-out include/flox/pkgdb/metrics.hh,$(call rwildcard,include,*.hh))
-endif  # ifeq (Linux,$(OS))
-
-ifeq (Linux,$(OS))
 SRCS           = $(call rwildcard,src,*.cc)
-else
-SRCS           = $(filter-out src/metrics.cc,$(call rwildcard,src,*.cc))
-endif  # ifeq (Linux,$(OS))
-
 test_SRCS      = $(sort $(wildcard tests/*.cc))
 ALL_SRCS       = $(SRCS) $(test_SRCS)
 BINS           = bin/pkgdb
@@ -293,14 +283,12 @@ toml_CFLAGS ?=                                                                \
   $(shell $(NIX) build --no-link --print-out-paths 'nixpkgs#toml11')/include
 toml_CFLAGS := $(toml_CFLAGS)
 
-ifeq (Linux,$(OS))
 sentry_PREFIX ?=                                                        \
 	$(shell $(NIX) build --no-link --print-out-paths '.#sentry-native')
 sentry_PREFIX := $(sentry_PREFIX)
 sentry_CFLAGS  = -isystem $(sentry_PREFIX)/include
 sentry_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs sentry-native)
 sentry_LDFLAGS = -L$(sentry_PREFIX)/lib -lsentry
-endif # ifeq (Linux,$(OS)) 
 
 sqlite3_CFLAGS ?=                                                     \
 	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags sqlite3))
