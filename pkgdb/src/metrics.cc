@@ -43,8 +43,6 @@ sentryReporting::init( bool debug )
 
   sentryInitialized = true;
 
-  if ( std::getenv( "_FLOX_TEST_SENTRY_CRASH" ) != nullptr ) { abort(); }
-
   // Example usage for reporting a message
   //   report_message(SENTRY_LEVEL_INFO, "pkgdb", "Hello world from pkgdb!");
 }
