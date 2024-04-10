@@ -469,6 +469,11 @@ displayableGlobbedPath( const AttrPathGlob & attrs );
 [[nodiscard]] long
 getAvailableSystemMemory();
 
+/** @brief Get the main flox cache dir */
+std::filesystem::path
+getFloxCachedir();
+
+
 /* -------------------------------------------------------------------------- */
 
 /**

@@ -17,7 +17,7 @@ getSentryDbDir()
 {
   // For further information and recommendations:
   // https://docs.sentry.io/platforms/native/configuration/options/#database-path
-  return pkgdb::getPkgDbCachedir() / ".sentry";
+  return flox::getFloxCachedir() / ".sentry";
 }
 
 void

@@ -408,6 +408,13 @@ getAvailableSystemMemory()
 }
 /* -------------------------------------------------------------------------- */
 
+std::filesystem::path
+getFloxCachedir()
+{
+  std::filesystem::path nixCache = nix::getCacheDir();
+  return nixCache / "flox";
+}
+
 }  // namespace flox
 
 /* -------------------------------------------------------------------------- */
