@@ -102,7 +102,6 @@ if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _prof_scripts;
   _prof_scripts=( $(
     cd "$FLOX_ENV/etc/profile.d";
-    shopt -s nullglob;
     echo *.sh;
   ) );
   for p in "${_prof_scripts[@]}"; do . "$FLOX_ENV/etc/profile.d/$p"; done
