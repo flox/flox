@@ -286,7 +286,6 @@ toml_CFLAGS := $(toml_CFLAGS)
 ifeq (Linux,$(OS))
 sentry_PREFIX ?=                                                        \
 	$(shell $(NIX) build --no-link --print-out-paths '.#sentry-native')
-sentry_PREFIX := $(sentry_PREFIX)
 sentry_CFLAGS  = -isystem $(sentry_PREFIX)/include
 sentry_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs sentry-native)
 sentry_LDFLAGS = -L$(sentry_PREFIX)/lib -lsentry
