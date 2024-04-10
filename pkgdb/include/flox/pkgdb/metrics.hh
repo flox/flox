@@ -6,7 +6,9 @@
  *
  *
  * -------------------------------------------------------------------------- */
-#include <sentry.h>
+#ifndef __APPLE__
+  #include <sentry.h>
+#endif
 #include <string>
 
 #pragma once
@@ -50,7 +52,7 @@ public:
   virtual void
   shutdown();
 
-  virtual ~sentryReporting() { shutdown(); }
+  virtual ~sentryReporting() {}
 };
 
 }  // namespace flox
