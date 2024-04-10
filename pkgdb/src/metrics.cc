@@ -3,12 +3,22 @@
 #  include <sentry.h>
 #endif
 #include "flox/core/util.hh"
+#include "flox/pkgdb/read.hh"
 #include <string>
 
 namespace flox {
 
 bool            MetricsReporting::initialized = false;
 SentryReporting sentryReporting;
+
+
+std::filesystem::path
+getSentryDbDir()
+{
+  // For further information and recommendations:
+  // https://docs.sentry.io/platforms/native/configuration/options/#database-path
+  return pkgdb::getPkgDbCachedir() / ".sentry";
+}
 
 void
 SentryReporting::init( bool debug )
@@ -39,10 +49,7 @@ SentryReporting::init( bool debug )
   sentry_options_t * options = sentry_options_new();
   sentry_options_set_dsn( options, dsn.c_str() );
   sentry_options_set_environment( options, env.c_str() );
-
-  // This is also the default-path. For further information and recommendations:
-  // https://docs.sentry.io/platforms/native/configuration/options/#database-path
-  sentry_options_set_database_path( options, ".sentry-native" );
+  sentry_options_set_database_path( options, getSentryDbDir().c_str() );
 
   // TODO - Get actual version / commit hash ?
   sentry_options_set_release( options, ( "pkgdb@" + version ).c_str() );
