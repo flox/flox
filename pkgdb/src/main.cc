@@ -28,7 +28,7 @@
 #include "flox/pkgdb/command.hh"
 
 #ifndef __APPLE__
-#include "flox/pkgdb/metrics.hh"
+#  include "flox/pkgdb/metrics.hh"
 #endif
 
 #include "flox/repl.hh"

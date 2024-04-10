@@ -7,9 +7,9 @@ namespace flox {
 void
 sentryReporting::init( bool debug )
 {
-// Sentry reporting on Darwin will take more effort, including getting the
-// Sentry libs into nix, as well as looking at the backend needs (breakpad or
-// inproc). See https://github.com/flox/flox/issues/1056 for details.
+  // Sentry reporting on Darwin will take more effort, including getting the
+  // Sentry libs into nix, as well as looking at the backend needs (breakpad or
+  // inproc). See https://github.com/flox/flox/issues/1056 for details.
   std::string dsn;
 
   if ( const char * dsnVal = std::getenv( "FLOX_SENTRY_DSN" );
@@ -45,8 +45,8 @@ sentryReporting::init( bool debug )
 
   if ( std::getenv( "_FLOX_TEST_SENTRY_CRASH" ) != nullptr ) { abort(); }
 
-// Example usage for reporting a message
-//   report_message(SENTRY_LEVEL_INFO, "pkgdb", "Hello world from pkgdb!");
+  // Example usage for reporting a message
+  //   report_message(SENTRY_LEVEL_INFO, "pkgdb", "Hello world from pkgdb!");
 }
 
 void
