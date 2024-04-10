@@ -37,7 +37,7 @@ environment is synced.
 `-f` may only be specified in this case, forceably updating the environment
 locally even if there are local changes not reflected in the remote environment.
 `<owner>/<name>` may be specified in this case and will replace the environment
-with any environment.
+with the specified environment.
 
 A remote environment may not support the architecture or operating system of the
 local system pulling the environment,
