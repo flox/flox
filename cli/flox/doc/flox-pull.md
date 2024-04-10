@@ -36,8 +36,6 @@ If `-d` is not specified and the current directory contains an environment, that
 environment is synced.
 `-f` may only be specified in this case, forceably updating the environment
 locally even if there are local changes not reflected in the remote environment.
-`<owner>/<name>` may not be specified in this case, as it would have been
-specified when the environment was first pulled.
 
 A remote environment may not support the architecture or operating system of the
 local system pulling the environment,
