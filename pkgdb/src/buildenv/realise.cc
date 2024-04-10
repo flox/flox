@@ -127,7 +127,7 @@ if [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
 elif [ -e "$FLOX_ENV/activate.d/hook-script" ]; then
   # [hook.script] is deprecated - print warning and source it.
   echo "WARNING: [hook.script] is deprecated, use [hook.on-activate] instead." >&2
-  source "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
+  source "$FLOX_ENV/activate.d/hook-script" 1>&2
 fi
 
 # From this point on the activation process depends on the mode:
