@@ -2,6 +2,7 @@
 #ifdef __linux__
 #  include <sentry.h>
 #endif
+#include "flox/core/util.hh"
 #include <string>
 
 namespace flox {
@@ -23,7 +24,8 @@ SentryReporting::init( bool debug )
   else
     {
       // If DSN is not set, don't continue initializing Sentry
-      return;
+      debugLog(
+        "Environment var FLOX_SENTRY_DSN not set, Sentry is disabled." ) return;
     }
 
   const char *      env_val = std::getenv( "FLOX_SENTRY_ENV" );
@@ -48,6 +50,12 @@ SentryReporting::init( bool debug )
 
   // Example usage for reporting a message
   //   report_message(SENTRY_LEVEL_INFO, "pkgdb", "Hello world from pkgdb!");
+  return;
+
+#else
+  // This is mainly to get rid of the unused bool warning when building on mac.
+  if ( debug ) { debugLog( "Sentry reporting disabled on Darwin." ); }
+  return;
 #endif
 }
 
