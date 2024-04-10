@@ -283,12 +283,14 @@ toml_CFLAGS ?=                                                                \
   $(shell $(NIX) build --no-link --print-out-paths 'nixpkgs#toml11')/include
 toml_CFLAGS := $(toml_CFLAGS)
 
+ifeq (Linux,$(OS))
 sentry_PREFIX ?=                                                        \
 	$(shell $(NIX) build --no-link --print-out-paths '.#sentry-native')
 sentry_PREFIX := $(sentry_PREFIX)
 sentry_CFLAGS  = -isystem $(sentry_PREFIX)/include
 sentry_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs sentry-native)
 sentry_LDFLAGS = -L$(sentry_PREFIX)/lib -lsentry
+endif ifeq (Linux,$(OS))
 
 sqlite3_CFLAGS ?=                                                     \
 	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags sqlite3))
