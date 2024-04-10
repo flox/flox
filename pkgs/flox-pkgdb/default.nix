@@ -46,7 +46,6 @@
     nix_INCDIR = nix.dev.outPath + "/include";
     boost_CFLAGS = "-isystem " + boost.dev.outPath + "/include";
     toml_CFLAGS = "-isystem " + toml11.outPath + "/include";
-    sentry_PREFIX = sentry-native.outPath;
     yaml_PREFIX = yaml-cpp.outPath;
     semver_PREFIX = cpp-semver.outPath;
     libExt = stdenv.hostPlatform.extensions.sharedLibrary;
@@ -113,7 +112,9 @@
     in
       # todo: use `builtins.flakerefToString` once flox ships with nix 2.18+
       "github:NixOS/nixpkgs/${nixpkgs.rev}";
-  };
+  } // lib.optionalAttrs stdenv.isLinux {
+    sentry_PREFIX = sentry-native.outPath;
+};
 in
   stdenv.mkDerivation ({
       pname = "flox-pkgdb";
