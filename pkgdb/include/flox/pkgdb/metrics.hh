@@ -7,7 +7,7 @@
  *
  * -------------------------------------------------------------------------- */
 #ifndef __APPLE__
-  #include <sentry.h>
+#  include <sentry.h>
 #endif
 #include <string>
 
