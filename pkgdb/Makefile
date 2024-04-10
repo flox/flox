@@ -174,15 +174,18 @@ rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2)        \
 # ---------------------------------------------------------------------------- #
 
 # Various file and target lists
-
+ifeq (Linux,$(OS))
 HEADERS        = $(call rwildcard,include,*.hh)
-ifneq (Linux,$(OS))
-HEADERS        = $(filter-out $(SRCS) metrics.hh)
-endif  # ifneq (Linux,$(OS))
+else
+HEADERS        = $(filter-out include/flox/pkgdb/metrics.hh,$(call rwildcard,include,*.hh))
+endif  # ifeq (Linux,$(OS))
+
+ifeq (Linux,$(OS))
 SRCS           = $(call rwildcard,src,*.cc)
-ifneq (Linux,$(OS))
-SRCS           = $(filter-out $(SRCS) metrics.cc)
-endif  # ifneq (Linux,$(OS))
+else
+SRCS           = $(filter-out src/metrics.cc,$(call rwildcard,src,*.cc))
+endif  # ifeq (Linux,$(OS))
+
 test_SRCS      = $(sort $(wildcard tests/*.cc))
 ALL_SRCS       = $(SRCS) $(test_SRCS)
 BINS           = bin/pkgdb
