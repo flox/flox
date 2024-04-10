@@ -7,6 +7,9 @@
 
 namespace flox {
 
+bool            MetricsReporting::initialized = false;
+SentryReporting sentryReporting;
+
 void
 SentryReporting::init( bool debug )
 {
@@ -46,7 +49,7 @@ SentryReporting::init( bool debug )
   sentry_options_set_debug( options, debug ? 1 : 0 );
   sentry_init( options );
 
-  sentryInitialized = true;
+  initialized = true;
 
   // Example usage for reporting a message
   //   report_message(SENTRY_LEVEL_INFO, "pkgdb", "Hello world from pkgdb!");
@@ -65,7 +68,7 @@ SentryReporting::report_message( const sentry_level_t level,
                                  const std::string &  logger,
                                  const std::string &  message )
 {
-  if ( sentryInitialized )
+  if ( initialized )
     {
       sentry_capture_event( sentry_value_new_message_event( level,
                                                             logger.c_str(),
@@ -79,8 +82,12 @@ SentryReporting::shutdown()
 {
 #ifdef __linux__
   // make sure everything flushes
-  if ( sentryInitialized ) { sentry_close(); }
-  sentryInitialized = false;
+  if ( initialized )
+    {
+      int res = sentry_close();
+      debugLog( nix::fmt( "sentry_close returned %d", res ) );
+    }
+  initialized = false;
 #endif
 }
 

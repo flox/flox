@@ -19,7 +19,7 @@ class MetricsReporting
 {
 public:
 
-  MetricsReporting() : sentryInitialized( false ) {}
+  MetricsReporting() {}
   virtual ~MetricsReporting() = default;
 
   virtual void
@@ -32,7 +32,7 @@ public:
 
 protected:
 
-  bool sentryInitialized;
+  static bool initialized;
 };
 
 class SentryReporting : public MetricsReporting
@@ -56,5 +56,7 @@ public:
 
   virtual ~SentryReporting() {}
 };
+
+extern SentryReporting sentryReporting;
 
 }  // namespace flox

@@ -40,8 +40,6 @@ namespace flox {
 #  error "NIXPKGS_CACERT_BUNDLE_CRT must be set"
 #endif
 
-static SentryReporting theSentryReporting = SentryReporting();
-
 /* -------------------------------------------------------------------------- */
 
 /**
@@ -145,7 +143,7 @@ run( int argc, char * argv[] )
   setVerbosityFromEnv();
 
   // We wait to init here so we have verbosity.
-  flox::theSentryReporting.init( nix::verbosity >= nix::lvlDebug );
+  flox::sentryReporting.init( nix::verbosity >= nix::lvlDebug );
 
   /* Run subcommand */
   if ( prog.is_subcommand_used( "scrape" ) ) { return cmdScrape.run(); }
@@ -223,7 +221,7 @@ main( int argc, char * argv[] )
         flox::CaughtException( "running pkgdb subcommand", err.what() ) );
     }
 
-  flox::theSentryReporting.shutdown();
+  flox::sentryReporting.shutdown();
 
   return exit_code;
 }
