@@ -149,12 +149,14 @@ endif  # ifndef TOOLCHAIN
 VERSION := $(file < $(PKGDB_ROOT)/.version)
 
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
+# WARNING: these assignments are normally done within pkgs/flox-pkgdb/default.nix.
+# If you want to develop iteratively without using the packages created at the
+# time of running `nix develop` then unset the corresponding variables in your
+# develop shell environment.
 PROFILE_D_SCRIPTS_DIR ?= $(shell                            \
   $(NIX) build .\#flox-pkgdb.envs.PROFILE_D_SCRIPTS_DIR --print-out-paths)
-SET_PROMPT_BASH_SH ?= $(shell                                                  \
-  $(NIX) store add-path -n set-prompt.bash.sh src/buildenv/assets/set-prompt.bash.sh)
-SET_PROMPT_ZSH_SH ?= $(shell                                                  \
-  $(NIX) store add-path -n set-prompt.zsh.sh src/buildenv/assets/set-prompt.zsh.sh)
+ACTIVATE_D_SCRIPTS_DIR ?= $(shell                                                  \
+  $(NIX) store add-path -n flox-activate.d src/buildenv/assets/activate.d)
 CONTAINER_BUILDER_PATH ?= $(shell                                                  \
   $(NIX) store add-path -n mkContainer.nix src/buildenv/assets/mkContainer.nix)
 
@@ -363,10 +365,7 @@ src/buildenv/realise.o: CXXFLAGS +=                   \
 	'-DPROFILE_D_SCRIPTS_DIR="$(PROFILE_D_SCRIPTS_DIR)"'
 
 src/buildenv/realise.o: CXXFLAGS +=               \
-	'-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
-
-src/buildenv/realise.o: CXXFLAGS +=               \
-	'-DSET_PROMPT_ZSH_SH="$(SET_PROMPT_ZSH_SH)"'
+	'-DACTIVATE_D_SCRIPTS_DIR ="$(ACTIVATE_D_SCRIPTS_DIR)"'
 
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DCONTAINER_BUILDER_PATH="$(CONTAINER_BUILDER_PATH)"'
