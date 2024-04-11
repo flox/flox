@@ -235,6 +235,27 @@ set +h
 const char * const ZSH_ACTIVATE_SCRIPT = R"(
 [ ${_FLOX_PKGDB_VERBOSITY:-0} -le 1 ] || set -x
 
+# Modify dynamic zsh fpath in preference to FPATH in environment.
+# See https://github.com/flox/flox/pull/1299 for more details.
+declare -a fpath_prepend=()
+for i in "${(@s/:/)FLOX_ENV_DIRS}"; do
+  # Check if fpath already contains this env's site-functions directory.
+  # The trick here is that the "i" means inverse subscript, meaning that
+  # it returns the index of the value which follows, and "e" specifies an
+  # exact match. If the value is found it returns the index of the matching
+  # element, but if not it returns the length of the array + 1, hence we
+  # check for any value greater than the length of the array.
+  if [[ $fpath[(ie)$i/share/zsh/site-functions] -gt ${#fpath} ]]; then
+    fpath_prepend+=( "$i"/share/zsh/site-functions "$i"/share/zsh/vendor-completions )
+  fi
+done
+if [ ${#fpath_prepend[@]} -gt 0 ]; then
+  fpath=( "${fpath_prepend[@]}" "${fpath[@]}" )
+  autoload -U compinit
+  compinit
+fi
+unset fpath_prepend
+
 # Disable command hashing to allow for newly installed flox packages to be found
 # immediately.
 setopt nohashcmds
