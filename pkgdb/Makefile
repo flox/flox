@@ -174,7 +174,6 @@ rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2)        \
 # ---------------------------------------------------------------------------- #
 
 # Various file and target lists
-
 HEADERS        = $(call rwildcard,include,*.hh)
 SRCS           = $(call rwildcard,src,*.cc)
 test_SRCS      = $(sort $(wildcard tests/*.cc))
@@ -284,6 +283,14 @@ toml_CFLAGS ?=                                                                \
   $(shell $(NIX) build --no-link --print-out-paths 'nixpkgs#toml11')/include
 toml_CFLAGS := $(toml_CFLAGS)
 
+ifeq (Linux,$(OS))
+sentry_PREFIX ?=                                                        \
+	$(shell $(NIX) build --no-link --print-out-paths '.#sentry-native')
+sentry_CFLAGS  = -isystem $(sentry_PREFIX)/include
+sentry_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs sentry-native)
+sentry_LDFLAGS = -L$(sentry_PREFIX)/lib -lsentry
+endif #ifeq (Linux,$(OS))
+
 sqlite3_CFLAGS ?=                                                     \
 	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags sqlite3))
 sqlite3_CFLAGS  := $(sqlite3_CFLAGS)
@@ -335,10 +342,16 @@ CXXFLAGS += $(nljson_CFLAGS)
 CXXFLAGS += $(toml_CFLAGS)
 CXXFLAGS += $(yaml_CFLAGS)
 CXXFLAGS += $(semver_CFLAGS)
+ifeq (Linux,$(OS))
+CXXFLAGS += $(sentry_CFLAGS)
+endif # ifeq (Linux,$(OS))
 
 LDFLAGS += $(nix_LDFLAGS)
 LDFLAGS += $(sqlite3_LDFLAGS)
 LDFLAGS += $(yaml_LDFLAGS)
+ifeq (Linux,$(OS))
+LDFLAGS += $(sentry_LDFLAGS)
+endif # ifeq (Linux,$(OS))
 
 
 # ---------------------------------------------------------------------------- #

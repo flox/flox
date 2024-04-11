@@ -26,6 +26,7 @@
 #include "flox/eval.hh"
 #include "flox/parse/command.hh"
 #include "flox/pkgdb/command.hh"
+#include "flox/pkgdb/metrics.hh"
 #include "flox/repl.hh"
 #include "flox/resolver/command.hh"
 #include "flox/search/command.hh"
@@ -141,6 +142,9 @@ run( int argc, char * argv[] )
   /* Set the verbosity level requested by flox */
   setVerbosityFromEnv();
 
+  // We wait to init here so we have verbosity.
+  flox::sentryReporting.init( nix::verbosity >= nix::lvlDebug );
+
   /* Run subcommand */
   if ( prog.is_subcommand_used( "scrape" ) ) { return cmdScrape.run(); }
   if ( prog.is_subcommand_used( "get" ) ) { return cmdGet.run(); }
@@ -193,28 +197,33 @@ main( int argc, char * argv[] )
   setenv( "NIX_SSL_CERT_FILE", NIXPKGS_CACERT_BUNDLE_CRT, 0 );
 
   /* Wrap all execution in an error handler that pretty prints exceptions. */
+  int exit_code = 0;
   try
     {
-      return run( argc, argv );
+      exit_code = run( argc, argv );
     }
   catch ( const flox::FloxException & err )
     {
-      return printAndReturnException( err );
+      exit_code = printAndReturnException( err );
     }
   // TODO: we may want to catch these closer to where they are
   //       originally thrown.
   // TODO: handle IFD build errors.
   catch ( const nix::Error & err )
     {
-      return printAndReturnException(
+      exit_code = printAndReturnException(
         flox::NixException( "running pkgdb subcommand",
                             nix::filterANSIEscapes( err.what(), true ) ) );
     }
   catch ( const std::exception & err )
     {
-      return printAndReturnException(
+      exit_code = printAndReturnException(
         flox::CaughtException( "running pkgdb subcommand", err.what() ) );
     }
+
+  flox::sentryReporting.shutdown();
+
+  return exit_code;
 }
 
 

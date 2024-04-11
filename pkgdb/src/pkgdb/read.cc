@@ -43,7 +43,7 @@ getPkgDbCachedir()
   static std::stringstream dirname;
   if ( ! known )
     {
-      dirname << nix::getCacheDir() << "/flox/pkgdb-v" << sqlVersions.tables;
+      dirname << getFloxCachedir().c_str() << "/pkgdb-v" << sqlVersions.tables;
       known = true;
     }
   static const std::filesystem::path cacheDir = dirname.str();

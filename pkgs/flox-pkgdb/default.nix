@@ -14,6 +14,7 @@
   nlohmann_json,
   pkg-config,
   remake,
+  sentry-native,
   sqlite,
   sqlite3pp,
   toml11,
@@ -41,77 +42,81 @@
     p.bats-file
     p.bats-support
   ]);
-  envs = {
-    nix_INCDIR = nix.dev.outPath + "/include";
-    boost_CFLAGS = "-isystem " + boost.dev.outPath + "/include";
-    toml_CFLAGS = "-isystem " + toml11.outPath + "/include";
-    yaml_PREFIX = yaml-cpp.outPath;
-    semver_PREFIX = cpp-semver.outPath;
-    libExt = stdenv.hostPlatform.extensions.sharedLibrary;
-    # Used by `buildenv' to provide activation hook extensions.
-    PROFILE_D_SCRIPTS_DIR = let
-      path = builtins.path {
-        name = "etc-profile.d";
-        path = ../../pkgdb/src/buildenv/assets/etc/profile.d;
+  envs =
+    {
+      nix_INCDIR = nix.dev.outPath + "/include";
+      boost_CFLAGS = "-isystem " + boost.dev.outPath + "/include";
+      toml_CFLAGS = "-isystem " + toml11.outPath + "/include";
+      yaml_PREFIX = yaml-cpp.outPath;
+      semver_PREFIX = cpp-semver.outPath;
+      libExt = stdenv.hostPlatform.extensions.sharedLibrary;
+      # Used by `buildenv' to provide activation hook extensions.
+      PROFILE_D_SCRIPTS_DIR = let
+        path = builtins.path {
+          name = "etc-profile.d";
+          path = ../../pkgdb/src/buildenv/assets/etc/profile.d;
+        };
+
+        dependencies = {
+          realpath = coreutils + "/bin/realpath";
+        };
+
+        scripts = lib.mapAttrs (name: type:
+          substituteAll ({
+              src = path + "/${name}";
+              dir = "etc/profile.d";
+              isExecutable = true;
+            }
+            // dependencies)) (builtins.readDir path);
+
+        joined = symlinkJoin {
+          name = "profile-d-scripts";
+          paths = lib.attrValues scripts;
+        };
+      in
+        joined;
+
+      # Used by `buildenv' to set shell prompts on activation.
+      SET_PROMPT_BASH_SH = builtins.path {
+        name = "set-prompt.bash.sh";
+        path = ../../pkgdb/src/buildenv/assets/set-prompt.bash.sh;
       };
 
-      dependencies = {
-        realpath = coreutils + "/bin/realpath";
+      # Used by `buildenv' to set shell prompts on activation.
+      SET_PROMPT_ZSH_SH = builtins.path {
+        name = "set-prompt.zsh.sh";
+        path = ../../pkgdb/src/buildenv/assets/set-prompt.zsh.sh;
       };
 
-      scripts = lib.mapAttrs (name: type:
-        substituteAll ({
-            src = path + "/${name}";
-            dir = "etc/profile.d";
-            isExecutable = true;
-          }
-          // dependencies)) (builtins.readDir path);
-
-      joined = symlinkJoin {
-        name = "profile-d-scripts";
-        paths = lib.attrValues scripts;
+      # Used by `buildenv --container' to create a container builder script.
+      CONTAINER_BUILDER_PATH = builtins.path {
+        name = "mkContainer.nix";
+        path = ../../pkgdb/src/buildenv/assets/mkContainer.nix;
       };
-    in
-      joined;
 
-    # Used by `buildenv' to set shell prompts on activation.
-    SET_PROMPT_BASH_SH = builtins.path {
-      name = "set-prompt.bash.sh";
-      path = ../../pkgdb/src/buildenv/assets/set-prompt.bash.sh;
+      # The Bash executable to use for `hook.on-activate`
+      FLOX_BASH_BIN = "${bash}/bin/bash";
+
+      # used so that `nix` calls that require an SSL cert don't fail
+      NIXPKGS_CACERT_BUNDLE_CRT =
+        cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
+
+      # Used by `buildenv --container' to access `dockerTools` at a known version
+      # When utilities from nixpkgs are used by flox at runtime,
+      # they should be
+      # a) bundled at buildtime if possible (binaries/packages)
+      # b) use this version of nixpkgs i.e. (nix library utils such as `dockerTools`)
+      COMMON_NIXPKGS_URL = let
+        lockfile = builtins.fromJSON (builtins.readFile ./../../flake.lock);
+        root = lockfile.nodes.${lockfile.root};
+        nixpkgs = lockfile.nodes.${root.inputs.nixpkgs}.locked;
+      in
+        # todo: use `builtins.flakerefToString` once flox ships with nix 2.18+
+        "github:NixOS/nixpkgs/${nixpkgs.rev}";
+    }
+    // lib.optionalAttrs stdenv.isLinux {
+      sentry_PREFIX = sentry-native.outPath;
     };
-
-    # Used by `buildenv' to set shell prompts on activation.
-    SET_PROMPT_ZSH_SH = builtins.path {
-      name = "set-prompt.zsh.sh";
-      path = ../../pkgdb/src/buildenv/assets/set-prompt.zsh.sh;
-    };
-
-    # Used by `buildenv --container' to create a container builder script.
-    CONTAINER_BUILDER_PATH = builtins.path {
-      name = "mkContainer.nix";
-      path = ../../pkgdb/src/buildenv/assets/mkContainer.nix;
-    };
-
-    # The Bash executable to use for `hook.on-activate`
-    FLOX_BASH_BIN = "${bash}/bin/bash";
-
-    # used so that `nix` calls that require an SSL cert don't fail
-    NIXPKGS_CACERT_BUNDLE_CRT =
-      cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
-
-    # Used by `buildenv --container' to access `dockerTools` at a known version
-    # When utilities from nixpkgs are used by flox at runtime,
-    # they should be
-    # a) bundled at buildtime if possible (binaries/packages)
-    # b) use this version of nixpkgs i.e. (nix library utils such as `dockerTools`)
-    COMMON_NIXPKGS_URL = let
-      lockfile = builtins.fromJSON (builtins.readFile ./../../flake.lock);
-      root = lockfile.nodes.${lockfile.root};
-      nixpkgs = lockfile.nodes.${root.inputs.nixpkgs}.locked;
-    in
-      # todo: use `builtins.flakerefToString` once flox ships with nix 2.18+
-      "github:NixOS/nixpkgs/${nixpkgs.rev}";
-  };
 in
   stdenv.mkDerivation ({
       pname = "flox-pkgdb";
