@@ -486,7 +486,7 @@ env_is_activated() {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/profile-order.toml"
-  NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/simple.exp" "$PROJECT_DIR"
+  run bash -c 'eval "$("$FLOX_BIN" activate)"'
   # 'hook.on-activate' sets a var containing "hookie",
   # 'profile.common' creates a directory named after the contents of that
   # variable, suffixed by '-common'
@@ -495,11 +495,12 @@ env_is_activated() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=activate:scripts:on-activate
 @test "bash: 'profile.common' is sourced before 'profile.bash'" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/profile-order.toml"
-  FLOX_SHELL=bash NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/simple.exp" "$PROJECT_DIR"
+  run bash -c 'eval "$("$FLOX_BIN" activate)"'
   # 'profile.common' sets a var containing "common",
   # 'profile.bash' creates a directory named after the contents of that
   # variable, suffixed by '-bash'
@@ -508,11 +509,12 @@ env_is_activated() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=activate:scripts:on-activate
 @test "zsh: 'profile.common' is sourced before 'profile.zsh'" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/profile-order.toml"
-  FLOX_SHELL=zsh NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/simple.exp" "$PROJECT_DIR"
+  run zsh -c 'eval "$("$FLOX_BIN" activate)"'
   # 'profile.common' sets a var containing "common",
   # 'profile.zsh' creates a directory named after the contents of that variable,
   # suffixed by '-zsh'
@@ -527,7 +529,7 @@ env_is_activated() {
   mkdir -p "$PWD/$bad_dir"
   cd "$PWD/$bad_dir"
   "$FLOX_BIN" init
-  SHELL="bash" run bash -c '"$FLOX_BIN" activate -- true'
+  run bash -c '"$FLOX_BIN" activate -- true'
   assert_success
   refute_output --partial "no such file or directory"
 }
@@ -538,7 +540,7 @@ env_is_activated() {
   mkdir -p "$PWD/$bad_dir"
   cd "$PWD/$bad_dir"
   "$FLOX_BIN" init
-  FLOX_SHELL="zsh" run zsh -c '"$FLOX_BIN" activate -- true'
+  run zsh -c '"$FLOX_BIN" activate -- true'
   assert_success
   refute_output --partial "no such file or directory"
 }
