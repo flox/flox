@@ -14,8 +14,8 @@ serde_json.workspace = true
 #
 # Can't be in the [dev-dependencies] section,
 # because we can't mark the mock code as `cfg(test)` across crates.
-httpmock.workspace = true
-regex.workspace = true
+httpmock = { workspace = true, optional = true }
+regex = { workspace = true, optional = true }
 
 [build-dependencies]
 prettyplease.workspace = true
@@ -23,3 +23,6 @@ progenitor.workspace = true
 serde_json.workspace = true
 syn.workspace = true
 openapiv3.workspace = true
+
+[features]
+mock-client = ["dep:httpmock", "dep:regex"]

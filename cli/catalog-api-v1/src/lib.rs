@@ -6,4 +6,5 @@
 mod client;
 pub use client::*;
 
+#[cfg(feature = "mock-client")]
 pub mod mock;
