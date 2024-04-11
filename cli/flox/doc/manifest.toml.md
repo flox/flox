@@ -255,7 +255,7 @@ SERVER_PORT = "3000"
 
 ## `[hook]`
 
-The `[hook]` section of the manifest allows you to specify scripts to be invoked by the
+The `[hook]` section of the manifest allows you to specify scripts to be invoked by a
 **bash** shell immediately upon activating an environment for the *first time only*.
 Subsequent activations, such as the "in-place" activations performed by way of
 "in-place" invocations performed in subshell "dotfiles" will *NOT* re-run these scripts.
