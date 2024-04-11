@@ -29,7 +29,7 @@
 
   # This is needed to be able to calculate `git describe` format version of flox
   # without running `git describe`
-  inputs.flox-latest.url = "git+ssh://git@github.com/flox/flox?ref=refs/tags/v1.0.2&rev=947bd4c4a3b660d308a01a05d32ed62e495ef69f";
+  inputs.flox-latest.url = "git+ssh://git@github.com/flox/flox?ref=refs/tags/v1.0.3&rev=c50d78782713d19d6c790af271c8819b89b1a253";
   inputs.flox-latest.flake = false;
 
   # -------------------------------------------------------------------------- #
