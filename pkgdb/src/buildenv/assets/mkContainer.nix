@@ -50,7 +50,7 @@
         "FLOX_PROMPT_COLOR_2" = "141";
         "_FLOX_ACTIVE_ENVIRONMENTS" = "[]";
         "FLOX_SOURCED_FROM_SHELL_RC" = "1"; # don't source from shell rc (again)
-        "FLOX_FORCE_INTERACTIVE" = "1"; # Required when running podman without "-t"
+        "_FLOX_FORCE_INTERACTIVE" = "1"; # Required when running podman without "-t"
         "FLOX_SHELL" = "${containerPkgs.bashInteractive}/bin/bash";
       };
     };

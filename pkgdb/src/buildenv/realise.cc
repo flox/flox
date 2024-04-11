@@ -149,7 +149,7 @@ fi
 # 2. "interactive" mode: invoke the user's shell with args that:
 #   a. defeat the shell's normal startup scripts
 #   b. source the relevant activation script
-if [ -t 1 -o -n "$FLOX_FORCE_INTERACTIVE" ]; then
+if [ -t 1 -o -n "$_FLOX_FORCE_INTERACTIVE" ]; then
   cleanup
   case "$FLOX_SHELL" in
     *bash)
