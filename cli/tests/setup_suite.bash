@@ -392,17 +392,6 @@ flox_vars_setup() {
 
 # ---------------------------------------------------------------------------- #
 
-# Ensure the existence of a ~/.zshrc for the test user to prevent zsh
-# from launching into the interactive zsh-newuser-install dialog.
-zshrc_setup() {
-  if [[ -n ${__FT_RAN_ZSHRC_SETUP-} ]]; then return 0; fi
-  # N.B. $HOME is set to the test user's home directory by flox_vars_setup.
-  [ -f "$HOME/.zshrc" ] || ( echo "autoload -U newuser" > "$HOME/.zshrc" )
-  export __FT_RAN_ZSHRC_SETUP=:
-}
-
-# ---------------------------------------------------------------------------- #
-
 # home_setup [suite|file|test]
 # ----------------------------
 # Set `FLOX_TEST_HOME' to a temporary directory and setup essential files.
@@ -427,7 +416,6 @@ home_setup() {
   fi
   xdg_tmp_setup
   flox_vars_setup
-  zshrc_setup
   export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME"
 }
 
