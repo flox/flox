@@ -188,34 +188,32 @@ impl Pull {
         force: bool,
         message: &str,
     ) -> Result<()> {
-        if dot_flox_path.exists() {
-            if force {
-                match open_path(flox, &dot_flox_path) {
-                    Ok(concrete_env) => match concrete_env {
-                        ConcreteEnvironment::Path(env) => {
-                            env.delete(flox)
-                                .context("Failed to delete existing environment")?;
-                        },
-                        ConcreteEnvironment::Managed(env) => {
-                            env.delete(flox)
-                                .context("Failed to delete existing environment")?;
-                        },
-                        ConcreteEnvironment::Remote(_) => {},
+	if force && dot_flox_path.is_dir() {
+            match open_path(flox, &dot_flox_path) {
+		Ok(concrete_env) => match concrete_env {
+                    ConcreteEnvironment::Path(env) => {
+			env.delete(flox)
+                            .context("Failed to delete existing environment")?;
                     },
-                    Err(_) => {
-                        fs::remove_dir_all(&dot_flox_path).context(format!(
-                            "Failed to remove existing .flox directory at {:?}",
-                            dot_flox_path
-                        ))?;
+                    ConcreteEnvironment::Managed(env) => {
+			env.delete(flox)
+                            .context("Failed to delete existing environment")?;
                     },
-                }
-            } else {
-                bail!(
-                    "An environment already exists at {:?}. Use --force to overwrite.",
-                    dot_flox_path
-                );
+                    ConcreteEnvironment::Remote(_) => {},
+		},
+		Err(_) => {
+                    fs::remove_dir_all(&dot_flox_path).context(format!(
+			"Failed to remove existing .flox directory at {:?}",
+			dot_flox_path
+                    ))?;
+		},
             }
-        }
+	} else if dot_flox_path.exists() {
+            bail!(
+                "An environment already exists at {:?}. Use --force to overwrite.",
+                dot_flox_path
+            );
+	}
 
         // region: write pointer
         let pointer = ManagedPointer::new(
