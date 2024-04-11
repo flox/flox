@@ -289,7 +289,7 @@ sentry_PREFIX ?=                                                        \
 sentry_CFLAGS  = -isystem $(sentry_PREFIX)/include
 sentry_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs sentry-native)
 sentry_LDFLAGS = -L$(sentry_PREFIX)/lib -lsentry
-endif ifeq (Linux,$(OS))
+endif #ifeq (Linux,$(OS))
 
 sqlite3_CFLAGS ?=                                                     \
 	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags sqlite3))
