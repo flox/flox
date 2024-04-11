@@ -8,10 +8,10 @@ flox_zdotdir="$ZDOTDIR"
 # after we reset ZDOTDIR.
 if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
 then
-	export ZDOTDIR="$FLOX_ORIG_ZDOTDIR"
-	unset FLOX_ORIG_ZDOTDIR
+    export ZDOTDIR="$FLOX_ORIG_ZDOTDIR"
+    unset FLOX_ORIG_ZDOTDIR
 else
-	unset ZDOTDIR
+    unset ZDOTDIR
 fi
 
 if [ -f /etc/zshrc ]
