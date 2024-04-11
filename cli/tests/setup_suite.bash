@@ -397,7 +397,7 @@ flox_vars_setup() {
 zshrc_setup() {
   if [[ -n ${__FT_RAN_ZSHRC_SETUP-} ]]; then return 0; fi
   # N.B. $HOME is set to the test user's home directory by flox_vars_setup.
-  [ -f "$HOME/.zshrc" ] || touch "$HOME/.zshrc"
+  [ -f "$HOME/.zshrc" ] || ( echo "autoload -U newuser" > "$HOME/.zshrc" )
   export __FT_RAN_ZSHRC_SETUP=:
 }
 
