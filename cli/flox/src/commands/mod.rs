@@ -369,14 +369,25 @@ impl FloxArgs {
     }
 }
 
+/// Timestamp we serialize to a file to track when the user was last notified an
+/// update is available
 #[derive(Deserialize, Serialize)]
 struct LastUpdateNotification {
     #[serde(with = "time::serde::iso8601")]
     last_notification: OffsetDateTime,
 }
 
+/// [UpdateNotification] stores a version that the user should be notified is
+/// available.
+///
+/// After notifying, `notification_file` should be written with a timestamp to
+/// track that the user was notified.
 #[derive(Debug, PartialEq)]
 struct UpdateNotification {
+    /// `new_version` that the user should be notified is available
+    ///
+    /// It is assumed that it has already been verified that
+    /// new_version != FLOX_VERSION
     new_version: String,
     notification_file: PathBuf,
 }
