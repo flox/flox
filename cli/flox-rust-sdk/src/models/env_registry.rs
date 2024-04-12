@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::tempdir_in;
 use tracing::debug;
 
-use super::environment::{path_hash, CanonicalPath, CanonicalizeError, EnvironmentPointer};
+use super::environment::{path_hash, CanonicalPath, EnvironmentPointer};
 use crate::data::Version;
 use crate::flox::Flox;
 use crate::utils::traceable_path;
@@ -24,12 +24,6 @@ pub enum EnvRegistryError {
     OpenRegistry(#[source] std::io::Error),
     #[error("couldn't parse environment registry")]
     ParseRegistry(#[source] serde_json::Error),
-    #[error("couldn't read environment pointer")]
-    ReadPointer(#[source] std::io::Error),
-    #[error("couldn't parse environment pointer")]
-    ParsePointer(#[source] serde_json::Error),
-    #[error("no '.flox' directory at provided path")]
-    DotFloxDoesntExist(#[source] CanonicalizeError),
     #[error("failed to open temporary file for registry")]
     OpenTmpRegistry(#[source] std::io::Error),
     #[error("failed to write temporary environment registry file")]
@@ -84,13 +78,14 @@ impl EnvRegistry {
         Ok(entry.path.clone())
     }
 
-    /// Registers the environment, creating a new [RegistryEntry] if necessary
-    pub fn register_env(
+    /// Registers the environment, creating a new [RegistryEntry] if necessary and returning the
+    /// [RegisteredEnv] that was created. If the environment was already it returns `Ok(None)`.
+    fn register_env(
         &mut self,
         dot_flox_path: &impl AsRef<Path>,
         hash: &str,
         env_pointer: &EnvironmentPointer,
-    ) -> Result<(), EnvRegistryError> {
+    ) -> Result<Option<RegisteredEnv>, EnvRegistryError> {
         let entry = match self.entry_for_hash_mut(hash) {
             Some(entry) => entry,
             None => {
@@ -104,13 +99,12 @@ impl EnvRegistry {
                     .expect("didn't find registry entry that was just pushed")
             },
         };
-        entry.register_env(env_pointer)?;
-        Ok(())
+        entry.register_env(env_pointer)
     }
 
     /// Deregisters and returns the latest entry if it is the same type of environment and has
     /// the same pointer.
-    pub fn deregister_env(
+    fn deregister_env(
         &mut self,
         hash: &str,
         env_pointer: &EnvironmentPointer,
@@ -121,6 +115,8 @@ impl EnvRegistry {
         let res = entry
             .deregister_env(env_pointer)
             .ok_or(EnvRegistryError::EnvNotRegistered);
+        // Remove the entry if it's empty. We use [Vec::retain] because the entry doesn't
+        // track its own index.
         if entry.envs.is_empty() {
             self.entries.retain(|e| e.path_hash != hash);
         }
@@ -150,13 +146,13 @@ impl RegistryEntry {
     /// Adds the environment to the list of registered environments. This is a no-op if the latest
     /// registered environment has the same environment pointer, which indicates that it's the
     /// currently registered environment.
-    pub fn register_env(
+    fn register_env(
         &mut self,
         env_pointer: &EnvironmentPointer,
-    ) -> Result<(), EnvRegistryError> {
+    ) -> Result<Option<RegisteredEnv>, EnvRegistryError> {
         // Bail early if the environment is the same as the latest registered one
         if self.is_same_as_latest_env(env_pointer) {
-            return Ok(());
+            return Ok(None);
         }
 
         // [SystemTime] isn't guaranteed to be monotonic, so we account for that by setting the
@@ -175,8 +171,8 @@ impl RegistryEntry {
             created_at,
             pointer: env_pointer.clone(),
         };
-        self.envs.push(env);
-        Ok(())
+        self.envs.push(env.clone());
+        Ok(Some(env))
     }
 
     /// Returns true if there is a latest registered environment that is a managed environment with
@@ -190,9 +186,9 @@ impl RegistryEntry {
 
     /// Deregisters and returns the latest entry if it is the same type of environment and has
     /// the same pointer.
-    pub fn deregister_env(&mut self, ptr: &EnvironmentPointer) -> Option<RegisteredEnv> {
+    fn deregister_env(&mut self, ptr: &EnvironmentPointer) -> Option<RegisteredEnv> {
         if self.is_same_as_latest_env(ptr) {
-            return Some(self.envs.pop().unwrap());
+            return Some(self.envs.pop().expect("envs was assumed to be non-empty"));
         }
         None
     }
@@ -215,7 +211,7 @@ pub fn env_registry_path(flox: &Flox) -> PathBuf {
 }
 
 /// Returns the path to the user's environment registry lock file.
-pub fn env_registry_lock_path(flox: &Flox) -> PathBuf {
+pub(crate) fn env_registry_lock_path(flox: &Flox) -> PathBuf {
     env_registry_path(flox).with_extension("lock")
 }
 
@@ -255,6 +251,7 @@ pub fn write_environment_registry(
         // This error is thrown in the unlikely scenario that `reg_path` is:
         // - An empty string
         // - `/`
+        // - `.`
         EnvRegistryError::InvalidRegistryLocation(reg_path.as_ref().to_path_buf()),
     )?;
     let tmp_dir = tempdir_in(parent).map_err(EnvRegistryError::OpenRegistry)?;
@@ -288,8 +285,13 @@ pub fn ensure_registered(
     let reg_path = env_registry_path(flox);
     let mut reg = read_environment_registry(&reg_path)?.unwrap_or_default();
     let dot_flox_hash = path_hash(&dot_flox_path);
-    reg.register_env(dot_flox_path, &dot_flox_hash, env_pointer)?;
-    write_environment_registry(&reg, &reg_path, lock)?;
+    // Skip writing the registry if the environment was already registered
+    if reg
+        .register_env(dot_flox_path, &dot_flox_hash, env_pointer)?
+        .is_some()
+    {
+        write_environment_registry(&reg, &reg_path, lock)?;
+    }
     Ok(())
 }
 
