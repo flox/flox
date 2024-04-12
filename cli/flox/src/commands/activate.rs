@@ -12,7 +12,7 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     Environment,
@@ -40,7 +40,7 @@ use super::{
     UninitializedEnvironment,
 };
 use crate::commands::{ensure_environment_trust, ConcreteEnvironment, EnvironmentSelectError};
-use crate::config::Config;
+use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::openers::Shell;
 use crate::utils::{default_nix_env_vars, message};
@@ -81,19 +81,6 @@ impl Activate {
                 })
             },
             Err(e) => Err(e)?,
-        };
-
-        // TODO could move this to a pretty print method on the Environment trait?
-        let prompt_name = match concrete_environment {
-            // Note that the same environment could show up twice without any
-            // indication of which comes from which path
-            ConcreteEnvironment::Path(ref path) => path.name().to_string(),
-            ConcreteEnvironment::Managed(ref managed) => {
-                format!("{}/{}", managed.owner(), managed.name())
-            },
-            ConcreteEnvironment::Remote(ref remote) => {
-                format!("{}/{}", remote.owner(), remote.name())
-            },
         };
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
@@ -148,14 +135,7 @@ impl Activate {
             other => other?,
         };
 
-        // We don't have access to the current PS1 (it's not exported), so we
-        // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
-        // activation script set PS1 based on that.
-        let flox_prompt_environments = env::var(FLOX_PROMPT_ENVIRONMENTS_VAR)
-            .map_or(prompt_name.clone(), |prompt_environments| {
-                format!("{prompt_name} {prompt_environments}")
-            });
-
+        // read the currently active environments from the environment
         let mut flox_active_environments = activated_environments();
 
         // install prefixes of all active environments
@@ -213,6 +193,17 @@ impl Activate {
             (flox_env_dirs, flox_env_lib_dirs)
         };
 
+        let prompt_display_config = config
+            .flox
+            .shell_prompt
+            .unwrap_or(EnvironmentPromptConfig::ShowAll);
+
+        // We don't have access to the current PS1 (it's not exported), so we
+        // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
+        // activation script set PS1 based on that.
+        let flox_prompt_environments =
+            Self::make_environment_prompt(prompt_display_config, &flox_active_environments);
+
         let prompt_color_1 = env::var("FLOX_PROMPT_COLOR_1")
             .unwrap_or(utils::colors::INDIGO_400.to_ansi256().to_string());
         let prompt_color_2 = env::var("FLOX_PROMPT_COLOR_2")
@@ -220,7 +211,6 @@ impl Activate {
 
         let mut exports = HashMap::from([
             (FLOX_ENV_VAR, activation_path.to_string_lossy().to_string()),
-            (FLOX_PROMPT_ENVIRONMENTS_VAR, flox_prompt_environments),
             (
                 FLOX_ACTIVE_ENVIRONMENTS_VAR,
                 flox_active_environments.to_string(),
@@ -243,6 +233,15 @@ impl Activate {
             ),
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
+            // Set `FLOX_PROMPT_ENVIRONMENTS` to either the constructed prompt string
+            // or "" if the prompt is disabled.
+            //
+            // The latter is necessary for inner activations to be able to hide the prompt
+            // if the parent activation has it disabled.
+            (
+                FLOX_PROMPT_ENVIRONMENTS_VAR,
+                flox_prompt_environments.unwrap_or_default(),
+            ),
         ]);
 
         exports.extend(default_nix_env_vars());
@@ -551,15 +550,66 @@ impl Activate {
                 Shell::detect_from_env("SHELL")
             })
     }
+
+    /// Construct the envrionment list for the shell prompt
+    ///
+    /// [`None`] if the prompt is disabled, or filters removed all components.
+    fn make_environment_prompt(
+        prompt_display_config: EnvironmentPromptConfig,
+        flox_active_environments: &super::ActiveEnvironments,
+    ) -> Option<String> {
+        if prompt_display_config == EnvironmentPromptConfig::HideAll {
+            return None;
+        }
+
+        let prompt_envs: Vec<_> = flox_active_environments
+            .iter()
+            .filter_map(|env| {
+                if prompt_display_config == EnvironmentPromptConfig::HideDefault
+                    && env.name().as_ref() == DEFAULT_NAME
+                {
+                    return None;
+                }
+                Some(
+                    env.bare_description()
+                        .expect("`bare_description` is infallible"),
+                )
+            })
+            .collect();
+
+        if prompt_envs.is_empty() {
+            return None;
+        }
+
+        Some(prompt_envs.join(" "))
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, PathPointer};
+    use once_cell::sync::Lazy;
+
     use super::*;
+    use crate::commands::ActiveEnvironments;
 
     #[cfg(target_os = "macos")]
     const PATH: &str =
         "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/flox/env/bin:/nix/store/some/bin";
+
+    static DEFAULT_ENV: Lazy<UninitializedEnvironment> = Lazy::new(|| {
+        UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::from(""),
+            pointer: EnvironmentPointer::Path(PathPointer::new("default".parse().unwrap())),
+        })
+    });
+
+    static NON_DEFAULT_ENV: Lazy<UninitializedEnvironment> = Lazy::new(|| {
+        UninitializedEnvironment::DotFlox(DotFlox {
+            path: PathBuf::from(""),
+            pointer: EnvironmentPointer::Path(PathPointer::new("wichtig".parse().unwrap())),
+        })
+    });
 
     #[test]
     #[cfg(target_os = "macos")]
@@ -638,5 +688,71 @@ mod tests {
             Activate::quote_run_args(&["a b".to_string(), '"'.to_string()]),
             r#""a b" "\"""#
         )
+    }
+
+    #[test]
+    fn test_shell_prompt_empty_without_active_environments() {
+        let active_environments = ActiveEnvironments::default();
+        let prompt = Activate::make_environment_prompt(
+            EnvironmentPromptConfig::ShowAll,
+            &active_environments,
+        );
+
+        assert_eq!(prompt, None);
+    }
+
+    #[test]
+    fn test_shell_prompt_default() {
+        let mut active_environments = ActiveEnvironments::default();
+        active_environments.set_last_active(DEFAULT_ENV.clone());
+
+        // with `ShowAll` we should see the default environment
+        let prompt = Activate::make_environment_prompt(
+            EnvironmentPromptConfig::ShowAll,
+            &active_environments,
+        );
+        assert_eq!(prompt, Some("default".to_string()));
+
+        // with `HideDefault` we should not see the default environment
+        let prompt = Activate::make_environment_prompt(
+            EnvironmentPromptConfig::HideDefault,
+            &active_environments,
+        );
+        assert_eq!(prompt, None);
+
+        // with `HideAll` we should not see the default environment
+        let prompt = Activate::make_environment_prompt(
+            EnvironmentPromptConfig::HideAll,
+            &active_environments,
+        );
+        assert_eq!(prompt, None);
+    }
+
+    #[test]
+    fn test_shell_prompt_mixed() {
+        let mut active_environments = ActiveEnvironments::default();
+        active_environments.set_last_active(DEFAULT_ENV.clone());
+        active_environments.set_last_active(NON_DEFAULT_ENV.clone());
+
+        // with `ShowAll` we should see the default environment
+        let prompt = Activate::make_environment_prompt(
+            EnvironmentPromptConfig::ShowAll,
+            &active_environments,
+        );
+        assert_eq!(prompt, Some("wichtig default".to_string()));
+
+        // with `HideDefault` we should not see the default environment
+        let prompt = Activate::make_environment_prompt(
+            EnvironmentPromptConfig::HideDefault,
+            &active_environments,
+        );
+        assert_eq!(prompt, Some("wichtig".to_string()));
+
+        // with `HideAll` we should not see the default environment
+        let prompt = Activate::make_environment_prompt(
+            EnvironmentPromptConfig::HideAll,
+            &active_environments,
+        );
+        assert_eq!(prompt, None);
     }
 }

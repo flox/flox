@@ -100,6 +100,14 @@ flox config --set 'trusted_environments."owner/name"' trust
 `search_limit`
 :   How many items `flox search` should show by default.
 
+`shell_prompt`
+:   Rule whether to change the shell prompt in activated environments
+    (default: "show-all").
+    Possible values are
+    * "show-all": shows all active anvironments
+    * "hide-all": disables the modification of the shell prompt
+    * "hide-default": filters out environments named 'default' from the shell prompt
+
 `trusted_environments`
 :   Remote environments that are trusted for activation.
     Contains keys of the form `"<owner>/<name>"` that map to either `"trust"` or

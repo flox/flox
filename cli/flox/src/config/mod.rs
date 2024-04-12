@@ -72,6 +72,9 @@ pub struct FloxConfig {
 
     /// The URL of the FloxHub instance to use
     pub floxhub_url: Option<Url>,
+
+    /// Rule whether to change the shell prompt in activated environments
+    pub shell_prompt: Option<EnvironmentPromptConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -79,6 +82,18 @@ pub struct FloxConfig {
 pub enum EnvironmentTrust {
     Trust,
     Deny,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum EnvironmentPromptConfig {
+    /// Change the shell prompt to show all active environments
+    ShowAll,
+    /// Do not change the shell prompt
+    HideAll,
+    /// Change the shell prompt to show the active environments,
+    /// but omit 'default' environments
+    HideDefault,
 }
 
 // TODO: move to runix?

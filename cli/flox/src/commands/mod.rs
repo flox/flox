@@ -1054,8 +1054,14 @@ impl ActiveEnvironments {
         self.0.push_front(env);
     }
 
+    /// Check if the given environment is active
     pub fn is_active(&self, env: &UninitializedEnvironment) -> bool {
         self.0.contains(env)
+    }
+
+    /// Iterate over the active environments
+    pub fn iter(&self) -> impl Iterator<Item = &UninitializedEnvironment> {
+        self.0.iter()
     }
 }
 
