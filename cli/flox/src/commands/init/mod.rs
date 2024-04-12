@@ -102,7 +102,7 @@ impl Init {
             }
             .spin_with_delay(Duration::from_secs_f32(0.25))?;
 
-            self.run_language_hooks(&dir, &flox).unwrap_or_else(|e| {
+            self.run_language_hooks(&flox, &dir).unwrap_or_else(|e| {
                 message::warning(format!("Failed to generate init suggestions: {}", e));
                 InitCustomization::default()
             })
@@ -161,30 +161,32 @@ impl Init {
     }
 
     /// Run all language hooks and return a single combined customization
-    fn run_language_hooks(&self, dir: &Path, flox: &Flox) -> Result<InitCustomization> {
+    fn run_language_hooks(&self, flox: &Flox, path: &Path) -> Result<InitCustomization> {
         let mut hooks: Vec<Box<dyn InitHook>> = vec![];
 
-        let node = Node::new(dir, flox)?;
+        let node = Node::new(flox, path)?;
         hooks.push(Box::new(node));
 
-        let python = Python::new(dir, flox);
+        let python = Python::new(flox, path);
         hooks.push(Box::new(python));
 
-        let go = Go::new(dir, flox)?;
+        let go = Go::new(flox, path)?;
         hooks.push(Box::new(go));
 
-        let mut customizations = vec![];
+        let mut _customizations = vec![];
 
-        for mut hook in hooks {
+        for mut _hook in hooks {
             // Run hooks if we can't prompt
-            if hook.should_run(dir)?
-                && (self.auto_setup || (Dialog::can_prompt() && hook.prompt_user(dir, flox)?))
+            /*
+            if hook.should_run(path)?
+                && (self.auto_setup || (Dialog::can_prompt() && hook.prompt_user(path, flox)?))
             {
                 customizations.push(hook.get_init_customization())
             }
+            */
         }
 
-        Ok(Self::combine_customizations(customizations))
+        Ok(Self::combine_customizations(_customizations))
     }
 
     /// Deduplicate packages and concatenate profiles into a single string
@@ -222,9 +224,8 @@ impl Init {
 
 // TODO: clean up how we pass around path and flox
 trait InitHook {
-    fn should_run(&mut self, path: &Path) -> Result<bool>;
-
-    fn prompt_user(&mut self, path: &Path, flox: &Flox) -> Result<bool>;
+    // (flox: &Flox, path: &Path)
+    fn prompt_user(&mut self, flox: &Flox, path: &Path) -> Result<bool>;
 
     fn get_init_customization(&self) -> InitCustomization;
 }
@@ -345,9 +346,9 @@ impl From<ProvidedPackage> for PackageToInstall {
 
 /// Get nixpkgs#rel_path optionally verifying that it satisfies a version constraint.
 fn get_default_package_if_compatible(
+    flox: &Flox,
     rel_path: impl IntoIterator<Item = impl ToString>,
     version: Option<String>,
-    flox: &Flox,
 ) -> Result<Option<SearchResult>> {
     let rel_path = rel_path
         .into_iter()
@@ -378,10 +379,10 @@ fn get_default_package_if_compatible(
 
 /// Searches for a given pname and version, optionally restricting rel_path
 fn try_find_compatible_version(
+    flox: &Flox,
     pname: impl Into<String>,
     version: Option<impl Into<String>>,
     rel_path: Option<impl IntoIterator<Item = impl Into<String>>>,
-    flox: &Flox,
 ) -> Result<Option<SearchResult>> {
     let rel_path = rel_path.map(|r| r.into_iter().map(|s| s.into()).collect::<Vec<String>>());
 

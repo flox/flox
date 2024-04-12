@@ -48,7 +48,7 @@ pub(super) struct Go {
 
 impl Go {
     /// Creates and returns the Go hook with the detected module system.
-    pub fn new(path: &Path, flox: &Flox) -> Result<Self> {
+    pub fn new(flox: &Flox, path: &Path) -> Result<Self> {
         let module_system = Self::detect_module_system(flox, path)?;
 
         Ok(Self { module_system })
@@ -75,13 +75,15 @@ impl InitHook for Go {
     ///
     /// [Self::prompt_user] and [Self::get_init_customization]
     /// are expected to be called only if this method returns `true`!
+    /*
     fn should_run(&mut self, _path: &Path) -> Result<bool> {
         Ok(self.module_system.is_some())
     }
+    */
 
     /// Returns `true` if the user accepts the prompt. In that case,
     /// the hook customizes the manifest with the default Go environment.
-    fn prompt_user(&mut self, _path: &Path, _flox: &Flox) -> Result<bool> {
+    fn prompt_user(&mut self, _flox: &Flox, _path: &Path) -> Result<bool> {
         let module_system = &mut self
             .module_system
             .as_ref()
@@ -305,7 +307,7 @@ impl GoVersion {
         };
 
         let provided_go_version =
-            try_find_compatible_version("go", Some(&required_go_version), None::<Vec<&str>>, flox)?;
+            try_find_compatible_version(flox, "go", Some(&required_go_version), None::<Vec<&str>>)?;
 
         if let Some(found_go_version) = provided_go_version {
             let found_go_version = TryInto::<ProvidedPackage>::try_into(found_go_version)?;
@@ -351,7 +353,7 @@ mod tests {
 
     #[test]
     fn test_should_run_returns_true_on_valid_module() {
-        let mut go = Go {
+        let mut _go = Go {
             module_system: Some(GoModuleSystemKind::Module(GoModSystem {
                 version: ProvidedVersion::Compatible {
                     requested: None,
@@ -359,12 +361,13 @@ mod tests {
                 },
             })),
         };
-        assert!(go.should_run(Path::new("")).unwrap());
+        // assert!(go.should_run(Path::new("")).unwrap());
+        todo!();
     }
 
     #[test]
     fn test_should_run_returns_true_on_valid_workspace() {
-        let mut go = Go {
+        let mut _go = Go {
             module_system: Some(GoModuleSystemKind::Workspace(GoWorkSystem {
                 version: ProvidedVersion::Compatible {
                     requested: None,
@@ -372,15 +375,17 @@ mod tests {
                 },
             })),
         };
-        assert!(go.should_run(Path::new("")).unwrap());
+        // assert!(go.should_run(Path::new("")).unwrap());
+        todo!();
     }
 
     #[test]
     fn test_should_run_returns_false_on_none_system() {
-        let mut go = Go {
+        let mut _go = Go {
             module_system: None,
         };
-        assert!(!go.should_run(Path::new("")).unwrap());
+        // assert!(!go.should_run(Path::new("")).unwrap());
+        todo!();
     }
 
     #[test]

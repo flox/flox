@@ -8,7 +8,6 @@ use flox_rust_sdk::models::environment::{global_manifest_lockfile_path, global_m
 use flox_rust_sdk::models::manifest::PackageToInstall;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
 use indoc::{formatdoc, indoc};
-use log::debug;
 use semver::VersionReq;
 
 use super::{format_customization, InitHook, AUTO_SETUP_HINT};
@@ -132,7 +131,7 @@ impl Node {
     /// - Returns [NodeAction::Nothing] if
     ///   - There's no package.json or .nvmrc
     ///   - We can't satisfy constraints in package.json
-    pub fn new(path: &Path, flox: &Flox) -> Result<Self> {
+    pub fn new(flox: &Flox, path: &Path) -> Result<Self> {
         // Check for a viable yarn
         // TODO: we should check for npm version as well,
         // but since npm comes bundled with nodejs, we'll probably cover the most
@@ -147,7 +146,7 @@ impl Node {
             None => None,
             Some(ref versions) => {
                 if yarn_lock_exists {
-                    Self::try_find_compatible_yarn(versions, flox)?
+                    Self::try_find_compatible_yarn(flox, versions)?
                 } else {
                     None
                 }
@@ -176,7 +175,7 @@ impl Node {
             Some(PackageJSONVersions {
                 node: Some(ref node_version),
                 ..
-            }) => match Self::try_find_compatible_version("nodejs", node_version, None, flox)? {
+            }) => match Self::try_find_compatible_version(flox, "nodejs", node_version, None)? {
                 None => Some(PackageJSONVersion::Unavailable),
                 Some(result) => Some(PackageJSONVersion::Found(Box::new(result))),
             },
@@ -191,7 +190,7 @@ impl Node {
             // so don't check .nvmrc if we know we'll use the version in
             // package.json or we know we can't provide it
             Some(PackageJSONVersion::Found(_)) | Some(PackageJSONVersion::Unavailable) => None,
-            _ => Self::get_nvmrc_version(path, flox)?,
+            _ => Self::get_nvmrc_version(flox, path)?,
         };
 
         let action = match yarn_install {
@@ -262,20 +261,20 @@ impl Node {
     /// Try to find node, npm, and yarn versions that satisfy constraints in
     /// package.json
     fn try_find_compatible_yarn(
-        versions: &PackageJSONVersions,
         flox: &Flox,
+        versions: &PackageJSONVersions,
     ) -> Result<Option<YarnInstall>> {
         let PackageJSONVersions { yarn, node, .. } = versions;
 
         let found_node = match node {
             Some(node_version) => {
-                match Self::get_default_node_if_compatible(Some(node_version.clone()), flox)? {
+                match Self::get_default_node_if_compatible(flox, Some(node_version.clone()))? {
                     // If the corresponding node isn't compatible, don't install yarn
                     None => return Ok(None),
                     Some(found_node) => found_node,
                 }
             },
-            None => Self::get_default_node_if_compatible(None, flox)?
+            None => Self::get_default_node_if_compatible(flox, None)?
                 .ok_or(anyhow!("Flox couldn't find nodejs in nixpkgs"))?,
         };
 
@@ -283,9 +282,9 @@ impl Node {
         // in nixpkgs
         let found_yarn = match yarn {
             Some(yarn_version) => {
-                Self::try_find_compatible_version("yarn", yarn_version, None, flox)?
+                Self::try_find_compatible_version(flox, "yarn", yarn_version, None)?
             },
-            _ => Some(Self::get_default_package("yarn", flox)?),
+            _ => Some(Self::get_default_package(flox, "yarn")?),
         };
 
         Ok(found_yarn.map(|found_yarn| YarnInstall {
@@ -299,7 +298,7 @@ impl Node {
     ///
     /// This will perform a search to determine if a requested version is
     /// available.
-    fn get_nvmrc_version(path: &Path, flox: &Flox) -> Result<Option<NVMRCVersion>> {
+    fn get_nvmrc_version(flox: &Flox, path: &Path) -> Result<Option<NVMRCVersion>> {
         let nvmrc = path.join(".nvmrc");
         if !nvmrc.exists() {
             return Ok(None);
@@ -310,7 +309,7 @@ impl Node {
             RequestedNVMRCVersion::None => None,
             RequestedNVMRCVersion::Unsure => Some(NVMRCVersion::Unsure),
             RequestedNVMRCVersion::Found(version) => {
-                match Self::try_find_compatible_version("nodejs", &version, None, flox)? {
+                match Self::try_find_compatible_version(flox, "nodejs", &version, None)? {
                     None => Some(NVMRCVersion::Unavailable),
                     Some(result) => Some(NVMRCVersion::Found(Box::new(result))),
                 }
@@ -358,10 +357,10 @@ impl Node {
 
     /// Searches for a given pname and version, optionally restricting rel_path
     fn try_find_compatible_version(
+        flox: &Flox,
         pname: &str,
         version: &str,
         rel_path: Option<Vec<String>>,
-        flox: &Flox,
     ) -> Result<Option<SearchResult>> {
         let query = Query {
             pname: Some(pname.to_string()),
@@ -389,8 +388,8 @@ impl Node {
     /// Get nixpkgs#nodejs,
     /// optionally verifying that it satisfies a version constraint.
     fn get_default_node_if_compatible(
-        version: Option<String>,
         flox: &Flox,
+        version: Option<String>,
     ) -> Result<Option<SearchResult>> {
         let query = Query {
             rel_path: Some(vec!["nodejs".to_string()]),
@@ -415,7 +414,7 @@ impl Node {
     }
 
     /// Get a package as if installed with `flox install {package}`
-    fn get_default_package(package: &str, flox: &Flox) -> Result<SearchResult> {
+    fn get_default_package(flox: &Flox, package: &str) -> Result<SearchResult> {
         let query = Query::new(package, Features::parse()?.search_strategy, Some(1), false)?;
         let params = SearchParams {
             manifest: None,
@@ -505,19 +504,19 @@ impl Node {
                 (message, result.version.clone())
             },
             (_, Some(NVMRCVersion::Unsure)) => {
-                let result = Self::get_default_package("nodejs", flox)?;
+                let result = Self::get_default_package(flox, "nodejs")?;
                 let message = format!("Flox detected an .nvmrc with a version specifier not understood by Flox, but Flox can provide {}",
                        result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
                 (message, result.version)
             },
             (_, Some(NVMRCVersion::Unavailable)) => {
-                let result = Self::get_default_package("nodejs", flox)?;
+                let result = Self::get_default_package(flox, "nodejs")?;
                 let message = format!("Flox detected an .nvmrc with a version of nodejs not provided by Flox, but Flox can provide {}",
                 result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
                 (message, result.version.clone())
             },
             (Some(PackageJSONVersion::Unspecified), None) => {
-                let result = Self::get_default_package("nodejs", flox)?;
+                let result = Self::get_default_package(flox, "nodejs")?;
                 mentions_package_json = true;
                 ("Flox detected a package.json".to_string(), result.version)
             },
@@ -552,7 +551,7 @@ impl Node {
     }
 
     /// Prompt whether to install nodejs (but not npm or yarn)
-    fn prompt_with_node(&self, node_install: &NodeInstall, flox: &Flox) -> Result<bool> {
+    fn prompt_with_node(&self, flox: &Flox, node_install: &NodeInstall) -> Result<bool> {
         let (nodejs_detected, nodejs_version, mentions_package_json) =
             self.nodejs_message_and_version(flox)?;
         let mut detected = format!("{nodejs_detected}\n");
@@ -602,16 +601,16 @@ impl Node {
     /// Prompt whether to install npm or yarn when either is viable
     fn prompt_for_package_manager(
         &mut self,
+        flox: &Flox,
         yarn_install: YarnInstall,
         node_install: NodeInstall,
-        flox: &Flox,
     ) -> Result<bool> {
         let yarn_version = Self::format_version_or_empty(yarn_install.yarn.version.as_ref());
         let yarn_node_version = Self::format_version_or_empty(yarn_install.node.version.as_ref());
         let node_version = Self::format_version_or_empty(
             match &node_install.node {
                 Some(found_node) => found_node.clone(),
-                None => Self::get_default_package("nodejs", flox)?,
+                None => Self::get_default_package(flox, "nodejs")?,
             }
             .version
             .as_ref(),
@@ -675,6 +674,7 @@ impl Node {
 }
 
 impl InitHook for Node {
+    /*
     fn should_run(&mut self, _path: &Path) -> Result<bool> {
         match self.action {
             NodeAction::InstallYarn(_) => {
@@ -695,14 +695,15 @@ impl InitHook for Node {
             },
         }
     }
+    */
 
-    fn prompt_user(&mut self, _path: &Path, flox: &Flox) -> Result<bool> {
+    fn prompt_user(&mut self, flox: &Flox, _path: &Path) -> Result<bool> {
         match &self.action {
             NodeAction::InstallYarn(yarn_install) => self.prompt_with_yarn(yarn_install),
             NodeAction::InstallYarnOrNode(yarn_install, node_install) => {
-                self.prompt_for_package_manager(*yarn_install.clone(), *node_install.clone(), flox)
+                self.prompt_for_package_manager(flox, *yarn_install.clone(), *node_install.clone())
             },
-            NodeAction::InstallNode(node_install) => self.prompt_with_node(node_install, flox),
+            NodeAction::InstallNode(node_install) => self.prompt_with_node(flox, node_install),
             NodeAction::Nothing => unreachable!(),
         }
     }
@@ -919,13 +920,10 @@ mod tests {
     #[serial]
     fn test_try_find_compatible_yarn_no_constraints() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(
-            &PackageJSONVersions {
-                yarn: None,
-                node: None,
-            },
-            &flox,
-        )
+        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
+            yarn: None,
+            node: None,
+        })
         .unwrap()
         .unwrap();
 
@@ -938,13 +936,10 @@ mod tests {
     #[serial]
     fn test_try_find_compatible_yarn_node_available() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(
-            &PackageJSONVersions {
-                yarn: None,
-                node: Some("18".to_string()),
-            },
-            &flox,
-        )
+        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
+            yarn: None,
+            node: Some("18".to_string()),
+        })
         .unwrap()
         .unwrap();
 
@@ -959,13 +954,10 @@ mod tests {
     #[serial]
     fn test_try_find_compatible_yarn_node_unavailable() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(
-            &PackageJSONVersions {
-                yarn: None,
-                node: Some("20".to_string()),
-            },
-            &flox,
-        )
+        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
+            yarn: None,
+            node: Some("20".to_string()),
+        })
         .unwrap();
 
         assert_eq!(yarn_install, None);
@@ -976,13 +968,10 @@ mod tests {
     #[serial]
     fn test_try_find_compatible_yarn_yarn_available() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(
-            &PackageJSONVersions {
-                yarn: Some("1".to_string()),
-                node: None,
-            },
-            &flox,
-        )
+        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
+            yarn: Some("1".to_string()),
+            node: None,
+        })
         .unwrap()
         .unwrap();
 
@@ -997,13 +986,10 @@ mod tests {
     #[serial]
     fn test_try_find_compatible_yarn_yarn_unavailable() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(
-            &PackageJSONVersions {
-                yarn: Some("2".to_string()),
-                node: None,
-            },
-            &flox,
-        )
+        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
+            yarn: Some("2".to_string()),
+            node: None,
+        })
         .unwrap();
 
         assert_eq!(yarn_install, None);
@@ -1015,13 +1001,10 @@ mod tests {
     #[serial]
     fn test_try_find_compatible_yarn_both_available() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(
-            &PackageJSONVersions {
-                yarn: Some("1".to_string()),
-                node: Some("18".to_string()),
-            },
-            &flox,
-        )
+        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
+            yarn: Some("1".to_string()),
+            node: Some("18".to_string()),
+        })
         .unwrap()
         .unwrap();
 
