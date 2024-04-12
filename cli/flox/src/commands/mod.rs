@@ -419,7 +419,7 @@ impl UpdateNotification {
         cache_dir: impl AsRef<Path>,
     ) -> Result<Option<Self>, UpdateNotificationError> {
         let notification_file = cache_dir.as_ref().join(UPDATE_NOTIFICATION_FILE_NAME);
-        Self::testable_check_for_update(
+        Self::check_for_update_inner(
             notification_file,
             Self::get_latest_version(),
             UPDATE_NOTIFICATION_EXPIRY,
@@ -429,7 +429,7 @@ impl UpdateNotification {
 
     /// If the user hasn't been notified of an update after `expiry` time has
     /// passed, check for an update.
-    async fn testable_check_for_update(
+    async fn check_for_update_inner(
         notification_file: PathBuf,
         get_latest_version_future: impl Future<Output = Result<String, UpdateNotificationError>>,
         expiry: Duration,
@@ -1644,7 +1644,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = UpdateNotification::testable_check_for_update(
+        let result = UpdateNotification::check_for_update_inner(
             notification_file,
             async { panic!() },
             UPDATE_NOTIFICATION_EXPIRY,
@@ -1671,7 +1671,7 @@ mod tests {
         )
         .unwrap();
 
-        let result = UpdateNotification::testable_check_for_update(
+        let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
             async { Ok("0.0.0".to_string()) },
             UPDATE_NOTIFICATION_EXPIRY,
@@ -1691,7 +1691,7 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let notification_file = temp_dir.path().join(UPDATE_NOTIFICATION_FILE_NAME);
 
-        let result = UpdateNotification::testable_check_for_update(
+        let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
             async { Ok("0.0.0".to_string()) },
             UPDATE_NOTIFICATION_EXPIRY,
@@ -1711,7 +1711,7 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let notification_file = temp_dir.path().join(UPDATE_NOTIFICATION_FILE_NAME);
 
-        let result = UpdateNotification::testable_check_for_update(
+        let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
             async { Ok("bad".to_string()) },
             UPDATE_NOTIFICATION_EXPIRY,
@@ -1732,7 +1732,7 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let notification_file = temp_dir.path().join(UPDATE_NOTIFICATION_FILE_NAME);
 
-        let result = UpdateNotification::testable_check_for_update(
+        let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
             async { Ok((*FLOX_VERSION).clone()) },
             UPDATE_NOTIFICATION_EXPIRY,
