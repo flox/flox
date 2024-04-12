@@ -410,7 +410,7 @@ impl UpdateNotification {
         let notification_file = cache_dir.as_ref().join(UPDATE_NOTIFICATION_FILE_NAME);
         Self::testable_check_for_update(
             notification_file,
-            Self::get_latest_version,
+            Self::get_latest_version(),
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await
@@ -418,17 +418,14 @@ impl UpdateNotification {
 
     /// If the user hasn't been notified of an update after `expiry` time has
     /// passed, check for an update.
-    async fn testable_check_for_update<Fut>(
+    async fn testable_check_for_update(
         notification_file: PathBuf,
-        get_latest_version_function: impl Fn() -> Fut,
+        get_latest_version_future: impl Future<Output = Result<String, UpdateNotificationError>>,
         expiry: Duration,
-    ) -> Result<Option<Self>, UpdateNotificationError>
-    where
-        Fut: Future<Output = Result<String, UpdateNotificationError>>,
-    {
+    ) -> Result<Option<Self>, UpdateNotificationError> {
         // Return early if we find a notification_file with a last_notification
         // that hasn't expired
-        match tokio::fs::read_to_string(&notification_file).await {
+        match fs::read_to_string(&notification_file) {
             // If the file doesn't it exist, it means we haven't shown the notification recently
             Err(e) if e.kind() == io::ErrorKind::NotFound => {},
             Ok(contents) => {
@@ -444,7 +441,7 @@ impl UpdateNotification {
             Err(e) => Err(UpdateNotificationError::Io(e))?,
         };
 
-        let new_version = get_latest_version_function().await?;
+        let new_version = get_latest_version_future.await?;
 
         // Sanity check we got a version back
         if let Err(e) = semver::Version::parse(&new_version) {
@@ -1638,7 +1635,7 @@ mod tests {
 
         let result = UpdateNotification::testable_check_for_update(
             notification_file,
-            || async { panic!() },
+            async { panic!() },
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await;
@@ -1665,7 +1662,7 @@ mod tests {
 
         let result = UpdateNotification::testable_check_for_update(
             notification_file.clone(),
-            || async { Ok("0.0.0".to_string()) },
+            async { Ok("0.0.0".to_string()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await;
@@ -1685,7 +1682,7 @@ mod tests {
 
         let result = UpdateNotification::testable_check_for_update(
             notification_file.clone(),
-            || async { Ok("0.0.0".to_string()) },
+            async { Ok("0.0.0".to_string()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await;
@@ -1705,7 +1702,7 @@ mod tests {
 
         let result = UpdateNotification::testable_check_for_update(
             notification_file.clone(),
-            || async { Ok("bad".to_string()) },
+            async { Ok("bad".to_string()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await;
@@ -1726,7 +1723,7 @@ mod tests {
 
         let result = UpdateNotification::testable_check_for_update(
             notification_file.clone(),
-            || async { Ok((*FLOX_VERSION).clone()) },
+            async { Ok((*FLOX_VERSION).clone()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await;
