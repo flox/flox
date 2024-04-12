@@ -126,7 +126,7 @@ la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag )
               if ( flox_env_lib_dirs_env != NULL )
                 {
                   if ( sizeof( flox_env_lib_dirs_env )
-                       > FLOX_ENV_LIB_DIRS_MAXLEN )
+                       >= FLOX_ENV_LIB_DIRS_MAXLEN )
                     {
                       fprintf( stderr,
                                "ERROR: la_objsearch() "
