@@ -82,12 +82,7 @@ const char * const ACTIVATE_SCRIPT = R"_(
 
 # Capture starting environment.
 _start_env="$($_coreutils/bin/mktemp --suffix=.start-env)"
-_end_env="$($_coreutils/bin/mktemp --suffix=.end-env)"
 export | $_coreutils/bin/sort > "$_start_env"
-
-function cleanup() {
-  $_coreutils/bin/rm -f "$_start_env" "$_end_env"
-}
 
 # Set FLOX_ENV as the path by which all flox scripts can make reference to
 # the environment to which they belong. Use this to define the path to the
@@ -120,24 +115,44 @@ if [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
   # as configuration statements by the "in-place" activation
   # mode. So, we'll redirect stdout to stderr.
   source "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
-elif [ -e "$FLOX_ENV/activate.d/hook-script" ]; then
-  # [hook.script] is deprecated - print warning and source it.
-  echo "WARNING: [hook.script] is deprecated, use [hook.on-activate] instead." >&2
-  source "$FLOX_ENV/activate.d/hook-script" 1>&2
 fi
+
+# Capture ending environment.
+_end_env="$($_coreutils/bin/mktemp --suffix=.end-env)"
+export | $_coreutils/bin/sort > "$_end_env"
+
+# The userShell initialization scripts that follow have the potential to undo
+# the environment modifications performed above, so we must first calculate
+# all changes made to the environment so far so that we can restore them after
+# the userShell initialization scripts have run. We use the `comm(1)` command
+# to compare the starting and ending environment captures (think of it as a
+# better diff for comparing sorted files), and `sed(1)` to format the output
+# in the best format for use in each language-specific activation script.
+_add_env="$($_coreutils/bin/mktemp --suffix=.add-env)"
+_del_env="$($_coreutils/bin/mktemp --suffix=.del-env)"
+
+# Capture environment variables to _set_ as "key=value" pairs.
+$_coreutils/bin/comm -13 "$_start_env" "$_end_env" | \
+  $_gnused/bin/sed -e 's/^declare -x //' > $_add_env
+
+# Capture environment variables to _unset_ as a list of keys.
+# TODO: remove from $_del_env keys set in $_add_env
+$_coreutils/bin/comm -23 "$_start_env" "$_end_env" | \
+  $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > $_del_env
+
+# Don't need these anymore.
+$_coreutils/bin/rm -f "$_start_env" "$_end_env"
 
 # From this point on the activation process depends on the mode:
 
-# 1. "command" mode: simply exec the provided command and args
-if [ $# -gt 0 ]; then
-  cleanup
-  # The colon is a no-op command that returns true so don't
-  # attempt to execute it as a command.
-  if [ "$1" = ":" ]; then
-    exit 0
-  else
-    exec "$@"
-  fi
+# 1. "turbo command" mode: simply exec the provided command and args
+#    without paying the cost of invoking the userShell.
+#    TODO: discuss, then remove or plumb this through the CLI if necessary
+#    TODO: add "command" mode which appends 'exec "$@"' to the userShell script
+FLOX_TURBO=always
+if [ $# -gt 0 -a -n "$FLOX_TURBO" ]; then
+  $_coreutils/bin/rm -f "$_add_env" "$_del_env"
+  exec "$@"
 fi
 
 # The remaining modes require that $FLOX_SHELL be set by the rust CLI.
@@ -150,16 +165,17 @@ fi
 #   a. defeat the shell's normal startup scripts
 #   b. source the relevant activation script
 if [ -t 1 -o -n "$_FLOX_FORCE_INTERACTIVE" ]; then
-  cleanup
+  # Export tempfile paths for use within shell-specific activation scripts.
+  export _add_env _del_env
   case "$FLOX_SHELL" in
     *bash)
-      exec "$FLOX_SHELL" --rcfile "$FLOX_ENV/activate.d/bash"
+      exec "$FLOX_SHELL" --rcfile "$FLOX_ENV/activate.d/bash" "$@"
       ;;
     *zsh)
       export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
       export ZDOTDIR="$_zdotdir"
       export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
-      exec "$FLOX_SHELL"
+      exec "$FLOX_SHELL" "$@"
       ;;
     *)
       echo "Unsupported shell: $FLOX_SHELL" >&2
@@ -172,16 +188,17 @@ fi
 
 # Start by comparing the starting and ending environments and
 # emit commands to delete and add environment variables as needed.
-export | $_coreutils/bin/sort > "$_end_env"
 case "$FLOX_SHELL" in
   *bash|*zsh)
+    # Export tempfile paths for use within shell-specific activation scripts.
+    echo "export _add_env=\"$_add_env\""
+    echo "export _del_env=\"$_del_env\""
     # Use "unset" for env deletions.
-    # TODO: weed out unset statements for the exports to follow.
-    $_coreutils/bin/comm -23 "$_start_env" "$_end_env" | \
-      $_gnused/bin/sed -e 's/declare -x/unset/' -e 's/=.*//'
+    $_gnused/bin/sed -e 's/^/unset /' $_del_env
     # Use "export" for env additions.
-    $_coreutils/bin/comm -13 "$_start_env" "$_end_env" | \
-      $_gnused/bin/sed -e 's/declare -x/export/'
+    $_gnused/bin/sed -e 's/^/export /' $_add_env
+    # echo $_coreutils/bin/rm -f "$_add_env" "$_del_env"
+    # echo unset _add_env _del_env
     ;;
   *)
     echo "Unsupported shell: $FLOX_SHELL" >&2
@@ -195,8 +212,6 @@ case "$FLOX_SHELL" in
   *zsh)  echo "$( <"$FLOX_ENV/activate.d/zsh"  )";;
   *)     echo "unsupported shell: $FLOX_SHELL" >&2; exit 1;;
 esac
-
-cleanup
 )_";
 
 /* We disable command hashing so a `flox install` will be reflected immediately
@@ -204,8 +219,14 @@ cleanup
  * and with hashing disabled, that fails.  Therefore, disable that at the end,
  * in case it's used in the prior scripts (e.g. ~/.bashrc).
  */
-const char * const BASH_ACTIVATE_SCRIPT = R"(
+const char * const BASH_ACTIVATE_SCRIPT = R"_(
 [ "${_FLOX_PKGDB_VERBOSITY:-0}" -le 1 ] || set -x
+
+# Assert that the expected _{add,del}_env variables are present.
+[ -n "$_add_env" -a -n "$_del_env" ] || {
+  echo 'ERROR: $_add_env and $_del_env not found in environment' >&2;
+  exit 1;
+}
 
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
@@ -217,12 +238,26 @@ fi
 # Disable command hashing to allow for newly installed flox packages to be found
 # immediately.
 set +h
-)";
+
+# Restore environment variables set in the previous bash initialization.
+eval "$($_gnused/bin/sed -e 's/^/unset /' $_del_env)"
+eval "$($_gnused/bin/sed -e 's/^/export /' $_add_env)"
+
+# Clean up temporary files.
+$_coreutils/bin/rm -f "$_add_env" "$_del_env"
+unset _add_env _del_env
+)_";
 
 
 // unlike bash, zsh activation calls this script from the user's shell rcfile
-const char * const ZSH_ACTIVATE_SCRIPT = R"(
+const char * const ZSH_ACTIVATE_SCRIPT = R"_(
 [ "${_FLOX_PKGDB_VERBOSITY:-0}" -le 1 ] || set -x
+
+# Assert that the expected _{add,del}_env variables are present.
+[ -n "$_add_env" -a -n "$_del_env" ] || {
+  echo 'ERROR: $_add_env and $_del_env not found in environment' >&2;
+  exit 1;
+}
 
 # Modify dynamic zsh fpath in preference to FPATH in environment.
 # See https://github.com/flox/flox/pull/1299 for more details.
@@ -251,7 +286,15 @@ unset fpath_prepend
 # immediately.
 setopt nohashcmds
 setopt nohashdirs
-)";
+
+# Restore environment variables set in the previous bash initialization.
+eval "$($_gnused/bin/sed -e 's/^/unset /' $_del_env)"
+eval "$($_gnused/bin/sed -e 's/^/export /' $_add_env)"
+
+# Clean up temporary files.
+$_coreutils/bin/rm -f "$_add_env" "$_del_env"
+unset _add_env _del_env
+)_";
 
 
 /* -------------------------------------------------------------------------- */
@@ -901,12 +944,18 @@ makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile )
     }
 
   /* Add the shell activate scripts */
-  bashScript << BASH_ACTIVATE_SCRIPT << "\n";
-  bashScript << "source " << ACTIVATE_D_SCRIPTS_DIR << "/set-prompt.bash\n"
-             << "set +x\n";  // disable verbose mode
-  zshScript << ZSH_ACTIVATE_SCRIPT << "\n";
-  zshScript << "source " << ACTIVATE_D_SCRIPTS_DIR << "/set-prompt.zsh\n"
-            << "set +x\n";  // disable verbose mode
+  bashScript << "_coreutils=" << FLOX_COREUTILS_PKG << std::endl
+             << "_gnused=" << FLOX_GNUSED_PKG << std::endl
+             << BASH_ACTIVATE_SCRIPT << "source " << ACTIVATE_D_SCRIPTS_DIR
+             << "/set-prompt.bash" << std::endl
+             << "set +x"  // disable verbose mode
+             << std::endl;
+  zshScript << "_coreutils=" << FLOX_COREUTILS_PKG << std::endl
+            << "_gnused=" << FLOX_GNUSED_PKG << std::endl
+            << ZSH_ACTIVATE_SCRIPT << "source " << ACTIVATE_D_SCRIPTS_DIR
+            << "/set-prompt.zsh" << std::endl
+            << "set +x"  // disable verbose mode
+            << std::endl;
 
   /* Add profile scripts */
   auto profile = manifest.profile;
@@ -939,7 +988,7 @@ makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile )
     {
       // [hook.script] is deprecated, in favor of [profile.*].  For now we will
       // allow it.
-      // TODO: print a warning??
+      // TODO: remove, print a warning in the meantime??
       if ( hook->script.has_value() )
         {
           debugLog( "adding 'hook.script' to activation scripts" );

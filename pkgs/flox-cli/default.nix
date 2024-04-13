@@ -52,8 +52,9 @@
       # 3rd party CLIs
       # we want to use our own binaries by absolute path
       # rather than relying on or modifying the user's `PATH` variable
-      GIT_BIN = "${gitMinimal}/bin/git";
-      NIX_BIN = "${nix}/bin/nix";
+      GIT_PKG = gitMinimal;
+      NIX_PKG = nix;
+      NIX_BIN = "${nix}/bin/nix"; # only used for nix invocations in tests
       PKGDB_BIN =
         if flox-pkgdb == null
         then "pkgdb"

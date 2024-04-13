@@ -111,7 +111,7 @@ env_is_activated() {
 }
 
 # ---------------------------------------------------------------------------- #
-
+# bats test_tags=activate,activate:path,activate:path:bash
 @test "bash: activate modifies prompt and puts package in path" {
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
@@ -122,7 +122,7 @@ env_is_activated() {
 }
 
 # ---------------------------------------------------------------------------- #
-
+# bats test_tags=activate,activate:path,activate:path:zsh
 @test "zsh: activate modifies prompt and puts package in path" {
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
@@ -149,7 +149,7 @@ env_is_activated() {
   refute_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing hook.script"
 
-  FLOX_SHELL=bash USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_SHELL=bash USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
   refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
@@ -174,7 +174,7 @@ env_is_activated() {
   refute_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing hook.script"
 
-  FLOX_SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
   refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
@@ -246,10 +246,10 @@ env_is_activated() {
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  FLOX_SHELL=zsh NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- :
+  FLOX_SHELL=zsh NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- true
   assert_success
   assert_output --partial "baz"
-  FLOX_SHELL=bash NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- :
+  FLOX_SHELL=bash NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- true
   assert_success
   assert_output --partial "baz"
 }
@@ -310,7 +310,7 @@ env_is_activated() {
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   "$FLOX_BIN" install hello
 
-  run bash -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
+  run bash -c 'eval "$("$FLOX_BIN" -v activate)"; type hello; echo $foo'
   assert_success
   assert_line "sourcing hook.on-activate"
   assert_line "sourcing profile.common"
@@ -343,41 +343,28 @@ env_is_activated() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=activate,activate:inplace-reactivate
-@test "bash: 'flox activate' only patches PATH when already activated" {
-  SHELL="bash" run bash -c 'eval "$("$FLOX_BIN" activate --print-script)"; "$FLOX_BIN" activate --print-script'
+# N.B. removed "'flox activate' only patches PATH when already activated" test,
+# because we in fact need to patch PATH with every activation to defend against
+# userShell "dotfiles" that may have modified PATH unconditionally (e.g. on any
+# host running nix-darwin(!)).
+#
+# Replacing it with a test that checks that a) activation puts the FLOX_ENV/bin
+# first, and b) that it doesn't put it there more than once.
+
+# bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:bash
+@test "bash: 'flox activate' patches PATH correctly when already activated" {
+  SHELL="bash" run -- \
+    "$FLOX_BIN" activate -- \
+      bash -c "eval \$("$FLOX_BIN" activate); bash "$TESTS_DIR"/activate/verify_PATH.bash"
   assert_success
-  # on macos activating an already activated environment using
-  # `eval "$(flox activate [--print-script])"
-  # will only fix the PATH
-  if [[ -e /usr/libexec/path_helper ]]; then
-    assert_output --regexp "^(export PATH=.+)$"
-  else
-    # on linux reactivation is ignored
-    assert_output ""
-  fi
 }
 
-# bats test_tags=activate,activate:inplace-reactivate
-@test "zsh: 'flox activate' only patches PATH when already activated" {
-  SHELL="zsh" run zsh -c 'eval "$("$FLOX_BIN" activate --print-script)"; "$FLOX_BIN" activate --print-script'
+# bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:zsh
+@test "zsh: 'flox activate' patches PATH correctly when already activated" {
+  SHELL="zsh" run -- \
+    "$FLOX_BIN" activate -- \
+      zsh -c "eval \$("$FLOX_BIN" activate); bash "$TESTS_DIR"/activate/verify_PATH.bash"
   assert_success
-  # on macos activating an already activated environment using
-  # `eval "$(flox activate [--print-script])"
-  # will only fix the PATH
-  if [[ -e /usr/libexec/path_helper ]]; then
-    assert_output --regexp "^(export PATH=.+)$"
-  else
-    # on linux reactivation is ignored
-    assert_output ""
-  fi
-}
-
-# bats test_tags=activate,activate:inplace-reactivate
-@test "'flox activate' does not patch PATH when not activated" {
-  run "$FLOX_BIN" activate --print-script
-  assert_success
-  refute_output --regexp "^(export PATH=.+)$"
 }
 
 # ---------------------------------------------------------------------------- #

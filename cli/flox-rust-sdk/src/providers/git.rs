@@ -115,7 +115,7 @@ impl Default for GitCommandOptions {
     /// By default, use the git binary bundled with flox
     fn default() -> Self {
         Self {
-            exe: String::from(env!("GIT_BIN")),
+            exe: String::from(env!("GIT_PKG")) + "/bin/git",
             config: Default::default(),
             envs: Default::default(),
         }

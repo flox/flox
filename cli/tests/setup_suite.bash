@@ -392,6 +392,28 @@ flox_vars_setup() {
 
 # ---------------------------------------------------------------------------- #
 
+# Create a set of dotfiles to simulate the sorts of things users can do that
+# disrupt flox's attempts to configure the environment. Please append to this
+# growing list of nightmare scenarios as you encounter them in the wild.
+user_dotfiles_setup() {
+  if [[ -n ${__FT_RAN_USER_DOTFILES_SETUP-} ]]; then return 0; fi
+  # N.B. $HOME is set to the test user's home directory by flox_vars_setup
+  # so none of these should exist, and we abort if we find otherwise.
+  if [ -f "$HOME/.bashrc" -o -f "$HOME/.zshrc" -o -f "$HOME/.zshenv" -o
+       -f "$HOME/.zlogin" -o -f "$HOME/.zlogout" -o -f "$HOME/.zprofile" ]; then
+        echo "user_dotfiles_setup: found preexisting dotfile(s) in $HOME" >&2
+        return 1
+  fi
+  BADPATH="/usr/local/bin:/usr/bin:/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin"
+  for i in "profile" "login" "logout" "bashrc" \
+           "zshrc" "zshenv" "zlogin" "zlogout" "zprofile"; do
+    echo "echo Setting PATH from .$i >&2; export PATH=\"$BADPATH\"" > "$HOME/.$i"
+  done
+  export __FT_RAN_USER_DOTFILES_SETUP=:
+}
+
+# ---------------------------------------------------------------------------- #
+
 # home_setup [suite|file|test]
 # ----------------------------
 # Set `FLOX_TEST_HOME' to a temporary directory and setup essential files.
@@ -416,6 +438,7 @@ home_setup() {
   fi
   xdg_tmp_setup
   flox_vars_setup
+  user_dotfiles_setup
   export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME"
 }
 
