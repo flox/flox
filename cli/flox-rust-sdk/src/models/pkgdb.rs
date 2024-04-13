@@ -89,7 +89,32 @@ pub enum CallPkgDbError {
 ///
 /// Error JSON is parsed into a [CallPkgDbError::PkgDbError].
 pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
+    // Configure pkgdb PATH with exact versions of everything it needs.
+    //
+    // Nix itself isn't pure, which is to say that it isn't built with a
+    // reference to `git` in its closure, so correspondingly depends upon
+    // finding it in $PATH to function. Funnily enough it is also not built
+    // to know where `nix` itself resides, and again relies on $PATH for that.
+    //
+    // This just isn't OK for us as we're looking for flox to operate reliably
+    // in "hostile" environments, which includes situation where a user may
+    // redefine or blat their $PATH variable entirely, so we always invoke
+    // pkgdb with an explicit PATH of our making.
+    let pkgdb_paths = [
+        String::from(env!("NIX_PKG")) + "/bin",
+        String::from(env!("GIT_PKG")) + "/bin",
+        // It really shouldn't be necessary to append $PATH,
+        // ... so we won't.
+    ];
+    let pkgdb_path = env::join_paths(pkgdb_paths.iter());
     let mut proc = pkgdb_cmd
+        .env(
+            "PATH",
+            pkgdb_path
+                .unwrap()
+                .to_str()
+                .expect("couldn't convert path to string"),
+        )
         .stderr(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
