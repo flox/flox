@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use flox_rust_sdk::flox::FLOX_SENTRY_ENV;
 use log::{debug, warn};
 use sentry::{ClientInitGuard, IntoDsn};
 
@@ -21,7 +22,9 @@ pub fn init_sentry() -> Option<ClientInitGuard> {
             return None;
         },
     };
-    let sentry_env = std::env::var("FLOX_SENTRY_ENV").unwrap_or_else(|_| "development".to_string());
+    let sentry_env = (*FLOX_SENTRY_ENV)
+        .clone()
+        .unwrap_or_else(|| "development".to_string());
 
     // TODO: configure user
     // https://docs.sentry.io/platforms/rust/enriching-events/identify-user/
