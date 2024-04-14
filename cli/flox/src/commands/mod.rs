@@ -1277,19 +1277,9 @@ impl ActiveEnvironments {
         self.0.front().cloned()
     }
 
-    /// Set the last active environment
-    pub fn set_last_active(&mut self, env: UninitializedEnvironment) {
-        self.0.push_front(env);
-    }
-
     /// Check if the given environment is active
     pub fn is_active(&self, env: &UninitializedEnvironment) -> bool {
         self.0.contains(env)
-    }
-
-    /// Iterate over the active environments
-    pub fn iter(&self) -> impl Iterator<Item = &UninitializedEnvironment> {
-        self.0.iter()
     }
 }
 
@@ -1518,89 +1508,10 @@ pub fn environment_description(environment: &ConcreteEnvironment) -> Result<Stri
 #[cfg(test)]
 mod tests {
 
-    use flox_rust_sdk::flox::EnvironmentName;
-    use flox_rust_sdk::models::environment::PathPointer;
     use sentry::test::with_captured_events;
     use tempfile::tempdir;
 
     use super::*;
-
-    /// is_active() behaves as expected when using set_last_active()
-    #[test]
-    fn test_is_active() {
-        let env1 = UninitializedEnvironment::DotFlox(DotFlox {
-            path: PathBuf::new(),
-            pointer: EnvironmentPointer::Path(PathPointer::new(
-                EnvironmentName::from_str("env1").unwrap(),
-            )),
-        });
-        let env2 = UninitializedEnvironment::DotFlox(DotFlox {
-            path: PathBuf::new(),
-            pointer: EnvironmentPointer::Path(PathPointer::new(
-                EnvironmentName::from_str("env2").unwrap(),
-            )),
-        });
-
-        let mut active = ActiveEnvironments::default();
-        active.set_last_active(env1.clone());
-
-        assert!(active.is_active(&env1));
-        assert!(!active.is_active(&env2));
-    }
-
-    /// Simulate setting an active environment in one flox invocation and then
-    /// checking if it's active in a second.
-    #[test]
-    fn test_is_active_round_trip_from_env() {
-        let uninitialized = UninitializedEnvironment::DotFlox(DotFlox {
-            path: PathBuf::new(),
-            pointer: EnvironmentPointer::Path(PathPointer::new(
-                EnvironmentName::from_str("test").unwrap(),
-            )),
-        });
-        let mut first_active = temp_env::with_var(
-            FLOX_ACTIVE_ENVIRONMENTS_VAR,
-            None::<&str>,
-            activated_environments,
-        );
-
-        first_active.set_last_active(uninitialized.clone());
-
-        let second_active = temp_env::with_var(
-            FLOX_ACTIVE_ENVIRONMENTS_VAR,
-            Some(first_active.to_string()),
-            activated_environments,
-        );
-
-        assert!(second_active.is_active(&uninitialized));
-    }
-
-    #[test]
-    fn test_last_activated() {
-        let env1 = UninitializedEnvironment::DotFlox(DotFlox {
-            path: PathBuf::new(),
-            pointer: EnvironmentPointer::Path(PathPointer::new(
-                EnvironmentName::from_str("env1").unwrap(),
-            )),
-        });
-        let env2 = UninitializedEnvironment::DotFlox(DotFlox {
-            path: PathBuf::new(),
-            pointer: EnvironmentPointer::Path(PathPointer::new(
-                EnvironmentName::from_str("env2").unwrap(),
-            )),
-        });
-
-        let mut active = ActiveEnvironments::default();
-        active.set_last_active(env1);
-        active.set_last_active(env2.clone());
-
-        let last_active = temp_env::with_var(
-            FLOX_ACTIVE_ENVIRONMENTS_VAR,
-            Some(active.to_string()),
-            last_activated_environment,
-        );
-        assert_eq!(last_active.unwrap(), env2)
-    }
 
     /// [UpdateNotification::print_new_version_available] should write notification_file
     #[test]

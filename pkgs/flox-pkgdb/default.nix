@@ -95,6 +95,7 @@
       FLOX_COREUTILS_PKG = coreutils;
       FLOX_GNUSED_PKG = gnused;
       FLOX_PROCPS_PKG = procps;
+      FLOX_CACERT_PKG = cacert;
 
       # used so that `nix` calls that require an SSL cert don't fail
       NIXPKGS_CACERT_BUNDLE_CRT =

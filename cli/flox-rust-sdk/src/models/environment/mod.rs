@@ -52,14 +52,16 @@ pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
 pub const ENV_DIR_NAME: &str = "env";
-pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
+
+// A collection of variables pertaining to the environment
+// currently being activated. These are used by hooks to
+// configure several variables, notably including FLOX_ENV_DIRS
+// and _FLOX_ACTIVE_ENVIRONMENTS.
+pub const FLOX_ENV_DESCRIPTION_VAR: &str = "FLOX_ENV_DESCRIPTION";
+
 pub const FLOX_ENV_CACHE_VAR: &str = "FLOX_ENV_CACHE";
 pub const FLOX_ENV_PROJECT_VAR: &str = "FLOX_ENV_PROJECT";
-pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
-pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
-pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
-pub const FLOX_PATH_PATCHED_VAR: &str = "FLOX_PATH_PATCHED";
 pub const FLOX_SYSTEM_PLACEHOLDER: &str = "_FLOX_INIT_SYSTEM";
 pub const FLOX_PROFILE_PLACEHOLDER: &str = "_FLOX_INIT_PROFILE";
 pub const FLOX_HOOK_PLACEHOLDER: &str = "_FLOX_INIT_HOOK";
