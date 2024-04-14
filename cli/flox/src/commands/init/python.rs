@@ -28,7 +28,11 @@ pub(super) struct Python {
 }
 
 impl Python {
-    pub fn new(flox: &Flox, path: &Path) -> Self {
+    /// Returns `true` if any valid provider was found
+    ///
+    /// [Self::prompt_user] and [Self::get_init_customization]
+    /// are expected to be called only if this method returns `true`!
+    pub fn new(flox: &Flox, path: &Path) -> Option<Self> {
         let providers = vec![
             PoetryPyProject::detect(flox, path).into(),
             PyProject::detect(flox, path).into(),
@@ -37,28 +41,22 @@ impl Python {
 
         debug!("Detected Python providers: {:#?}", providers);
 
-        Self {
+        // TODO: warn about errors (at least send to sentry)
+        if !providers
+            .iter()
+            .any(|provider| matches!(provider, Provide::Found(_)))
+        {
+            return None;
+        }
+
+        Some(Self {
             providers,
             selected_provider: None,
-        }
+        })
     }
 }
 
 impl InitHook for Python {
-    /// Returns `true` if any valid provider was found
-    ///
-    /// [Self::prompt_user] and [Self::get_init_customization]
-    /// are expected to be called only if this method returns `true`!
-    /*
-    fn should_run(&mut self, _path: &Path) -> Result<bool> {
-        // TODO: warn about errors (at least send to sentry)
-        Ok(self
-            .providers
-            .iter()
-            .any(|provider| matches!(provider, Provide::Found(_))))
-    }
-    */
-
     /// Empties the [Python::providers] and stores the selected provider in [Python::selected_provider]
     fn prompt_user(&mut self, _flox: &Flox, _path: &Path) -> Result<bool> {
         let mut found_providers = std::mem::take(&mut self.providers)
@@ -145,9 +143,6 @@ impl InitHook for Python {
     }
 
     /// Returns the customization of the selected provider or the first found provider
-    ///
-    /// This method assumes that **it is only called if [Self::should_run] returned `true`**
-    /// and will panic if no provider was selected or found.
     fn get_init_customization(&self) -> InitCustomization {
         let selected = self
             .selected_provider
@@ -622,32 +617,6 @@ mod tests {
 
     use super::*;
     use crate::commands::init::ProvidedPackage;
-
-    #[test]
-    fn test_should_run_true() {
-        let mut _python = Python {
-            providers: vec![Provide::Found(Box::new(PoetryPyProject {
-                provided_python_version: ProvidedVersion::Compatible {
-                    requested: None,
-                    compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
-                },
-                poetry_version: "1.7.1".to_string(),
-            }))],
-            selected_provider: None,
-        };
-        // assert!(python.should_run(Path::new("")).unwrap());
-        todo!();
-    }
-
-    #[test]
-    fn test_should_run_false() {
-        let mut _python = Python {
-            providers: vec![Provide::Invalid(anyhow!(""))],
-            selected_provider: None,
-        };
-        // assert!(!python.should_run(Path::new("")).unwrap());
-        todo!();
-    }
 
     /// An invalid pyproject.toml should return an error
     #[test]

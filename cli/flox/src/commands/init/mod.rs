@@ -164,15 +164,14 @@ impl Init {
     fn run_language_hooks(&self, flox: &Flox, path: &Path) -> Result<InitCustomization> {
         let mut hooks: Vec<Box<dyn InitHook>> = vec![];
 
-        /*
         if let Some(node) = Node::new(flox, path)? {
             hooks.push(Box::new(node));
         }
 
-        if let Some(node) = Python::new(flox, path) {
+        if let Some(python) = Python::new(flox, path) {
             hooks.push(Box::new(python));
         }
-        */
+
         if let Some(go) = Go::new(flox, path)? {
             hooks.push(Box::new(go));
         }
