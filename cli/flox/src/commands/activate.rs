@@ -1,46 +1,32 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
-#[cfg(target_os = "macos")]
-use std::ffi::OsStr;
-use std::ffi::OsString;
 use std::io::stdout;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
+use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     Environment,
     EnvironmentError,
-    FLOX_ACTIVE_ENVIRONMENTS_VAR,
     FLOX_ENV_CACHE_VAR,
-    FLOX_ENV_DIRS_VAR,
-    FLOX_ENV_LIB_DIRS_VAR,
+    FLOX_ENV_DESCRIPTION_VAR,
     FLOX_ENV_PROJECT_VAR,
-    FLOX_ENV_VAR,
-    FLOX_PATH_PATCHED_VAR,
-    FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
-use indexmap::IndexSet;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::{debug, warn};
 
-use super::{
-    activated_environments,
-    environment_select,
-    EnvironmentSelect,
-    UninitializedEnvironment,
-};
+use super::{environment_select, EnvironmentSelect, UninitializedEnvironment};
 use crate::commands::{ensure_environment_trust, ConcreteEnvironment, EnvironmentSelectError};
-use crate::config::{Config, EnvironmentPromptConfig};
+use crate::config::Config;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::openers::Shell;
 use crate::utils::{default_nix_env_vars, message};
@@ -135,94 +121,12 @@ impl Activate {
             other => other?,
         };
 
-        // read the currently active environments from the environment
-        let mut flox_active_environments = activated_environments();
-
-        // install prefixes of all active environments
-        let flox_env_install_prefixes = IndexSet::from_iter(env::split_paths(
-            &env::var(FLOX_ENV_DIRS_VAR).unwrap_or_default(),
-        ));
-
-        // on macos: patch the existing PATH
-        // If this is [Some] the path will be restored from `$FLOX_PATH_PATCHED`
-        // As part of running $FLOX_ENV/etc/profile.d/0100_common-paths.sh during activation.
-        //
-        // NOTE: this does _not_ include any additions to the PATH
-        // due to the newly activated environment.
-        // Amending the path is strictly implemented by the activation scripts!
-        let fixed_up_original_path_joined =
-            Self::fixup_path(&flox_env_install_prefixes).transpose()?;
-
-        // Detect if the current environment is already active
-        if flox_active_environments.is_active(&now_active) {
-            if !in_place {
-                // Error if interactive and already active
-                bail!(
-                    "Environment '{}' is already active.",
-                    now_active.bare_description()?
-                );
-            }
-            debug!("Environment is already active: environment={}. Ignoring activation (may patch PATH)", now_active.bare_description()?);
-            Self::reactivate_in_place(fixed_up_original_path_joined)?;
-            return Ok(());
-        }
-
-        // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
-        flox_active_environments.set_last_active(now_active.clone());
-
-        // Prepend the new environment to the list of active environments
-        let flox_env_install_prefixes = {
-            let mut set = IndexSet::from([activation_path.clone()]);
-            set.extend(flox_env_install_prefixes);
-            set
-        };
-
-        // Set FLOX_ENV_DIRS and FLOX_ENV_LIB_DIRS
-
-        let (flox_env_dirs_joined, flox_env_lib_dirs_joined) = {
-            let flox_env_lib_dirs = flox_env_install_prefixes.iter().map(|p| p.join("lib"));
-
-            let flox_env_dirs = env::join_paths(&flox_env_install_prefixes).context(
-                "Cannot activate environment because its path contains an invalid character",
-            )?;
-
-            let flox_env_lib_dirs = env::join_paths(flox_env_lib_dirs).context(
-                "Cannot activate environment because its path contains an invalid character",
-            )?;
-
-            (flox_env_dirs, flox_env_lib_dirs)
-        };
-
-        let prompt_display_config = config
-            .flox
-            .shell_prompt
-            .unwrap_or(EnvironmentPromptConfig::ShowAll);
-
-        // We don't have access to the current PS1 (it's not exported), so we
-        // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
-        // activation script set PS1 based on that.
-        let flox_prompt_environments =
-            Self::make_environment_prompt(prompt_display_config, &flox_active_environments);
-
         let prompt_color_1 = env::var("FLOX_PROMPT_COLOR_1")
             .unwrap_or(utils::colors::INDIGO_400.to_ansi256().to_string());
         let prompt_color_2 = env::var("FLOX_PROMPT_COLOR_2")
             .unwrap_or(utils::colors::INDIGO_300.to_ansi256().to_string());
 
         let mut exports = HashMap::from([
-            (FLOX_ENV_VAR, activation_path.to_string_lossy().to_string()),
-            (
-                FLOX_ACTIVE_ENVIRONMENTS_VAR,
-                flox_active_environments.to_string(),
-            ),
-            (
-                FLOX_ENV_DIRS_VAR,
-                flox_env_dirs_joined.to_string_lossy().to_string(),
-            ),
-            (
-                FLOX_ENV_LIB_DIRS_VAR,
-                flox_env_lib_dirs_joined.to_string_lossy().to_string(),
-            ),
             (
                 FLOX_ENV_CACHE_VAR,
                 environment.cache_path()?.to_string_lossy().to_string(),
@@ -233,25 +137,18 @@ impl Activate {
             ),
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
-            // Set `FLOX_PROMPT_ENVIRONMENTS` to either the constructed prompt string
-            // or "" if the prompt is disabled.
-            //
-            // The latter is necessary for inner activations to be able to hide the prompt
-            // if the parent activation has it disabled.
+            // Export FLOX_ENV_DESCRIPTION for this environment and let the
+            // activation script take care of tracking active environments
+            // and invoking the appropriate script to set the prompt.
             (
-                FLOX_PROMPT_ENVIRONMENTS_VAR,
-                flox_prompt_environments.unwrap_or_default(),
+                FLOX_ENV_DESCRIPTION_VAR,
+                now_active
+                    .bare_description()
+                    .expect("`bare_description` is infallible"),
             ),
         ]);
 
         exports.extend(default_nix_env_vars());
-
-        if let Some(fixed_up_original_path_joined) = fixed_up_original_path_joined {
-            exports.insert(
-                FLOX_PATH_PATCHED_VAR,
-                fixed_up_original_path_joined.to_string_lossy().to_string(),
-            );
-        }
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
@@ -442,116 +339,6 @@ impl Activate {
         Err(command.exec().into())
     }
 
-    /// Patch the PATH to undo the effects of `/usr/libexec/path_helper`
-    ///
-    /// Darwin has a "path_helper" which indiscriminately reorders the path
-    /// to put the system curated path items first in the `PATH`,
-    /// which completely breaks the user's ability to manage their `PATH` in subshells,
-    /// e.g. when using tmux.
-    ///
-    /// On macos `/usr/libexec/path_helper` is typically invoked from
-    /// default shell rc files, e.g. `/etc/profile` and `/etc/zprofile`.
-    ///
-    /// Note: since the "path_helper" i only invoked by login shells,
-    /// we only need to setup the PATH patching for `flox activate` in shell rc files.
-    ///
-    /// ## Example
-    ///
-    /// > User has `eval "$(flox activate)"` in their `.zshrc`.
-    ///
-    ///  Without the path patching, the following happens:
-    ///
-    /// 1. Open a new terminal (login shell)
-    ///     -> `path_helper` runs (`PATH=<default envs>`)
-    ///     -> `flox activate` runs (`PATH=<flox_env>:<default envs>`)
-    /// 2. Open a new tmux session (login shell by default)
-    ///     -> `path_helper` runs (`PATH=<default envs>:<flox_env>`)
-    ///     -> `flox activate` runs
-    ///     -> ⚡️ environment already active, activate skipped
-    ///        without path patching: `PATH:<default envs>:<flox_env>` ❌
-    ///        with path patching: `PATH:<flox_env>:<default envs>`    ✅ flox env is not shadowed
-    ///
-    /// ## Implementation
-    ///
-    /// This function attempts to undo the effects of `/usr/libexec/path_helper`
-    /// by partitioning the `PATH` into two parts:
-    /// 1. known paths of activated flox environments
-    ///    and nix store paths (e.g. `/nix/store/...`) -- assumed to be `nix develop` paths
-    /// 2. everything else
-    ///
-    /// The `PATH` is then reordered to put the flox environment and nix store paths first.
-    /// The order within the two partitions is preserved.
-    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))] // on linux `flox_env_dirs` is not used
-    fn fixup_path(flox_env_dirs: &IndexSet<PathBuf>) -> Option<Result<OsString>> {
-        #[cfg(not(target_os = "macos"))]
-        {
-            None
-        }
-        #[cfg(target_os = "macos")]
-        {
-            if !Path::new("/usr/libexec/path_helper").exists() {
-                return None;
-            }
-            let path_var = env::var("PATH").unwrap_or_default();
-            let fixed_up_path = Self::fixup_path_with(path_var, flox_env_dirs);
-            let fixed_up_path_joined = env::join_paths(fixed_up_path).context(
-                "Cannot activate environment because its path contains an invalid character",
-            );
-            Some(fixed_up_path_joined)
-        }
-    }
-
-    /// Patch a given PATH value to undo the effects of `/usr/libexec/path_helper`
-    ///
-    /// See [Self::fixup_path] for more details.
-    #[cfg(target_os = "macos")]
-    fn fixup_path_with(
-        path_var: impl AsRef<OsStr>,
-        flox_env_dirs: &IndexSet<PathBuf>,
-    ) -> Vec<PathBuf> {
-        let path_iter = env::split_paths(&path_var);
-
-        let (flox_and_nix_path, path) = path_iter.partition::<Vec<_>, _>(|path| {
-            let is_flox_path = path
-                .parent()
-                .map(|path| flox_env_dirs.contains(path))
-                .unwrap_or_else(|| flox_env_dirs.contains(path));
-
-            path.starts_with("/nix/store") || is_flox_path
-        });
-
-        [flox_and_nix_path, path].into_iter().flatten().collect()
-    }
-
-    /// Used when the activated environment is already active
-    /// and executed non-interactively -- e.g. from a .bashrc.
-    ///
-    /// In the general case, this function produces a noop shell function
-    ///
-    ///     eval "$(flox activate)" -> eval "true"
-    ///
-    /// On macOS, we need to patch the PATH
-    /// to undo the effects of /usr/libexec/path_helper
-    ///
-    ///     eval "$(flox activate)" -> eval "export PATH=<flox_env_dirs>:$PATH"
-    ///
-    /// See [Self::fixup_path] for more details.
-    fn reactivate_in_place(fixed_up_path_joined: Option<OsString>) -> Result<(), anyhow::Error> {
-        if let Some(fixed_up_path_joined) = fixed_up_path_joined {
-            debug!(
-                "Patching PATH to {}",
-                fixed_up_path_joined.to_string_lossy()
-            );
-            println!(
-                "export PATH={}",
-                shell_escape::escape(fixed_up_path_joined.to_string_lossy())
-            );
-        } else {
-            debug!("No path patching needed");
-        };
-        Ok(())
-    }
-
     /// Used for `eval "$(flox activate)"`
     fn old_activate_in_place(
         shell: &Shell,
@@ -668,80 +455,11 @@ impl Activate {
                 Shell::detect_from_env("SHELL")
             })
     }
-
-    /// Construct the envrionment list for the shell prompt
-    ///
-    /// [`None`] if the prompt is disabled, or filters removed all components.
-    fn make_environment_prompt(
-        prompt_display_config: EnvironmentPromptConfig,
-        flox_active_environments: &super::ActiveEnvironments,
-    ) -> Option<String> {
-        if prompt_display_config == EnvironmentPromptConfig::HideAll {
-            return None;
-        }
-
-        let prompt_envs: Vec<_> = flox_active_environments
-            .iter()
-            .filter_map(|env| {
-                if prompt_display_config == EnvironmentPromptConfig::HideDefault
-                    && env.name().as_ref() == DEFAULT_NAME
-                {
-                    return None;
-                }
-                Some(
-                    env.bare_description()
-                        .expect("`bare_description` is infallible"),
-                )
-            })
-            .collect();
-
-        if prompt_envs.is_empty() {
-            return None;
-        }
-
-        Some(prompt_envs.join(" "))
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::models::environment::{DotFlox, EnvironmentPointer, PathPointer};
-    use once_cell::sync::Lazy;
-
     use super::*;
-    use crate::commands::ActiveEnvironments;
-
-    #[cfg(target_os = "macos")]
-    const PATH: &str =
-        "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/flox/env/bin:/nix/store/some/bin";
-
-    static DEFAULT_ENV: Lazy<UninitializedEnvironment> = Lazy::new(|| {
-        UninitializedEnvironment::DotFlox(DotFlox {
-            path: PathBuf::from(""),
-            pointer: EnvironmentPointer::Path(PathPointer::new("default".parse().unwrap())),
-        })
-    });
-
-    static NON_DEFAULT_ENV: Lazy<UninitializedEnvironment> = Lazy::new(|| {
-        UninitializedEnvironment::DotFlox(DotFlox {
-            path: PathBuf::from(""),
-            pointer: EnvironmentPointer::Path(PathPointer::new("wichtig".parse().unwrap())),
-        })
-    });
-
-    #[test]
-    #[cfg(target_os = "macos")]
-    fn test_fixup_path() {
-        let flox_env_dirs = IndexSet::from(["/flox/env"].map(PathBuf::from));
-        let fixed_up_path = Activate::fixup_path_with(PATH, &flox_env_dirs);
-        let joined = env::join_paths(fixed_up_path).unwrap();
-
-        assert_eq!(
-            joined.to_string_lossy(),
-            "/flox/env/bin:/nix/store/some/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
-            "PATH was not reordered correctly"
-        );
-    }
 
     const SHELL_SET: (&'_ str, Option<&'_ str>) = ("SHELL", Some("/shell/bash"));
     const FLOX_SHELL_SET: (&'_ str, Option<&'_ str>) = ("FLOX_SHELL", Some("/flox_shell/bash"));
@@ -806,71 +524,5 @@ mod tests {
             Activate::quote_run_args(&["a b".to_string(), '"'.to_string()]),
             r#""a b" "\"""#
         )
-    }
-
-    #[test]
-    fn test_shell_prompt_empty_without_active_environments() {
-        let active_environments = ActiveEnvironments::default();
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::ShowAll,
-            &active_environments,
-        );
-
-        assert_eq!(prompt, None);
-    }
-
-    #[test]
-    fn test_shell_prompt_default() {
-        let mut active_environments = ActiveEnvironments::default();
-        active_environments.set_last_active(DEFAULT_ENV.clone());
-
-        // with `ShowAll` we should see the default environment
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::ShowAll,
-            &active_environments,
-        );
-        assert_eq!(prompt, Some("default".to_string()));
-
-        // with `HideDefault` we should not see the default environment
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::HideDefault,
-            &active_environments,
-        );
-        assert_eq!(prompt, None);
-
-        // with `HideAll` we should not see the default environment
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::HideAll,
-            &active_environments,
-        );
-        assert_eq!(prompt, None);
-    }
-
-    #[test]
-    fn test_shell_prompt_mixed() {
-        let mut active_environments = ActiveEnvironments::default();
-        active_environments.set_last_active(DEFAULT_ENV.clone());
-        active_environments.set_last_active(NON_DEFAULT_ENV.clone());
-
-        // with `ShowAll` we should see the default environment
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::ShowAll,
-            &active_environments,
-        );
-        assert_eq!(prompt, Some("wichtig default".to_string()));
-
-        // with `HideDefault` we should not see the default environment
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::HideDefault,
-            &active_environments,
-        );
-        assert_eq!(prompt, Some("wichtig".to_string()));
-
-        // with `HideAll` we should not see the default environment
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::HideAll,
-            &active_environments,
-        );
-        assert_eq!(prompt, None);
     }
 }
