@@ -164,29 +164,29 @@ impl Init {
     fn run_language_hooks(&self, flox: &Flox, path: &Path) -> Result<InitCustomization> {
         let mut hooks: Vec<Box<dyn InitHook>> = vec![];
 
-        let node = Node::new(flox, path)?;
-        hooks.push(Box::new(node));
-
-        let python = Python::new(flox, path);
-        hooks.push(Box::new(python));
-
-        let go = Go::new(flox, path)?;
-        hooks.push(Box::new(go));
-
-        let mut _customizations = vec![];
-
-        for mut _hook in hooks {
-            // Run hooks if we can't prompt
-            /*
-            if hook.should_run(path)?
-                && (self.auto_setup || (Dialog::can_prompt() && hook.prompt_user(path, flox)?))
-            {
-                customizations.push(hook.get_init_customization())
-            }
-            */
+        /*
+        if let Some(node) = Node::new(flox, path)? {
+            hooks.push(Box::new(node));
         }
 
-        Ok(Self::combine_customizations(_customizations))
+        if let Some(node) = Python::new(flox, path) {
+            hooks.push(Box::new(python));
+        }
+        */
+        if let Some(go) = Go::new(flox, path)? {
+            hooks.push(Box::new(go));
+        }
+
+        let mut customizations = vec![];
+
+        for mut hook in hooks {
+            // Run hooks if we can't prompt
+            if self.auto_setup || (Dialog::can_prompt() && hook.prompt_user(flox, path)?) {
+                customizations.push(hook.get_init_customization())
+            }
+        }
+
+        Ok(Self::combine_customizations(customizations))
     }
 
     /// Deduplicate packages and concatenate profiles into a single string
