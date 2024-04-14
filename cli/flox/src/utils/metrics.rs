@@ -19,13 +19,13 @@ use time::format_description::well_known::Iso8601;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
+use super::TRAILING_NETWORK_CALL_TIMEOUT;
 use crate::config::Config;
 
 pub const METRICS_EVENTS_FILE_NAME: &str = "metrics-events-v2.json";
 pub const METRICS_UUID_FILE_NAME: &str = "metrics-uuid";
 pub const METRICS_LOCK_FILE_NAME: &str = "metrics-lock";
 const DEFAULT_BUFFER_EXPIRY: Duration = Duration::minutes(2);
-const DEFAULT_TIMEOUT: TimeoutDuration = TimeoutDuration::from_secs(2);
 
 pub static METRICS_EVENTS_URL: Lazy<String> = Lazy::new(|| {
     std::env::var("_FLOX_METRICS_URL_OVERRIDE").unwrap_or(env!("METRICS_EVENTS_URL").to_string())
@@ -484,7 +484,7 @@ impl Connection for AWSDatalakeConnection {
 impl Default for AWSDatalakeConnection {
     fn default() -> Self {
         Self {
-            timeout: DEFAULT_TIMEOUT,
+            timeout: TRAILING_NETWORK_CALL_TIMEOUT,
             endpoint_url: METRICS_EVENTS_URL.clone(),
             api_key: METRICS_EVENTS_API_KEY.to_string(),
         }

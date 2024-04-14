@@ -18,9 +18,9 @@ use std::collections::VecDeque;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::{env, fmt, fs, mem};
+use std::{env, fmt, fs, io, mem};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
 use flox_rust_sdk::flox::{
     EnvironmentName,
@@ -32,6 +32,7 @@ use flox_rust_sdk::flox::{
     FloxhubTokenError,
     DEFAULT_FLOXHUB_URL,
     DEFAULT_NAME,
+    FLOX_SENTRY_ENV,
     FLOX_VERSION,
 };
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
@@ -48,26 +49,33 @@ use flox_rust_sdk::models::environment::{
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::environment_ref;
+use futures::Future;
 use indoc::{formatdoc, indoc};
 use log::{debug, info};
 use once_cell::sync::Lazy;
+use sentry::integrations::anyhow::capture_anyhow;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use thiserror::Error;
+use time::{Duration, OffsetDateTime};
 use toml_edit::Key;
 use url::Url;
 
 use crate::commands::general::update_config;
 use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
+use crate::utils::errors::display_chain;
 use crate::utils::init::{
     init_access_tokens,
     init_telemetry_uuid,
     init_uuid,
     telemetry_opt_out_needs_migration,
 };
-use crate::utils::message;
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FILE_NAME};
+use crate::utils::{message, TRAILING_NETWORK_CALL_TIMEOUT};
+
+const UPDATE_NOTIFICATION_FILE_NAME: &str = "update-notification.json";
+const UPDATE_NOTIFICATION_EXPIRY: Duration = Duration::days(1);
 
 static FLOX_DESCRIPTION: &'_ str = indoc! {"
     flox is a virtual environment and package manager all in one.\n\n
@@ -176,12 +184,6 @@ impl fmt::Debug for Commands {
 impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, mut config: crate::config::Config) -> Result<()> {
-        // Given no command, skip initialization and print welcome message
-        if self.command.is_none() {
-            println!("{}", &*FLOX_WELCOME_MESSAGE);
-            return Ok(());
-        }
-
         // ensure xdg dirs exist
         tokio::fs::create_dir_all(&config.flox.config_dir).await?;
         tokio::fs::create_dir_all(&config.flox.data_dir).await?;
@@ -193,6 +195,18 @@ impl FloxArgs {
         // `temp_dir` will automatically be removed from disk when the function returns
         let temp_dir = TempDir::new_in(process_dir)?;
         let temp_dir_path = temp_dir.path().to_owned();
+
+        // Given no command, skip initialization and print welcome message
+        if self.command.is_none() {
+            println!("{}", &*FLOX_WELCOME_MESSAGE);
+            UpdateNotification::check_for_and_print_update_notification(&config.flox.cache_dir)
+                .await;
+            return Ok(());
+        }
+
+        let cache_dir = config.flox.cache_dir.clone();
+        let check_for_update_handle =
+            tokio::spawn(async { UpdateNotification::check_for_update(cache_dir).await });
 
         // migrate metrics denial
         // metrics could be turned off by writing an empty UUID file
@@ -329,14 +343,218 @@ impl FloxArgs {
         });
 
         // command handled above
-        match self.command.unwrap() {
-            Commands::Help(group) => group.handle(),
-            Commands::Development(group) => group.handle(config, flox).await?,
-            Commands::Sharing(group) => group.handle(config, flox).await?,
-            Commands::Additional(group) => group.handle(config, flox).await?,
-            Commands::Internal(group) => group.handle(config, flox).await?,
+        let result = match self.command.unwrap() {
+            Commands::Help(group) => {
+                group.handle();
+                Ok(())
+            },
+            Commands::Development(group) => group.handle(config, flox).await,
+            Commands::Sharing(group) => group.handle(config, flox).await,
+            Commands::Additional(group) => group.handle(config, flox).await,
+            Commands::Internal(group) => group.handle(config, flox).await,
+        };
+
+        // This will print the update notification after output from a successful
+        // command but before an error is printed for an unsuccessful command.
+        // That's a bit weird,
+        // but I'm not sure it's worth a refactor.
+        match check_for_update_handle.await {
+            Ok(update_notification) => {
+                UpdateNotification::handle_update_result(update_notification);
+            },
+            Err(e) => debug!("Failed to check for CLI update: {}", display_chain(&e)),
         }
-        Ok(())
+
+        result
+    }
+}
+
+/// Timestamp we serialize to a file to track when the user was last notified an
+/// update is available
+#[derive(Deserialize, Serialize)]
+struct LastUpdateNotification {
+    #[serde(with = "time::serde::iso8601")]
+    last_notification: OffsetDateTime,
+}
+
+/// [UpdateNotification] stores a version that the user should be notified is
+/// available.
+///
+/// After notifying, `notification_file` should be written with a timestamp to
+/// track that the user was notified.
+#[derive(Debug, PartialEq)]
+struct UpdateNotification {
+    /// `new_version` that the user should be notified is available
+    ///
+    /// It is assumed that it has already been verified that
+    /// new_version != FLOX_VERSION
+    new_version: String,
+    notification_file: PathBuf,
+}
+
+#[derive(Debug, Error)]
+enum UpdateNotificationError {
+    /// If someone can't check for updates because of a network error, we'll
+    /// want to silently ignore it.
+    #[error("network error")]
+    Network(#[source] reqwest::Error),
+    /// If someone can't check for updates because of an IO error, we'll want to
+    /// silently ignore it.
+    #[error("IO error")]
+    Io(#[source] io::Error),
+    /// Other errors indicate something we didn't expect may have happened,
+    /// so we want to report it with Sentry.
+    #[error(transparent)]
+    WeMayHaveMessedUp(#[from] anyhow::Error),
+}
+
+impl UpdateNotification {
+    pub async fn check_for_and_print_update_notification(cache_dir: impl AsRef<Path>) {
+        Self::handle_update_result(Self::check_for_update(cache_dir).await)
+    }
+
+    /// If the user hasn't been notified of an update after
+    /// UPDATE_NOTIFICATION_EXPIRY time has passed, check for an update.
+    pub async fn check_for_update(
+        cache_dir: impl AsRef<Path>,
+    ) -> Result<Option<Self>, UpdateNotificationError> {
+        let notification_file = cache_dir.as_ref().join(UPDATE_NOTIFICATION_FILE_NAME);
+        Self::check_for_update_inner(
+            notification_file,
+            Self::get_latest_version(),
+            UPDATE_NOTIFICATION_EXPIRY,
+        )
+        .await
+    }
+
+    /// If the user hasn't been notified of an update after `expiry` time has
+    /// passed, check for an update.
+    async fn check_for_update_inner(
+        notification_file: PathBuf,
+        get_latest_version_future: impl Future<Output = Result<String, UpdateNotificationError>>,
+        expiry: Duration,
+    ) -> Result<Option<Self>, UpdateNotificationError> {
+        // Return early if we find a notification_file with a last_notification
+        // that hasn't expired
+        match fs::read_to_string(&notification_file) {
+            // If the file doesn't it exist, it means we haven't shown the notification recently
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {},
+            Ok(contents) => {
+                let update_notification: LastUpdateNotification =
+                    serde_json::from_str(&contents)
+                        .map_err(|e| UpdateNotificationError::WeMayHaveMessedUp(anyhow!(e)))?;
+
+                let now = OffsetDateTime::now_utc();
+                if now - update_notification.last_notification < expiry {
+                    return Ok(None);
+                }
+            },
+            Err(e) => Err(UpdateNotificationError::Io(e))?,
+        };
+
+        let new_version = get_latest_version_future.await?;
+
+        // Sanity check we got a version back
+        if let Err(e) = semver::Version::parse(&new_version) {
+            return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
+                "version is invalid: {e}"
+            )));
+        }
+
+        if *FLOX_VERSION == new_version {
+            return Ok(None);
+        };
+
+        Ok(Some(UpdateNotification {
+            new_version,
+            notification_file,
+        }))
+    }
+
+    /// Print if there's a new version available,
+    /// or handle an error
+    pub fn handle_update_result(
+        update_notification: Result<Option<Self>, UpdateNotificationError>,
+    ) {
+        match update_notification {
+            Ok(None) => {},
+            Ok(Some(update_notification)) => {
+                update_notification.print_new_version_available();
+            },
+            Err(UpdateNotificationError::WeMayHaveMessedUp(e)) => {
+                debug!("Failed to check for CLI updates. Sending error to Sentry if enabled");
+                capture_anyhow(&anyhow!("Failed to check for CLI updates: {e}"));
+            },
+            Err(e) => {
+                debug!(
+                    "Failed to check for CLI update. Ignoring error: {}",
+                    display_chain(&e)
+                );
+            },
+        }
+    }
+
+    /// If a new version is available, print a message to the user.
+    ///
+    /// Write the notification_file with the current time.
+    fn print_new_version_available(self) {
+        message::plain(formatdoc! {"
+            🚀  Flox has a new version available. {} -> {}
+
+            Get the latest at https://flox.dev/docs/install-flox/
+        ", *FLOX_VERSION, self.new_version});
+
+        if let Err(e) = serde_json::to_string_pretty(&LastUpdateNotification {
+            last_notification: OffsetDateTime::now_utc(),
+        })
+        .map(|contents| {
+            fs::write(&self.notification_file, contents).map_err(UpdateNotificationError::Io)
+        }) {
+            // Ignore serialization and write errors
+            debug!("Failed to write update notification file: {e}");
+        };
+    }
+
+    /// Get latest version from downloads.flox.dev
+    ///
+    /// Timeout after TRAILING_NETWORK_CALL_TIMEOUT
+    async fn get_latest_version() -> Result<String, UpdateNotificationError> {
+        let client = reqwest::Client::new();
+
+        let request = client
+            .get(format!(
+                "https://downloads.flox.dev/by-env/{}/LATEST_VERSION",
+                (*FLOX_SENTRY_ENV).as_ref().unwrap_or(&"stable".to_string())
+            ))
+            .timeout(TRAILING_NETWORK_CALL_TIMEOUT);
+
+        let response = request.send().await.map_err(|e| {
+            // We'll want to ignore errors if network is non-existent or slow
+            if e.is_connect() || e.is_timeout() {
+                UpdateNotificationError::Network(e)
+            } else {
+                UpdateNotificationError::WeMayHaveMessedUp(anyhow!(e))
+            }
+        })?;
+
+        if response.status().is_success() {
+            Ok(response
+                .text()
+                .await
+                .map_err(|e| UpdateNotificationError::WeMayHaveMessedUp(anyhow!(e)))?
+                .trim()
+                .to_string())
+        } else {
+            Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
+                "got response body:\n{}",
+                response
+                    .text()
+                    .await
+                    .unwrap_or_else(|e| format!("couldn't decode body: {e}"))
+                    .trim()
+                    .to_string()
+            )))
+        }
     }
 }
 
@@ -1054,8 +1272,14 @@ impl ActiveEnvironments {
         self.0.push_front(env);
     }
 
+    /// Check if the given environment is active
     pub fn is_active(&self, env: &UninitializedEnvironment) -> bool {
         self.0.contains(env)
+    }
+
+    /// Iterate over the active environments
+    pub fn iter(&self) -> impl Iterator<Item = &UninitializedEnvironment> {
+        self.0.iter()
     }
 }
 
@@ -1286,6 +1510,8 @@ mod tests {
 
     use flox_rust_sdk::flox::EnvironmentName;
     use flox_rust_sdk::models::environment::PathPointer;
+    use sentry::test::with_captured_events;
+    use tempfile::tempdir;
 
     use super::*;
 
@@ -1364,5 +1590,161 @@ mod tests {
             last_activated_environment,
         );
         assert_eq!(last_active.unwrap(), env2)
+    }
+
+    /// [UpdateNotification::print_new_version_available] should write notification_file
+    #[test]
+    fn test_print_new_version_available_writes_file() {
+        let temp_dir = tempdir().unwrap();
+        let notification_file = temp_dir.path().join("notification_file");
+        UpdateNotification {
+            new_version: "new_version".to_string(),
+            notification_file: notification_file.clone(),
+        }
+        .print_new_version_available();
+
+        serde_json::from_str::<LastUpdateNotification>(
+            &fs::read_to_string(notification_file).unwrap(),
+        )
+        .unwrap();
+    }
+
+    /// [UpdateNotificationError::WeMayHaveMessedUp] errors should be sent to sentry
+    #[test]
+    fn test_handle_update_result_sends_error_to_sentry() {
+        let events = with_captured_events(|| {
+            UpdateNotification::handle_update_result(Err(
+                UpdateNotificationError::WeMayHaveMessedUp(anyhow!("error")),
+            ));
+        });
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].exception.values[0].value.as_ref().unwrap(),
+            "Failed to check for CLI updates: error"
+        );
+    }
+
+    /// [UpdateNotificationError::Io] errors should not be sent to sentry
+    #[test]
+    fn test_handle_update_result_does_not_send_io_error_to_sentry() {
+        let events = with_captured_events(|| {
+            UpdateNotification::handle_update_result(Err(UpdateNotificationError::Io(
+                io::Error::from(io::ErrorKind::UnexpectedEof),
+            )));
+        });
+        assert_eq!(events.len(), 0);
+    }
+
+    /// When notification_file contains a recent timestamp,
+    /// UpdateNotification::testable_check_for_update should return None
+    #[tokio::test]
+    async fn test_check_for_update_returns_none_if_already_notified() {
+        let temp_dir = tempdir().unwrap();
+        let notification_file = temp_dir.path().join(UPDATE_NOTIFICATION_FILE_NAME);
+        fs::write(
+            &notification_file,
+            serde_json::to_string(&LastUpdateNotification {
+                last_notification: OffsetDateTime::now_utc(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let result = UpdateNotification::check_for_update_inner(
+            notification_file,
+            async { panic!() },
+            UPDATE_NOTIFICATION_EXPIRY,
+        )
+        .await;
+
+        assert!(result.unwrap().is_none());
+    }
+
+    /// When notification_file contains an old timestamp,
+    /// testable_check_for_update should return an UpdateNotification
+    #[tokio::test]
+    async fn test_check_for_update_returns_some_if_expired() {
+        let temp_dir = tempdir().unwrap();
+        let notification_file = temp_dir.path().join(UPDATE_NOTIFICATION_FILE_NAME);
+        fs::write(
+            &notification_file,
+            serde_json::to_string(&LastUpdateNotification {
+                last_notification: OffsetDateTime::now_utc()
+                    - UPDATE_NOTIFICATION_EXPIRY
+                    - Duration::seconds(1),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let result = UpdateNotification::check_for_update_inner(
+            notification_file.clone(),
+            async { Ok("0.0.0".to_string()) },
+            UPDATE_NOTIFICATION_EXPIRY,
+        )
+        .await;
+
+        assert_eq!(result.unwrap().unwrap(), UpdateNotification {
+            notification_file,
+            new_version: "0.0.0".to_string()
+        });
+    }
+
+    /// When there's no existing notification_file,
+    /// testable_check_for_update should return an UpdateNotification
+    #[tokio::test]
+    async fn test_check_for_update_returns_some_if_no_notification_file() {
+        let temp_dir = tempdir().unwrap();
+        let notification_file = temp_dir.path().join(UPDATE_NOTIFICATION_FILE_NAME);
+
+        let result = UpdateNotification::check_for_update_inner(
+            notification_file.clone(),
+            async { Ok("0.0.0".to_string()) },
+            UPDATE_NOTIFICATION_EXPIRY,
+        )
+        .await;
+
+        assert_eq!(result.unwrap().unwrap(), UpdateNotification {
+            notification_file,
+            new_version: "0.0.0".to_string()
+        });
+    }
+
+    /// testable_check_for_update fails when get_latest_version_function doesn't
+    /// return something that looks like a version
+    #[tokio::test]
+    async fn test_check_for_update_fails_for_bad_version() {
+        let temp_dir = tempdir().unwrap();
+        let notification_file = temp_dir.path().join(UPDATE_NOTIFICATION_FILE_NAME);
+
+        let result = UpdateNotification::check_for_update_inner(
+            notification_file.clone(),
+            async { Ok("bad".to_string()) },
+            UPDATE_NOTIFICATION_EXPIRY,
+        )
+        .await;
+
+        match result {
+            Err(UpdateNotificationError::WeMayHaveMessedUp(e)) => {
+                assert!(e.to_string().contains("version is invalid"))
+            },
+            _ => panic!(),
+        }
+    }
+    /// testable_check_for_update fails when get_latest_version_function doesn't
+    /// return something that looks like a version
+    #[tokio::test]
+    async fn test_check_for_update_returns_none_for_flox_version() {
+        let temp_dir = tempdir().unwrap();
+        let notification_file = temp_dir.path().join(UPDATE_NOTIFICATION_FILE_NAME);
+
+        let result = UpdateNotification::check_for_update_inner(
+            notification_file.clone(),
+            async { Ok((*FLOX_VERSION).clone()) },
+            UPDATE_NOTIFICATION_EXPIRY,
+        )
+        .await;
+
+        assert!(result.unwrap().is_none());
     }
 }

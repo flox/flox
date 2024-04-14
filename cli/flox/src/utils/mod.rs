@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::io::Stderr;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use once_cell::sync::Lazy;
 
@@ -17,6 +18,11 @@ pub mod openers;
 pub mod search;
 
 pub static TERMINAL_STDERR: Lazy<Mutex<Stderr>> = Lazy::new(|| Mutex::new(std::io::stderr()));
+/// Timeout used for network operations that run after the main flox command has
+/// completed.
+///
+/// This is used for metrics submission and checking for updates.
+pub const TRAILING_NETWORK_CALL_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Explicitly set environment for nix calls
 ///
