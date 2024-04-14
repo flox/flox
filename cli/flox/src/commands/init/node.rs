@@ -26,8 +26,6 @@ const YARN_HOOK: &str = indoc! {"
 /// The general flow of the node hook is:
 ///
 /// - [Self::new]: Calculate a [NodeAction]
-/// - [Self::should_run]: If the action is [NodeAction::Nothing], return false,
-///   else true
 /// - [Self::prompt_user]: If the action is [NodeAction::InstallYarnOrNode],
 ///   set it to one of [NodeAction::InstallNode] or [NodeAction::InstallYarn].
 ///   Otherwise, just return true or false based on whether the user wants the
@@ -102,7 +100,6 @@ enum NodeAction {
     InstallYarn(Box<YarnInstall>),
     InstallYarnOrNode(Box<YarnInstall>, Box<NodeInstall>),
     InstallNode(Box<NodeInstall>),
-    Nothing,
 }
 
 struct PackageJSONVersions {
@@ -128,10 +125,10 @@ impl Node {
     ///   - yarn.lock does not exist
     /// - Returns [NodeAction::InstallYarnOrNode] if
     ///   - Constraints for yarn and constraints for nodejs are met
-    /// - Returns [NodeAction::Nothing] if
+    /// - Returns [None] if
     ///   - There's no package.json or .nvmrc
     ///   - We can't satisfy constraints in package.json
-    pub fn new(flox: &Flox, path: &Path) -> Result<Self> {
+    pub fn new(flox: &Flox, path: &Path) -> Result<Option<Self>> {
         // Check for a viable yarn
         // TODO: we should check for npm version as well,
         // but since npm comes bundled with nodejs, we'll probably cover the most
@@ -161,11 +158,11 @@ impl Node {
         // early with just yarn
         if let Some(yarn_install) = &yarn_install {
             if !package_json_and_package_lock {
-                return Ok(Self {
+                return Ok(Some(Self {
                     action: NodeAction::InstallYarn(Box::new(yarn_install.clone())),
                     package_json_node_version: None,
                     nvmrc_version: None,
-                });
+                }));
             }
         }
 
@@ -195,44 +192,49 @@ impl Node {
 
         let action = match yarn_install {
             Some(yarn_install) => {
-                match Self::get_node_install(
+                Self::get_node_install(
                     &package_json_node_version,
                     &nvmrc_version,
                     valid_package_json,
-                ) {
-                    // We know at this point that package-lock.json exists,
-                    // because otherwise we would have returned above
-                    Some(node_install) => NodeAction::InstallYarnOrNode(
-                        Box::new(yarn_install),
-                        Box::new(node_install),
-                    ),
-                    None => NodeAction::InstallYarn(Box::new(yarn_install)),
-                }
+                )
+                .map_or(
+                    Some(NodeAction::InstallYarn(Box::new(yarn_install.clone()))),
+                    |node_install| {
+                        // We know at this point that package-lock.json exists,
+                        // because otherwise we would have returned above
+                        Some(NodeAction::InstallYarnOrNode(
+                            Box::new(yarn_install),
+                            Box::new(node_install),
+                        ))
+                    },
+                )
             },
             None => {
-                match Self::get_node_install(
+                Self::get_node_install(
                     &package_json_node_version,
                     &nvmrc_version,
                     valid_package_json,
-                ) {
-                    Some(mut node_install) => {
-                        // If yarn.lock exists but we couldn't find a compatible
-                        // yarn, don't offer an npm hook
-                        if yarn_lock_exists {
-                            node_install.npm_hook = false;
-                        }
-                        NodeAction::InstallNode(Box::new(node_install))
-                    },
-                    None => NodeAction::Nothing,
-                }
+                )
+                .map(|mut node_install| {
+                    // If yarn.lock exists but we couldn't find a compatible
+                    // yarn, don't offer an npm hook
+                    if yarn_lock_exists {
+                        node_install.npm_hook = false;
+                    }
+                    NodeAction::InstallNode(Box::new(node_install))
+                })
             },
         };
 
-        Ok(Self {
-            package_json_node_version,
-            nvmrc_version,
-            action,
-        })
+        if let Some(action) = action {
+            return Ok(Some(Self {
+                package_json_node_version,
+                nvmrc_version,
+                action,
+            }));
+        }
+
+        Ok(None)
     }
 
     /// Look for nodejs, npm, and yarn versions in a (possibly non-existent)
@@ -476,8 +478,6 @@ impl Node {
     /// 2. The version of nodejs Flox would install
     /// 3. Whether the message says Flox detected package.json (to avoid
     ///    printing that message twice)
-    ///
-    /// Any case that get_action() would return NodeAction::Nothing for is unreachable
     fn nodejs_message_and_version(&self, flox: &Flox) -> Result<(String, Option<String>, bool)> {
         let mut mentions_package_json = false;
         let (message, version) = match (
@@ -674,29 +674,6 @@ impl Node {
 }
 
 impl InitHook for Node {
-    /*
-    fn should_run(&mut self, _path: &Path) -> Result<bool> {
-        match self.action {
-            NodeAction::InstallYarn(_) => {
-                debug!("Should run node init hook and install yarn.");
-                Ok(true)
-            },
-            NodeAction::InstallYarnOrNode(_, _) => {
-                debug!("Should run node init hook and install npm or yarn.");
-                Ok(true)
-            },
-            NodeAction::InstallNode(_) => {
-                debug!("Should run node init hook and install nodejs");
-                Ok(true)
-            },
-            NodeAction::Nothing => {
-                debug!("Should not run node init hook");
-                Ok(false)
-            },
-        }
-    }
-    */
-
     fn prompt_user(&mut self, flox: &Flox, _path: &Path) -> Result<bool> {
         match &self.action {
             NodeAction::InstallYarn(yarn_install) => self.prompt_with_yarn(yarn_install),
@@ -704,7 +681,6 @@ impl InitHook for Node {
                 self.prompt_for_package_manager(flox, *yarn_install.clone(), *node_install.clone())
             },
             NodeAction::InstallNode(node_install) => self.prompt_with_node(flox, node_install),
-            NodeAction::Nothing => unreachable!(),
         }
     }
 
@@ -748,8 +724,6 @@ impl InitHook for Node {
                     None
                 }
             },
-            // get_init_customization() should only be called when should_run() returns true
-            NodeAction::Nothing => unreachable!(),
         };
 
         InitCustomization {
