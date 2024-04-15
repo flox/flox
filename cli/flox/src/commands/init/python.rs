@@ -28,10 +28,9 @@ pub(super) struct Python {
 }
 
 impl Python {
-    /// Returns `true` if any valid provider was found
-    ///
-    /// [Self::prompt_user] and [Self::get_init_customization]
-    /// are expected to be called only if this method returns `true`!
+    /// Creates and returns the [Python] hook with any detected
+    /// [Provider] instances.
+    /// If no providers are detected, returns [None].
     pub fn new(flox: &Flox, path: &Path) -> Option<Self> {
         let providers = vec![
             PoetryPyProject::detect(flox, path).into(),
