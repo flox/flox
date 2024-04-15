@@ -226,15 +226,11 @@ impl Node {
             },
         };
 
-        if let Some(action) = action {
-            return Ok(Some(Self {
-                package_json_node_version,
-                nvmrc_version,
-                action,
-            }));
-        }
-
-        Ok(None)
+        Ok(action.map(|action| Self {
+            package_json_node_version,
+            nvmrc_version,
+            action,
+        }))
     }
 
     /// Look for nodejs, npm, and yarn versions in a (possibly non-existent)
