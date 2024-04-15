@@ -223,7 +223,6 @@ impl Init {
 
 // TODO: clean up how we pass around path and flox
 trait InitHook {
-    // (flox: &Flox, path: &Path)
     fn prompt_user(&mut self, flox: &Flox, path: &Path) -> Result<bool>;
 
     fn get_init_customization(&self) -> InitCustomization;
