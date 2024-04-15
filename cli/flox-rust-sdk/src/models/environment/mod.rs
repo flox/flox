@@ -52,6 +52,7 @@ pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
 pub const ENV_DIR_NAME: &str = "env";
+pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 
 // A collection of variables pertaining to the environment
 // currently being activated. These are used by hooks to

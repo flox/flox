@@ -18,3 +18,6 @@ then
         ZDOTDIR= source "$zshenv"
     fi
 fi
+
+# Bring in the Nix and Flox environment customizations.
+[ -z "$FLOX_ZSH_INIT_SCRIPT" ] || source "$FLOX_ZSH_INIT_SCRIPT"
