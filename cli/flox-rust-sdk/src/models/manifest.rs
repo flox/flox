@@ -1,12 +1,196 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::process::Command;
 use std::str::FromStr;
 
 use log::debug;
-use serde::Deserialize;
+use serde::de::Error;
+use serde::{Deserialize, Serialize};
 use toml_edit::{self, DocumentMut, Formatted, InlineTable, Item, Table, Value};
 
+use crate::data::{System, Version};
 use crate::models::pkgdb::PKGDB_BIN;
+
+/// A wrapper around a [`toml_edit::DocumentMut`]
+/// that allows modifications of the raw manifest document,
+/// while preserving comments and user formatting.
+#[derive(Debug)]
+struct RawManifest(toml_edit::DocumentMut);
+impl RawManifest {
+    /// Get the version of the manifest, if it's present or default to version 1.
+    fn get_version(&self) -> Option<i64> {
+        self.0.get("version").and_then(Item::as_integer)
+    }
+
+    /// Serde's error messages for _untagged_ enums are rather bad
+    /// and don't appear to become better any time soon:
+    /// - <https://github.com/serde-rs/serde/pull/1544>
+    /// - <https://github.com/serde-rs/serde/pull/2376>
+    ///
+    /// This function aims to provide the intermediate version matching on
+    /// the `version` field, and then deserializes the correct version
+    /// of the Manifest explicitly.
+    ///
+    /// <https://github.com/serde-rs/serde/pull/2525> will allow the use of integers
+    /// (i.e. versions) as enum tags, which will allow us to use `#[serde(tag = "version")]`
+    /// and avoid the [Version] field entirely, where the version field is not optional.
+    ///
+    /// Discussion: using a string field as the version tag `version: "1"` vs `version: 1`
+    /// could work today, but is still limited by the lack of an optional tag.
+    fn to_typed(&self) -> Result<TypedManifest, toml_edit::de::Error> {
+        match self.get_version() {
+            Some(1) => Ok(TypedManifest::Catalog(toml_edit::de::from_document(
+                self.0.clone(),
+            )?)),
+            None => Ok(TypedManifest::Pkgdb(toml_edit::de::from_document(
+                self.0.clone(),
+            )?)),
+            Some(v) => {
+                let msg = format!("unsupported manifest version: {v}");
+                Err(toml_edit::de::Error::custom(msg))
+            },
+        }
+    }
+}
+
+impl FromStr for RawManifest {
+    type Err = toml_edit::de::Error;
+
+    /// Parses a string to a `ManifestMut` and validates that it's a valid manifest
+    /// Validation is currently only checking the structure of the manifest,
+    /// not the precise contents.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let doc = s.parse::<DocumentMut>()?;
+        let manifest = RawManifest(doc);
+        let _validate = manifest.to_typed()?;
+        Ok(manifest)
+    }
+}
+
+/// Represents the Manifest data schema for reading/processing of the manifest.
+/// Writing a [`TypedManifest`] will drop comments and formatting.
+/// Hence, this should only be used in cases where these can safely be severed.
+/// Edits to the user facing manifest.toml file should be made using [`RawManifest`] instead.
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(untagged)]
+enum TypedManifest {
+    /// v2 manifest, processed by flox and resolved using the catalog service
+    Catalog(Box<TypedManifestCatalog>),
+    /// deprecated v1 manifest, processed entirely by `pkgdb`
+    Pkgdb(TypedManifestPkgdb),
+}
+
+/// Not meant for writing manifest files, only for reading them.
+/// Modifications should be made using the the raw functions in this module.
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+struct TypedManifestCatalog {
+    version: Version<1>,
+    /// The packages to install in the form of a map from package name
+    /// to package descriptor.
+    #[serde(default)]
+    install: ManifestInstall,
+    /// Variables that are exported to the shell environment upon activation.
+    #[serde(default)]
+    vars: ManifestVariables,
+    /// Hooks that are run at various times during the lifecycle of the manifest
+    /// in a known shell environment.
+    #[serde(default)]
+    hook: ManifestHook,
+    /// Profile scripts that are run in the user's shell upon activation.
+    #[serde(default)]
+    profile: ManifestProfile,
+    /// Options that control the behavior of the manifest.
+    #[serde(default)]
+    options: ManifestOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+struct ManifestPackageDescriptor {
+    pkg_path: String,
+    package_group: Option<String>,
+    priority: Option<usize>,
+    version: Option<String>,
+    systems: Option<Vec<System>>,
+    #[serde(default)]
+    optional: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+struct ManifestVariables(BTreeMap<String, String>);
+
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+struct ManifestHook {
+    /// A script that is run at activation time,
+    /// in a flox provided bash shell
+    on_activate: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+struct ManifestProfile {
+    /// When defined, this hook is run by _all_ shells upon activation
+    common: Option<String>,
+    /// When defined, this hook is run upon activation in a bash shell
+    bash: Option<String>,
+    /// When defined, this hook is run upon activation in a zsh shell
+    zsh: Option<String>,
+    /// When defined, this hook is run upon activation in a fish shell
+    fish: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+struct ManifestOptions {
+    /// A list of systems that each package is resolved for.
+    #[serde(default)]
+    systems: Vec<System>,
+    /// Options that control what types of packages are allowed.
+    #[serde(default)]
+    allows: Allows,
+    /// Options that control how semver versions are resolved.
+    #[serde(default)]
+    semver: SemverOptions,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+struct Allows {
+    /// Whether to allow packages that are marked as `unfree`
+    unfree: Option<bool>,
+    /// Whether to allow packages that are marked as `broken`
+    broken: Option<bool>,
+    /// A list of license descriptors that are allowed
+    #[serde(default)]
+    licenses: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+struct SemverOptions {
+    /// Whether to prefer pre-release versions when resolving
+    #[serde(default)]
+    prefer_pre_releases: Option<bool>,
+}
+
+/// Deserialize the manifest as a [serde_json::Value],
+/// then convert it to a [RawManifest] that can then be converted to a [TypedManifest].
+/// This provides more precise errors based on the version of the manifest.
+///
+/// See the comment on [`RawManifest::to_typed`] for more information.
+impl<'de> Deserialize<'de> for TypedManifest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let document = toml_edit::ser::to_document(&value)
+            .map_err(|err| serde::de::Error::custom(err.to_string()))?;
+        RawManifest(document)
+            .to_typed()
+            .map_err(serde::de::Error::custom)
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
@@ -22,13 +206,17 @@ pub enum ManifestError {
 ///
 /// The authoritative form of the manifest is in
 /// https://github.com/flox/pkgdb/blob/main/include/flox/resolver/manifest-raw.hh#L263
-#[derive(Debug, Deserialize)]
-pub struct Manifest {
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+pub struct TypedManifestPkgdb {
     pub vars: Option<toml::Table>,
     pub hook: Option<toml::Table>,
     #[serde(flatten)]
     _toml: toml::Table,
 }
+
+/// An alias to the Pkgdb backed Maifest Schema for backwards compatibility.
+/// TODO: remove this as part of <https://github.com/flox/flox/issues/1320>
+pub type Manifest = TypedManifestPkgdb;
 
 /// An error encountered while installing packages.
 #[derive(Debug, thiserror::Error)]
@@ -325,6 +513,9 @@ pub fn temporary_parse_descriptor(descriptor: &str) -> Result<PackageToInstall, 
 
 #[cfg(test)]
 mod test {
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+
     use super::*;
 
     const DUMMY_MANIFEST: &str = r#"
@@ -343,6 +534,30 @@ python = {}
 [[install]]
 ripgrep = {}
         "#;
+
+    #[test]
+    fn detect_pkgdb_manifest() {
+        const PKGDB_MANIFEST: &str = indoc! {r#"
+            # No version field, so it's a pkgdb manifest
+        "#};
+
+        assert!(matches!(
+            toml_edit::de::from_str(PKGDB_MANIFEST),
+            Ok(TypedManifest::Pkgdb(_))
+        ))
+    }
+
+    #[test]
+    fn detect_catalog_manifest() {
+        const CATALOG_MANIFEST: &str = indoc! {r#"
+            version = 1
+        "#};
+
+        assert!(matches!(
+            toml_edit::de::from_str(CATALOG_MANIFEST),
+            Ok(TypedManifest::Catalog(_))
+        ))
+    }
 
     #[test]
     fn insert_adds_new_package() {
