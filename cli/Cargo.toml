@@ -9,7 +9,7 @@ anyhow = "1"
 blake3 = "1.5.0"
 bpaf = { version = "0.9.8", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
-chrono = { version = "0.4.24", features = ["serde"] }
+chrono = { version = "0.4.38", features = ["serde"] }
 config = "0.14.0"
 crossterm = "0.27"
 derive_more = "0.99.17"
@@ -39,7 +39,7 @@ serde_yaml = "0.9"
 shell-escape = "0.1.5"
 supports-color = "3.0.0"
 # provides process tools for shell detection
-sysinfo = "0.30.7"
+sysinfo = "0.30.10"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
