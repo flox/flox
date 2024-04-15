@@ -231,24 +231,48 @@ fi
 #    without paying the cost of invoking the userShell.
 #    TODO: discuss, then remove or plumb this through the CLI if necessary
 #    TODO: add "command" mode which appends 'exec "$@"' to the userShell script
-FLOX_TURBO=always
 if [ $# -gt 0 -a -n "$FLOX_TURBO" ]; then
   exec "$@"
 fi
 
-# 2. "interactive" mode: invoke the user's shell with args that:
+# 2. "interactive" and "command" modes: invoke the user's shell with args that:
 #   a. defeat the shell's normal startup scripts
 #   b. source the relevant activation script
-if [ -t 1 -o -n "$_FLOX_FORCE_INTERACTIVE" ]; then
+#   c. if in command mode, include the command to be invoked
+if [ -t 1 -o $# -gt 0 -o -n "$_FLOX_FORCE_INTERACTIVE" ]; then
+  declare -a cmdargs=()
+  if [ $# -gt 0 ]; then
+    cmdargs=( "-c" "$*" )
+  fi
   case "$FLOX_SHELL" in
     *bash)
-      exec "$FLOX_SHELL" --rcfile "$FLOX_ENV/activate.d/bash" "$@"
+      if [ -n "$FLOX_NO_PROFILES" ]; then
+        exec "$FLOX_SHELL" --noprofile --norc "${cmdargs[@]}"
+      else
+        if [ -t 1 ]; then
+          exec "$FLOX_SHELL" --rcfile "$FLOX_ENV/activate.d/bash" "${cmdargs[@]}"
+        else
+          # The bash --rcfile option only works for interactive shells
+          # so we need to cobble together our own means of sourcing our
+          # startup script for non-interactive shells.
+          declare -a sourceargs=()
+          sourceargs=( "source" "$FLOX_ENV/activate.d/bash" "&&" "$*" )
+          cmdargs=( "-c" "${sourceargs[*]}" )
+          exec "$FLOX_SHELL" "${cmdargs[@]}"
+        fi
+      fi
       ;;
     *zsh)
-      export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
-      export ZDOTDIR="$_zdotdir"
-      export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
-      exec "$FLOX_SHELL" "$@"
+      if [ -n "$FLOX_NO_PROFILES" ]; then
+        exec "$FLOX_SHELL" -o NO_GLOBAL_RCS -o NO_RCS "${cmdargs[@]}"
+      else
+        export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
+        export ZDOTDIR="$_zdotdir"
+        export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
+        # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
+        # automatically sourcing /etc/zshrc et al.
+        exec "$FLOX_SHELL" -o NO_GLOBAL_RCS "${cmdargs[@]}"
+      fi
       ;;
     *)
       echo "Unsupported shell: $FLOX_SHELL" >&2
@@ -269,6 +293,9 @@ case "$FLOX_SHELL" in
     ;;
   *zsh)
     echo "export FLOX_ENV=\"$FLOX_ENV\""
+    echo "export FLOX_ORIG_ZDOTDIR=\"$FLOX_ORIG_ZDOTDIR\""
+    echo "export ZDOTDIR=\"$ZDOTDIR\""
+    echo "export FLOX_ZSH_INIT_SCRIPT=\"$FLOX_ZSH_INIT_SCRIPT\""
     echo "export _add_env=\"$_add_env\""
     echo "export _del_env=\"$_del_env\""
     echo "$( <"$FLOX_ENV/activate.d/zsh"  )"
@@ -333,7 +360,7 @@ for i in "${(@s/:/)FLOX_ENV_DIRS}"; do
   # check for any value greater than the length of the array.
   # TODO: apple puts their stuff first so re-sort fpath by putting flox envs
   #       first by paring the latter appearances from fpath.
-  if [[ $fpath[(ie)$i/share/zsh/site-functions] -gt ${#fpath} ]]; then
+  if [[ -n "$i" && $fpath[(ie)$i/share/zsh/site-functions] -gt ${#fpath} ]]; then
     fpath_prepend+=( "$i"/share/zsh/site-functions "$i"/share/zsh/vendor-completions )
   fi
 done
@@ -352,7 +379,6 @@ setopt nohashdirs
 # Restore environment variables set in the previous bash initialization.
 eval "$($_gnused/bin/sed -e 's/^/unset /' $_del_env)"
 eval "$($_gnused/bin/sed -e 's/^/export /' $_add_env)"
-set +x
 )_";
 
 

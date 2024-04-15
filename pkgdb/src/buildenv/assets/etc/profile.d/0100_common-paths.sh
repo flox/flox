@@ -24,22 +24,6 @@ export \
 # ---------------------------------------------------------------------------- #
 
 # Set the PATH environment variable.
-# In the general case, we prepend the flox environments `bin/` and `sbin/`
-# macOS uses `path_helper` to always move system paths at the front of PATH.
-# We can't do much about that, but we can try to fight back
-# by likewise moving the flox environment paths to the front.
-#
-# `FLOX_PATH_PATCHED` is set by `flox activate`
-# *iff* there is a `/usr/libexec/path_helper`.
-# In that case, the existing PATH is patched to move the flox environment paths
-# to the front.
-# The PATH items corresponding to the current activation
-# are subsequently prepended to the patched path as usual.
-if [ -n "${FLOX_PATH_PATCHED:-}" ]; then
-  PATH="$FLOX_PATH_PATCHED"
-  unset FLOX_PATH_PATCHED
-fi
-
 PATH="$FLOX_ENV/bin:$FLOX_ENV/sbin${PATH:+:$PATH}"
 export PATH
 
