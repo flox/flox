@@ -1,11 +1,10 @@
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
-use tempfile::tempdir_in;
 use tracing::debug;
 
 use super::environment::{path_hash, CanonicalPath, EnvironmentPointer};
@@ -29,7 +28,7 @@ pub enum EnvRegistryError {
     #[error("failed to write temporary environment registry file")]
     WriteTmpRegistry(#[source] serde_json::Error),
     #[error("failed to rename temporary registry file")]
-    RenameRegistry(#[source] std::io::Error),
+    RenameRegistry(#[source] tempfile::PersistError),
     #[error("registry file stored in an invalid location: {0}")]
     InvalidRegistryLocation(PathBuf),
     #[error("no environments registered with key: {0}")]
