@@ -61,6 +61,7 @@ walkdir = "2"
 xdg = "2.4"
 httpmock = "0.7"
 regex = "1.5"
+regress = "0.9.1"
 
 # dev dependencies
 pretty_assertions = "1.3"

@@ -9,6 +9,8 @@ progenitor-client.workspace = true
 reqwest = { workspace = true, features = ["json", "stream"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+chrono.workspace = true
+regress.workspace = true
 
 # Dependencies for the generated mock code.
 #
