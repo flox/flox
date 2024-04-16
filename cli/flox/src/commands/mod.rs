@@ -49,6 +49,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::environment_ref;
+use flox_rust_sdk::providers::catalog;
 use futures::Future;
 use indoc::{formatdoc, indoc};
 use log::{debug, info};
@@ -62,6 +63,7 @@ use toml_edit::Key;
 use url::Url;
 
 use crate::commands::general::update_config;
+use crate::config::features::Features;
 use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
@@ -313,6 +315,9 @@ impl FloxArgs {
             Ok(token) => token,
         };
 
+        let features = Features::parse()?;
+        let catalog_client = features.use_catalog.then(catalog::Client::default);
+
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
@@ -324,6 +329,7 @@ impl FloxArgs {
             uuid: init_uuid(&config.flox.data_dir).await?,
             floxhub_token,
             floxhub,
+            catalog_client,
         };
 
         // in debug mode keep the tempdir to reproduce nix commands

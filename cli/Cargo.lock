@@ -1057,6 +1057,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "blake3",
+ "catalog-api-v1",
  "chrono",
  "derive_more",
  "fslock",

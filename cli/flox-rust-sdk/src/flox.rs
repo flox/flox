@@ -9,6 +9,7 @@ use thiserror::Error;
 use url::Url;
 
 pub use crate::models::environment_ref::{self, *};
+use crate::providers::catalog;
 
 pub static FLOX_VERSION: Lazy<String> =
     Lazy::new(|| std::env::var("FLOX_VERSION").unwrap_or(env!("FLOX_VERSION").to_string()));
@@ -51,6 +52,8 @@ pub struct Flox {
     /// It's usually populated from the config during [Flox] initialization.
     /// Checking for [None] can be used to check if the use is logged in.
     pub floxhub_token: Option<FloxhubToken>,
+
+    pub catalog_client: Option<catalog::Client>,
 }
 
 impl Flox {}
@@ -302,6 +305,7 @@ pub mod test_helpers {
             )
             .unwrap(),
             floxhub_token: None,
+            catalog_client: Some(catalog::Client::new(true)),
         };
 
         init_global_manifest(&global_manifest_path(&flox)).unwrap();

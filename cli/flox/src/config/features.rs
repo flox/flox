@@ -9,6 +9,7 @@ pub struct Features {
     /// Which matching logic to use when searching for packages
     #[serde(default)]
     pub search_strategy: SearchStrategy,
+    pub use_catalog: bool,
 }
 
 impl Features {

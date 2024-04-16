@@ -28,6 +28,7 @@ jsonwebtoken.workspace = true
 indent.workspace = true
 shell-escape.workspace = true
 fslock.workspace = true
+catalog-api-v1.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
