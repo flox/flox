@@ -241,8 +241,15 @@ fi
 #   c. if in command mode, include the command to be invoked
 if [ -t 1 -o $# -gt 0 -o -n "$_FLOX_FORCE_INTERACTIVE" ]; then
   declare -a cmdargs=()
+  cmdstring=""
   if [ $# -gt 0 ]; then
-    cmdargs=( "-c" "$*" )
+    cmdstring="$($_coreutils/bin/printf '%q' "$1")"
+    shift
+    while [ $# -ne 0 ]; do
+        cmdstring="$($_coreutils/bin/printf '%s %q' "$cmdstring" "$1")"
+        shift
+    done
+    cmdargs=( "-c" "$cmdstring" )
   fi
   case "$FLOX_SHELL" in
     *bash)
@@ -255,10 +262,12 @@ if [ -t 1 -o $# -gt 0 -o -n "$_FLOX_FORCE_INTERACTIVE" ]; then
           # The bash --rcfile option only works for interactive shells
           # so we need to cobble together our own means of sourcing our
           # startup script for non-interactive shells.
-          declare -a sourceargs=()
-          sourceargs=( "source" "$FLOX_ENV/activate.d/bash" "&&" "$*" )
-          cmdargs=( "-c" "${sourceargs[*]}" )
-          exec "$FLOX_SHELL" "${cmdargs[@]}"
+          if [ -n "$cmdstring" ]; then
+            exec "$FLOX_SHELL" -c "source $FLOX_ENV/activate.d/bash && $cmdstring"
+          else
+            # Should this be an error? What will this do?
+            exec "$FLOX_SHELL" -c "source $FLOX_ENV/activate.d/bash"
+          fi
         fi
       fi
       ;;
