@@ -377,8 +377,7 @@ mod test {
 
         #[test]
         fn writes_registry(reg: EnvRegistry) {
-            let (flox, _) = flox_instance();
-            std::fs::create_dir_all(&flox.data_dir).unwrap();
+            let (flox, _temp_dir_handle) = flox_instance();
             let reg_path = env_registry_path(&flox);
             let lock_path = env_registry_lock_path(&flox);
             let lock = LockFile::open(&lock_path).unwrap();
