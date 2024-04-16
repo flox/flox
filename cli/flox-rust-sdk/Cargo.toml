@@ -27,11 +27,14 @@ toml.workspace = true
 jsonwebtoken.workspace = true
 indent.workspace = true
 shell-escape.workspace = true
+fslock.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
 pretty_assertions.workspace = true
 serial_test.workspace = true
+proptest.workspace = true
+proptest-derive.workspace = true
 
 [features]
 extra-tests = ["impure-unit-tests"]

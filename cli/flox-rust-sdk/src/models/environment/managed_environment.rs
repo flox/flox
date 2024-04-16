@@ -1,4 +1,3 @@
-use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -11,22 +10,33 @@ use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
     gcroots_dir,
+    path_hash,
     CanonicalPath,
     CanonicalizeError,
     CoreEnvironmentError,
     EditResult,
     Environment,
     EnvironmentError,
+    EnvironmentPointer,
     InstallationAttempt,
     ManagedPointer,
     UninstallationAttempt,
     UpdateResult,
     CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
+    N_HASH_CHARS,
 };
 use crate::data::Version;
 use crate::flox::{EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
+use crate::models::env_registry::{
+    deregister,
+    ensure_registered,
+    env_registry_path,
+    read_environment_registry,
+    EnvRegistry,
+    EnvRegistryError,
+};
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
 use crate::models::lockfile::LockedManifest;
@@ -138,6 +148,9 @@ pub enum ManagedEnvironmentError {
 
     #[error("invalid FloxHub base url")]
     InvalidFloxhubBaseUrl(#[source] url::ParseError),
+
+    #[error("failed to locate project in environment registry")]
+    Registry(#[from] EnvRegistryError),
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -430,18 +443,7 @@ impl Environment for ManagedEnvironment {
                 .map_err(|e| ManagedEnvironmentError::DeleteEnvironmentLink(out_link_path, e))?;
         }
 
-        let reverse_link = {
-            let links_dir = reverse_links_dir(flox);
-            let encoded = ManagedEnvironment::encode(&self.path);
-
-            links_dir.join(encoded)
-        };
-        // if symlink exists, delete it
-        if fs::symlink_metadata(&reverse_link).is_ok() {
-            std::fs::remove_file(&reverse_link).map_err(|e| {
-                ManagedEnvironmentError::DeleteEnvironmentReverseLink(reverse_link, e)
-            })?;
-        }
+        deregister(flox, &self.path, &EnvironmentPointer::Managed(self.pointer))?;
 
         Ok(())
     }
@@ -451,7 +453,7 @@ impl Environment for ManagedEnvironment {
 impl ManagedEnvironment {
     /// Returns a unique identifier for the location of the project.
     fn encode(path: &CanonicalPath) -> String {
-        blake3::hash(path.as_os_str().as_bytes()).to_string()
+        path_hash(path)
     }
 
     /// Returns the path to an environment given the branch name in the floxmeta repository.
@@ -465,40 +467,23 @@ impl ManagedEnvironment {
             .split('.')
             .next_back()
             .map(|hash| {
-                let links_dir = reverse_links_dir(flox);
-                let link = links_dir.join(hash);
-                std::fs::read_link(&link)
-                    .map_err(|e| ManagedEnvironmentError::ProjectNotFound { path: link, err: e })
+                let reg_path = env_registry_path(flox);
+                let reg: EnvRegistry = read_environment_registry(reg_path)?
+                    .ok_or(EnvRegistryError::EnvNotRegistered)?;
+                let hash = match hash.len() {
+                    // Older branches probably still have the longer hashes
+                    n if n < N_HASH_CHARS => Err(ManagedEnvironmentError::BadBranchName(
+                        String::from(branch_name),
+                    )),
+                    n if n > N_HASH_CHARS => Ok(hash.split_at(N_HASH_CHARS).0),
+                    n => Ok(hash),
+                }?;
+                reg.path_for_hash(hash)
+                    .map_err(ManagedEnvironmentError::Registry)
             })
             .unwrap_or(Err(ManagedEnvironmentError::BadBranchName(String::from(
                 branch_name,
             ))))
-    }
-
-    /// Creates a symlink pointing from the `FloxMeta` back to the project environment
-    /// using this managed environment if the symlink doesn't already exist.
-    ///
-    /// Iff an environment in `<path>` refers to a branch `<system>.<name>.<encode(path)>`
-    /// then `reverse_links_dir(_).join(encode(path))` is a link to <path>
-    fn ensure_reverse_link(
-        flox: &Flox,
-        path: &CanonicalPath,
-    ) -> Result<(), ManagedEnvironmentError> {
-        let links_dir = reverse_links_dir(flox);
-        let encoded = ManagedEnvironment::encode(path);
-        let link = links_dir.join(encoded);
-        if !links_dir.exists() {
-            std::fs::create_dir_all(&links_dir).map_err(ManagedEnvironmentError::CreateLinksDir)?;
-            std::os::unix::fs::symlink(path, link).map_err(ManagedEnvironmentError::ReverseLink)?;
-        } else {
-            // Do not use `Path.exists` to check whether the link exists. It will return `false` if
-            // the symlink is broken or if you can't read the file metadata due to permissions errors.
-            if !link.is_symlink() {
-                std::os::unix::fs::symlink(path, link)
-                    .map_err(ManagedEnvironmentError::ReverseLink)?;
-            }
-        }
-        Ok(())
     }
 
     /// Open a managed environment by reading its lockfile and ensuring there is
@@ -576,7 +561,11 @@ impl ManagedEnvironment {
 
         Self::ensure_branch(&branch_name(&pointer, &dot_flox_path), &lock, &floxmeta)?;
 
-        Self::ensure_reverse_link(flox, &dot_flox_path)?;
+        ensure_registered(
+            flox,
+            &dot_flox_path,
+            &EnvironmentPointer::Managed(pointer.clone()),
+        )?;
 
         Ok(ManagedEnvironment {
             path: dot_flox_path,
@@ -935,18 +924,6 @@ pub fn remote_branch_name(pointer: &ManagedPointer) -> String {
     format!("{}", pointer.name)
 }
 
-/// Path to the directory that contains symlinks
-/// that map unique branch ids to
-/// the directories linking to the environment.
-///
-/// see also: [ManagedEnvironment::encode],
-///           [ManagedEnvironment::decode],
-///           [ManagedEnvironment::ensure_reverse_link],
-///           [branch_name]
-fn reverse_links_dir(flox: &Flox) -> PathBuf {
-    flox.data_dir.join("links")
-}
-
 pub enum PullResult {
     /// The environment was already up to date
     UpToDate,
@@ -1219,10 +1196,19 @@ mod test {
     use std::str::FromStr;
     use std::time::Duration;
 
+    use fslock::LockFile;
     use url::Url;
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::env_registry::{
+        env_registry_lock_path,
+        env_registry_path,
+        read_environment_registry,
+        write_environment_registry,
+        RegisteredEnv,
+        RegistryEntry,
+    };
     use crate::models::environment::DOT_FLOX;
     use crate::models::floxmeta::floxmeta_dir;
     use crate::providers::git::tests::commit_file;
@@ -1830,90 +1816,11 @@ mod test {
     }
 
     #[test]
-    fn creates_reverse_links_dir() {
-        let (flox, tmp_dir) = flox_instance();
-        let path = tmp_dir.path().join("foo");
-        std::fs::File::create(&path).unwrap();
-        let path = CanonicalPath::new(path).unwrap();
-        let links_dir = reverse_links_dir(&flox);
-        assert!(!links_dir.exists());
-        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
-        assert!(links_dir.exists());
-    }
-
-    #[test]
-    fn creates_reverse_link() {
-        let (flox, tmp_dir) = flox_instance();
-        let links_dir = reverse_links_dir(&flox);
-        let path = tmp_dir.path().join("foo");
-        std::fs::File::create(&path).unwrap();
-        let path = CanonicalPath::new(path).unwrap();
-        // There are no links if the directory hasn't been created
-        assert!(!links_dir.exists());
-        // Create the reverse link
-        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
-        // Ensure that only one symlink was created.
-        assert_eq!(links_dir.read_dir().unwrap().count(), 1);
-        let link_name = links_dir
-            .read_dir()
-            .unwrap()
-            .next()
-            .unwrap()
-            .unwrap()
-            .file_name();
-        let expected_link_name = ManagedEnvironment::encode(&path);
-        assert_eq!(link_name.to_str().unwrap(), &expected_link_name);
-    }
-
-    #[test]
-    fn noop_when_symlink_exists() {
-        let (flox, tmp_dir) = flox_instance();
-        let links_dir = reverse_links_dir(&flox);
-        let path = tmp_dir.path().join("foo");
-        std::fs::File::create(&path).unwrap();
-        let path = CanonicalPath::new(path).unwrap();
-        // There are no links if the directory hasn't been created
-        assert!(!links_dir.exists());
-        // Create the reverse link
-        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
-        // Ensure that only one symlink was created.
-        assert_eq!(links_dir.read_dir().unwrap().count(), 1);
-        let link_name = links_dir
-            .read_dir()
-            .unwrap()
-            .next()
-            .unwrap()
-            .unwrap()
-            .file_name();
-        let expected_link_name = ManagedEnvironment::encode(&path);
-        assert_eq!(link_name.to_str().unwrap(), &expected_link_name);
-        // Ensure that the link exists, checking that another one hasn't been created
-        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
-        assert_eq!(links_dir.read_dir().unwrap().count(), 1);
-        let link_name = links_dir
-            .read_dir()
-            .unwrap()
-            .next()
-            .unwrap()
-            .unwrap()
-            .file_name();
-        assert_eq!(link_name.to_str().unwrap(), &expected_link_name);
-    }
-
-    #[test]
     fn decode_branch_name_to_path() {
         let (flox, tmp_dir) = flox_instance();
-        let links_dir = reverse_links_dir(&flox);
         let path = tmp_dir.path().join("foo");
         std::fs::File::create(&path).unwrap();
         let path = CanonicalPath::new(path).unwrap();
-
-        // There are no links if the directory hasn't been created
-        assert!(!links_dir.exists());
-        // Create the reverse link
-        ManagedEnvironment::ensure_reverse_link(&flox, &path).unwrap();
-        // Ensure that only one symlink was created.
-        assert_eq!(links_dir.read_dir().unwrap().count(), 1);
         // Decode the branch name and assert that it's the same path we created before
         let pointer = ManagedPointer {
             owner: EnvironmentOwner::from_str("owner").unwrap(),
@@ -1922,10 +1829,102 @@ mod test {
             floxhub_git_url_override: None,
             version: Version::<1>,
         };
+        let reg = EnvRegistry {
+            version: Version,
+            entries: vec![RegistryEntry {
+                path_hash: path_hash(&path),
+                path: path.to_path_buf(),
+                envs: vec![RegisteredEnv {
+                    created_at: 0,
+                    pointer: EnvironmentPointer::Managed(pointer.clone()),
+                }],
+            }],
+        };
+        let lock = LockFile::open(&env_registry_lock_path(&flox)).unwrap();
+        write_environment_registry(&reg, &env_registry_path(&flox), lock).unwrap();
         let branch_name = branch_name(&pointer, &path);
         let decoded_path = ManagedEnvironment::decode(&flox, &branch_name).unwrap();
         let canonicalized_decoded_path = std::fs::canonicalize(decoded_path).unwrap();
         let canonicalized_path = std::fs::canonicalize(&path).unwrap();
         assert_eq!(canonicalized_path, canonicalized_decoded_path);
+    }
+
+    #[test]
+    fn registers_on_open() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
+        std::fs::create_dir_all(&dot_flox_path).unwrap();
+
+        // create a mock remote
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+
+        let branch = remote_branch_name(&test_pointer);
+        remote.checkout(&branch, true).unwrap();
+        commit_file(&remote, "file 1");
+
+        // create a mock floxmeta
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
+
+        let _env = ManagedEnvironment::open_with(
+            floxmeta,
+            &flox,
+            test_pointer,
+            CanonicalPath(dot_flox_path),
+            flox.temp_dir.join("out_link"),
+        )
+        .unwrap();
+        let reg_path = env_registry_path(&flox);
+        assert!(reg_path.exists());
+        let reg = read_environment_registry(&reg_path).unwrap().unwrap();
+        assert!(matches!(
+            reg.entries[0].envs[0].pointer,
+            EnvironmentPointer::Managed(_)
+        ));
+    }
+
+    #[test]
+    fn deregisters_on_delete() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
+        std::fs::create_dir_all(&dot_flox_path).unwrap();
+
+        // create a mock remote
+        let remote_base_path = flox.temp_dir.join("remote");
+        let test_pointer = make_test_pointer(&remote_base_path);
+        let remote_path = remote_base_path
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+
+        let branch = remote_branch_name(&test_pointer);
+        remote.checkout(&branch, true).unwrap();
+        commit_file(&remote, "file 1");
+
+        // create a mock floxmeta
+        let floxmeta = create_floxmeta(&flox, &remote_path, &test_pointer, &branch);
+
+        // Create the registry
+        let env = ManagedEnvironment::open_with(
+            floxmeta,
+            &flox,
+            test_pointer,
+            CanonicalPath(dot_flox_path),
+            flox.temp_dir.join("out_link"),
+        )
+        .unwrap();
+        let reg_path = env_registry_path(&flox);
+        assert!(reg_path.exists());
+
+        // Delete the environment from the registry
+        env.delete(&flox).unwrap();
+        let reg = read_environment_registry(&reg_path).unwrap().unwrap();
+        assert!(reg.entries.is_empty());
     }
 }

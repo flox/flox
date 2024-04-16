@@ -45,6 +45,7 @@ impl FromStr for EnvironmentName {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, SerializeDisplay, DeserializeFromStr)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct EnvironmentRef {
     owner: EnvironmentOwner,
     name: EnvironmentName,
@@ -106,5 +107,33 @@ impl EnvironmentRef {
 
     pub fn new_from_parts(owner: EnvironmentOwner, name: EnvironmentName) -> Self {
         Self { owner, name }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use proptest::arbitrary::Arbitrary;
+    use proptest::strategy::{BoxedStrategy, Strategy};
+
+    use super::*;
+
+    impl Arbitrary for EnvironmentOwner {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            "[^ /]"
+                .prop_map(|s| EnvironmentOwner(s.to_string()))
+                .boxed()
+        }
+    }
+
+    impl Arbitrary for EnvironmentName {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            "[^ /]".prop_map(|s| EnvironmentName(s.to_string())).boxed()
+        }
     }
 }

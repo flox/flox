@@ -275,6 +275,7 @@ pub mod test_helpers {
         let config_dir = tempdir_handle.path().join("config");
 
         std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::create_dir_all(&data_dir).unwrap();
         std::fs::create_dir_all(&temp_dir).unwrap();
         std::fs::create_dir_all(&config_dir).unwrap();
 

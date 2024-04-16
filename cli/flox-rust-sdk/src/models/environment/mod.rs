@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::{env, fs, io};
 
@@ -11,6 +12,7 @@ use walkdir::WalkDir;
 use self::managed_environment::ManagedEnvironmentError;
 use self::remote_environment::RemoteEnvironmentError;
 use super::container_builder::ContainerBuilder;
+use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::LockedManifest;
 use super::manifest::PackageToInstall;
@@ -63,6 +65,8 @@ pub const FLOX_PROFILE_PLACEHOLDER: &str = "_FLOX_INIT_PROFILE";
 pub const FLOX_HOOK_PLACEHOLDER: &str = "_FLOX_INIT_HOOK";
 pub const FLOX_INSTALL_PLACEHOLDER: &str = "_FLOX_INIT_INSTALL";
 
+pub const N_HASH_CHARS: usize = 5;
+
 #[derive(Debug)]
 pub struct UpdateResult {
     pub new_lockfile: LockedManifest,
@@ -98,6 +102,10 @@ impl CanonicalPath {
             err: e,
         })?;
         Ok(Self(canonicalized))
+    }
+
+    pub fn path(&self) -> PathBuf {
+        self.0.clone()
     }
 
     pub fn into_path_buf(self) -> PathBuf {
@@ -231,6 +239,7 @@ pub trait Environment: Send {
 /// See [EnvironmentPointer::open].
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, derive_more::From)]
 #[serde(untagged)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EnvironmentPointer {
     /// Identifies an environment whose source of truth lies outside of the project itself
     Managed(ManagedPointer),
@@ -242,6 +251,7 @@ pub enum EnvironmentPointer {
 ///
 /// This is serialized to `env.json` inside the `.flox` directory
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct PathPointer {
     pub name: EnvironmentName,
     version: Version<1>,
@@ -262,11 +272,14 @@ impl PathPointer {
 ///
 /// This is serialized to an `env.json` inside the `.flox` directory.
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManagedPointer {
     pub owner: EnvironmentOwner,
     pub name: EnvironmentName,
+    #[cfg_attr(test, proptest(value = "crate::flox::DEFAULT_FLOXHUB_URL.clone()"))]
     pub floxhub_url: Url,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, proptest(value = "None"))]
     pub floxhub_git_url_override: Option<Url>,
     version: Version<1>,
 }
@@ -460,6 +473,15 @@ pub enum EnvironmentError {
 
     #[error("could not get current directory")]
     GetCurrentDir(#[source] std::io::Error),
+
+    #[error("failed to get canonical path for '.flox' directory: {path}")]
+    CanonicalDotFlox {
+        err: CanonicalizeError,
+        path: PathBuf,
+    },
+
+    #[error("failed to access the environment registry")]
+    Registry(#[from] EnvRegistryError),
 }
 
 /// Copy a whole directory recursively ignoring the original permissions
@@ -592,6 +614,13 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
 /// Directory containing nix gc roots for (previous) builds of environments of a given owner
 pub(super) fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
     flox.cache_dir.join(GCROOTS_DIR_NAME).join(owner.as_str())
+}
+
+/// Returns the truncated hash of a [Path]
+pub fn path_hash(p: &impl AsRef<Path>) -> String {
+    let mut chars = blake3::hash(p.as_ref().as_os_str().as_bytes()).to_hex();
+    chars.truncate(N_HASH_CHARS);
+    chars.to_string()
 }
 
 #[cfg(test)]
