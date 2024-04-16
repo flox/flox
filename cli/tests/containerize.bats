@@ -123,7 +123,7 @@ function skip_if_linux() {
   skip_if_not_linux
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
-  run --separate-stderr podman run -q -i "$CONTAINER_ID" -- sh -c 'echo $foo'
+  run --separate-stderr podman run -q -i "$CONTAINER_ID" sh -c 'echo $foo'
   assert_success
 
   # check:
@@ -135,8 +135,9 @@ function skip_if_linux() {
   #     redirected to STDERR by the flox activate script
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "bar"
-  assert_regex "$stderr" "\/nix\/store\/.*\/bin\/hello"
-  assert_regex "$stderr" "Hello, world!"
+  assert_equal "${#stderr_lines[@]}" 2
+  assert_regex "${stderr_lines[0]}" "\/nix\/store\/.*\/bin\/hello"
+  assert_equal "${stderr_lines[1]}" "Hello, world!"
 }
 
 # bats test_tags=containerize:run-container-no-i
@@ -144,13 +145,14 @@ function skip_if_linux() {
   skip_if_not_linux
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
-  run --separate-stderr podman run "$CONTAINER_ID" -- sh -c 'echo $foo'
+  run --separate-stderr podman run "$CONTAINER_ID" sh -c 'echo $foo'
   assert_success
 
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "bar"
-  assert_regex "$stderr" "\/nix\/store\/.*\/bin\/hello"
-  assert_regex "$stderr" "Hello, world!"
+  assert_equal "${#stderr_lines[@]}" 2
+  assert_regex "${stderr_lines[0]}" "\/nix\/store\/.*\/bin\/hello"
+  assert_equal "${stderr_lines[1]}" "Hello, world!"
 }
 
 # ---------------------------------------------------------------------------- #

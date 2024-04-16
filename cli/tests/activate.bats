@@ -270,7 +270,7 @@ env_is_activated() {
   FLOX_SHELL=bash NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
-  FLOX_SHELL=bash NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  FLOX_SHELL=bash NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- bash -c 'echo $foo'
   assert_success
   assert_output --partial "baz"
 }
@@ -287,7 +287,7 @@ env_is_activated() {
   FLOX_SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
-  FLOX_SHELL=zsh NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  FLOX_SHELL=zsh NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- zsh -c 'echo $foo'
   assert_success
   assert_output --partial "baz"
 }
@@ -454,11 +454,11 @@ env_is_activated() {
   # install python and pip
   "$FLOX_BIN" install python311Packages.pip
 
-  run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
+  run -- "$FLOX_BIN" activate -- sh -c 'echo PYTHONPATH is $PYTHONPATH'
   assert_success
   assert_line "PYTHONPATH is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/lib/python3.11/site-packages"
 
-  run -- "$FLOX_BIN" activate -- echo PIP_CONFIG_FILE is '$PIP_CONFIG_FILE'
+  run -- "$FLOX_BIN" activate -- sh -c 'echo PIP_CONFIG_FILE is $PIP_CONFIG_FILE'
   assert_success
   assert_line "PIP_CONFIG_FILE is $(realpath $PROJECT_DIR)/.flox/pip.ini"
 }
@@ -471,11 +471,11 @@ env_is_activated() {
   export PYTHONPATH="/some/other/pythonpath"
   export PIP_CONFIG_FILE="/some/other/pip.ini"
 
-  run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
+  run -- "$FLOX_BIN" activate -- sh -c 'echo PYTHONPATH is $PYTHONPATH'
   assert_success
   assert_line "PYTHONPATH is /some/other/pythonpath"
 
-  run -- "$FLOX_BIN" activate -- echo PIP_CONFIG_FILE is '$PIP_CONFIG_FILE'
+  run -- "$FLOX_BIN" activate -- sh -c 'echo PIP_CONFIG_FILE is $PIP_CONFIG_FILE'
   assert_success
   assert_line "PIP_CONFIG_FILE is /some/other/pip.ini"
 }
@@ -538,7 +538,7 @@ env_is_activated() {
   # - If the on-activate script is able to modify variables outside the shell,
   #   then we should see "baz" here. The expected output is "bar" since that
   #   script isn't supposed to be able to modify environment variables.
-  SHELL="$(which bash)" run --separate-stderr "$FLOX_BIN" activate -- echo '$foo'
+  SHELL="$(which bash)" run --separate-stderr "$FLOX_BIN" activate -- bash -c 'echo $foo'
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "baz"
 }
@@ -557,7 +557,7 @@ env_is_activated() {
   # - If the on-activate script is able to modify variables outside the shell,
   #   then we should see "baz" here. The expected output is "bar" since that
   #   script isn't supposed to be able to modify environment variables.
-  SHELL="$(which zsh)" run --separate-stderr "$FLOX_BIN" activate -- echo '$foo'
+  SHELL="$(which zsh)" run --separate-stderr "$FLOX_BIN" activate -- bash -c 'echo $foo'
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "baz"
 }
