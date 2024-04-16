@@ -470,6 +470,7 @@ checksum = "514de17de45fdb8dc022b1a7975556c53c86f9f0aa5f534b98977b171857c2c9"
 name = "catalog-api-v1"
 version = "0.0.0"
 dependencies = [
+ "chrono",
  "futures",
  "httpmock",
  "openapiv3",
@@ -477,6 +478,7 @@ dependencies = [
  "progenitor",
  "progenitor-client",
  "regex",
+ "regress 0.9.1",
  "reqwest",
  "serde",
  "serde_json",
@@ -2561,6 +2563,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "regress"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0eae2a1ebfecc58aff952ef8ccd364329abe627762f5bf09ff42eb9d98522479"
+dependencies = [
+ "hashbrown 0.14.3",
+ "memchr",
+]
+
+[[package]]
 name = "reqwest"
 version = "0.11.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3679,7 +3691,7 @@ dependencies = [
  "log",
  "proc-macro2",
  "quote",
- "regress",
+ "regress 0.8.0",
  "schemars",
  "serde_json",
  "syn 2.0.58",

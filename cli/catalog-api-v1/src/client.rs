@@ -112,20 +112,68 @@ pub mod types {
             value.clone()
         }
     }
-    ///HttpValidationError
+    ///CatalogStatus
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
-    ///  "title": "HTTPValidationError",
+    ///  "title": "CatalogStatus",
     ///  "type": "object",
+    ///  "required": [
+    ///    "attribute_path_ct",
+    ///    "catalogs",
+    ///    "derivations_ct",
+    ///    "latest_rev",
+    ///    "latest_scrape",
+    ///    "pages_ct",
+    ///    "schema_version",
+    ///    "search_index_ct",
+    ///    "systems"
+    ///  ],
     ///  "properties": {
-    ///    "detail": {
-    ///      "title": "Detail",
+    ///    "attribute_path_ct": {
+    ///      "title": "Attribute Path Ct",
+    ///      "type": "integer"
+    ///    },
+    ///    "catalogs": {
+    ///      "title": "Catalogs",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/ValidationError"
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "derivations_ct": {
+    ///      "title": "Derivations Ct",
+    ///      "type": "integer"
+    ///    },
+    ///    "latest_rev": {
+    ///      "title": "Latest Rev",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "latest_scrape": {
+    ///      "title": "Latest Scrape",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "pages_ct": {
+    ///      "title": "Pages Ct",
+    ///      "type": "integer"
+    ///    },
+    ///    "schema_version": {
+    ///      "title": "Schema Version",
+    ///      "type": "number"
+    ///    },
+    ///    "search_index_ct": {
+    ///      "title": "Search Index Ct",
+    ///      "type": "integer"
+    ///    },
+    ///    "systems": {
+    ///      "title": "Systems",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
     ///      }
     ///    }
     ///  }
@@ -133,84 +181,131 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct HttpValidationError {
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        pub detail: Vec<ValidationError>,
+    pub struct CatalogStatus {
+        pub attribute_path_ct: i64,
+        pub catalogs: Vec<String>,
+        pub derivations_ct: i64,
+        pub latest_rev: chrono::DateTime<chrono::offset::Utc>,
+        pub latest_scrape: chrono::DateTime<chrono::offset::Utc>,
+        pub pages_ct: i64,
+        pub schema_version: f64,
+        pub search_index_ct: i64,
+        pub systems: Vec<String>,
     }
-    impl From<&HttpValidationError> for HttpValidationError {
-        fn from(value: &HttpValidationError) -> Self {
+    impl From<&CatalogStatus> for CatalogStatus {
+        fn from(value: &CatalogStatus) -> Self {
             value.clone()
         }
     }
-    ///LocationItem
+    ///ErrorResponse
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
-    ///  "anyOf": [
-    ///    {
+    ///  "title": "ErrorResponse",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "detail",
+    ///    "status_code"
+    ///  ],
+    ///  "properties": {
+    ///    "detail": {
+    ///      "title": "Detail",
     ///      "type": "string"
     ///    },
-    ///    {
+    ///    "status_code": {
+    ///      "title": "Status Code",
     ///      "type": "integer"
     ///    }
-    ///  ]
+    ///  }
     ///}
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    #[serde(untagged)]
-    pub enum LocationItem {
-        Variant0(String),
-        Variant1(i64),
+    pub struct ErrorResponse {
+        pub detail: String,
+        pub status_code: i64,
     }
-    impl From<&LocationItem> for LocationItem {
-        fn from(value: &LocationItem) -> Self {
+    impl From<&ErrorResponse> for ErrorResponse {
+        fn from(value: &ErrorResponse) -> Self {
             value.clone()
         }
     }
-    impl std::str::FromStr for LocationItem {
-        type Err = self::error::ConversionError;
-        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
-            if let Ok(v) = value.parse() {
-                Ok(Self::Variant0(v))
-            } else if let Ok(v) = value.parse() {
-                Ok(Self::Variant1(v))
-            } else {
-                Err("string conversion failed for all variants".into())
-            }
+    ///PackageBuildsResultInput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageBuildsResult",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items",
+    ///    "total_count"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PackageInfoCommon"
+    ///      }
+    ///    },
+    ///    "total_count": {
+    ///      "title": "Total Count",
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct PackageBuildsResultInput {
+        pub items: Vec<PackageInfoCommon>,
+        pub total_count: i64,
+    }
+    impl From<&PackageBuildsResultInput> for PackageBuildsResultInput {
+        fn from(value: &PackageBuildsResultInput) -> Self {
+            value.clone()
         }
     }
-    impl std::convert::TryFrom<&str> for LocationItem {
-        type Error = self::error::ConversionError;
-        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
+    ///PackageBuildsResultOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageBuildsResult",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items",
+    ///    "total_count"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PackageInfoCommon"
+    ///      }
+    ///    },
+    ///    "total_count": {
+    ///      "title": "Total Count",
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct PackageBuildsResultOutput {
+        pub items: Vec<PackageInfoCommon>,
+        pub total_count: i64,
     }
-    impl std::convert::TryFrom<&String> for LocationItem {
-        type Error = self::error::ConversionError;
-        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl std::convert::TryFrom<String> for LocationItem {
-        type Error = self::error::ConversionError;
-        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl ToString for LocationItem {
-        fn to_string(&self) -> String {
-            match self {
-                Self::Variant0(x) => x.to_string(),
-                Self::Variant1(x) => x.to_string(),
-            }
-        }
-    }
-    impl From<i64> for LocationItem {
-        fn from(value: i64) -> Self {
-            Self::Variant1(value)
+    impl From<&PackageBuildsResultOutput> for PackageBuildsResultOutput {
+        fn from(value: &PackageBuildsResultOutput) -> Self {
+            value.clone()
         }
     }
     ///PackageDescriptor
@@ -222,8 +317,8 @@ pub mod types {
     ///  "title": "PackageDescriptor",
     ///  "examples": [
     ///    {
-    ///      "name": "hello",
-    ///      "pkgPath": "hello"
+    ///      "name": "curl",
+    ///      "pkgPath": "curl"
     ///    }
     ///  ],
     ///  "type": "object",
@@ -296,12 +391,16 @@ pub mod types {
     ///    {
     ///      "descriptors": [
     ///        {
-    ///          "name": "hello",
-    ///          "pkgPath": "hello"
-    ///        },
-    ///        {
     ///          "name": "curl",
     ///          "pkgPath": "curl"
+    ///        },
+    ///        {
+    ///          "name": "slack",
+    ///          "pkgPath": "slack"
+    ///        },
+    ///        {
+    ///          "name": "xeyes",
+    ///          "pkgPath": "xorg.xeyes"
     ///        }
     ///      ],
     ///      "name": "test",
@@ -326,6 +425,14 @@ pub mod types {
     ///      "title": "Name",
     ///      "type": "string"
     ///    },
+    ///    "stability": {
+    ///      "title": "Stability",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "string"
+    ///        }
+    ///      ]
+    ///    },
     ///    "system": {
     ///      "$ref": "#/components/schemas/SystemEnum"
     ///    }
@@ -337,6 +444,8 @@ pub mod types {
     pub struct PackageGroup {
         pub descriptors: Vec<PackageDescriptor>,
         pub name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub stability: Option<String>,
         pub system: SystemEnum,
     }
     impl From<&PackageGroup> for PackageGroup {
@@ -357,12 +466,16 @@ pub mod types {
     ///        {
     ///          "descriptors": [
     ///            {
-    ///              "name": "hello",
-    ///              "pkgPath": "hello"
-    ///            },
-    ///            {
     ///              "name": "curl",
     ///              "pkgPath": "curl"
+    ///            },
+    ///            {
+    ///              "name": "slack",
+    ///              "pkgPath": "slack"
+    ///            },
+    ///            {
+    ///              "name": "xeyes",
+    ///              "pkgPath": "xorg.xeyes"
     ///            }
     ///          ],
     ///          "name": "test",
@@ -449,11 +562,19 @@ pub mod types {
     ///    },
     ///    "description": {
     ///      "title": "Description",
-    ///      "type": "string"
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "string"
+    ///        }
+    ///      ]
     ///    },
     ///    "license": {
     ///      "title": "License",
-    ///      "type": "string"
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "string"
+    ///        }
+    ///      ]
     ///    },
     ///    "locked_url": {
     ///      "title": "Locked Url",
@@ -494,7 +615,8 @@ pub mod types {
     ///    },
     ///    "rev_date": {
     ///      "title": "Rev Date",
-    ///      "type": "integer"
+    ///      "type": "string",
+    ///      "format": "date-time"
     ///    },
     ///    "stabilities": {
     ///      "title": "Stabilities",
@@ -526,13 +648,125 @@ pub mod types {
         pub pname: String,
         pub rev: String,
         pub rev_count: i64,
-        pub rev_date: i64,
+        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
         pub stabilities: Vec<String>,
         pub system: SystemEnum,
         pub version: String,
     }
     impl From<&PackageInfoApi> for PackageInfoApi {
         fn from(value: &PackageInfoApi) -> Self {
+            value.clone()
+        }
+    }
+    ///PackageInfoCommon
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageInfoCommon",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "description",
+    ///    "license",
+    ///    "name",
+    ///    "outputs",
+    ///    "outputs_to_install",
+    ///    "pname",
+    ///    "rev",
+    ///    "rev_count",
+    ///    "rev_date",
+    ///    "system",
+    ///    "version"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "string"
+    ///        }
+    ///      ]
+    ///    },
+    ///    "license": {
+    ///      "title": "License",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "string"
+    ///        }
+    ///      ]
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "outputs": {
+    ///      "title": "Outputs",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "object"
+    ///        }
+    ///      ]
+    ///    },
+    ///    "outputs_to_install": {
+    ///      "title": "Outputs To Install",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "array",
+    ///          "items": {}
+    ///        }
+    ///      ]
+    ///    },
+    ///    "pname": {
+    ///      "title": "Pname",
+    ///      "type": "string"
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "rev_count": {
+    ///      "title": "Rev Count",
+    ///      "type": "integer"
+    ///    },
+    ///    "rev_date": {
+    ///      "title": "Rev Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct PackageInfoCommon {
+        pub attr_path: String,
+        pub description: String,
+        pub license: String,
+        pub name: String,
+        pub outputs: serde_json::Map<String, serde_json::Value>,
+        pub outputs_to_install: Vec<serde_json::Value>,
+        pub pname: String,
+        pub rev: String,
+        pub rev_count: i64,
+        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
+        pub system: SystemEnum,
+        pub version: String,
+    }
+    impl From<&PackageInfoCommon> for PackageInfoCommon {
+        fn from(value: &PackageInfoCommon) -> Self {
             value.clone()
         }
     }
@@ -578,11 +812,19 @@ pub mod types {
     ///    },
     ///    "description": {
     ///      "title": "Description",
-    ///      "type": "string"
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "string"
+    ///        }
+    ///      ]
     ///    },
     ///    "license": {
     ///      "title": "License",
-    ///      "type": "string"
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "string"
+    ///        }
+    ///      ]
     ///    },
     ///    "locked_url": {
     ///      "title": "Locked Url",
@@ -623,18 +865,24 @@ pub mod types {
     ///    },
     ///    "rev_date": {
     ///      "title": "Rev Date",
-    ///      "type": "integer"
+    ///      "type": "string",
+    ///      "format": "date-time"
     ///    },
     ///    "scrape_date": {
     ///      "title": "Scrape Date",
-    ///      "type": "integer"
+    ///      "type": "string",
+    ///      "format": "date-time"
     ///    },
     ///    "stabilities": {
     ///      "title": "Stabilities",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "array",
+    ///          "items": {
+    ///            "type": "string"
+    ///          }
+    ///        }
+    ///      ]
     ///    },
     ///    "unfree": {
     ///      "title": "Unfree",
@@ -662,8 +910,8 @@ pub mod types {
         pub pname: String,
         pub rev: String,
         pub rev_count: i64,
-        pub rev_date: i64,
-        pub scrape_date: i64,
+        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
+        pub scrape_date: chrono::DateTime<chrono::offset::Utc>,
         pub stabilities: Vec<String>,
         pub unfree: bool,
         pub version: String,
@@ -673,7 +921,7 @@ pub mod types {
             value.clone()
         }
     }
-    ///PackageSearchResult
+    ///PackageSearchResultInput
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -726,16 +974,78 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct PackageSearchResult {
+    pub struct PackageSearchResultInput {
         pub items: Vec<PackageInfoApi>,
         pub total_count: i64,
     }
-    impl From<&PackageSearchResult> for PackageSearchResult {
-        fn from(value: &PackageSearchResult) -> Self {
+    impl From<&PackageSearchResultInput> for PackageSearchResultInput {
+        fn from(value: &PackageSearchResultInput) -> Self {
             value.clone()
         }
     }
-    ///ResolvedPackageGroup
+    ///PackageSearchResultOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageSearchResult",
+    ///  "examples": [
+    ///    [
+    ///      {
+    ///        "attr_path": "foo.bar.curl",
+    ///        "description": "A very nice Item",
+    ///        "license": "foo",
+    ///        "locked_url": "git:git?rev=xyz",
+    ///        "name": "curl",
+    ///        "outputs": "{}",
+    ///        "outputs_to_install": "{}",
+    ///        "pname": "curl",
+    ///        "rev": "xyz",
+    ///        "rev_count": 4,
+    ///        "rev_date": 0,
+    ///        "search_string": "curl^curl^my description",
+    ///        "stabilities": [
+    ///          "stable",
+    ///          "unstable"
+    ///        ],
+    ///        "system": "x86_64-linux",
+    ///        "version": "1.0"
+    ///      }
+    ///    ]
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items",
+    ///    "total_count"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PackageInfoAPI"
+    ///      }
+    ///    },
+    ///    "total_count": {
+    ///      "title": "Total Count",
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct PackageSearchResultOutput {
+        pub items: Vec<PackageInfoApi>,
+        pub total_count: i64,
+    }
+    impl From<&PackageSearchResultOutput> for PackageSearchResultOutput {
+        fn from(value: &PackageSearchResultOutput) -> Self {
+            value.clone()
+        }
+    }
+    ///ResolvedPackageGroupInput
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -790,17 +1100,82 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct ResolvedPackageGroup {
+    pub struct ResolvedPackageGroupInput {
         pub name: String,
         pub pages: Vec<CatalogPage>,
         pub system: SystemEnum,
     }
-    impl From<&ResolvedPackageGroup> for ResolvedPackageGroup {
-        fn from(value: &ResolvedPackageGroup) -> Self {
+    impl From<&ResolvedPackageGroupInput> for ResolvedPackageGroupInput {
+        fn from(value: &ResolvedPackageGroupInput) -> Self {
             value.clone()
         }
     }
-    ///ResolvedPackageGroups
+    ///ResolvedPackageGroupOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "ResolvedPackageGroup",
+    ///  "examples": [
+    ///    {
+    ///      "attr_path": "foo.bar.curl",
+    ///      "description": "A very nice Item",
+    ///      "license": "foo",
+    ///      "locked_url": "git:git?rev=xyz",
+    ///      "name": "curl",
+    ///      "outputs": "{}",
+    ///      "outputs_to_install": "{}",
+    ///      "pname": "curl",
+    ///      "rev": "xyz",
+    ///      "rev_count": 4,
+    ///      "rev_date": 0,
+    ///      "search_string": "curl^curl^my description",
+    ///      "stabilities": [
+    ///        "stable",
+    ///        "unstable"
+    ///      ],
+    ///      "system": "x86_64-linux",
+    ///      "version": "1.0"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "name",
+    ///    "pages",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "pages": {
+    ///      "title": "Pages",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/CatalogPage"
+    ///      }
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct ResolvedPackageGroupOutput {
+        pub name: String,
+        pub pages: Vec<CatalogPage>,
+        pub system: SystemEnum,
+    }
+    impl From<&ResolvedPackageGroupOutput> for ResolvedPackageGroupOutput {
+        fn from(value: &ResolvedPackageGroupOutput) -> Self {
+            value.clone()
+        }
+    }
+    ///ResolvedPackageGroupsInput
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -816,7 +1191,7 @@ pub mod types {
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/ResolvedPackageGroup"
+    ///        "$ref": "#/components/schemas/ResolvedPackageGroup-Input"
     ///      }
     ///    }
     ///  }
@@ -824,12 +1199,119 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct ResolvedPackageGroups {
-        pub items: Vec<ResolvedPackageGroup>,
+    pub struct ResolvedPackageGroupsInput {
+        pub items: Vec<ResolvedPackageGroupInput>,
     }
-    impl From<&ResolvedPackageGroups> for ResolvedPackageGroups {
-        fn from(value: &ResolvedPackageGroups) -> Self {
+    impl From<&ResolvedPackageGroupsInput> for ResolvedPackageGroupsInput {
+        fn from(value: &ResolvedPackageGroupsInput) -> Self {
             value.clone()
+        }
+    }
+    ///ResolvedPackageGroupsOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "ResolvedPackageGroups",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/ResolvedPackageGroup-Output"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct ResolvedPackageGroupsOutput {
+        pub items: Vec<ResolvedPackageGroupOutput>,
+    }
+    impl From<&ResolvedPackageGroupsOutput> for ResolvedPackageGroupsOutput {
+        fn from(value: &ResolvedPackageGroupsOutput) -> Self {
+            value.clone()
+        }
+    }
+    ///SearchTerm
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "Search Term",
+    ///  "type": "string",
+    ///  "pattern": "[a-zA-Z0-9\\-\\._,]{2,200}"
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+    pub struct SearchTerm(String);
+    impl std::ops::Deref for SearchTerm {
+        type Target = String;
+        fn deref(&self) -> &String {
+            &self.0
+        }
+    }
+    impl From<SearchTerm> for String {
+        fn from(value: SearchTerm) -> Self {
+            value.0
+        }
+    }
+    impl From<&SearchTerm> for SearchTerm {
+        fn from(value: &SearchTerm) -> Self {
+            value.clone()
+        }
+    }
+    impl std::str::FromStr for SearchTerm {
+        type Err = self::error::ConversionError;
+        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+            if regress::Regex::new("[a-zA-Z0-9\\-\\._,]{2,200}")
+                .unwrap()
+                .find(value)
+                .is_none()
+            {
+                return Err(
+                    "doesn't match pattern \"[a-zA-Z0-9\\-\\._,]{2,200}\"".into(),
+                );
+            }
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl std::convert::TryFrom<&str> for SearchTerm {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<&String> for SearchTerm {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<String> for SearchTerm {
+        type Error = self::error::ConversionError;
+        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl<'de> serde::Deserialize<'de> for SearchTerm {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            String::deserialize(deserializer)?
+                .parse()
+                .map_err(|e: self::error::ConversionError| {
+                    <D::Error as serde::de::Error>::custom(e.to_string())
+                })
         }
     }
     ///SystemEnum
@@ -916,58 +1398,6 @@ pub mod types {
             value.parse()
         }
     }
-    ///ValidationError
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "ValidationError",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "loc",
-    ///    "msg",
-    ///    "type"
-    ///  ],
-    ///  "properties": {
-    ///    "loc": {
-    ///      "title": "Location",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "anyOf": [
-    ///          {
-    ///            "type": "string"
-    ///          },
-    ///          {
-    ///            "type": "integer"
-    ///          }
-    ///        ]
-    ///      }
-    ///    },
-    ///    "msg": {
-    ///      "title": "Message",
-    ///      "type": "string"
-    ///    },
-    ///    "type": {
-    ///      "title": "Error Type",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct ValidationError {
-        pub loc: Vec<LocationItem>,
-        pub msg: String,
-        #[serde(rename = "type")]
-        pub type_: String,
-    }
-    impl From<&ValidationError> for ValidationError {
-        fn from(value: &ValidationError) -> Self {
-            value.clone()
-        }
-    }
 }
 #[derive(Clone, Debug)]
 /**Client for Flox Catalog Server
@@ -1042,41 +1472,43 @@ impl Client {
 Search the catalog(s) under the given criteria for matching packages.
 
 Required Query Parameters:
-- **name**: _description_
-- **system**: _description_
+- **seach_term**: The search term to search on.
+- **system**: The search will be constrained to packages on this system.
 
 Optional Query Parameters:
 - **catalogs**: Comma separated list of catalog names to search
-- **page**: _description_
-- **pageSize**: _description_
+- **page**: Optional page number for pagination (def = 0)
+- **pageSize**: Optional page size for pagination (def = 10)
 
 Returns:
-- **PackageSearchResult**: _description_
+- **PackageSearchResult**: A list of PackageInfo and the total result count
 
 Sends a `GET` request to `/api/v1/catalog/search`
 
 */
     pub async fn search_api_v1_catalog_search_get<'a>(
         &'a self,
-        catalogs: &'a str,
-        name: &'a str,
+        catalogs: Option<&'a str>,
         page: Option<i64>,
         page_size: Option<i64>,
+        search_term: &'a types::SearchTerm,
         system: types::SystemEnum,
     ) -> Result<
-        ResponseValue<types::PackageSearchResult>,
-        Error<types::HttpValidationError>,
+        ResponseValue<types::PackageSearchResultInput>,
+        Error<types::ErrorResponse>,
     > {
         let url = format!("{}/api/v1/catalog/search", self.baseurl,);
         let mut query = Vec::with_capacity(5usize);
-        query.push(("catalogs", catalogs.to_string()));
-        query.push(("name", name.to_string()));
+        if let Some(v) = &catalogs {
+            query.push(("catalogs", v.to_string()));
+        }
         if let Some(v) = &page {
             query.push(("page", v.to_string()));
         }
         if let Some(v) = &page_size {
             query.push(("pageSize", v.to_string()));
         }
+        query.push(("search_term", search_term.to_string()));
         query.push(("system", system.to_string()));
         #[allow(unused_mut)]
         let mut request = self
@@ -1098,7 +1530,98 @@ Sends a `GET` request to `/api/v1/catalog/search`
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
+    /**Shows avaliable builds of a specfic package
+
+Returns a list of versions for a given pkg-path
+
+Required Query Parameters:
+- **pkgPath**: The pkg-path, must be valid.
+
+Optional Query Parameters:
+- **page**: Optional page number for pagination (def = 0)
+- **pageSize**: Optional page size for pagination (def = 10)
+
+Returns:
+- **PackageSearchResult**: A list of PackageInfo and the total result count
+
+Sends a `GET` request to `/api/v1/catalog/builds`
+
+*/
+    pub async fn builds_api_v1_catalog_builds_get<'a>(
+        &'a self,
+        page: Option<i64>,
+        page_size: Option<i64>,
+        pkg_path: &'a str,
+    ) -> Result<
+        ResponseValue<types::PackageBuildsResultInput>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!("{}/api/v1/catalog/builds", self.baseurl,);
+        let mut query = Vec::with_capacity(3usize);
+        if let Some(v) = &page {
+            query.push(("page", v.to_string()));
+        }
+        if let Some(v) = &page_size {
+            query.push(("pageSize", v.to_string()));
+        }
+        query.push(("pkgPath", pkg_path.to_string()));
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&query)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**Resolve a list of Package Groups
+
+Resolves a list of package groups, each being a list of package descriptors.
+
+Required Body:
+- **groups**: An object with an `items` array of PackageGroups to resolve.
+
+Optional Query Parameters:
+- **none**
+
+Returns:
+- **ResolvedPackageGroups**: A object with an `items` array of
+    `ResolvedPackageGroup` items.
+
+Resolution Rules:
+- Each `PackageGroup` is resolved independently.
+- Each page that has a package that meets each of the descriptors in that group is returned in the results
+- The latest page will include details for each package in the group from that page
+- The remainder pages are returned without details (to get those details... TBD)
+
+A Package Descriptor match:
+- **name**: [required] - is not used in matching, only for reference (TBD is
+            there a uniqueness constraint?)
+- **pkgPath**: [required] - this must match the nix attribute path exactly and in full
+- **semver**: [optional] - This can be any valid semver range, and if given
+    will attempt to parse the nix `version` field.  If it can and it is
+    within the range, this check passes.  If it cannot parse `version` as a
+    valid semver, or it is not within the range, it is exluded.
+    - **allow-pre-release**: [optional] - Defaults to False.  Only applies
+        when a **semver** constraint is given.  If true, a `version` that can
+        be parsed as a valid semver, that includes a pre-release suffix will
+        be included as a candidate.  Otherwise, they will be excluded.
+- **version**: [optional] - If given, this must match the nix `version`
+    field precisely. This overrides **semver** matching if provided.
 
 Sends a `POST` request to `/api/v1/catalog/resolve`
 
@@ -1107,8 +1630,8 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
         &'a self,
         body: &'a types::PackageGroups,
     ) -> Result<
-        ResponseValue<types::ResolvedPackageGroups>,
-        Error<types::HttpValidationError>,
+        ResponseValue<types::ResolvedPackageGroupsInput>,
+        Error<types::ErrorResponse>,
     > {
         let url = format!("{}/api/v1/catalog/resolve", self.baseurl,);
         #[allow(unused_mut)]
@@ -1125,9 +1648,42 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
+            406u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
             422u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get basic catalog database status
+
+Gather some basic status values from the database.
+
+Returns:
+- **CatalogStatus**: A dictionary of various status values.
+
+Sends a `GET` request to `/api/v1/metrics/status`
+
+*/
+    pub async fn get_status_api_v1_metrics_status_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<types::CatalogStatus>, Error<()>> {
+        let url = format!("{}/api/v1/metrics/status", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
