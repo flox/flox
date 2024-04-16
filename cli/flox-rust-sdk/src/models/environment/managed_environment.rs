@@ -1820,7 +1820,6 @@ mod test {
         let (flox, tmp_dir) = flox_instance();
         let path = tmp_dir.path().join("foo");
         std::fs::File::create(&path).unwrap();
-        std::fs::create_dir_all(&flox.data_dir).unwrap();
         let path = CanonicalPath::new(path).unwrap();
         // Decode the branch name and assert that it's the same path we created before
         let pointer = ManagedPointer {
@@ -1853,7 +1852,6 @@ mod test {
     #[test]
     fn registers_on_open() {
         let (flox, _temp_dir_handle) = flox_instance();
-        std::fs::create_dir_all(&flox.data_dir).unwrap();
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         std::fs::create_dir_all(&dot_flox_path).unwrap();
 
@@ -1893,7 +1891,6 @@ mod test {
     #[test]
     fn deregisters_on_delete() {
         let (flox, _temp_dir_handle) = flox_instance();
-        std::fs::create_dir_all(&flox.data_dir).unwrap();
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         std::fs::create_dir_all(&dot_flox_path).unwrap();
 

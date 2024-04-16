@@ -428,7 +428,6 @@ mod test {
             let dot_flox_path = tmp_dir.path().join(".flox");
             std::fs::create_dir_all(&dot_flox_path).unwrap();
             let canonical_dot_flox_path = CanonicalPath::new(&dot_flox_path).unwrap();
-            std::fs::create_dir_all(&flox.data_dir).unwrap();
             // Seed the existing registry
             let reg_contents = serde_json::to_string(&existing_reg).unwrap();
             let reg_path = env_registry_path(&flox);

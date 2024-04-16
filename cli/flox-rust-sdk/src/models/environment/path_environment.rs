@@ -592,7 +592,6 @@ mod tests {
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
         let pointer = PathPointer::new("test".parse().unwrap());
 
-        std::fs::create_dir_all(&flox.data_dir).unwrap();
         let before = PathEnvironment::open(
             &flox,
             pointer.clone(),
@@ -639,7 +638,6 @@ mod tests {
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
         let pointer = PathPointer::new("test".parse().unwrap());
 
-        std::fs::create_dir_all(&flox.data_dir).unwrap();
         let mut env = PathEnvironment::init(
             pointer,
             environment_temp_dir.path(),
@@ -666,7 +664,6 @@ mod tests {
     #[test]
     fn registers_on_init() {
         let (flox, tmp_dir) = flox_instance();
-        std::fs::create_dir_all(&flox.data_dir).unwrap();
         let environment_temp_dir = tempfile::tempdir_in(&tmp_dir).unwrap();
         let ptr = PathPointer::new("test".parse().unwrap());
         let _env = PathEnvironment::init(
@@ -690,7 +687,6 @@ mod tests {
     #[test]
     fn registers_on_open() {
         let (flox, tmp_dir) = flox_instance();
-        std::fs::create_dir_all(&flox.data_dir).unwrap();
         let environment_temp_dir = tempfile::tempdir_in(&tmp_dir).unwrap();
         // Create an environment so that the .flox directory is populated and we can open it later
         let ptr = PathPointer::new("test".parse().unwrap());
@@ -718,7 +714,6 @@ mod tests {
     #[test]
     fn deregisters_on_delete() {
         let (flox, tmp_dir) = flox_instance();
-        std::fs::create_dir_all(&flox.data_dir).unwrap();
         let environment_temp_dir = tempfile::tempdir_in(&tmp_dir).unwrap();
         // Create an environment so that the .flox directory is populated and we can open it later
         let ptr = PathPointer::new("test".parse().unwrap());
