@@ -254,16 +254,14 @@ pub fn write_environment_registry(
         // - `.`
         EnvRegistryError::InvalidRegistryLocation(reg_path.as_ref().to_path_buf()),
     )?;
-    let tmp_dir = tempdir_in(parent).map_err(EnvRegistryError::OpenRegistry)?;
-    let tmp_path = tmp_dir.path().join(ENV_REGISTRY_FILENAME);
-    let file = OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&tmp_path)
-        .map_err(EnvRegistryError::OpenTmpRegistry)?;
-    let writer = BufWriter::new(file);
+    let temp_file =
+        tempfile::NamedTempFile::new_in(parent).map_err(EnvRegistryError::OpenTmpRegistry)?;
+
+    let writer = BufWriter::new(&temp_file);
     serde_json::to_writer_pretty(writer, reg).map_err(EnvRegistryError::WriteTmpRegistry)?;
-    std::fs::rename(tmp_path, reg_path.as_ref()).map_err(EnvRegistryError::RenameRegistry)?;
+    temp_file
+        .persist(reg_path.as_ref())
+        .map_err(EnvRegistryError::RenameRegistry)?;
     Ok(())
 }
 
