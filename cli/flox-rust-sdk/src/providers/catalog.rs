@@ -1,40 +1,20 @@
-use std::env;
-
+use async_trait::async_trait;
 use catalog_api_v1::types::{self as api_types, error as api_error};
 use catalog_api_v1::{Client as APIClient, Error as APIError};
-use once_cell::sync::Lazy;
+use enum_dispatch::enum_dispatch;
 use thiserror::Error;
 
 use crate::data::System;
 
-const DEFAULT_CATALOG_URL: &str = "https://flox-catalog.flox.dev";
-/// Whether to use an actual catalog client or the mock client.
-///
-/// Don't use a feature flag since this shouldn't be exposed to users.
-static USE_CATALOG_MOCK: Lazy<bool> = Lazy::new(|| env::var("_FLOX_USE_CATALOG_MOCK").is_ok());
+pub const DEFAULT_CATALOG_URL: &str = "https://flox-catalog.flox.dev";
 
 /// Either a client for the actual catalog service,
 /// or a mock client for testing.
 #[derive(Debug)]
+#[enum_dispatch(ClientTrait)]
 pub enum Client {
     Catalog(CatalogClient),
     Mock(MockClient),
-}
-
-impl Client {
-    pub fn new(mock: bool) -> Self {
-        if mock {
-            Client::Mock(MockClient)
-        } else {
-            Client::Catalog(CatalogClient::default())
-        }
-    }
-}
-
-impl Default for Client {
-    fn default() -> Self {
-        Self::new(*USE_CATALOG_MOCK)
-    }
 }
 
 /// A client for the catalog service.
@@ -50,48 +30,70 @@ impl CatalogClient {
             client: APIClient::new(DEFAULT_CATALOG_URL),
         }
     }
-}
-impl Default for CatalogClient {
-    fn default() -> Self {
-        Self::new()
+
+    pub fn new_with_reqwest_client(client: reqwest::Client) -> Self {
+        Self {
+            client: APIClient::new_with_client(DEFAULT_CATALOG_URL, client),
+        }
     }
 }
 
 #[derive(Debug)]
 pub struct MockClient;
 
-impl Client {
+impl Default for CatalogClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+#[enum_dispatch]
+pub trait ClientTrait {
     /// Resolve a list of [PackageGroup]s into a list of
     /// [ResolvedPackageGroup]s.
-    pub async fn resolve(
+    async fn resolve(
+        &self,
+        package_groups: Vec<PackageGroup>,
+    ) -> Result<Vec<ResolvedPackageGroup>, CatalogClientError>;
+}
+
+#[async_trait]
+impl ClientTrait for CatalogClient {
+    async fn resolve(
         &self,
         package_groups: Vec<PackageGroup>,
     ) -> Result<Vec<ResolvedPackageGroup>, CatalogClientError> {
-        match self {
-            Client::Catalog(client) => {
-                let package_groups = api_types::PackageGroups {
-                    items: package_groups
-                        .into_iter()
-                        .map(TryInto::try_into)
-                        .collect::<Result<Vec<_>, _>>()?,
-                };
+        let package_groups = api_types::PackageGroups {
+            items: package_groups
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<Vec<_>, _>>()?,
+        };
 
-                let response = client
-                    .client
-                    .resolve_api_v1_catalog_resolve_post(&package_groups)
-                    .await
-                    .map_err(CatalogClientError::Resolution)?;
+        let response = self
+            .client
+            .resolve_api_v1_catalog_resolve_post(&package_groups)
+            .await
+            .map_err(CatalogClientError::Resolution)?;
 
-                let resolved_package_groups = response.into_inner();
+        let resolved_package_groups = response.into_inner();
 
-                resolved_package_groups
-                    .items
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<Vec<_>, _>>()
-            },
-            Client::Mock(_) => unimplemented!(),
-        }
+        resolved_package_groups
+            .items
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>, _>>()
+    }
+}
+
+#[async_trait]
+impl ClientTrait for MockClient {
+    async fn resolve(
+        &self,
+        _package_groups: Vec<PackageGroup>,
+    ) -> Result<Vec<ResolvedPackageGroup>, CatalogClientError> {
+        unimplemented!()
     }
 }
 

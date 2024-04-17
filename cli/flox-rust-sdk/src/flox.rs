@@ -202,6 +202,7 @@ pub mod test_helpers {
 
     use tempfile::{tempdir_in, TempDir};
 
+    use self::catalog::MockClient;
     use super::*;
     use crate::models::environment::{
         global_manifest_lockfile_path,
@@ -305,7 +306,7 @@ pub mod test_helpers {
             )
             .unwrap(),
             floxhub_token: None,
-            catalog_client: Some(catalog::Client::new(true)),
+            catalog_client: Some(MockClient.into()),
         };
 
         init_global_manifest(&global_manifest_path(&flox)).unwrap();

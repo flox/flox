@@ -6,36 +6,39 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-log.workspace = true
+async-trait.workspace = true
+blake3.workspace = true
+catalog-api-v1.workspace = true
+chrono.workspace = true
 derive_more.workspace = true
-url.workspace = true
-serde_with.workspace = true
-thiserror.workspace = true
-tempfile.workspace = true
+enum_dispatch.workspace = true
+fslock.workspace = true
+indent.workspace = true
+indoc.workspace = true
+jsonwebtoken.workspace = true
+log.workspace = true
 once_cell.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+serde.workspace = true
+shell-escape.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml_edit.workspace = true
+toml.workspace = true
+tracing.workspace = true
+url.workspace = true
 uuid.workspace = true
 walkdir.workspace = true
-indoc.workspace = true
-chrono.workspace = true
-blake3.workspace = true
-toml_edit.workspace = true
-tracing.workspace = true
-toml.workspace = true
-jsonwebtoken.workspace = true
-indent.workspace = true
-shell-escape.workspace = true
-fslock.workspace = true
-catalog-api-v1.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
 pretty_assertions.workspace = true
-serial_test.workspace = true
 proptest.workspace = true
 proptest-derive.workspace = true
+serial_test.workspace = true
 
 [features]
 extra-tests = ["impure-unit-tests"]
