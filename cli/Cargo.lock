@@ -1068,7 +1068,6 @@ name = "flox-rust-sdk"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "blake3",
  "catalog-api-v1",
  "chrono",
