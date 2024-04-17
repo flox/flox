@@ -18,7 +18,7 @@ use std::fs::{self};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use indoc::{formatdoc, indoc};
+use indoc::formatdoc;
 use log::debug;
 
 use super::core_environment::CoreEnvironment;
@@ -45,15 +45,14 @@ use crate::models::container_builder::ContainerBuilder;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{
     ENV_DIR_NAME,
-    FLOX_HOOK_PLACEHOLDER,
-    FLOX_INSTALL_PLACEHOLDER,
-    FLOX_PROFILE_PLACEHOLDER,
-    FLOX_SYSTEM_PLACEHOLDER,
+    FLOX_INSTALL_TABLE_KEY,
+    FLOX_PROFILE_TABLE_KEY,
+    FLOX_SYSTEMS_ARRAY_KEY,
     MANIFEST_FILENAME,
 };
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::LockedManifest;
-use crate::models::manifest::PackageToInstall;
+use crate::models::manifest::{PackageToInstall, RawManifest};
 use crate::models::pkgdb::UpgradeResult;
 use crate::utils::mtime_of;
 
@@ -398,19 +397,23 @@ impl PathEnvironment {
             ))?,
         }
 
-        let template_contents = fs::read_to_string(env!("MANIFEST_TEMPLATE"))
-            .map_err(EnvironmentError::ReadManifest)?;
+        // Read and parse `manifest.toml` TOML template asset containing placeholders
+        let mut manifest_template = fs::read_to_string(env!("MANIFEST_TEMPLATE"))
+            .map_err(EnvironmentError::ReadManifest)
+            .and_then(|toml| {
+                toml.parse::<RawManifest>()
+                    .map_err(EnvironmentError::ParseManifest)
+            })?;
 
-        let manifest_contents =
-            Self::replace_placeholders(&template_contents, system, customization);
-
-        let mut environment = Self::write_new(
-            flox,
-            pointer,
-            dot_flox_parent_path,
-            temp_dir,
-            &manifest_contents,
+        // Fill out manifest placeholders
+        let manifest = Self::replace_manifest_template_placeholders(
+            &mut manifest_template,
+            system,
+            customization,
         )?;
+
+        let mut environment =
+            Self::write_new(flox, pointer, dot_flox_parent_path, temp_dir, &manifest)?;
 
         if let Some(ref packages) = customization.packages {
             // Ignore the result, because we know there can't be packages already installed
@@ -441,7 +444,7 @@ impl PathEnvironment {
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
-        manifest_contents: &str,
+        manifest: &RawManifest,
     ) -> Result<Self, EnvironmentError> {
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
         let env_dir = dot_flox_path.join(ENV_DIR_NAME);
@@ -462,7 +465,7 @@ impl PathEnvironment {
 
         // Write `manifest.toml`
         let write_res =
-            fs::write(manifest_path, manifest_contents).map_err(EnvironmentError::WriteManifest);
+            fs::write(manifest_path, manifest.to_string()).map_err(EnvironmentError::WriteManifest);
         if let Err(e) = write_res {
             debug!("writing manifest did not complete successfully");
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
@@ -479,57 +482,36 @@ impl PathEnvironment {
         Self::open(flox, pointer, dot_flox_path, temp_dir)
     }
 
-    /// Replace all placeholders in the manifest file contents
-    ///
-    /// TODO: we should probably be using toml_edit
-    fn replace_placeholders(
-        contents: &String,
+    /// Replace all placeholders in the `manifest.toml` file
+    fn replace_manifest_template_placeholders<'a>(
+        manifest_template: &'a mut RawManifest,
         system: &str,
         customization: &InitCustomization,
-    ) -> String {
-        // Replace system
-        let mut replaced = contents.replace(FLOX_SYSTEM_PLACEHOLDER, system);
+    ) -> Result<&'a RawManifest, EnvironmentError> {
+        // Add system to `systems` array
+        manifest_template[FLOX_SYSTEMS_ARRAY_KEY]
+            .as_array_mut()
+            .map(|arr| arr.push(system))
+            .ok_or(EnvironmentError::EditManifest)?;
 
-        // Don't add example packages if packages are being installed
-        let packages = if customization.packages.is_some() {
-            ""
-        } else {
-            // The install method adds a newline, so add one here as well
-            indoc! {r#"
-            # hello.pkg-path = "hello"
-            # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
-        "#}
-        };
-        replaced = replaced.replace(FLOX_INSTALL_PLACEHOLDER, packages);
+        // TODO: Add packages to install
+        if customization.packages.is_some() {
+            manifest_template[FLOX_INSTALL_TABLE_KEY]
+                .as_table_mut()
+                .map(|table| table)
+                .ok_or(EnvironmentError::EditManifest)?;
+        }
 
-        // Replace profile
-        let profile = if let Some(ref custom_profile) = customization.profile {
-            formatdoc! {r#"
-                common = """
-                {}
-                """"#, indent::indent_all_by(2, custom_profile)}
-        } else {
-            formatdoc! {r#"
-                # common = """
-                #   echo "it's gettin flox in here";
-                # """"#}
-        };
-        replaced = replaced.replace(FLOX_PROFILE_PLACEHOLDER, &profile);
+        // TODO: Replace profile
+        if let Some(ref _custom_profile) = customization.profile {
+            manifest_template[FLOX_PROFILE_TABLE_KEY]
+                .as_table_mut()
+                // .map(|table| table.insert("common", indent::indent_all_by(2, custom_profile)))
+                .map(|table| table)
+                .ok_or(EnvironmentError::EditManifest)?;
+        }
 
-        // Replace the hook
-        let default_hook = formatdoc! {r#"
-            # on-activate = """
-            #     mkdir my_data_dir
-            # """"#};
-
-        let replaced = replaced.replace(FLOX_HOOK_PLACEHOLDER, &default_hook);
-
-        debug!(
-            "manifest was updated successfully: {}",
-            contents != &replaced
-        );
-
-        replaced
+        Ok(manifest_template)
     }
 
     /// Determine if the environment needs to be rebuilt
@@ -566,14 +548,14 @@ pub mod test_helpers {
 
     use super::*;
 
-    pub fn new_path_environment(flox: &Flox, contents: &str) -> PathEnvironment {
+    pub fn new_path_environment(flox: &Flox, manifest: &RawManifest) -> PathEnvironment {
         let pointer = PathPointer::new("name".parse().unwrap());
         PathEnvironment::write_new(
             flox,
             pointer,
             tempdir_in(&flox.temp_dir).unwrap().into_path(),
             &flox.temp_dir,
-            contents,
+            &manifest,
         )
         .unwrap()
     }

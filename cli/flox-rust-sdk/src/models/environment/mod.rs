@@ -60,10 +60,14 @@ pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 pub const FLOX_PATH_PATCHED_VAR: &str = "FLOX_PATH_PATCHED";
-pub const FLOX_SYSTEM_PLACEHOLDER: &str = "_FLOX_INIT_SYSTEM";
-pub const FLOX_PROFILE_PLACEHOLDER: &str = "_FLOX_INIT_PROFILE";
-pub const FLOX_HOOK_PLACEHOLDER: &str = "_FLOX_INIT_HOOK";
-pub const FLOX_INSTALL_PLACEHOLDER: &str = "_FLOX_INIT_INSTALL";
+/// Represents the `[install]` table key from the Flox manifest.toml file
+pub const FLOX_INSTALL_TABLE_KEY: &str = "install";
+/// Represents the `[profile]` table key from the Flox manifest.toml file
+pub const FLOX_PROFILE_TABLE_KEY: &str = "profile";
+/// Represents the `[hook]` table key from the Flox manifest.toml file
+pub const FLOX_HOOK_TABLE_KEY: &str = "hook";
+/// Represents the `systems = []` array key from the Flox manifest.toml file
+pub const FLOX_SYSTEMS_ARRAY_KEY: &str = "systems";
 
 pub const N_HASH_CHARS: usize = 5;
 
@@ -459,6 +463,10 @@ pub enum EnvironmentError {
 
     #[error("could not read manifest")]
     ReadManifest(#[source] std::io::Error),
+    #[error("Failed parsing contents of manifest")]
+    ParseManifest(#[source] toml_edit::de::Error),
+    #[error("Failed editing contents of manifest")]
+    EditManifest,
     #[error("couldn't write manifest")]
     WriteManifest(#[source] std::io::Error),
 

@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::ops::{Deref, DerefMut};
 use std::process::Command;
 use std::str::FromStr;
 
@@ -14,7 +15,7 @@ use crate::models::pkgdb::PKGDB_BIN;
 /// that allows modifications of the raw manifest document,
 /// while preserving comments and user formatting.
 #[derive(Debug)]
-struct RawManifest(toml_edit::DocumentMut);
+pub struct RawManifest(toml_edit::DocumentMut);
 impl RawManifest {
     /// Get the version of the manifest, if it's present or default to version 1.
     fn get_version(&self) -> Option<i64> {
@@ -63,6 +64,22 @@ impl FromStr for RawManifest {
         let manifest = RawManifest(doc);
         let _validate = manifest.to_typed()?;
         Ok(manifest)
+    }
+}
+
+impl Deref for RawManifest {
+    type Target = DocumentMut;
+
+    // Allows accessing the [DocumentMut] instance wrapped by [RawManifest].
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for RawManifest {
+    // Allows accessing the mutable [DocumentMut] instance wrapped by [RawManifest].
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
