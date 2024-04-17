@@ -98,6 +98,11 @@ const char * const ACTIVATE_SCRIPT = R"_(
 # Flox environment activation script.
 [ "${_FLOX_PKGDB_VERBOSITY:-0}" -eq 0 ] || set -x
 
+# TODO: add getopt arg parser for following args:
+# -c "<cmd> <args>": specify exact command args to pass to shell
+# --turbo: invoke commands directly without involving userShell
+# --noprofile: do not source `[profile]` scripts
+
 # Set FLOX_ENV as the path by which all flox scripts can make reference to
 # the environment to which they belong. Use this to define the path to the
 # activation scripts directory.
@@ -227,60 +232,91 @@ fi
 
 # From this point on the activation process depends on the mode:
 
-# 1. "turbo command" mode: simply exec the provided command and args
-#    without paying the cost of invoking the userShell.
-#    TODO: discuss, then remove or plumb this through the CLI if necessary
-#    TODO: add "command" mode which appends 'exec "$@"' to the userShell script
-if [ $# -gt 0 -a -n "$FLOX_TURBO" ]; then
-  exec "$@"
-fi
-
-# 2. "interactive" and "command" modes: invoke the user's shell with args that:
+# 1. "command" mode(s): invoke the user's shell with args that:
 #   a. defeat the shell's normal startup scripts
 #   b. source the relevant activation script
-#   c. if in command mode, include the command to be invoked
-if [ -t 1 -o $# -gt 0 -o -n "$_FLOX_FORCE_INTERACTIVE" ]; then
-  declare -a cmdargs=()
-  cmdstring=""
-  if [ $# -gt 0 ]; then
-    cmdstring="$($_coreutils/bin/printf '%q' "$1")"
-    shift
-    while [ $# -ne 0 ]; do
-        cmdstring="$($_coreutils/bin/printf '%s %q' "$cmdstring" "$1")"
-        shift
-    done
-    cmdargs=( "-c" "$cmdstring" )
+#   c. invoke the command in one of "stdin" or "-c" modes
+if [ $# -gt 0 ]; then
+  if [ $# -ne 2 -o "$1" != "-c" ]; then
+    # Marshal the provided args into a single safely-quoted string.
+    # We use the magic "${@@Q}" parameter transformation to return
+    # each element of "$@" as a safely quoted string.
+    declare -a cmdarray=()
+    cmdarray=("-c" "$(echo "${@@Q}")")
+    set -- "${cmdarray[@]}"
   fi
+  if [ -n "$FLOX_TURBO" ]; then
+    # "turbo command" mode: simply exec the provided command and args
+    # without paying the cost of invoking the userShell.
+    eval "exec $2"
+  fi
+  # "-c" command mode: pass both [2] arguments unaltered to shell invocation
   case "$FLOX_SHELL" in
     *bash)
       if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$FLOX_SHELL" --noprofile --norc "${cmdargs[@]}"
+        exec "$FLOX_SHELL" --noprofile --norc "$@"
       else
         if [ -t 1 ]; then
-          exec "$FLOX_SHELL" --rcfile "$FLOX_ENV/activate.d/bash" "${cmdargs[@]}"
+          exec "$FLOX_SHELL" --noprofile --rcfile "$FLOX_ENV/activate.d/bash" "$@"
         else
           # The bash --rcfile option only works for interactive shells
           # so we need to cobble together our own means of sourcing our
           # startup script for non-interactive shells.
-          if [ -n "$cmdstring" ]; then
-            exec "$FLOX_SHELL" -c "source $FLOX_ENV/activate.d/bash && $cmdstring"
-          else
-            # Should this be an error? What will this do?
-            exec "$FLOX_SHELL" -c "source $FLOX_ENV/activate.d/bash"
-          fi
+          exec "$FLOX_SHELL" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash && $2"
         fi
       fi
       ;;
     *zsh)
       if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$FLOX_SHELL" -o NO_GLOBAL_RCS -o NO_RCS "${cmdargs[@]}"
+        exec "$FLOX_SHELL" -o NO_GLOBAL_RCS -o NO_RCS "$@"
       else
         export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
         export ZDOTDIR="$_zdotdir"
         export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
         # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
         # automatically sourcing /etc/zshrc et al.
-        exec "$FLOX_SHELL" -o NO_GLOBAL_RCS "${cmdargs[@]}"
+        exec "$FLOX_SHELL" -o NO_GLOBAL_RCS "$@"
+      fi
+      ;;
+    *)
+      echo "Unsupported shell: $FLOX_SHELL" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+# 2. "interactive" mode: invoke the user's shell with args that:
+#   a. defeat the shell's normal startup scripts
+#   b. source the relevant activation script
+if [ -t 1 -o -n "$_FLOX_FORCE_INTERACTIVE" ]; then
+  case "$FLOX_SHELL" in
+    *bash)
+      if [ -n "$FLOX_NO_PROFILES" ]; then
+        exec "$FLOX_SHELL" --noprofile --norc
+      else
+        if [ -t 1 ]; then
+          exec "$FLOX_SHELL" --noprofile --rcfile "$FLOX_ENV/activate.d/bash"
+        else
+          # The bash --rcfile option only works for interactive shells
+          # so we need to cobble together our own means of sourcing our
+          # startup script for non-interactive shells.
+          # XXX Is this case even a thing? What's the point of activating with
+          #     no command to be invoked and no controlling terminal from which
+          #     to issue commands?!? A broken docker experience maybe?!?
+          exec "$FLOX_SHELL" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash"
+        fi
+      fi
+      ;;
+    *zsh)
+      if [ -n "$FLOX_NO_PROFILES" ]; then
+        exec "$FLOX_SHELL" -o NO_GLOBAL_RCS -o NO_RCS
+      else
+        export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
+        export ZDOTDIR="$_zdotdir"
+        export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
+        # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
+        # automatically sourcing /etc/zshrc et al.
+        exec "$FLOX_SHELL" -o NO_GLOBAL_RCS
       fi
       ;;
     *)

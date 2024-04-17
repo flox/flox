@@ -230,8 +230,13 @@ impl Activate {
 
         let mut command = Command::new(activate_path);
         command.env("FLOX_SHELL", shell.exe_path());
-        command.args(run_args);
         command.envs(exports);
+
+        // The activation script works like a shell in that it accepts the "-c"
+        // flag which takes exactly one argument to be passed verbatim to the
+        // userShell invocation. Take this opportunity to combine these args
+        // safely, and *exactly* as the user provided them in argv.
+        command.arg("-c").arg(Self::quote_run_args(&run_args));
 
         debug!("running activation command: {:?}", command);
 
@@ -427,7 +432,13 @@ impl Activate {
     fn quote_run_args(run_args: &[String]) -> String {
         run_args
             .iter()
-            .map(|arg| format!(r#""{}""#, arg.replace('"', r#"\""#)))
+            .map(|arg| {
+                if arg.contains(' ') || arg.contains('"') {
+                    format!(r#""{}""#, arg.replace('"', r#"\""#))
+                } else {
+                    arg.to_string()
+                }
+            })
             .join(" ")
     }
 
