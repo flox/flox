@@ -106,8 +106,15 @@ const char * const ACTIVATE_SCRIPT = R"_(
 # Set FLOX_ENV as the path by which all flox scripts can make reference to
 # the environment to which they belong. Use this to define the path to the
 # activation scripts directory.
-FLOX_ENV="$( $_coreutils/bin/dirname -- "${BASH_SOURCE[0]}" )"
-export FLOX_ENV
+# TODO: reconcile with CLI which should be setting this. We must override
+#       the value coming from the CLI for now because it won't be set for
+#       container invocations, and it would have the incorrect value for
+#       nested flox activations.
+_FLOX_ENV="$( $_coreutils/bin/dirname -- "${BASH_SOURCE[0]}" )"
+if [ -n "$FLOX_ENV" -a "$FLOX_ENV" != "$_FLOX_ENV" ]; then
+  echo "WARN: detected change in FLOX_ENV: $FLOX_ENV -> $_FLOX_ENV" >&2
+fi
+export FLOX_ENV="$_FLOX_ENV"
 
 # The rust CLI contains sophisticated logic to set $FLOX_SHELL based on the
 # process listening on STDOUT, but that won't happen when activating from
@@ -124,7 +131,7 @@ FLOX_SHELL="${FLOX_SHELL:-$SHELL}"
 # variable, and if it hasn't then we'll prepend it to the list and set
 # all the other related env variables.
 declare -a flox_env_dirs
-IFS=: read -ra flox_env_dirs <<< "$FLOX_ENV_DIRS"
+IFS=: read -ra flox_env_dirs <<< "$FLOX_ENV_DIRS_activate"
 declare -i flox_env_found=0
 for d in "${flox_env_dirs[@]}"; do
   if [ "$d" = "$FLOX_ENV" ]; then
@@ -146,10 +153,14 @@ if [ $flox_env_found -eq 0 ]; then
   # Set environment variables which represent the cumulative layering
   # of flox environments. For the most part this involves prepending
   # to the existing variables of the same name.
-  FLOX_ENV_DIRS="$FLOX_ENV${FLOX_ENV_DIRS:+:$FLOX_ENV_DIRS}"
-  FLOX_ENV_LIB_DIRS="$FLOX_ENV/lib${FLOX_ENV_LIB_DIRS:+:$FLOX_ENV_LIB_DIRS}"
-  FLOX_PROMPT_ENVIRONMENTS="$FLOX_ENV_DESCRIPTION${FLOX_PROMPT_ENVIRONMENTS:+ $FLOX_PROMPT_ENVIRONMENTS}"
-  export FLOX_ENV_DIRS FLOX_ENV_LIB_DIRS FLOX_PROMPT_ENVIRONMENTS
+  # TODO: reconcile with CLI which should be setting these. Setting
+  #       "*_activate" variables to indicate the ones we've seen and
+  #       processed on the activate script side, and ultimately also
+  #       for testing/comparison against the CLI-maintained equivalents.
+  FLOX_ENV_DIRS_activate="$FLOX_ENV${FLOX_ENV_DIRS_activate:+:$FLOX_ENV_DIRS_activate}"
+  FLOX_ENV_LIB_DIRS_activate="$FLOX_ENV/lib${FLOX_ENV_LIB_DIRS_activate:+:$FLOX_ENV_LIB_DIRS_activate}"
+  FLOX_PROMPT_ENVIRONMENTS_activate="$FLOX_ENV_DESCRIPTION${FLOX_PROMPT_ENVIRONMENTS_activate:+ $FLOX_PROMPT_ENVIRONMENTS_activate}"
+  export FLOX_ENV_DIRS_activate FLOX_ENV_LIB_DIRS_activate FLOX_PROMPT_ENVIRONMENTS_activate
 
   # Process the flox environment customizations, which includes (amongst
   # other things) prepending this environment's bin directory to the PATH.
