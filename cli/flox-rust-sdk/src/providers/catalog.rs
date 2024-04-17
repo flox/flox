@@ -65,18 +65,11 @@ impl ClientTrait for CatalogClient {
                 .collect::<Result<Vec<_>, _>>()?,
         };
 
-        let response = std::thread::scope(|s| {
-            s.spawn(|| {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(
-                    self.client
-                        .resolve_api_v1_catalog_resolve_post(&package_groups),
-                )
-            })
-            .join()
-        })
-        .unwrap()
-        .map_err(CatalogClientError::Resolution)?;
+        let response = self
+            .client
+            .resolve_api_v1_catalog_resolve_post(&package_groups)
+            .await
+            .map_err(CatalogClientError::Resolution)?;
 
         let resolved_package_groups = response.into_inner();
 
