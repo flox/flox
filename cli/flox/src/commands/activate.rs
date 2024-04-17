@@ -136,19 +136,31 @@ impl Activate {
         let mut flox_active_environments = activated_environments();
 
         // install prefixes of all active environments
-        let flox_env_install_prefixes: IndexSet<PathBuf> = IndexSet::from_iter(env::split_paths(
-            &env::var(FLOX_ENV_DIRS_VAR).unwrap_or_default(),
-        ));
+        let flox_env_install_prefixes: IndexSet<PathBuf> =
+            if flox_active_environments.is_active(&now_active) {
+                let mut set = IndexSet::from([activation_path.clone()]);
+                if !env::var(FLOX_ENV_DIRS_VAR)?.is_empty() {
+                    set.extend::<IndexSet<PathBuf>>(IndexSet::from_iter(env::split_paths(
+                        &env::var(FLOX_ENV_DIRS_VAR).unwrap_or_default(),
+                    )));
+                }
+                set
+            } else {
+                IndexSet::from_iter(env::split_paths(
+                    &env::var(FLOX_ENV_DIRS_VAR).unwrap_or_default(),
+                ))
+            };
 
-        // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
-        flox_active_environments.set_last_active(now_active.clone());
-
-        // Prepend the new environment to the list of active environments
-        let flox_env_install_prefixes = {
-            let mut set = IndexSet::from([activation_path.clone()]);
-            set.extend(flox_env_install_prefixes);
-            set
-        };
+        // Detect if the current environment is already active
+        if flox_active_environments.is_active(&now_active) {
+            debug!(
+                "Environment is already active: environment={}. Ignoring activation",
+                now_active.bare_description()?
+            );
+        } else {
+            // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
+            flox_active_environments.set_last_active(now_active.clone());
+        }
 
         // Set FLOX_ENV_DIRS and FLOX_ENV_LIB_DIRS
 
