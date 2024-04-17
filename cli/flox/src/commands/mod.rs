@@ -49,7 +49,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::environment_ref;
-use flox_rust_sdk::providers::catalog;
+use flox_rust_sdk::providers::catalog::{self, CatalogClient, MockClient};
 use futures::Future;
 use indoc::{formatdoc, indoc};
 use log::{debug, info};
@@ -63,12 +63,13 @@ use toml_edit::Key;
 use url::Url;
 
 use crate::commands::general::update_config;
-use crate::config::features::Features;
+use crate::config::features::{self, Features};
 use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::init::{
     init_access_tokens,
+    init_catalog_client,
     init_telemetry_uuid,
     init_uuid,
     telemetry_opt_out_needs_migration,
@@ -315,8 +316,7 @@ impl FloxArgs {
             Ok(token) => token,
         };
 
-        let features = Features::parse()?;
-        let catalog_client = features.use_catalog.then(catalog::Client::default);
+        let catalog_client = init_catalog_client(&config);
 
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
