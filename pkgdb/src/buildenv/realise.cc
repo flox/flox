@@ -368,7 +368,7 @@ const char * const BASH_ACTIVATE_SCRIPT = R"_(
 
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
-if [ -f ~/.bashrc -a "${FLOX_SOURCED_FROM_SHELL_RC:-}" != 1 ]
+if [ -f ~/.bashrc -a -z "${FLOX_SOURCED_FROM_SHELL_RC:-}" ]
 then
     source ~/.bashrc
 fi
@@ -957,10 +957,10 @@ addActivationScript( const std::filesystem::path & tempDir )
     }
   scriptTmpFile << "#!" << FLOX_BASH_PKG << "/bin/bash" << std::endl;
   // Create variables for Nix-provided tooling.
-  scriptTmpFile << "_coreutils=" << FLOX_COREUTILS_PKG << std::endl;
-  scriptTmpFile << "_gnused=" << FLOX_GNUSED_PKG << std::endl;
-  scriptTmpFile << "_procps=" << FLOX_PROCPS_PKG << std::endl;
-  scriptTmpFile << "_zdotdir=" << ACTIVATE_D_SCRIPTS_DIR << "/zdotdir"
+  scriptTmpFile << "export _coreutils=" << FLOX_COREUTILS_PKG << std::endl;
+  scriptTmpFile << "export _gnused=" << FLOX_GNUSED_PKG << std::endl;
+  scriptTmpFile << "export _procps=" << FLOX_PROCPS_PKG << std::endl;
+  scriptTmpFile << "export _zdotdir=" << ACTIVATE_D_SCRIPTS_DIR << "/zdotdir"
                 << std::endl;
   scriptTmpFile << ACTIVATE_SCRIPT;
   if ( scriptTmpFile.fail() )
@@ -1090,16 +1090,16 @@ makeActivationScripts( nix::EvalState &              state,
     }
 
   /* Add the shell activate scripts */
-  bashScript << "_coreutils=" << FLOX_COREUTILS_PKG << std::endl
-             << "_gnused=" << FLOX_GNUSED_PKG << std::endl
+  bashScript << "export _coreutils=" << FLOX_COREUTILS_PKG << std::endl
+             << "export _gnused=" << FLOX_GNUSED_PKG << std::endl
              << BASH_ACTIVATE_SCRIPT
              << posixIfThen( "[ -t 1 ]",
                              "source " << ACTIVATE_D_SCRIPTS_DIR
                                        << "/set-prompt.bash" )
              << posixIfThen( "[ \"${_FLOX_PKGDB_VERBOSITY:-0}\" -gt 0 ]",
                              "set +x" );
-  zshScript << "_coreutils=" << FLOX_COREUTILS_PKG << std::endl
-            << "_gnused=" << FLOX_GNUSED_PKG << std::endl
+  zshScript << "export _coreutils=" << FLOX_COREUTILS_PKG << std::endl
+            << "export _gnused=" << FLOX_GNUSED_PKG << std::endl
             << ZSH_ACTIVATE_SCRIPT
             << posixIfThen( "[ -t 1 ]",
                             "source " << ACTIVATE_D_SCRIPTS_DIR

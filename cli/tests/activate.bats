@@ -431,7 +431,7 @@ env_is_activated() {
 @test "bash: 'flox activate' patches PATH correctly when already activated" {
   SHELL="bash" run -- \
     "$FLOX_BIN" activate -- \
-      bash -c 'eval "$("$FLOX_BIN" activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
+      bash -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
   assert_success
 }
 
@@ -439,7 +439,7 @@ env_is_activated() {
 @test "zsh: 'flox activate' patches PATH correctly when already activated" {
   SHELL="zsh" run -- \
     "$FLOX_BIN" activate -- \
-      zsh -c 'eval "$("$FLOX_BIN" activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
+      zsh -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
   assert_success
 }
 
