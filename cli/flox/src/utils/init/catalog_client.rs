@@ -20,8 +20,7 @@ pub fn init_catalog_client(config: &Config) -> Option<Client> {
     if use_mock {
         debug!("Using mock catalog client");
         // TODO: setup the "runtime" mock client, e.g. from a file
-        let mock = MockClient;
-        Some(Client::Mock(mock))
+        Some(MockClient.into())
     } else {
         debug!("Using catalog client");
         Some(Client::Catalog(CatalogClient::default()))

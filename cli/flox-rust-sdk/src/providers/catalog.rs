@@ -30,12 +30,6 @@ impl CatalogClient {
             client: APIClient::new(DEFAULT_CATALOG_URL),
         }
     }
-
-    pub fn new_with_reqwest_client(client: reqwest::Client) -> Self {
-        Self {
-            client: APIClient::new_with_client(DEFAULT_CATALOG_URL, client),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -71,11 +65,6 @@ impl ClientTrait for CatalogClient {
                 .collect::<Result<Vec<_>, _>>()?,
         };
 
-        let response = self
-            .client
-            .resolve_api_v1_catalog_resolve_post(&package_groups)
-            .await
-            .map_err(CatalogClientError::Resolution)?;
         let response = std::thread::scope(|s| {
             s.spawn(|| {
                 let rt = tokio::runtime::Runtime::new().unwrap();
@@ -88,6 +77,7 @@ impl ClientTrait for CatalogClient {
         })
         .unwrap()
         .map_err(CatalogClientError::Resolution)?;
+
         let resolved_package_groups = response.into_inner();
 
         resolved_package_groups

@@ -49,7 +49,6 @@ use flox_rust_sdk::models::environment::{
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::environment_ref;
-use flox_rust_sdk::providers::catalog::{self, CatalogClient, MockClient};
 use futures::Future;
 use indoc::{formatdoc, indoc};
 use log::{debug, info};
@@ -63,7 +62,6 @@ use toml_edit::Key;
 use url::Url;
 
 use crate::commands::general::update_config;
-use crate::config::features::{self, Features};
 use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
