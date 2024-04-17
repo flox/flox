@@ -25,12 +25,11 @@ jobs:
     steps:
     # For pull requests it's not necessary to checkout the code
     - uses: "actions/checkout@v4"
-
-    - uses: dorny/paths-filter@v3
-      id: filter
+    - uses: "dorny/paths-filter@v3"
+      id: "filter"
       with:
-        base: ${{ github.event.merge_group.base_ref || 'main' }}
-        ref: ${{ github.event.merge_group.head_ref || github.ref }}
+        base: "${{ github.event.merge_group.base_ref || 'main' }}"
+        ref: "${{ github.event.merge_group.head_ref || github.ref }}"
         filters: |
           pkgdb:
             - ".github/workflows/ci.yml"
@@ -73,12 +72,7 @@ jobs:
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.NIX_GIT_TOKEN }}"
-          SUBSTITUTER:            "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
-          SUBSTITUTER_KEY:        "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID:      "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY:  "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+          OP_SERVICE_ACCOUNT_TOKEN: "${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}"
 
       - name: "Build"
         run: nix develop -L --no-update-lock-file --command just build-pkgdb
@@ -128,12 +122,7 @@ jobs:
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.NIX_GIT_TOKEN }}"
-          SUBSTITUTER:            "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
-          SUBSTITUTER_KEY:        "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID:      "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY:  "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+          OP_SERVICE_ACCOUNT_TOKEN: "${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}"
 
       - name: "Cache Cargo"
         uses: "actions/cache@v4"
@@ -164,7 +153,7 @@ jobs:
         if: ${{ github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
         env:
           RUST_BACKTRACE: 1
-          AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.AUTH0_FLOX_DEV_CLIENT_SECRET }}"
+          AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ steps.secrets.outputs.AUTH0_FLOX_DEV_CLIENT_SECRET }}"
         run: nix develop -L --no-update-lock-file --command just functional-tests
 
   nix-build:
@@ -194,15 +183,9 @@ jobs:
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.NIX_GIT_TOKEN }}"
-          SUBSTITUTER:            "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
-          SUBSTITUTER_KEY:        "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID:      "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY:  "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
-          TAILSCALE_URL:          "${{ vars.TAILSCALE_URL }}"
-          TAILSCALE_AUTH_KEY:     "${{ secrets.TAILSCALE_AUTH_KEY }}"
-          REMOTE_BUILDERS:        "${{ vars.FLOX_BUILDERS }}"
+          OP_SERVICE_ACCOUNT_TOKEN: "${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}"
+          TAILSCALE: true
+          REMOTE_BUILDERS: true
 
       - name: "Build"
         id: "build"
@@ -244,13 +227,22 @@ jobs:
       - "nix-build"
 
     steps:
+      - name: "Load secrets"
+        id: "secrets"
+        uses: "1password/load-secrets-action@v2"
+        with:
+          export-env: false
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: "${{ inputs.OP_SERVICE_ACCOUNT_TOKEN }}"
+          GITHUB_ACCESS_TOKEN: "op://github-actions/ci/floxbot-github-access-token"
+
       - name: "Trigger flox-installers workflow"
         id: "trigger-workflow"
         uses: "convictional/trigger-workflow-and-wait@v1.6.5"
         with:
           owner:              "flox"
           repo:               "flox-installers"
-          github_token:       "${{ secrets.NIX_GIT_TOKEN }}"
+          github_token:       "${{ steps.secrets.outputs.GITHUB_ACCESS_TOKEN }}"
           github_user:        "floxbot"
           workflow_file_name: "ci.yml"
           ref:                "main"
@@ -289,12 +281,21 @@ jobs:
       # TODO: enable these when deemed reliable - "nix-build-bats-tests"
 
     steps:
+      - name: "Load secrets"
+        id: "secrets"
+        uses: "1password/load-secrets-action@v2"
+        with:
+          export-env: false
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: "${{ inputs.OP_SERVICE_ACCOUNT_TOKEN }}"
+          SLACK_WEBHOOK: "op://github-actions/ci/slack-webhook"
+
       - name: "Slack Notification"
         uses: "rtCamp/action-slack-notify@v2"
         env:
           SLACK_TITLE:      "Something broke CI for flox/flox on main"
           SLACK_FOOTER:     "Thank you for caring"
-          SLACK_WEBHOOK:    "${{ secrets.SLACK_WEBHOOK_FOR_TEAM_ENGINEERING}}"
+          SLACK_WEBHOOK:    "${{ steps.secrets.outputs.SLACK_WEBHOOK }}"
           SLACK_USERNAME:   "GitHub"
           SLACK_ICON_EMOJI: ":poop:"
           SLACK_COLOR:      "#ff2800"  # ferrari red -> https://encycolorpedia.com/ff2800
@@ -325,15 +326,9 @@ jobs:
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.NIX_GIT_TOKEN }}"
-          SUBSTITUTER:            "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
-          SUBSTITUTER_KEY:        "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID:      "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY:  "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
-          TAILSCALE_URL:          "${{ vars.TAILSCALE_URL }}"
-          TAILSCALE_AUTH_KEY:     "${{ secrets.TAILSCALE_AUTH_KEY }}"
-          REMOTE_BUILDERS:        "${{ vars.FLOX_BUILDERS }}"
+          OP_SERVICE_ACCOUNT_TOKEN: "${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}"
+          TAILSCALE: true
+          REMOTE_BUILDERS: true
           SYSTEM:                 "${{ matrix.system }}"
 
       - name: "Build flox"

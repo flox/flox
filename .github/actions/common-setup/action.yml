@@ -1,41 +1,45 @@
 name: "Common Setup"
 
 inputs:
-  GITHUB_ACCESS_TOKEN:
+  OP_SERVICE_ACCOUNT_TOKEN:
     required: true
-  SUBSTITUTER:
-    required: true
-  SUBSTITUTER_KEY:
-    required: true
-  AWS_ACCESS_KEY_ID:
-    required: true
-  AWS_SECRET_ACCESS_KEY:
-    required: true
-  SSH_KEY:
-    required: true
-  TAILSCALE_URL:
-    required: false
-    default: ""
-  TAILSCALE_AUTH_KEY:
-    required: false
+  CACHE:
+    default: "public"
+  TAILSCALE:
     default: ""
   REMOTE_BUILDERS:
-    required: false
     default: ""
   SYSTEM:
-    required: false
     default: ""
 
 runs:
   using: "composite"
   steps:
+    - name: "Load secrets"
+      id: "secrets"
+      uses: "1password/load-secrets-action@v2"
+      with:
+        export-env: false
+      env:
+        OP_SERVICE_ACCOUNT_TOKEN: "${{ inputs.OP_SERVICE_ACCOUNT_TOKEN }}"
+        GITHUB_ACCESS_TOKEN: "op://github-actions/ci/floxbot-github-access-token"
+        CACHE_BUCKET: "${{ format('op://github-actions/flox-cache-{0}/s3-bucket', inputs.CACHE) }}"
+        CACHE_SECRET_KEY: "${{ format('op://github-actions/flox-cache-{0}/secret-key', inputs.CACHE) }}"
+        CACHE_AWS_ACCESS_KEY_ID: "${{ format('op://github-actions/flox-cache-{0}/aws-access-key', inputs.CACHE) }}"
+        CACHE_AWS_SECRET_ACCESS_KEY: "${{ format('op://github-actions/flox-cache-{0}/aws-secret-access-key', inputs.CACHE) }}"
+        SSH_KEY: "op://github-actions/ci/floxbot-ssh-key"
+        TAILSCALE_URL: "op://github-actions/ci/tailscale-url"
+        TAILSCALE_AUTH_KEY: "op://github-actions/ci/tailscale-auth-key"
+        REMOTE_BUILDERS: "op://github-actions/ci/remote-builders"
+        AUTH0_FLOX_DEV_CLIENT_SECRET: "op://github-actions/ci/auth0-flox-dev-client-secret"
+
     - name: "Setup Tailscale"
       uses: "tailscale/github-action@v2"
-      if: ${{ inputs.TAILSCALE_URL && inputs.TAILSCALE_AUTH_KEY }}
+      if: ${{ inputs.TAILSCALE }}
       with:
-        args: "--timeout 30s --login-server ${{ inputs.TAILSCALE_URL }}"
+        args: "--timeout 30s --login-server ${{ steps.secrets.outputs.TAILSCALE_URL }}"
         tags: "tag:ci"
-        authkey: "${{ inputs.TAILSCALE_AUTH_KEY }}"
+        authkey: "${{ steps.secrets.outputs.TAILSCALE_AUTH_KEY }}"
 
     - name: "Install newer Nix"
       uses: "cachix/install-nix-action@v24"
@@ -43,18 +47,18 @@ runs:
     - name: "Install flox"
       uses: "flox/install-flox-action@main"
       with:
-        github-access-token:    "${{ inputs.GITHUB_ACCESS_TOKEN }}"
-        substituter:            "${{ inputs.SUBSTITUTER }}"
-        substituter-key:        "${{ inputs.SUBSTITUTER_KEY }}"
-        aws-access-key-id:      "${{ inputs.AWS_ACCESS_KEY_ID }}"
-        aws-secret-access-key:  "${{ inputs.AWS_SECRET_ACCESS_KEY }}"
-        ssh-key:                "${{ inputs.SSH_KEY }}"
-        remote-builders:        "${{ inputs.REMOTE_BUILDERS }}"
+        github-access-token:    "${{ steps.secrets.outputs.GITHUB_ACCESS_TOKEN }}"
+        substituter:            "${{ steps.secrets.outputs.CACHE_BUCKET }}"
+        substituter-key:        "${{ steps.secrets.outputs.CACHE_SECRET_KEY }}"
+        aws-access-key-id:      "${{ steps.secrets.outputs.CACHE_AWS_ACCESS_KEY_ID }}"
+        aws-secret-access-key:  "${{ steps.secrets.outputs.CACHE_AWS_SECRET_ACCESS_KEY }}"
+        ssh-key:                "${{ steps.secrets.outputs.SSH_KEY }}"
+        remote-builders:        "${{ inputs.REMOTE_BUILDERS && steps.secrets.outputs.REMOTE_BUILDERS || '' }}"
 
     - name: "Configure Nix"
       shell: "bash"
       run: |
-        sudo echo 
+        sudo echo
         {
           echo "experimental-features = nix-command flakes";
           echo "accept-flake-config = true";
