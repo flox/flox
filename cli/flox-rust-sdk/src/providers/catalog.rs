@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use catalog_api_v1::types::{self as api_types, error as api_error};
 use catalog_api_v1::{Client as APIClient, Error as APIError};
 use enum_dispatch::enum_dispatch;
@@ -41,20 +40,18 @@ impl Default for CatalogClient {
     }
 }
 
-#[async_trait]
 #[enum_dispatch]
 pub trait ClientTrait {
     /// Resolve a list of [PackageGroup]s into a list of
     /// [ResolvedPackageGroup]s.
-    async fn resolve(
+    fn resolve(
         &self,
         package_groups: Vec<PackageGroup>,
     ) -> Result<Vec<ResolvedPackageGroup>, CatalogClientError>;
 }
 
-#[async_trait]
 impl ClientTrait for CatalogClient {
-    async fn resolve(
+    fn resolve(
         &self,
         package_groups: Vec<PackageGroup>,
     ) -> Result<Vec<ResolvedPackageGroup>, CatalogClientError> {
@@ -88,9 +85,8 @@ impl ClientTrait for CatalogClient {
     }
 }
 
-#[async_trait]
 impl ClientTrait for MockClient {
-    async fn resolve(
+    fn resolve(
         &self,
         _package_groups: Vec<PackageGroup>,
     ) -> Result<Vec<ResolvedPackageGroup>, CatalogClientError> {
