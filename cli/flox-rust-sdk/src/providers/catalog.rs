@@ -69,7 +69,13 @@ impl ClientTrait for CatalogClient {
             .client
             .resolve_api_v1_catalog_resolve_post(&package_groups)
             .await
-            .map_err(CatalogClientError::Resolution)?;
+            .map_err(|e| {
+                if let APIError::ErrorResponse(_) = e {
+                    CatalogClientError::Resolution(e)
+                } else {
+                    CatalogClientError::UnexpectedError(e)
+                }
+            })?;
 
         let resolved_package_groups = response.into_inner();
 
@@ -105,8 +111,14 @@ pub struct PackageGroup {
 pub enum CatalogClientError {
     #[error("system not supported by catalog")]
     UnsupportedSystem(#[source] api_error::ConversionError),
+    // TODO: would be nicer if this contained a ResponseValue<api_types::ErrorResponse>,
+    // but that doesn't implement the necessary traits.
     #[error("resolution failed")]
     Resolution(#[source] APIError<api_types::ErrorResponse>),
+    /// UnexpectedError corresponds to any variant of APIError other than
+    /// ErrorResponse, which is the only error that is in the API schema.
+    #[error("unexpected catalog connection error")]
+    UnexpectedError(#[source] APIError<api_types::ErrorResponse>),
 }
 
 impl TryFrom<PackageGroup> for api_types::PackageGroup {
