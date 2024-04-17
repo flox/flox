@@ -50,10 +50,10 @@ FloxHub with local changes to the environment.
 :   Directory to push the environment from (default: current directory).
 
 `-o`, `--owner`
-:   Owner to push push environment to (default: current user).
+:   FloxHub owner to push environment to (default: current user).
 
 `-f`, `--force`
-:   forceably overwrite the remote copy of the environment.
+:   Forceably overwrite the remote copy of the environment.
 
 ```{.include}
 ./include/general-options.md
