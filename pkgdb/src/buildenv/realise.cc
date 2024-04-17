@@ -131,7 +131,7 @@ FLOX_SHELL="${FLOX_SHELL:-$SHELL}"
 # variable, and if it hasn't then we'll prepend it to the list and set
 # all the other related env variables.
 declare -a flox_env_dirs
-IFS=: read -ra flox_env_dirs <<< "$FLOX_ENV_DIRS_activate"
+IFS=: read -ra flox_env_dirs <<< "${FLOX_ENV_DIRS_activate}"
 declare -i flox_env_found=0
 for d in "${flox_env_dirs[@]}"; do
   if [ "$d" = "$FLOX_ENV" ]; then
@@ -203,6 +203,9 @@ if [ $flox_env_found -eq 0 ]; then
   _add_env="$($_coreutils/bin/mktemp --suffix=.$FLOX_ENV_PID.add-env)"
   _del_env="$($_coreutils/bin/mktemp --suffix=.$FLOX_ENV_PID.del-env)"
 
+  # Export tempfile paths for use within shell-specific activation scripts.
+  export _add_env _del_env
+
   # Capture environment variables to _set_ as "key=value" pairs.
   $_coreutils/bin/comm -13 "$_start_env" "$_end_env" | \
     $_gnused/bin/sed -e 's/^declare -x //' > $_add_env
@@ -211,9 +214,6 @@ if [ $flox_env_found -eq 0 ]; then
   # TODO: remove from $_del_env keys set in $_add_env
   $_coreutils/bin/comm -23 "$_start_env" "$_end_env" | \
     $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > $_del_env
-
-  # Export tempfile paths for use within shell-specific activation scripts.
-  export _add_env _del_env
 
   # Don't need these anymore.
   $_coreutils/bin/rm -f "$_start_env" "$_end_env"
@@ -232,6 +232,10 @@ else
   # Assert that the expected _{add,del}_env variables are present.
   [ -n "$_add_env" -a -n "$_del_env" ] || {
     echo 'ERROR (activate): $_add_env and $_del_env not found in environment' >&2;
+    if [ -h "$FLOX_ENV" ]; then
+      echo "moving $FLOX_ENV link to $FLOX_ENV.$$ - please try again" >&2;
+      $_coreutils/bin/mv $FLOX_ENV $FLOX_ENV.$$
+    fi
     exit 1;
   }
 
@@ -350,8 +354,8 @@ case "$FLOX_SHELL" in
   *zsh)
     echo "export FLOX_ENV=\"$FLOX_ENV\""
     echo "export FLOX_ORIG_ZDOTDIR=\"$FLOX_ORIG_ZDOTDIR\""
-    echo "export ZDOTDIR=\"$ZDOTDIR\""
-    echo "export FLOX_ZSH_INIT_SCRIPT=\"$FLOX_ZSH_INIT_SCRIPT\""
+    echo "export ZDOTDIR=\"$_zdotdir\""
+    echo "export FLOX_ZSH_INIT_SCRIPT=\"$FLOX_ENV/activate.d/zsh\""
     echo "export _add_env=\"$_add_env\""
     echo "export _del_env=\"$_del_env\""
     echo "$( <"$FLOX_ENV/activate.d/zsh"  )"
@@ -435,6 +439,13 @@ setopt nohashdirs
 # Restore environment variables set in the previous bash initialization.
 eval "$($_gnused/bin/sed -e 's/^/unset /' $_del_env)"
 eval "$($_gnused/bin/sed -e 's/^/export /' $_add_env)"
+
+# On MacOS Apple have reinvented the wheel and broken our ability to define
+# HISTFILE and SHELL_SESSION_DIR variables, so define them up-front here
+# so that our env variable replay feature can fix the damage caused by
+# their /etc/zshrc* files.
+export HISTFILE=$HOME/.zsh_history
+export SHELL_SESSION_DIR=$HOME/.zsh_sessions
 )_";
 
 
