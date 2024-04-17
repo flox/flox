@@ -529,15 +529,12 @@ env_is_activated() {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
-  # Run a command that causes the activation scripts to run without putting us
-  # in the interactive shell
+  # Run a command that causes the activation scripts to run without entering
+  # an interactive shell
   # What this is testing:
-  # - Commands (e.g. echo "$foo") are run after activation scripts run
   # - The [vars] section sets foo=bar
   # - The on-activate script exports foo=baz
-  # - If the on-activate script is able to modify variables outside the shell,
-  #   then we should see "baz" here. The expected output is "bar" since that
-  #   script isn't supposed to be able to modify environment variables.
+  # - We echo $foo from within userShell and see "baz" as expected
   SHELL="$(which bash)" run --separate-stderr "$FLOX_BIN" activate -- echo '$foo'
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "baz"
@@ -548,15 +545,12 @@ env_is_activated() {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
-  # Run a command that causes the activation scripts to run without putting us
-  # in the interactive shell
+  # Run a command that causes the activation scripts to run without entering
+  # an interactive shell
   # What this is testing:
-  # - Commands (e.g. echo "$foo") are run after activation scripts run
   # - The [vars] section sets foo=bar
   # - The on-activate script exports foo=baz
-  # - If the on-activate script is able to modify variables outside the shell,
-  #   then we should see "baz" here. The expected output is "bar" since that
-  #   script isn't supposed to be able to modify environment variables.
+  # - We echo $foo from within userShell and see "baz" as expected
   SHELL="$(which zsh)" run --separate-stderr "$FLOX_BIN" activate -- echo '$foo'
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "baz"
