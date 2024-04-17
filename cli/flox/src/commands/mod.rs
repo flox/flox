@@ -739,10 +739,11 @@ impl AdditionalCommands {
 
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
+            AdditionalCommands::Config(args) => args.handle(config, flox).await?,
             AdditionalCommands::Documentation(args) => args.handle(),
+            AdditionalCommands::Envs(args) => args.handle(flox)?,
             AdditionalCommands::Update(args) => args.handle(flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
-            AdditionalCommands::Config(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
@@ -1052,7 +1053,7 @@ impl ConcreteEnvironment {
 /// * for [RemoteEnvironment] that's the [ManagedPointer] to the remote environment
 ///
 /// Serialized as is into [FLOX_ACTIVE_ENVIRONMENTS_VAR] to be able to reopen environments.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(tag = "type")]
 #[serde(rename_all = "kebab-case")]
 pub enum UninitializedEnvironment {
