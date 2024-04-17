@@ -6,6 +6,7 @@ resolver = "2"
 
 [workspace.dependencies]
 anyhow = "1"
+async-trait = "0.1.80"
 blake3 = "1.5.0"
 bpaf = { version = "0.9.8", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
