@@ -123,7 +123,7 @@ function skip_if_linux() {
   skip_if_not_linux
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
-  run --separate-stderr podman run -q -i "$CONTAINER_ID" sh -c 'echo $foo'
+  run --separate-stderr podman run -q -i "$CONTAINER_ID" -c 'echo $foo'
   assert_success
 
   # check:
@@ -145,7 +145,7 @@ function skip_if_linux() {
   skip_if_not_linux
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
-  run --separate-stderr podman run "$CONTAINER_ID" sh -c 'echo $foo'
+  run --separate-stderr podman run "$CONTAINER_ID" -c 'echo $foo'
   assert_success
 
   assert_equal "${#lines[@]}" 1 # 1 result
