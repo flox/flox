@@ -33,7 +33,7 @@ pub struct Push {
     #[bpaf(long, short, argument("path"))]
     dir: Option<PathBuf>,
 
-    /// Owner to push environment to (default: current user)
+    /// FloxHub owner to push environment to (default: current user)
     #[bpaf(long, short, argument("owner"))]
     owner: Option<EnvironmentOwner>,
 
