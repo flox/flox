@@ -28,7 +28,7 @@ _FLOX_INIT_INSTALL
 _FLOX_INIT_HOOK
 
 # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
-# inherit env variables set in the `[vars]` section and by `[hook]` scripts.
+# inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
 # The `profile.common` script is sourced by all shells and must be compatible
 # with all shells. The `profile.bash` and `profile.zsh` scripts will only be
 # sourced by the corresponding shell after sourcing the `profile.common` script.
