@@ -86,16 +86,17 @@ impl Pull {
 
         match self.pull_select {
             PullSelect::New { remote } | PullSelect::NewAbbreviated { remote } => {
-                let (start, complete) =
-                    Self::pull_new_messages(self.dir.as_deref(), &remote, flox.floxhub.base_url());
+                let start_message = Self::pull_new_spinner_message(
+                    self.dir.as_deref(),
+                    &remote,
+                    flox.floxhub.base_url(),
+                );
 
                 let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
 
-                Self::pull_new_environment(&flox, dir.join(DOT_FLOX), remote, self.force, &start)?;
-
-                message::created(complete);
+                Self::pull_new_environment(&flox, dir, remote, self.force, &start_message)?;
             },
             PullSelect::Existing {} => {
                 let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
@@ -110,45 +111,12 @@ impl Pull {
                     }
                 };
 
-                let start_message = format!(
-                    "⬇️  Remote: pulling and building {owner}/{name} from {floxhub_host}",
-                    owner = pointer.owner,
-                    name = pointer.name,
-                    floxhub_host = flox.floxhub.base_url()
-                );
-
-                let result = Dialog {
-                    message: &start_message,
-                    help_message: None,
-                    typed: Spinner::new(|| {
-                        Self::pull_existing_environment(
-                            &flox,
-                            dir.join(DOT_FLOX),
-                            pointer.clone(),
-                            self.force,
-                        )
-                    }),
-                }
-                .spin()?;
-
-                match result {
-                    PullResult::Updated => {
-                        message::updated(formatdoc! {"
-                            Pulled {owner}/{name} from {floxhub_host}{suffix}
-
-                            You can activate this environment with 'flox activate'
-                            ",
-                            owner = pointer.owner, name = pointer.name,
-                            floxhub_host = flox.floxhub.base_url(),
-                            suffix = if self.force { " (forced)" } else { "" }
-                        });
-                    },
-                    PullResult::UpToDate => {
-                        message::warning(formatdoc! {"
-                            {owner}/{name} is already up to date.
-                        ", owner = pointer.owner, name = pointer.name});
-                    },
-                }
+                Self::pull_existing_environment(
+                    &flox,
+                    dir.join(DOT_FLOX),
+                    pointer.clone(),
+                    self.force,
+                )?;
             },
         }
 
@@ -164,14 +132,54 @@ impl Pull {
         dot_flox_path: PathBuf,
         pointer: ManagedPointer,
         force: bool,
-    ) -> Result<PullResult, EnvironmentError> {
-        let mut env = ManagedEnvironment::open(flox, pointer, dot_flox_path)?;
-        let state = env.pull(force)?;
-        // only build if the environment was updated
-        if let PullResult::Updated = state {
-            env.build(flox)?;
+    ) -> Result<(), EnvironmentError> {
+        let mut env = ManagedEnvironment::open(flox, pointer.clone(), dot_flox_path)?;
+
+        let pull_message = format!(
+            "⬇️  Remote: pulling {owner}/{name} from {floxhub_host}",
+            owner = pointer.owner,
+            name = pointer.name,
+            floxhub_host = flox.floxhub.base_url()
+        );
+
+        let state = Dialog {
+            message: &pull_message,
+            help_message: None,
+            typed: Spinner::new(|| env.pull(force)),
         }
-        Ok(state)
+        .spin()?;
+
+        match state {
+            PullResult::Updated => {
+                // only build if the environment was updated
+                //
+                // Build errors are _not_ handled here
+                // as it is assumed that environments were validated during push.
+                Dialog {
+                    message: "🛠️  Building the environment",
+                    help_message: None,
+                    typed: Spinner::new(|| env.build(flox)),
+                }
+                .spin()?;
+
+                message::updated(formatdoc! {"
+                    Pulled {owner}/{name} from {floxhub_host}{suffix}
+
+                    You can activate this environment with 'flox activate'
+                    ",
+                    owner = pointer.owner, name = pointer.name,
+                    floxhub_host = flox.floxhub.base_url(),
+                    suffix = if force { " (forced)" } else { "" }
+                });
+            },
+            PullResult::UpToDate => {
+                message::warning(formatdoc! {"
+                            {owner}/{name} is already up to date.
+                        ", owner = pointer.owner, name = pointer.name});
+            },
+        }
+
+        Ok(())
     }
 
     /// Pull a new environment from FloxHub into the given directory
@@ -183,11 +191,12 @@ impl Pull {
     /// If opening the environment fails, the .flox/ directory will be cleaned up.
     fn pull_new_environment(
         flox: &Flox,
-        dot_flox_path: PathBuf,
+        env_path: PathBuf,
         env_ref: EnvironmentRef,
         force: bool,
         message: &str,
     ) -> Result<()> {
+        let dot_flox_path = env_path.join(DOT_FLOX);
         if dot_flox_path.exists() {
             if force {
                 match open_path(flox, &dot_flox_path) {
@@ -282,8 +291,21 @@ impl Pull {
         mut env: ManagedEnvironment,
         query_functions: Option<QueryFunctions>,
     ) -> Result<()> {
+        let pulled_line = format!(
+            "Pulled {owner}/{name} from {floxhub_host}",
+            owner = env.owner(),
+            name = env.name(),
+            floxhub_host = env.pointer().floxhub_url
+        );
+        let completed = formatdoc! {"
+                    {pulled_line}
+
+                    You can activate this environment with 'flox activate'
+                    "};
         match result {
-            Ok(_) => {},
+            Ok(_) => {
+                message::created(completed);
+            },
             Err(EnvironmentError::Core(e)) if e.is_incompatible_system_error() => {
                 let hint = formatdoc! {"
                     Use 'flox pull --force' to add your system to the manifest.
@@ -316,13 +338,29 @@ impl Pull {
                 }
 
                 let doc = Self::amend_current_system(&env, flox)?;
-                if let Err(broken_error) = env.edit_unsafe(flox, doc.to_string())? {
-                    message::warning(formatdoc! {"
-                        {err:#}
+                let rebuild_with_current_system = Dialog {
+                    message: "Adding your system to the manifest and validating the environment.",
+                    help_message: None,
+                    typed: Spinner::new(|| env.edit_unsafe(flox, doc.to_string())),
+                }
+                .spin()?;
 
-                        Could not build modified environment, build errors need to be resolved manually.",
-                        err = anyhow!(broken_error)
-                    });
+                match rebuild_with_current_system {
+                    Err(broken_error) => {
+                        message::warning(format!("{err:#}", err = anyhow!(broken_error)));
+
+                        let message_with_warning = formatdoc! {"
+                            {pulled_line}
+
+                            Modified the manifest to include your system but could not build.
+                            Use 'flox edit' to address issues before activating.
+                        "};
+
+                        message::created(message_with_warning);
+                    },
+                    Ok(_) => {
+                        message::created(completed);
+                    },
                 };
             },
             Err(EnvironmentError::Core(
@@ -348,7 +386,13 @@ impl Pull {
                 // The unwrap() is only reached if !force,
                 // and we return above if !force and query_functions.is_none()
                 if force || (query_functions.unwrap().query_ignore_build_errors)()? {
-                    message::warning("Ignoring build errors and pulling the environment anyway.");
+                    let message_with_warning = formatdoc! {"
+                        {pulled_line}
+
+                        Could not build environment.
+                        Use 'flox edit' to address issues before activating.
+                    "};
+                    message::warning(message_with_warning);
                 } else {
                     fs::remove_dir_all(dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
@@ -363,12 +407,12 @@ impl Pull {
         Ok(())
     }
 
-    /// construct a message for pulling a new environment
-    fn pull_new_messages(
+    /// construct a message for spiners while pulling a new environment
+    fn pull_new_spinner_message(
         dir: Option<&Path>,
         env_ref: &EnvironmentRef,
         floxhub_host: &Url,
-    ) -> (String, String) {
+    ) -> String {
         let mut start_message =
             format!("⬇️  Remote: pulling and building {env_ref} from {floxhub_host}");
         if let Some(dir) = dir {
@@ -377,13 +421,7 @@ impl Pull {
             start_message += " into the current directory";
         };
 
-        let complete_message = formatdoc! {"
-            Pulled {env_ref} from {floxhub_host}
-
-            You can activate this environment with 'flox activate'
-        "};
-
-        (start_message, complete_message)
+        start_message
     }
 
     /// if possible, prompt the user to automatically add their system to the manifest
