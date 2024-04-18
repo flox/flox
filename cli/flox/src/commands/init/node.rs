@@ -36,7 +36,7 @@ pub(super) struct Node {
     /// [Self::get_init_customization].
     ///
     /// Initialized in [Self::new] and potentially modified by [Self::prompt_user].
-    action: NodeAction,
+    action: NodeInstallAction,
     /// This is initialized in [Self::new] and currently only used by
     /// [Self::nodejs_message_and_version]
     /// TODO: should this be stored on [NodeAction::InstallNode]?
@@ -96,10 +96,10 @@ struct NodeInstall {
 }
 
 #[derive(Clone)]
-enum NodeAction {
-    InstallYarn(Box<YarnInstall>),
-    InstallYarnOrNode(Box<YarnInstall>, Box<NodeInstall>),
-    InstallNode(Box<NodeInstall>),
+enum NodeInstallAction {
+    Yarn(Box<YarnInstall>),
+    YarnOrNode(Box<YarnInstall>, Box<NodeInstall>),
+    Node(Box<NodeInstall>),
 }
 
 struct PackageJSONVersions {
@@ -159,7 +159,7 @@ impl Node {
         if let Some(yarn_install) = &yarn_install {
             if !package_json_and_package_lock {
                 return Ok(Some(Self {
-                    action: NodeAction::InstallYarn(Box::new(yarn_install.clone())),
+                    action: NodeInstallAction::Yarn(Box::new(yarn_install.clone())),
                     package_json_node_version: None,
                     nvmrc_version: None,
                 }));
@@ -198,11 +198,11 @@ impl Node {
                     valid_package_json,
                 )
                 .map_or(
-                    Some(NodeAction::InstallYarn(Box::new(yarn_install.clone()))),
+                    Some(NodeInstallAction::Yarn(Box::new(yarn_install.clone()))),
                     |node_install| {
                         // We know at this point that package-lock.json exists,
                         // because otherwise we would have returned above
-                        Some(NodeAction::InstallYarnOrNode(
+                        Some(NodeInstallAction::YarnOrNode(
                             Box::new(yarn_install),
                             Box::new(node_install),
                         ))
@@ -221,7 +221,7 @@ impl Node {
                     if yarn_lock_exists {
                         node_install.npm_hook = false;
                     }
-                    NodeAction::InstallNode(Box::new(node_install))
+                    NodeInstallAction::Node(Box::new(node_install))
                 })
             },
         };
@@ -645,9 +645,9 @@ impl Node {
             // Temporarily set choice so self.get_init_customization() returns
             // the correct hook
             if choice == 3 {
-                self.action = NodeAction::InstallNode(Box::new(node_install.clone()))
+                self.action = NodeInstallAction::Node(Box::new(node_install.clone()))
             } else if choice == 4 {
-                self.action = NodeAction::InstallYarn(Box::new(yarn_install.clone()))
+                self.action = NodeInstallAction::Yarn(Box::new(yarn_install.clone()))
             }
             message::plain(format_customization(&self.get_init_customization())?);
 
@@ -655,9 +655,9 @@ impl Node {
         }
 
         if choice == 0 {
-            self.action = NodeAction::InstallNode(Box::new(node_install.clone()))
+            self.action = NodeInstallAction::Node(Box::new(node_install.clone()))
         } else if choice == 1 {
-            self.action = NodeAction::InstallYarn(Box::new(yarn_install.clone()))
+            self.action = NodeInstallAction::Yarn(Box::new(yarn_install.clone()))
         }
         Ok(choice == 0 || choice == 1)
     }
@@ -672,11 +672,11 @@ impl Node {
 impl InitHook for Node {
     fn prompt_user(&mut self, flox: &Flox, _path: &Path) -> Result<bool> {
         match &self.action {
-            NodeAction::InstallYarn(yarn_install) => self.prompt_with_yarn(yarn_install),
-            NodeAction::InstallYarnOrNode(yarn_install, node_install) => {
+            NodeInstallAction::Yarn(yarn_install) => self.prompt_with_yarn(yarn_install),
+            NodeInstallAction::YarnOrNode(yarn_install, node_install) => {
                 self.prompt_for_package_manager(flox, *yarn_install.clone(), *node_install.clone())
             },
-            NodeAction::InstallNode(node_install) => self.prompt_with_node(flox, node_install),
+            NodeInstallAction::Node(node_install) => self.prompt_with_node(flox, node_install),
         }
     }
 
@@ -684,7 +684,7 @@ impl InitHook for Node {
         let mut packages = vec![];
 
         let profile = match &self.action {
-            NodeAction::InstallYarn(yarn_install) => {
+            NodeInstallAction::Yarn(yarn_install) => {
                 packages.push(PackageToInstall {
                     id: "yarn".to_string(),
                     pkg_path: yarn_install.yarn.rel_path.join("."),
@@ -697,8 +697,8 @@ impl InitHook for Node {
             },
             // Default to node for InstallYarnOrNode
             // This is only reachable if --auto-setup is used.
-            NodeAction::InstallYarnOrNode(_, node_install)
-            | NodeAction::InstallNode(node_install) => {
+            NodeInstallAction::YarnOrNode(_, node_install)
+            | NodeInstallAction::Node(node_install) => {
                 let nodejs_to_install = match &node_install.node {
                     Some(result) => PackageToInstall {
                         id: "nodejs".to_string(),
@@ -794,7 +794,7 @@ mod tests {
             Node {
                 package_json_node_version: None,
                 nvmrc_version: None,
-                action: NodeAction::InstallYarn(Box::new(YarnInstall {
+                action: NodeInstallAction::Yarn(Box::new(YarnInstall {
                     yarn: SearchResult {
                         rel_path: vec!["yarn".to_string(), "path".to_string()],
                         version: Some("1".to_string()),
@@ -824,7 +824,7 @@ mod tests {
             Node {
                 package_json_node_version: None,
                 nvmrc_version: None,
-                action: NodeAction::InstallYarnOrNode(
+                action: NodeInstallAction::YarnOrNode(
                     Box::new(YarnInstall {
                         yarn: SearchResult::default(),
                         node: SearchResult::default(),
@@ -858,7 +858,7 @@ mod tests {
             Node {
                 package_json_node_version: None,
                 nvmrc_version: None,
-                action: NodeAction::InstallNode(Box::new(NodeInstall {
+                action: NodeInstallAction::Node(Box::new(NodeInstall {
                     node: Some(SearchResult {
                         rel_path: vec!["nodejs".to_string(), "path".to_string()],
                         version: Some("1".to_string()),
