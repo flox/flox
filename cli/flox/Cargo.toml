@@ -47,12 +47,14 @@ oauth2.workspace = true
 textwrap = { workspace = true, features = ["terminal_size"] }
 indent.workspace = true
 semver.workspace = true
+regex.workspace = true
 sentry = { workspace = true, features = ["anyhow", "tracing", "debug-logs"] }
 
 [dev-dependencies]
 pretty_assertions.workspace = true
 serial_test.workspace = true
 temp-env.workspace = true
+tempfile.workspace = true
 
 
 [features]

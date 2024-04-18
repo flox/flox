@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::Debug;
+use std::fs;
 use std::path::Path;
 use std::str::FromStr;
 
@@ -10,6 +11,7 @@ use flox_rust_sdk::models::manifest::PackageToInstall;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::debug;
+use regex::Regex;
 
 use super::{
     format_customization,
@@ -539,23 +541,53 @@ impl Provider for PyProject {
 pub(super) struct Requirements {
     /// The latest version of python3 found in the catalogs
     python_version: String,
+    filename: String,
 }
 
 impl Requirements {
     fn detect(flox: &Flox, path: &Path) -> Result<Option<Self>> {
-        let requirements_txt = path.join("requirements.txt");
+        debug!("Detecting python requirements.txt at {:?}", path);
+        // NOTE: Does not match requirements files that have a prefix like `example_requirements.txt`
+        // See https://github.com/flox/flox/issues/1323
+        let pat = Regex::new(r#"^requirements\S*\.txt"#)?;
+        let mut dir_it = fs::read_dir(path)?;
+        let matched_filename: Option<String> =
+            dir_it.try_fold(None, |acc: Option<String>, entry| -> Result<_> {
+                let path = entry?.path();
+                if path.is_file() {
+                    // A file is considered a requirements file if it:
+                    // Has a name (which should always be true?)
+                    if let Some(file_name_osstr) = path.file_name() {
+                        // The name is valid unicode
+                        if let Some(file_name) = file_name_osstr.to_str() {
+                            // The name matches the regex pattern
+                            if pat.is_match(file_name)
+                            // Only considered if shorter than the current match OR if there is no current match
+                            && acc.as_ref().map(|acc| file_name.len() < acc.len()).unwrap_or(true)
+                            {
+                                return Ok(Some(file_name.to_string()));
+                            }
+                        }
+                    }
+                }
+                Ok(acc)
+            })?;
 
-        if !requirements_txt.exists() {
-            return Ok(None);
+        if let Some(filename) = matched_filename {
+            let result = get_default_package_if_compatible(flox, ["python3"], None)?
+                .context("Did not find python3 in the catalogs")?;
+            // given our catalog is based on nixpkgs,
+            // we can assume that the version is always present.
+            let python_version = result.version.unwrap_or_else(|| "N/A".to_string());
+
+            Ok(Some(Requirements {
+                python_version,
+                filename,
+            }))
+        } else {
+            debug!("Did not find a python requirements.txt at {:?}", path);
+            Ok(None)
         }
-
-        let result = get_default_package_if_compatible(flox, ["python3"], None)?
-            .context("Did not find python3 in the catalogs")?;
-        // given our catalog is based on nixpkgs,
-        // we can assume that the version is always present.
-        let python_version = result.version.unwrap_or_else(|| "N/A".to_string());
-
-        Ok(Some(Requirements { python_version }))
     }
 }
 
@@ -580,10 +612,11 @@ impl Provider for Requirements {
     }
 
     fn get_init_customization(&self) -> InitCustomization {
+        let filename = self.filename.as_str();
         InitCustomization {
             profile: Some(
                 // TODO: when we support fish, we'll need to source activate.fish
-                indoc! {r#"
+                formatdoc! {r#"
                 # Setup a Python virtual environment
 
                 PYTHON_DIR="$FLOX_ENV_CACHE/python"
@@ -595,7 +628,7 @@ impl Provider for Requirements {
                 echo "Activating python virtual environment"
                 source "$PYTHON_DIR/bin/activate"
 
-                pip install -r "$FLOX_ENV_PROJECT/requirements.txt" --quiet"#}
+                pip install -r "$FLOX_ENV_PROJECT/{filename}" --quiet"#}
                 .to_string(),
             ),
             packages: Some(vec![PackageToInstall {
@@ -613,6 +646,7 @@ mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_global_lock;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
+    use tempfile::TempDir;
 
     use super::*;
     use crate::commands::init::ProvidedPackage;
@@ -794,5 +828,63 @@ mod tests {
             },
             poetry_version: "1.7.1".to_string(),
         });
+    }
+
+    /// Requirements::detect should return None if no requirements.txt is found
+    #[test]
+    #[serial]
+    fn test_requirements_detect_no_file() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let temp_dir = TempDir::new().unwrap(); // Deleted when temp_dir goes out of scope
+        let no_match = temp_dir.path().join("not_a_requirements.txt");
+        let no_match2 = temp_dir.path().join("random_file.txt");
+
+        fs::write(&no_match, "").unwrap(); // NOTE: As of right now, `Requirements::detect()` doesn't actually read the file
+        fs::write(&no_match2, "").unwrap();
+        let requirements = Requirements::detect(&flox, temp_dir.path()).unwrap();
+        assert!(requirements.is_none());
+    }
+
+    /// Requirements::detect should match requirements*.txt
+    #[test]
+    #[serial]
+    fn test_requirements_detect() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let temp_dir = TempDir::new().unwrap(); // Deleted when temp_dir goes out of scope
+        let requirements_file = temp_dir.path().join("requirements.txt");
+        fs::write(&requirements_file, "").unwrap();
+        let requirements = Requirements::detect(&flox, temp_dir.path())
+            .unwrap()
+            .unwrap();
+        assert_eq!(requirements.filename, "requirements.txt");
+    }
+
+    #[test]
+    #[serial]
+    fn test_requirements_detect_unconventional() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let temp_dir = TempDir::new().unwrap(); // Deleted when temp_dir goes out of scope
+        let requirements_file_unconvential = temp_dir.path().join("requirements_versioned.txt");
+        fs::write(&requirements_file_unconvential, "").unwrap();
+        let requirements = Requirements::detect(&flox, temp_dir.path())
+            .unwrap()
+            .unwrap();
+        assert_eq!(requirements.filename, "requirements_versioned.txt");
+    }
+
+    /// Requirements::detect should return the shortest match
+    #[test]
+    #[serial]
+    fn test_requirements_detect_shortest() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let temp_dir = TempDir::new().unwrap(); // Deleted when temp_dir goes out of scope
+        let long_name = temp_dir.path().join("requirements_versioned_dev.txt");
+        let short_name = temp_dir.path().join("requirements_versioned.txt"); // shorter
+        fs::write(&long_name, "").unwrap();
+        fs::write(&short_name, "").unwrap();
+        let requirements = Requirements::detect(&flox, temp_dir.path())
+            .unwrap()
+            .unwrap();
+        assert_eq!(requirements.filename, "requirements_versioned.txt");
     }
 }
