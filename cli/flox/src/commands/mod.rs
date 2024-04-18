@@ -67,6 +67,7 @@ use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::init::{
     init_access_tokens,
+    init_catalog_client,
     init_telemetry_uuid,
     init_uuid,
     telemetry_opt_out_needs_migration,
@@ -313,6 +314,8 @@ impl FloxArgs {
             Ok(token) => token,
         };
 
+        let catalog_client = init_catalog_client(&config);
+
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
@@ -324,6 +327,7 @@ impl FloxArgs {
             uuid: init_uuid(&config.flox.data_dir).await?,
             floxhub_token,
             floxhub,
+            catalog_client,
         };
 
         // in debug mode keep the tempdir to reproduce nix commands
