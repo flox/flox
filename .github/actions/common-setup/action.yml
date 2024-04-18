@@ -12,6 +12,28 @@ inputs:
   SYSTEM:
     default: ""
 
+outputs:
+  GITHUB_ACCESS_TOKEN:
+    value: "${{ steps.secrets.outputs.GITHUB_ACCESS_TOKEN }}"
+  CACHE_BUCKET:
+    value: "${{ steps.secrets.outputs.CACHE_BUCKET }}"
+  CACHE_SECRET_KEY:
+    value: "${{ steps.secrets.outputs.CACHE_SECRET_KEY }}"
+  CACHE_AWS_ACCESS_KEY_ID:
+    value: "${{ steps.secrets.outputs.CACHE_AWS_ACCESS_KEY_ID }}"
+  CACHE_AWS_SECRET_ACCESS_KEY:
+    value: "${{ steps.secrets.outputs.CACHE_AWS_SECRET_ACCESS_KEY }}"
+  SSH_KEY:
+    value: "${{ steps.secrets.outputs.SSH_KEY }}"
+  TAILSCALE_URL:
+    value: "${{ steps.secrets.outputs.TAILSCALE_URL }}"
+  TAILSCALE_AUTH_KEY:
+    value: "${{ steps.secrets.outputs.TAILSCALE_AUTH_KEY }}"
+  REMOTE_BUILDERS:
+    value: "${{ steps.secrets.outputs.REMOTE_BUILDERS }}"
+  AUTH0_FLOX_DEV_CLIENT_SECRET:
+    value: "${{ steps.secrets.outputs.AUTH0_FLOX_DEV_CLIENT_SECRET }}"
+
 runs:
   using: "composite"
   steps:
