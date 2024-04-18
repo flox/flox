@@ -191,16 +191,12 @@ ssh_key_setup() {
       -C 'floxuser@example.invalid'
     chmod 600 "$FLOX_TEST_SSH_KEY"
   fi
-  export SSH_AUTH_SOCK="$BATS_SUITE_TMPDIR/ssh/ssh_agent.sock"
-  if ! [[ -d "${SSH_AUTH_SOCK%/*}" ]]; then mkdir -p "${SSH_AUTH_SOCK%/*}"; fi
-  # If our socket isn't open ( it probably ain't ) we open one.
-  if ! [[ -e "$SSH_AUTH_SOCK" ]]; then
-    # You can't find work in this town without a good agent. Lets get one.
-    eval "$(ssh-agent -s)"
-    ln -sf "$SSH_AUTH_SOCK" "$BATS_SUITE_TMPDIR/ssh/ssh_agent.sock"
-    export SSH_AUTH_SOCK="$BATS_SUITE_TMPDIR/ssh/ssh_agent.sock"
-    ssh-add "$FLOX_TEST_SSH_KEY"
-  fi
+  # Don't poison any existing agent and allow `ssh-add` to fail if we can't
+  # start a new one.
+  unset SSH_AUTH_SOCK SSH_AGENT_PID
+  # You can't find work in this town without a good agent. Lets get one.
+  eval "$(ssh-agent -s)"
+  ssh-add "$FLOX_TEST_SSH_KEY"
   unset SSH_ASKPASS
   export __FT_RAN_SSH_KEY_SETUP=:
 }
