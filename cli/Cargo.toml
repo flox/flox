@@ -6,6 +6,7 @@ resolver = "2"
 
 [workspace.dependencies]
 anyhow = "1"
+async-trait = "0.1.80"
 blake3 = "1.5.0"
 bpaf = { version = "0.9.8", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
@@ -14,6 +15,7 @@ config = "0.14.0"
 crossterm = "0.27"
 derive_more = "0.99.17"
 dirs = "5.0.0"
+enum_dispatch = "0.3.13"
 flox-rust-sdk = { path = "flox-rust-sdk" }
 fslock = "0.2.1"
 futures = "0.3"

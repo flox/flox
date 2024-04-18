@@ -3,7 +3,7 @@ use flox_rust_sdk::flox::{Flox, Floxhub, DEFAULT_FLOXHUB_URL};
 use log::debug;
 use tempfile::TempDir;
 
-use super::init::init_access_tokens;
+use super::init::{init_access_tokens, init_catalog_client};
 use crate::config::Config;
 
 pub(crate) trait FloxCompletionExt
@@ -49,6 +49,8 @@ impl FloxCompletionExt for Flox {
             .expect("User must have a home directory")
             .join(".netrc");
 
+        let catalog_client = init_catalog_client(&config);
+
         Ok(Flox {
             cache_dir: config.flox.cache_dir,
             data_dir: config.flox.data_dir,
@@ -60,6 +62,7 @@ impl FloxCompletionExt for Flox {
             uuid: uuid::Uuid::nil(),
             floxhub_token: None,
             floxhub: Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None)?,
+            catalog_client,
         })
     }
 }

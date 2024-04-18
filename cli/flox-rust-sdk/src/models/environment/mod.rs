@@ -65,7 +65,7 @@ pub const FLOX_PROFILE_PLACEHOLDER: &str = "_FLOX_INIT_PROFILE";
 pub const FLOX_HOOK_PLACEHOLDER: &str = "_FLOX_INIT_HOOK";
 pub const FLOX_INSTALL_PLACEHOLDER: &str = "_FLOX_INIT_INSTALL";
 
-pub const N_HASH_CHARS: usize = 5;
+pub const N_HASH_CHARS: usize = 8;
 
 #[derive(Debug)]
 pub struct UpdateResult {

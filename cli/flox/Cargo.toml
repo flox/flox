@@ -6,49 +6,49 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flox-rust-sdk.workspace = true
 anyhow.workspace = true
-tokio.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-serde_yaml.workspace = true
-log.workspace = true
 bpaf.workspace = true
-config.workspace = true
-dirs.workspace = true
-tempfile.workspace = true
-futures.workspace = true
-once_cell.workspace = true
-itertools.workspace = true
-toml_edit.workspace = true
-supports-color.workspace = true
-inquire.workspace = true
-indicatif.workspace = true
-crossterm.workspace = true
-shell-escape.workspace = true
-xdg.workspace = true
-nix.workspace = true
-indoc.workspace = true
-derive_more.workspace = true
-time.workspace = true
-uuid.workspace = true
-reqwest.workspace = true
-sysinfo.workspace = true
-sys-info.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
-tracing-log.workspace = true
-fslock.workspace = true
-indexmap.workspace = true
-url.workspace = true
 chrono.workspace = true
-oauth2.workspace = true
-textwrap = { workspace = true, features = ["terminal_size"] }
+config.workspace = true
+crossterm.workspace = true
+derive_more.workspace = true
+dirs.workspace = true
+flox-rust-sdk.workspace = true
+fslock.workspace = true
+futures.workspace = true
 indent.workspace = true
+indexmap.workspace = true
+indicatif.workspace = true
+indoc.workspace = true
+inquire.workspace = true
+itertools.workspace = true
+log.workspace = true
+nix.workspace = true
+oauth2.workspace = true
+once_cell.workspace = true
+reqwest.workspace = true
 semver.workspace = true
 regex.workspace = true
 sentry = { workspace = true, features = ["anyhow", "tracing", "debug-logs"] }
+serde_json.workspace = true
+serde_yaml.workspace = true
+serde.workspace = true
+shell-escape.workspace = true
+supports-color.workspace = true
+sys-info.workspace = true
+sysinfo.workspace = true
+tempfile.workspace = true
+textwrap = { workspace = true, features = ["terminal_size"] }
+thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+toml_edit.workspace = true
+tracing-log.workspace = true
+tracing-subscriber.workspace = true
+tracing.workspace = true
+url.workspace = true
+uuid.workspace = true
+xdg.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true
