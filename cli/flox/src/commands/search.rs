@@ -13,7 +13,6 @@ use flox_rust_sdk::models::search::{
     SearchResult,
     SearchResults,
     ShowError,
-    Subtree,
 };
 use indoc::formatdoc;
 use log::debug;
@@ -279,17 +278,6 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
         let multiple_versions = results
             .iter()
             .filter_map(|sr| {
-                // Don't show a "latest" search result, it's just
-                // a duplicate
-                if sr.subtree == Subtree::Catalog
-                    && sr
-                        .abs_path
-                        .last()
-                        .map(|version| version == "latest")
-                        .unwrap_or(false)
-                {
-                    return None;
-                }
                 let name = sr.rel_path.join(".");
                 // We don't print packages that don't have a version since
                 // the resolver will always rank versioned packages higher.

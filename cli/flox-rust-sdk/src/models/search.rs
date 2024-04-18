@@ -427,15 +427,10 @@ pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitSta
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     /// Which input the package came from
-    pub input: String,
-    /// The full attribute path of the package inside the input.
     ///
-    /// Most attributes in the attribute path are broken out into other subfields
-    /// with the exception of the package version for a package from a catalog
-    /// (i.e. the last attribute in the path). This attribute can be extracted from
-    pub abs_path: Vec<String>,
-    /// Which subtree the package is under e.g. "catalog", "legacyPackages", etc
-    pub subtree: Subtree,
+    /// This is also abused to be the name of the catalog.
+    /// At some point we should rename this to catalog.
+    pub input: String,
     /// The system that the package can be built for
     pub system: String,
     /// The part of the attribute path after `<subtree>.<system>`.
@@ -449,14 +444,8 @@ pub struct SearchResult {
     pub version: Option<String>,
     /// The package description
     pub description: Option<String>,
-    /// Whether the package is marked "broken"
-    pub broken: Option<bool>,
-    /// Whether the package has an unfree license
-    pub unfree: Option<bool>,
     /// Which license the package is licensed under
     pub license: Option<String>,
-    /// The database ID of this package
-    pub id: u64,
 }
 
 #[cfg(test)]
