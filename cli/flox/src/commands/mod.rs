@@ -465,7 +465,7 @@ impl UpdateNotification {
             )));
         }
 
-        if *FLOX_VERSION == new_version {
+        if *FLOX_VERSION >= new_version {
             return Ok(None);
         };
 
