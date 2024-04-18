@@ -423,12 +423,18 @@ impl UpdateNotification {
         cache_dir: impl AsRef<Path>,
     ) -> Result<Option<Self>, UpdateNotificationError> {
         let notification_file = cache_dir.as_ref().join(UPDATE_NOTIFICATION_FILE_NAME);
-        Self::check_for_update_inner(
-            notification_file,
-            Self::get_latest_version(),
-            UPDATE_NOTIFICATION_EXPIRY,
-        )
-        .await
+        // FLOX_SENTRY_ENV won't be set for development builds.
+        // Skip printing an update notification.
+        if let Some(ref sentry_env) = *FLOX_SENTRY_ENV {
+            Self::check_for_update_inner(
+                notification_file,
+                Self::get_latest_version(sentry_env),
+                UPDATE_NOTIFICATION_EXPIRY,
+            )
+            .await
+        } else {
+            Ok(None)
+        }
     }
 
     /// If the user hasn't been notified of an update after `expiry` time has
@@ -522,13 +528,12 @@ impl UpdateNotification {
     /// Get latest version from downloads.flox.dev
     ///
     /// Timeout after TRAILING_NETWORK_CALL_TIMEOUT
-    async fn get_latest_version() -> Result<String, UpdateNotificationError> {
+    async fn get_latest_version(sentry_env: &str) -> Result<String, UpdateNotificationError> {
         let client = reqwest::Client::new();
 
         let request = client
             .get(format!(
-                "https://downloads.flox.dev/by-env/{}/LATEST_VERSION",
-                (*FLOX_SENTRY_ENV).as_ref().unwrap_or(&"stable".to_string())
+                "https://downloads.flox.dev/by-env/{sentry_env}/LATEST_VERSION",
             ))
             .timeout(TRAILING_NETWORK_CALL_TIMEOUT);
 
