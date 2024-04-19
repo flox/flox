@@ -412,8 +412,13 @@ impl PathEnvironment {
             customization,
         )?;
 
-        let mut environment =
-            Self::write_new(flox, pointer, dot_flox_parent_path, temp_dir, &manifest)?;
+        let mut environment = Self::write_new_unchecked(
+            flox,
+            pointer,
+            dot_flox_parent_path,
+            temp_dir,
+            manifest.to_string(),
+        )?;
 
         if let Some(ref packages) = customization.packages {
             // Ignore the result, because we know there can't be packages already installed
@@ -439,12 +444,12 @@ impl PathEnvironment {
     ///       to make this safe in practice.
     ///
     /// This functionality is shared between [PathEnvironment::init] and tests.
-    fn write_new(
+    fn write_new_unchecked(
         flox: &Flox,
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
-        manifest: &RawManifest,
+        manifest: impl AsRef<str>,
     ) -> Result<Self, EnvironmentError> {
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
         let env_dir = dot_flox_path.join(ENV_DIR_NAME);
@@ -464,8 +469,8 @@ impl PathEnvironment {
         }
 
         // Write `manifest.toml`
-        let write_res =
-            fs::write(manifest_path, manifest.to_string()).map_err(EnvironmentError::WriteManifest);
+        let write_res = fs::write(manifest_path, manifest.as_ref().to_string())
+            .map_err(EnvironmentError::WriteManifest);
         if let Err(e) = write_res {
             debug!("writing manifest did not complete successfully");
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
@@ -548,14 +553,14 @@ pub mod test_helpers {
 
     use super::*;
 
-    pub fn new_path_environment(flox: &Flox, manifest: &RawManifest) -> PathEnvironment {
+    pub fn new_path_environment(flox: &Flox, contents: &str) -> PathEnvironment {
         let pointer = PathPointer::new("name".parse().unwrap());
-        PathEnvironment::write_new(
+        PathEnvironment::write_new_unchecked(
             flox,
             pointer,
             tempdir_in(&flox.temp_dir).unwrap().into_path(),
             &flox.temp_dir,
-            &manifest,
+            &contents,
         )
         .unwrap()
     }
