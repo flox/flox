@@ -222,7 +222,7 @@ impl GoModuleSystemMode for GoModSystem {
 
     #[inline(always)]
     fn get_filename(&self) -> &'static str {
-        GO_MOD_FILENAME.into()
+        GO_MOD_FILENAME
     }
 
     fn get_version(&self) -> ProvidedVersion {
@@ -259,7 +259,7 @@ impl GoModuleSystemMode for GoWorkSystem {
 
     #[inline(always)]
     fn get_filename(&self) -> &'static str {
-        GO_WORK_FILENAME.into()
+        GO_WORK_FILENAME
     }
 
     fn get_version(&self) -> ProvidedVersion {
@@ -303,9 +303,8 @@ impl GoVersion {
     fn parse_content_version_string(content: &str) -> Result<Option<String>> {
         content
             .lines()
-            .skip_while(|line| !line.trim_start().starts_with("go"))
-            .next()
-            .and_then(|line| line.trim().split_whitespace().nth(1))
+            .find(|line| line.trim_start().starts_with("go"))
+            .and_then(|line| line.split_whitespace().nth(1))
             .and_then(|version| {
                 version
                     .parse::<semver::VersionReq>()

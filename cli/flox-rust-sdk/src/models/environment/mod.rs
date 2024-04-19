@@ -69,7 +69,7 @@ pub const FLOX_HOOK_TABLE_KEY: &str = "hook";
 /// Represents the `systems = []` array key from the Flox manifest.toml file
 pub const FLOX_SYSTEMS_ARRAY_KEY: &str = "systems";
 
-pub const N_HASH_CHARS: usize = 5;
+pub const N_HASH_CHARS: usize = 8;
 
 #[derive(Debug)]
 pub struct UpdateResult {

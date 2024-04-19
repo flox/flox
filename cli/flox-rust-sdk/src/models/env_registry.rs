@@ -416,8 +416,8 @@ mod test {
 
         #[test]
         fn none_on_nonexistent_registry_file(path: PathBuf) {
-            prop_assume!(path != PathBuf::from("/"));
             prop_assume!(path != PathBuf::from(""));
+            prop_assume!(!path.exists() || path.is_file());
             prop_assert!(read_environment_registry(path).unwrap().is_none())
         }
 
