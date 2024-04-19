@@ -242,13 +242,13 @@ pub mod types {
     ///  "examples": [
     ///    {
     ///      "name": "curl",
-    ///      "pkgPath": "curl"
+    ///      "pkgpath": "curl"
     ///    }
     ///  ],
     ///  "type": "object",
     ///  "required": [
     ///    "name",
-    ///    "pkgPath"
+    ///    "pkgpath"
     ///  ],
     ///  "properties": {
     ///    "derivation": {
@@ -263,8 +263,8 @@ pub mod types {
     ///      "title": "Name",
     ///      "type": "string"
     ///    },
-    ///    "pkgPath": {
-    ///      "title": "Pkgpath",
+    ///    "pkgpath": {
+    ///      "title": "pkgpath",
     ///      "type": "string"
     ///    },
     ///    "semver": {
@@ -292,8 +292,7 @@ pub mod types {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub derivation: Option<String>,
         pub name: String,
-        #[serde(rename = "pkgPath")]
-        pub pkg_path: String,
+        pub pkgpath: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub semver: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -316,15 +315,15 @@ pub mod types {
     ///      "descriptors": [
     ///        {
     ///          "name": "curl",
-    ///          "pkgPath": "curl"
+    ///          "pkgpath": "curl"
     ///        },
     ///        {
     ///          "name": "slack",
-    ///          "pkgPath": "slack"
+    ///          "pkgpath": "slack"
     ///        },
     ///        {
     ///          "name": "xeyes",
-    ///          "pkgPath": "xorg.xeyes"
+    ///          "pkgpath": "xorg.xeyes"
     ///        }
     ///      ],
     ///      "name": "test",
@@ -391,15 +390,15 @@ pub mod types {
     ///          "descriptors": [
     ///            {
     ///              "name": "curl",
-    ///              "pkgPath": "curl"
+    ///              "pkgpath": "curl"
     ///            },
     ///            {
     ///              "name": "slack",
-    ///              "pkgPath": "slack"
+    ///              "pkgpath": "slack"
     ///            },
     ///            {
     ///              "name": "xeyes",
-    ///              "pkgPath": "xorg.xeyes"
+    ///              "pkgpath": "xorg.xeyes"
     ///            }
     ///          ],
     ///          "name": "test",
@@ -1794,7 +1793,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
 Returns a list of versions for a given pkg-path
 
 Required Query Parameters:
-- **pkgPath**: The pkg-path, must be valid.
+- **pkgpath**: The pkg-path, must be valid.
 
 Optional Query Parameters:
 - **page**: Optional page number for pagination (def = 0)
@@ -1803,17 +1802,17 @@ Optional Query Parameters:
 Returns:
 - **PackageSearchResult**: A list of PackageInfo and the total result count
 
-Sends a `GET` request to `/api/v1/catalog/packages/{pkgPath}`
+Sends a `GET` request to `/api/v1/catalog/packages/{pkgpath}`
 
 */
-    pub async fn packages_api_v1_catalog_packages_pkg_path_get<'a>(
+    pub async fn packages_api_v1_catalog_packages_pkgpath_get<'a>(
         &'a self,
-        pkg_path: &'a str,
+        pkgpath: &'a str,
         page: Option<i64>,
         page_size: Option<i64>,
     ) -> Result<ResponseValue<types::PackagesResultInput>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/catalog/packages/{}", self.baseurl, encode_path(& pkg_path
+            "{}/api/v1/catalog/packages/{}", self.baseurl, encode_path(& pkgpath
             .to_string()),
         );
         let mut query = Vec::with_capacity(2usize);
@@ -1869,7 +1868,7 @@ Resolution Rules:
 A Package Descriptor match:
 - **name**: [required] - is not used in matching, only for reference (TBD is
             there a uniqueness constraint?)
-- **pkgPath**: [required] - this must match the nix attribute path exactly and in full
+- **pkgpath**: [required] - this must match the nix attribute path exactly and in full
 - **semver**: [optional] - This can be any valid semver range, and if given
     will attempt to parse the nix `version` field.  If it can and it is
     within the range, this check passes.  If it cannot parse `version` as a

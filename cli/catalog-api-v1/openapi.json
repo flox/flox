@@ -96,22 +96,22 @@
         }
       }
     },
-    "/api/v1/catalog/packages/{pkgPath}": {
+    "/api/v1/catalog/packages/{pkgpath}": {
       "get": {
         "tags": [
           "catalog"
         ],
         "summary": "Shows avaliable packages of a specfic package",
-        "description": "Returns a list of versions for a given pkg-path\n\nRequired Query Parameters:\n- **pkgPath**: The pkg-path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
-        "operationId": "packages_api_v1_catalog_packages__pkgPath__get",
+        "description": "Returns a list of versions for a given pkg-path\n\nRequired Query Parameters:\n- **pkgpath**: The pkg-path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
+        "operationId": "packages_api_v1_catalog_packages__pkgpath__get",
         "parameters": [
           {
-            "name": "pkgPath",
+            "name": "pkgpath",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Pkgpath"
+              "title": "pkgpath"
             }
           },
           {
@@ -147,7 +147,7 @@
             }
           },
           "404": {
-            "description": "pkgPath was not found.",
+            "description": "pkgpath was not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -175,7 +175,7 @@
           "catalog"
         ],
         "summary": "Resolve a list of Package Groups",
-        "description": "Resolves a list of package groups, each being a list of package descriptors.\n\nRequired Body:\n- **groups**: An object with an `items` array of PackageGroups to resolve.\n\nOptional Query Parameters:\n- **none**\n\nReturns:\n- **ResolvedPackageGroups**: A object with an `items` array of\n    `ResolvedPackageGroup` items.\n\nResolution Rules:\n- Each `PackageGroup` is resolved independently.\n- Each page that has a package that meets each of the descriptors in that group is returned in the results\n- The latest page will include details for each package in the group from that page\n- The remainder pages are returned without details (to get those details... TBD)\n\nA Package Descriptor match:\n- **name**: [required] - is not used in matching, only for reference (TBD is\n            there a uniqueness constraint?)\n- **pkgPath**: [required] - this must match the nix attribute path exactly and in full\n- **semver**: [optional] - This can be any valid semver range, and if given\n    will attempt to parse the nix `version` field.  If it can and it is\n    within the range, this check passes.  If it cannot parse `version` as a\n    valid semver, or it is not within the range, it is exluded.\n    - **allow-pre-release**: [optional] - Defaults to False.  Only applies\n        when a **semver** constraint is given.  If true, a `version` that can\n        be parsed as a valid semver, that includes a pre-release suffix will\n        be included as a candidate.  Otherwise, they will be excluded.\n- **version**: [optional] - If given, this must match the nix `version`\n    field precisely. This overrides **semver** matching if provided.",
+        "description": "Resolves a list of package groups, each being a list of package descriptors.\n\nRequired Body:\n- **groups**: An object with an `items` array of PackageGroups to resolve.\n\nOptional Query Parameters:\n- **none**\n\nReturns:\n- **ResolvedPackageGroups**: A object with an `items` array of\n    `ResolvedPackageGroup` items.\n\nResolution Rules:\n- Each `PackageGroup` is resolved independently.\n- Each page that has a package that meets each of the descriptors in that group is returned in the results\n- The latest page will include details for each package in the group from that page\n- The remainder pages are returned without details (to get those details... TBD)\n\nA Package Descriptor match:\n- **name**: [required] - is not used in matching, only for reference (TBD is\n            there a uniqueness constraint?)\n- **pkgpath**: [required] - this must match the nix attribute path exactly and in full\n- **semver**: [optional] - This can be any valid semver range, and if given\n    will attempt to parse the nix `version` field.  If it can and it is\n    within the range, this check passes.  If it cannot parse `version` as a\n    valid semver, or it is not within the range, it is exluded.\n    - **allow-pre-release**: [optional] - Defaults to False.  Only applies\n        when a **semver** constraint is given.  If true, a `version` that can\n        be parsed as a valid semver, that includes a pre-release suffix will\n        be included as a candidate.  Otherwise, they will be excluded.\n- **version**: [optional] - If given, this must match the nix `version`\n    field precisely. This overrides **semver** matching if provided.",
         "operationId": "resolve_api_v1_catalog_resolve_post",
         "requestBody": {
           "content": {
@@ -381,9 +381,9 @@
             "type": "string",
             "title": "Name"
           },
-          "pkgPath": {
+          "pkgpath": {
             "type": "string",
-            "title": "Pkgpath"
+            "title": "pkgpath"
           },
           "semver": {
             "anyOf": [
@@ -416,12 +416,12 @@
         "type": "object",
         "required": [
           "name",
-          "pkgPath"
+          "pkgpath"
         ],
         "title": "PackageDescriptor",
         "example": {
           "name": "curl",
-          "pkgPath": "curl"
+          "pkgpath": "curl"
         }
       },
       "PackageGroup": {
@@ -461,15 +461,15 @@
           "descriptors": [
             {
               "name": "curl",
-              "pkgPath": "curl"
+              "pkgpath": "curl"
             },
             {
               "name": "slack",
-              "pkgPath": "slack"
+              "pkgpath": "slack"
             },
             {
               "name": "xeyes",
-              "pkgPath": "xorg.xeyes"
+              "pkgpath": "xorg.xeyes"
             }
           ],
           "name": "test",
@@ -497,15 +497,15 @@
               "descriptors": [
                 {
                   "name": "curl",
-                  "pkgPath": "curl"
+                  "pkgpath": "curl"
                 },
                 {
                   "name": "slack",
-                  "pkgPath": "slack"
+                  "pkgpath": "slack"
                 },
                 {
                   "name": "xeyes",
-                  "pkgPath": "xorg.xeyes"
+                  "pkgpath": "xorg.xeyes"
                 }
               ],
               "name": "test",
