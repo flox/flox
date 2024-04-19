@@ -54,10 +54,15 @@ pub const CACHE_DIR_NAME: &str = "cache";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 
-// A collection of variables pertaining to the environment
-// currently being activated. These are used by hooks to
-// configure several variables, notably including FLOX_ENV_DIRS
-// and _FLOX_ACTIVE_ENVIRONMENTS.
+// The FLOX_* variables which follow are currently updated by the CLI as it
+// activates new environments, and they are consequently *not* updated with
+// manual invocations of the activation script. We want the activation script
+// to eventually have feature parity with the CLI, so in future we will need
+// to migrate this logic to the activation script itself. The only information
+// known by the CLI that cannot be easily derived at runtime is the description
+// text to be added to the prompt, and FLOX_ENV_DESCRIPTION_VAR was introduced
+// to provide the means by which the CLI will be able to communicate this detail
+// to the activation script.
 pub const FLOX_ENV_DESCRIPTION_VAR: &str = "FLOX_ENV_DESCRIPTION";
 
 pub const FLOX_ENV_CACHE_VAR: &str = "FLOX_ENV_CACHE";
