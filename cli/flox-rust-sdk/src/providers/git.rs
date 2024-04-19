@@ -1,13 +1,21 @@
 use std::collections::BTreeMap;
+use std::env;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use log::{debug, error, warn};
+use once_cell::sync::Lazy;
 use thiserror::Error;
 
 use crate::utils::CommandExt;
+
+// This is the full /path/to/bin/git that we actually use.
+// This is set once and prefers to use the `GIT_PKG` env variable if set,
+// and falls back to the value observed at build time if it is unset.
+pub static GIT_BIN: Lazy<String> =
+    Lazy::new(|| env::var("GIT_PKG").unwrap_or(env!("GIT_PKG").to_string()) + "/bin/git");
 
 #[derive(Error, Debug)]
 pub enum EmptyError {}
@@ -115,7 +123,7 @@ impl Default for GitCommandOptions {
     /// By default, use the git binary bundled with flox
     fn default() -> Self {
         Self {
-            exe: String::from(env!("GIT_PKG")) + "/bin/git",
+            exe: GIT_BIN.to_string(),
             config: Default::default(),
             envs: Default::default(),
         }
