@@ -318,6 +318,15 @@ impl Activate {
         // old_activate_command function.
         let activate_path = activation_path.join("activate");
         if activate_path.is_dir() {
+            // We'll warn the user with a debug message for now, and when we
+            // are ready to start deprecating support for the old style we'll
+            // change this to an info message, and finally throw an error as
+            // we remove support entirely for the old style.
+            debug!(
+                "old-style activation directory found, \
+                 consider re-rendering environment: {}",
+                activate_path.display()
+            );
             return Self::old_activate_command(run_args, shell, exports, activation_path);
         }
 
@@ -422,6 +431,15 @@ impl Activate {
         // old_activate_interactive function.
         let activate_path = activation_path.join("activate");
         if activate_path.is_dir() {
+            // We'll warn the user with a debug message for now, and when we
+            // are ready to start deprecating support for the old style we'll
+            // change this to an info message, and finally throw an error as
+            // we remove support entirely for the old style.
+            debug!(
+                "old-style activation directory found, \
+                 consider re-rendering environment: {}",
+                activate_path.display()
+            );
             return Self::old_activate_interactive(shell, exports, activation_path, now_active);
         }
 
@@ -479,6 +497,15 @@ impl Activate {
         // old_activate_in_place function.
         let activate_path = activation_path.join("activate");
         if activate_path.is_dir() {
+            // We'll warn the user with a debug message for now, and when we
+            // are ready to start deprecating support for the old style we'll
+            // change this to an info message, and finally throw an error as
+            // we remove support entirely for the old style.
+            debug!(
+                "old-style activation directory found, \
+                 consider re-rendering environment: {}",
+                activate_path.display()
+            );
             return Self::old_activate_in_place(shell, exports, activation_path);
         }
 
