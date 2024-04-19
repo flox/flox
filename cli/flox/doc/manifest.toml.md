@@ -255,10 +255,13 @@ SERVER_PORT = "3000"
 
 ## `[hook]`
 
-The `[hook]` section of the manifest allows you to specify scripts to be invoked by a
-**bash** shell immediately upon activating an environment for the *first time only*.
-Subsequent activations, such as the "in-place" activations performed by way of
-"in-place" invocations performed in subshell "dotfiles" will *NOT* re-run these scripts.
+The `[hook]` section provides a place to specify
+scripts to be invoked by a **bash** shell
+immediately upon activating an environment for the *first time only*.
+Subsequent "in place" activations,
+such as those performed from within `eval "$(flox activate)"` invocations
+embedded in shell "rc" files like `.bashrc`
+will *NOT* re-run scripts from this section.
 
 Hook scripts inherit environment variables set in the `[vars]` section,
 and variables set by the script will in turn be inherited by
