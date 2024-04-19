@@ -10,6 +10,7 @@ use flox_rust_sdk::models::manifest::PackageToInstall;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::debug;
+use regex::Regex;
 
 use super::{
     format_customization,
@@ -186,9 +187,9 @@ impl<P: Provider + 'static> From<Result<Option<P>>> for Provide<Box<dyn Provider
 trait Provider: Debug {
     fn describe_provider(&self) -> Cow<'static, str>;
 
-    fn describe_reason(&self) -> Cow<'static, str>;
+    fn describe_reason(&self) -> Cow<'_, str>;
 
-    fn describe_customization(&self) -> Cow<'static, str>;
+    fn describe_customization(&self) -> Cow<'_, str>;
 
     fn compatible(&self) -> bool {
         true
@@ -539,23 +540,64 @@ impl Provider for PyProject {
 pub(super) struct Requirements {
     /// The latest version of python3 found in the catalogs
     python_version: String,
+    filenames: Vec<String>,
 }
 
 impl Requirements {
+    /// Gets the filenames of all the requirements.txt files in the given directory
+    fn get_matches(path: &Path) -> Result<Vec<String>> {
+        // NOTE: Does not match requirements files that have a prefix like `example_requirements.txt`
+        // See https://github.com/flox/flox/issues/1323
+        let pat = Regex::new(r"^requirements\S*\.txt")?;
+        let dir_it = std::fs::read_dir(path)?;
+        let matches: Vec<String> = dir_it
+            .filter_map(|entry_res| match entry_res {
+                Ok(entry) => {
+                    let path = entry.path();
+
+                    if path.is_file() {
+                        // Files are considered valid requirements files if they:
+                        // Have a name (should always be the case)
+                        if let Some(file_name_osstr) = path.file_name() {
+                            // The name is valid unicode
+                            if let Some(file_name) = file_name_osstr.to_str() {
+                                // The name matches the requirements*.txt pattern
+                                if pat.is_match(file_name) {
+                                    // NOTE: Does not currently check the contents of the file
+                                    return Some(Ok(file_name.to_string()));
+                                }
+                            }
+                        }
+                    }
+                    None
+                },
+                // Convert from std::io::Error to anyhow::Error
+                Err(e) => Some(Err(e.into())),
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(matches)
+    }
+
     fn detect(flox: &Flox, path: &Path) -> Result<Option<Self>> {
-        let requirements_txt = path.join("requirements.txt");
+        debug!("Detecting python requirements.txt at {:?}", path);
+        let matches = Self::get_matches(path)?;
 
-        if !requirements_txt.exists() {
-            return Ok(None);
+        if !matches.is_empty() {
+            let result = get_default_package_if_compatible(flox, ["python3"], None)?
+                .context("Did not find python3 in the catalogs")?;
+            // given our catalog is based on nixpkgs,
+            // we can assume that the version is always present.
+            let python_version = result.version.unwrap_or_else(|| "N/A".to_string());
+
+            Ok(Some(Requirements {
+                python_version,
+                filenames: matches,
+            }))
+        } else {
+            debug!("Did not find a python requirements.txt at {:?}", path);
+            Ok(None)
         }
-
-        let result = get_default_package_if_compatible(flox, ["python3"], None)?
-            .context("Did not find python3 in the catalogs")?;
-        // given our catalog is based on nixpkgs,
-        // we can assume that the version is always present.
-        let python_version = result.version.unwrap_or_else(|| "N/A".to_string());
-
-        Ok(Some(Requirements { python_version }))
     }
 }
 
@@ -564,26 +606,37 @@ impl Provider for Requirements {
         "latest python".into()
     }
 
-    fn describe_reason(&self) -> Cow<'static, str> {
+    fn describe_reason(&self) -> Cow<'_, str> {
         // Found ...
-        "requirements.txt".into()
+        self.filenames.join(", ").into()
     }
 
-    fn describe_customization(&self) -> Cow<'static, str> {
+    fn describe_customization(&self) -> Cow<'_, str> {
         formatdoc! {"
             Installs latest python ({}) with pip bundled.
             Adds hooks to setup and use a venv.
-            Installs the dependencies from the requirements.txt to the venv.",
+            Installs dependencies to the venv from: {}",
             self.python_version,
+            self.filenames.join(", ")
         }
         .into()
     }
 
     fn get_init_customization(&self) -> InitCustomization {
+        let pip_cmds = self
+            .filenames
+            .iter()
+            .map(|file_name| {
+                formatdoc! {r#"
+                pip install -r "$FLOX_ENV_PROJECT/{}" --quiet"#,
+                file_name
+                }
+            })
+            .join("\n");
         InitCustomization {
             profile: Some(
                 // TODO: when we support fish, we'll need to source activate.fish
-                indoc! {r#"
+                formatdoc! {r#"
                 # Setup a Python virtual environment
 
                 PYTHON_DIR="$FLOX_ENV_CACHE/python"
@@ -595,7 +648,7 @@ impl Provider for Requirements {
                 echo "Activating python virtual environment"
                 source "$PYTHON_DIR/bin/activate"
 
-                pip install -r "$FLOX_ENV_PROJECT/requirements.txt" --quiet"#}
+                {pip_cmds}"#}
                 .to_string(),
             ),
             packages: Some(vec![PackageToInstall {
@@ -610,6 +663,8 @@ impl Provider for Requirements {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_global_lock;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
@@ -794,5 +849,61 @@ mod tests {
             },
             poetry_version: "1.7.1".to_string(),
         });
+    }
+
+    /// Requirements::get_matches should return an empty Vec if no requirements files are found
+    #[test]
+    fn test_requirements_no_match() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let temp_dir = flox.temp_dir;
+        let no_match = temp_dir.join("not_a_requirements.txt");
+        let no_match2 = temp_dir.join("random_file.txt");
+
+        File::create(&no_match).unwrap();
+        File::create(&no_match2).unwrap();
+        let matches = Requirements::get_matches(&temp_dir).unwrap();
+        assert!(matches.len() == 0);
+    }
+
+    /// Requirements::detect should match requirements.txt
+    #[test]
+    fn test_requirements_matches_conventional() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let temp_dir = flox.temp_dir;
+        let requirements_file = temp_dir.join("requirements.txt");
+        File::create(&requirements_file).unwrap();
+        let matches = Requirements::get_matches(&temp_dir).unwrap();
+        assert!(matches.len() == 1);
+        assert_eq!(matches[0], "requirements.txt");
+    }
+
+    /// Requirements::detect should match requirements_versioned.txt
+    #[test]
+    fn test_requirements_matches_unconventional() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let temp_dir = flox.temp_dir;
+        let requirements_file_unconventional = temp_dir.join("requirements_versioned.txt");
+        File::create(&requirements_file_unconventional).unwrap();
+        let matches = Requirements::get_matches(&temp_dir).unwrap();
+        assert!(matches.len() == 1);
+        assert_eq!(matches[0], "requirements_versioned.txt");
+    }
+
+    /// Requirements::detect should return all matches
+    #[test]
+    fn test_requirements_matches_all() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let temp_dir = flox.temp_dir;
+        let long_name = temp_dir.join("requirements_versioned_dev.txt");
+        let short_name = temp_dir.join("requirements_versioned.txt");
+        File::create(&long_name).unwrap();
+        File::create(&short_name).unwrap();
+        let matches = Requirements::get_matches(&temp_dir).unwrap();
+        assert!(matches.len() == 2);
+        // std::fs::read_dir does not guarantee order
+        assert!(matches
+            .iter()
+            .any(|s| s == "requirements_versioned_dev.txt"));
+        assert!(matches.iter().any(|s| s == "requirements_versioned.txt"));
     }
 }

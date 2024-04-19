@@ -1037,6 +1037,7 @@ dependencies = [
  "oauth2",
  "once_cell",
  "pretty_assertions",
+ "regex",
  "reqwest",
  "semver",
  "sentry",

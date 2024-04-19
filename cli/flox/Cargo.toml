@@ -28,6 +28,7 @@ oauth2.workspace = true
 once_cell.workspace = true
 reqwest.workspace = true
 semver.workspace = true
+regex.workspace = true
 sentry = { workspace = true, features = ["anyhow", "tracing", "debug-logs"] }
 serde_json.workspace = true
 serde_yaml.workspace = true
@@ -53,6 +54,7 @@ xdg.workspace = true
 pretty_assertions.workspace = true
 serial_test.workspace = true
 temp-env.workspace = true
+tempfile.workspace = true
 
 
 [features]
