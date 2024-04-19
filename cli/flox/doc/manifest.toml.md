@@ -287,9 +287,21 @@ can be used in this script.
 ```toml
 [hook]
 on-activate = """
-    mkdir -p data_dir
-    # Start daemons which set env vars via stdout, e.g. a familiar example:
-    eval $(ssh-agent)
+    # Interact with the tty as you would in any script
+    echo "Starting up $FLOX_ENV_DESCRIPTION environment ..." >&2
+    declare value
+    read -e -p "Any comments? " value
+    echo "You said: $value" >&2
+
+    # Set variables, create files and directories
+    venv_dir="$(mktemp -d)"
+    export venv_dir
+
+    # Perform initialization steps, e.g. create a python venv
+    python -m venv "$venv_dir"
+
+    # Invoke apps that configure the environment via stdout
+    eval "$(ssh-agent)"
 """
 ```
 
@@ -319,11 +331,15 @@ common = """
     fortune | lolcat
 """
 bash = """
+    source $venv_dir/bin/activate
     set -o vi
+    alias foo="echo bar"
 """
 zsh = """
+    source $venv_dir/bin/activate
     bindkey -v
     bindkey "^R" history-incremental-search-backward
+    alias foo="echo bar"
 """
 ```
 
