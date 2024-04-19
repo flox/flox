@@ -110,8 +110,8 @@ pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
         // It really shouldn't be necessary to append $PATH,
         // ... so we won't.
     ];
-    let pkgdb_path = env::join_paths(pkgdb_paths.iter())
-    	.expect("nix or git bin dir contain invalid characters");
+    let pkgdb_path =
+        env::join_paths(pkgdb_paths.iter()).expect("nix or git bin dir contain invalid characters");
     let mut proc = pkgdb_cmd
         .env("PATH", pkgdb_path)
         .stderr(Stdio::piped())
