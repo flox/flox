@@ -29,7 +29,7 @@ after the client was updated.
 
 ```
 # change openapi.json
-$ cargo check -p catalog-api-v1 -F mock-client
+$ cargo check -p catalog-api-v1
 ```
 
 Finally, remember to check-in the updated sources.

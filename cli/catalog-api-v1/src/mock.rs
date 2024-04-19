@@ -111,17 +111,26 @@ pub mod operations {
             )
         }
     }
-    pub struct BuildsApiV1CatalogBuildsGetWhen(httpmock::When);
-    impl BuildsApiV1CatalogBuildsGetWhen {
+    pub struct PackagesApiV1CatalogPackagesPkgPathGetWhen(httpmock::When);
+    impl PackagesApiV1CatalogPackagesPkgPathGetWhen {
         pub fn new(inner: httpmock::When) -> Self {
             Self(
                 inner
                     .method(httpmock::Method::GET)
-                    .path_matches(regex::Regex::new("^/api/v1/catalog/builds$").unwrap()),
+                    .path_matches(
+                        regex::Regex::new("^/api/v1/catalog/packages/[^/]*$").unwrap(),
+                    ),
             )
         }
         pub fn into_inner(self) -> httpmock::When {
             self.0
+        }
+        pub fn pkg_path(self, value: &str) -> Self {
+            let re = regex::Regex::new(
+                    &format!("^/api/v1/catalog/packages/.*$", value.to_string()),
+                )
+                .unwrap();
+            Self(self.0.path_matches(re))
         }
         pub fn page<T>(self, value: T) -> Self
         where
@@ -163,19 +172,16 @@ pub mod operations {
                 )
             }
         }
-        pub fn pkg_path(self, value: &str) -> Self {
-            Self(self.0.query_param("pkg_path", value.to_string()))
-        }
     }
-    pub struct BuildsApiV1CatalogBuildsGetThen(httpmock::Then);
-    impl BuildsApiV1CatalogBuildsGetThen {
+    pub struct PackagesApiV1CatalogPackagesPkgPathGetThen(httpmock::Then);
+    impl PackagesApiV1CatalogPackagesPkgPathGetThen {
         pub fn new(inner: httpmock::Then) -> Self {
             Self(inner)
         }
         pub fn into_inner(self) -> httpmock::Then {
             self.0
         }
-        pub fn ok(self, value: &types::PackageBuildsResultInput) -> Self {
+        pub fn ok(self, value: &types::PackagesResultInput) -> Self {
             Self(
                 self
                     .0
@@ -299,11 +305,14 @@ pub trait MockServerExt {
             operations::SearchApiV1CatalogSearchGetWhen,
             operations::SearchApiV1CatalogSearchGetThen,
         );
-    fn builds_api_v1_catalog_builds_get<F>(&self, config_fn: F) -> httpmock::Mock
+    fn packages_api_v1_catalog_packages_pkg_path_get<F>(
+        &self,
+        config_fn: F,
+    ) -> httpmock::Mock
     where
         F: FnOnce(
-            operations::BuildsApiV1CatalogBuildsGetWhen,
-            operations::BuildsApiV1CatalogBuildsGetThen,
+            operations::PackagesApiV1CatalogPackagesPkgPathGetWhen,
+            operations::PackagesApiV1CatalogPackagesPkgPathGetThen,
         );
     fn resolve_api_v1_catalog_resolve_post<F>(&self, config_fn: F) -> httpmock::Mock
     where
@@ -333,17 +342,20 @@ impl MockServerExt for httpmock::MockServer {
             )
         })
     }
-    fn builds_api_v1_catalog_builds_get<F>(&self, config_fn: F) -> httpmock::Mock
+    fn packages_api_v1_catalog_packages_pkg_path_get<F>(
+        &self,
+        config_fn: F,
+    ) -> httpmock::Mock
     where
         F: FnOnce(
-            operations::BuildsApiV1CatalogBuildsGetWhen,
-            operations::BuildsApiV1CatalogBuildsGetThen,
+            operations::PackagesApiV1CatalogPackagesPkgPathGetWhen,
+            operations::PackagesApiV1CatalogPackagesPkgPathGetThen,
         ),
     {
         self.mock(|when, then| {
             config_fn(
-                operations::BuildsApiV1CatalogBuildsGetWhen::new(when),
-                operations::BuildsApiV1CatalogBuildsGetThen::new(then),
+                operations::PackagesApiV1CatalogPackagesPkgPathGetWhen::new(when),
+                operations::PackagesApiV1CatalogPackagesPkgPathGetThen::new(then),
             )
         })
     }

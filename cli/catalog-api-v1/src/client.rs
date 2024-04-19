@@ -51,13 +51,13 @@ pub mod types {
     ///  "title": "CatalogPage",
     ///  "examples": [
     ///    {
-    ///      "attr_path": "foo.bar.curl",
     ///      "description": "A very nice Item",
     ///      "license": "foo",
     ///      "locked_url": "git:git?rev=xyz",
     ///      "name": "curl",
     ///      "outputs": "{}",
     ///      "outputs_to_install": "{}",
+    ///      "pkg_path": "foo.bar.curl",
     ///      "pname": "curl",
     ///      "rev": "xyz",
     ///      "rev_count": 4,
@@ -229,82 +229,6 @@ pub mod types {
     }
     impl From<&ErrorResponse> for ErrorResponse {
         fn from(value: &ErrorResponse) -> Self {
-            value.clone()
-        }
-    }
-    ///PackageBuildsResultInput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackageBuildsResult",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items",
-    ///    "total_count"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoCommon"
-    ///      }
-    ///    },
-    ///    "total_count": {
-    ///      "title": "Total Count",
-    ///      "type": "integer"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct PackageBuildsResultInput {
-        pub items: Vec<PackageInfoCommon>,
-        pub total_count: i64,
-    }
-    impl From<&PackageBuildsResultInput> for PackageBuildsResultInput {
-        fn from(value: &PackageBuildsResultInput) -> Self {
-            value.clone()
-        }
-    }
-    ///PackageBuildsResultOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackageBuildsResult",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items",
-    ///    "total_count"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoCommon"
-    ///      }
-    ///    },
-    ///    "total_count": {
-    ///      "title": "Total Count",
-    ///      "type": "integer"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct PackageBuildsResultOutput {
-        pub items: Vec<PackageInfoCommon>,
-        pub total_count: i64,
-    }
-    impl From<&PackageBuildsResultOutput> for PackageBuildsResultOutput {
-        fn from(value: &PackageBuildsResultOutput) -> Self {
             value.clone()
         }
     }
@@ -509,7 +433,7 @@ pub mod types {
             value.clone()
         }
     }
-    ///PackageInfoApi
+    ///PackageInfoApiInput
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -518,13 +442,13 @@ pub mod types {
     ///  "title": "PackageInfoAPI",
     ///  "examples": [
     ///    {
-    ///      "attr_path": "foo.bar.curl",
     ///      "description": "A very nice Item",
     ///      "license": "foo",
     ///      "locked_url": "git:git?rev=xyz",
     ///      "name": "curl",
     ///      "outputs": "{}",
     ///      "outputs_to_install": "{}",
+    ///      "pkg_path": "foo.bar.curl",
     ///      "pname": "curl",
     ///      "rev": "xyz",
     ///      "rev_count": 4,
@@ -637,7 +561,7 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct PackageInfoApi {
+    pub struct PackageInfoApiInput {
         pub attr_path: String,
         pub description: String,
         pub license: String,
@@ -653,12 +577,161 @@ pub mod types {
         pub system: SystemEnum,
         pub version: String,
     }
-    impl From<&PackageInfoApi> for PackageInfoApi {
-        fn from(value: &PackageInfoApi) -> Self {
+    impl From<&PackageInfoApiInput> for PackageInfoApiInput {
+        fn from(value: &PackageInfoApiInput) -> Self {
             value.clone()
         }
     }
-    ///PackageInfoCommon
+    ///PackageInfoApiOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageInfoAPI",
+    ///  "examples": [
+    ///    {
+    ///      "description": "A very nice Item",
+    ///      "license": "foo",
+    ///      "locked_url": "git:git?rev=xyz",
+    ///      "name": "curl",
+    ///      "outputs": "{}",
+    ///      "outputs_to_install": "{}",
+    ///      "pkg_path": "foo.bar.curl",
+    ///      "pname": "curl",
+    ///      "rev": "xyz",
+    ///      "rev_count": 4,
+    ///      "rev_date": 0,
+    ///      "search_string": "curl^curl^my description",
+    ///      "stabilities": [
+    ///        "stable",
+    ///        "unstable"
+    ///      ],
+    ///      "system": "x86_64-linux",
+    ///      "version": "1.0"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "description",
+    ///    "license",
+    ///    "locked_url",
+    ///    "name",
+    ///    "outputs",
+    ///    "outputs_to_install",
+    ///    "pkg_path",
+    ///    "pname",
+    ///    "rev",
+    ///    "rev_count",
+    ///    "rev_date",
+    ///    "stabilities",
+    ///    "system",
+    ///    "version"
+    ///  ],
+    ///  "properties": {
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "string"
+    ///        }
+    ///      ]
+    ///    },
+    ///    "license": {
+    ///      "title": "License",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "string"
+    ///        }
+    ///      ]
+    ///    },
+    ///    "locked_url": {
+    ///      "title": "Locked Url",
+    ///      "type": "string"
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "outputs": {
+    ///      "title": "Outputs",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "object"
+    ///        }
+    ///      ]
+    ///    },
+    ///    "outputs_to_install": {
+    ///      "title": "Outputs To Install",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "array",
+    ///          "items": {}
+    ///        }
+    ///      ]
+    ///    },
+    ///    "pkg_path": {
+    ///      "title": "Pkg Path",
+    ///      "type": "string"
+    ///    },
+    ///    "pname": {
+    ///      "title": "Pname",
+    ///      "type": "string"
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "rev_count": {
+    ///      "title": "Rev Count",
+    ///      "type": "integer"
+    ///    },
+    ///    "rev_date": {
+    ///      "title": "Rev Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "stabilities": {
+    ///      "title": "Stabilities",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct PackageInfoApiOutput {
+        pub description: String,
+        pub license: String,
+        pub locked_url: String,
+        pub name: String,
+        pub outputs: serde_json::Map<String, serde_json::Value>,
+        pub outputs_to_install: Vec<serde_json::Value>,
+        pub pkg_path: String,
+        pub pname: String,
+        pub rev: String,
+        pub rev_count: i64,
+        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
+        pub stabilities: Vec<String>,
+        pub system: SystemEnum,
+        pub version: String,
+    }
+    impl From<&PackageInfoApiOutput> for PackageInfoApiOutput {
+        fn from(value: &PackageInfoApiOutput) -> Self {
+            value.clone()
+        }
+    }
+    ///PackageInfoCommonInput
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -751,7 +824,7 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct PackageInfoCommon {
+    pub struct PackageInfoCommonInput {
         pub attr_path: String,
         pub description: String,
         pub license: String,
@@ -765,8 +838,120 @@ pub mod types {
         pub system: SystemEnum,
         pub version: String,
     }
-    impl From<&PackageInfoCommon> for PackageInfoCommon {
-        fn from(value: &PackageInfoCommon) -> Self {
+    impl From<&PackageInfoCommonInput> for PackageInfoCommonInput {
+        fn from(value: &PackageInfoCommonInput) -> Self {
+            value.clone()
+        }
+    }
+    ///PackageInfoCommonOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageInfoCommon",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "description",
+    ///    "license",
+    ///    "name",
+    ///    "outputs",
+    ///    "outputs_to_install",
+    ///    "pkg_path",
+    ///    "pname",
+    ///    "rev",
+    ///    "rev_count",
+    ///    "rev_date",
+    ///    "system",
+    ///    "version"
+    ///  ],
+    ///  "properties": {
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "string"
+    ///        }
+    ///      ]
+    ///    },
+    ///    "license": {
+    ///      "title": "License",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "string"
+    ///        }
+    ///      ]
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "outputs": {
+    ///      "title": "Outputs",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "object"
+    ///        }
+    ///      ]
+    ///    },
+    ///    "outputs_to_install": {
+    ///      "title": "Outputs To Install",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "array",
+    ///          "items": {}
+    ///        }
+    ///      ]
+    ///    },
+    ///    "pkg_path": {
+    ///      "title": "Pkg Path",
+    ///      "type": "string"
+    ///    },
+    ///    "pname": {
+    ///      "title": "Pname",
+    ///      "type": "string"
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "rev_count": {
+    ///      "title": "Rev Count",
+    ///      "type": "integer"
+    ///    },
+    ///    "rev_date": {
+    ///      "title": "Rev Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct PackageInfoCommonOutput {
+        pub description: String,
+        pub license: String,
+        pub name: String,
+        pub outputs: serde_json::Map<String, serde_json::Value>,
+        pub outputs_to_install: Vec<serde_json::Value>,
+        pub pkg_path: String,
+        pub pname: String,
+        pub rev: String,
+        pub rev_count: i64,
+        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
+        pub system: SystemEnum,
+        pub version: String,
+    }
+    impl From<&PackageInfoCommonOutput> for PackageInfoCommonOutput {
+        fn from(value: &PackageInfoCommonOutput) -> Self {
             value.clone()
         }
     }
@@ -886,7 +1071,11 @@ pub mod types {
     ///    },
     ///    "unfree": {
     ///      "title": "Unfree",
-    ///      "type": "boolean"
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "boolean"
+    ///        }
+    ///      ]
     ///    },
     ///    "version": {
     ///      "title": "Version",
@@ -931,13 +1120,13 @@ pub mod types {
     ///  "examples": [
     ///    [
     ///      {
-    ///        "attr_path": "foo.bar.curl",
     ///        "description": "A very nice Item",
     ///        "license": "foo",
     ///        "locked_url": "git:git?rev=xyz",
     ///        "name": "curl",
     ///        "outputs": "{}",
     ///        "outputs_to_install": "{}",
+    ///        "pkg_path": "foo.bar.curl",
     ///        "pname": "curl",
     ///        "rev": "xyz",
     ///        "rev_count": 4,
@@ -962,7 +1151,7 @@ pub mod types {
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoAPI"
+    ///        "$ref": "#/components/schemas/PackageInfoAPI-Input"
     ///      }
     ///    },
     ///    "total_count": {
@@ -975,7 +1164,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct PackageSearchResultInput {
-        pub items: Vec<PackageInfoApi>,
+        pub items: Vec<PackageInfoApiInput>,
         pub total_count: i64,
     }
     impl From<&PackageSearchResultInput> for PackageSearchResultInput {
@@ -993,13 +1182,13 @@ pub mod types {
     ///  "examples": [
     ///    [
     ///      {
-    ///        "attr_path": "foo.bar.curl",
     ///        "description": "A very nice Item",
     ///        "license": "foo",
     ///        "locked_url": "git:git?rev=xyz",
     ///        "name": "curl",
     ///        "outputs": "{}",
     ///        "outputs_to_install": "{}",
+    ///        "pkg_path": "foo.bar.curl",
     ///        "pname": "curl",
     ///        "rev": "xyz",
     ///        "rev_count": 4,
@@ -1024,7 +1213,7 @@ pub mod types {
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoAPI"
+    ///        "$ref": "#/components/schemas/PackageInfoAPI-Output"
     ///      }
     ///    },
     ///    "total_count": {
@@ -1037,11 +1226,87 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct PackageSearchResultOutput {
-        pub items: Vec<PackageInfoApi>,
+        pub items: Vec<PackageInfoApiOutput>,
         pub total_count: i64,
     }
     impl From<&PackageSearchResultOutput> for PackageSearchResultOutput {
         fn from(value: &PackageSearchResultOutput) -> Self {
+            value.clone()
+        }
+    }
+    ///PackagesResultInput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackagesResult",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items",
+    ///    "total_count"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PackageInfoCommon-Input"
+    ///      }
+    ///    },
+    ///    "total_count": {
+    ///      "title": "Total Count",
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct PackagesResultInput {
+        pub items: Vec<PackageInfoCommonInput>,
+        pub total_count: i64,
+    }
+    impl From<&PackagesResultInput> for PackagesResultInput {
+        fn from(value: &PackagesResultInput) -> Self {
+            value.clone()
+        }
+    }
+    ///PackagesResultOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackagesResult",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items",
+    ///    "total_count"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PackageInfoCommon-Output"
+    ///      }
+    ///    },
+    ///    "total_count": {
+    ///      "title": "Total Count",
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct PackagesResultOutput {
+        pub items: Vec<PackageInfoCommonOutput>,
+        pub total_count: i64,
+    }
+    impl From<&PackagesResultOutput> for PackagesResultOutput {
+        fn from(value: &PackagesResultOutput) -> Self {
             value.clone()
         }
     }
@@ -1054,13 +1319,13 @@ pub mod types {
     ///  "title": "ResolvedPackageGroup",
     ///  "examples": [
     ///    {
-    ///      "attr_path": "foo.bar.curl",
     ///      "description": "A very nice Item",
     ///      "license": "foo",
     ///      "locked_url": "git:git?rev=xyz",
     ///      "name": "curl",
     ///      "outputs": "{}",
     ///      "outputs_to_install": "{}",
+    ///      "pkg_path": "foo.bar.curl",
     ///      "pname": "curl",
     ///      "rev": "xyz",
     ///      "rev_count": 4,
@@ -1119,13 +1384,13 @@ pub mod types {
     ///  "title": "ResolvedPackageGroup",
     ///  "examples": [
     ///    {
-    ///      "attr_path": "foo.bar.curl",
     ///      "description": "A very nice Item",
     ///      "license": "foo",
     ///      "locked_url": "git:git?rev=xyz",
     ///      "name": "curl",
     ///      "outputs": "{}",
     ///      "outputs_to_install": "{}",
+    ///      "pkg_path": "foo.bar.curl",
     ///      "pname": "curl",
     ///      "rev": "xyz",
     ///      "rev_count": 4,
@@ -1400,23 +1665,17 @@ pub mod types {
     }
 }
 #[derive(Clone, Debug)]
-/**Client for Flox Catalog Server
+/**Client for Flox Catalog Service
 
 
-# Flox Catalog API
+# Flox Catalog Service API
 
-## Markdown
+TBD
 
-Section
-
-## More markdown
-
-You will be able to:
-
-- **Search** for packages
+*Markdown is available here*
 
 
-Version: v1*/
+Version: v0.1.dev127+g74c9441.d19800101*/
 pub struct Client {
     pub(crate) baseurl: String,
     pub(crate) client: reqwest::Client,
@@ -1462,7 +1721,7 @@ impl Client {
     /// This string is pulled directly from the source OpenAPI
     /// document and may be in any format the API selects.
     pub fn api_version(&self) -> &'static str {
-        "v1"
+        "v0.1.dev127+g74c9441.d19800101"
     }
 }
 #[allow(clippy::all)]
@@ -1530,7 +1789,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
-    /**Shows avaliable builds of a specfic package
+    /**Shows avaliable packages of a specfic package
 
 Returns a list of versions for a given pkg-path
 
@@ -1544,27 +1803,26 @@ Optional Query Parameters:
 Returns:
 - **PackageSearchResult**: A list of PackageInfo and the total result count
 
-Sends a `GET` request to `/api/v1/catalog/builds`
+Sends a `GET` request to `/api/v1/catalog/packages/{pkgPath}`
 
 */
-    pub async fn builds_api_v1_catalog_builds_get<'a>(
+    pub async fn packages_api_v1_catalog_packages_pkg_path_get<'a>(
         &'a self,
+        pkg_path: &'a str,
         page: Option<i64>,
         page_size: Option<i64>,
-        pkg_path: &'a str,
-    ) -> Result<
-        ResponseValue<types::PackageBuildsResultInput>,
-        Error<types::ErrorResponse>,
-    > {
-        let url = format!("{}/api/v1/catalog/builds", self.baseurl,);
-        let mut query = Vec::with_capacity(3usize);
+    ) -> Result<ResponseValue<types::PackagesResultInput>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/packages/{}", self.baseurl, encode_path(& pkg_path
+            .to_string()),
+        );
+        let mut query = Vec::with_capacity(2usize);
         if let Some(v) = &page {
             query.push(("page", v.to_string()));
         }
         if let Some(v) = &page_size {
             query.push(("pageSize", v.to_string()));
         }
-        query.push(("pkgPath", pkg_path.to_string()));
         #[allow(unused_mut)]
         let mut request = self
             .client
