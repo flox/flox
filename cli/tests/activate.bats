@@ -111,6 +111,7 @@ env_is_activated() {
 }
 
 # ---------------------------------------------------------------------------- #
+
 # bats test_tags=activate,activate:flox_shell,activate:flox_shell:bash
 @test "activate identifies FLOX_SHELL from running shell (bash)" {
   run --separate-stderr bash -c "$FLOX_BIN activate | grep -- '-flox-activate.d/set-prompt'"
@@ -119,7 +120,6 @@ env_is_activated() {
   assert_line --partial "flox-activate.d/set-prompt.bash"
 }
 
-# ---------------------------------------------------------------------------- #
 # bats test_tags=activate,activate:flox_shell,activate:flox_shell:zsh
 @test "activate identifies FLOX_SHELL from running shell (zsh)" {
   run --separate-stderr zsh -c "$FLOX_BIN activate | grep -- '-flox-activate.d/set-prompt'"
@@ -129,6 +129,7 @@ env_is_activated() {
 }
 
 # ---------------------------------------------------------------------------- #
+
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "bash: activate puts package in path" {
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -139,7 +140,6 @@ env_is_activated() {
   refute_output "not found"
 }
 
-# ---------------------------------------------------------------------------- #
 # bats test_tags=activate,activate:path,activate:path:zsh
 @test "zsh: activate puts package in path" {
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -154,6 +154,7 @@ env_is_activated() {
 }
 
 # ---------------------------------------------------------------------------- #
+
 # bats test_tags=activate,activate:hook,activate:hook:bash
 @test "bash: activate runs profile scripts" {
   # calls init
@@ -195,7 +196,6 @@ env_is_activated() {
 
 }
 
-# ---------------------------------------------------------------------------- #
 # bats test_tags=activate,activate:hook,activate:hook:zsh
 @test "zsh: activate runs profile scripts" {
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -251,7 +251,6 @@ env_is_activated() {
   assert_output --partial "test_alias is aliased to \`echo testing'"
 }
 
-# ---------------------------------------------------------------------------- #
 # bats test_tags=activate,activate:rc:zsh
 @test "zsh: activate respects ~/.zshrc" {
   echo "alias test_alias='echo testing'" > "$HOME/.zshrc"
@@ -263,6 +262,7 @@ env_is_activated() {
 }
 
 # ---------------------------------------------------------------------------- #
+
 # bats test_tags=activate,activate:envVar:bash
 @test "bash: activate sets env var" {
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -275,7 +275,6 @@ env_is_activated() {
   assert_output --partial "baz"
 }
 
-# ---------------------------------------------------------------------------- #
 # bats test_tags=activate,activate:envVar:zsh
 @test "zsh: activate sets env var" {
 
@@ -330,8 +329,6 @@ env_is_activated() {
   assert_output --partial "Hello, world!"
 }
 
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=activate,activate:path,activate:path:zsh
 @test "'flox activate' modifies path (zsh)" {
   original_path="$PATH"
@@ -374,6 +371,8 @@ env_is_activated() {
   assert_line --partial "export NIX_SSL_CERT_FILE="
   assert_output --regexp "Disable command hashing"
 }
+
+# ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:bash
 @test "'flox activate' modifies the current shell (bash)" {
@@ -558,7 +557,7 @@ env_is_activated() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=activate:scripts:on-activate
+# bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:bash
 @test "bash: 'hook.on-activate' is sourced before 'profile.common'" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
@@ -570,9 +569,21 @@ env_is_activated() {
   [ -d "hookie-common" ]
 }
 
+# bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:zsh
+@test "zsh: 'hook.on-activate' is sourced before 'profile.common'" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/profile-order.toml"
+  run zsh -c 'eval "$("$FLOX_BIN" activate)"'
+  # 'hook.on-activate' sets a var containing "hookie",
+  # 'profile.common' creates a directory named after the contents of that
+  # variable, suffixed by '-common'
+  [ -d "hookie-common" ]
+}
+
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=activate:scripts:on-activate
+# bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:bash
 @test "bash: 'profile.common' is sourced before 'profile.bash'" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
@@ -586,9 +597,7 @@ env_is_activated() {
   [ -d "common-bash" ]
 }
 
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=activate:scripts:on-activate
+# bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:zsh
 @test "zsh: 'profile.common' is sourced before 'profile.zsh'" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
@@ -616,8 +625,6 @@ env_is_activated() {
   refute_output --partial "no such file or directory"
 }
 
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:zsh
 @test "zsh: tolerates paths containing spaces" {
   "$FLOX_BIN" delete -f
@@ -629,3 +636,5 @@ env_is_activated() {
   assert_success
   refute_output --partial "no such file or directory"
 }
+
+# ---------------------------------------------------------------------------- #
