@@ -402,7 +402,7 @@ impl PathEnvironment {
             .map_err(EnvironmentError::ReadManifest)
             .and_then(|toml| {
                 toml.parse::<RawManifest>()
-                    .map_err(EnvironmentError::ParseManifest)
+                    .map_err(EnvironmentError::ParseTemplateManifest)
             })?;
 
         // Fill out manifest placeholders

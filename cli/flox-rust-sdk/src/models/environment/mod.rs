@@ -463,8 +463,9 @@ pub enum EnvironmentError {
 
     #[error("could not read manifest")]
     ReadManifest(#[source] std::io::Error),
-    #[error("Failed parsing contents of manifest")]
-    ParseManifest(#[source] toml_edit::de::Error),
+    // Should be unreachable since we control the template
+    #[error("Failed parsing contents of template manifest")]
+    ParseTemplateManifest(#[source] toml_edit::de::Error),
     #[error("Failed editing contents of manifest")]
     EditManifest,
     #[error("couldn't write manifest")]
