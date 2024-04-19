@@ -155,50 +155,64 @@ env_is_activated() {
 
 # ---------------------------------------------------------------------------- #
 
+# The following battery of tests ensure that the activation script invokes
+# the expected hook and profile scripts for the bash and zsh shells, and
+# in each of the following four scenarios:
+#
+# 1. in the interactive case, simulated using using `hook.exp`
+# 2. in the default command case, invoking the shell primitive `:` (a no-op)
+# 3. in the `--noprofile` command case, again invoking the shell primitive `:`
+# 4. in the `--turbo` command case, which exec()s the provided command without
+#    involving the userShell and instead invokes `true` from the PATH
+#
+# The question of whether to continue support for the --noprofile and --turbo
+# cases is still open for discussion, but the tests are included here to ensure
+# that the current behavior is consistent and predictable.
+
 # bats test_tags=activate,activate:hook,activate:hook:bash
 @test "bash: activate runs profile scripts" {
   # calls init
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_SHELL="bash" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR"
   assert_success
+  assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
   assert_output --partial "sourcing profile.bash"
   refute_output --partial "sourcing profile.zsh"
-  refute_output --partial "sourcing hook.on-activate"
-  refute_output --partial "sourcing hook.script"
 
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
+  assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
   assert_output --partial "sourcing profile.bash"
   refute_output --partial "sourcing profile.zsh"
-  refute_output --partial "sourcing hook.on-activate"
-  refute_output --partial "sourcing hook.script"
 
   FLOX_NO_PROFILES=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
+  assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
   refute_output --partial "sourcing profile.zsh"
-  refute_output --partial "sourcing hook.on-activate"
-  refute_output --partial "sourcing hook.script"
 
   # Turbo mode exec()s the provided command without involving the
   # userShell, so cannot invoke shell primitives like ":".
+  FLOX_TURBO=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -127 $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  assert_failure
   FLOX_TURBO=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
+  assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
   refute_output --partial "sourcing profile.zsh"
-  refute_output --partial "sourcing hook.on-activate"
-  refute_output --partial "sourcing hook.script"
 
 }
 
 # bats test_tags=activate,activate:hook,activate:hook:zsh
 @test "zsh: activate runs profile scripts" {
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
@@ -206,37 +220,35 @@ env_is_activated() {
   # FLOX_SHELL="zsh" USER="$REAL_USER" run -0 bash -c "echo exit | $FLOX_CLI activate --dir $PROJECT_DIR";
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR"
   assert_success
+  assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
   assert_output --partial "sourcing profile.zsh"
-  refute_output --partial "sourcing hook.on-activate"
-  refute_output --partial "sourcing hook.script"
 
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
+  assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
   assert_output --partial "sourcing profile.zsh"
-  refute_output --partial "sourcing hook.on-activate"
-  refute_output --partial "sourcing hook.script"
 
   FLOX_NO_PROFILES=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
+  assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
   refute_output --partial "sourcing profile.zsh"
-  refute_output --partial "sourcing hook.on-activate"
-  refute_output --partial "sourcing hook.script"
 
   # Turbo mode exec()s the provided command without involving the
   # userShell, so cannot invoke shell primitives like ":".
+  FLOX_TURBO=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -127 $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  assert_failure
   FLOX_TURBO=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
+  assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
   refute_output --partial "sourcing profile.zsh"
-  refute_output --partial "sourcing hook.on-activate"
-  refute_output --partial "sourcing hook.script"
 }
 
 # ---------------------------------------------------------------------------- #
