@@ -314,7 +314,7 @@ env_is_activated() {
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "'flox activate' modifies path (bash)" {
   original_path="$PATH"
-  run "$FLOX_BIN" activate -- bash -c 'echo $PATH'
+  FLOX_SHELL="$(which bash)" run "$FLOX_BIN" activate -- echo '$PATH'
   assert_success
   assert_not_equal "$original_path" "$output"
 
@@ -324,7 +324,7 @@ env_is_activated() {
   run "$FLOX_BIN" install hello
   assert_success
 
-  FLOX_SHELL="$(which bash)" run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- hello
+  FLOX_SHELL="$(which bash)" run "$FLOX_BIN" activate -- hello
   assert_success
   assert_output --partial "Hello, world!"
 }
@@ -332,7 +332,7 @@ env_is_activated() {
 # bats test_tags=activate,activate:path,activate:path:zsh
 @test "'flox activate' modifies path (zsh)" {
   original_path="$PATH"
-  run "$FLOX_BIN" activate -- bash -c 'echo $PATH'
+  FLOX_SHELL="$(which zsh)" run "$FLOX_BIN" activate -- echo '$PATH'
   assert_success
   assert_not_equal "$original_path" "$output"
 
@@ -342,7 +342,7 @@ env_is_activated() {
   run "$FLOX_BIN" install hello
   assert_success
 
-  FLOX_SHELL="$(which zsh)" run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- hello
+  FLOX_SHELL="$(which zsh)" run "$FLOX_BIN" activate -- hello
   assert_success
   assert_output --partial "Hello, world!"
 }
