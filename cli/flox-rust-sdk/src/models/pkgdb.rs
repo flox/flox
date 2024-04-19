@@ -17,6 +17,10 @@ use super::lockfile::FlakeRef;
 // the fallback to the binary available at build time if it is unset.
 pub static PKGDB_BIN: Lazy<String> =
     Lazy::new(|| env::var("PKGDB_BIN").unwrap_or(env!("PKGDB_BIN").to_string()));
+pub static NIX_PKG_BIN: Lazy<String> =
+    Lazy::new(|| env::var("NIX_PKG").unwrap_or(env!("NIX_PKG").to_string()) + "/bin");
+pub static GIT_PKG_BIN: Lazy<String> =
+    Lazy::new(|| env::var("GIT_PKG").unwrap_or(env!("GIT_PKG").to_string()) + "/bin");
 
 /// Error codes emitted by pkgdb
 /// matching the definitions in `pkgdb/include/flox/core/exceptions.hh`
@@ -101,8 +105,8 @@ pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
     // redefine or blat their $PATH variable entirely, so we always invoke
     // pkgdb with an explicit PATH of our making.
     let pkgdb_paths = [
-        String::from(env!("NIX_PKG")) + "/bin",
-        String::from(env!("GIT_PKG")) + "/bin",
+        Path::new(&*NIX_PKG_BIN),
+        Path::new(&*GIT_PKG_BIN),
         // It really shouldn't be necessary to append $PATH,
         // ... so we won't.
     ];
