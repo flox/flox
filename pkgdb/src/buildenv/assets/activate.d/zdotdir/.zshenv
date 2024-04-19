@@ -1,3 +1,8 @@
+# Source /etc/zlogin and "${FLOX_ORIG_ZDOTDIR:-$HOME}/.zlogin" if they exist
+# prior to performing Flox-specific initialization.
+#
+# See README.md for more information on the initialization process.
+
 if [ -f /etc/zshenv ]
 then
     if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
