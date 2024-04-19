@@ -1,3 +1,8 @@
+# Source /etc/zshrc and "${FLOX_ORIG_ZDOTDIR:-$HOME}/.zshrc" if they exist
+# prior to performing Flox-specific initialization.
+#
+# See README.md for more information on the initialization process.
+
 zshrc="${FLOX_ORIG_ZDOTDIR:-$HOME}/.zshrc"
 flox_zdotdir="$ZDOTDIR"
 
