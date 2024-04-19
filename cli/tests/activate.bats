@@ -135,7 +135,7 @@ env_is_activated() {
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
-  FLOX_SHELL=bash USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR"
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
 }
@@ -148,7 +148,7 @@ env_is_activated() {
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  FLOX_SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR"
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
 }
@@ -160,7 +160,7 @@ env_is_activated() {
   # calls init
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL="$(which bash)" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR"
+  FLOX_SHELL="bash" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR"
   assert_success
   assert_output --partial "sourcing profile.common"
   assert_output --partial "sourcing profile.bash"
@@ -168,7 +168,7 @@ env_is_activated() {
   refute_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing hook.script"
 
-  FLOX_SHELL="$(which bash)" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
   assert_output --partial "sourcing profile.common"
   assert_output --partial "sourcing profile.bash"
@@ -176,7 +176,7 @@ env_is_activated() {
   refute_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing hook.script"
 
-  FLOX_NO_PROFILES=1 FLOX_SHELL="$(which bash)" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_NO_PROFILES=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
   refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
@@ -186,7 +186,7 @@ env_is_activated() {
 
   # Turbo mode exec()s the provided command without involving the
   # userShell, so cannot invoke shell primitives like ":".
-  FLOX_TURBO=1 FLOX_SHELL="$(which bash)" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
+  FLOX_TURBO=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
   refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
@@ -203,8 +203,8 @@ env_is_activated() {
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  # FLOX_SHELL=zsh USER="$REAL_USER" run -0 bash -c "echo exit | $FLOX_CLI activate --dir $PROJECT_DIR";
-  FLOX_SHELL="$(which zsh)" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR"
+  # FLOX_SHELL="zsh" USER="$REAL_USER" run -0 bash -c "echo exit | $FLOX_CLI activate --dir $PROJECT_DIR";
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR"
   assert_success
   assert_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
@@ -212,7 +212,7 @@ env_is_activated() {
   refute_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing hook.script"
 
-  FLOX_SHELL="$(which zsh)" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
   assert_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
@@ -220,7 +220,7 @@ env_is_activated() {
   refute_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing hook.script"
 
-  FLOX_NO_PROFILES=1 FLOX_SHELL="$(which zsh)" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_NO_PROFILES=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
   refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
@@ -230,7 +230,7 @@ env_is_activated() {
 
   # Turbo mode exec()s the provided command without involving the
   # userShell, so cannot invoke shell primitives like ":".
-  FLOX_TURBO=1 FLOX_SHELL="$(which zsh)" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
+  FLOX_TURBO=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
   refute_output --partial "sourcing profile.common"
   refute_output --partial "sourcing profile.bash"
@@ -247,7 +247,7 @@ env_is_activated() {
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  FLOX_SHELL=bash USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is aliased to \`echo testing'"
 }
 
@@ -267,10 +267,10 @@ env_is_activated() {
 @test "bash: activate sets env var" {
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
-  FLOX_SHELL=bash NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
+  FLOX_SHELL="bash" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
-  FLOX_SHELL=bash NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
   assert_success
   assert_output --partial "baz"
 }
@@ -283,10 +283,10 @@ env_is_activated() {
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  FLOX_SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/envVar.exp" "$PROJECT_DIR"
   assert_output --partial "baz"
 
-  FLOX_SHELL=zsh NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
+  FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- echo '$foo'
   assert_success
   assert_output --partial "baz"
 }
@@ -301,10 +301,10 @@ env_is_activated() {
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  FLOX_SHELL=zsh NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
   assert_success
   assert_output --partial "baz"
-  FLOX_SHELL=bash NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
+  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
   assert_success
   assert_output --partial "baz"
 }
@@ -314,7 +314,7 @@ env_is_activated() {
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "'flox activate' modifies path (bash)" {
   original_path="$PATH"
-  FLOX_SHELL="$(which bash)" run "$FLOX_BIN" activate -- echo '$PATH'
+  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- echo '$PATH'
   assert_success
   assert_not_equal "$original_path" "$output"
 
@@ -324,7 +324,7 @@ env_is_activated() {
   run "$FLOX_BIN" install hello
   assert_success
 
-  FLOX_SHELL="$(which bash)" run "$FLOX_BIN" activate -- hello
+  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- hello
   assert_success
   assert_output --partial "Hello, world!"
 }
@@ -332,7 +332,7 @@ env_is_activated() {
 # bats test_tags=activate,activate:path,activate:path:zsh
 @test "'flox activate' modifies path (zsh)" {
   original_path="$PATH"
-  FLOX_SHELL="$(which zsh)" run "$FLOX_BIN" activate -- echo '$PATH'
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- echo '$PATH'
   assert_success
   assert_not_equal "$original_path" "$output"
 
@@ -342,7 +342,7 @@ env_is_activated() {
   run "$FLOX_BIN" install hello
   assert_success
 
-  FLOX_SHELL="$(which zsh)" run "$FLOX_BIN" activate -- hello
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- hello
   assert_success
   assert_output --partial "Hello, world!"
 }
@@ -428,7 +428,7 @@ env_is_activated() {
 
 # bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:bash
 @test "bash: 'flox activate' patches PATH correctly when already activated" {
-  SHELL="bash" run -- \
+  FLOX_SHELL="bash" run -- \
     "$FLOX_BIN" activate -- \
       bash -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
   assert_success
@@ -436,7 +436,7 @@ env_is_activated() {
 
 # bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:zsh
 @test "zsh: 'flox activate' patches PATH correctly when already activated" {
-  SHELL="zsh" run -- \
+  FLOX_SHELL="zsh" run -- \
     "$FLOX_BIN" activate -- \
       zsh -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
   assert_success
