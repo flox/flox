@@ -187,9 +187,9 @@ impl<P: Provider + 'static> From<Result<Option<P>>> for Provide<Box<dyn Provider
 trait Provider: Debug {
     fn describe_provider(&self) -> Cow<'static, str>;
 
-    fn describe_reason(&self) -> Cow<'static, str>;
+    fn describe_reason(&self) -> Cow<'_, str>;
 
-    fn describe_customization(&self) -> Cow<'static, str>;
+    fn describe_customization(&self) -> Cow<'_, str>;
 
     fn compatible(&self) -> bool {
         true
@@ -606,17 +606,18 @@ impl Provider for Requirements {
         "latest python".into()
     }
 
-    fn describe_reason(&self) -> Cow<'static, str> {
+    fn describe_reason(&self) -> Cow<'_, str> {
         // Found ...
-        "requirements.txt".into()
+        self.filenames.join(", ").into()
     }
 
-    fn describe_customization(&self) -> Cow<'static, str> {
+    fn describe_customization(&self) -> Cow<'_, str> {
         formatdoc! {"
             Installs latest python ({}) with pip bundled.
             Adds hooks to setup and use a venv.
-            Installs the dependencies from the requirements.txt to the venv.",
+            Installs dependencies to the venv from: {}",
             self.python_version,
+            self.filenames.join(", ")
         }
         .into()
     }
