@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.2",
   "info": {
-    "title": "Flox Catalog Server",
-    "description": "\n# Flox Catalog API\n\n## Markdown\n\nSection\n\n## More markdown\n\nYou will be able to:\n\n- **Search** for packages\n",
-    "version": "v1",
+    "title": "Flox Catalog Service",
+    "description": "\n# Flox Catalog Service API\n\nTBD\n\n*Markdown is available here*\n",
+    "version": "v0.1.dev127+g74c9441.d19800101",
     "x-logo": {
       "url": "https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png"
     }
@@ -96,22 +96,22 @@
         }
       }
     },
-    "/api/v1/catalog/builds": {
+    "/api/v1/catalog/packages/{pkgpath}": {
       "get": {
         "tags": [
           "catalog"
         ],
-        "summary": "Shows avaliable builds of a specfic package",
-        "description": "Returns a list of versions for a given pkg-path\n\nRequired Query Parameters:\n- **pkgPath**: The pkg-path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
-        "operationId": "builds_api_v1_catalog_builds_get",
+        "summary": "Shows avaliable packages of a specfic package",
+        "description": "Returns a list of versions for a given pkg-path\n\nRequired Query Parameters:\n- **pkgpath**: The pkg-path, must be valid.\n\nOptional Query Parameters:\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
+        "operationId": "packages_api_v1_catalog_packages__pkgpath__get",
         "parameters": [
           {
-            "name": "pkgPath",
-            "in": "query",
+            "name": "pkgpath",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Pkgpath"
+              "title": "pkgpath"
             }
           },
           {
@@ -137,17 +137,17 @@
         ],
         "responses": {
           "200": {
-            "description": "A list of builds for pkgpath",
+            "description": "A list of packages for pkgpath",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PackageBuildsResult-Input"
+                  "$ref": "#/components/schemas/PackagesResult-Input"
                 }
               }
             }
           },
           "404": {
-            "description": "pkgPath was not found.",
+            "description": "pkgpath was not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -175,7 +175,7 @@
           "catalog"
         ],
         "summary": "Resolve a list of Package Groups",
-        "description": "Resolves a list of package groups, each being a list of package descriptors.\n\nRequired Body:\n- **groups**: An object with an `items` array of PackageGroups to resolve.\n\nOptional Query Parameters:\n- **none**\n\nReturns:\n- **ResolvedPackageGroups**: A object with an `items` array of\n    `ResolvedPackageGroup` items.\n\nResolution Rules:\n- Each `PackageGroup` is resolved independently.\n- Each page that has a package that meets each of the descriptors in that group is returned in the results\n- The latest page will include details for each package in the group from that page\n- The remainder pages are returned without details (to get those details... TBD)\n\nA Package Descriptor match:\n- **name**: [required] - is not used in matching, only for reference (TBD is\n            there a uniqueness constraint?)\n- **pkgPath**: [required] - this must match the nix attribute path exactly and in full\n- **semver**: [optional] - This can be any valid semver range, and if given\n    will attempt to parse the nix `version` field.  If it can and it is\n    within the range, this check passes.  If it cannot parse `version` as a\n    valid semver, or it is not within the range, it is exluded.\n    - **allow-pre-release**: [optional] - Defaults to False.  Only applies\n        when a **semver** constraint is given.  If true, a `version` that can\n        be parsed as a valid semver, that includes a pre-release suffix will\n        be included as a candidate.  Otherwise, they will be excluded.\n- **version**: [optional] - If given, this must match the nix `version`\n    field precisely. This overrides **semver** matching if provided.",
+        "description": "Resolves a list of package groups, each being a list of package descriptors.\n\nRequired Body:\n- **groups**: An object with an `items` array of PackageGroups to resolve.\n\nOptional Query Parameters:\n- **none**\n\nReturns:\n- **ResolvedPackageGroups**: A object with an `items` array of\n    `ResolvedPackageGroup` items.\n\nResolution Rules:\n- Each `PackageGroup` is resolved independently.\n- Each page that has a package that meets each of the descriptors in that group is returned in the results\n- The latest page will include details for each package in the group from that page\n- The remainder pages are returned without details (to get those details... TBD)\n\nA Package Descriptor match:\n- **name**: [required] - is not used in matching, only for reference (TBD is\n            there a uniqueness constraint?)\n- **pkgpath**: [required] - this must match the nix attribute path exactly and in full\n- **semver**: [optional] - This can be any valid semver range, and if given\n    will attempt to parse the nix `version` field.  If it can and it is\n    within the range, this check passes.  If it cannot parse `version` as a\n    valid semver, or it is not within the range, it is exluded.\n    - **allow-pre-release**: [optional] - Defaults to False.  Only applies\n        when a **semver** constraint is given.  If true, a `version` that can\n        be parsed as a valid semver, that includes a pre-release suffix will\n        be included as a candidate.  Otherwise, they will be excluded.\n- **version**: [optional] - If given, this must match the nix `version`\n    field precisely. This overrides **semver** matching if provided.",
         "operationId": "resolve_api_v1_catalog_resolve_post",
         "requestBody": {
           "content": {
@@ -276,13 +276,13 @@
         ],
         "title": "CatalogPage",
         "example": {
-          "attr_path": "foo.bar.curl",
           "description": "A very nice Item",
           "license": "foo",
           "locked_url": "git:git?rev=xyz",
           "name": "curl",
           "outputs": "{}",
           "outputs_to_install": "{}",
+          "pkg_path": "foo.bar.curl",
           "pname": "curl",
           "rev": "xyz",
           "rev_count": 4,
@@ -375,57 +375,15 @@
         ],
         "title": "ErrorResponse"
       },
-      "PackageBuildsResult-Input": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/PackageInfoCommon"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total_count": {
-            "type": "integer",
-            "title": "Total Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total_count"
-        ],
-        "title": "PackageBuildsResult"
-      },
-      "PackageBuildsResult-Output": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/PackageInfoCommon"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total_count": {
-            "type": "integer",
-            "title": "Total Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total_count"
-        ],
-        "title": "PackageBuildsResult"
-      },
       "PackageDescriptor": {
         "properties": {
           "name": {
             "type": "string",
             "title": "Name"
           },
-          "pkgPath": {
+          "pkgpath": {
             "type": "string",
-            "title": "Pkgpath"
+            "title": "pkgpath"
           },
           "semver": {
             "anyOf": [
@@ -458,12 +416,12 @@
         "type": "object",
         "required": [
           "name",
-          "pkgPath"
+          "pkgpath"
         ],
         "title": "PackageDescriptor",
         "example": {
           "name": "curl",
-          "pkgPath": "curl"
+          "pkgpath": "curl"
         }
       },
       "PackageGroup": {
@@ -503,15 +461,15 @@
           "descriptors": [
             {
               "name": "curl",
-              "pkgPath": "curl"
+              "pkgpath": "curl"
             },
             {
               "name": "slack",
-              "pkgPath": "slack"
+              "pkgpath": "slack"
             },
             {
               "name": "xeyes",
-              "pkgPath": "xorg.xeyes"
+              "pkgpath": "xorg.xeyes"
             }
           ],
           "name": "test",
@@ -539,15 +497,15 @@
               "descriptors": [
                 {
                   "name": "curl",
-                  "pkgPath": "curl"
+                  "pkgpath": "curl"
                 },
                 {
                   "name": "slack",
-                  "pkgPath": "slack"
+                  "pkgpath": "slack"
                 },
                 {
                   "name": "xeyes",
-                  "pkgPath": "xorg.xeyes"
+                  "pkgpath": "xorg.xeyes"
                 }
               ],
               "name": "test",
@@ -556,7 +514,7 @@
           ]
         }
       },
-      "PackageInfoAPI": {
+      "PackageInfoAPI-Input": {
         "properties": {
           "attr_path": {
             "type": "string",
@@ -658,13 +616,13 @@
         ],
         "title": "PackageInfoAPI",
         "example": {
-          "attr_path": "foo.bar.curl",
           "description": "A very nice Item",
           "license": "foo",
           "locked_url": "git:git?rev=xyz",
           "name": "curl",
           "outputs": "{}",
           "outputs_to_install": "{}",
+          "pkg_path": "foo.bar.curl",
           "pname": "curl",
           "rev": "xyz",
           "rev_count": 4,
@@ -678,7 +636,129 @@
           "version": "1.0"
         }
       },
-      "PackageInfoCommon": {
+      "PackageInfoAPI-Output": {
+        "properties": {
+          "pkg_path": {
+            "type": "string",
+            "title": "Pkg Path"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "pname": {
+            "type": "string",
+            "title": "Pname"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "outputs": {
+            "anyOf": [
+              {
+                "type": "object"
+              }
+            ],
+            "title": "Outputs",
+            "nullable": true
+          },
+          "outputs_to_install": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              }
+            ],
+            "title": "Outputs To Install",
+            "nullable": true
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Description",
+            "nullable": true
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              }
+            ],
+            "title": "License",
+            "nullable": true
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          },
+          "rev_count": {
+            "type": "integer",
+            "title": "Rev Count"
+          },
+          "rev_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Rev Date"
+          },
+          "system": {
+            "$ref": "#/components/schemas/SystemEnum"
+          },
+          "stabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stabilities"
+          },
+          "locked_url": {
+            "type": "string",
+            "title": "Locked Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pkg_path",
+          "name",
+          "pname",
+          "version",
+          "outputs",
+          "outputs_to_install",
+          "description",
+          "license",
+          "rev",
+          "rev_count",
+          "rev_date",
+          "system",
+          "stabilities",
+          "locked_url"
+        ],
+        "title": "PackageInfoAPI",
+        "example": {
+          "description": "A very nice Item",
+          "license": "foo",
+          "locked_url": "git:git?rev=xyz",
+          "name": "curl",
+          "outputs": "{}",
+          "outputs_to_install": "{}",
+          "pkg_path": "foo.bar.curl",
+          "pname": "curl",
+          "rev": "xyz",
+          "rev_count": 4,
+          "rev_date": 0,
+          "search_string": "curl^curl^my description",
+          "stabilities": [
+            "stable",
+            "unstable"
+          ],
+          "system": "x86_64-linux",
+          "version": "1.0"
+        }
+      },
+      "PackageInfoCommon-Input": {
         "properties": {
           "attr_path": {
             "type": "string",
@@ -753,6 +833,95 @@
         "type": "object",
         "required": [
           "attr_path",
+          "name",
+          "pname",
+          "version",
+          "outputs",
+          "outputs_to_install",
+          "description",
+          "license",
+          "rev",
+          "rev_count",
+          "rev_date",
+          "system"
+        ],
+        "title": "PackageInfoCommon"
+      },
+      "PackageInfoCommon-Output": {
+        "properties": {
+          "pkg_path": {
+            "type": "string",
+            "title": "Pkg Path"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "pname": {
+            "type": "string",
+            "title": "Pname"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "outputs": {
+            "anyOf": [
+              {
+                "type": "object"
+              }
+            ],
+            "title": "Outputs",
+            "nullable": true
+          },
+          "outputs_to_install": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              }
+            ],
+            "title": "Outputs To Install",
+            "nullable": true
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Description",
+            "nullable": true
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              }
+            ],
+            "title": "License",
+            "nullable": true
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          },
+          "rev_count": {
+            "type": "integer",
+            "title": "Rev Count"
+          },
+          "rev_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Rev Date"
+          },
+          "system": {
+            "$ref": "#/components/schemas/SystemEnum"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pkg_path",
           "name",
           "pname",
           "version",
@@ -848,8 +1017,13 @@
             "title": "Broken"
           },
           "unfree": {
-            "type": "boolean",
-            "title": "Unfree"
+            "anyOf": [
+              {
+                "type": "boolean"
+              }
+            ],
+            "title": "Unfree",
+            "nullable": true
           },
           "stabilities": {
             "anyOf": [
@@ -895,7 +1069,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/PackageInfoAPI"
+              "$ref": "#/components/schemas/PackageInfoAPI-Input"
             },
             "type": "array",
             "title": "Items"
@@ -913,13 +1087,13 @@
         "title": "PackageSearchResult",
         "example": [
           {
-            "attr_path": "foo.bar.curl",
             "description": "A very nice Item",
             "license": "foo",
             "locked_url": "git:git?rev=xyz",
             "name": "curl",
             "outputs": "{}",
             "outputs_to_install": "{}",
+            "pkg_path": "foo.bar.curl",
             "pname": "curl",
             "rev": "xyz",
             "rev_count": 4,
@@ -938,7 +1112,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/PackageInfoAPI"
+              "$ref": "#/components/schemas/PackageInfoAPI-Output"
             },
             "type": "array",
             "title": "Items"
@@ -956,13 +1130,13 @@
         "title": "PackageSearchResult",
         "example": [
           {
-            "attr_path": "foo.bar.curl",
             "description": "A very nice Item",
             "license": "foo",
             "locked_url": "git:git?rev=xyz",
             "name": "curl",
             "outputs": "{}",
             "outputs_to_install": "{}",
+            "pkg_path": "foo.bar.curl",
             "pname": "curl",
             "rev": "xyz",
             "rev_count": 4,
@@ -976,6 +1150,48 @@
             "version": "1.0"
           }
         ]
+      },
+      "PackagesResult-Input": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PackageInfoCommon-Input"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_count"
+        ],
+        "title": "PackagesResult"
+      },
+      "PackagesResult-Output": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PackageInfoCommon-Output"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_count"
+        ],
+        "title": "PackagesResult"
       },
       "ResolvedPackageGroup-Input": {
         "properties": {
@@ -1002,13 +1218,13 @@
         ],
         "title": "ResolvedPackageGroup",
         "example": {
-          "attr_path": "foo.bar.curl",
           "description": "A very nice Item",
           "license": "foo",
           "locked_url": "git:git?rev=xyz",
           "name": "curl",
           "outputs": "{}",
           "outputs_to_install": "{}",
+          "pkg_path": "foo.bar.curl",
           "pname": "curl",
           "rev": "xyz",
           "rev_count": 4,
@@ -1047,13 +1263,13 @@
         ],
         "title": "ResolvedPackageGroup",
         "example": {
-          "attr_path": "foo.bar.curl",
           "description": "A very nice Item",
           "license": "foo",
           "locked_url": "git:git?rev=xyz",
           "name": "curl",
           "outputs": "{}",
           "outputs_to_install": "{}",
+          "pkg_path": "foo.bar.curl",
           "pname": "curl",
           "rev": "xyz",
           "rev_count": 4,
