@@ -136,19 +136,23 @@ impl Activate {
         let mut flox_active_environments = activated_environments();
 
         // install prefixes of all active environments
-        let flox_env_install_prefixes: IndexSet<PathBuf> = if flox_active_environments
-            .is_active(&now_active)
-        {
-            IndexSet::from_iter(env::split_paths(
-                &env::var(FLOX_ENV_DIRS_VAR).unwrap_or_default(),
-            ))
-        } else {
-            let mut set = IndexSet::from([activation_path.clone()]);
-            if let Ok(var) = env::var(FLOX_ENV_DIRS_VAR) {
-                if !var.is_empty() {
-                    set.extend::<IndexSet<PathBuf>>(IndexSet::from_iter(env::split_paths(&var)));
-                }
+        let flox_env_install_prefixes: IndexSet<PathBuf> = {
+            let mut set = IndexSet::new();
+            if !flox_active_environments.is_active(&now_active) {
+                set.insert(activation_path.clone());
             }
+            let active_set: IndexSet<PathBuf> = {
+                if let Ok(var) = env::var(FLOX_ENV_DIRS_VAR) {
+                    if !var.is_empty() {
+                        IndexSet::from_iter(env::split_paths(&var))
+                    } else {
+                        IndexSet::new()
+                    }
+                } else {
+                    IndexSet::new()
+                }
+            };
+            set.extend(active_set);
             set
         };
 
