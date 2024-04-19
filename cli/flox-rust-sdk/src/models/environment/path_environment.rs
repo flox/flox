@@ -398,12 +398,10 @@ impl PathEnvironment {
         }
 
         // Read and parse `manifest.toml` TOML template asset containing placeholders
-        let mut manifest_template = fs::read_to_string(env!("MANIFEST_TEMPLATE"))
-            .map_err(EnvironmentError::ReadManifest)
-            .and_then(|toml| {
-                toml.parse::<RawManifest>()
-                    .map_err(EnvironmentError::ParseTemplateManifest)
-            })?;
+        let manifest_template = include_str!(env!("MANIFEST_TEMPLATE"));
+        let mut manifest_template = manifest_template
+            .parse::<RawManifest>()
+            .map_err(EnvironmentError::ParseTemplateManifest)?;
 
         // Fill out manifest placeholders
         let manifest = Self::replace_manifest_template_placeholders(
