@@ -249,7 +249,7 @@ pub enum Subtree {
 /// without an enclosing `[]`, so the results returned by `pkgdb` can't be
 /// directly deserialized to a JSON object. To parse the results you should
 /// use the provided `TryFrom` impl.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResults {
     pub results: Vec<SearchResult>,
     pub count: Option<u64>,
