@@ -533,15 +533,15 @@ impl Activate {
     /// Quote run args so that words don't get split,
     /// but don't escape all characters.
     ///
-    /// To do this we escape `"`,
+    /// To do this we escape '"' and '`',
     /// but we don't escape anything else.
-    /// We want `$` for example to be expanded by the shell.
+    /// We want '$' for example to be expanded by the shell.
     fn quote_run_args(run_args: &[String]) -> String {
         run_args
             .iter()
             .map(|arg| {
-                if arg.contains(' ') || arg.contains('"') {
-                    format!(r#""{}""#, arg.replace('"', r#"\""#))
+                if arg.contains(' ') || arg.contains('"') || arg.contains('`') {
+                    format!(r#""{}""#, arg.replace('"', r#"\""#).replace('`', r#"\`"#))
                 } else {
                     arg.to_string()
                 }
