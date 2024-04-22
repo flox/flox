@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use catalog_api_v1::types::{self as api_types, error as api_error, PackageInfoApi};
+use catalog_api_v1::types::{self as api_types, error as api_error, PackageInfoApiInput};
 use catalog_api_v1::{Client as APIClient, Error as APIError};
 use enum_dispatch::enum_dispatch;
 use thiserror::Error;
@@ -280,10 +280,10 @@ impl From<api_types::CatalogPage> for CatalogPage {
 /// at which point this will probably no longer be an alias.
 type PackageResolutionInfo = api_types::PackageResolutionInfo;
 
-impl TryFrom<PackageInfoApi> for SearchResult {
+impl TryFrom<PackageInfoApiInput> for SearchResult {
     type Error = SearchError;
 
-    fn try_from(package_info: PackageInfoApi) -> Result<Self, SearchError> {
+    fn try_from(package_info: PackageInfoApiInput) -> Result<Self, SearchError> {
         let mut attr_path: Vec<String> = package_info
             .attr_path
             .split('.')
