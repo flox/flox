@@ -760,6 +760,42 @@ pub mod test_helpers {
         systems = ["aarch64-darwin"]
         "#};
 
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    pub const MANIFEST_INCOMPATIBLE_PACKAGE: &str = indoc! {r#"
+        [install]
+        glibc.pkg-path = "glibc"
+
+        [options]
+        systems = ["aarch64-darwin"]
+        "#};
+
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    pub const MANIFEST_INCOMPATIBLE_PACKAGE: &str = indoc! {r#"
+        [install]
+        glibc.pkg-path = "glibc"
+
+        [options]
+        systems = ["x86_64-darwin"]
+        "#};
+
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    pub const MANIFEST_INCOMPATIBLE_PACKAGE: &str = indoc! {r#"
+        [install]
+        ps.pkg-path = "darwin.ps"
+
+        [options]
+        systems = ["x86_64-linux"]
+        "#};
+
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    pub const MANIFEST_INCOMPATIBLE_PACKAGE: &str = indoc! {r#"
+        [install]
+        ps.pkg-path = "darwin.ps"
+
+        [options]
+        systems = ["aarch64-linux"]
+        "#};
+
     pub fn new_core_environment(flox: &Flox, contents: &str) -> CoreEnvironment {
         let env_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
         fs::write(env_path.join(MANIFEST_FILENAME), contents).unwrap();
@@ -772,10 +808,10 @@ pub mod test_helpers {
 mod tests {
     use std::os::unix::fs::PermissionsExt;
 
-    use indoc::{formatdoc, indoc};
+    use indoc::indoc;
     use serial_test::serial;
     use tempfile::{tempdir_in, TempDir};
-    use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
+    use tests::test_helpers::{MANIFEST_INCOMPATIBLE_PACKAGE, MANIFEST_INCOMPATIBLE_SYSTEM};
 
     use self::test_helpers::new_core_environment;
     use super::*;
@@ -850,47 +886,13 @@ mod tests {
     #[test]
     #[serial]
     fn build_incompatible_package() {
-        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-        let manifest_contents = formatdoc! {r#"
-        [install]
-        glibc.pkg-path = "glibc"
-
-        [options]
-        systems = ["aarch64-darwin"]
-        "#};
-
-        #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-        let manifest_contents = formatdoc! {r#"
-        [install]
-        glibc.pkg-path = "glibc"
-
-        [options]
-        systems = ["x86_64-darwin"]
-        "#};
-
-        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-        let manifest_contents = formatdoc! {r#"
-        [install]
-        ps.pkg-path = "darwin.ps"
-
-        [options]
-        systems = ["x86_64-linux"]
-        "#};
-
-        #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-        let manifest_contents = formatdoc! {r#"
-        [install]
-        ps.pkg-path = "darwin.ps"
-
-        [options]
-        systems = ["aarch64-linux"]
-        "#};
-
         let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
         let mut temp_env = env_view
             .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
             .unwrap();
-        temp_env.update_manifest(&manifest_contents).unwrap();
+        temp_env
+            .update_manifest(MANIFEST_INCOMPATIBLE_PACKAGE)
+            .unwrap();
         env_view.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 

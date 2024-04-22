@@ -531,7 +531,10 @@ mod tests {
         mock_managed_environment,
         unusable_mock_managed_environment,
     };
-    use flox_rust_sdk::models::environment::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
+    use flox_rust_sdk::models::environment::test_helpers::{
+        MANIFEST_INCOMPATIBLE_PACKAGE,
+        MANIFEST_INCOMPATIBLE_SYSTEM,
+    };
     use flox_rust_sdk::models::pkgdb::error_codes::PACKAGE_BUILD_FAILURE;
     use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
     use tempfile::tempdir_in;
@@ -772,7 +775,7 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             false,
-            mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_PACKAGE, owner),
             Some(QueryFunctions {
                 query_add_system: |_| Ok(true),
                 query_ignore_build_errors: || panic!(),
