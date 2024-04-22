@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
@@ -24,7 +24,6 @@ use indoc::formatdoc;
 use log::debug;
 use toml_edit::DocumentMut;
 use tracing::instrument;
-use url::Url;
 
 use super::{open_path, ConcreteEnvironment};
 use crate::subcommand_metric;
@@ -86,10 +85,15 @@ impl Pull {
 
         match self.pull_select {
             PullSelect::New { remote } | PullSelect::NewAbbreviated { remote } => {
-                let start_message = Self::pull_new_spinner_message(
-                    self.dir.as_deref(),
-                    &remote,
-                    flox.floxhub.base_url(),
+                let start_message = format!(
+                    "⬇️  Remote: pulling and building {env_ref} from {host} into {into_dir}",
+                    env_ref = &remote,
+                    host = flox.floxhub.base_url(),
+                    into_dir = if let Some(dir) = self.dir.as_deref() {
+                        format!("{}", dir.display())
+                    } else {
+                        "the current directory".to_string()
+                    }
                 );
 
                 let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
@@ -405,23 +409,6 @@ impl Pull {
             },
         };
         Ok(())
-    }
-
-    /// construct a message for spiners while pulling a new environment
-    fn pull_new_spinner_message(
-        dir: Option<&Path>,
-        env_ref: &EnvironmentRef,
-        floxhub_host: &Url,
-    ) -> String {
-        let mut start_message =
-            format!("⬇️  Remote: pulling and building {env_ref} from {floxhub_host}");
-        if let Some(dir) = dir {
-            start_message += &format!(" into {dir}", dir = dir.display());
-        } else {
-            start_message += " into the current directory";
-        };
-
-        start_message
     }
 
     /// if possible, prompt the user to automatically add their system to the manifest
