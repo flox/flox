@@ -282,10 +282,3 @@ teardown() {
   assert_line --partial "The package 'yi' is marked as broken."
   assert_output --partial "'options.allow.broken = true'"
 }
-
-@test "'install' can use mock client" {
-  "$FLOX_BIN" init
-  resp_file="$TESTS_DIR/catalog_responses/empty_resolve.json"
-  FLOX_FEATURES_USE_CATALOG="true" _FLOX_USE_CATALOG_MOCK="$resp_file" "$FLOX_BIN" install ripgrep -vvv 2>&3 
-  cat .flox/env/manifest.lock >&3
-}

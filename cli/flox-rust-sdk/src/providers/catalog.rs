@@ -33,7 +33,6 @@ type ResolvedGroups = Vec<ResolvedPackageGroup>;
 
 // Arc allows you to push things into the client from outside the client if necessary
 // Mutex allows you to share across threads (necessary because of tokio)
-// RefCell lets us mutate the field without needing to make the Client trait methods mutable
 type MockField<T> = Arc<Mutex<T>>;
 
 /// A generic response that can be turned into a [ResponseValue]. This is only necessary for
@@ -57,6 +56,7 @@ impl<T> TryFrom<GenericResponse<T>> for ResponseValue<T> {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum Response {
     Resolve(ResolvedGroups),
     Search(SearchResults),
@@ -76,12 +76,13 @@ pub enum MockDataError {
     InvalidData(String),
 }
 
-/// Reads mock responses from disk when the appropriate environment variable is set.
+/// Reads a list of mock responses from disk.
 fn read_mock_responses(path: &impl AsRef<Path>) -> Result<VecDeque<Response>, MockDataError> {
     let mut responses = VecDeque::new();
     let contents = std::fs::read_to_string(path).map_err(MockDataError::ReadMockFile)?;
-    let json: Vec<Response> = serde_json::from_str(&contents).map_err(MockDataError::ParseJson)?;
-    responses.extend(json);
+    let deserialized: Vec<Response> =
+        serde_json::from_str(&contents).map_err(MockDataError::ParseJson)?;
+    responses.extend(deserialized);
     Ok(responses)
 }
 
@@ -644,9 +645,11 @@ mod tests {
 
 #[cfg(test)]
 mod test {
+    use std::io::Write;
     use std::path::PathBuf;
 
     use pollster::FutureExt;
+    use tempfile::NamedTempFile;
 
     use super::*;
 
@@ -670,6 +673,26 @@ mod test {
             let mut responses = resp_handle.lock().unwrap();
             responses.push_back(Response::Resolve(vec![]));
         }
+        let resp = client.resolve(vec![]).block_on().unwrap();
+        assert!(resp.is_empty());
+    }
+
+    #[test]
+    fn error_when_invalid_json() {
+        let tmp = NamedTempFile::new().unwrap();
+        // There's nothing in the mock data file yet, so it can't be parsed as JSON
+        let client = MockClient::new(Some(&tmp));
+        assert!(matches!(
+            client,
+            Err(CatalogClientError::MockData(MockDataError::ParseJson(_)))
+        ));
+    }
+
+    #[test]
+    fn parses_basic_json() {
+        let mut tmp = NamedTempFile::new().unwrap();
+        tmp.write_all("[[]]".as_bytes()).unwrap();
+        let client = MockClient::new(Some(&tmp)).unwrap();
         let resp = client.resolve(vec![]).block_on().unwrap();
         assert!(resp.is_empty());
     }
