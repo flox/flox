@@ -70,7 +70,7 @@ impl FromStr for RawManifest {
 /// Writing a [`TypedManifest`] will drop comments and formatting.
 /// Hence, this should only be used in cases where these can safely be severed.
 /// Edits to the user facing manifest.toml file should be made using [`RawManifest`] instead.
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(untagged)]
 enum TypedManifest {
     /// v2 manifest, processed by flox and resolved using the catalog service
@@ -81,8 +81,8 @@ enum TypedManifest {
 
 /// Not meant for writing manifest files, only for reading them.
 /// Modifications should be made using the the raw functions in this module.
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-struct TypedManifestCatalog {
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(super) struct TypedManifestCatalog {
     version: Version<1>,
     /// The packages to install in the form of a map from package name
     /// to package descriptor.
@@ -103,12 +103,12 @@ struct TypedManifestCatalog {
     options: ManifestOptions,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
-struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub(super) struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-struct ManifestPackageDescriptor {
+pub(super) struct ManifestPackageDescriptor {
     pkg_path: String,
     package_group: Option<String>,
     priority: Option<usize>,
@@ -118,19 +118,19 @@ struct ManifestPackageDescriptor {
     optional: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
-struct ManifestVariables(BTreeMap<String, String>);
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub(super) struct ManifestVariables(BTreeMap<String, String>);
 
-#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-struct ManifestHook {
+pub(super) struct ManifestHook {
     /// A script that is run at activation time,
     /// in a flox provided bash shell
     on_activate: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
-struct ManifestProfile {
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub(super) struct ManifestProfile {
     /// When defined, this hook is run by _all_ shells upon activation
     common: Option<String>,
     /// When defined, this hook is run upon activation in a bash shell
@@ -141,9 +141,9 @@ struct ManifestProfile {
     fish: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-struct ManifestOptions {
+pub(super) struct ManifestOptions {
     /// A list of systems that each package is resolved for.
     #[serde(default)]
     systems: Vec<System>,
@@ -155,8 +155,8 @@ struct ManifestOptions {
     semver: SemverOptions,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
-struct Allows {
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub(super) struct Allows {
     /// Whether to allow packages that are marked as `unfree`
     unfree: Option<bool>,
     /// Whether to allow packages that are marked as `broken`
@@ -166,8 +166,8 @@ struct Allows {
     licenses: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
-struct SemverOptions {
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub(super) struct SemverOptions {
     /// Whether to prefer pre-release versions when resolving
     #[serde(default)]
     prefer_pre_releases: Option<bool>,
@@ -206,7 +206,7 @@ pub enum ManifestError {
 ///
 /// The authoritative form of the manifest is in
 /// https://github.com/flox/pkgdb/blob/main/include/flox/resolver/manifest-raw.hh#L263
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct TypedManifestPkgdb {
     pub vars: Option<toml::Table>,
     pub hook: Option<toml::Table>,

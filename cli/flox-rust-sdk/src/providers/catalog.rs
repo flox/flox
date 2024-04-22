@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use catalog_api_v1::types::{self as api_types, error as api_error, PackageInfoApiInput};
 use catalog_api_v1::{Client as APIClient, Error as APIError};
 use enum_dispatch::enum_dispatch;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::data::System;
@@ -260,6 +261,7 @@ impl TryFrom<api_types::ResolvedPackageGroupInput> for ResolvedPackageGroup {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogPage {
     pub packages: Vec<PackageResolutionInfo>,
     pub page: i64,

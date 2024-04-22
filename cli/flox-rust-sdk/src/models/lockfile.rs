@@ -13,11 +13,13 @@ use thiserror::Error;
 
 use super::container_builder::ContainerBuilder;
 use super::environment::UpdateResult;
+use super::manifest::TypedManifestCatalog;
 use super::pkgdb::CallPkgDbError;
 use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
 use crate::flox::Flox;
 use crate::models::environment::{global_manifest_lockfile_path, global_manifest_path};
 use crate::models::pkgdb::{call_pkgdb, BuildEnvResult, PKGDB_BIN};
+use crate::providers::catalog::CatalogPage;
 use crate::utils::CommandExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -34,7 +36,7 @@ pub struct Registry {
     _json: Value,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum LockedManifest {
     Catalog(LockedManifestCatalog),
@@ -146,8 +148,30 @@ impl ToString for LockedManifest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct LockedManifestCatalog {}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LockedManifestCatalog {
+    #[serde(rename = "lockfile-version")]
+    version: Version<1>,
+    /// original manifest that was locked
+    manifest: TypedManifestCatalog,
+    /// locked groups
+    groups: Vec<LockedGroup>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LockedGroup {
+    /// name of the group
+    name: String,
+    /// system this group provides packages for
+    system: System,
+    /// [CatalogPage] that was selected to fulfill this group
+    ///
+    /// If resolution of a group provides multiple pages,
+    /// a single page is selected based on cross group constraints.
+    /// By default this is the latest page that provides packages
+    /// for all requested systems.
+    page: CatalogPage,
+}
 
 impl LockedManifestCatalog {
     pub fn list_packages(&self, _system: &System) -> Vec<InstalledPackage> {
