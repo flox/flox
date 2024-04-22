@@ -283,7 +283,6 @@ teardown() {
   assert_output --partial "'options.allow.broken = true'"
 }
 
-# bats test_tags=bats:focus
 @test "'install' can use mock client" {
   "$FLOX_BIN" init
   resp_file="$TESTS_DIR/catalog_responses/empty_resolve.json"

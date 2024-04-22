@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use anyhow::bail;
 use flox_rust_sdk::providers::catalog::{
     CatalogClient,
     Client,
@@ -29,17 +30,19 @@ pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Er
         if path.exists() {
             Some(path)
         } else {
-            None
+            bail!("path to mock data file doesn't exist: {}", path.display());
         }
     } else {
         None
     };
-    if let Some(path) = mock_data_path {
+    if mock_data_path.is_some() {
         debug!(
-            mock_data_path = traceable_path(&path),
+            mock_data_path = mock_data_path.clone().map(|p| traceable_path(&p)),
             "using mock catalog client"
         );
-        Ok(Some(Client::Mock(MockClient::new()?)))
+        Ok(Some(Client::Mock(MockClient::new(
+            mock_data_path.as_ref(),
+        )?)))
     } else {
         debug!("using production catalog client");
         Ok(Some(Client::Catalog(CatalogClient::default())))

@@ -1,6 +1,6 @@
-use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::num::NonZeroU32;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
@@ -34,7 +34,7 @@ type ResolvedGroups = Vec<ResolvedPackageGroup>;
 // Arc allows you to push things into the client from outside the client if necessary
 // Mutex allows you to share across threads (necessary because of tokio)
 // RefCell lets us mutate the field without needing to make the Client trait methods mutable
-type MockField<T> = Arc<Mutex<RefCell<T>>>;
+type MockField<T> = Arc<Mutex<T>>;
 
 /// A generic response that can be turned into a [ResponseValue]. This is only necessary for
 /// representing error responses.
@@ -77,15 +77,12 @@ pub enum MockDataError {
 }
 
 /// Reads mock responses from disk when the appropriate environment variable is set.
-fn read_mock_responses() -> Result<MockField<VecDeque<Response>>, MockDataError> {
+fn read_mock_responses(path: &impl AsRef<Path>) -> Result<VecDeque<Response>, MockDataError> {
     let mut responses = VecDeque::new();
-    if let Ok(path) = std::env::var(FLOX_CATALOG_MOCK_DATA_VAR) {
-        let contents = std::fs::read_to_string(path).map_err(MockDataError::ReadMockFile)?;
-        let json: Vec<Response> =
-            serde_json::from_str(&contents).map_err(MockDataError::ParseJson)?;
-        responses.extend(json);
-    }
-    Ok(Arc::new(Mutex::new(RefCell::new(responses))))
+    let contents = std::fs::read_to_string(path).map_err(MockDataError::ReadMockFile)?;
+    let json: Vec<Response> = serde_json::from_str(&contents).map_err(MockDataError::ParseJson)?;
+    responses.extend(json);
+    Ok(responses)
 }
 
 /// Either a client for the actual catalog service,
@@ -123,9 +120,14 @@ pub struct MockClient {
 
 impl MockClient {
     /// Create a new mock client, potentially reading mock responses from disk
-    pub fn new() -> Result<Self, CatalogClientError> {
+    pub fn new(mock_data_path: Option<&impl AsRef<Path>>) -> Result<Self, CatalogClientError> {
+        let mock_responses = if mock_data_path.is_none() {
+            VecDeque::new()
+        } else {
+            read_mock_responses(mock_data_path.unwrap())?
+        };
         Ok(Self {
-            mock_responses: read_mock_responses()?,
+            mock_responses: Arc::new(Mutex::new(mock_responses)),
         })
     }
 
@@ -134,7 +136,6 @@ impl MockClient {
         self.mock_responses
             .lock()
             .expect("couldn't acquire mock lock")
-            .get_mut()
             .push_back(Response::Resolve(resp));
     }
 
@@ -143,7 +144,6 @@ impl MockClient {
         self.mock_responses
             .lock()
             .expect("couldn't acquire mock lock")
-            .get_mut()
             .push_back(Response::Search(resp));
     }
 
@@ -156,7 +156,6 @@ impl MockClient {
         self.mock_responses
             .lock()
             .expect("couldn't acquire mock lock")
-            .get_mut()
             .push_back(Response::Error(generic_resp));
     }
 }
@@ -368,7 +367,6 @@ impl ClientTrait for MockClient {
             .mock_responses
             .lock()
             .expect("couldn't acquire mock lock")
-            .borrow_mut()
             .pop_front();
         if let Some(Response::Search(_)) = mock_resp {
             panic!("found search response, expected resolve response");
@@ -646,14 +644,32 @@ mod tests {
 
 #[cfg(test)]
 mod test {
+    use std::path::PathBuf;
+
     use pollster::FutureExt;
 
     use super::*;
 
     #[test]
     fn mock_client_uses_seeded_responses() {
-        let mut client = MockClient::new().unwrap();
+        let path: Option<&PathBuf> = None;
+        let mut client = MockClient::new(path).unwrap();
         client.push_resolve_response(vec![]);
+        let resp = client.resolve(vec![]).block_on().unwrap();
+        assert!(resp.is_empty());
+    }
+
+    #[test]
+    fn can_push_responses_outside_of_client() {
+        let path: Option<&PathBuf> = None;
+        let client = MockClient::new(path).unwrap();
+        {
+            // Need to drop the mutex guard otherwise `resolve` will block trying to read
+            // the queue of mock responses
+            let resp_handle = client.mock_responses.clone();
+            let mut responses = resp_handle.lock().unwrap();
+            responses.push_back(Response::Resolve(vec![]));
+        }
         let resp = client.resolve(vec![]).block_on().unwrap();
         assert!(resp.is_empty());
     }
