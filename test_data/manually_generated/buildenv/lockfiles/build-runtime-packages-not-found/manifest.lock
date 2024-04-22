@@ -1,0 +1,149 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "hello": {
+        "pkg-path": "hello"
+      }
+    },
+    "hook": {},
+    "profile": {},
+    "options": {
+      "allow": {
+        "licenses": []
+      },
+      "semver": {}
+    },
+    "build": {
+      "myhello": {
+        "command": "  mkdir -p $out/bin\n  echo echo hello foo > $out/bin/hello\n  echo exec hello >> $out/bin/hello\n  chmod +x $out/bin/hello\n",
+        "files": null,
+        "runtime-packages": [
+          "hello",
+          "goodbye"
+        ],
+        "systems": null,
+        "sandbox": null
+      }
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "hello",
+      "broken": false,
+      "derivation": "/nix/store/z0x3vgz97j1az7c13nn1jbpx86qs94b7-hello-2.12.1.drv",
+      "description": "Program that produces a familiar, friendly greeting",
+      "install_id": "hello",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1997e4aa514312c1af7e2bda7fad1644e778ff26",
+      "name": "hello-2.12.1",
+      "pname": "hello",
+      "rev": "1997e4aa514312c1af7e2bda7fad1644e778ff26",
+      "rev_count": 695081,
+      "rev_date": "2024-10-20T08:35:21Z",
+      "scrape_date": "2024-10-23T03:58:08Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.12.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/8fpvkfwr8fm91xlzznsgh3g1fcw0hfnh-hello-2.12.1"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "hello",
+      "broken": false,
+      "derivation": "/nix/store/79g3wsyyb3vnyfnwwkz7h1iv0wn862rr-hello-2.12.1.drv",
+      "description": "Program that produces a familiar, friendly greeting",
+      "install_id": "hello",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1997e4aa514312c1af7e2bda7fad1644e778ff26",
+      "name": "hello-2.12.1",
+      "pname": "hello",
+      "rev": "1997e4aa514312c1af7e2bda7fad1644e778ff26",
+      "rev_count": 695081,
+      "rev_date": "2024-10-20T08:35:21Z",
+      "scrape_date": "2024-10-23T03:58:08Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.12.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/9i2ay9whhyswa2cc30azxiyqrjb795xj-hello-2.12.1"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "hello",
+      "broken": false,
+      "derivation": "/nix/store/rwf093pz3kp7lij1hyys0fjndsy6ipha-hello-2.12.1.drv",
+      "description": "Program that produces a familiar, friendly greeting",
+      "install_id": "hello",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1997e4aa514312c1af7e2bda7fad1644e778ff26",
+      "name": "hello-2.12.1",
+      "pname": "hello",
+      "rev": "1997e4aa514312c1af7e2bda7fad1644e778ff26",
+      "rev_count": 695081,
+      "rev_date": "2024-10-20T08:35:21Z",
+      "scrape_date": "2024-10-23T03:58:08Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.12.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/h6lx6hmccksq64nsa4h3c8p9gl1vzqcf-hello-2.12.1"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "hello",
+      "broken": false,
+      "derivation": "/nix/store/161hd6k485dvr9cx02ccnc1x4n9fzix6-hello-2.12.1.drv",
+      "description": "Program that produces a familiar, friendly greeting",
+      "install_id": "hello",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1997e4aa514312c1af7e2bda7fad1644e778ff26",
+      "name": "hello-2.12.1",
+      "pname": "hello",
+      "rev": "1997e4aa514312c1af7e2bda7fad1644e778ff26",
+      "rev_count": 695081,
+      "rev_date": "2024-10-20T08:35:21Z",
+      "scrape_date": "2024-10-23T03:58:08Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "2.12.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/26xbg1ndr7hbcncrlf9nhx5is2b25d13-hello-2.12.1"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}
