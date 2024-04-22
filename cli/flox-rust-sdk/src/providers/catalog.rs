@@ -284,22 +284,15 @@ impl TryFrom<PackageInfoApiInput> for SearchResult {
     type Error = SearchError;
 
     fn try_from(package_info: PackageInfoApiInput) -> Result<Self, SearchError> {
-        let mut attr_path: Vec<String> = package_info
-            .attr_path
-            .split('.')
-            .map(String::from)
-            .collect();
-
-        if attr_path.len() < 3 {
-            Err(SearchError::ShortAttributePath(package_info.attr_path))?
-        }
-
-        let rel_path: Vec<String> = attr_path.drain(2..).collect();
-
         Ok(Self {
             input: NIXPKGS_CATALOG.to_string(),
             system: package_info.system.to_string(),
-            rel_path,
+            // The server does not include legacyPackages.<system> in attr_path
+            rel_path: package_info
+                .attr_path
+                .split('.')
+                .map(String::from)
+                .collect(),
             pname: Some(package_info.pname),
             version: Some(package_info.version),
             description: Some(package_info.description),

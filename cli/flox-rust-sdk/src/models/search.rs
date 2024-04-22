@@ -437,6 +437,8 @@ pub struct SearchResult {
     ///
     /// For an arbitrary flake this will simply be the name of the package, but
     /// for nixpkgs this can be something like `python310Packages.flask`
+    ///
+    /// TODO: rename this attr_path or pkg_path
     pub rel_path: Vec<String>,
     /// The package name
     pub pname: Option<String>,
