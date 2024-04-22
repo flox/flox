@@ -9,6 +9,30 @@ fn print_message(v: impl Display) {
     eprintln!("{v}");
 }
 
+#[allow(dead_code)]
+#[derive(Debug, PartialEq)]
+pub enum Action {
+    Plain(String),
+    Error(String),
+    Created(String),
+    Deleted(String),
+    Updated(String),
+    Warning(String),
+}
+
+impl Action {
+    pub fn print(self) {
+        match self {
+            Action::Plain(v) => plain(v),
+            Action::Error(v) => error(v),
+            Action::Created(v) => created(v),
+            Action::Deleted(v) => deleted(v),
+            Action::Updated(v) => updated(v),
+            Action::Warning(v) => warning(v),
+        }
+    }
+}
+
 /// alias for [print_message]
 pub(crate) fn plain(v: impl Display) {
     print_message(v);

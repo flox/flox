@@ -266,7 +266,7 @@ impl Pull {
         }
         .spin();
 
-        Self::handle_pull_result(
+        let message = Self::handle_pull_result(
             flox,
             result,
             &dot_flox_path,
@@ -276,7 +276,10 @@ impl Pull {
                 query_add_system: Self::query_add_system,
                 query_ignore_build_errors: Self::query_ignore_build_errors,
             }),
-        )
+        )?;
+
+        message.print();
+        Ok(())
     }
 
     /// Helper function for [Self::pull_new_environment] that can be unit tested.
@@ -290,7 +293,7 @@ impl Pull {
         force: bool,
         mut env: ManagedEnvironment,
         query_functions: Option<QueryFunctions>,
-    ) -> Result<()> {
+    ) -> Result<message::Action, anyhow::Error> {
         let pulled_line = format!(
             "Pulled {owner}/{name} from {floxhub_host}",
             owner = env.owner(),
@@ -303,9 +306,7 @@ impl Pull {
                     You can activate this environment with 'flox activate'
                     "};
         match result {
-            Ok(_) => {
-                message::created(completed);
-            },
+            Ok(_) => Ok(message::Action::Created(completed)),
             Err(EnvironmentError::Core(e)) if e.is_incompatible_system_error() => {
                 let hint = formatdoc! {"
                     Use 'flox pull --force' to add your system to the manifest.
@@ -356,12 +357,10 @@ impl Pull {
                             Use 'flox edit' to address issues before activating.
                         "};
 
-                        message::created(message_with_warning);
+                        Ok(message::Action::Warning(message_with_warning))
                     },
-                    Ok(_) => {
-                        message::created(completed);
-                    },
-                };
+                    Ok(_) => Ok(message::Action::Created(completed)),
+                }
             },
             Err(EnvironmentError::Core(
                 ref core_err @ CoreEnvironmentError::LockedManifest(
@@ -392,7 +391,7 @@ impl Pull {
                         Could not build environment.
                         Use 'flox edit' to address issues before activating.
                     "};
-                    message::warning(message_with_warning);
+                    Ok(message::Action::Warning(message_with_warning))
                 } else {
                     fs::remove_dir_all(dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
@@ -403,8 +402,7 @@ impl Pull {
                 fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
                 bail!(e)
             },
-        };
-        Ok(())
+        }
     }
 
     /// construct a message for spiners while pulling a new environment
@@ -612,7 +610,7 @@ mod tests {
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
-        Pull::handle_pull_result(
+        let result = Pull::handle_pull_result(
             &flox,
             incompatible_system_result(),
             &dot_flox_path,
@@ -621,6 +619,16 @@ mod tests {
             None,
         )
         .unwrap();
+        assert_eq!(
+            result,
+            message::Action::Created(formatdoc!(
+                "
+            Pulled owner/name from https://hub.flox.dev/
+
+            You can activate this environment with 'flox activate'
+            "
+            ))
+        );
 
         assert!(dot_flox_path.exists());
     }
@@ -662,7 +670,7 @@ mod tests {
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
-        Pull::handle_pull_result(
+        let result = Pull::handle_pull_result(
             &flox,
             incompatible_system_result(),
             &dot_flox_path,
@@ -674,6 +682,16 @@ mod tests {
             }),
         )
         .unwrap();
+        assert_eq!(
+            result,
+            message::Action::Created(formatdoc!(
+                "
+            Pulled owner/name from https://hub.flox.dev/
+
+            You can activate this environment with 'flox activate'
+            "
+            ))
+        );
 
         assert!(dot_flox_path.exists());
     }
@@ -714,7 +732,7 @@ mod tests {
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
-        Pull::handle_pull_result(
+        let result = Pull::handle_pull_result(
             &flox,
             incompatible_package_result(),
             &dot_flox_path,
@@ -726,6 +744,17 @@ mod tests {
             }),
         )
         .unwrap();
+        assert_eq!(
+            result,
+            message::Action::Warning(formatdoc!(
+                "
+            Pulled owner/test from https://hub.flox.dev/
+
+            Could not build environment.
+            Use 'flox edit' to address issues before activating.
+            "
+            ))
+        );
 
         assert!(dot_flox_path.exists());
     }
