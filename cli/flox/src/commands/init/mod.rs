@@ -14,7 +14,12 @@ use flox_rust_sdk::models::environment::{
     Environment,
     PathPointer,
 };
-use flox_rust_sdk::models::lockfile::{LockedManifest, TypedLockedManifest};
+use flox_rust_sdk::models::lockfile::{
+    self,
+    LockedManifest,
+    LockedManifestPkgdb,
+    TypedLockedManifestPkgdb,
+};
 use flox_rust_sdk::models::manifest::{insert_packages, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::scrape_input;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
@@ -89,10 +94,17 @@ impl Init {
                 typed: Spinner::new(|| {
                     // Some language hooks run searches,
                     // so run a scrape first
-                    let global_lockfile = LockedManifest::ensure_global_lockfile(&flox)?;
-                    let lockfile: TypedLockedManifest =
-                        LockedManifest::read_from_file(&CanonicalPath::new(global_lockfile)?)?
-                            .try_into()?;
+                    let global_lockfile = LockedManifestPkgdb::ensure_global_lockfile(&flox)?;
+
+                    let lockfile: LockedManifest =
+                        LockedManifest::read_from_file(&CanonicalPath::new(global_lockfile)?)?;
+
+                    let LockedManifest::Pkgdb(lockfile) = lockfile else {
+                        return Err(anyhow!("Expected a Pkgdb lockfile"));
+                    };
+
+                    let lockfile = TypedLockedManifestPkgdb::try_from(lockfile)?;
+
                     // --ga-registry forces a single input
                     if let Some((_, input)) = lockfile.registry().inputs.iter().next() {
                         scrape_input(&input.from)?;

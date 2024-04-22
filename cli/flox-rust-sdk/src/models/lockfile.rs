@@ -34,40 +34,34 @@ pub struct Registry {
     _json: Value,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct LockedManifest(Value);
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(untagged)]
+pub enum LockedManifest {
+    Catalog(LockedManifestCatalog),
+    Pkgdb(LockedManifestPkgdb),
+}
+
+impl<'de> Deserialize<'de> for LockedManifest {
+    fn deserialize<D>(deserializer: D) -> Result<LockedManifest, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        let version = value.get("lockfile-version").and_then(Value::as_u64);
+
+        match version {
+            Some(0) => Ok(LockedManifest::Pkgdb(LockedManifestPkgdb(value))),
+            Some(1) => serde_json::from_value(value)
+                .map(LockedManifest::Catalog)
+                .map_err(serde::de::Error::custom),
+            _ => Err(serde::de::Error::custom(
+                "unsupported or missing 'lockfile-version'",
+            )),
+        }
+    }
+}
 
 impl LockedManifest {
-    /// Use pkgdb to lock a manifest
-    ///
-    /// `existing_lockfile_path` can be either the global lock or an environment's
-    /// lockfile
-    pub fn lock_manifest(
-        pkgdb: &Path,
-        manifest_path: &Path,
-        existing_lockfile_path: &CanonicalPath,
-        global_manifest_path: &Path,
-    ) -> Result<Self, LockedManifestError> {
-        let canonical_manifest_path =
-            CanonicalPath::new(manifest_path).map_err(LockedManifestError::BadManifestPath)?;
-
-        let mut pkgdb_cmd = Command::new(pkgdb);
-        pkgdb_cmd
-            .args(["manifest", "lock"])
-            .arg("--ga-registry")
-            .arg("--global-manifest")
-            .arg(global_manifest_path)
-            .arg("--manifest")
-            .arg(canonical_manifest_path)
-            .arg("--lockfile")
-            .arg(existing_lockfile_path);
-
-        debug!("locking manifest with command: {}", pkgdb_cmd.display());
-        call_pkgdb(pkgdb_cmd)
-            .map_err(LockedManifestError::LockManifest)
-            .map(Self)
-    }
-
     /// Build a locked manifest
     ///
     /// If a gcroot_out_link_path is provided,
@@ -122,6 +116,79 @@ impl LockedManifest {
         Ok(ContainerBuilder::new(container_builder_path))
     }
 
+    pub fn read_from_file(path: &CanonicalPath) -> Result<Self, LockedManifestError> {
+        let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
+        serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
+    }
+
+    pub fn check_lockfile(
+        path: &CanonicalPath,
+    ) -> Result<Vec<LockfileCheckWarning>, LockedManifestError> {
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd
+            .args(["manifest", "check"])
+            .arg("--lockfile")
+            .arg(path.as_os_str());
+
+        debug!("checking lockfile with command: {}", pkgdb_cmd.display());
+
+        let value = call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::CheckLockfile)?;
+        let warnings: Vec<LockfileCheckWarning> =
+            serde_json::from_value(value).map_err(LockedManifestError::ParseCheckWarnings)?;
+
+        Ok(warnings)
+    }
+}
+
+impl ToString for LockedManifest {
+    fn to_string(&self) -> String {
+        serde_json::json!(self).to_string()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LockedManifestCatalog {}
+
+impl LockedManifestCatalog {
+    pub fn list_packages(&self, _system: &System) -> Vec<InstalledPackage> {
+        todo!()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LockedManifestPkgdb(Value);
+
+impl LockedManifestPkgdb {
+    /// Use pkgdb to lock a manifest
+    ///
+    /// `existing_lockfile_path` can be either the global lock or an environment's
+    /// lockfile
+    pub fn lock_manifest(
+        pkgdb: &Path,
+        manifest_path: &Path,
+        existing_lockfile_path: &CanonicalPath,
+        global_manifest_path: &Path,
+    ) -> Result<Self, LockedManifestError> {
+        let canonical_manifest_path =
+            CanonicalPath::new(manifest_path).map_err(LockedManifestError::BadManifestPath)?;
+
+        let mut pkgdb_cmd = Command::new(pkgdb);
+        pkgdb_cmd
+            .args(["manifest", "lock"])
+            .arg("--ga-registry")
+            .arg("--global-manifest")
+            .arg(global_manifest_path)
+            .arg("--manifest")
+            .arg(canonical_manifest_path)
+            .arg("--lockfile")
+            .arg(existing_lockfile_path);
+
+        debug!("locking manifest with command: {}", pkgdb_cmd.display());
+        call_pkgdb(pkgdb_cmd)
+            .map_err(LockedManifestError::LockManifest)
+            .map(Self)
+    }
+
     /// Wrapper around `pkgdb update`
     ///
     /// lockfile_path does not need to exist
@@ -157,15 +224,24 @@ impl LockedManifest {
                 let canonical_lockfile_path =
                     CanonicalPath::new(lf_path).map_err(LockedManifestError::BadLockfilePath)?;
                 pkgdb_cmd.arg("--lockfile").arg(&canonical_lockfile_path);
-                Self::read_from_file(&canonical_lockfile_path)
+                LockedManifest::read_from_file(&canonical_lockfile_path)
             })
             .transpose()?;
+
+        // ensure the current lockfile is a Pkgdb lockfile
+        let old_lockfile = match old_lockfile {
+            Some(LockedManifest::Catalog(_)) => {
+                return Err(LockedManifestError::UnsupportedLockfileForUpdate);
+            },
+            Some(LockedManifest::Pkgdb(locked)) => Some(locked),
+            None => None,
+        };
 
         pkgdb_cmd.args(inputs);
 
         debug!("updating lockfile with command: {}", pkgdb_cmd.display());
-        let lockfile: LockedManifest =
-            LockedManifest(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::UpdateFailed)?);
+        let lockfile: LockedManifestPkgdb =
+            LockedManifestPkgdb(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::UpdateFailed)?);
 
         Ok(UpdateResult {
             new_lockfile: lockfile,
@@ -209,38 +285,15 @@ impl LockedManifest {
         }
         Ok(global_lockfile_path)
     }
-
-    pub fn read_from_file(path: &CanonicalPath) -> Result<Self, LockedManifestError> {
-        let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
-        serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
-    }
-
-    pub fn check_lockfile(
-        path: &CanonicalPath,
-    ) -> Result<Vec<LockfileCheckWarning>, LockedManifestError> {
-        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_cmd
-            .args(["manifest", "check"])
-            .arg("--lockfile")
-            .arg(path.as_os_str());
-
-        debug!("checking lockfile with command: {}", pkgdb_cmd.display());
-
-        let value = call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::CheckLockfile)?;
-        let warnings: Vec<LockfileCheckWarning> =
-            serde_json::from_value(value).map_err(LockedManifestError::ParseCheckWarnings)?;
-
-        Ok(warnings)
-    }
 }
 
-impl ToString for LockedManifest {
-    fn to_string(&self) -> String {
-        self.0.to_string()
-    }
-}
-
-/// An environment (or global) lockfile.
+/// An environment (or global) pkgdb lockfile.
+///
+/// **DEPRECATED**: pkgdb lockfiles are being phased out
+/// in favor of catalog lockfiles.
+/// Since catalog backed lockfiles are managed within the CLI,
+/// [LockedManifestCatalog] provides a typed interface directly,
+/// hence there is no catalog equivalent of this type.
 ///
 /// This struct is meant **for reading only**.
 ///
@@ -265,7 +318,7 @@ impl ToString for LockedManifest {
 /// rather than defining a separate set of fields for each different pkgdb
 /// command.
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct TypedLockedManifest {
+pub struct TypedLockedManifestPkgdb {
     #[serde(rename = "lockfile-version")]
     lockfile_version: Version<0>,
     packages: BTreeMap<System, BTreeMap<String, Option<LockedPackage>>>,
@@ -301,15 +354,15 @@ pub struct PackageInfo {
     pub version: Option<String>,
 }
 
-impl TryFrom<LockedManifest> for TypedLockedManifest {
+impl TryFrom<LockedManifestPkgdb> for TypedLockedManifestPkgdb {
     type Error = LockedManifestError;
 
-    fn try_from(value: LockedManifest) -> Result<Self, Self::Error> {
+    fn try_from(value: LockedManifestPkgdb) -> Result<Self, Self::Error> {
         serde_json::from_value(value.0).map_err(LockedManifestError::ParseLockedManifest)
     }
 }
 
-impl TypedLockedManifest {
+impl TypedLockedManifestPkgdb {
     pub fn registry(&self) -> &Registry {
         &self.registry
     }
@@ -376,6 +429,9 @@ pub enum LockedManifestError {
     SerializeGlobalLockfile(#[source] serde_json::Error),
     #[error("could not write global lockfile")]
     WriteGlobalLockfile(#[source] std::io::Error),
+
+    #[error("Catalog lockfile does not support update")]
+    UnsupportedLockfileForUpdate,
 }
 
 /// A warning produced by `pkgdb manifest check`

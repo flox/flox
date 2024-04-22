@@ -3,7 +3,7 @@ use std::fmt::Display;
 use anyhow::Result;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{global_manifest_path, Environment};
-use flox_rust_sdk::models::lockfile::LockedManifest;
+use flox_rust_sdk::models::lockfile::LockedManifestPkgdb;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, SearchResults};
 use log::debug;
 
@@ -64,7 +64,7 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
         let lockfile = if lockfile_path.exists() {
             PathOrJson::Path(lockfile_path)
         } else {
-            PathOrJson::Path(LockedManifest::ensure_global_lockfile(flox)?)
+            PathOrJson::Path(LockedManifestPkgdb::ensure_global_lockfile(flox)?)
         };
 
         let search_params = construct_search_params(
