@@ -87,7 +87,7 @@ pub(super) struct TypedManifestCatalog {
     /// The packages to install in the form of a map from package name
     /// to package descriptor.
     #[serde(default)]
-    install: ManifestInstall,
+    pub(super) install: ManifestInstall,
     /// Variables that are exported to the shell environment upon activation.
     #[serde(default)]
     vars: ManifestVariables,
@@ -103,19 +103,19 @@ pub(super) struct TypedManifestCatalog {
     options: ManifestOptions,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, derive_more::Deref)]
 pub(super) struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub(super) struct ManifestPackageDescriptor {
-    pkg_path: String,
-    package_group: Option<String>,
-    priority: Option<usize>,
-    version: Option<String>,
-    systems: Option<Vec<System>>,
+    pub(super) pkg_path: String,
+    pub(super) package_group: Option<String>,
+    pub(super) priority: Option<usize>,
+    pub(super) version: Option<String>,
+    pub(super) systems: Option<Vec<System>>,
     #[serde(default)]
-    optional: bool,
+    pub(super) optional: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]

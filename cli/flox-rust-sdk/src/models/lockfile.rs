@@ -174,8 +174,42 @@ struct LockedGroup {
 }
 
 impl LockedManifestCatalog {
-    pub fn list_packages(&self, _system: &System) -> Vec<InstalledPackage> {
-        todo!()
+    /// Convert a locked manifest to a list of installed packages for a given system
+    /// in a format shared with the pkgdb based locked manifest.
+    pub fn list_packages(&self, system: &System) -> Vec<InstalledPackage> {
+        self.groups
+            .iter()
+            .filter(|group| &group.system == system)
+            .flat_map(|group| {
+                group.page.packages.iter().cloned().map(|package| {
+                    let priority = self
+                        .manifest
+                        .install
+                        .values()
+                        .find(|install| {
+                            install.pkg_path == package.attr_path
+                                && install.package_group.as_deref().unwrap_or("toplevel")
+                                    == group.name
+                        })
+                        .and_then(|install| install.priority)
+                        .unwrap_or(5);
+
+                    InstalledPackage {
+                        name: package.name,
+                        rel_path: package.attr_path,
+                        info: PackageInfo {
+                            description: Some(package.description),
+                            broken: package.broken,
+                            license: Some(package.license),
+                            pname: package.pname,
+                            unfree: package.unfree,
+                            version: Some(package.version),
+                        },
+                        priority,
+                    }
+                })
+            })
+            .collect()
     }
 }
 
