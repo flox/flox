@@ -758,4 +758,37 @@ mod tests {
 
         assert!(dot_flox_path.exists());
     }
+
+    /// TODO: Invoke failure from edit_unsafe
+    #[test]
+    fn test_handle_pull_result_7() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+
+        let result = Pull::handle_pull_result(
+            &flox,
+            incompatible_system_result(),
+            &dot_flox_path,
+            false,
+            mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            Some(QueryFunctions {
+                query_add_system: |_| Ok(true),
+                query_ignore_build_errors: || panic!(),
+            }),
+        )
+        .unwrap();
+        assert_eq!(
+            result,
+            message::Action::Warning(formatdoc!(
+                "
+            Pulled owner/test from https://hub.flox.dev/
+
+            Modified the manifest to include your system but could not build.
+            Use 'flox edit' to address issues before activating.
+            "
+            ))
+        );
+    }
 }
