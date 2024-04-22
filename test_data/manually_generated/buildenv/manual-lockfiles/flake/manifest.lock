@@ -1,0 +1,139 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "hello": {
+        "flake": "github:nixos/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd#hello"
+      }
+    },
+    "hook": {},
+    "profile": {},
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-darwin",
+        "x86_64-linux"
+      ],
+      "allow": {
+        "licenses": []
+      },
+      "semver": {}
+    }
+  },
+  "packages": [
+    {
+      "install_id": "hello",
+      "locked-url": "github:nixos/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.aarch64-darwin.hello",
+      "derivation": "/nix/store/d9bl0li4hligkdcg5y9zfvgf6jlwl4xr-hello-2.12.1.drv",
+      "outputs": {
+        "out": "/nix/store/d5pw3xm4n9xqql53lmrbqhl04inx8dzp-hello-2.12.1"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "package-system": "aarch64-darwin",
+      "system": "aarch64-darwin",
+      "name": "hello-2.12.1",
+      "pname": "hello",
+      "version": "2.12.1",
+      "description": "A program that produces a familiar, friendly greeting",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "hello",
+      "locked-url": "github:nixos/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.aarch64-linux.hello",
+      "derivation": "/nix/store/fb816ji3sbjyawwr0qa2176xvhdljm5n-hello-2.12.1.drv",
+      "outputs": {
+        "out": "/nix/store/sgnd3fb22m769gqi577b6cdwwm5s76gk-hello-2.12.1"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "package-system": "aarch64-linux",
+      "system": "aarch64-linux",
+      "name": "hello-2.12.1",
+      "pname": "hello",
+      "version": "2.12.1",
+      "description": "A program that produces a familiar, friendly greeting",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "hello",
+      "locked-url": "github:nixos/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.x86_64-darwin.hello",
+      "derivation": "/nix/store/9mhdn2qqp8y9m55mxxldh0qc88rhd4sl-hello-2.12.1.drv",
+      "outputs": {
+        "out": "/nix/store/7kbf70d19867gqh5c94rb09nacibb9jp-hello-2.12.1"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "package-system": "x86_64-darwin",
+      "system": "x86_64-darwin",
+      "name": "hello-2.12.1",
+      "pname": "hello",
+      "version": "2.12.1",
+      "description": "A program that produces a familiar, friendly greeting",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    },
+    {
+      "install_id": "hello",
+      "locked-url": "github:nixos/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.x86_64-linux.hello",
+      "derivation": "/nix/store/g2mxdrkwr1hck4y5479dww7m56d1x81v-hello-2.12.1.drv",
+      "outputs": {
+        "out": "/nix/store/sbldylj3clbkc0aqvjjzfa6slp4zdvlj-hello-2.12.1"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "package-system": "x86_64-linux",
+      "system": "x86_64-linux",
+      "name": "hello-2.12.1",
+      "pname": "hello",
+      "version": "2.12.1",
+      "description": "A program that produces a familiar, friendly greeting",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 5
+    }
+  ]
+}
