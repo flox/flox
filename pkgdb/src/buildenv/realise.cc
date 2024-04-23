@@ -357,7 +357,7 @@ case "$FLOX_SHELL" in
     echo "export _FLOX_PKGDB_VERBOSITY=\"$_FLOX_PKGDB_VERBOSITY\";"
     echo "export _add_env=\"$_add_env\";"
     echo "export _del_env=\"$_del_env\";"
-    echo "$( <"$FLOX_ENV/activate.d/bash" )"
+    echo "source '$FLOX_ENV/activate.d/bash';"
     ;;
   *zsh)
     echo "export FLOX_ENV=\"$FLOX_ENV\";"
@@ -367,7 +367,7 @@ case "$FLOX_SHELL" in
     echo "export FLOX_ZSH_INIT_SCRIPT=\"$FLOX_ENV/activate.d/zsh\";"
     echo "export _add_env=\"$_add_env\";"
     echo "export _del_env=\"$_del_env\";"
-    echo "$( <"$FLOX_ENV/activate.d/zsh"  )"
+    echo "source '$FLOX_ENV/activate.d/zsh';"
     ;;
   *)
     echo "unsupported shell: $FLOX_SHELL" >&2
