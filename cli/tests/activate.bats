@@ -114,18 +114,18 @@ env_is_activated() {
 
 # bats test_tags=activate,activate:flox_shell,activate:flox_shell:bash
 @test "activate identifies FLOX_SHELL from running shell (bash)" {
-  run --separate-stderr bash -c "$FLOX_BIN activate | grep -- '-flox-activate.d/set-prompt'"
+  run --separate-stderr bash -c "$FLOX_BIN activate | grep -- 'source .*/activate.d/'"
   assert_success
   assert_equal "${#lines[@]}" 1 # 1 result
-  assert_line --partial "flox-activate.d/set-prompt.bash"
+  assert_line --partial "/activate.d/bash"
 }
 
 # bats test_tags=activate,activate:flox_shell,activate:flox_shell:zsh
 @test "activate identifies FLOX_SHELL from running shell (zsh)" {
-  run --separate-stderr zsh -c "$FLOX_BIN activate | grep -- '-flox-activate.d/set-prompt'"
+  run --separate-stderr zsh -c "$FLOX_BIN activate | grep -- 'source .*/activate.d/'"
   assert_success
   assert_equal "${#lines[@]}" 1 # 1 result
-  assert_line --partial "flox-activate.d/set-prompt.zsh"
+  assert_line --partial "/activate.d/zsh"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -371,7 +371,7 @@ env_is_activated() {
   assert_success
   # check that env vars are set for compatibility with nix built software
   assert_line --partial "export NIX_SSL_CERT_FILE="
-  assert_line --partial "Disable command hashing"
+  assert_line --partial "activate.d/bash"
 }
 
 # bats test_tags=activate,activate:inplace-prints
@@ -381,7 +381,7 @@ env_is_activated() {
   assert_success
   # check that env vars are set for compatibility with nix built software
   assert_line --partial "export NIX_SSL_CERT_FILE="
-  assert_line --partial "Disable command hashing"
+  assert_line --partial "activate.d/zsh"
 }
 
 # ---------------------------------------------------------------------------- #
