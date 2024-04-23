@@ -97,15 +97,13 @@ pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
     //
     // Nix itself isn't pure, which is to say that it isn't built with a
     // reference to `git` in its closure, so correspondingly depends upon
-    // finding it in $PATH to function. Funnily enough it is also not built
-    // to know where `nix` itself resides, and again relies on $PATH for that.
+    // finding it in $PATH to function.
     //
     // This just isn't OK for us as we're looking for flox to operate reliably
     // in "hostile" environments, which includes situation where a user may
     // redefine or blat their $PATH variable entirely, so we always invoke
     // pkgdb with an explicit PATH of our making.
     let pkgdb_paths = [
-        Path::new(&*NIX_PKG_BIN),
         Path::new(&*GIT_PKG_BIN),
         // It really shouldn't be necessary to append $PATH,
         // ... so we won't.
