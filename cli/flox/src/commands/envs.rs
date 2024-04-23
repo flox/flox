@@ -196,7 +196,7 @@ fn get_registered_environments(
     registry: &EnvRegistry,
 ) -> impl Iterator<Item = UninitializedEnvironment> + '_ {
     registry.entries.iter().filter_map(|entry| {
-        let path = entry.path.parent()?.to_path_buf();
+        let path = entry.path.clone();
         let pointer = entry.latest_env()?.pointer.clone();
 
         // If we have a path registered that has since been deleted, skip it

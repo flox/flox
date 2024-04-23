@@ -995,7 +995,7 @@ pub fn detect_environment(
         // If there's both an activated environment and an environment in the
         // current directory or git repo, prompt for which to use.
         (Some(activated_env), Some(found)) => {
-            let found_in_current_dir = found.path == current_dir;
+            let found_in_current_dir = found.path == current_dir.join(DOT_FLOX);
             Some(query_which_environment(
                 message,
                 activated_env,
@@ -1046,7 +1046,7 @@ fn query_which_environment(
 
 /// Open an environment defined in `{path}/.flox`
 fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError> {
-    DotFlox::open(path)
+    DotFlox::open_default_in(path)
         .map(UninitializedEnvironment::DotFlox)?
         .into_concrete_environment(flox)
 }
@@ -1107,14 +1107,14 @@ impl UninitializedEnvironment {
             ConcreteEnvironment::Path(path_env) => {
                 let pointer = path_env.pointer.clone().into();
                 Ok(Self::DotFlox(DotFlox {
-                    path: path_env.parent_path().unwrap(),
+                    path: path_env.path.to_path_buf(),
                     pointer,
                 }))
             },
             ConcreteEnvironment::Managed(managed_env) => {
                 let pointer = managed_env.pointer().clone().into();
                 Ok(Self::DotFlox(DotFlox {
-                    path: managed_env.parent_path().unwrap(),
+                    path: managed_env.path.to_path_buf(),
                     pointer,
                 }))
             },
@@ -1134,7 +1134,7 @@ impl UninitializedEnvironment {
     ) -> Result<ConcreteEnvironment, EnvironmentError> {
         match self {
             UninitializedEnvironment::DotFlox(dot_flox) => {
-                let dot_flox_path = dot_flox.path.join(DOT_FLOX);
+                let dot_flox_path = dot_flox.path;
                 let env = match dot_flox.pointer {
                     EnvironmentPointer::Path(path_pointer) => {
                         debug!("detected concrete environment type: path");

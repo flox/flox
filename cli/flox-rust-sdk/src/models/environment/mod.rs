@@ -261,26 +261,17 @@ impl ManagedPointer {
 }
 
 impl EnvironmentPointer {
-    /// The function attempts to open an environment at the specified path
-    /// by reading the contents of a file named .flox/[ENVIRONMENT_POINTER_FILENAME].
+    /// Attempt to read an environment pointer file ([ENVIRONMENT_POINTER_FILENAME])
+    /// in the specified `.flox` directory.
+    ///
     /// If the file is found and its contents can be deserialized,
     /// the function returns an [EnvironmentPointer] containing information about the environment.
-    /// If reading or parsing the file fails, an [EnvironmentError2] is returned.
+    /// If reading or parsing fails, an [EnvironmentError] is returned.
     ///
     /// Use this method to determine the type of an environment at a given path.
     /// The result should be used to call the appropriate `open` method
-    /// on either [PathEnvironment] or [ManagedEnvironment].
-    pub fn open(path: impl AsRef<Path>) -> Result<EnvironmentPointer, EnvironmentError> {
-        let dot_flox_path = path.as_ref().join(DOT_FLOX);
-        if !dot_flox_path.exists() {
-            debug!("couldn't find .flox at {}", dot_flox_path.display());
-            Err(EnvironmentError::DotFloxNotFound(
-                dot_flox_path
-                    .parent()
-                    .unwrap_or(&dot_flox_path)
-                    .to_path_buf(),
-            ))?
-        }
+    /// on either [path_environment::PathEnvironment] or [managed_environment::ManagedEnvironment].
+    fn open(dot_flox_path: &CanonicalPath) -> Result<EnvironmentPointer, EnvironmentError> {
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         let pointer_contents = match fs::read(&pointer_path) {
             Ok(contents) => contents,
@@ -328,10 +319,27 @@ pub struct DotFlox {
 }
 
 impl DotFlox {
-    pub fn open(path: impl AsRef<Path>) -> Result<Self, EnvironmentError> {
+    /// Open `<parent_path>/.flox` as a [DotFlox] directory
+    ///
+    /// This method attempts to find a `.flox` directory in the specified parent path,
+    /// and open it as a [DotFlox] directory.
+    /// If the directory is not found, an [EnvironmentError::DotFloxNotFound] is returned.
+    pub fn open_default_in(parent_path: impl AsRef<Path>) -> Result<Self, EnvironmentError> {
+        let dot_flox_path = parent_path.as_ref().join(DOT_FLOX);
+        let dot_flox_path = CanonicalPath::new(&dot_flox_path)
+            .map_err(|_| EnvironmentError::DotFloxNotFound(dot_flox_path))?;
+
+        Self::open(&dot_flox_path)
+    }
+
+    /// Open the specified path as a [DotFlox] directory
+    ///
+    /// This method is used to open an existing [DotFlox] directory.
+    pub(crate) fn open(dot_flox_path: &CanonicalPath) -> Result<Self, EnvironmentError> {
+        let pointer = EnvironmentPointer::open(dot_flox_path)?;
         Ok(Self {
-            path: path.as_ref().to_path_buf(),
-            pointer: EnvironmentPointer::open(&path)?,
+            path: dot_flox_path.to_path_buf(),
+            pointer,
         })
     }
 }
@@ -529,10 +537,11 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
     );
     // Look for an immediate child named `.flox`
     if tentative_dot_flox.exists() {
-        let pointer = DotFlox::open(&path).map_err(|err| EnvironmentError::InvalidDotFlox {
-            path: tentative_dot_flox.clone(),
-            source: Box::new(err),
-        })?;
+        let pointer =
+            DotFlox::open_default_in(&path).map_err(|err| EnvironmentError::InvalidDotFlox {
+                path: tentative_dot_flox.clone(),
+                source: Box::new(err),
+            })?;
         debug!(".flox found: path={}", tentative_dot_flox.display());
         return Ok(Some(pointer));
     }
@@ -559,11 +568,12 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
         debug!("looking for .flox: path={}", tentative_dot_flox.display());
 
         if tentative_dot_flox.exists() {
-            let pointer =
-                DotFlox::open(ancestor).map_err(|err| EnvironmentError::InvalidDotFlox {
+            let pointer = DotFlox::open_default_in(ancestor).map_err(|err| {
+                EnvironmentError::InvalidDotFlox {
                     path: ancestor.to_path_buf(),
                     source: Box::new(err),
-                })?;
+                }
+            })?;
             debug!(".flox found: path={}", tentative_dot_flox.display());
             return Ok(Some(pointer));
         }
@@ -692,7 +702,7 @@ mod test {
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_environment, DotFlox {
-            path: temp_dir.path().canonicalize().unwrap(),
+            path: temp_dir.path().join(DOT_FLOX).canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
         });
     }
@@ -719,7 +729,7 @@ mod test {
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_environment, DotFlox {
-            path: temp_dir.path().canonicalize().unwrap(),
+            path: temp_dir.path().join(DOT_FLOX).canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
         });
     }
@@ -754,7 +764,7 @@ mod test {
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_environment, DotFlox {
-            path: temp_dir.path().canonicalize().unwrap(),
+            path: temp_dir.path().join(DOT_FLOX).canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
         });
     }
@@ -792,7 +802,7 @@ mod test {
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_environment, DotFlox {
-            path: foo.canonicalize().unwrap(),
+            path: foo.join(DOT_FLOX).canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
         });
     }

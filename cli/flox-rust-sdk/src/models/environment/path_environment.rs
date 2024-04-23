@@ -24,6 +24,7 @@ use log::debug;
 use super::core_environment::CoreEnvironment;
 use super::{
     CanonicalizeError,
+    DotFlox,
     EditResult,
     Environment,
     EnvironmentError,
@@ -387,9 +388,14 @@ impl PathEnvironment {
         flox: &Flox,
     ) -> Result<Self, EnvironmentError> {
         let system: &str = system.as_ref();
-        match EnvironmentPointer::open(dot_flox_parent_path.as_ref()) {
+
+        // Ensure that the .flox directory does not already exist
+        match DotFlox::open_default_in(dot_flox_parent_path.as_ref()) {
+            // continue if the .flox directory does not exist, as it's being created by this method
             Err(EnvironmentError::DotFloxNotFound(_)) => {},
+            // propagate any other error signalling a faulty .flox directory
             Err(e) => Err(e)?,
+            // .flox directory exists, so we can't create a new environment here
             Ok(_) => Err(EnvironmentError::EnvironmentExists(
                 dot_flox_parent_path.as_ref().to_path_buf(),
             ))?,
