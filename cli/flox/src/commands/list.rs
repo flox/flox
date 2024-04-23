@@ -7,7 +7,7 @@ use flox_rust_sdk::models::lockfile::{
     InstalledPackage,
     LockedManifest,
     PackageInfo,
-    TypedLockedManifest,
+    TypedLockedManifestPkgdb,
 };
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -67,7 +67,12 @@ impl List {
 
         let system = &flox.system;
         let lockfile = Self::get_lockfile(&flox, &mut *env)?;
-        let packages = lockfile.list_packages(system);
+        let packages = match lockfile {
+            LockedManifest::Pkgdb(pkgdb_lockfile) => {
+                TypedLockedManifestPkgdb::try_from(pkgdb_lockfile)?.list_packages(system)
+            },
+            LockedManifest::Catalog(catalog_lockfile) => catalog_lockfile.list_packages(system),
+        };
 
         if packages.is_empty() {
             let message = formatdoc! {"
@@ -147,8 +152,9 @@ impl List {
                   Broken:   {broken}
                 ",
                 description = description.as_deref().unwrap_or("N/A"),
-                license = license.as_deref().unwrap_or("N/A"),
+                priority = priority.map(|p| p.to_string()).as_deref().unwrap_or("N/A"),
                 version = version.as_deref().unwrap_or("N/A"),
+                license = license.as_deref().unwrap_or("N/A"),
             };
 
             println!("{message}");
@@ -159,7 +165,7 @@ impl List {
     ///
     /// Does not write the lockfile,
     /// as that would require writing to the environment in case of remote environments)
-    fn get_lockfile(flox: &Flox, env: &mut dyn Environment) -> Result<TypedLockedManifest> {
+    fn get_lockfile(flox: &Flox, env: &mut dyn Environment) -> Result<LockedManifest> {
         let lockfile_path = env
             .lockfile_path(flox)
             .context("Could not get lockfile path")?;
@@ -179,7 +185,6 @@ impl List {
             LockedManifest::read_from_file(&path)?
         };
 
-        let lockfile: TypedLockedManifest = lockfile.try_into()?;
         Ok(lockfile)
     }
 }

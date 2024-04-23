@@ -14,7 +14,7 @@ use self::remote_environment::RemoteEnvironmentError;
 use super::container_builder::ContainerBuilder;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::LockedManifest;
+use super::lockfile::{LockedManifest, LockedManifestPkgdb};
 use super::manifest::PackageToInstall;
 use super::pkgdb::UpgradeResult;
 use crate::data::{CanonicalPath, CanonicalizeError, Version};
@@ -69,8 +69,8 @@ pub const N_HASH_CHARS: usize = 8;
 
 #[derive(Debug)]
 pub struct UpdateResult {
-    pub new_lockfile: LockedManifest,
-    pub old_lockfile: Option<LockedManifest>,
+    pub new_lockfile: LockedManifestPkgdb,
+    pub old_lockfile: Option<LockedManifestPkgdb>,
     pub store_path: Option<PathBuf>,
 }
 

@@ -697,6 +697,7 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         "},
 
         LockedManifestError::ParseCheckWarnings(_) => display_chain(err),
+        LockedManifestError::UnsupportedLockfileForUpdate => display_chain(err),
     }
 }
 

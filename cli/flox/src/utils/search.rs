@@ -7,7 +7,7 @@ use anyhow::Result;
 use crossterm::style::Stylize;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::lockfile::LockedManifest;
+use flox_rust_sdk::models::lockfile::LockedManifestPkgdb;
 use flox_rust_sdk::models::search::{PathOrJson, Query, SearchParams, SearchResult, SearchResults};
 use log::debug;
 
@@ -68,7 +68,7 @@ fn manifest_and_lockfile_from_detected_environment(
     // Use the global lock if we don't have a lock yet
     let lockfile_path = match lockfile_path {
         Some(lockfile_path) => lockfile_path,
-        None => LockedManifest::ensure_global_lockfile(flox)?,
+        None => LockedManifestPkgdb::ensure_global_lockfile(flox)?,
     };
     Ok((manifest_path, lockfile_path))
 }
