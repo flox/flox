@@ -518,24 +518,19 @@ impl Activate {
         let output = command.output().expect("failed to run activation script");
         eprint!("{}", String::from_utf8_lossy(&output.stderr));
 
-        // XXX BUG TODO: this is not correct, we need to know the value of
-        // $FLOX_SHELL in order to know the correct syntax for exporting
-        // variables in the local shell dialect. Turn this into a function
-        // that can do that.
+        // Render the exports in the correct shell dialect.
         let exports_rendered = exports
             .iter()
             .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
-            .map(|(key, value)| format!("export {key}={value}",))
+            .map(|(key, value)| match shell {
+                Shell::Bash(_) => format!("export {key}={value};",),
+                Shell::Zsh(_) => format!("export {key}={value};",),
+            })
             .join("\n");
 
         let script = formatdoc! {"
-            # Common flox environment variables
             {exports_rendered}
-
-            # to avoid infinite recursion sourcing bashrc
-            export FLOX_SOURCED_FROM_SHELL_RC=1
             {output}
-            unset FLOX_SOURCED_FROM_SHELL_RC
         ",
         output = String::from_utf8_lossy(&output.stdout),
         };

@@ -96,7 +96,9 @@ namespace flox::buildenv {
 // Top-level activate script, always invoked with nix bash.
 const char * const ACTIVATE_SCRIPT = R"_(
 # Flox environment activation script.
-[ "${_FLOX_PKGDB_VERBOSITY:-0}" -eq 0 ] || set -x
+export _FLOX_PKGDB_VERBOSITY="${_FLOX_PKGDB_VERBOSITY:-0}"
+[ "$_FLOX_PKGDB_VERBOSITY" -eq 0 ] || set -x
+
 
 # TODO: add getopt arg parser for following args:
 # -c "<cmd> <args>": specify exact command args to pass to shell
@@ -241,8 +243,8 @@ else
   }
 
   # Replay the environment for the benefit of this shell.
-  eval "$($_gnused/bin/sed -e 's/^/unset /' $_del_env)"
-  eval "$($_gnused/bin/sed -e 's/^/export /' $_add_env)"
+  eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' $_del_env)"
+  eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
 
 fi
 
@@ -345,20 +347,26 @@ fi
 # 3. "in-place" mode: emit activation commands in correct shell dialect
 
 # Finish by echoing the contents of the shell-specific activation script.
+# N.B. the output of these scripts may be eval'd with backticks which have
+# the effect of removing newlines from the output, so we must ensure that
+# the output is a valid shell script fragment when represented on a single
+# line.
 case "$FLOX_SHELL" in
   *bash)
-    echo "export FLOX_ENV=\"$FLOX_ENV\""
-    echo "export _add_env=\"$_add_env\""
-    echo "export _del_env=\"$_del_env\""
+    echo "export FLOX_ENV=\"$FLOX_ENV\";"
+    echo "export _FLOX_PKGDB_VERBOSITY=\"$_FLOX_PKGDB_VERBOSITY\";"
+    echo "export _add_env=\"$_add_env\";"
+    echo "export _del_env=\"$_del_env\";"
     echo "$( <"$FLOX_ENV/activate.d/bash" )"
     ;;
   *zsh)
-    echo "export FLOX_ENV=\"$FLOX_ENV\""
-    echo "export FLOX_ORIG_ZDOTDIR=\"$FLOX_ORIG_ZDOTDIR\""
-    echo "export ZDOTDIR=\"$_zdotdir\""
-    echo "export FLOX_ZSH_INIT_SCRIPT=\"$FLOX_ENV/activate.d/zsh\""
-    echo "export _add_env=\"$_add_env\""
-    echo "export _del_env=\"$_del_env\""
+    echo "export FLOX_ENV=\"$FLOX_ENV\";"
+    echo "export _FLOX_PKGDB_VERBOSITY=\"$_FLOX_PKGDB_VERBOSITY\";"
+    echo "export FLOX_ORIG_ZDOTDIR=\"$FLOX_ORIG_ZDOTDIR\";"
+    echo "export ZDOTDIR=\"$_zdotdir\";"
+    echo "export FLOX_ZSH_INIT_SCRIPT=\"$FLOX_ENV/activate.d/zsh\";"
+    echo "export _add_env=\"$_add_env\";"
+    echo "export _del_env=\"$_del_env\";"
     echo "$( <"$FLOX_ENV/activate.d/zsh"  )"
     ;;
   *)
@@ -384,18 +392,18 @@ const char * const BASH_ACTIVATE_SCRIPT = R"_(
 
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here.
-if [ -f ~/.bashrc -a -z "${FLOX_SOURCED_FROM_SHELL_RC:-}" ]
+if [ -f ~/.bashrc ]
 then
     source ~/.bashrc
 fi
 
-# Disable command hashing to allow for newly installed flox packages to be found
-# immediately.
+# Disable command hashing to allow for newly installed flox packages
+# to be found immediately.
 set +h
 
 # Restore environment variables set in the previous bash initialization.
-eval "$($_gnused/bin/sed -e 's/^/unset /' $_del_env)"
-eval "$($_gnused/bin/sed -e 's/^/export /' $_add_env)"
+eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' $_del_env)"
+eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
 )_";
 
 
@@ -432,14 +440,14 @@ if [ ${#fpath_prepend[@]} -gt 0 ]; then
 fi
 unset fpath_prepend
 
-# Disable command hashing to allow for newly installed flox packages to be found
-# immediately.
+# Disable command hashing to allow for newly installed flox packages
+# to be found immediately.
 setopt nohashcmds
 setopt nohashdirs
 
 # Restore environment variables set in the previous bash initialization.
-eval "$($_gnused/bin/sed -e 's/^/unset /' $_del_env)"
-eval "$($_gnused/bin/sed -e 's/^/export /' $_add_env)"
+eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' $_del_env)"
+eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
 
 # On MacOS Apple have reinvented the wheel and broken our ability to define
 # HISTFILE and SHELL_SESSION_DIR variables, so define them up-front here
@@ -1113,17 +1121,16 @@ makeActivationScripts( nix::EvalState &              state,
     }
 
   /* Add the shell activate scripts */
-  bashScript << "export _coreutils=" << FLOX_COREUTILS_PKG << std::endl
-             << "export _gnused=" << FLOX_GNUSED_PKG << std::endl
+  bashScript << posixSetEnv( "_coreutils", FLOX_COREUTILS_PKG )
+             << posixSetEnv( "_gnused", FLOX_GNUSED_PKG )
              << BASH_ACTIVATE_SCRIPT
              << posixIfThen( "[ -t 1 ]",
                              "source " << ACTIVATE_D_SCRIPTS_DIR
                                        << "/set-prompt.bash" )
              << posixIfThen( "[ \"${_FLOX_PKGDB_VERBOSITY:-0}\" -gt 0 ]",
                              "set +x" );
-  zshScript << "export _coreutils=" << FLOX_COREUTILS_PKG << std::endl
-            << "export _gnused=" << FLOX_GNUSED_PKG << std::endl
-            << ZSH_ACTIVATE_SCRIPT
+  zshScript << posixSetEnv( "_coreutils", FLOX_COREUTILS_PKG )
+            << posixSetEnv( "_gnused", FLOX_GNUSED_PKG ) << ZSH_ACTIVATE_SCRIPT
             << posixIfThen( "[ -t 1 ]",
                             "source " << ACTIVATE_D_SCRIPTS_DIR
                                       << "/set-prompt.zsh" )
