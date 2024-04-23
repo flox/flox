@@ -389,7 +389,23 @@ impl ClientTrait for MockClient {
         _system: System,
         _limit: u8,
     ) -> Result<SearchResults, SearchError> {
-        unimplemented!()
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        if let Some(Response::Resolve(_)) = mock_resp {
+            panic!("found resolve response, expected search response");
+        } else if mock_resp.is_none() {
+            panic!("expected mock response, found nothing");
+        } else if let Some(Response::Error(err)) = mock_resp {
+            return Err(SearchError::Search(APIError::ErrorResponse(
+                err.try_into()?,
+            )));
+        } else if let Some(Response::Search(resp)) = mock_resp {
+            return Ok(resp);
+        }
+        return Err(MockDataError::InvalidData("unrecognized response".into()).into());
     }
 
     async fn package_versions(
