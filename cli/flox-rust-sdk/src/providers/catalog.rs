@@ -59,6 +59,8 @@ impl<T> TryFrom<GenericResponse<T>> for ResponseValue<T> {
 #[serde(untagged)]
 pub enum Response {
     Resolve(ResolvedGroups),
+    // Note that this variant _also_ works for `flox show`/`package_versions` since they return
+    // the same type
     Search(SearchResults),
     Error(GenericResponse<ErrorResponse>),
 }
@@ -422,7 +424,28 @@ impl ClientTrait for MockClient {
         &self,
         _attr_path: impl AsRef<str> + Send + Sync,
     ) -> Result<SearchResults, VersionsError> {
-        unimplemented!()
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::Search(resp)) => {
+                return Ok(resp);
+            },
+            Some(Response::Resolve(_)) => {
+                panic!("found resolve response, expect search response");
+            },
+            Some(Response::Error(err)) => {
+                return Err(VersionsError::Versions(APIError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                )));
+            },
+            None => {
+                panic!("expected mock response, found nothing");
+            },
+        }
     }
 }
 
