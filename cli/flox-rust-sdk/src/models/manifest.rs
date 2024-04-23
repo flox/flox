@@ -10,6 +10,8 @@ use toml_edit::{self, DocumentMut, Formatted, InlineTable, Item, Table, Value};
 use crate::data::{System, Version};
 use crate::models::pkgdb::PKGDB_BIN;
 
+pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
+
 /// A wrapper around a [`toml_edit::DocumentMut`]
 /// that allows modifications of the raw manifest document,
 /// while preserving comments and user formatting.

@@ -13,7 +13,7 @@ use thiserror::Error;
 
 use super::container_builder::ContainerBuilder;
 use super::environment::UpdateResult;
-use super::manifest::TypedManifestCatalog;
+use super::manifest::{TypedManifestCatalog, DEFAULT_GROUP_NAME};
 use super::pkgdb::CallPkgDbError;
 use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
 use crate::flox::Flox;
@@ -170,7 +170,10 @@ impl LockedManifestCatalog {
                         .values()
                         .find(|install| {
                             install.pkg_path == package.attr_path
-                                && install.package_group.as_deref().unwrap_or("toplevel")
+                                && install
+                                    .package_group
+                                    .as_deref()
+                                    .unwrap_or(DEFAULT_GROUP_NAME)
                                     == group.name
                         })
                         .and_then(|install| install.priority);
