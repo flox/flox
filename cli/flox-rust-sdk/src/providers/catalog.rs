@@ -1,18 +1,25 @@
+use std::collections::VecDeque;
 use std::num::NonZeroU32;
+use std::path::Path;
 use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
 use async_stream::try_stream;
 use async_trait::async_trait;
 use catalog_api_v1::types::{
     self as api_types,
     error as api_error,
+    ErrorResponse,
     PackageInfoApiInput,
     PackageInfoCommonInput,
 };
-use catalog_api_v1::{Client as APIClient, Error as APIError};
+use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, TryStreamExt};
+use reqwest::header::HeaderMap;
+use reqwest::StatusCode;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::data::System;
@@ -20,6 +27,66 @@ use crate::models::search::{SearchResult, SearchResults};
 
 pub const DEFAULT_CATALOG_URL: &str = "https://flox-catalog.flox.dev";
 const NIXPKGS_CATALOG: &str = "nixpkgs";
+pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
+
+type ResolvedGroups = Vec<ResolvedPackageGroup>;
+
+// Arc allows you to push things into the client from outside the client if necessary
+// Mutex allows you to share across threads (necessary because of tokio)
+type MockField<T> = Arc<Mutex<T>>;
+
+/// A generic response that can be turned into a [ResponseValue]. This is only necessary for
+/// representing error responses.
+// TODO: we can handle headers later if we need to
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GenericResponse<T> {
+    pub(crate) inner: T,
+    pub(crate) status: u16,
+}
+
+impl<T> TryFrom<GenericResponse<T>> for ResponseValue<T> {
+    type Error = MockDataError;
+
+    fn try_from(value: GenericResponse<T>) -> Result<Self, Self::Error> {
+        let status_code = StatusCode::from_u16(value.status)
+            .map_err(|_| MockDataError::InvalidData("invalid status code".into()))?;
+        let headers = HeaderMap::new();
+        Ok(ResponseValue::new(value.inner, status_code, headers))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Response {
+    Resolve(ResolvedGroups),
+    // Note that this variant _also_ works for `flox show`/`package_versions` since they return
+    // the same type
+    Search(SearchResults),
+    Error(GenericResponse<ErrorResponse>),
+}
+
+#[derive(Debug, Error)]
+pub enum MockDataError {
+    /// Failed to read the JSON file pointed at by the _FLOX_USE_CATALOG_MOCK var
+    #[error("failed to read mock response file")]
+    ReadMockFile(#[source] std::io::Error),
+    /// Failed to parse the contents of the mock data file as JSON
+    #[error("failed to parse mock data as JSON")]
+    ParseJson(#[source] serde_json::Error),
+    /// The data was parsed as JSON but it wasn't semantically valid
+    #[error("invalid mocked data: {0}")]
+    InvalidData(String),
+}
+
+/// Reads a list of mock responses from disk.
+fn read_mock_responses(path: &impl AsRef<Path>) -> Result<VecDeque<Response>, MockDataError> {
+    let mut responses = VecDeque::new();
+    let contents = std::fs::read_to_string(path).map_err(MockDataError::ReadMockFile)?;
+    let deserialized: Vec<Response> =
+        serde_json::from_str(&contents).map_err(MockDataError::ParseJson)?;
+    responses.extend(deserialized);
+    Ok(responses)
+}
 
 /// Either a client for the actual catalog service,
 /// or a mock client for testing.
@@ -37,6 +104,7 @@ pub enum Client {
 pub struct CatalogClient {
     client: APIClient,
 }
+
 impl CatalogClient {
     pub fn new() -> Self {
         Self {
@@ -45,8 +113,55 @@ impl CatalogClient {
     }
 }
 
-#[derive(Debug)]
-pub struct MockClient;
+/// A catalog client that can be seeded with mock responses
+#[derive(Debug, Default)]
+pub struct MockClient {
+    // We use a RefCell here so that we don't have to modify the trait to allow mutable access
+    // to `self` just to get mock responses out.
+    pub mock_responses: MockField<VecDeque<Response>>,
+}
+
+impl MockClient {
+    /// Create a new mock client, potentially reading mock responses from disk
+    pub fn new(mock_data_path: Option<&impl AsRef<Path>>) -> Result<Self, CatalogClientError> {
+        let mock_responses = if let Some(path) = mock_data_path {
+            read_mock_responses(&path).expect("couldn't read mock responses from disk")
+        } else {
+            VecDeque::new()
+        };
+        Ok(Self {
+            mock_responses: Arc::new(Mutex::new(mock_responses)),
+        })
+    }
+
+    /// Push a new response into the list of mock responses
+    pub fn push_resolve_response(&mut self, resp: ResolvedGroups) {
+        self.mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .push_back(Response::Resolve(resp));
+    }
+
+    /// Push a new response into the list of mock responses
+    pub fn push_search_response(&mut self, resp: SearchResults) {
+        self.mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .push_back(Response::Search(resp));
+    }
+
+    /// Push an API error into the list of mock responses
+    pub fn push_error_response(&mut self, err: ErrorResponse, status_code: u16) {
+        let generic_resp = GenericResponse {
+            inner: err,
+            status: status_code,
+        };
+        self.mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .push_back(Response::Error(generic_resp));
+    }
+}
 
 impl Default for CatalogClient {
     fn default() -> Self {
@@ -250,8 +365,29 @@ impl ClientTrait for MockClient {
     async fn resolve(
         &self,
         _package_groups: Vec<PackageGroup>,
-    ) -> Result<Vec<ResolvedPackageGroup>, ResolveError> {
-        unimplemented!()
+    ) -> Result<ResolvedGroups, ResolveError> {
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::Resolve(resp)) => {
+                return Ok(resp);
+            },
+            Some(Response::Search(_)) => {
+                panic!("found search response, expect resolve response");
+            },
+            Some(Response::Error(err)) => {
+                return Err(ResolveError::Resolve(APIError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                )));
+            },
+            None => {
+                panic!("expected mock response, found nothing");
+            },
+        }
     }
 
     async fn search(
@@ -260,14 +396,56 @@ impl ClientTrait for MockClient {
         _system: System,
         _limit: u8,
     ) -> Result<SearchResults, SearchError> {
-        unimplemented!()
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::Search(resp)) => {
+                return Ok(resp);
+            },
+            Some(Response::Resolve(_)) => {
+                panic!("found resolve response, expect search response");
+            },
+            Some(Response::Error(err)) => {
+                return Err(SearchError::Search(APIError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                )));
+            },
+            None => {
+                panic!("expected mock response, found nothing");
+            },
+        }
     }
 
     async fn package_versions(
         &self,
         _attr_path: impl AsRef<str> + Send + Sync,
     ) -> Result<SearchResults, VersionsError> {
-        unimplemented!()
+        let mock_resp = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .pop_front();
+        match mock_resp {
+            Some(Response::Search(resp)) => {
+                return Ok(resp);
+            },
+            Some(Response::Resolve(_)) => {
+                panic!("found resolve response, expect search response");
+            },
+            Some(Response::Error(err)) => {
+                return Err(VersionsError::Versions(APIError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                )));
+            },
+            None => {
+                panic!("expected mock response, found nothing");
+            },
+        }
     }
 }
 
@@ -275,6 +453,7 @@ impl ClientTrait for MockClient {
 /// we need.
 pub type PackageDescriptor = api_types::PackageDescriptor;
 
+#[derive(Debug)]
 pub struct PackageGroup {
     pub descriptors: Vec<PackageDescriptor>,
     pub name: String,
@@ -351,6 +530,7 @@ impl TryFrom<PackageGroup> for api_types::PackageGroup {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ResolvedPackageGroup {
     pub name: String,
     pub pages: Vec<CatalogPage>,
@@ -375,6 +555,7 @@ impl TryFrom<api_types::ResolvedPackageGroupInput> for ResolvedPackageGroup {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CatalogPage {
     pub packages: Vec<PackageResolutionInfo>,
     pub page: i64,
@@ -501,5 +682,58 @@ mod tests {
         let collected: Vec<i32> = stream.try_collect().await.unwrap();
 
         assert_eq!(collected, (1..=3).collect::<Vec<_>>());
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::io::Write;
+    use std::path::PathBuf;
+
+    use pollster::FutureExt;
+    use tempfile::NamedTempFile;
+
+    use super::*;
+
+    #[test]
+    fn mock_client_uses_seeded_responses() {
+        let path: Option<&PathBuf> = None;
+        let mut client = MockClient::new(path).unwrap();
+        client.push_resolve_response(vec![]);
+        let resp = client.resolve(vec![]).block_on().unwrap();
+        assert!(resp.is_empty());
+    }
+
+    #[test]
+    fn can_push_responses_outside_of_client() {
+        let path: Option<&PathBuf> = None;
+        let client = MockClient::new(path).unwrap();
+        {
+            // Need to drop the mutex guard otherwise `resolve` will block trying to read
+            // the queue of mock responses
+            let resp_handle = client.mock_responses.clone();
+            let mut responses = resp_handle.lock().unwrap();
+            responses.push_back(Response::Resolve(vec![]));
+        }
+        let resp = client.resolve(vec![]).block_on().unwrap();
+        assert!(resp.is_empty());
+    }
+
+    #[test]
+    fn error_when_invalid_json() {
+        let tmp = NamedTempFile::new().unwrap();
+        // There's nothing in the mock data file yet, so it can't be parsed as JSON.
+        // This will cause a panic, which is returned as an error from `catch_unwind`.
+        let res = std::panic::catch_unwind(|| MockClient::new(Some(&tmp)));
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn parses_basic_json() {
+        let mut tmp = NamedTempFile::new().unwrap();
+        tmp.write_all("[[]]".as_bytes()).unwrap();
+        let client = MockClient::new(Some(&tmp)).unwrap();
+        let resp = client.resolve(vec![]).block_on().unwrap();
+        assert!(resp.is_empty());
     }
 }
