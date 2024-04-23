@@ -12,15 +12,11 @@ use log::debug;
 use thiserror::Error;
 
 use super::container_builder::ContainerBuilder;
-use super::environment::{CanonicalizeError, UpdateResult};
+use super::environment::UpdateResult;
 use super::pkgdb::CallPkgDbError;
-use crate::data::{System, Version};
+use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
 use crate::flox::Flox;
-use crate::models::environment::{
-    global_manifest_lockfile_path,
-    global_manifest_path,
-    CanonicalPath,
-};
+use crate::models::environment::{global_manifest_lockfile_path, global_manifest_path};
 use crate::models::pkgdb::{call_pkgdb, BuildEnvResult, PKGDB_BIN};
 use crate::utils::CommandExt;
 

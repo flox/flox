@@ -2,13 +2,9 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Result};
 use bpaf::Bpaf;
+use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{
-    CanonicalPath,
-    CoreEnvironmentError,
-    Environment,
-    EnvironmentError,
-};
+use flox_rust_sdk::models::environment::{CoreEnvironmentError, Environment, EnvironmentError};
 use flox_rust_sdk::models::lockfile::{LockedManifest, LockedManifestError};
 use flox_rust_sdk::models::manifest::PackageToInstall;
 use flox_rust_sdk::models::pkgdb::error_codes;

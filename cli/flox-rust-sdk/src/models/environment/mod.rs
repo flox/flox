@@ -17,7 +17,7 @@ use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::LockedManifest;
 use super::manifest::PackageToInstall;
 use super::pkgdb::UpgradeResult;
-use crate::data::Version;
+use crate::data::{CanonicalPath, CanonicalizeError, Version};
 use crate::flox::{Flox, Floxhub};
 use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{
@@ -72,45 +72,6 @@ pub struct UpdateResult {
     pub new_lockfile: LockedManifest,
     pub old_lockfile: Option<LockedManifest>,
     pub store_path: Option<PathBuf>,
-}
-
-/// A path that is guaranteed to be canonicalized
-///
-/// [`ManagedEnvironment`] uses this to refer to the path of its `.flox` directory.
-/// [`ManagedEnvironment::encode`] is used to uniquely identify the environment
-/// by encoding the canonicalized path.
-/// This encoding is used to create a unique branch name in the floxmeta repository.
-/// Thus, rather than canonicalizing the path every time we need to encode it,
-/// we store the path as a [`CanonicalPath`].
-#[derive(Debug, Clone, derive_more::Deref, derive_more::AsRef)]
-#[deref(forward)]
-#[as_ref(forward)]
-pub struct CanonicalPath(PathBuf);
-
-#[derive(Debug, Error)]
-#[error("couldn't canonicalize path {path:?}: {err}")]
-pub struct CanonicalizeError {
-    pub path: PathBuf,
-    #[source]
-    pub err: std::io::Error,
-}
-
-impl CanonicalPath {
-    pub fn new(path: impl AsRef<Path>) -> Result<Self, CanonicalizeError> {
-        let canonicalized = std::fs::canonicalize(&path).map_err(|e| CanonicalizeError {
-            path: path.as_ref().to_path_buf(),
-            err: e,
-        })?;
-        Ok(Self(canonicalized))
-    }
-
-    pub fn path(&self) -> PathBuf {
-        self.0.clone()
-    }
-
-    pub fn into_path_buf(self) -> PathBuf {
-        self.0
-    }
 }
 
 /// The result of an installation attempt that contains the new manifest contents
@@ -237,7 +198,9 @@ pub trait Environment: Send {
 /// A pointer to an environment, either managed or path.
 /// This is used to determine the type of an environment at a given path.
 /// See [EnvironmentPointer::open].
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, derive_more::From)]
+#[derive(
+    Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, derive_more::From,
+)]
 #[serde(untagged)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EnvironmentPointer {
@@ -250,7 +213,7 @@ pub enum EnvironmentPointer {
 /// The identifier for a project environment.
 ///
 /// This is serialized to `env.json` inside the `.flox` directory
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct PathPointer {
     pub name: EnvironmentName,
@@ -271,7 +234,7 @@ impl PathPointer {
 /// points to an environment owner and the name of the environment.
 ///
 /// This is serialized to an `env.json` inside the `.flox` directory.
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManagedPointer {
     pub owner: EnvironmentOwner,
@@ -358,7 +321,7 @@ impl EnvironmentPointer {
 /// However, this type does not perform any validation of the referenced environment.
 /// Opening the environment with [ManagedEnvironment::open] or
 /// [PathEnvironment::open], could still fail.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, PartialOrd, Ord)]
 pub struct DotFlox {
     pub path: PathBuf,
     pub pointer: EnvironmentPointer,
@@ -474,11 +437,8 @@ pub enum EnvironmentError {
     #[error("could not get current directory")]
     GetCurrentDir(#[source] std::io::Error),
 
-    #[error("failed to get canonical path for '.flox' directory: {path}")]
-    CanonicalDotFlox {
-        err: CanonicalizeError,
-        path: PathBuf,
-    },
+    #[error("failed to get canonical path for '.flox' directory")]
+    CanonicalDotFlox(#[source] CanonicalizeError),
 
     #[error("failed to access the environment registry")]
     Registry(#[from] EnvRegistryError),

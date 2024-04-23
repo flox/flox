@@ -7,8 +7,8 @@ use fslock::LockFile;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
-use super::environment::{path_hash, CanonicalPath, EnvironmentPointer};
-use crate::data::Version;
+use super::environment::{path_hash, EnvironmentPointer};
+use crate::data::{CanonicalPath, Version};
 use crate::flox::Flox;
 use crate::utils::traceable_path;
 

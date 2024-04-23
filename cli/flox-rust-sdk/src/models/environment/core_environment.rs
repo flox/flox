@@ -15,9 +15,10 @@ use super::{
     LOCKFILE_FILENAME,
     MANIFEST_FILENAME,
 };
+use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
-use crate::models::environment::{call_pkgdb, global_manifest_path, CanonicalPath};
+use crate::models::environment::{call_pkgdb, global_manifest_path};
 use crate::models::lockfile::{LockedManifest, LockedManifestError};
 use crate::models::manifest::{
     insert_packages,

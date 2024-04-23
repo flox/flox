@@ -11,7 +11,18 @@ pub static DEFAULT_NAME: &str = "default";
 pub static DEFAULT_OWNER: &str = "local";
 
 #[derive(
-    Debug, Clone, PartialEq, Eq, Hash, AsRef, Deref, Display, DeserializeFromStr, SerializeDisplay,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    AsRef,
+    Deref,
+    Display,
+    DeserializeFromStr,
+    SerializeDisplay,
 )]
 pub struct EnvironmentOwner(String);
 
@@ -28,7 +39,17 @@ impl FromStr for EnvironmentOwner {
 }
 
 #[derive(
-    Debug, Clone, PartialEq, Eq, Hash, AsRef, Display, DeserializeFromStr, SerializeDisplay,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    AsRef,
+    Display,
+    DeserializeFromStr,
+    SerializeDisplay,
 )]
 pub struct EnvironmentName(String);
 
