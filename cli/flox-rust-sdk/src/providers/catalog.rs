@@ -1,3 +1,4 @@
+use std::num::NonZeroU32;
 use std::str::FromStr;
 
 use async_stream::try_stream;
@@ -196,7 +197,8 @@ impl ClientTrait for CatalogClient {
                         .collect::<Result<Vec<_>, _>>()?,
                 ))
             },
-            10,
+            // I'm quite confident 10 can be stored as a NonZeroU32
+            unsafe { NonZeroU32::new_unchecked(10) },
         );
 
         let results: Vec<SearchResult> = stream.try_collect().await?;
@@ -211,7 +213,7 @@ impl ClientTrait for CatalogClient {
 /// Create a stream that yields all results from all pages.
 fn make_depaging_stream<T, E, Fut>(
     generator: impl Fn(i64, i64) -> Fut,
-    page_size: i64,
+    page_size: NonZeroU32,
 ) -> impl Stream<Item = Result<T, E>>
 where
     Fut: Future<Output = Result<(i64, Vec<T>), E>>,
@@ -220,7 +222,7 @@ where
         let mut page_number = 0;
         // TODO: this will loop forever if page_size = 0
         loop {
-            let (total_count, results) = generator(page_number, page_size).await?;
+            let (total_count, results) = generator(page_number, page_size.get().into()).await?;
 
             let items_on_page = results.len();
 
@@ -228,11 +230,14 @@ where
                 yield result;
             }
 
-            if items_on_page < page_size as usize {
+            // If there are fewer items on this page than page_size, it should
+            // be the last page.
+            // If there are more pages, we assume that's a bug in the server.
+            if items_on_page < page_size.get() as usize {
                 break;
             }
             // This prevents us from making one extra request
-            if total_count == (page_number+1) * page_size {
+            if total_count == (page_number+1) * page_size.get() as i64 {
                 break;
             }
             page_number += 1;
@@ -449,7 +454,7 @@ mod tests {
                 }
                 Ok::<_, VersionsError>((9, results[page_number as usize].clone()))
             },
-            3,
+            NonZeroU32::new(3).unwrap(),
         );
 
         let collected: Vec<i32> = stream.try_collect().await.unwrap();
@@ -470,7 +475,7 @@ mod tests {
                 // This is a bad response from the server since 9 should actually be 3
                 Ok::<_, VersionsError>((9, results[page_number as usize].clone()))
             },
-            4,
+            NonZeroU32::new(4).unwrap(),
         );
 
         let collected: Vec<i32> = stream.try_collect().await.unwrap();
@@ -490,7 +495,7 @@ mod tests {
                 }
                 Ok::<_, VersionsError>((3, results[page_number as usize].clone()))
             },
-            3,
+            NonZeroU32::new(3).unwrap(),
         );
 
         let collected: Vec<i32> = stream.try_collect().await.unwrap();
