@@ -255,43 +255,39 @@ SERVER_PORT = "3000"
 
 ## `[hook]`
 
-The `[hook]` section provides a place to specify
-scripts to be invoked by a **bash** shell
-immediately upon activating an environment for the *first time only*.
-Subsequent "in place" activations,
-such as those performed from within `eval "$(flox activate)"` invocations
-embedded in shell "rc" files like `.bashrc`
-will *NOT* re-run scripts from this section.
+Scripts in the `[hook]` section
+are useful for performing initialization
+in a predictable bash shell environment.
+
+### `on-activate`
+
+The `on-activate` script is invoked only once upon activation
+and can be useful for spawning processes,
+dynamically setting environment variables,
+and creating files and directories
+to be used by the subsequent profile scripts, commands and shells.
+
+If Flox detects that the environment has not yet been activated,
+then it will source this script from a **bash** shell.
+This prevents it from being sourced in subsequent "in place" activations,
+such as those performed with `eval "$(flox activate)"`.
 
 Hook scripts inherit environment variables set in the `[vars]` section,
-and variables set by the script will in turn be inherited by
+and variables set here will in turn be inherited by
 the `[profile]` scripts described below.
+
 Any output written to `stdout` in a hook script is redirected to `stderr`
 to avoid it being mixed with the output of profile section scripts
 that write to `stdout` for "in-place" activations.
 
-The `on-activate` script is currently the only supported hook,
-but we expect to add additional ones in the future.
-
-### `on-activate`
-The `on-activate` script is useful for performing initialization
-in a well-supported shell environment (Bash).
-It is invoked only once as the environment is first activated
-and can be useful for spawning processes,
-dynamically setting environment variables,
-creating files and directories
-to be used by the subsequent profile scripts, commands and shells.
-Environment variables declared in the `[vars]` section
-can be used in this script.
+The `on-activate` script is currently the only supported hook.
 
 ```toml
 [hook]
 on-activate = """
     # Interact with the tty as you would in any script
-    echo "Starting up $FLOX_ENV_DESCRIPTION environment ..." >&2
-    declare value
-    read -e -p "Any comments? " value
-    echo "You said: $value" >&2
+    echo "Starting up $FLOX_ENV_DESCRIPTION environment ..."
+    read -e -p "Favourite colour or favorite color? " value
 
     # Set variables, create files and directories
     venv_dir="$(mktemp -d)"
@@ -311,13 +307,18 @@ It will be removed in a later release.
 
 ## `[profile]`
 
-Scripts defined in the `[profile]` section are sourced by *your shell*
-immediately following any `[hook]` invocations, and consequently inherit environment
-variables both set in those scripts and from the `[vars]` section above.
-The `profile.common` script is sourced by all shells
-and must therefore be compatible with all shells.
-The `profile.bash` and `profile.zsh` scripts will only be sourced
-by the corresponding shell after sourcing the `profile.common` script.
+Scripts defined in the `[profile]` section
+are sourced by *your shell*
+and inherit environment variables
+set in the `[vars]` section
+and by the `[hook]` scripts.
+The `profile.common` script is sourced
+for every shell
+and special care should be taken
+to ensure compatibility with all shells.
+The `profile.bash` and `profile.zsh` scripts
+are then sourced
+by the corresponding shell.
 
 These scripts are useful for performing shell-specific customizations
 such as setting aliases or configuring the prompt.
@@ -328,28 +329,31 @@ performed from a `.bashrc` or similar "dotfile".
 ```toml
 [profile]
 common = """
-    fortune | lolcat
+    fortune
 """
 bash = """
     source $venv_dir/bin/activate
-    set -o vi
     alias foo="echo bar"
+    set -o vi
 """
 zsh = """
     source $venv_dir/bin/activate
-    bindkey -v
-    bindkey "^R" history-incremental-search-backward
     alias foo="echo bar"
+    bindkey -v
 """
 ```
 
-The `profile.common` script is intended to be common setup that can be sourced
-by any shell, but it is your responsibility to make sure that the script is
-compatible with any shells that may consume the environment.  The `profile.bash`
-and `profile.zsh` scripts are sourced *after* the `profile.common` script, and
-are only sourced by the corresponding shell.  The shell-specific profile scripts
-are intended to contain any shell functions, aliases, variables, etc that could
-be specific to a user's shell.
+The `profile.common` script
+is intended for setup that will be sourced for every shell,
+and it is your responsibility
+to make sure that commands are compatible with all shells
+in which the environment is expected to be activated.
+The `profile.bash` and `profile.zsh` scripts
+are sourced *after* `profile.common`,
+and are only sourced by the corresponding shell.
+The shell-specific profile scripts
+are intended for functions, aliases, variables, etc.
+that could be specific to a user's shell.
 
 ## `[options]`
 
