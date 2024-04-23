@@ -35,14 +35,18 @@
 #define defaultValue( var, value ) \
   "export " var "=\"${" var ":-" value "}\"" << std::endl
 
-// Macro for appending a conditional action to a bash script. This is
-// bash script. This is useful for setting a default value to an environment
-// variable, but only if it is not already set.
+// Macro for appending a conditional action to a bash or zsh script.
 //
 // E.g. 'posixIfThen("[ -t 1 ]", "echo interactive")' returns:
 //   'if [ -t 1 ]; then echo interactive; fi' (with newlines)
 #define posixIfThen( cond, action ) \
   "if " cond "; then\n  " action "\nfi" << std::endl
+
+// Macro for setting and exporting an environment variable in bash or zsh.
+//
+// E.g. 'posixSetEnv("foo", "bar")' returns:
+//   'foo=bar; export foo;' (with newlines)
+#define posixSetEnv( var, value ) var "=" value "\nexport " var ";" << std::endl
 
 /* -------------------------------------------------------------------------- */
 

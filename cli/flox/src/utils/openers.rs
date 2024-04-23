@@ -107,6 +107,7 @@ impl Shell {
     /// an error is returned.
     pub fn detect_from_parent_process() -> Result<Self> {
         let parent_process_exe = get_parent_process_exe()?;
+        debug!("Detected parent process exe: {parent_process_exe:?}");
 
         Self::try_from(parent_process_exe.as_path())
     }

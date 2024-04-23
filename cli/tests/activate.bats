@@ -289,7 +289,6 @@ env_is_activated() {
 
 # bats test_tags=activate,activate:envVar:zsh
 @test "zsh: activate sets env var" {
-
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   # TODO: flox will set HOME if it doesn't match the home of the user with
@@ -372,23 +371,23 @@ env_is_activated() {
   assert_success
   # check that env vars are set for compatibility with nix built software
   assert_line --partial "export NIX_SSL_CERT_FILE="
-  assert_output --regexp "Disable command hashing"
+  assert_line --partial "Disable command hashing"
 }
 
 # bats test_tags=activate,activate:inplace-prints
 @test "'flox activate' prints script to modify current shell (zsh)" {
+  # Flox detects that the output is not a tty and prints the script to stdout
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate
   assert_success
   # check that env vars are set for compatibility with nix built software
   assert_line --partial "export NIX_SSL_CERT_FILE="
-  assert_output --regexp "Disable command hashing"
+  assert_line --partial "Disable command hashing"
 }
 
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:bash
 @test "'flox activate' modifies the current shell (bash)" {
-
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set a hook
@@ -409,7 +408,6 @@ env_is_activated() {
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:zsh
 @test "'flox activate' modifies the current shell (zsh)" {
-
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set a hook

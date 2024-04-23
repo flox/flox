@@ -17,8 +17,6 @@ use super::lockfile::FlakeRef;
 // the fallback to the binary available at build time if it is unset.
 pub static PKGDB_BIN: Lazy<String> =
     Lazy::new(|| env::var("PKGDB_BIN").unwrap_or(env!("PKGDB_BIN").to_string()));
-pub static NIX_PKG_BIN: Lazy<String> =
-    Lazy::new(|| env::var("NIX_PKG").unwrap_or(env!("NIX_PKG").to_string()) + "/bin");
 pub static GIT_PKG_BIN: Lazy<String> =
     Lazy::new(|| env::var("GIT_PKG").unwrap_or(env!("GIT_PKG").to_string()) + "/bin");
 
@@ -103,13 +101,9 @@ pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
     // in "hostile" environments, which includes situation where a user may
     // redefine or blat their $PATH variable entirely, so we always invoke
     // pkgdb with an explicit PATH of our making.
-    let pkgdb_paths = [
-        Path::new(&*GIT_PKG_BIN),
-        // It really shouldn't be necessary to append $PATH,
-        // ... so we won't.
-    ];
-    let pkgdb_path =
-        env::join_paths(pkgdb_paths.iter()).expect("nix or git bin dir contain invalid characters");
+    //
+    // It really shouldn't be necessary to append $PATH, so we won't.
+    let pkgdb_path = Path::new(&*GIT_PKG_BIN);
     let mut proc = pkgdb_cmd
         .env("PATH", pkgdb_path)
         .stderr(Stdio::piped())

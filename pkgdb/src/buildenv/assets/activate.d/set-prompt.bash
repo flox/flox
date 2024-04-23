@@ -23,18 +23,18 @@ unset _esc colorReset colorBold colorPrompt1 colorPrompt2 _floxPrompt1 _floxProm
 
 if [ -n "$_flox" ] && [ -n "${PS1:-}" ] && [ "${FLOX_PROMPT_ENVIRONMENTS:-}" != "" ]; then
   # Start by saving the original value of PS1.
-  if [ -z "$FLOX_SAVE_PS1" ]; then
-    export FLOX_SAVE_PS1="$PS1"
+  if [ -z "$FLOX_SAVE_BASH_PS1" ]; then
+    export FLOX_SAVE_BASH_PS1="$PS1"
   fi
-  case "$FLOX_SAVE_PS1" in
+  case "$FLOX_SAVE_BASH_PS1" in
     # If the prompt contains an embedded newline,
     # then insert the flox indicator immediately after
     # the (first) newline.
-    *\\n*) PS1="${FLOX_SAVE_PS1/\\n/\\n$_flox}" ;;
-    *\\012*) PS1="${FLOX_SAVE_PS1/\\012/\\012$_flox}" ;;
+    *\\n*) PS1="${FLOX_SAVE_BASH_PS1/\\n/\\n$_flox}" ;;
+    *\\012*) PS1="${FLOX_SAVE_BASH_PS1/\\012/\\012$_flox}" ;;
 
     # Otherwise, prepend the flox indicator.
-    *) PS1="$_flox$FLOX_SAVE_PS1" ;;
+    *) PS1="$_flox$FLOX_SAVE_BASH_PS1" ;;
   esac
 fi
 
