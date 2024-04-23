@@ -15,7 +15,6 @@ use flox_rust_sdk::models::environment::{
     PathPointer,
 };
 use flox_rust_sdk::models::lockfile::{
-    self,
     LockedManifest,
     LockedManifestPkgdb,
     TypedLockedManifestPkgdb,
