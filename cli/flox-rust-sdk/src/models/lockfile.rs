@@ -122,24 +122,6 @@ impl LockedManifest {
         let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
         serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
     }
-
-    pub fn check_lockfile(
-        path: &CanonicalPath,
-    ) -> Result<Vec<LockfileCheckWarning>, LockedManifestError> {
-        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_cmd
-            .args(["manifest", "check"])
-            .arg("--lockfile")
-            .arg(path.as_os_str());
-
-        debug!("checking lockfile with command: {}", pkgdb_cmd.display());
-
-        let value = call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::CheckLockfile)?;
-        let warnings: Vec<LockfileCheckWarning> =
-            serde_json::from_value(value).map_err(LockedManifestError::ParseCheckWarnings)?;
-
-        Ok(warnings)
-    }
 }
 
 impl ToString for LockedManifest {
@@ -341,6 +323,25 @@ impl LockedManifestPkgdb {
             Self::update_global_manifest(flox, vec![])?;
         }
         Ok(global_lockfile_path)
+    }
+
+    /// Check the integrity of a lockfile using `pkgdb manifest check`
+    pub fn check_lockfile(
+        path: &CanonicalPath,
+    ) -> Result<Vec<LockfileCheckWarning>, LockedManifestError> {
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd
+            .args(["manifest", "check"])
+            .arg("--lockfile")
+            .arg(path.as_os_str());
+
+        debug!("checking lockfile with command: {}", pkgdb_cmd.display());
+
+        let value = call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::CheckLockfile)?;
+        let warnings: Vec<LockfileCheckWarning> =
+            serde_json::from_value(value).map_err(LockedManifestError::ParseCheckWarnings)?;
+
+        Ok(warnings)
     }
 }
 
