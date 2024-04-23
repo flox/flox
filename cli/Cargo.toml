@@ -6,6 +6,7 @@ resolver = "2"
 
 [workspace.dependencies]
 anyhow = "1"
+async-stream = "0.3.5"
 async-trait = "0.1.80"
 blake3 = "1.5.0"
 bpaf = { version = "0.9.8", features = ["derive", "autocomplete"] }
@@ -30,6 +31,7 @@ log = "0.4.17"
 nix = { version = "0.28", features = ["process", "user"] }
 oauth2 = "4.4"
 once_cell = "1.16.0"
+pollster = "0.3.0"
 progenitor-client = "0.6"
 proptest = "1.4.0"
 proptest-derive = "0.4.0"

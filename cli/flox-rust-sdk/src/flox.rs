@@ -306,7 +306,7 @@ pub mod test_helpers {
             )
             .unwrap(),
             floxhub_token: None,
-            catalog_client: Some(MockClient.into()),
+            catalog_client: Some(MockClient::default().into()),
         };
 
         init_global_manifest(&global_manifest_path(&flox)).unwrap();

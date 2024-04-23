@@ -315,7 +315,7 @@ impl FloxArgs {
             Ok(token) => token,
         };
 
-        let catalog_client = init_catalog_client(&config);
+        let catalog_client = init_catalog_client(&config)?;
 
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
