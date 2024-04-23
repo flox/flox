@@ -122,10 +122,10 @@ pub struct MockClient {
 impl MockClient {
     /// Create a new mock client, potentially reading mock responses from disk
     pub fn new(mock_data_path: Option<&impl AsRef<Path>>) -> Result<Self, CatalogClientError> {
-        let mock_responses = if mock_data_path.is_none() {
-            VecDeque::new()
+        let mock_responses = if let Some(path) = mock_data_path {
+            read_mock_responses(&path).expect("couldn't read mock responses from disk")
         } else {
-            read_mock_responses(mock_data_path.unwrap())?
+            VecDeque::new()
         };
         Ok(Self {
             mock_responses: Arc::new(Mutex::new(mock_responses)),
@@ -369,18 +369,23 @@ impl ClientTrait for MockClient {
             .lock()
             .expect("couldn't acquire mock lock")
             .pop_front();
-        if let Some(Response::Search(_)) = mock_resp {
-            panic!("found search response, expected resolve response");
-        } else if mock_resp.is_none() {
-            panic!("expected mock response, found nothing");
-        } else if let Some(Response::Error(err)) = mock_resp {
-            return Err(ResolveError::Resolve(APIError::ErrorResponse(
-                err.try_into()?,
-            )));
-        } else if let Some(Response::Resolve(resp)) = mock_resp {
-            return Ok(resp);
+        match mock_resp {
+            Some(Response::Resolve(resp)) => {
+                return Ok(resp);
+            },
+            Some(Response::Search(_)) => {
+                panic!("found search response, expect resolve response");
+            },
+            Some(Response::Error(err)) => {
+                return Err(ResolveError::Resolve(APIError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                )));
+            },
+            None => {
+                panic!("expected mock response, found nothing");
+            },
         }
-        return Err(MockDataError::InvalidData("unrecognized response".into()).into());
     }
 
     async fn search(
@@ -394,18 +399,23 @@ impl ClientTrait for MockClient {
             .lock()
             .expect("couldn't acquire mock lock")
             .pop_front();
-        if let Some(Response::Resolve(_)) = mock_resp {
-            panic!("found resolve response, expected search response");
-        } else if mock_resp.is_none() {
-            panic!("expected mock response, found nothing");
-        } else if let Some(Response::Error(err)) = mock_resp {
-            return Err(SearchError::Search(APIError::ErrorResponse(
-                err.try_into()?,
-            )));
-        } else if let Some(Response::Search(resp)) = mock_resp {
-            return Ok(resp);
+        match mock_resp {
+            Some(Response::Search(resp)) => {
+                return Ok(resp);
+            },
+            Some(Response::Resolve(_)) => {
+                panic!("found resolve response, expect search response");
+            },
+            Some(Response::Error(err)) => {
+                return Err(SearchError::Search(APIError::ErrorResponse(
+                    err.try_into()
+                        .expect("couldn't convert mock error response"),
+                )));
+            },
+            None => {
+                panic!("expected mock response, found nothing");
+            },
         }
-        return Err(MockDataError::InvalidData("unrecognized response".into()).into());
     }
 
     async fn package_versions(
@@ -439,9 +449,6 @@ pub enum CatalogClientError {
     UnexpectedError(#[source] APIError<api_types::ErrorResponse>),
     #[error("negative number of results")]
     NegativeNumberOfResults,
-    /// An error related to loading mock response data
-    #[error("failed handling mock response data")]
-    MockData(#[from] MockDataError),
 }
 
 #[derive(Debug, Error)]
@@ -456,8 +463,6 @@ pub enum SearchError {
     ShortAttributePath(String),
     #[error(transparent)]
     CatalogClientError(#[from] CatalogClientError),
-    #[error("failed handling mock response data")]
-    MockData(#[from] MockDataError),
 }
 
 #[derive(Debug, Error)]
@@ -466,8 +471,6 @@ pub enum ResolveError {
     Resolve(#[source] APIError<api_types::ErrorResponse>),
     #[error(transparent)]
     CatalogClientError(#[from] CatalogClientError),
-    #[error("failed handling mock response data")]
-    MockData(#[from] MockDataError),
 }
 
 #[derive(Debug, Error)]
@@ -696,12 +699,10 @@ mod test {
     #[test]
     fn error_when_invalid_json() {
         let tmp = NamedTempFile::new().unwrap();
-        // There's nothing in the mock data file yet, so it can't be parsed as JSON
-        let client = MockClient::new(Some(&tmp));
-        assert!(matches!(
-            client,
-            Err(CatalogClientError::MockData(MockDataError::ParseJson(_)))
-        ));
+        // There's nothing in the mock data file yet, so it can't be parsed as JSON.
+        // This will cause a panic, which is returned as an error from `catch_unwind`.
+        let res = std::panic::catch_unwind(|| MockClient::new(Some(&tmp)));
+        assert!(res.is_err());
     }
 
     #[test]
