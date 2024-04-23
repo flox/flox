@@ -437,11 +437,8 @@ pub enum EnvironmentError {
     #[error("could not get current directory")]
     GetCurrentDir(#[source] std::io::Error),
 
-    #[error("failed to get canonical path for '.flox' directory: {path}")]
-    CanonicalDotFlox {
-        err: CanonicalizeError,
-        path: PathBuf,
-    },
+    #[error("failed to get canonical path for '.flox' directory")]
+    CanonicalDotFlox(#[source] CanonicalizeError),
 
     #[error("failed to access the environment registry")]
     Registry(#[from] EnvRegistryError),

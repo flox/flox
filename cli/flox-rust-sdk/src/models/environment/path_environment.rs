@@ -364,10 +364,8 @@ impl PathEnvironment {
         }
 
         let canonical_dot_flox =
-            CanonicalPath::new(&dot_flox_path).map_err(|e| EnvironmentError::CanonicalDotFlox {
-                err: e,
-                path: dot_flox_path.as_ref().to_path_buf(),
-            })?;
+            CanonicalPath::new(&dot_flox_path).map_err(EnvironmentError::CanonicalDotFlox)?;
+
         ensure_registered(
             flox,
             &canonical_dot_flox,
