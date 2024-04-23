@@ -191,8 +191,7 @@ impl LockedManifestCatalog {
                                 && install.package_group.as_deref().unwrap_or("toplevel")
                                     == group.name
                         })
-                        .and_then(|install| install.priority)
-                        .unwrap_or(5);
+                        .and_then(|install| install.priority);
 
                     InstalledPackage {
                         name: package.name,
@@ -435,7 +434,7 @@ impl TypedLockedManifestPkgdb {
                         name: name.clone(),
                         rel_path: locked_package.rel_path(),
                         info: locked_package.info.clone(),
-                        priority: locked_package.priority,
+                        priority: Some(locked_package.priority),
                     });
                 };
             }
@@ -448,7 +447,7 @@ pub struct InstalledPackage {
     pub name: String,
     pub rel_path: String,
     pub info: PackageInfo,
-    pub priority: usize,
+    pub priority: Option<usize>,
 }
 
 #[derive(Debug, Error)]

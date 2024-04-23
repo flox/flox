@@ -152,8 +152,9 @@ impl List {
                   Broken:   {broken}
                 ",
                 description = description.as_deref().unwrap_or("N/A"),
-                license = license.as_deref().unwrap_or("N/A"),
+                priority = priority.map(|p| p.to_string()).as_deref().unwrap_or("N/A"),
                 version = version.as_deref().unwrap_or("N/A"),
+                license = license.as_deref().unwrap_or("N/A"),
             };
 
             println!("{message}");
