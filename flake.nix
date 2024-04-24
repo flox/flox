@@ -27,6 +27,9 @@
   inputs.crane.url = "github:ipetkov/crane";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
 
+  inputs.fenix.url = "github:nix-community/fenix";
+  # inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
+
   # This is needed to be able to calculate `git describe` format version of flox
   # without running `git describe`
   inputs.flox-latest.url = "git+ssh://git@github.com/flox/flox?ref=refs/tags/v1.0.3&rev=c50d78782713d19d6c790af271c8819b89b1a253";
@@ -40,6 +43,7 @@
     sqlite3pp,
     pre-commit-hooks,
     crane,
+    fenix,
     flox-latest,
     ...
   } @ inputs: let
@@ -98,6 +102,7 @@
       overlays.nix
       overlays.bear
       sqlite3pp.overlays.default
+      fenix.overlays.default
     ];
 
     # Packages defined in this repository.
@@ -170,6 +175,7 @@
 
       # Wrapper scripts for running test suites.
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
+
       # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
       flox-tests-pure = callPackage ./pkgs/flox-tests-pure {inputs = inputs;};
