@@ -256,3 +256,14 @@ setup_file() {
   assert_output '    nodejs - nodejs@18.16.0'
 
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=catalog,catalog:show
+@test "mock client reads 'show' data from disk" {
+  FLOX_FEATURES_USE_CATALOG=true \
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello_show.json" \
+  run --separate-stderr "$FLOX_BIN" show hello -vvv
+  assert_output --partial "hello@2.12.1"
+  assert_regex "$stderr" "using catalog client for show"
+}

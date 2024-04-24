@@ -336,7 +336,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=catalog,catalog:search
-@test "mock client reads data from disk" {
+@test "mock client reads 'search' data from disk" {
   FLOX_FEATURES_USE_CATALOG=true \
   _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello_search.json" \
   run --separate-stderr "$FLOX_BIN" search hello -vvv
