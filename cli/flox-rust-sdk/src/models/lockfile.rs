@@ -1,3 +1,4 @@
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -13,7 +14,7 @@ use thiserror::Error;
 
 use super::container_builder::ContainerBuilder;
 use super::environment::UpdateResult;
-use super::manifest::{TypedManifestCatalog, DEFAULT_GROUP_NAME};
+use super::manifest::TypedManifestCatalog;
 use super::pkgdb::CallPkgDbError;
 use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
 use crate::flox::Flox;
@@ -136,8 +137,39 @@ pub struct LockedManifestCatalog {
     version: Version<1>,
     /// original manifest that was locked
     manifest: TypedManifestCatalog,
-    /// locked groups
-    groups: Vec<LockedGroup>,
+    /// locked pacakges
+    packages: Vec<LockedPackageCatalog>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) struct LockedPackageCatalog {
+    // region: original fields from the service
+    // These fields are copied from the generated struct.
+    pub attr_path: String,
+    pub broken: bool,
+    pub derivation: String,
+    pub description: String,
+    pub license: String,
+    pub locked_url: String,
+    pub name: String,
+    pub pname: String,
+    pub rev: String,
+    pub rev_count: i64,
+    pub rev_date: chrono::DateTime<chrono::offset::Utc>,
+    pub scrape_date: chrono::DateTime<chrono::offset::Utc>,
+    pub stabilities: Vec<String>,
+    pub unfree: bool,
+    pub version: String,
+    // endregion
+
+    // region: converted fields
+    pub outputs: IndexMap<String, String>,
+    pub outputs_to_install: Vec<String>,
+    // endregion
+
+    // region: added fields
+    system: System,
+    // endregion
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,39 +191,35 @@ impl LockedManifestCatalog {
     /// Convert a locked manifest to a list of installed packages for a given system
     /// in a format shared with the pkgdb based locked manifest.
     pub fn list_packages(&self, system: &System) -> Vec<InstalledPackage> {
-        self.groups
+        self.packages
             .iter()
-            .filter(|group| &group.system == system)
-            .flat_map(|group| {
-                group.page.packages.iter().cloned().map(|package| {
-                    let priority = self
-                        .manifest
-                        .install
-                        .values()
-                        .find(|install| {
-                            install.pkg_path == package.attr_path
-                                && install
-                                    .package_group
-                                    .as_deref()
-                                    .unwrap_or(DEFAULT_GROUP_NAME)
-                                    == group.name
-                        })
-                        .and_then(|install| install.priority);
+            .filter(|package| &package.system == system)
+            .map(|package| {
+                let priority = self
+                    .manifest
+                    .install
+                    .iter()
+                    .find(|(install_id, _)| {
+                        install_id == &&package.name
+                    })
+                    .and_then(|(_, descriptor)| descriptor.priority);
 
-                    InstalledPackage {
-                        name: package.name,
-                        rel_path: package.attr_path,
-                        info: PackageInfo {
-                            description: Some(package.description),
-                            broken: package.broken,
-                            license: Some(package.license),
-                            pname: package.pname,
-                            unfree: package.unfree,
-                            version: Some(package.version),
-                        },
-                        priority,
-                    }
-                })
+                let package = package.clone();
+
+
+                InstalledPackage {
+                    name: package.name,
+                    rel_path: package.attr_path,
+                    info: PackageInfo {
+                        description: Some(package.description),
+                        broken: package.broken,
+                        license: Some(package.license),
+                        pname: package.pname,
+                        unfree: package.unfree,
+                        version: Some(package.version),
+                    },
+                    priority,
+                }
             })
             .collect()
     }
@@ -382,19 +410,19 @@ impl LockedManifestPkgdb {
 pub struct TypedLockedManifestPkgdb {
     #[serde(rename = "lockfile-version")]
     lockfile_version: Version<0>,
-    packages: BTreeMap<System, BTreeMap<String, Option<LockedPackage>>>,
+    packages: BTreeMap<System, BTreeMap<String, Option<LockedPackagePkgdb>>>,
     registry: Registry,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-struct LockedPackage {
+struct LockedPackagePkgdb {
     info: PackageInfo,
     #[serde(rename = "attr-path")]
     abs_path: Vec<String>,
     priority: usize,
 }
 
-impl LockedPackage {
+impl LockedPackagePkgdb {
     pub fn rel_path(&self) -> String {
         self.abs_path
             .iter()
@@ -447,6 +475,8 @@ impl TypedLockedManifestPkgdb {
     }
 }
 
+// TODO: consider dropping this in favor of mapping to [LockedPackageCatalog]?
+/// A locked package with additionally derived attributes
 pub struct InstalledPackage {
     pub name: String,
     pub rel_path: String,
@@ -513,7 +543,7 @@ mod tests {
     #[test]
     fn locked_package_tolerates_null_values() {
         let locked_packages =
-            serde_json::from_value::<HashMap<String, LockedPackage>>(serde_json::json!({
+            serde_json::from_value::<HashMap<String, LockedPackagePkgdb>>(serde_json::json!({
                     "complete": {
                         "info": {
                             "description": "A package",

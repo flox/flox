@@ -16,6 +16,7 @@ enum_dispatch.workspace = true
 fslock.workspace = true
 futures.workspace = true
 indent.workspace = true
+indexmap.workspace = true
 indoc.workspace = true
 jsonwebtoken.workspace = true
 log.workspace = true
