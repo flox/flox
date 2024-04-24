@@ -504,9 +504,15 @@ pub struct LockfileCheckWarning {
 
 #[cfg(test)]
 mod tests {
+    use core::panic;
     use std::collections::HashMap;
 
+    use catalog_api_v1::types::{Output, PackageResolutionInfo};
+    use chrono::Local;
+    use indoc::indoc;
+
     use super::*;
+    use crate::models::manifest::{RawManifest, TypedManifest};
 
     /// Validate that the parser for the locked manifest can handle null values
     /// for the `version`, `license`, and `description` fields.
@@ -593,5 +599,60 @@ mod tests {
                 .as_deref(),
             None
         );
+    }
+
+    #[test]
+    fn test_generate_manifest_lock() {
+        let raw_manifest: RawManifest = indoc! {r#"
+          version = 1
+
+          [install]
+          hello.pkg-path = "hello"
+        "#}
+        .parse()
+        .unwrap();
+        let typed = raw_manifest.to_typed().unwrap();
+        let TypedManifest::Catalog(manifest) = typed else {
+            panic!()
+        };
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&LockedManifestCatalog {
+                version: Version,
+                manifest: *manifest,
+                groups: vec![LockedGroup {
+                    name: "name".to_string(),
+                    system: "system".to_string(),
+                    page: CatalogPage {
+                        packages: vec![PackageResolutionInfo {
+                            attr_path: "attr_path".to_string(),
+                            broken: false,
+                            derivation: "derivation".to_string(),
+                            description: "description".to_string(),
+                            license: "license".to_string(),
+                            locked_url: "locked_url".to_string(),
+                            name: "name".to_string(),
+                            outputs: vec![Output {
+                                name: "name".to_string(),
+                                store_path: "store_path".to_string()
+                            }],
+                            outputs_to_install: vec!["name".to_string()],
+                            pname: "pname".to_string(),
+                            rev: "rev".to_string(),
+                            rev_count: 1,
+                            rev_date: Local::now().into(),
+                            scrape_date: Local::now().into(),
+                            stabilities: vec!["stability".to_string()],
+                            unfree: false,
+                            version: "version".to_string()
+                        }],
+                        page: 1,
+                        url: "url".to_string()
+                    },
+                }],
+            })
+            .unwrap()
+        );
+        panic!()
     }
 }
