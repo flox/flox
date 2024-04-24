@@ -73,17 +73,20 @@ impl FromStr for RawManifest {
 /// Hence, this should only be used in cases where these can safely be severed.
 /// Edits to the user facing manifest.toml file should be made using [`RawManifest`] instead.
 #[derive(Debug, Clone, Serialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(untagged)]
 enum TypedManifest {
     /// v2 manifest, processed by flox and resolved using the catalog service
     Catalog(Box<TypedManifestCatalog>),
     /// deprecated v1 manifest, processed entirely by `pkgdb`
+    #[cfg_attr(test, proptest(skip))]
     Pkgdb(TypedManifestPkgdb),
 }
 
 /// Not meant for writing manifest files, only for reading them.
 /// Modifications should be made using the the raw functions in this module.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(super) struct TypedManifestCatalog {
     version: Version<1>,
     /// The packages to install in the form of a map from package name
@@ -106,9 +109,11 @@ pub(super) struct TypedManifestCatalog {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, derive_more::Deref)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(super) struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 pub(super) struct ManifestPackageDescriptor {
     pub(super) pkg_path: String,
@@ -121,9 +126,11 @@ pub(super) struct ManifestPackageDescriptor {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(super) struct ManifestVariables(BTreeMap<String, String>);
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 pub(super) struct ManifestHook {
     /// A script that is run at activation time,
@@ -132,6 +139,7 @@ pub(super) struct ManifestHook {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(super) struct ManifestProfile {
     /// When defined, this hook is run by _all_ shells upon activation
     common: Option<String>,
@@ -144,6 +152,7 @@ pub(super) struct ManifestProfile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 pub(super) struct ManifestOptions {
     /// A list of systems that each package is resolved for.
@@ -158,6 +167,7 @@ pub(super) struct ManifestOptions {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(super) struct Allows {
     /// Whether to allow packages that are marked as `unfree`
     unfree: Option<bool>,
@@ -169,6 +179,7 @@ pub(super) struct Allows {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub(super) struct SemverOptions {
     /// Whether to prefer pre-release versions when resolving
     #[serde(default)]
