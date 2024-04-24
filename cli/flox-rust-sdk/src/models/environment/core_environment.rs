@@ -15,10 +15,11 @@ use super::{
     LOCKFILE_FILENAME,
     MANIFEST_FILENAME,
 };
+use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
-use crate::models::environment::{call_pkgdb, global_manifest_path, CanonicalPath};
-use crate::models::lockfile::{LockedManifest, LockedManifestError};
+use crate::models::environment::{call_pkgdb, global_manifest_path};
+use crate::models::lockfile::{LockedManifest, LockedManifestError, LockedManifestPkgdb};
 use crate::models::manifest::{
     insert_packages,
     remove_packages,
@@ -101,13 +102,13 @@ impl<State> CoreEnvironment<State> {
             debug!("no existing lockfile found, using the global lockfile as a base");
             // Use the global lock so we're less likely to kick off a pkgdb
             // scrape in e.g. an install.
-            LockedManifest::ensure_global_lockfile(flox)
+            LockedManifestPkgdb::ensure_global_lockfile(flox)
                 .map_err(CoreEnvironmentError::LockedManifest)?
         };
         let lockfile_path = CanonicalPath::new(existing_lockfile_path)
             .map_err(CoreEnvironmentError::BadLockfilePath)?;
 
-        let lockfile = LockedManifest::lock_manifest(
+        let lockfile = LockedManifestPkgdb::lock_manifest(
             Path::new(&*PKGDB_BIN),
             &manifest_path,
             &lockfile_path,
@@ -127,7 +128,7 @@ impl<State> CoreEnvironment<State> {
         )
         .map_err(CoreEnvironmentError::WriteLockfile)?;
 
-        Ok(lockfile)
+        Ok(LockedManifest::Pkgdb(lockfile))
     }
 
     /// Build the environment, [Self::lock] if necessary.
@@ -375,7 +376,7 @@ impl CoreEnvironment<ReadOnly> {
             new_lockfile,
             old_lockfile,
             ..
-        } = LockedManifest::update_manifest(
+        } = LockedManifestPkgdb::update_manifest(
             flox,
             Some(self.manifest_path()),
             self.lockfile_path(),

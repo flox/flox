@@ -11,14 +11,8 @@ The types and methods of the client are docuemnted using rustdoc.
 to enhance the documentation of the generated client based on the spec.
 
 ```
-$ cargo doc --open -p catalog-api-v1 -F mock-client
+$ cargo doc --open -p catalog-api-v1
 ```
-
-## Features:
-
-* `mock-client`
-Include the generated moc client based on the [httpmock](https://github.com/alexliesenfeld/httpmock) crate.
-
 
 ## Updating the Client
 
@@ -29,7 +23,7 @@ after the client was updated.
 
 ```
 # change openapi.json
-$ cargo check -p catalog-api-v1 -F mock-client
+$ cargo check -p catalog-api-v1
 ```
 
 Finally, remember to check-in the updated sources.

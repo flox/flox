@@ -16,29 +16,16 @@ fn main() {
     let client_dst = generate_dir.join("client.rs");
     fs::write(&client_dst, client).unwrap();
 
-    let mock = generate_mock(&spec);
-    let mock_dst = generate_dir.join("mock.rs");
-    fs::write(&mock_dst, mock).unwrap();
-
     // rerun if the spec changed
     println!("cargo:rerun-if-changed={}", spec_src.display());
 
     // rerun if the generated files were changed manually
     println!("cargo:rerun-if-changed={}", client_dst.display());
-    println!("cargo:rerun-if-changed={}", mock_dst.display());
 }
 
 fn generate_client(spec: &OpenAPI) -> String {
     let mut generator = progenitor::Generator::default();
     let tokens = generator.generate_tokens(spec).unwrap();
-    let ast = syn::parse2(tokens).unwrap();
-    prettyplease::unparse(&ast)
-}
-
-fn generate_mock(spec: &OpenAPI) -> String {
-    let mut generator = progenitor::Generator::default();
-    let tokens = generator.httpmock(spec, "crate").unwrap();
-
     let ast = syn::parse2(tokens).unwrap();
     prettyplease::unparse(&ast)
 }

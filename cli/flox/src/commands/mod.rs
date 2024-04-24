@@ -3,6 +3,7 @@ mod auth;
 mod containerize;
 mod delete;
 mod edit;
+mod envs;
 mod general;
 mod init;
 mod install;
@@ -314,7 +315,7 @@ impl FloxArgs {
             Ok(token) => token,
         };
 
-        let catalog_client = init_catalog_client(&config);
+        let catalog_client = init_catalog_client(&config)?;
 
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
@@ -728,6 +729,9 @@ enum AdditionalCommands {
     /// View and set configuration options
     #[bpaf(command, hide, footer("Run 'man flox-config' for more details."))]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
+
+    #[bpaf(command, hide, footer("Run 'man flox-envs' for more details."))]
+    Envs(#[bpaf(external(envs::envs))] envs::Envs),
 }
 
 impl AdditionalCommands {
@@ -739,10 +743,11 @@ impl AdditionalCommands {
 
     async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         match self {
+            AdditionalCommands::Config(args) => args.handle(config, flox).await?,
             AdditionalCommands::Documentation(args) => args.handle(),
+            AdditionalCommands::Envs(args) => args.handle(flox)?,
             AdditionalCommands::Update(args) => args.handle(flox).await?,
             AdditionalCommands::Upgrade(args) => args.handle(flox).await?,
-            AdditionalCommands::Config(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
@@ -1052,7 +1057,7 @@ impl ConcreteEnvironment {
 /// * for [RemoteEnvironment] that's the [ManagedPointer] to the remote environment
 ///
 /// Serialized as is into [FLOX_ACTIVE_ENVIRONMENTS_VAR] to be able to reopen environments.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(tag = "type")]
 #[serde(rename_all = "kebab-case")]
 pub enum UninitializedEnvironment {

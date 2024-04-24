@@ -209,7 +209,7 @@ pub mod test_helpers {
         global_manifest_path,
         init_global_manifest,
     };
-    use crate::models::lockfile::LockedManifest;
+    use crate::models::lockfile::LockedManifestPkgdb;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
     /// Get an instance of Flox that has both a locked global manifest and a git
@@ -239,11 +239,11 @@ pub mod test_helpers {
         owner: Option<&EnvironmentOwner>,
     ) -> (Flox, TempDir) {
         // Scrape nixpkgs once and then store the resulting global lockfile in memory
-        static GLOBAL_LOCKFILE: Lazy<LockedManifest> = Lazy::new(|| {
+        static GLOBAL_LOCKFILE: Lazy<LockedManifestPkgdb> = Lazy::new(|| {
             let (flox, _temp_dir_handle) = flox_instance();
             let pkgdb_nixpkgs_rev_new = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
             std::env::set_var("_PKGDB_GA_REGISTRY_REF_OR_REV", pkgdb_nixpkgs_rev_new);
-            LockedManifest::update_global_manifest(&flox, vec![])
+            LockedManifestPkgdb::update_global_manifest(&flox, vec![])
                 .unwrap()
                 .new_lockfile
         });
@@ -306,7 +306,7 @@ pub mod test_helpers {
             )
             .unwrap(),
             floxhub_token: None,
-            catalog_client: Some(MockClient.into()),
+            catalog_client: Some(MockClient::default().into()),
         };
 
         init_global_manifest(&global_manifest_path(&flox)).unwrap();

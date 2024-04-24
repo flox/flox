@@ -310,7 +310,7 @@ function add_insecure_package() {
 
   run "$FLOX_BIN" pull --remote owner/name --force
   assert_success
-  assert_line --partial "Could not build modified environment, build errors need to be resolved manually."
+  assert_line --partial "Modified the manifest to include your system but could not build."
 
   run "$FLOX_BIN" list
   assert_success

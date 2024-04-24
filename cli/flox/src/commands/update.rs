@@ -2,7 +2,7 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::UpdateResult;
-use flox_rust_sdk::models::lockfile::{Input, LockedManifest, TypedLockedManifest};
+use flox_rust_sdk::models::lockfile::{Input, LockedManifestPkgdb, TypedLockedManifestPkgdb};
 use flox_rust_sdk::models::pkgdb::{self, ScrapeError};
 use tracing::instrument;
 
@@ -63,9 +63,9 @@ impl Update {
 
                 (
                     old_lockfile
-                        .map(TypedLockedManifest::try_from)
+                        .map(TypedLockedManifestPkgdb::try_from)
                         .transpose()?,
-                    TypedLockedManifest::try_from(new_lockfile)?,
+                    TypedLockedManifestPkgdb::try_from(new_lockfile)?,
                     false,
                     description,
                 )
@@ -82,16 +82,16 @@ impl Update {
                     message: "Updating global-manifest...",
                     help_message: None,
                     typed: Spinner::new(|| {
-                        LockedManifest::update_global_manifest(&flox, self.inputs)
+                        LockedManifestPkgdb::update_global_manifest(&flox, self.inputs)
                     }),
                 }
                 .spin()?;
 
                 (
                     old_lockfile
-                        .map(TypedLockedManifest::try_from)
+                        .map(TypedLockedManifestPkgdb::try_from)
                         .transpose()?,
-                    TypedLockedManifest::try_from(new_lockfile)?,
+                    TypedLockedManifestPkgdb::try_from(new_lockfile)?,
                     true,
                     None,
                 )

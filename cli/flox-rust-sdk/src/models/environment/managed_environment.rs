@@ -11,7 +11,6 @@ use super::path_environment::PathEnvironment;
 use super::{
     gcroots_dir,
     path_hash,
-    CanonicalPath,
     CanonicalizeError,
     CoreEnvironmentError,
     EditResult,
@@ -26,7 +25,7 @@ use super::{
     ENVIRONMENT_POINTER_FILENAME,
     N_HASH_CHARS,
 };
-use crate::data::Version;
+use crate::data::{CanonicalPath, Version};
 use crate::flox::{EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::env_registry::{
@@ -1875,7 +1874,7 @@ mod test {
             floxmeta,
             &flox,
             test_pointer,
-            CanonicalPath(dot_flox_path),
+            CanonicalPath::new(dot_flox_path).unwrap(),
             flox.temp_dir.join("out_link"),
         )
         .unwrap();
@@ -1915,7 +1914,7 @@ mod test {
             floxmeta,
             &flox,
             test_pointer,
-            CanonicalPath(dot_flox_path),
+            CanonicalPath::new(dot_flox_path).unwrap(),
             flox.temp_dir.join("out_link"),
         )
         .unwrap();

@@ -49,7 +49,7 @@ impl FloxCompletionExt for Flox {
             .expect("User must have a home directory")
             .join(".netrc");
 
-        let catalog_client = init_catalog_client(&config);
+        let catalog_client = init_catalog_client(&config)?;
 
         Ok(Flox {
             cache_dir: config.flox.cache_dir,

@@ -2,14 +2,10 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Result};
 use bpaf::Bpaf;
+use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{
-    CanonicalPath,
-    CoreEnvironmentError,
-    Environment,
-    EnvironmentError,
-};
-use flox_rust_sdk::models::lockfile::{LockedManifest, LockedManifestError};
+use flox_rust_sdk::models::environment::{CoreEnvironmentError, Environment, EnvironmentError};
+use flox_rust_sdk::models::lockfile::{LockedManifestError, LockedManifestPkgdb};
 use flox_rust_sdk::models::manifest::PackageToInstall;
 use flox_rust_sdk::models::pkgdb::error_codes;
 use indoc::formatdoc;
@@ -131,7 +127,11 @@ impl Install {
 
         let lockfile_path = environment.lockfile_path(&flox)?;
         let lockfile_path = CanonicalPath::new(lockfile_path)?;
-        let warnings = LockedManifest::check_lockfile(&lockfile_path)?;
+
+        // Check for warnings in the lockfile using pkgdb
+        //
+        // TODO: handle catalog lockfiles
+        let warnings = LockedManifestPkgdb::check_lockfile(&lockfile_path)?;
 
         warnings
             .iter()
