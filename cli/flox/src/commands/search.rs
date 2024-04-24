@@ -14,6 +14,7 @@ use flox_rust_sdk::models::search::{
     SearchResults,
     ShowError,
 };
+use flox_rust_sdk::providers::catalog::ClientTrait;
 use indoc::formatdoc;
 use log::debug;
 use tracing::instrument;
@@ -86,22 +87,38 @@ impl Search {
             config.flox.search_limit.or(DEFAULT_SEARCH_LIMIT)
         };
 
-        let search_params = construct_search_params(
-            &self.search_term,
-            limit,
-            manifest.clone(),
-            global_manifest.clone(),
-            lockfile.clone(),
-        )?;
+        let results = if let Some(client) = flox.catalog_client {
+            tracing::debug!("using catalog client for search");
+            // TODO: Don't handle the `--all` case yet, what limit would we set?
+            client
+                .search(
+                    "hello",
+                    flox.system.clone(),
+                    limit.unwrap_or(
+                        DEFAULT_SEARCH_LIMIT.expect("default search limit didn't have a value"),
+                    ),
+                )
+                .await?
+        } else {
+            tracing::debug!("using pkgdb for search");
 
-        let (results, exit_status) = Dialog {
-            message: "Searching for packages...",
-            help_message: Some("This may take a while the first time you run it."),
-            typed: Spinner::new(|| do_search(&search_params)),
-        }
-        .spin_with_delay(Duration::from_secs(1))?;
+            let search_params = construct_search_params(
+                &self.search_term,
+                limit,
+                manifest.clone(),
+                global_manifest.clone(),
+                lockfile.clone(),
+            )?;
 
-        debug!("search call exit status: {}", exit_status.to_string());
+            let (results, exit_status) = Dialog {
+                message: "Searching for packages...",
+                help_message: Some("This may take a while the first time you run it."),
+                typed: Spinner::new(|| do_search(&search_params)),
+            }
+            .spin_with_delay(Duration::from_secs(1))?;
+            tracing::debug!("search call exit status: {}", exit_status.to_string());
+            results
+        };
 
         // Render what we have no matter what, then indicate whether we encountered an error.
         // FIXME: We may have warnings on `stderr` even with a successful call to `pkgdb`.

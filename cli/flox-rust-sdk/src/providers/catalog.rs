@@ -79,7 +79,7 @@ pub enum MockDataError {
 }
 
 /// Reads a list of mock responses from disk.
-fn read_mock_responses(path: &impl AsRef<Path>) -> Result<VecDeque<Response>, MockDataError> {
+fn read_mock_responses(path: impl AsRef<Path>) -> Result<VecDeque<Response>, MockDataError> {
     let mut responses = VecDeque::new();
     let contents = std::fs::read_to_string(path).map_err(MockDataError::ReadMockFile)?;
     let deserialized: Vec<Response> =
@@ -123,7 +123,7 @@ pub struct MockClient {
 
 impl MockClient {
     /// Create a new mock client, potentially reading mock responses from disk
-    pub fn new(mock_data_path: Option<&impl AsRef<Path>>) -> Result<Self, CatalogClientError> {
+    pub fn new(mock_data_path: Option<impl AsRef<Path>>) -> Result<Self, CatalogClientError> {
         let mock_responses = if let Some(path) = mock_data_path {
             read_mock_responses(&path).expect("couldn't read mock responses from disk")
         } else {
@@ -335,7 +335,6 @@ where
 {
     try_stream! {
         let mut page_number = 0;
-        // TODO: this will loop forever if page_size = 0
         loop {
             let (total_count, results) = generator(page_number, page_size.get().into()).await?;
 
@@ -621,6 +620,12 @@ impl TryFrom<PackageInfoCommonInput> for SearchResult {
 #[cfg(test)]
 mod tests {
 
+    use std::io::Write;
+    use std::path::PathBuf;
+
+    use pollster::FutureExt;
+    use tempfile::NamedTempFile;
+
     use super::*;
 
     /// make_depaging_stream collects items from multiple pages
@@ -683,17 +688,6 @@ mod tests {
 
         assert_eq!(collected, (1..=3).collect::<Vec<_>>());
     }
-}
-
-#[cfg(test)]
-mod test {
-    use std::io::Write;
-    use std::path::PathBuf;
-
-    use pollster::FutureExt;
-    use tempfile::NamedTempFile;
-
-    use super::*;
 
     #[test]
     fn mock_client_uses_seeded_responses() {
