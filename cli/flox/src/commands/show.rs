@@ -38,7 +38,7 @@ impl Show {
 
         let (results, exit_status) = if let Some(client) = flox.catalog_client {
             tracing::debug!("using catalog client for show");
-            (client.package_versions("hello").await?, None)
+            (client.package_versions(&self.search_term).await?, None)
         } else {
             tracing::debug!("using pkgdb for show");
 
