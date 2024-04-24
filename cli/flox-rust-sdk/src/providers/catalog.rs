@@ -579,7 +579,7 @@ impl From<api_types::CatalogPageInput> for CatalogPage {
 /// [lockfile::LockedPackageCatalog] adds (at least) a `system` field.
 /// We should consider whether adding a shim to [api_types::PackageResolutionInfo]
 /// is not adding unnecessary complexity.
-type PackageResolutionInfo = api_types::PackageResolutionInfo;
+pub type PackageResolutionInfo = api_types::PackageResolutionInfo;
 
 impl TryFrom<PackageInfoApi> for SearchResult {
     type Error = SearchError;

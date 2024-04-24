@@ -1,10 +1,9 @@
-use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub type FlakeRef = Value;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -14,13 +13,19 @@ use thiserror::Error;
 
 use super::container_builder::ContainerBuilder;
 use super::environment::UpdateResult;
-use super::manifest::TypedManifestCatalog;
+use super::manifest::{ManifestPackageDescriptor, TypedManifestCatalog, DEFAULT_GROUP_NAME};
 use super::pkgdb::CallPkgDbError;
 use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
 use crate::flox::Flox;
 use crate::models::environment::{global_manifest_lockfile_path, global_manifest_path};
 use crate::models::pkgdb::{call_pkgdb, BuildEnvResult, PKGDB_BIN};
-use crate::providers::catalog::CatalogPage;
+use crate::providers::catalog::{
+    self,
+    CatalogPage,
+    PackageDescriptor,
+    PackageGroup,
+    ResolvedPackageGroup,
+};
 use crate::utils::CommandExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -134,15 +139,15 @@ impl ToString for LockedManifest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LockedManifestCatalog {
     #[serde(rename = "lockfile-version")]
-    version: Version<1>,
+    pub(crate) version: Version<1>,
     /// original manifest that was locked
-    manifest: TypedManifestCatalog,
+    pub(crate) manifest: TypedManifestCatalog,
     /// locked pacakges
-    packages: Vec<LockedPackageCatalog>,
+    pub(crate) packages: Vec<LockedPackageCatalog>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(super) struct LockedPackageCatalog {
+pub(crate) struct LockedPackageCatalog {
     // region: original fields from the service
     // These fields are copied from the generated struct.
     pub attr_path: String,
@@ -163,12 +168,12 @@ pub(super) struct LockedPackageCatalog {
     // endregion
 
     // region: converted fields
-    pub outputs: IndexMap<String, String>,
+    pub outputs: BTreeMap<String, String>,
     pub outputs_to_install: Vec<String>,
     // endregion
 
     // region: added fields
-    system: System,
+    pub system: System,
     // endregion
 }
 
@@ -199,13 +204,10 @@ impl LockedManifestCatalog {
                     .manifest
                     .install
                     .iter()
-                    .find(|(install_id, _)| {
-                        install_id == &&package.name
-                    })
+                    .find(|(install_id, _)| install_id == &&package.name)
                     .and_then(|(_, descriptor)| descriptor.priority);
 
                 let package = package.clone();
-
 
                 InstalledPackage {
                     name: package.name,
@@ -222,6 +224,176 @@ impl LockedManifestCatalog {
                 }
             })
             .collect()
+    }
+
+    /// Produce a lockfile for a given manifest using the catalog service.
+    ///
+    /// If a seed lockfile is provided, packages that are already locked
+    /// will constrain the resolution.
+    pub async fn new(
+        manifest: &TypedManifestCatalog,
+        seed_lockfile: Option<LockedManifestCatalog>,
+        client: &impl catalog::ClientTrait,
+    ) -> Result<LockedManifestCatalog, catalog::CatalogClientError> {
+        let locked_packages = if let Some(ref seed) = seed_lockfile {
+            seed.packages
+                .iter()
+                .filter_map(|package| {
+                    let system = &package.system;
+                    let manifest = seed.manifest.install.get(&package.name)?;
+                    Some(((manifest, system), package))
+                })
+                .collect()
+        } else {
+            HashMap::new()
+        };
+
+        let groups = Self::collect_package_groups(manifest, locked_packages).collect();
+
+        // lock existing packages
+
+        let resolved = client.resolve(groups).await.unwrap();
+
+        let locked_packages = Self::locked_packages_from_resolution(resolved).collect();
+
+        let lockfile = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: locked_packages,
+        };
+
+        Ok(lockfile)
+    }
+
+    /// Creates package groups from a flat map of install descriptors
+    ///
+    /// A group is created for each unique combination of (descriptor.package_group ｘ descriptor.system).
+    /// Each group contains a list of package descriptors that belong to that group.
+    ///
+    /// `locked` is used to provide existing derivations for packages that are already locked,
+    /// e.g. by a previous lockfile.
+    /// These packages are used to constrain the resolution.
+    fn collect_package_groups<'manifest>(
+        manifest: &'manifest TypedManifestCatalog,
+        locked: HashMap<(&ManifestPackageDescriptor, &System), &LockedPackageCatalog>,
+    ) -> impl Iterator<Item = PackageGroup> + 'manifest {
+        // Using a btree map to ensure consistent ordering
+        let mut map = BTreeMap::new();
+
+        let default_systems = &manifest.options.systems;
+
+        for (install_id, manifest_descriptor) in manifest.install.iter() {
+            let resolved_descriptor = PackageDescriptor {
+                name: install_id.clone(),
+                pkg_path: manifest_descriptor.pkg_path.clone(),
+                derivation: None,
+                semver: None,
+                version: manifest_descriptor.version.clone(),
+            };
+
+            let group = manifest_descriptor
+                .package_group
+                .as_deref()
+                .unwrap_or(DEFAULT_GROUP_NAME);
+
+            let descriptor_systems = manifest_descriptor
+                .systems
+                .as_ref()
+                .unwrap_or(default_systems);
+
+            for system in descriptor_systems {
+                let resolved_group = map.entry((group, system)).or_insert_with(|| PackageGroup {
+                    descriptors: Vec::new(),
+                    name: group.to_string(),
+                    system: system.clone(),
+                });
+
+                let locked_derivation = locked
+                    .get(&(manifest_descriptor, system))
+                    .map(|p| p.derivation.clone());
+
+                let mut resolved_descriptor = resolved_descriptor.clone();
+                resolved_descriptor.derivation = locked_derivation;
+
+                resolved_group.descriptors.push(resolved_descriptor);
+            }
+        }
+
+        map.into_values()
+    }
+
+    /// Convert a resolution results into a list of locked packages
+    ///
+    /// * Flattens `Group(Page(PackageResolutionInfo+)+)` into `LockedPackageCatalog+`
+    /// * Adds a `system` field to each locked package.
+    /// * Converts [serde_json::Value] based `outputs` and `outputs_to_install` fields
+    /// into [`IndexMap<String, String>`] and [`Vec<String>`] respectively.
+    ///
+    /// TODO: handle results from multiple pages
+    ///       currently there is no api to request packages from specific pages
+    /// TODO: handle json value conversion earlier in the shim (or the upstream spec)
+    fn locked_packages_from_resolution(
+        groups: impl IntoIterator<Item = ResolvedPackageGroup>,
+    ) -> impl Iterator<Item = LockedPackageCatalog> {
+        groups.into_iter().flat_map(|group| {
+            group
+                .pages
+                .into_iter()
+                .take(1)
+                .flat_map(|page| page.packages.into_iter())
+                .map(move |package| {
+                    // unpack package to avoid missing new fields
+                    let catalog::PackageResolutionInfo {
+                        attr_path,
+                        broken,
+                        derivation,
+                        description,
+                        license,
+                        locked_url,
+                        name,
+                        outputs,
+                        outputs_to_install,
+                        pname,
+                        rev,
+                        rev_count,
+                        rev_date,
+                        scrape_date,
+                        stabilities,
+                        unfree,
+                        version,
+                    } = package;
+
+                    // todo: server might be able to define otputs as strings directly
+                    // todo: comsider adding an intermediate type in the catalog module to handle conversion to strings
+                    let outputs = outputs
+                        .into_iter()
+                        .map(|output| (output.name, output.store_path))
+                        .collect();
+
+                    let outputs_to_install = outputs_to_install.into_iter().collect();
+
+                    LockedPackageCatalog {
+                        attr_path,
+                        broken,
+                        derivation,
+                        description,
+                        license,
+                        locked_url,
+                        name,
+                        outputs,
+                        outputs_to_install,
+                        pname,
+                        rev,
+                        rev_count,
+                        rev_date,
+                        scrape_date,
+                        stabilities,
+                        unfree,
+                        version,
+                        system: group.system.clone(),
+                    }
+                })
+        })
     }
 }
 
