@@ -42,13 +42,7 @@ use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::env_registry::{deregister, ensure_registered};
-use crate::models::environment::{
-    ENV_DIR_NAME,
-    FLOX_INSTALL_TABLE_KEY,
-    FLOX_PROFILE_TABLE_KEY,
-    FLOX_SYSTEMS_ARRAY_KEY,
-    MANIFEST_FILENAME,
-};
+use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::{PackageToInstall, RawManifest};
@@ -394,18 +388,8 @@ impl PathEnvironment {
             ))?,
         }
 
-        // Read and parse `manifest.toml` TOML template asset containing placeholders
-        let manifest_template = include_str!(env!("MANIFEST_TEMPLATE"));
-        let mut manifest_template = manifest_template
-            .parse::<RawManifest>()
-            .map_err(EnvironmentError::ParseTemplateManifest)?;
-
-        // Fill out manifest placeholders
-        let manifest = Self::replace_manifest_template_placeholders(
-            &mut manifest_template,
-            system,
-            customization,
-        )?;
+        // Create manifest
+        let manifest = RawManifest::new(vec![system], customization);
 
         let mut environment = Self::write_new_unchecked(
             flox,
@@ -480,38 +464,6 @@ impl PathEnvironment {
         .map_err(EnvironmentError::WriteGitignore)?;
 
         Self::open(flox, pointer, dot_flox_path, temp_dir)
-    }
-
-    /// Replace all placeholders in the `manifest.toml` file
-    fn replace_manifest_template_placeholders<'a>(
-        manifest_template: &'a mut RawManifest,
-        system: &str,
-        customization: &InitCustomization,
-    ) -> Result<&'a RawManifest, EnvironmentError> {
-        // Add system to `systems` array
-        manifest_template[FLOX_SYSTEMS_ARRAY_KEY]
-            .as_array_mut()
-            .map(|arr| arr.push(system))
-            .ok_or(EnvironmentError::EditManifest)?;
-
-        // TODO: Add packages to install
-        if customization.packages.is_some() {
-            manifest_template[FLOX_INSTALL_TABLE_KEY]
-                .as_table_mut()
-                .map(|table| table)
-                .ok_or(EnvironmentError::EditManifest)?;
-        }
-
-        // TODO: Replace profile
-        if let Some(ref _custom_profile) = customization.profile {
-            manifest_template[FLOX_PROFILE_TABLE_KEY]
-                .as_table_mut()
-                // .map(|table| table.insert("common", indent::indent_all_by(2, custom_profile)))
-                .map(|table| table)
-                .ok_or(EnvironmentError::EditManifest)?;
-        }
-
-        Ok(manifest_template)
     }
 
     /// Determine if the environment needs to be rebuilt

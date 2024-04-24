@@ -6,12 +6,22 @@ use std::str::FromStr;
 use log::debug;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
-use toml_edit::{self, DocumentMut, Formatted, InlineTable, Item, Table, Value};
+use toml_edit::{self, value, Array, DocumentMut, Formatted, InlineTable, Item, Table, Value};
 
+use super::environment::path_environment::InitCustomization;
 use crate::data::{System, Version};
 use crate::models::pkgdb::PKGDB_BIN;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
+
+/// Represents the `[install]` table key in manifest.toml
+pub const MANIFEST_INSTALL_TABLE_KEY: &str = "install";
+/// Represents the `[profile]` table key in manifest.toml
+pub const MANIFEST_PROFILE_TABLE_KEY: &str = "profile";
+/// Represents the `[hook]` table key in manifest.toml
+pub const MANIFEST_HOOK_TABLE_KEY: &str = "hook";
+/// Represents the `systems = []` array key in manifest.toml
+pub const MANIFEST_SYSTEMS_ARRAY_KEY: &str = "systems";
 
 /// A wrapper around a [`toml_edit::DocumentMut`]
 /// that allows modifications of the raw manifest document,
@@ -19,6 +29,31 @@ pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
 #[derive(Debug)]
 pub struct RawManifest(toml_edit::DocumentMut);
 impl RawManifest {
+    pub fn new(systems: Vec<&str>, customization: &InitCustomization) -> RawManifest {
+        let mut manifest = DocumentMut::new();
+        // Add system to `systems` array
+        manifest[MANIFEST_SYSTEMS_ARRAY_KEY] = value(Array::from_iter(systems));
+
+        // Add packages to install
+        if let Some(packages) = &customization.packages {
+            let packages: Vec<(String, Value)> = packages
+                .iter()
+                .map(|pkg| (pkg.id.clone(), Value::InlineTable(InlineTable::from(pkg))))
+                .collect();
+            manifest[MANIFEST_INSTALL_TABLE_KEY] = Item::Table(Table::from_iter(packages));
+        }
+
+        // TODO: Replace profile
+        if let Some(ref _custom_profile) = customization.profile {
+            // .map(|table| table.insert("common", indent::indent_all_by(2, custom_profile)))
+            // manifest[MANIFEST_PROFILE_TABLE_KEY];
+            dbg!(MANIFEST_PROFILE_TABLE_KEY);
+            todo!();
+        }
+
+        RawManifest(manifest)
+    }
+
     /// Get the version of the manifest, if it's present or default to version 1.
     fn get_version(&self) -> Option<i64> {
         self.0.get("version").and_then(Item::as_integer)
@@ -285,6 +320,25 @@ impl FromStr for PackageToInstall {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         temporary_parse_descriptor(s)
+    }
+}
+
+impl From<&PackageToInstall> for Vec<(&'static str, String)> {
+    fn from(val: &PackageToInstall) -> Self {
+        let mut vec = vec![("pkg-path", val.pkg_path.clone())];
+        if let Some(version) = &val.version {
+            vec.push(("version", version.clone()));
+        }
+        if let Some(input) = &val.input {
+            vec.push(("input", input.clone()));
+        }
+        vec
+    }
+}
+
+impl From<&PackageToInstall> for InlineTable {
+    fn from(val: &PackageToInstall) -> Self {
+        InlineTable::from_iter(Vec::from(val).into_iter())
     }
 }
 

@@ -60,14 +60,6 @@ pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 pub const FLOX_PATH_PATCHED_VAR: &str = "FLOX_PATH_PATCHED";
-/// Represents the `[install]` table key from the Flox manifest.toml file
-pub const FLOX_INSTALL_TABLE_KEY: &str = "install";
-/// Represents the `[profile]` table key from the Flox manifest.toml file
-pub const FLOX_PROFILE_TABLE_KEY: &str = "profile";
-/// Represents the `[hook]` table key from the Flox manifest.toml file
-pub const FLOX_HOOK_TABLE_KEY: &str = "hook";
-/// Represents the `systems = []` array key from the Flox manifest.toml file
-pub const FLOX_SYSTEMS_ARRAY_KEY: &str = "systems";
 
 pub const N_HASH_CHARS: usize = 8;
 
