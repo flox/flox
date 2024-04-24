@@ -859,10 +859,10 @@ mod tests {
         let no_match = temp_dir.join("not_a_requirements.txt");
         let no_match2 = temp_dir.join("random_file.txt");
 
-        File::create(&no_match).unwrap();
-        File::create(&no_match2).unwrap();
+        File::create(no_match).unwrap();
+        File::create(no_match2).unwrap();
         let matches = Requirements::get_matches(&temp_dir).unwrap();
-        assert!(matches.len() == 0);
+        assert!(matches.is_empty());
     }
 
     /// Requirements::detect should match requirements.txt
@@ -871,7 +871,7 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let temp_dir = flox.temp_dir;
         let requirements_file = temp_dir.join("requirements.txt");
-        File::create(&requirements_file).unwrap();
+        File::create(requirements_file).unwrap();
         let matches = Requirements::get_matches(&temp_dir).unwrap();
         assert!(matches.len() == 1);
         assert_eq!(matches[0], "requirements.txt");
@@ -883,7 +883,7 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let temp_dir = flox.temp_dir;
         let requirements_file_unconventional = temp_dir.join("requirements_versioned.txt");
-        File::create(&requirements_file_unconventional).unwrap();
+        File::create(requirements_file_unconventional).unwrap();
         let matches = Requirements::get_matches(&temp_dir).unwrap();
         assert!(matches.len() == 1);
         assert_eq!(matches[0], "requirements_versioned.txt");
@@ -896,8 +896,8 @@ mod tests {
         let temp_dir = flox.temp_dir;
         let long_name = temp_dir.join("requirements_versioned_dev.txt");
         let short_name = temp_dir.join("requirements_versioned.txt");
-        File::create(&long_name).unwrap();
-        File::create(&short_name).unwrap();
+        File::create(long_name).unwrap();
+        File::create(short_name).unwrap();
         let matches = Requirements::get_matches(&temp_dir).unwrap();
         assert!(matches.len() == 2);
         // std::fs::read_dir does not guarantee order
