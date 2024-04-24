@@ -571,8 +571,14 @@ impl From<api_types::CatalogPageInput> for CatalogPage {
     }
 }
 
-/// Just an alias until the auto-generated PackageResolutionInfo diverges from
-/// what we need.
+/// TODO: Implement a shim for [api_types::PackageResolutionInfo] that
+/// converts `outputs` and `outputs_to_install` from
+/// [serde_json::Value] to [String] based types.
+///
+/// Since we plan to list resolved packages in a flat list within the lockfile,
+/// [lockfile::LockedPackageCatalog] adds (at least) a `system` field.
+/// We should consider whether adding a shim to [api_types::PackageResolutionInfo]
+/// is not adding unnecessary complexity.
 type PackageResolutionInfo = api_types::PackageResolutionInfo;
 
 impl TryFrom<PackageInfoApi> for SearchResult {
