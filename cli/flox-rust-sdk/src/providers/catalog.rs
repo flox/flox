@@ -287,7 +287,7 @@ impl ClientTrait for CatalogClient {
             |page_number, page_size| async move {
                 let response = self
                     .client
-                    .packages_api_v1_catalog_packages_pkgpath_get(
+                    .packages_api_v1_catalog_packages_pkg_path_get(
                         attr_path,
                         Some(page_number),
                         Some(page_size),
@@ -561,8 +561,8 @@ pub struct CatalogPage {
     pub url: String,
 }
 
-impl From<api_types::CatalogPage> for CatalogPage {
-    fn from(catalog_page: api_types::CatalogPage) -> Self {
+impl From<api_types::CatalogPageInput> for CatalogPage {
+    fn from(catalog_page: api_types::CatalogPageInput) -> Self {
         Self {
             packages: catalog_page.packages,
             page: catalog_page.page,
@@ -571,8 +571,8 @@ impl From<api_types::CatalogPage> for CatalogPage {
     }
 }
 
-/// TODO: fix types for outputs and outputs_to_install,
-/// at which point this will probably no longer be an alias.
+/// Just an alias until the auto-generated PackageResolutionInfo diverges from
+/// what we need.
 type PackageResolutionInfo = api_types::PackageResolutionInfo;
 
 impl TryFrom<PackageInfoApiInput> for SearchResult {

@@ -42,7 +42,7 @@ pub mod types {
             }
         }
     }
-    ///CatalogPage
+    ///CatalogPageInput
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -101,14 +101,84 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct CatalogPage {
+    pub struct CatalogPageInput {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         pub packages: Vec<PackageResolutionInfo>,
         pub page: i64,
         pub url: String,
     }
-    impl From<&CatalogPage> for CatalogPage {
-        fn from(value: &CatalogPage) -> Self {
+    impl From<&CatalogPageInput> for CatalogPageInput {
+        fn from(value: &CatalogPageInput) -> Self {
+            value.clone()
+        }
+    }
+    ///CatalogPageOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "CatalogPage",
+    ///  "examples": [
+    ///    {
+    ///      "description": "A very nice Item",
+    ///      "license": "foo",
+    ///      "locked_url": "git:git?rev=xyz",
+    ///      "name": "curl",
+    ///      "outputs": "{}",
+    ///      "outputs_to_install": "{}",
+    ///      "pkg_path": "foo.bar.curl",
+    ///      "pname": "curl",
+    ///      "rev": "xyz",
+    ///      "rev_count": 4,
+    ///      "rev_date": 0,
+    ///      "search_string": "curl^curl^my description",
+    ///      "stabilities": [
+    ///        "stable",
+    ///        "unstable"
+    ///      ],
+    ///      "system": "x86_64-linux",
+    ///      "version": "1.0"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "page",
+    ///    "url"
+    ///  ],
+    ///  "properties": {
+    ///    "packages": {
+    ///      "title": "Packages",
+    ///      "anyOf": [
+    ///        {
+    ///          "type": "array",
+    ///          "items": {
+    ///            "$ref": "#/components/schemas/PackageResolutionInfo"
+    ///          }
+    ///        }
+    ///      ]
+    ///    },
+    ///    "page": {
+    ///      "title": "Page",
+    ///      "type": "integer"
+    ///    },
+    ///    "url": {
+    ///      "title": "Url",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct CatalogPageOutput {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        pub packages: Vec<PackageResolutionInfo>,
+        pub page: i64,
+        pub url: String,
+    }
+    impl From<&CatalogPageOutput> for CatalogPageOutput {
+        fn from(value: &CatalogPageOutput) -> Self {
             value.clone()
         }
     }
@@ -232,6 +302,41 @@ pub mod types {
             value.clone()
         }
     }
+    ///Output
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "Output",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "name",
+    ///    "store_path"
+    ///  ],
+    ///  "properties": {
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "store_path": {
+    ///      "title": "Store Path",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Output {
+        pub name: String,
+        pub store_path: String,
+    }
+    impl From<&Output> for Output {
+        fn from(value: &Output) -> Self {
+            value.clone()
+        }
+    }
     ///PackageDescriptor
     ///
     /// <details><summary>JSON schema</summary>
@@ -242,13 +347,13 @@ pub mod types {
     ///  "examples": [
     ///    {
     ///      "name": "curl",
-    ///      "pkgpath": "curl"
+    ///      "pkgPath": "curl"
     ///    }
     ///  ],
     ///  "type": "object",
     ///  "required": [
     ///    "name",
-    ///    "pkgpath"
+    ///    "pkgPath"
     ///  ],
     ///  "properties": {
     ///    "derivation": {
@@ -263,8 +368,8 @@ pub mod types {
     ///      "title": "Name",
     ///      "type": "string"
     ///    },
-    ///    "pkgpath": {
-    ///      "title": "pkgpath",
+    ///    "pkgPath": {
+    ///      "title": "Pkgpath",
     ///      "type": "string"
     ///    },
     ///    "semver": {
@@ -292,7 +397,8 @@ pub mod types {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub derivation: Option<String>,
         pub name: String,
-        pub pkgpath: String,
+        #[serde(rename = "pkgPath")]
+        pub pkg_path: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub semver: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -315,15 +421,15 @@ pub mod types {
     ///      "descriptors": [
     ///        {
     ///          "name": "curl",
-    ///          "pkgpath": "curl"
+    ///          "pkgPath": "curl"
     ///        },
     ///        {
     ///          "name": "slack",
-    ///          "pkgpath": "slack"
+    ///          "pkgPath": "slack"
     ///        },
     ///        {
     ///          "name": "xeyes",
-    ///          "pkgpath": "xorg.xeyes"
+    ///          "pkgPath": "xorg.xeyes"
     ///        }
     ///      ],
     ///      "name": "test",
@@ -390,15 +496,15 @@ pub mod types {
     ///          "descriptors": [
     ///            {
     ///              "name": "curl",
-    ///              "pkgpath": "curl"
+    ///              "pkgPath": "curl"
     ///            },
     ///            {
     ///              "name": "slack",
-    ///              "pkgpath": "slack"
+    ///              "pkgPath": "slack"
     ///            },
     ///            {
     ///              "name": "xeyes",
-    ///              "pkgpath": "xorg.xeyes"
+    ///              "pkgPath": "xorg.xeyes"
     ///            }
     ///          ],
     ///          "name": "test",
@@ -511,7 +617,10 @@ pub mod types {
     ///      "title": "Outputs",
     ///      "anyOf": [
     ///        {
-    ///          "type": "object"
+    ///          "type": "array",
+    ///          "items": {
+    ///            "$ref": "#/components/schemas/Output"
+    ///          }
     ///        }
     ///      ]
     ///    },
@@ -520,7 +629,9 @@ pub mod types {
     ///      "anyOf": [
     ///        {
     ///          "type": "array",
-    ///          "items": {}
+    ///          "items": {
+    ///            "type": "string"
+    ///          }
     ///        }
     ///      ]
     ///    },
@@ -566,8 +677,8 @@ pub mod types {
         pub license: String,
         pub locked_url: String,
         pub name: String,
-        pub outputs: serde_json::Map<String, serde_json::Value>,
-        pub outputs_to_install: Vec<serde_json::Value>,
+        pub outputs: Vec<Output>,
+        pub outputs_to_install: Vec<String>,
         pub pname: String,
         pub rev: String,
         pub rev_count: i64,
@@ -656,7 +767,10 @@ pub mod types {
     ///      "title": "Outputs",
     ///      "anyOf": [
     ///        {
-    ///          "type": "object"
+    ///          "type": "array",
+    ///          "items": {
+    ///            "$ref": "#/components/schemas/Output"
+    ///          }
     ///        }
     ///      ]
     ///    },
@@ -665,7 +779,9 @@ pub mod types {
     ///      "anyOf": [
     ///        {
     ///          "type": "array",
-    ///          "items": {}
+    ///          "items": {
+    ///            "type": "string"
+    ///          }
     ///        }
     ///      ]
     ///    },
@@ -714,8 +830,8 @@ pub mod types {
         pub license: String,
         pub locked_url: String,
         pub name: String,
-        pub outputs: serde_json::Map<String, serde_json::Value>,
-        pub outputs_to_install: Vec<serde_json::Value>,
+        pub outputs: Vec<Output>,
+        pub outputs_to_install: Vec<String>,
         pub pkg_path: String,
         pub pname: String,
         pub rev: String,
@@ -781,7 +897,10 @@ pub mod types {
     ///      "title": "Outputs",
     ///      "anyOf": [
     ///        {
-    ///          "type": "object"
+    ///          "type": "array",
+    ///          "items": {
+    ///            "$ref": "#/components/schemas/Output"
+    ///          }
     ///        }
     ///      ]
     ///    },
@@ -790,7 +909,9 @@ pub mod types {
     ///      "anyOf": [
     ///        {
     ///          "type": "array",
-    ///          "items": {}
+    ///          "items": {
+    ///            "type": "string"
+    ///          }
     ///        }
     ///      ]
     ///    },
@@ -828,8 +949,8 @@ pub mod types {
         pub description: String,
         pub license: String,
         pub name: String,
-        pub outputs: serde_json::Map<String, serde_json::Value>,
-        pub outputs_to_install: Vec<serde_json::Value>,
+        pub outputs: Vec<Output>,
+        pub outputs_to_install: Vec<String>,
         pub pname: String,
         pub rev: String,
         pub rev_count: i64,
@@ -889,7 +1010,10 @@ pub mod types {
     ///      "title": "Outputs",
     ///      "anyOf": [
     ///        {
-    ///          "type": "object"
+    ///          "type": "array",
+    ///          "items": {
+    ///            "$ref": "#/components/schemas/Output"
+    ///          }
     ///        }
     ///      ]
     ///    },
@@ -898,7 +1022,9 @@ pub mod types {
     ///      "anyOf": [
     ///        {
     ///          "type": "array",
-    ///          "items": {}
+    ///          "items": {
+    ///            "type": "string"
+    ///          }
     ///        }
     ///      ]
     ///    },
@@ -939,8 +1065,8 @@ pub mod types {
         pub description: String,
         pub license: String,
         pub name: String,
-        pub outputs: serde_json::Map<String, serde_json::Value>,
-        pub outputs_to_install: Vec<serde_json::Value>,
+        pub outputs: Vec<Output>,
+        pub outputs_to_install: Vec<String>,
         pub pkg_path: String,
         pub pname: String,
         pub rev: String,
@@ -1022,7 +1148,10 @@ pub mod types {
     ///      "title": "Outputs",
     ///      "anyOf": [
     ///        {
-    ///          "type": "object"
+    ///          "type": "array",
+    ///          "items": {
+    ///            "$ref": "#/components/schemas/Output"
+    ///          }
     ///        }
     ///      ]
     ///    },
@@ -1031,7 +1160,9 @@ pub mod types {
     ///      "anyOf": [
     ///        {
     ///          "type": "array",
-    ///          "items": {}
+    ///          "items": {
+    ///            "type": "string"
+    ///          }
     ///        }
     ///      ]
     ///    },
@@ -1093,8 +1224,8 @@ pub mod types {
         pub license: String,
         pub locked_url: String,
         pub name: String,
-        pub outputs: serde_json::Map<String, serde_json::Value>,
-        pub outputs_to_install: Vec<serde_json::Value>,
+        pub outputs: Vec<Output>,
+        pub outputs_to_install: Vec<String>,
         pub pname: String,
         pub rev: String,
         pub rev_count: i64,
@@ -1353,7 +1484,7 @@ pub mod types {
     ///      "title": "Pages",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/CatalogPage"
+    ///        "$ref": "#/components/schemas/CatalogPage-Input"
     ///      }
     ///    },
     ///    "system": {
@@ -1366,7 +1497,7 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct ResolvedPackageGroupInput {
         pub name: String,
-        pub pages: Vec<CatalogPage>,
+        pub pages: Vec<CatalogPageInput>,
         pub system: SystemEnum,
     }
     impl From<&ResolvedPackageGroupInput> for ResolvedPackageGroupInput {
@@ -1418,7 +1549,7 @@ pub mod types {
     ///      "title": "Pages",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/CatalogPage"
+    ///        "$ref": "#/components/schemas/CatalogPage-Output"
     ///      }
     ///    },
     ///    "system": {
@@ -1431,7 +1562,7 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct ResolvedPackageGroupOutput {
         pub name: String,
-        pub pages: Vec<CatalogPage>,
+        pub pages: Vec<CatalogPageOutput>,
         pub system: SystemEnum,
     }
     impl From<&ResolvedPackageGroupOutput> for ResolvedPackageGroupOutput {
@@ -1674,7 +1805,7 @@ TBD
 *Markdown is available here*
 
 
-Version: v0.1.dev127+g74c9441.d19800101*/
+Version: v0.1.dev127+gef29480*/
 pub struct Client {
     pub(crate) baseurl: String,
     pub(crate) client: reqwest::Client,
@@ -1720,7 +1851,7 @@ impl Client {
     /// This string is pulled directly from the source OpenAPI
     /// document and may be in any format the API selects.
     pub fn api_version(&self) -> &'static str {
-        "v0.1.dev127+g74c9441.d19800101"
+        "v0.1.dev127+gef29480"
     }
 }
 #[allow(clippy::all)]
@@ -1793,7 +1924,7 @@ Sends a `GET` request to `/api/v1/catalog/search`
 Returns a list of versions for a given pkg-path
 
 Required Query Parameters:
-- **pkgpath**: The pkg-path, must be valid.
+- **pkgPath**: The pkg-path, must be valid.
 
 Optional Query Parameters:
 - **page**: Optional page number for pagination (def = 0)
@@ -1802,17 +1933,17 @@ Optional Query Parameters:
 Returns:
 - **PackageSearchResult**: A list of PackageInfo and the total result count
 
-Sends a `GET` request to `/api/v1/catalog/packages/{pkgpath}`
+Sends a `GET` request to `/api/v1/catalog/packages/{pkgPath}`
 
 */
-    pub async fn packages_api_v1_catalog_packages_pkgpath_get<'a>(
+    pub async fn packages_api_v1_catalog_packages_pkg_path_get<'a>(
         &'a self,
-        pkgpath: &'a str,
+        pkg_path: &'a str,
         page: Option<i64>,
         page_size: Option<i64>,
     ) -> Result<ResponseValue<types::PackagesResultInput>, Error<types::ErrorResponse>> {
         let url = format!(
-            "{}/api/v1/catalog/packages/{}", self.baseurl, encode_path(& pkgpath
+            "{}/api/v1/catalog/packages/{}", self.baseurl, encode_path(& pkg_path
             .to_string()),
         );
         let mut query = Vec::with_capacity(2usize);
@@ -1868,7 +1999,7 @@ Resolution Rules:
 A Package Descriptor match:
 - **name**: [required] - is not used in matching, only for reference (TBD is
             there a uniqueness constraint?)
-- **pkgpath**: [required] - this must match the nix attribute path exactly and in full
+- **pkgPath**: [required] - this must match the nix attribute path exactly and in full
 - **semver**: [optional] - This can be any valid semver range, and if given
     will attempt to parse the nix `version` field.  If it can and it is
     within the range, this check passes.  If it cannot parse `version` as a
