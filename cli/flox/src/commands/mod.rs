@@ -11,6 +11,7 @@ mod list;
 mod pull;
 mod push;
 mod search;
+mod show;
 mod uninstall;
 mod update;
 mod upgrade;
@@ -624,7 +625,7 @@ enum LocalDevelopmentCommands {
     Search(#[bpaf(external(search::search))] search::Search),
     /// Show details about a single package
     #[bpaf(command, long("show"), footer("Run 'man flox-show' for more details."))]
-    Show(#[bpaf(external(search::show))] search::Show),
+    Show(#[bpaf(external(show::show))] show::Show),
     /// Install packages into an environment
     #[bpaf(
         command,
