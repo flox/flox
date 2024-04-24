@@ -77,6 +77,8 @@
 
     # Use nix@2.17
     overlays.nix = final: prev: {
+      # Uncomment to compile Nix with debug symbols on Linux
+      # nix = final.enableDebugging (final.callPackage ./pkgs/nix {});
       nix = final.callPackage ./pkgs/nix {};
     };
 
