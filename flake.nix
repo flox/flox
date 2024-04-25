@@ -112,6 +112,8 @@
           inherit inputs self;
           pkgsFor = final;
         });
+
+      rust-toolchain = final.fenix.stable;
     in {
       # Use bleeding edge `rustfmt'.
       rustfmt = prev.rustfmt.override {asNightly = true;};
@@ -154,6 +156,8 @@
           rust.cargoManifestPath = "cli/Cargo.toml";
         };
         tools = {
+          # use fenix provided clippy
+          clippy = rust-toolchain.clippy;
           clang-tools = final.clang-tools_16;
         };
       };
@@ -165,7 +169,9 @@
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
 
       # Flox Command Line Interface ( development build ).
-      flox-cli = callPackage ./pkgs/flox-cli {};
+      flox-cli = callPackage ./pkgs/flox-cli {
+        rust-toolchain = rust-toolchain;
+      };
 
       # Flox Command Line Interface Manpages
       flox-manpages = callPackage ./pkgs/flox-manpages {};
@@ -220,7 +226,6 @@
         flox
         pre-commit-check
         flox-tests-pure
-        flox-dev
         ;
       default = pkgs.flox;
     });
