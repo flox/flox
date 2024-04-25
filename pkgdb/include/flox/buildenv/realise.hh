@@ -316,7 +316,7 @@ getRealisedPackages( nix::ref<nix::EvalState> &         state,
  */
 nix::StorePath
 createFloxEnv( nix::ref<nix::EvalState> & state,
-               resolver::Lockfile &       lockfile,
+               resolver::LockfileRaw &    lockfile,
                const System &             system );
 
 
