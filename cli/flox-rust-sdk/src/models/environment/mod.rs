@@ -329,14 +329,8 @@ impl DotFlox {
         let dot_flox_path = CanonicalPath::new(&dot_flox_path)
             .map_err(|_| EnvironmentError::DotFloxNotFound(dot_flox_path))?;
 
-        Self::open(&dot_flox_path)
-    }
+        let pointer = EnvironmentPointer::open(&dot_flox_path)?;
 
-    /// Open the specified path as a [DotFlox] directory
-    ///
-    /// This method is used to open an existing [DotFlox] directory.
-    pub(crate) fn open(dot_flox_path: &CanonicalPath) -> Result<Self, EnvironmentError> {
-        let pointer = EnvironmentPointer::open(dot_flox_path)?;
         Ok(Self {
             path: dot_flox_path.to_path_buf(),
             pointer,
