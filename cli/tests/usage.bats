@@ -78,7 +78,7 @@ EOF
   run "$FLOX_BIN" --help
   assert_output --partial - << EOF
 Additional Commands. Use "flox COMMAND --help" for more info
-    update, upgrade, config, auth
+    auth, config, envs, update, upgrade
 EOF
 }
 

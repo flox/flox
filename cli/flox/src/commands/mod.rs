@@ -37,6 +37,7 @@ use flox_rust_sdk::flox::{
     FLOX_SENTRY_ENV,
     FLOX_VERSION,
 };
+use flox_rust_sdk::models::env_registry::{EnvRegistry, ENV_REGISTRY_FILENAME};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
@@ -50,11 +51,10 @@ use flox_rust_sdk::models::environment::{
     DOT_FLOX,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
-use flox_rust_sdk::models::environment_ref;
+use flox_rust_sdk::models::{env_registry, environment_ref};
 use futures::Future;
 use indoc::{formatdoc, indoc};
 use log::{debug, info};
-use once_cell::sync::Lazy;
 use sentry::integrations::anyhow::capture_anyhow;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
@@ -63,6 +63,7 @@ use time::{Duration, OffsetDateTime};
 use toml_edit::Key;
 use url::Url;
 
+use self::envs::DisplayEnvironments;
 use crate::commands::general::update_config;
 use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
@@ -87,21 +88,9 @@ static FLOX_DESCRIPTION: &'_ str = indoc! {"
     making them portable across the full software lifecycle."
 };
 
-static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
-    let version = FLOX_VERSION.to_string();
-    formatdoc! {r#"
-    flox version {version}
-
-    Usage: flox OPTIONS (init|activate|search|install|...) [--help]
-
-    Use `flox --help` for full list of commands and more information
-
-    First time? Create an environment with `flox init`
-"#}
-});
-
+/// Manually documented commands that are to keep the help text short
 const ADDITIONAL_COMMANDS: &str = indoc! {"
-    update, upgrade, config, auth
+    auth, config, envs, update, upgrade
 "};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
@@ -201,7 +190,12 @@ impl FloxArgs {
 
         // Given no command, skip initialization and print welcome message
         if self.command.is_none() {
-            println!("{}", &*FLOX_WELCOME_MESSAGE);
+            let envs = env_registry::read_environment_registry(
+                config.flox.data_dir.join(ENV_REGISTRY_FILENAME),
+            )?
+            .unwrap_or_default();
+            let active_environments = activated_environments();
+            print_welcome_message(envs, active_environments);
             UpdateNotification::check_for_and_print_update_notification(&config.flox.cache_dir)
                 .await;
             return Ok(());
@@ -372,6 +366,45 @@ impl FloxArgs {
         }
 
         result
+    }
+}
+
+/// Print general welcome message with short usage instructions
+/// and give hints for creating and activating environments.
+/// List active environments if any are active.
+fn print_welcome_message(envs: EnvRegistry, active_environments: ActiveEnvironments) {
+    let welcome_message = {
+        let version = FLOX_VERSION.to_string();
+        formatdoc! {r#"
+            flox version {version}
+
+            Usage: flox OPTIONS (init|activate|search|install|...) [--help]
+
+            Use 'flox --help' for full list of commands and more information
+        "#}
+    };
+
+    message::plain(welcome_message);
+
+    // print trailer message
+    // - if no environments are known to Flox yet, hint at creating one
+    // - if no environments are active, hint at activating one
+    // - if environments are active, list them
+
+    if envs.entries.is_empty() {
+        message::plain("First time? Create an environment with 'flox init'\n");
+        return;
+    }
+
+    if active_environments.last_active().is_none() {
+        message::plain("No active environments. Use 'flox envs' to list all environments.\n");
+    } else {
+        message::created("Active environments:");
+        let envs = indent::indent_all_by(
+            2,
+            DisplayEnvironments::new(active_environments.iter(), true).to_string(),
+        );
+        message::plain(envs);
     }
 }
 

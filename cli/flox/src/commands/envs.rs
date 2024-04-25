@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::path::Path;
@@ -78,8 +79,11 @@ impl Envs {
             return Ok(());
         }
 
-        message::plain("Active environments:");
-        println!("{}", DisplayEnvironments::new(active.iter(), true));
+        message::created("Active environments:");
+        let envs =
+            indent::indent_all_by(2, DisplayEnvironments::new(active.iter(), true).to_string());
+        println!("{envs}");
+
         Ok(())
     }
 
@@ -112,26 +116,32 @@ impl Envs {
         }
 
         if active.iter().next().is_some() {
-            message::plain("Active environments:");
-            println!("{}", DisplayEnvironments::new(active.iter(), true));
+            message::created("Active environments:");
+            let envs =
+                indent::indent_all_by(2, DisplayEnvironments::new(active.iter(), true).to_string());
+            println!("{envs}");
         }
 
         if !inactive.is_empty() {
             message::plain("Inactive environments:");
-            println!("{}", DisplayEnvironments::new(inactive.iter(), false));
+            let envs = indent::indent_all_by(
+                2,
+                DisplayEnvironments::new(inactive.iter(), false).to_string(),
+            );
+            println!("{envs}");
         }
 
         Ok(())
     }
 }
 
-struct DisplayEnvironments<'a> {
+pub(crate) struct DisplayEnvironments<'a> {
     envs: Vec<&'a UninitializedEnvironment>,
     format_active: bool,
 }
 
 impl<'a> DisplayEnvironments<'a> {
-    fn new(
+    pub(crate) fn new(
         envs: impl IntoIterator<Item = &'a UninitializedEnvironment>,
         format_active: bool,
     ) -> Self {
@@ -147,7 +157,7 @@ impl<'a> Display for DisplayEnvironments<'a> {
         let widest = self
             .envs
             .iter()
-            .map(|env| env.name().as_ref().len())
+            .map(|env| format_description(env).len())
             .max()
             .unwrap_or(0);
 
@@ -170,9 +180,16 @@ impl<'a> Display for DisplayEnvironments<'a> {
     }
 }
 
-fn format_path(path: Option<&Path>) -> String {
-    path.map(|p| p.display().to_string())
-        .unwrap_or_else(|| "(remote)".to_string())
+fn format_description(env: &UninitializedEnvironment) -> Cow<'_, str> {
+    match env.bare_description() {
+        Ok(desc) => desc.into(),
+        Err(_) => "(unknown)".into(),
+    }
+}
+
+fn format_path(path: Option<&Path>) -> Cow<'_, str> {
+    path.map(|p| p.to_string_lossy())
+        .unwrap_or_else(|| "(remote)".into())
 }
 
 fn get_registered_environments(
