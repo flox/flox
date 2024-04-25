@@ -57,7 +57,7 @@ impl Push {
 
         let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
-        let dot_flox = DotFlox::open_default_in(dir)?;
+        let dot_flox = DotFlox::open_in(dir)?;
         let canonical_dot_flox_path =
             CanonicalPath::new(&dot_flox.path).expect("DotFlox path was just opened");
 

@@ -324,7 +324,7 @@ impl DotFlox {
     /// This method attempts to find a `.flox` directory in the specified parent path,
     /// and open it as a [DotFlox] directory.
     /// If the directory is not found, an [EnvironmentError::DotFloxNotFound] is returned.
-    pub fn open_default_in(parent_path: impl AsRef<Path>) -> Result<Self, EnvironmentError> {
+    pub fn open_in(parent_path: impl AsRef<Path>) -> Result<Self, EnvironmentError> {
         let dot_flox_path = parent_path.as_ref().join(DOT_FLOX);
         let dot_flox_path = CanonicalPath::new(&dot_flox_path)
             .map_err(|_| EnvironmentError::DotFloxNotFound(dot_flox_path))?;
@@ -543,11 +543,10 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
     );
     // Look for an immediate child named `.flox`
     if tentative_dot_flox.exists() {
-        let pointer =
-            DotFlox::open_default_in(&path).map_err(|err| EnvironmentError::InvalidDotFlox {
-                path: tentative_dot_flox.clone(),
-                source: Box::new(err),
-            })?;
+        let pointer = DotFlox::open_in(&path).map_err(|err| EnvironmentError::InvalidDotFlox {
+            path: tentative_dot_flox.clone(),
+            source: Box::new(err),
+        })?;
         debug!(".flox found: path={}", tentative_dot_flox.display());
         return Ok(Some(pointer));
     }
@@ -574,12 +573,11 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
         debug!("looking for .flox: path={}", tentative_dot_flox.display());
 
         if tentative_dot_flox.exists() {
-            let pointer = DotFlox::open_default_in(ancestor).map_err(|err| {
-                EnvironmentError::InvalidDotFlox {
+            let pointer =
+                DotFlox::open_in(ancestor).map_err(|err| EnvironmentError::InvalidDotFlox {
                     path: ancestor.to_path_buf(),
                     source: Box::new(err),
-                }
-            })?;
+                })?;
             debug!(".flox found: path={}", tentative_dot_flox.display());
             return Ok(Some(pointer));
         }

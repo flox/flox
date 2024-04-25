@@ -109,7 +109,7 @@ impl Pull {
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
 
                 let pointer = {
-                    let p = DotFlox::open_default_in(&dir)?.pointer;
+                    let p = DotFlox::open_in(&dir)?.pointer;
                     match p {
                         EnvironmentPointer::Managed(managed_pointer) => managed_pointer,
                         EnvironmentPointer::Path(_) => bail!("Cannot pull into a path environment"),

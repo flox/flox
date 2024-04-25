@@ -1047,7 +1047,7 @@ fn query_which_environment(
 
 /// Open an environment defined in `{path}/.flox`
 fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError> {
-    DotFlox::open_default_in(path)
+    DotFlox::open_in(path)
         .map(UninitializedEnvironment::DotFlox)?
         .into_concrete_environment(flox)
 }
