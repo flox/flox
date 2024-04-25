@@ -692,7 +692,7 @@ appendBashCalledScript( const std::string & scriptName,
 
 std::pair<buildenv::RealisedPackage, nix::StorePathSet>
 makeActivationScripts( nix::EvalState &        state,
-                       resolver::LockfileRaw & lockfile )
+                       const resolver::LockfileRaw & lockfile )
 {
   std::vector<nix::StorePath> activationScripts;
   auto tempDir = std::filesystem::path( nix::createTempDir() );

@@ -369,7 +369,7 @@ createContainerBuilder( nix::EvalState &       state,
  * scripts.
  */
 std::pair<buildenv::RealisedPackage, nix::StorePathSet>
-makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile );
+makeActivationScripts( nix::EvalState & state, const resolver::LockfileRaw & lockfile );
 
 
 /* -------------------------------------------------------------------------- */
