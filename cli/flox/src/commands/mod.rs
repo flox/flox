@@ -380,7 +380,7 @@ fn print_welcome_message(envs: EnvRegistry, active_environments: ActiveEnvironme
 
             Usage: flox OPTIONS (init|activate|search|install|...) [--help]
 
-            Use `flox --help` for full list of commands and more information
+            Use 'flox --help' for full list of commands and more information
         "#}
     };
 
@@ -392,12 +392,12 @@ fn print_welcome_message(envs: EnvRegistry, active_environments: ActiveEnvironme
     // - if environments are active, list them
 
     if envs.entries.is_empty() {
-        message::plain("First time? Create an environment with `flox init`\n");
+        message::plain("First time? Create an environment with 'flox init'\n");
         return;
     }
 
     if active_environments.last_active().is_none() {
-        message::plain("No active environments. Activate one with `flox activate`\n");
+        message::plain("No active environments. Use 'flox envs' to list all environments.\n");
     } else {
         message::created("Active environments:");
         let envs = indent::indent_all_by(
