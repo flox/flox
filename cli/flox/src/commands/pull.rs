@@ -11,6 +11,7 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
+    DotFlox,
     Environment,
     EnvironmentError,
     EnvironmentPointer,
@@ -108,7 +109,7 @@ impl Pull {
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
 
                 let pointer = {
-                    let p = EnvironmentPointer::open(&dir)?;
+                    let p = DotFlox::open_in(&dir)?.pointer;
                     match p {
                         EnvironmentPointer::Managed(managed_pointer) => managed_pointer,
                         EnvironmentPointer::Path(_) => bail!("Cannot pull into a path environment"),

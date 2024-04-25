@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
+use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::{EnvironmentOwner, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
@@ -10,11 +11,11 @@ use flox_rust_sdk::models::environment::managed_environment::{
 };
 use flox_rust_sdk::models::environment::{
     path_environment,
+    DotFlox,
     Environment,
     EnvironmentPointer,
     ManagedPointer,
     PathPointer,
-    DOT_FLOX,
 };
 use indoc::formatdoc;
 use log::debug;
@@ -56,7 +57,11 @@ impl Push {
 
         let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
-        match EnvironmentPointer::open(&dir)? {
+        let dot_flox = DotFlox::open_in(dir)?;
+        let canonical_dot_flox_path =
+            CanonicalPath::new(&dot_flox.path).expect("DotFlox path was just opened");
+
+        match dot_flox.pointer {
             EnvironmentPointer::Managed(managed_pointer) => {
                 let message = Self::push_existing_message(&managed_pointer, self.force);
 
@@ -64,7 +69,7 @@ impl Push {
                     message: "Pushing updates to FloxHub...",
                     help_message: None,
                     typed: Spinner::new(|| {
-                        Self::push_managed_env(&flox, managed_pointer, dir, self.force)
+                        Self::push_managed_env(&flox, managed_pointer, &dot_flox.path, self.force)
                     }),
                 }
                 .spin()?;
@@ -88,7 +93,13 @@ impl Push {
                     message: "Pushing environment to FloxHub...",
                     help_message: None,
                     typed: Spinner::new(|| {
-                        Self::push_make_managed(&flox, path_pointer, &dir, owner, self.force)
+                        Self::push_make_managed(
+                            &flox,
+                            path_pointer,
+                            canonical_dot_flox_path,
+                            owner,
+                            self.force,
+                        )
                     }),
                 }
                 .spin()?;
@@ -102,10 +113,10 @@ impl Push {
     fn push_managed_env(
         flox: &Flox,
         managed_pointer: ManagedPointer,
-        dir: PathBuf,
+        dot_flox_dir: &Path,
         force: bool,
     ) -> Result<()> {
-        let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dir.join(DOT_FLOX))?;
+        let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dot_flox_dir)?;
         env.push(flox, force)
             .map_err(|err| Self::convert_error(err, managed_pointer, false))?;
 
@@ -116,11 +127,10 @@ impl Push {
     fn push_make_managed(
         flox: &Flox,
         path_pointer: PathPointer,
-        dir: &Path,
+        dot_flox_path: CanonicalPath,
         owner: EnvironmentOwner,
         force: bool,
     ) -> Result<ManagedEnvironment> {
-        let dot_flox_path = dir.join(DOT_FLOX);
         let path_environment = path_environment::PathEnvironment::open(
             flox,
             path_pointer,

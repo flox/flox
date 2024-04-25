@@ -33,7 +33,8 @@ impl CanonicalPath {
         Ok(Self(canonicalized))
     }
 
-    pub fn into_path_buf(self) -> PathBuf {
+    /// Destruct the [`CanonicalPath`] and return the inner [`PathBuf`]
+    pub fn into_inner(self) -> PathBuf {
         self.0
     }
 }
