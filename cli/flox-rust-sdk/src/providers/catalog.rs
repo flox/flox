@@ -10,8 +10,8 @@ use catalog_api_v1::types::{
     self as api_types,
     error as api_error,
     ErrorResponse,
-    PackageInfoApiInput,
-    PackageInfoCommonInput,
+    PackageInfoApi,
+    PackageInfoCommon,
 };
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
@@ -575,10 +575,10 @@ impl From<api_types::CatalogPageInput> for CatalogPage {
 /// what we need.
 type PackageResolutionInfo = api_types::PackageResolutionInfo;
 
-impl TryFrom<PackageInfoApiInput> for SearchResult {
+impl TryFrom<PackageInfoApi> for SearchResult {
     type Error = SearchError;
 
-    fn try_from(package_info: PackageInfoApiInput) -> Result<Self, SearchError> {
+    fn try_from(package_info: PackageInfoApi) -> Result<Self, SearchError> {
         Ok(Self {
             input: NIXPKGS_CATALOG.to_string(),
             system: package_info.system.to_string(),
@@ -596,10 +596,10 @@ impl TryFrom<PackageInfoApiInput> for SearchResult {
     }
 }
 
-impl TryFrom<PackageInfoCommonInput> for SearchResult {
+impl TryFrom<PackageInfoCommon> for SearchResult {
     type Error = VersionsError;
 
-    fn try_from(package_info: PackageInfoCommonInput) -> Result<Self, VersionsError> {
+    fn try_from(package_info: PackageInfoCommon) -> Result<Self, VersionsError> {
         Ok(Self {
             input: NIXPKGS_CATALOG.to_string(),
             system: package_info.system.to_string(),

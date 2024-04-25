@@ -538,7 +538,7 @@ pub mod types {
             value.clone()
         }
     }
-    ///PackageInfoApiInput
+    ///PackageInfoApi
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -671,7 +671,7 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct PackageInfoApiInput {
+    pub struct PackageInfoApi {
         pub attr_path: String,
         pub description: String,
         pub license: String,
@@ -687,166 +687,12 @@ pub mod types {
         pub system: SystemEnum,
         pub version: String,
     }
-    impl From<&PackageInfoApiInput> for PackageInfoApiInput {
-        fn from(value: &PackageInfoApiInput) -> Self {
+    impl From<&PackageInfoApi> for PackageInfoApi {
+        fn from(value: &PackageInfoApi) -> Self {
             value.clone()
         }
     }
-    ///PackageInfoApiOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackageInfoAPI",
-    ///  "examples": [
-    ///    {
-    ///      "description": "A very nice Item",
-    ///      "license": "foo",
-    ///      "locked_url": "git:git?rev=xyz",
-    ///      "name": "curl",
-    ///      "outputs": "{}",
-    ///      "outputs_to_install": "{}",
-    ///      "pkg_path": "foo.bar.curl",
-    ///      "pname": "curl",
-    ///      "rev": "xyz",
-    ///      "rev_count": 4,
-    ///      "rev_date": 0,
-    ///      "search_string": "curl^curl^my description",
-    ///      "stabilities": [
-    ///        "stable",
-    ///        "unstable"
-    ///      ],
-    ///      "system": "x86_64-linux",
-    ///      "version": "1.0"
-    ///    }
-    ///  ],
-    ///  "type": "object",
-    ///  "required": [
-    ///    "description",
-    ///    "license",
-    ///    "locked_url",
-    ///    "name",
-    ///    "outputs",
-    ///    "outputs_to_install",
-    ///    "pkg_path",
-    ///    "pname",
-    ///    "rev",
-    ///    "rev_count",
-    ///    "rev_date",
-    ///    "stabilities",
-    ///    "system",
-    ///    "version"
-    ///  ],
-    ///  "properties": {
-    ///    "description": {
-    ///      "title": "Description",
-    ///      "anyOf": [
-    ///        {
-    ///          "type": "string"
-    ///        }
-    ///      ]
-    ///    },
-    ///    "license": {
-    ///      "title": "License",
-    ///      "anyOf": [
-    ///        {
-    ///          "type": "string"
-    ///        }
-    ///      ]
-    ///    },
-    ///    "locked_url": {
-    ///      "title": "Locked Url",
-    ///      "type": "string"
-    ///    },
-    ///    "name": {
-    ///      "title": "Name",
-    ///      "type": "string"
-    ///    },
-    ///    "outputs": {
-    ///      "title": "Outputs",
-    ///      "anyOf": [
-    ///        {
-    ///          "type": "array",
-    ///          "items": {
-    ///            "$ref": "#/components/schemas/Output"
-    ///          }
-    ///        }
-    ///      ]
-    ///    },
-    ///    "outputs_to_install": {
-    ///      "title": "Outputs To Install",
-    ///      "anyOf": [
-    ///        {
-    ///          "type": "array",
-    ///          "items": {
-    ///            "type": "string"
-    ///          }
-    ///        }
-    ///      ]
-    ///    },
-    ///    "pkg_path": {
-    ///      "title": "Pkg Path",
-    ///      "type": "string"
-    ///    },
-    ///    "pname": {
-    ///      "title": "Pname",
-    ///      "type": "string"
-    ///    },
-    ///    "rev": {
-    ///      "title": "Rev",
-    ///      "type": "string"
-    ///    },
-    ///    "rev_count": {
-    ///      "title": "Rev Count",
-    ///      "type": "integer"
-    ///    },
-    ///    "rev_date": {
-    ///      "title": "Rev Date",
-    ///      "type": "string",
-    ///      "format": "date-time"
-    ///    },
-    ///    "stabilities": {
-    ///      "title": "Stabilities",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
-    ///    },
-    ///    "version": {
-    ///      "title": "Version",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct PackageInfoApiOutput {
-        pub description: String,
-        pub license: String,
-        pub locked_url: String,
-        pub name: String,
-        pub outputs: Vec<Output>,
-        pub outputs_to_install: Vec<String>,
-        pub pkg_path: String,
-        pub pname: String,
-        pub rev: String,
-        pub rev_count: i64,
-        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-        pub stabilities: Vec<String>,
-        pub system: SystemEnum,
-        pub version: String,
-    }
-    impl From<&PackageInfoApiOutput> for PackageInfoApiOutput {
-        fn from(value: &PackageInfoApiOutput) -> Self {
-            value.clone()
-        }
-    }
-    ///PackageInfoCommonInput
+    ///PackageInfoCommon
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -944,7 +790,7 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct PackageInfoCommonInput {
+    pub struct PackageInfoCommon {
         pub attr_path: String,
         pub description: String,
         pub license: String,
@@ -958,125 +804,8 @@ pub mod types {
         pub system: SystemEnum,
         pub version: String,
     }
-    impl From<&PackageInfoCommonInput> for PackageInfoCommonInput {
-        fn from(value: &PackageInfoCommonInput) -> Self {
-            value.clone()
-        }
-    }
-    ///PackageInfoCommonOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackageInfoCommon",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "description",
-    ///    "license",
-    ///    "name",
-    ///    "outputs",
-    ///    "outputs_to_install",
-    ///    "pkg_path",
-    ///    "pname",
-    ///    "rev",
-    ///    "rev_count",
-    ///    "rev_date",
-    ///    "system",
-    ///    "version"
-    ///  ],
-    ///  "properties": {
-    ///    "description": {
-    ///      "title": "Description",
-    ///      "anyOf": [
-    ///        {
-    ///          "type": "string"
-    ///        }
-    ///      ]
-    ///    },
-    ///    "license": {
-    ///      "title": "License",
-    ///      "anyOf": [
-    ///        {
-    ///          "type": "string"
-    ///        }
-    ///      ]
-    ///    },
-    ///    "name": {
-    ///      "title": "Name",
-    ///      "type": "string"
-    ///    },
-    ///    "outputs": {
-    ///      "title": "Outputs",
-    ///      "anyOf": [
-    ///        {
-    ///          "type": "array",
-    ///          "items": {
-    ///            "$ref": "#/components/schemas/Output"
-    ///          }
-    ///        }
-    ///      ]
-    ///    },
-    ///    "outputs_to_install": {
-    ///      "title": "Outputs To Install",
-    ///      "anyOf": [
-    ///        {
-    ///          "type": "array",
-    ///          "items": {
-    ///            "type": "string"
-    ///          }
-    ///        }
-    ///      ]
-    ///    },
-    ///    "pkg_path": {
-    ///      "title": "Pkg Path",
-    ///      "type": "string"
-    ///    },
-    ///    "pname": {
-    ///      "title": "Pname",
-    ///      "type": "string"
-    ///    },
-    ///    "rev": {
-    ///      "title": "Rev",
-    ///      "type": "string"
-    ///    },
-    ///    "rev_count": {
-    ///      "title": "Rev Count",
-    ///      "type": "integer"
-    ///    },
-    ///    "rev_date": {
-    ///      "title": "Rev Date",
-    ///      "type": "string",
-    ///      "format": "date-time"
-    ///    },
-    ///    "system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
-    ///    },
-    ///    "version": {
-    ///      "title": "Version",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct PackageInfoCommonOutput {
-        pub description: String,
-        pub license: String,
-        pub name: String,
-        pub outputs: Vec<Output>,
-        pub outputs_to_install: Vec<String>,
-        pub pkg_path: String,
-        pub pname: String,
-        pub rev: String,
-        pub rev_count: i64,
-        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-        pub system: SystemEnum,
-        pub version: String,
-    }
-    impl From<&PackageInfoCommonOutput> for PackageInfoCommonOutput {
-        fn from(value: &PackageInfoCommonOutput) -> Self {
+    impl From<&PackageInfoCommon> for PackageInfoCommon {
+        fn from(value: &PackageInfoCommon) -> Self {
             value.clone()
         }
     }
@@ -1281,7 +1010,7 @@ pub mod types {
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoAPI-Input"
+    ///        "$ref": "#/components/schemas/PackageInfoAPI"
     ///      }
     ///    },
     ///    "total_count": {
@@ -1294,7 +1023,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct PackageSearchResultInput {
-        pub items: Vec<PackageInfoApiInput>,
+        pub items: Vec<PackageInfoApi>,
         pub total_count: i64,
     }
     impl From<&PackageSearchResultInput> for PackageSearchResultInput {
@@ -1343,7 +1072,7 @@ pub mod types {
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoAPI-Output"
+    ///        "$ref": "#/components/schemas/PackageInfoAPI"
     ///      }
     ///    },
     ///    "total_count": {
@@ -1356,7 +1085,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct PackageSearchResultOutput {
-        pub items: Vec<PackageInfoApiOutput>,
+        pub items: Vec<PackageInfoApi>,
         pub total_count: i64,
     }
     impl From<&PackageSearchResultOutput> for PackageSearchResultOutput {
@@ -1381,7 +1110,7 @@ pub mod types {
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoCommon-Input"
+    ///        "$ref": "#/components/schemas/PackageInfoCommon"
     ///      }
     ///    },
     ///    "total_count": {
@@ -1394,7 +1123,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct PackagesResultInput {
-        pub items: Vec<PackageInfoCommonInput>,
+        pub items: Vec<PackageInfoCommon>,
         pub total_count: i64,
     }
     impl From<&PackagesResultInput> for PackagesResultInput {
@@ -1419,7 +1148,7 @@ pub mod types {
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoCommon-Output"
+    ///        "$ref": "#/components/schemas/PackageInfoCommon"
     ///      }
     ///    },
     ///    "total_count": {
@@ -1432,7 +1161,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct PackagesResultOutput {
-        pub items: Vec<PackageInfoCommonOutput>,
+        pub items: Vec<PackageInfoCommon>,
         pub total_count: i64,
     }
     impl From<&PackagesResultOutput> for PackagesResultOutput {
@@ -1805,7 +1534,7 @@ TBD
 *Markdown is available here*
 
 
-Version: v0.1.dev127+gef29480*/
+Version: v0.1.dev129+g9e3c6c6.d19800101*/
 pub struct Client {
     pub(crate) baseurl: String,
     pub(crate) client: reqwest::Client,
@@ -1851,7 +1580,7 @@ impl Client {
     /// This string is pulled directly from the source OpenAPI
     /// document and may be in any format the API selects.
     pub fn api_version(&self) -> &'static str {
-        "v0.1.dev127+gef29480"
+        "v0.1.dev129+g9e3c6c6.d19800101"
     }
 }
 #[allow(clippy::all)]
