@@ -188,7 +188,7 @@ fn format_description(env: &UninitializedEnvironment) -> Cow<'_, str> {
 }
 
 fn format_path(path: Option<&Path>) -> Cow<'_, str> {
-    path.map(|p| p.to_string_lossy())
+    path.map(|p| p.parent().unwrap_or(p).to_string_lossy())
         .unwrap_or_else(|| "(remote)".into())
 }
 
