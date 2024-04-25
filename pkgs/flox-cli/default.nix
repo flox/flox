@@ -1,5 +1,4 @@
 {
-  rustfmt,
   cacert,
   darwin,
   rust-toolchain,
@@ -18,6 +17,7 @@
   pkg-config,
   pkgsFor,
   rust-analyzer,
+  rustfmt ? rust-toolchain.rustfmt,
   targetPlatform,
   zlib,
 }: let

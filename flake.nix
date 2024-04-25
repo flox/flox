@@ -113,11 +113,16 @@
           pkgsFor = final;
         });
 
+      # We depend on several nightly features of rustfmt,
+      # so pick the current nightly version.
+      # We're using `default.withComponents`
+      # which _should_ only pull the nightly rustfmt component.
+      # Alternatively, we could use nixpkgs.rustfmt,
+      # and rebuild with a (stable) fenix toolchain and `asNightly = true`,
+      # which would avoid the need to pull another channel altogether.
+      rustfmt-nightly = prev.fenix.default.withComponents ["rustfmt"];
       rust-toolchain = final.fenix.stable;
     in {
-      # Use bleeding edge `rustfmt'.
-      rustfmt = prev.rustfmt.override {asNightly = true;};
-
       # Generates a `.git/hooks/pre-commit' script.
       pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
         src = builtins.path {path = ./.;};
@@ -134,10 +139,11 @@
           rustfmt = let
             wrapper = final.symlinkJoin {
               name = "rustfmt-wrapped";
-              paths = [final.rustfmt];
+              paths = [rustfmt-nightly];
               nativeBuildInputs = [final.makeWrapper];
               postBuild = let
-                PATH = final.lib.makeBinPath [final.cargo final.rustfmt];
+                # Use nightly rustfmt
+                PATH = final.lib.makeBinPath [final.fenix.stable.cargo rustfmt-nightly];
               in ''
                 wrapProgram $out/bin/cargo-fmt --prefix PATH : ${PATH};
               '';
@@ -171,6 +177,7 @@
       # Flox Command Line Interface ( development build ).
       flox-cli = callPackage ./pkgs/flox-cli {
         rust-toolchain = rust-toolchain;
+        rustfmt = rustfmt-nightly;
       };
 
       # Flox Command Line Interface Manpages
