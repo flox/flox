@@ -349,7 +349,20 @@ pub enum EnvironmentError {
     // todo: candidate for impl specific error
     // * only path and managed env are defined in .Flox
     // region: path env open
-    #[error("Did not find an environment in '{0}'")]
+    /// The `.flox` directory was not found
+    /// This error is thrown by calling [DotFlox::open_default_in]
+    /// and callers in the `flox` crate if the `.flox` directory is not found.
+    ///
+    /// The error contains the path to the expected `.flox` directory,
+    /// **including** the final `.flox` component.
+    ///
+    /// The [Display] implementation of this error displays the path to the parent directory.
+    /// As for all practical purposes, we assume the final component to be `.flox`
+    /// and communicate the parent directory to user when mentioning environment paths.
+    #[error(
+        "Did not find an environment in '{}'",
+       .0.parent().map(PathBuf::from).as_ref().unwrap_or(.0).display()
+    )]
     DotFloxNotFound(PathBuf),
 
     #[error("could not locate the manifest for this environment")]
@@ -466,7 +479,6 @@ fn copy_dir_recursive(
     if !to.as_ref().exists() {
         std::fs::create_dir(to).unwrap();
     }
-
     for entry in WalkDir::new(from).into_iter().skip(1) {
         let entry = entry.unwrap();
         let new_path = to.as_ref().join(entry.path().strip_prefix(from).unwrap());

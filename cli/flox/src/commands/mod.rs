@@ -24,6 +24,7 @@ use std::{env, fmt, fs, io, mem};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
+use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::{
     EnvironmentName,
     EnvironmentOwner,
@@ -1134,7 +1135,9 @@ impl UninitializedEnvironment {
     ) -> Result<ConcreteEnvironment, EnvironmentError> {
         match self {
             UninitializedEnvironment::DotFlox(dot_flox) => {
-                let dot_flox_path = dot_flox.path;
+                let dot_flox_path = CanonicalPath::new(dot_flox.path)
+                    .map_err(|err| EnvironmentError::DotFloxNotFound(err.path))?;
+
                 let env = match dot_flox.pointer {
                     EnvironmentPointer::Path(path_pointer) => {
                         debug!("detected concrete environment type: path");

@@ -95,20 +95,12 @@ impl PartialEq for PathEnvironment {
 
 impl PathEnvironment {
     pub fn new(
-        dot_flox_path: impl AsRef<Path>,
+        dot_flox_path: CanonicalPath,
         pointer: PathPointer,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError> {
-        let dot_flox_path =
-            CanonicalPath::new(dot_flox_path).map_err(|CanonicalizeError { path, err }| {
-                EnvironmentError::InvalidDotFlox {
-                    path,
-                    source: Box::new(err),
-                }
-            })?;
-
         if &*dot_flox_path == Path::new("/") {
-            return Err(EnvironmentError::InvalidPath(dot_flox_path.into_path_buf()));
+            return Err(EnvironmentError::InvalidPath(dot_flox_path.into_inner()));
         }
 
         let env_path = dot_flox_path.join(ENV_DIR_NAME);
@@ -292,9 +284,7 @@ impl Environment for PathEnvironment {
         if Some(OsStr::new(".flox")) == dot_flox.file_name() {
             std::fs::remove_dir_all(dot_flox).map_err(EnvironmentError::DeleteEnvironment)?;
         } else {
-            return Err(EnvironmentError::DotFloxNotFound(
-                self.path.parent().unwrap_or(&self.path).to_path_buf(),
-            ));
+            return Err(EnvironmentError::DotFloxNotFound(self.path.to_path_buf()));
         }
         deregister(flox, &self.path, &EnvironmentPointer::Path(self.pointer))?;
         Ok(())
@@ -353,27 +343,16 @@ impl PathEnvironment {
     pub fn open(
         flox: &Flox,
         pointer: PathPointer,
-        dot_flox_path: impl AsRef<Path>,
+        dot_flox_path: CanonicalPath,
         temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError> {
-        let dot_flox = dot_flox_path.as_ref();
-        log::debug!("attempting to open .flox directory: {}", dot_flox.display());
-        if !dot_flox.exists() {
-            Err(EnvironmentError::DotFloxNotFound(
-                dot_flox.parent().unwrap_or(dot_flox).to_path_buf(),
-            ))?;
-        }
-
-        let canonical_dot_flox =
-            CanonicalPath::new(&dot_flox_path).map_err(EnvironmentError::CanonicalDotFlox)?;
-
         ensure_registered(
             flox,
-            &canonical_dot_flox,
+            &dot_flox_path,
             &EnvironmentPointer::Path(pointer.clone()),
         )?;
 
-        PathEnvironment::new(dot_flox, pointer, temp_dir)
+        PathEnvironment::new(dot_flox_path, pointer, temp_dir)
     }
 
     /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
@@ -478,6 +457,8 @@ impl PathEnvironment {
             {CACHE_DIR_NAME}/
             "})
         .map_err(EnvironmentError::WriteGitignore)?;
+
+        let dot_flox_path = CanonicalPath::new(dot_flox_path).expect("the directory just created");
 
         Self::open(flox, pointer, dot_flox_path, temp_dir)
     }
@@ -595,18 +576,6 @@ mod tests {
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
         let pointer = PathPointer::new("test".parse().unwrap());
 
-        let before = PathEnvironment::open(
-            &flox,
-            pointer.clone(),
-            environment_temp_dir.path(),
-            temp_dir.path(),
-        );
-
-        assert!(
-            matches!(before, Err(EnvironmentError::EnvDirNotFound)),
-            "{before:?}"
-        );
-
         let actual = PathEnvironment::init(
             pointer,
             environment_temp_dir.path(),
@@ -618,7 +587,7 @@ mod tests {
         .unwrap();
 
         let expected = PathEnvironment::new(
-            environment_temp_dir.into_path().join(".flox"),
+            CanonicalPath::new(environment_temp_dir.path().join(DOT_FLOX)).unwrap(),
             PathPointer::new("test".parse().unwrap()),
             temp_dir.path(),
         )

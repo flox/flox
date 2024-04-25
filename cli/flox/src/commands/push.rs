@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
+use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::{EnvironmentOwner, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
     ManagedEnvironment,
@@ -57,6 +58,8 @@ impl Push {
         let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
         let dot_flox = DotFlox::open_default_in(dir)?;
+        let canonical_dot_flox_path =
+            CanonicalPath::new(&dot_flox.path).expect("DotFlox path was just opened");
 
         match dot_flox.pointer {
             EnvironmentPointer::Managed(managed_pointer) => {
@@ -93,7 +96,7 @@ impl Push {
                         Self::push_make_managed(
                             &flox,
                             path_pointer,
-                            &dot_flox.path,
+                            canonical_dot_flox_path,
                             owner,
                             self.force,
                         )
@@ -124,7 +127,7 @@ impl Push {
     fn push_make_managed(
         flox: &Flox,
         path_pointer: PathPointer,
-        dot_flox_path: &Path,
+        dot_flox_path: CanonicalPath,
         owner: EnvironmentOwner,
         force: bool,
     ) -> Result<ManagedEnvironment> {

@@ -75,10 +75,11 @@ impl Install {
             Err(EnvironmentSelectError::Environment(
                 ref e @ EnvironmentError::DotFloxNotFound(ref dir),
             )) => {
+                let parent = dir.parent().unwrap_or(dir).display();
                 bail!(formatdoc! {"
                 {e}
 
-                Create an environment with 'flox init --dir {}'", dir.to_string_lossy()
+                Create an environment with 'flox init --dir {parent}'"
                 })
             },
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
