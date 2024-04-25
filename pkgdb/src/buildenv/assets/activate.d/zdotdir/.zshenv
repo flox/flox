@@ -24,5 +24,11 @@ then
     fi
 fi
 
-# Bring in the Nix and Flox environment customizations.
-[ -z "$FLOX_ZSH_INIT_SCRIPT" ] || source "$FLOX_ZSH_INIT_SCRIPT"
+# Bring in the Nix and Flox environment customizations, but _not_ if this is an
+# interactive shell. If the shell is interactive then the neighbouring .zshrc file
+# will be sourced after this one, and we want to delay processing of the flox
+# init script to the last possible moment so that no other "rc" files have an
+# opportunity to perturb variables after we have set them.
+[[ -o interactive ]] || \
+  [ -z "$FLOX_ZSH_INIT_SCRIPT" ] || \
+    source "$FLOX_ZSH_INIT_SCRIPT"

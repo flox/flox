@@ -253,6 +253,47 @@ env_is_activated() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=activate,activate:once
+@test "activate runs hook and profile scripts only once" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+
+  echo '# Testing non-interactive bash' >&2
+  FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate -- :
+  assert_success
+  refute_output --partial "ERROR"
+  assert_output --partial "sourcing hook.on-activate for first time"
+  assert_output --partial "sourcing profile.bash for first time"
+  refute_output --partial "sourcing profile.zsh for first time"
+
+  echo '# Testing interactive bash' >&2
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR"
+  assert_success
+  refute_output --partial "ERROR"
+  assert_output --partial "sourcing hook.on-activate for first time"
+  assert_output --partial "sourcing profile.bash for first time"
+  refute_output --partial "sourcing profile.zsh for first time"
+
+  echo '# Testing non-interactive zsh' >&2
+  FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate -- :
+  assert_success
+  refute_output --partial "ERROR"
+  assert_output --partial "sourcing hook.on-activate for first time"
+  refute_output --partial "sourcing profile.bash for first time"
+  assert_output --partial "sourcing profile.zsh for first time"
+
+  echo '# Testing interactive zsh' >&2
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$PROJECT_DIR"
+  assert_success
+  refute_output --partial "ERROR"
+  assert_output --partial "sourcing hook.on-activate for first time"
+  refute_output --partial "sourcing profile.bash for first time"
+  assert_output --partial "sourcing profile.zsh for first time"
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=activate,activate:rc:bash
 @test "bash: activate respects ~/.bashrc" {
   echo "alias test_alias='echo testing'" > "$HOME/.bashrc"
