@@ -25,24 +25,17 @@ pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Er
     }
 
     // if $_FLOX_USE_CATALOG_MOCK is set to a path to mock data, use the mock client
-    let mock_data_path = if let Ok(path_str) = std::env::var(FLOX_CATALOG_MOCK_DATA_VAR) {
+    if let Ok(path_str) = std::env::var(FLOX_CATALOG_MOCK_DATA_VAR) {
         let path = PathBuf::from(path_str);
-        if path.exists() {
-            Some(path)
-        } else {
+        if !path.exists() {
             bail!("path to mock data file doesn't exist: {}", path.display());
         }
-    } else {
-        None
-    };
-    if mock_data_path.is_some() {
+
         debug!(
-            mock_data_path = mock_data_path.clone().map(|p| traceable_path(&p)),
+            mock_data_path = traceable_path(&path),
             "using mock catalog client"
         );
-        Ok(Some(Client::Mock(MockClient::new(
-            mock_data_path.as_ref(),
-        )?)))
+        Ok(Some(Client::Mock(MockClient::new(Some(path))?)))
     } else {
         debug!("using production catalog client");
         Ok(Some(Client::Catalog(CatalogClient::default())))
