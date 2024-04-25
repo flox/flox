@@ -52,8 +52,4 @@ impl CanonicalPath {
     pub fn parent(inst: &CanonicalPath) -> Option<Self> {
         inst.0.parent().map(Self::new_unchecked)
     }
-
-    pub fn join(inst: &CanonicalPath, path: impl AsRef<Path>) -> Self {
-        Self::new_unchecked(inst.0.join(path))
-    }
 }
