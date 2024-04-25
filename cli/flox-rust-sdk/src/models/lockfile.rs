@@ -137,17 +137,19 @@ impl ToString for LockedManifest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedManifestCatalog {
     #[serde(rename = "lockfile-version")]
-    pub(crate) version: Version<1>,
+    pub version: Version<1>,
     /// original manifest that was locked
-    pub(crate) manifest: TypedManifestCatalog,
+    pub manifest: TypedManifestCatalog,
     /// locked pacakges
-    pub(crate) packages: Vec<LockedPackageCatalog>,
+    pub packages: Vec<LockedPackageCatalog>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct LockedPackageCatalog {
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct LockedPackageCatalog {
     // region: original fields from the service
     // These fields are copied from the generated struct.
     pub attr_path: String,
@@ -160,7 +162,9 @@ pub(crate) struct LockedPackageCatalog {
     pub pname: String,
     pub rev: String,
     pub rev_count: i64,
+    #[cfg_attr(test, proptest(strategy = "crate::utils::proptest_chrono_strategy()"))]
     pub rev_date: chrono::DateTime<chrono::offset::Utc>,
+    #[cfg_attr(test, proptest(strategy = "crate::utils::proptest_chrono_strategy()"))]
     pub scrape_date: chrono::DateTime<chrono::offset::Utc>,
     pub stabilities: Vec<String>,
     pub unfree: bool,
