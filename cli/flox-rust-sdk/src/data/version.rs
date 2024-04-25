@@ -1,9 +1,10 @@
 use std::fmt::Debug;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, JsonSchema)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Version<const V: u8>;
 

@@ -1,4 +1,5 @@
 use indexmap::IndexMap;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -131,7 +132,7 @@ impl ToString for LockedManifest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct LockedManifestCatalog {
     #[serde(rename = "lockfile-version")]
     version: Version<1>,
@@ -141,7 +142,7 @@ pub struct LockedManifestCatalog {
     packages: Vec<LockedPackageCatalog>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub(super) struct LockedPackageCatalog {
     // region: original fields from the service
     // These fields are copied from the generated struct.
@@ -623,5 +624,11 @@ mod tests {
                 .as_deref(),
             None
         );
+    }
+
+    #[test]
+    fn schema() {
+        let schema = schemars::schema_for!(LockedManifestCatalog);
+        println!("{}", serde_json::to_string_pretty(&schema).unwrap());
     }
 }

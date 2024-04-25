@@ -37,6 +37,8 @@ url.workspace = true
 uuid.workspace = true
 walkdir.workspace = true
 
+schemars = {version = "0.8", features = ["chrono", "indexmap2"]}
+
 [dev-dependencies]
 anyhow.workspace = true
 pretty_assertions.workspace = true

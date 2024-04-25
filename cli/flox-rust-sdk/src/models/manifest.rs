@@ -3,6 +3,7 @@ use std::process::Command;
 use std::str::FromStr;
 
 use log::debug;
+use schemars::JsonSchema;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use toml_edit::{self, DocumentMut, Formatted, InlineTable, Item, Table, Value};
@@ -83,7 +84,7 @@ enum TypedManifest {
 
 /// Not meant for writing manifest files, only for reading them.
 /// Modifications should be made using the the raw functions in this module.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub(super) struct TypedManifestCatalog {
     version: Version<1>,
     /// The packages to install in the form of a map from package name
@@ -105,10 +106,10 @@ pub(super) struct TypedManifestCatalog {
     options: ManifestOptions,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, derive_more::Deref)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, derive_more::Deref, JsonSchema)]
 pub(super) struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub(super) struct ManifestPackageDescriptor {
     pub(super) pkg_path: String,
@@ -120,10 +121,10 @@ pub(super) struct ManifestPackageDescriptor {
     pub(super) optional: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 pub(super) struct ManifestVariables(BTreeMap<String, String>);
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub(super) struct ManifestHook {
     /// A script that is run at activation time,
@@ -131,7 +132,7 @@ pub(super) struct ManifestHook {
     on_activate: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 pub(super) struct ManifestProfile {
     /// When defined, this hook is run by _all_ shells upon activation
     common: Option<String>,
@@ -143,7 +144,7 @@ pub(super) struct ManifestProfile {
     fish: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub(super) struct ManifestOptions {
     /// A list of systems that each package is resolved for.
@@ -157,7 +158,7 @@ pub(super) struct ManifestOptions {
     semver: SemverOptions,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 pub(super) struct Allows {
     /// Whether to allow packages that are marked as `unfree`
     unfree: Option<bool>,
@@ -168,7 +169,7 @@ pub(super) struct Allows {
     licenses: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, JsonSchema)]
 pub(super) struct SemverOptions {
     /// Whether to prefer pre-release versions when resolving
     #[serde(default)]

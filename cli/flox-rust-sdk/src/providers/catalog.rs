@@ -563,11 +563,17 @@ pub struct CatalogPage {
 }
 
 impl From<api_types::CatalogPage> for CatalogPage {
-    fn from(catalog_page: api_types::CatalogPage) -> Self {
+    fn from(
+        api_types::CatalogPage {
+            packages,
+            page,
+            url,
+        }: api_types::CatalogPage,
+    ) -> Self {
         Self {
-            packages: catalog_page.packages,
-            page: catalog_page.page,
-            url: catalog_page.url,
+            packages,
+            page,
+            url,
         }
     }
 }

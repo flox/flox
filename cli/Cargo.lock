@@ -731,6 +731,7 @@ dependencies = [
  "proptest",
  "proptest-derive",
  "reqwest 0.11.27",
+ "schemars",
  "serde",
  "serde_json",
  "serde_with",
@@ -2398,6 +2399,7 @@ checksum = "45a28f4c49489add4ce10783f7911893516f15afe45d015608d41faca6bc4d29"
 dependencies = [
  "chrono",
  "dyn-clone",
+ "indexmap 2.2.6",
  "schemars_derive",
  "serde",
  "serde_json",
