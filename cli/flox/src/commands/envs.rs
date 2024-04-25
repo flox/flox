@@ -79,7 +79,7 @@ impl Envs {
             return Ok(());
         }
 
-        message::plain("Active environments:");
+        message::created("Active environments:");
         let envs =
             indent::indent_all_by(2, DisplayEnvironments::new(active.iter(), true).to_string());
         println!("{envs}");
@@ -116,7 +116,7 @@ impl Envs {
         }
 
         if active.iter().next().is_some() {
-            message::plain("Active environments:");
+            message::created("Active environments:");
             let envs =
                 indent::indent_all_by(2, DisplayEnvironments::new(active.iter(), true).to_string());
             println!("{envs}");
