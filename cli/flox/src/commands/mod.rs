@@ -88,8 +88,9 @@ static FLOX_DESCRIPTION: &'_ str = indoc! {"
     making them portable across the full software lifecycle."
 };
 
+/// Manually documented commands that are to keep the help text short
 const ADDITIONAL_COMMANDS: &str = indoc! {"
-    update, upgrade, config, auth
+    auth, config, envs, update, upgrade
 "};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
