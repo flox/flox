@@ -80,7 +80,10 @@ impl Envs {
         }
 
         message::plain("Active environments:");
-        println!("{}", DisplayEnvironments::new(active.iter(), true));
+        let envs =
+            indent::indent_all_by(2, DisplayEnvironments::new(active.iter(), true).to_string());
+        println!("{envs}");
+
         Ok(())
     }
 
@@ -114,12 +117,18 @@ impl Envs {
 
         if active.iter().next().is_some() {
             message::plain("Active environments:");
-            println!("{}", DisplayEnvironments::new(active.iter(), true));
+            let envs =
+                indent::indent_all_by(2, DisplayEnvironments::new(active.iter(), true).to_string());
+            println!("{envs}");
         }
 
         if !inactive.is_empty() {
             message::plain("Inactive environments:");
-            println!("{}", DisplayEnvironments::new(inactive.iter(), false));
+            let envs = indent::indent_all_by(
+                2,
+                DisplayEnvironments::new(inactive.iter(), false).to_string(),
+            );
+            println!("{envs}");
         }
 
         Ok(())
