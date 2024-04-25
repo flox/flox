@@ -135,13 +135,13 @@ impl Envs {
     }
 }
 
-struct DisplayEnvironments<'a> {
+pub(crate) struct DisplayEnvironments<'a> {
     envs: Vec<&'a UninitializedEnvironment>,
     format_active: bool,
 }
 
 impl<'a> DisplayEnvironments<'a> {
-    fn new(
+    pub(crate) fn new(
         envs: impl IntoIterator<Item = &'a UninitializedEnvironment>,
         format_active: bool,
     ) -> Self {
