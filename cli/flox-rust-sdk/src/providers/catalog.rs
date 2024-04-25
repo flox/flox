@@ -106,10 +106,16 @@ pub struct CatalogClient {
 }
 
 impl CatalogClient {
-    pub fn new() -> Self {
+    pub fn new(baseurl: &str) -> Self {
         Self {
-            client: APIClient::new(DEFAULT_CATALOG_URL),
+            client: APIClient::new(baseurl),
         }
+    }
+}
+
+impl Default for CatalogClient {
+    fn default() -> Self {
+        Self::new(DEFAULT_CATALOG_URL)
     }
 }
 
@@ -163,12 +169,6 @@ impl MockClient {
     }
 }
 
-impl Default for CatalogClient {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[async_trait]
 #[enum_dispatch]
 pub trait ClientTrait {
@@ -213,12 +213,9 @@ impl ClientTrait for CatalogClient {
             .client
             .resolve_api_v1_catalog_resolve_post(&package_groups)
             .await
-            .map_err(|e| {
-                if CatalogClientError::is_unexpected_error(&e) {
-                    CatalogClientError::UnexpectedError(e).into()
-                } else {
-                    ResolveError::Resolve(e)
-                }
+            .map_err(|e| match e {
+                APIError::ErrorResponse(e) => ResolveError::Resolve(e),
+                _ => CatalogClientError::UnexpectedError(e).into(),
             })?;
 
         let resolved_package_groups = response.into_inner();
@@ -251,12 +248,9 @@ impl ClientTrait for CatalogClient {
                     .map_err(CatalogClientError::UnsupportedSystem)?,
             )
             .await
-            .map_err(|e| {
-                if CatalogClientError::is_unexpected_error(&e) {
-                    CatalogClientError::UnexpectedError(e).into()
-                } else {
-                    SearchError::Search(e)
-                }
+            .map_err(|e| match e {
+                APIError::ErrorResponse(e) => SearchError::Search(e),
+                _ => CatalogClientError::UnexpectedError(e).into(),
             })?;
 
         let api_search_result = response.into_inner();
@@ -293,12 +287,9 @@ impl ClientTrait for CatalogClient {
                         Some(page_size),
                     )
                     .await
-                    .map_err(|e| {
-                        if CatalogClientError::is_unexpected_error(&e) {
-                            CatalogClientError::UnexpectedError(e).into()
-                        } else {
-                            VersionsError::Versions(e)
-                        }
+                    .map_err(|e| match e {
+                        APIError::ErrorResponse(e) => VersionsError::Versions(e),
+                        _ => CatalogClientError::UnexpectedError(e).into(),
                     })?;
 
                 let packages = response.into_inner();
@@ -378,10 +369,10 @@ impl ClientTrait for MockClient {
                 panic!("found search response, expect resolve response");
             },
             Some(Response::Error(err)) => {
-                return Err(ResolveError::Resolve(APIError::ErrorResponse(
+                return Err(ResolveError::Resolve(
                     err.try_into()
                         .expect("couldn't convert mock error response"),
-                )));
+                ));
             },
             None => {
                 panic!("expected mock response, found nothing");
@@ -408,10 +399,10 @@ impl ClientTrait for MockClient {
                 panic!("found resolve response, expect search response");
             },
             Some(Response::Error(err)) => {
-                return Err(SearchError::Search(APIError::ErrorResponse(
+                return Err(SearchError::Search(
                     err.try_into()
                         .expect("couldn't convert mock error response"),
-                )));
+                ));
             },
             None => {
                 panic!("expected mock response, found nothing");
@@ -436,10 +427,10 @@ impl ClientTrait for MockClient {
                 panic!("found resolve response, expect search response");
             },
             Some(Response::Error(err)) => {
-                return Err(VersionsError::Versions(APIError::ErrorResponse(
+                return Err(VersionsError::Versions(
                     err.try_into()
                         .expect("couldn't convert mock error response"),
-                )));
+                ));
             },
             None => {
                 panic!("expected mock response, found nothing");
@@ -463,8 +454,6 @@ pub struct PackageGroup {
 pub enum CatalogClientError {
     #[error("system not supported by catalog")]
     UnsupportedSystem(#[source] api_error::ConversionError),
-    // TODO: would be nicer if this contained a ResponseValue<api_types::ErrorResponse>,
-    // but that doesn't implement the necessary traits.
     /// UnexpectedError corresponds to any variant of APIError other than
     /// ErrorResponse, which is the only error that is in the API schema.
     #[error("unexpected catalog connection error")]
@@ -475,10 +464,8 @@ pub enum CatalogClientError {
 
 #[derive(Debug, Error)]
 pub enum SearchError {
-    // TODO: would be nicer if this contained a ResponseValue<api_types::ErrorResponse>,
-    // but that doesn't implement the necessary traits.
-    #[error("search failed")]
-    Search(#[source] APIError<api_types::ErrorResponse>),
+    #[error("search failed: {}", fmt_info(_0))]
+    Search(ResponseValue<api_types::ErrorResponse>),
     #[error("invalid search term")]
     InvalidSearchTerm(#[source] api_error::ConversionError),
     #[error("encountered attribute path with less than 3 elements: {0}")]
@@ -489,28 +476,29 @@ pub enum SearchError {
 
 #[derive(Debug, Error)]
 pub enum ResolveError {
-    #[error("resolution failed")]
-    Resolve(#[source] APIError<api_types::ErrorResponse>),
+    #[error("resolution failed: {}", fmt_info(_0))]
+    Resolve(ResponseValue<api_types::ErrorResponse>),
     #[error(transparent)]
     CatalogClientError(#[from] CatalogClientError),
 }
-
 #[derive(Debug, Error)]
 pub enum VersionsError {
-    // TODO: would be nicer if this contained a ResponseValue<api_types::ErrorResponse>,
-    // but that doesn't implement the necessary traits.
-    #[error("getting package versions failed")]
-    Versions(#[source] APIError<api_types::ErrorResponse>),
+    #[error("getting package versions failed: {}", fmt_info(_0))]
+    Versions(ResponseValue<api_types::ErrorResponse>),
     #[error(transparent)]
     CatalogClientError(#[from] CatalogClientError),
 }
 
-impl CatalogClientError {
-    /// UnexpectedError corresponds to any variant of APIError other than
-    /// ErrorResponse, which is the only error that is in the API schema.
-    fn is_unexpected_error(error: &APIError<api_types::ErrorResponse>) -> bool {
-        !matches!(error, APIError::ErrorResponse(_))
-    }
+/// TODO: I copied this from the fmt_info function used by the Display impl of
+/// APIError.
+/// We should find something cleaner.
+fn fmt_info(error_response: &ResponseValue<api_types::ErrorResponse>) -> String {
+    format!(
+        "status: {}; headers: {:?}; value: {:?}",
+        error_response.status(),
+        error_response.headers(),
+        error_response.as_ref()
+    )
 }
 
 impl TryFrom<PackageGroup> for api_types::PackageGroup {

@@ -36,6 +36,9 @@ pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Er
             "using mock catalog client"
         );
         Ok(Some(Client::Mock(MockClient::new(Some(path))?)))
+    } else if let Some(ref catalog_url) = config.flox.catalog_url {
+        debug!("using catalog client with url: {}", catalog_url);
+        Ok(Some(Client::Catalog(CatalogClient::new(catalog_url))))
     } else {
         debug!("using production catalog client");
         Ok(Some(Client::Catalog(CatalogClient::default())))
