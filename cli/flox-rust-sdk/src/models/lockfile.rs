@@ -42,7 +42,7 @@ pub struct Registry {
     _json: Value,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize /* , Deserialize implemented manually */)]
 #[serde(untagged)]
 pub enum LockedManifest {
     Catalog(LockedManifestCatalog),
@@ -136,7 +136,7 @@ impl ToString for LockedManifest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedManifestCatalog {
     #[serde(rename = "lockfile-version")]
@@ -147,7 +147,7 @@ pub struct LockedManifestCatalog {
     pub packages: Vec<LockedPackageCatalog>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedPackageCatalog {
     // region: original fields from the service

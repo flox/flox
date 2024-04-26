@@ -452,7 +452,7 @@ impl ClientTrait for MockClient {
 /// we need.
 pub type PackageDescriptor = api_types::PackageDescriptor;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct PackageGroup {
     pub descriptors: Vec<PackageDescriptor>,
     pub name: String,
@@ -529,7 +529,7 @@ impl TryFrom<PackageGroup> for api_types::PackageGroup {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedPackageGroup {
     pub name: String,
     pub pages: Vec<CatalogPage>,

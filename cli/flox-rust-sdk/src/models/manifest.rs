@@ -38,7 +38,7 @@ impl RawManifest {
     ///
     /// Discussion: using a string field as the version tag `version: "1"` vs `version: 1`
     /// could work today, but is still limited by the lack of an optional tag.
-    fn to_typed(&self) -> Result<TypedManifest, toml_edit::de::Error> {
+    pub fn to_typed(&self) -> Result<TypedManifest, toml_edit::de::Error> {
         match self.get_version() {
             Some(1) => Ok(TypedManifest::Catalog(toml_edit::de::from_document(
                 self.0.clone(),
