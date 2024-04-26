@@ -1166,7 +1166,7 @@ makeActivationScripts( nix::EvalState & state, resolver::Lockfile & lockfile )
     {
       // [hook.script] is deprecated, in favor of [profile.*].  For now we will
       // allow it.
-      // TODO: remove, print a warning in the meantime??
+      // TODO: print a warning??
       if ( hook->script.has_value() )
         {
           debugLog( "adding 'hook.script' to activation scripts" );
