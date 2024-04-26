@@ -152,7 +152,9 @@ bool
 test_scriptsAreAddedToScriptsDir( nix::ref<nix::EvalState> & state,
                                   flox::resolver::Lockfile & lockfile )
 {
-  auto output     = flox::buildenv::makeActivationScripts( *state, lockfile );
+  auto output
+    = flox::buildenv::makeActivationScripts( *state,
+                                             lockfile.getLockfileRaw() );
   auto scriptsDir = std::filesystem::path( output.first.path )
                     / flox::buildenv::ACTIVATION_SUBDIR_NAME;
   std::vector<std::string> scripts
@@ -173,7 +175,9 @@ bool
 test_scriptsAreSourcedOrCalled( nix::ref<nix::EvalState> & state,
                                 flox::resolver::Lockfile & lockfile )
 {
-  auto output     = flox::buildenv::makeActivationScripts( *state, lockfile );
+  auto output
+    = flox::buildenv::makeActivationScripts( *state,
+                                             lockfile.getLockfileRaw() );
   auto scriptsDir = std::filesystem::path( output.first.path )
                     / flox::buildenv::ACTIVATION_SUBDIR_NAME;
   std::vector<std::string> shells         = { "bash", "zsh" };
