@@ -315,9 +315,9 @@ getRealisedPackages( nix::ref<nix::EvalState> &         state,
  * @return `StorePath` to the environment.
  */
 nix::StorePath
-createFloxEnv( nix::ref<nix::EvalState> & state,
-               resolver::LockfileRaw &    lockfile,
-               const System &             system );
+createFloxEnv( nix::ref<nix::EvalState> &    state,
+               const resolver::LockfileRaw & lockfile,
+               const System &                system );
 
 
 /* -------------------------------------------------------------------------- */
@@ -369,7 +369,8 @@ createContainerBuilder( nix::EvalState &       state,
  * scripts.
  */
 std::pair<buildenv::RealisedPackage, nix::StorePathSet>
-makeActivationScripts( nix::EvalState & state, const resolver::LockfileRaw & lockfile );
+makeActivationScripts( nix::EvalState &              state,
+                       const resolver::LockfileRaw & lockfile );
 
 
 /* -------------------------------------------------------------------------- */

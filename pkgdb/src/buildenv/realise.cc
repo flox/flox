@@ -199,7 +199,8 @@ createEnvironmentStorePath(
  * @return List of locked packages for the given system paired with their id.
  */
 static std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
-getLockedPackages( resolver::LockfileRaw & lockfile, const System & system )
+getLockedPackages( const resolver::LockfileRaw & lockfile,
+                   const System &                system )
 {
   traceLog( "creating FloxEnv" );
   auto packages = lockfile.packages.find( system );
@@ -691,7 +692,7 @@ appendBashCalledScript( const std::string & scriptName,
 /* -------------------------------------------------------------------------- */
 
 std::pair<buildenv::RealisedPackage, nix::StorePathSet>
-makeActivationScripts( nix::EvalState &        state,
+makeActivationScripts( nix::EvalState &              state,
                        const resolver::LockfileRaw & lockfile )
 {
   std::vector<nix::StorePath> activationScripts;
@@ -841,9 +842,9 @@ makeProfileDScripts( nix::EvalState & state )
  * @return The store path of the environment.
  */
 nix::StorePath
-createFloxEnv( nix::ref<nix::EvalState> & state,
-               resolver::LockfileRaw &    lockfile,
-               const System &             system )
+createFloxEnv( nix::ref<nix::EvalState> &    state,
+               const resolver::LockfileRaw & lockfile,
+               const System &                system )
 {
   auto locked_packages = getLockedPackages( lockfile, system );
 
