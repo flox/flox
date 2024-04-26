@@ -158,6 +158,7 @@
           # shellcheck.enable = true; # disabled until we have time to fix all the warnings
         };
         settings = {
+          clippy.denyWarnings = true;
           alejandra.verbosity = "quiet";
           rust.cargoManifestPath = "cli/Cargo.toml";
         };
