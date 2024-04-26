@@ -1,0 +1,20 @@
+# Activate a project environment using --dir and check an alias is loaded from
+# ~/.bashrc
+
+set dir [lindex $argv 0]
+set flox $env(FLOX_BIN)
+
+set timeout 3
+spawn $flox activate --dir $dir
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
+  "*\r" { exp_continue }
+}
+
+expect -re "flox .*\\\[name\\\] \\\(python\\\)" {}
+# expect -re "(python) " {}
+send "type activate || exit 1\r"
+send "type deactivate || exit 1\r"
+expect eof
