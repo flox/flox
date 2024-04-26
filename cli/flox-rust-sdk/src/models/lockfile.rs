@@ -1213,6 +1213,75 @@ mod tests {
         assert_eq!(actual_params, expected_params);
     }
 
+    #[test]
+    fn ungroup_response() {
+        let groups = vec![ResolvedPackageGroup {
+            system: "system".to_string(),
+            pages: vec![CatalogPage {
+                page: 1,
+                url: "url".to_string(),
+                packages: vec![PackageResolutionInfo {
+                    attr_path: "hello".to_string(),
+                    broken: false,
+                    derivation: "derivation".to_string(),
+                    description: "description".to_string(),
+                    license: "license".to_string(),
+                    locked_url: "locked_url".to_string(),
+                    name: "hello".to_string(),
+                    outputs: vec![Output {
+                        name: "name".to_string(),
+                        store_path: "store_path".to_string(),
+                    }],
+                    outputs_to_install: vec!["name".to_string()],
+                    pname: "pname".to_string(),
+                    rev: "rev".to_string(),
+                    rev_count: 1,
+                    rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::offset::Utc),
+                    scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::offset::Utc),
+                    stabilities: vec!["stability".to_string()],
+                    unfree: false,
+                    version: "version".to_string(),
+                }],
+            }],
+            name: "group".to_string(),
+        }];
+
+        let locked_packages =
+            LockedManifestCatalog::locked_packages_from_resolution(groups).collect::<Vec<_>>();
+
+        assert_eq!(locked_packages.len(), 1);
+        assert_eq!(&locked_packages[0], &LockedPackageCatalog {
+            attr_path: "hello".to_string(),
+            broken: false,
+            derivation: "derivation".to_string(),
+            description: "description".to_string(),
+            license: "license".to_string(),
+            locked_url: "locked_url".to_string(),
+            name: "hello".to_string(),
+            outputs: vec![("name".to_string(), "store_path".to_string())]
+                .into_iter()
+                .collect(),
+            outputs_to_install: vec!["name".to_string()],
+            pname: "pname".to_string(),
+            rev: "rev".to_string(),
+            rev_count: 1,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            stabilities: vec!["stability".to_string()],
+            unfree: false,
+            version: "version".to_string(),
+            system: "system".to_string(),
+        });
+    }
+
     #[tokio::test]
     async fn test_locking_1() {
         let manifest = &*TEST_TYPED_MANIFEST;
