@@ -22,7 +22,10 @@ setup_file() {
 setup() {
   common_test_setup
   export FLOX_FEATURES_USE_CATALOG=true
-  export FLOX_CATALOG_URL="https://flox-catalog.flox.dev"
+  if [ -z "${TESTING_FLOX_CATALOG_URL:-}" ]; then
+    skip "TESTING_FLOX_CATALOG_URL is not set"
+  fi
+  export FLOX_CATALOG_URL="$TESTING_FLOX_CATALOG_URL"
 }
 
 teardown() {

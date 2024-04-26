@@ -165,6 +165,7 @@ jobs:
         env:
           RUST_BACKTRACE: 1
           AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.MANAGED_AUTH0_FLOX_DEV_CLIENT_SECRET }}"
+          TESTING_FLOX_CATALOG_URL: "${{ secrets.MANAGED_TESTING_FLOX_CATALOG_URL }}"
         run: nix develop -L --no-update-lock-file --command just functional-tests
 
   nix-build:
