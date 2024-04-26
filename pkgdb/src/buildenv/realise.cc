@@ -228,7 +228,7 @@ else
   # If we're attempting to launch an interactive shell then just print a
   # message to say that the environment has already been activated.
   if [ -t 1 ] && [ $# -eq 0 ]; then
-    echo "ERROR: Flox environment already activated: $FLOX_ENV" >&2
+    echo "ERROR: Environment '$FLOX_ENV_DESCRIPTION' is already active." >&2
     exit 1
   fi
 
