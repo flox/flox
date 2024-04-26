@@ -181,6 +181,64 @@ pub struct LockedPackageCatalog {
     // endregion
 }
 
+impl LockedPackageCatalog {
+    /// Convert a [catalog::PackageResolutionInfo] response into a [LockedPackageCatalog]
+    /// and add fold in the system field of the containing group.
+    ///
+    /// There may be more validation/parsing we could do here in the future.
+    pub fn from_resolution_info_for_system(
+        package: catalog::PackageResolutionInfo,
+        system: System,
+    ) -> Self {
+        // unpack package to avoid missing new fields
+        let catalog::PackageResolutionInfo {
+            attr_path,
+            broken,
+            derivation,
+            description,
+            license,
+            locked_url,
+            name,
+            outputs,
+            outputs_to_install,
+            pname,
+            rev,
+            rev_count,
+            rev_date,
+            scrape_date,
+            stabilities,
+            unfree,
+            version,
+        } = package;
+
+        let outputs = outputs
+            .into_iter()
+            .map(|output| (output.name, output.store_path))
+            .collect();
+
+        LockedPackageCatalog {
+            attr_path,
+            broken,
+            derivation,
+            description,
+            license,
+            locked_url,
+            name,
+            outputs,
+            outputs_to_install,
+            pname,
+            rev,
+            rev_count,
+            rev_date,
+            scrape_date,
+            stabilities,
+            unfree,
+            version,
+            system,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LockedGroup {
     /// name of the group
@@ -358,55 +416,10 @@ impl LockedManifestCatalog {
                 .flat_map(|page| page.packages.into_iter())
                 .map(move |package| {
                     // unpack package to avoid missing new fields
-                    let catalog::PackageResolutionInfo {
-                        attr_path,
-                        broken,
-                        derivation,
-                        description,
-                        license,
-                        locked_url,
-                        name,
-                        outputs,
-                        outputs_to_install,
-                        pname,
-                        rev,
-                        rev_count,
-                        rev_date,
-                        scrape_date,
-                        stabilities,
-                        unfree,
-                        version,
-                    } = package;
-
-                    // todo: server might be able to define otputs as strings directly
-                    // todo: comsider adding an intermediate type in the catalog module to handle conversion to strings
-                    let outputs = outputs
-                        .into_iter()
-                        .map(|output| (output.name, output.store_path))
-                        .collect();
-
-                    let outputs_to_install = outputs_to_install.into_iter().collect();
-
-                    LockedPackageCatalog {
-                        attr_path,
-                        broken,
-                        derivation,
-                        description,
-                        license,
-                        locked_url,
-                        name,
-                        outputs,
-                        outputs_to_install,
-                        pname,
-                        rev,
-                        rev_count,
-                        rev_date,
-                        scrape_date,
-                        stabilities,
-                        unfree,
-                        version,
-                        system: group.system.clone(),
-                    }
+                    LockedPackageCatalog::from_resolution_info_for_system(
+                        package,
+                        group.system.clone(),
+                    )
                 })
         })
     }
@@ -1257,35 +1270,17 @@ mod tests {
         }];
 
         let locked_packages =
-            LockedManifestCatalog::locked_packages_from_resolution(groups).collect::<Vec<_>>();
+            LockedManifestCatalog::locked_packages_from_resolution(groups.clone())
+                .collect::<Vec<_>>();
 
         assert_eq!(locked_packages.len(), 1);
-        assert_eq!(&locked_packages[0], &LockedPackageCatalog {
-            attr_path: "hello".to_string(),
-            broken: false,
-            derivation: "derivation".to_string(),
-            description: "description".to_string(),
-            license: "license".to_string(),
-            locked_url: "locked_url".to_string(),
-            name: "hello".to_string(),
-            outputs: vec![("name".to_string(), "store_path".to_string())]
-                .into_iter()
-                .collect(),
-            outputs_to_install: vec!["name".to_string()],
-            pname: "pname".to_string(),
-            rev: "rev".to_string(),
-            rev_count: 1,
-            rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
-                .unwrap()
-                .with_timezone(&chrono::offset::Utc),
-            scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
-                .unwrap()
-                .with_timezone(&chrono::offset::Utc),
-            stabilities: vec!["stability".to_string()],
-            unfree: false,
-            version: "version".to_string(),
-            system: "system".to_string(),
-        });
+        assert_eq!(
+            &locked_packages[0],
+            &LockedPackageCatalog::from_resolution_info_for_system(
+                groups[0].pages[0].packages[0].clone(),
+                groups[0].system.clone()
+            )
+        );
     }
 
     #[tokio::test]
