@@ -177,7 +177,7 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
 #[cfg(test)]
 mod test {
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::providers::catalog::{ApiErrorResponse, Client};
+    use flox_rust_sdk::providers::catalog::{Client, ApiErrorResponse};
 
     use super::*;
 
@@ -188,7 +188,7 @@ mod test {
             panic!()
         };
         client.push_error_response(
-            api_types::ErrorResponse {
+            ApiErrorResponse {
                 detail: "detail".to_string(),
                 status_code: 404,
             },
