@@ -249,7 +249,7 @@ impl LockedManifestCatalog {
 
         // lock existing packages
 
-        let resolved = client.resolve(groups).await.unwrap();
+        let resolved = client.resolve(groups).await?;
 
         let locked_packages = Self::locked_packages_from_resolution(resolved).collect();
 
@@ -870,7 +870,7 @@ mod tests {
                     description: "description".to_string(),
                     license: "license".to_string(),
                     locked_url: "locked_url".to_string(),
-                    name: "name".to_string(),
+                    name: "hello".to_string(),
                     outputs: vec![Output {
                         name: "name".to_string(),
                         store_path: "store_path".to_string(),
@@ -905,7 +905,7 @@ mod tests {
                 description: "description".to_string(),
                 license: "license".to_string(),
                 locked_url: "locked_url".to_string(),
-                name: "name".to_string(),
+                name: "hello".to_string(),
                 outputs: vec![("name".to_string(), "store_path".to_string())]
                     .into_iter()
                     .collect(),
@@ -928,12 +928,289 @@ mod tests {
     });
 
     #[test]
-    fn resolve_params() {
+    fn make_params_smoke() {
         let manifest = &*TEST_TYPED_MANIFEST;
 
         let params = LockedManifestCatalog::collect_package_groups(manifest, Default::default())
             .collect::<Vec<_>>();
         assert_eq!(&params, &*TEST_RESOLUTION_PARAMS);
+    }
+
+    /// When `options.systems` defines multiple systems,
+    /// request groups for each system separately.
+    #[test]
+    fn make_params_multiple_systems() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            emacs.pkg-path = "emacs"
+
+            [options]
+            systems = ["system1", "system2"]
+        "#};
+        let manifest = toml::from_str(manifest_str).unwrap();
+
+        let expected_params = vec![
+            PackageGroup {
+                name: DEFAULT_GROUP_NAME.to_string(),
+                system: "system1".to_string(),
+                descriptors: vec![
+                    PackageDescriptor {
+                        name: "emacs".to_string(),
+                        pkg_path: "emacs".to_string(),
+                        derivation: None,
+                        semver: None,
+                        version: None,
+                    },
+                    PackageDescriptor {
+                        name: "vim".to_string(),
+                        pkg_path: "vim".to_string(),
+                        derivation: None,
+                        semver: None,
+                        version: None,
+                    },
+                ],
+            },
+            PackageGroup {
+                name: DEFAULT_GROUP_NAME.to_string(),
+                system: "system2".to_string(),
+                descriptors: vec![
+                    PackageDescriptor {
+                        name: "emacs".to_string(),
+                        pkg_path: "emacs".to_string(),
+                        derivation: None,
+                        semver: None,
+                        version: None,
+                    },
+                    PackageDescriptor {
+                        name: "vim".to_string(),
+                        pkg_path: "vim".to_string(),
+                        derivation: None,
+                        semver: None,
+                        version: None,
+                    },
+                ],
+            },
+        ];
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest, Default::default())
+                .collect::<Vec<_>>();
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    /// When `options.systems` defines multiple systems,
+    /// request groups for each system separately.
+    /// If a package specifies systems, use those instead.
+    #[test]
+    fn make_params_limit_systems() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            emacs.pkg-path = "emacs"
+            emacs.systems = ["system1"]
+
+            [options]
+            systems = ["system1", "system2"]
+        "#};
+        let manifest = toml::from_str(manifest_str).unwrap();
+
+        let expected_params = vec![
+            PackageGroup {
+                name: DEFAULT_GROUP_NAME.to_string(),
+                system: "system1".to_string(),
+                descriptors: vec![
+                    PackageDescriptor {
+                        name: "emacs".to_string(),
+                        pkg_path: "emacs".to_string(),
+                        derivation: None,
+                        semver: None,
+                        version: None,
+                    },
+                    PackageDescriptor {
+                        name: "vim".to_string(),
+                        pkg_path: "vim".to_string(),
+                        derivation: None,
+                        semver: None,
+                        version: None,
+                    },
+                ],
+            },
+            PackageGroup {
+                name: DEFAULT_GROUP_NAME.to_string(),
+                system: "system2".to_string(),
+                descriptors: vec![PackageDescriptor {
+                    name: "vim".to_string(),
+                    pkg_path: "vim".to_string(),
+                    derivation: None,
+                    semver: None,
+                    version: None,
+                }],
+            },
+        ];
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest, Default::default())
+                .collect::<Vec<_>>();
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    /// If a package specifies a system not in `options.systems`,
+    /// use those instead.
+    #[test]
+    fn make_params_override_systems() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            emacs.pkg-path = "emacs"
+            emacs.systems = ["system2"]
+
+            [options]
+            systems = ["system1",]
+        "#};
+        let manifest = toml::from_str(manifest_str).unwrap();
+
+        let expected_params = vec![
+            PackageGroup {
+                name: DEFAULT_GROUP_NAME.to_string(),
+                system: "system1".to_string(),
+                descriptors: vec![PackageDescriptor {
+                    name: "vim".to_string(),
+                    pkg_path: "vim".to_string(),
+                    derivation: None,
+                    semver: None,
+                    version: None,
+                }],
+            },
+            PackageGroup {
+                name: DEFAULT_GROUP_NAME.to_string(),
+                system: "system2".to_string(),
+                descriptors: vec![PackageDescriptor {
+                    name: "emacs".to_string(),
+                    pkg_path: "emacs".to_string(),
+                    derivation: None,
+                    semver: None,
+                    version: None,
+                }],
+            },
+        ];
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest, Default::default())
+                .collect::<Vec<_>>();
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    /// If packages specify different groups,
+    /// create request groups for each group.
+    #[test]
+    fn make_params_groups() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            vim.package-group = "group1"
+
+            emacs.pkg-path = "emacs"
+            emacs.package-group = "group2"
+
+            [options]
+            systems = ["system"]
+        "#};
+
+        let manifest = toml::from_str(manifest_str).unwrap();
+
+        let expected_params = vec![
+            PackageGroup {
+                name: "group1".to_string(),
+                system: "system".to_string(),
+                descriptors: vec![PackageDescriptor {
+                    name: "vim".to_string(),
+                    pkg_path: "vim".to_string(),
+                    derivation: None,
+                    semver: None,
+                    version: None,
+                }],
+            },
+            PackageGroup {
+                name: "group2".to_string(),
+                system: "system".to_string(),
+                descriptors: vec![PackageDescriptor {
+                    name: "emacs".to_string(),
+                    pkg_path: "emacs".to_string(),
+                    derivation: None,
+                    semver: None,
+                    version: None,
+                }],
+            },
+        ];
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest, Default::default())
+                .collect::<Vec<_>>();
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    #[test]
+    fn make_params_seeded() {
+        let mut manifest = TEST_TYPED_MANIFEST.clone();
+
+        // Add a package to the manifest that is not already locked
+        manifest
+            .install
+            .insert("unlocked".to_string(), ManifestPackageDescriptor {
+                pkg_path: "unlocked".to_string(),
+                package_group: Some("group".to_string()),
+                systems: None,
+                version: None,
+                priority: None,
+                optional: false,
+            });
+
+        let LockedManifest::Catalog(seed) = &*TEST_LOCKED_MANIFEST else {
+            panic!("Expected a catalog lockfile");
+        };
+        let seed_mapping = LockedManifestCatalog::make_seed_mapping(seed);
+
+        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, seed_mapping)
+            .collect::<Vec<_>>();
+
+        let expected_params = vec![PackageGroup {
+            name: "group".to_string(),
+            system: "system".to_string(),
+            descriptors: vec![
+                // 'hello' was already locked, so it should have a derivation
+                PackageDescriptor {
+                    name: "hello".to_string(),
+                    pkg_path: "hello".to_string(),
+                    derivation: Some("derivation".to_string()),
+                    semver: None,
+                    version: None,
+                },
+                // The unlocked package should not have a derivation
+                PackageDescriptor {
+                    name: "unlocked".to_string(),
+                    pkg_path: "unlocked".to_string(),
+                    derivation: None,
+                    semver: None,
+                    version: None,
+                },
+            ],
+        }];
+
+        assert_eq!(actual_params, expected_params);
     }
 
     #[tokio::test]

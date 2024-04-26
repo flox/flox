@@ -108,7 +108,16 @@ pub struct TypedManifestCatalog {
     pub(super) options: ManifestOptions,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, derive_more::Deref)]
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Default,
+    PartialEq,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 
