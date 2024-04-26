@@ -38,6 +38,8 @@
   massif-visualizer ? throw "`massif-visualizer' is required for memory profiling on Linux",
   substituteAll,
   symlinkJoin,
+  flox-activate,
+  flox-activate-d-scripts,
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
@@ -79,10 +81,9 @@
         joined;
 
       # Used by `buildenv' to set shell prompts on activation.
-      ACTIVATE_D_SCRIPTS_DIR = builtins.path {
-        name = "flox-activate.d";
-        path = ../../pkgdb/src/buildenv/assets/activate.d;
-      };
+      ACTIVATE_D_SCRIPTS_DIR = flox-activate-d-scripts;
+
+      ACTIVATION_SCRIPT = flox-activate;
 
       # Used by `buildenv --container' to create a container builder script.
       CONTAINER_BUILDER_PATH = builtins.path {
@@ -199,6 +200,7 @@ in
           envs
           nix
           cpp-semver
+          flox-activate
           ;
 
         ciPackages = [

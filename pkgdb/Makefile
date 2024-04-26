@@ -159,6 +159,8 @@ ACTIVATE_D_SCRIPTS_DIR ?= $(shell                                               
   $(NIX) store add-path -n flox-activate.d src/buildenv/assets/activate.d)
 CONTAINER_BUILDER_PATH ?= $(shell                                                  \
   $(NIX) store add-path -n mkContainer.nix src/buildenv/assets/mkContainer.nix)
+ACTIVATION_SCRIPT ?= $(shell                                                         \
+	$(NIX) build .\#flox-pkgdb.flox-activate --print-out-paths )
 
 COMMON_NIXPKGS_URL ?= $(shell \
   $(NIX) eval --raw .\#flox-pkgdb.envs.COMMON_NIXPKGS_URL)
@@ -369,6 +371,9 @@ src/buildenv/realise.o: CXXFLAGS +=               \
 
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DCONTAINER_BUILDER_PATH="$(CONTAINER_BUILDER_PATH)"'
+
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DACTIVATION_SCRIPT ="$(ACTIVATION_SCRIPT)"'
 
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DCOMMON_NIXPKGS_URL="$(COMMON_NIXPKGS_URL)"'

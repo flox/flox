@@ -158,6 +158,8 @@
 
       # Package Database Utilities: scrape, search, and resolve.
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
+      flox-activate-d-scripts = callPackage ./pkgs/flox-activate-d-scripts {};
+      flox-activate = callPackage ./pkgs/flox-activate {};
 
       # Flox Command Line Interface ( development build ).
       flox-cli = callPackage ./pkgs/flox-cli {};
