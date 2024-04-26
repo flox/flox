@@ -236,18 +236,11 @@ impl LockedManifestCatalog {
     /// will constrain the resolution.
     pub async fn new(
         manifest: &TypedManifestCatalog,
-        seed_lockfile: Option<LockedManifestCatalog>,
+        seed_lockfile: Option<&LockedManifestCatalog>,
         client: &impl catalog::ClientTrait,
     ) -> Result<LockedManifestCatalog, catalog::CatalogClientError> {
-        let locked_packages = if let Some(ref seed) = seed_lockfile {
-            seed.packages
-                .iter()
-                .filter_map(|package| {
-                    let system = &package.system;
-                    let manifest = seed.manifest.install.get(&package.name)?;
-                    Some(((manifest, system), package))
-                })
-                .collect()
+        let locked_packages = if let Some(seed_lockfile) = seed_lockfile {
+            Self::make_seed_mapping(seed_lockfile)
         } else {
             HashMap::new()
         };
@@ -267,6 +260,21 @@ impl LockedManifestCatalog {
         };
 
         Ok(lockfile)
+    }
+
+    /// Transform a lockfile into a mapping  that is easier to query:
+    /// Lockfile -> { (package, system): locked package }
+    fn make_seed_mapping(
+        seed: &LockedManifestCatalog,
+    ) -> HashMap<(&ManifestPackageDescriptor, &System), &LockedPackageCatalog> {
+        seed.packages
+            .iter()
+            .filter_map(|package| {
+                let system = &package.system;
+                let manifest = seed.manifest.install.get(&package.name)?;
+                Some(((manifest, system), package))
+            })
+            .collect()
     }
 
     /// Creates package groups from a flat map of install descriptors
