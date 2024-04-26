@@ -443,6 +443,9 @@ impl ClientTrait for MockClient {
 /// we need.
 pub type PackageDescriptor = api_types::PackageDescriptor;
 
+/// Alias to type representing expected errors that are in the API spec
+pub type ApiErrorResponse = ResponseValue<api_types::ErrorResponse>;
+
 #[derive(Debug)]
 pub struct PackageGroup {
     pub descriptors: Vec<PackageDescriptor>,
@@ -465,7 +468,7 @@ pub enum CatalogClientError {
 #[derive(Debug, Error)]
 pub enum SearchError {
     #[error("search failed: {}", fmt_info(_0))]
-    Search(ResponseValue<api_types::ErrorResponse>),
+    Search(ApiErrorResponse),
     #[error("invalid search term")]
     InvalidSearchTerm(#[source] api_error::ConversionError),
     #[error("encountered attribute path with less than 3 elements: {0}")]
@@ -477,7 +480,7 @@ pub enum SearchError {
 #[derive(Debug, Error)]
 pub enum ResolveError {
     #[error("resolution failed: {}", fmt_info(_0))]
-    Resolve(ResponseValue<api_types::ErrorResponse>),
+    Resolve(ApiErrorResponse),
     #[error(transparent)]
     CatalogClientError(#[from] CatalogClientError),
 }
@@ -492,7 +495,7 @@ pub enum VersionsError {
 /// TODO: I copied this from the fmt_info function used by the Display impl of
 /// APIError.
 /// We should find something cleaner.
-fn fmt_info(error_response: &ResponseValue<api_types::ErrorResponse>) -> String {
+fn fmt_info(error_response: &ApiErrorResponse) -> String {
     format!(
         "status: {}; headers: {:?}; value: {:?}",
         error_response.status(),

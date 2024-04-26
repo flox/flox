@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 anyhow.workspace = true
 bpaf.workspace = true
-catalog-api-v1.workspace = true
 chrono.workspace = true
 config.workspace = true
 crossterm.workspace = true

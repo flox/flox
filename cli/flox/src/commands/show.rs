@@ -176,9 +176,8 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
 
 #[cfg(test)]
 mod test {
-    use catalog_api_v1::types::{self as api_types};
     use flox_rust_sdk::flox::test_helpers::flox_instance;
-    use flox_rust_sdk::providers::catalog::Client;
+    use flox_rust_sdk::providers::catalog::{ApiErrorResponse, Client};
 
     use super::*;
 
