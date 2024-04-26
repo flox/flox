@@ -120,7 +120,7 @@
       # Alternatively, we could use nixpkgs.rustfmt,
       # and rebuild with a (stable) fenix toolchain and `asNightly = true`,
       # which would avoid the need to pull another channel altogether.
-      rustfmt-nightly = prev.fenix.default.withComponents ["rustfmt"];
+      rustfmt-nightly = final.fenix.default.withComponents ["rustfmt"];
       rust-toolchain = final.fenix.stable;
     in {
       # Generates a `.git/hooks/pre-commit' script.
