@@ -1,0 +1,56 @@
+# ============================================================================ #
+#
+# Run `pre-commit` over the codebase.
+#
+# ---------------------------------------------------------------------------- #
+
+name: "Project Lints"
+on:
+  pull_request:
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.head_ref || github.sha }}"
+  cancel-in-progress: true
+
+jobs:
+  nix-git-hooks:
+    name: "Nix Git Hooks"
+    runs-on: "ubuntu-latest"
+
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v4"
+
+      - name: "Setup Nix"
+        uses: "./.github/actions/common-setup"
+        with:
+          GITHUB_ACCESS_TOKEN: "${{ secrets.NIX_GIT_TOKEN }}"
+          SUBSTITUTER: "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
+          SUBSTITUTER_KEY: "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID: "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY: "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY: "${{ secrets.FLOXBOT_SSH_KEY }}"
+
+      - name: "Fetch target branch ( PR )"
+        if: ${{ github.event.pull_request }}
+        run: |
+          git fetch origin '${{ github.base_ref }}';
+
+      # avoid the next step being filled with nix substitution logs
+      - name: "Instantiate Development Shell"
+        run: |
+          nix develop -L --no-update-lock-file --command true;
+
+      - name: "Run Nix Git Hooks"
+        run: |
+          nix develop -L --no-update-lock-file --command \
+            pre-commit run \
+              --hook-stage manual \
+              --from-ref "$( git rev-parse origin/${{ github.base_ref }} )" \
+              --to-ref   "$( git rev-parse HEAD )";
+
+# ---------------------------------------------------------------------------- #
+#
+#
+#
+# ============================================================================ #
