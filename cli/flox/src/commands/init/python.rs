@@ -332,7 +332,7 @@ impl Provider for PoetryPyProject {
         };
 
         InitCustomization {
-            script: Some(
+            hook_on_activate: Some(
                 // TODO: when we support fish, we'll need to source activate.fish
                 indoc! {r#"
                 # Setup a Python virtual environment
@@ -344,10 +344,25 @@ impl Provider for PoetryPyProject {
                   poetry lock --quiet
                 fi
 
-                echo "Activating poetry virtual environment"
+                # Quietly activate venv for poetry install invocation.
                 source "$(poetry env info --path)/bin/activate"
 
                 poetry install --quiet"#}
+                .to_string(),
+            ),
+            profile_common: None,
+            profile_bash: Some(
+                indoc! {r#"
+                echo "Activating poetry virtual environment"
+                source "$(poetry env info --path)/bin/activate"
+                "#}
+                .to_string(),
+            ),
+            profile_zsh: Some(
+                indoc! {r#"
+                echo "Activating poetry virtual environment"
+                source "$(poetry env info --path)/bin/activate"
+                "#}
                 .to_string(),
             ),
             packages: Some(vec![
@@ -506,7 +521,7 @@ impl Provider for PyProject {
         };
 
         InitCustomization {
-            script: Some(
+            hook_on_activate: Some(
                 // TODO: when we support fish, we'll need to source activate.fish
                 indoc! {r#"
                 # Setup a Python virtual environment
@@ -517,13 +532,27 @@ impl Provider for PyProject {
                   python -m venv "$PYTHON_DIR"
                 fi
 
-                echo "Activating python virtual environment"
+                # Quietly activate venv for pip install invocation.
                 source "$PYTHON_DIR/bin/activate"
 
                 # install the dependencies for this project based on pyproject.toml
                 # <https://pip.pypa.io/en/stable/cli/pip_install/>
-
                 pip install -e . --quiet"#}
+                .to_string(),
+            ),
+            profile_common: None,
+            profile_bash: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment"
+                source "$PYTHON_DIR/bin/activate"
+                "#}
+                .to_string(),
+            ),
+            profile_zsh: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment"
+                source "$PYTHON_DIR/bin/activate"
+                "#}
                 .to_string(),
             ),
             packages: Some(vec![PackageToInstall {
@@ -634,7 +663,7 @@ impl Provider for Requirements {
             })
             .join("\n");
         InitCustomization {
-            script: Some(
+            hook_on_activate: Some(
                 // TODO: when we support fish, we'll need to source activate.fish
                 formatdoc! {r#"
                 # Setup a Python virtual environment
@@ -645,10 +674,25 @@ impl Provider for Requirements {
                   python -m venv "$PYTHON_DIR"
                 fi
 
-                echo "Activating python virtual environment"
+                # Quietly activate venv for pip commands below.
                 source "$PYTHON_DIR/bin/activate"
 
                 {pip_cmds}"#}
+                .to_string(),
+            ),
+            profile_common: None,
+            profile_bash: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment"
+                source "$PYTHON_DIR/bin/activate"
+                "#}
+                .to_string(),
+            ),
+            profile_zsh: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment"
+                source "$PYTHON_DIR/bin/activate"
+                "#}
                 .to_string(),
             ),
             packages: Some(vec![PackageToInstall {

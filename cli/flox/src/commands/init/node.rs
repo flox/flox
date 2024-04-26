@@ -683,7 +683,7 @@ impl InitHook for Node {
     fn get_init_customization(&self) -> InitCustomization {
         let mut packages = vec![];
 
-        let script = match &self.action {
+        let hook_on_activate = match &self.action {
             NodeInstallAction::Yarn(yarn_install) => {
                 packages.push(PackageToInstall {
                     id: "yarn".to_string(),
@@ -723,7 +723,10 @@ impl InitHook for Node {
         };
 
         InitCustomization {
-            script,
+            hook_on_activate,
+            profile_common: None,
+            profile_bash: None,
+            profile_zsh: None,
             packages: Some(packages),
         }
     }
@@ -811,7 +814,10 @@ mod tests {
                     version: Some("1".to_string()),
                     input: None,
                 }]),
-                script: Some(YARN_HOOK.to_string()),
+                hook_on_activate: Some(YARN_HOOK.to_string()),
+                profile_common: None,
+                profile_bash: None,
+                profile_zsh: None,
             }
         );
     }
@@ -847,7 +853,10 @@ mod tests {
                     version: Some("1".to_string()),
                     input: None,
                 }]),
-                script: Some(NPM_HOOK.to_string()),
+                hook_on_activate: Some(NPM_HOOK.to_string()),
+                profile_common: None,
+                profile_bash: None,
+                profile_zsh: None,
             }
         );
     }
@@ -875,7 +884,10 @@ mod tests {
                     version: Some("1".to_string()),
                     input: None,
                 }]),
-                script: None,
+                hook_on_activate: None,
+                profile_common: None,
+                profile_bash: None,
+                profile_zsh: None,
             }
         );
     }
