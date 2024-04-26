@@ -193,7 +193,7 @@ impl<State> CoreEnvironment<State> {
 
         LockedManifestCatalog::new(&manifest, existing_lockfile.as_ref(), client)
             .block_on()
-            .map_err(|_| todo!("add error"))
+            .map_err(CoreEnvironmentError::LockedManifest)
     }
 
     /// Build the environment, [Self::lock] if necessary.

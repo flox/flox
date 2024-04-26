@@ -238,7 +238,7 @@ impl LockedManifestCatalog {
         manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
         client: &impl catalog::ClientTrait,
-    ) -> Result<LockedManifestCatalog, catalog::CatalogClientError> {
+    ) -> Result<LockedManifestCatalog, LockedManifestError> {
         let locked_packages = if let Some(seed_lockfile) = seed_lockfile {
             Self::make_seed_mapping(seed_lockfile)
         } else {
@@ -249,7 +249,10 @@ impl LockedManifestCatalog {
 
         // lock existing packages
 
-        let resolved = client.resolve(groups).await?;
+        let resolved = client
+            .resolve(groups)
+            .await
+            .map_err(LockedManifestError::CatalogResolve)?;
 
         let locked_packages = Self::locked_packages_from_resolution(resolved).collect();
 
@@ -674,6 +677,9 @@ pub struct InstalledPackage {
 
 #[derive(Debug, Error)]
 pub enum LockedManifestError {
+    #[error("failed to resolve packages")]
+    CatalogResolve(#[from] catalog::ResolveError),
+
     #[error("failed to lock manifest")]
     LockManifest(#[source] CallPkgDbError),
     #[error("failed to check lockfile")]

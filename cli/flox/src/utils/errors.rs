@@ -560,6 +560,15 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
 
             Please ensure that the path exists and that you have read permissions.
         "},
+
+        // region: errors from the catalog locking
+        LockedManifestError::CatalogResolve(err) => formatdoc! {"
+            Failed to lock the manifest.
+
+            {err}
+        "},
+        // endregion
+
         // region: errors returned by pkgdb
         // we do minimal formatting here as the error message is supposed to be
         // already user friendly.
