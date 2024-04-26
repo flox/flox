@@ -505,17 +505,15 @@ impl PathEnvironment {
         // Replace profile
         let profile = formatdoc! {r#"
             # common = """
-            #     fortune
+            #     echo "it's gettin' flox in here"
             # """
             # bash = """
-            #     source $venv_dir/bin/activate
+            #     source "$venv_dir/bin/activate"
             #     alias foo="echo bar"
-            #     set -o vi
             # """
             # zsh = """
-            #     source $venv_dir/bin/activate
+            #     source "$venv_dir/bin/activate"
             #     alias foo="echo bar"
-            #     bindkey -v
             # """"#};
         replaced = replaced.replace(FLOX_PROFILE_PLACEHOLDER, &profile);
 
@@ -528,19 +526,12 @@ impl PathEnvironment {
         } else {
             formatdoc! {r#"
                 # on-activate = """
-                #     # Interact with the tty as you would in any script
-                #     echo "Starting up $FLOX_ENV_DESCRIPTION environment ..."
-                #     read -e -p "Favourite colour or favorite color? " value
-                #
                 #     # Set variables, create files and directories
                 #     venv_dir="$(mktemp -d)"
                 #     export venv_dir
                 #
                 #     # Perform initialization steps, e.g. create a python venv
                 #     python -m venv "$venv_dir"
-                #
-                #     # Invoke apps that configure the environment via stdout
-                #     eval "$(ssh-agent)"
                 #
                 # """"#}
         };

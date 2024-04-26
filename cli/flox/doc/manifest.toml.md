@@ -255,22 +255,17 @@ SERVER_PORT = "3000"
 
 ## `[hook]`
 
-Scripts in the `[hook]` section
-are useful for performing initialization
+The `on-activate` script in the `[hook]` section
+is useful for performing initialization
 in a predictable bash shell environment.
 
 ### `on-activate`
 
-The `on-activate` script is invoked only once upon activation
-and can be useful for spawning processes,
+The `on-activate` script is sourced from a **bash** shell,
+and it can be useful for spawning processes,
 dynamically setting environment variables,
 and creating files and directories
-to be used by the subsequent profile scripts, commands and shells.
-
-If Flox detects that the environment has not yet been activated,
-then it will source this script from a **bash** shell.
-This prevents it from being sourced in subsequent "in place" activations,
-such as those performed with `eval "$(flox activate)"`.
+to be used by the subsequent profile scripts, commands, and shells.
 
 Hook scripts inherit environment variables set in the `[vars]` section,
 and variables set here will in turn be inherited by
@@ -279,8 +274,6 @@ the `[profile]` scripts described below.
 Any output written to `stdout` in a hook script is redirected to `stderr`
 to avoid it being mixed with the output of profile section scripts
 that write to `stdout` for "in-place" activations.
-
-The `on-activate` script is currently the only supported hook.
 
 ```toml
 [hook]
@@ -301,6 +294,15 @@ on-activate = """
 """
 ```
 
+The `on-activate` script is not re-run when activations are nested.
+A nested activation can occur when an environment is already active and either
+`eval "$(flox activate)"` or `flox activate -- CMD` is run.
+In this scenario, `on-activate` is not re-run.
+Currently, environment variables set by the first run of the `on-activate`
+script are captured and then later set by the nested activation,
+but this behavior may change.
+
+
 ### `script` - DEPRECATED
 This field was deprecated in favor of the `profile` section.
 It will be removed in a later release.
@@ -317,19 +319,16 @@ for every shell
 and special care should be taken
 to ensure compatibility with all shells.
 The `profile.bash` and `profile.zsh` scripts
-are then sourced
+are then sourced *after* `profile.common`
 by the corresponding shell.
 
 These scripts are useful for performing shell-specific customizations
 such as setting aliases or configuring the prompt.
-Scripts in this section are sourced with *every* activation,
-including those performed by way of "in-place" activations
-performed from a `.bashrc` or similar "dotfile".
 
 ```toml
 [profile]
 common = """
-    fortune
+    echo "it's gettin' flox in here"
 """
 bash = """
     source $venv_dir/bin/activate
@@ -343,17 +342,12 @@ zsh = """
 """
 ```
 
-The `profile.common` script
-is intended for setup that will be sourced for every shell,
-and it is your responsibility
-to make sure that commands are compatible with all shells
-in which the environment is expected to be activated.
-The `profile.bash` and `profile.zsh` scripts
-are sourced *after* `profile.common`,
-and are only sourced by the corresponding shell.
-The shell-specific profile scripts
-are intended for functions, aliases, variables, etc.
-that could be specific to a user's shell.
+Profile scripts are re-run for nested activations.
+A nested activation can occur when an environment is already active and either
+`eval "$(flox activate)"` or `flox activate -- CMD` is run.
+In this scenario, profile scripts are run a second time.
+Re-running profile scripts allows aliases to be set in subshells that inherit
+from a parent shell with an already active environment.
 
 ## `[options]`
 
