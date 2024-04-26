@@ -28,7 +28,7 @@
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.fenix.url = "github:nix-community/fenix";
-  # inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
+  inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
 
   # This is needed to be able to calculate `git describe` format version of flox
   # without running `git describe`
