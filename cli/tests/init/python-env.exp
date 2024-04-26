@@ -14,7 +14,7 @@ expect_after {
 }
 
 expect -re "flox .*\\\[name\\\] \\\(python\\\)" {}
-# expect -re "(python) " {}
+send "$flox list -c\r"
 send "type activate || exit 1\r"
 send "type deactivate || exit 1\r"
 expect eof
