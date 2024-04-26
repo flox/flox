@@ -197,7 +197,6 @@ in
         devPackages = [
           rustfmt
           rust-analyzer
-          rust-toolchain.rust-std
           rust-toolchain.rustc
           rust-toolchain.clippy
         ];
@@ -205,7 +204,7 @@ in
         devEnvs =
           envs
           // {
-            RUST_SRC_PATH = rust-toolchain.rust-std;
+            RUST_SRC_PATH = "${rust-toolchain.rust-src}/lib/rustlib/src/rust/library";
             RUSTFMT = "${rustfmt}/bin/rustfmt";
           };
 
