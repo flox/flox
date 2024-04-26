@@ -404,6 +404,8 @@ impl LockedManifestCatalog {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LockedManifestPkgdb(Value);
 
+// region: pkgdb lockfile operations
+
 impl LockedManifestPkgdb {
     /// Use pkgdb to lock a manifest
     ///
@@ -651,6 +653,8 @@ impl TypedLockedManifestPkgdb {
     }
 }
 
+// endregion
+
 // TODO: consider dropping this in favor of mapping to [LockedPackageCatalog]?
 /// A locked package with additionally derived attributes
 pub struct InstalledPackage {
@@ -708,11 +712,18 @@ pub struct LockfileCheckWarning {
     pub message: String,
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test"))]
 mod tests {
     use std::collections::HashMap;
 
+    use catalog_api_v1::types::Output;
+    use indoc::indoc;
+    use once_cell::sync::Lazy;
+    use pretty_assertions::assert_eq;
+
+    use self::catalog::PackageResolutionInfo;
     use super::*;
+    use crate::models::manifest::{RawManifest, TypedManifest};
 
     /// Validate that the parser for the locked manifest can handle null values
     /// for the `version`, `license`, and `description` fields.
@@ -798,6 +809,138 @@ mod tests {
                 .description
                 .as_deref(),
             None
+        );
+    }
+
+    static TEST_RAW_MANIFEST: Lazy<RawManifest> = Lazy::new(|| {
+        indoc! {r#"
+          version = 1
+
+          [install]
+          hello.pkg-path = "hello"
+          hello.package-group = "group"
+
+          [options]
+          systems = ["system"]
+        "#}
+        .parse()
+        .unwrap()
+    });
+
+    static TEST_TYPED_MANIFEST: Lazy<TypedManifestCatalog> = Lazy::new(|| {
+        let typed = TEST_RAW_MANIFEST.to_typed().unwrap();
+        match typed {
+            TypedManifest::Catalog(manifest) => *manifest,
+            _ => panic!("Expected a catalog manifest"),
+        }
+    });
+
+    static TEST_RESOLUTION_PARAMS: Lazy<Vec<PackageGroup>> = Lazy::new(|| {
+        vec![PackageGroup {
+            name: "group".to_string(),
+            system: "system".to_string(),
+            descriptors: vec![PackageDescriptor {
+                name: "hello".to_string(),
+                pkg_path: "hello".to_string(),
+                derivation: None,
+                semver: None,
+                version: None,
+            }],
+        }]
+    });
+
+    static TEST_RESOLUTION_RESPONSE: Lazy<Vec<ResolvedPackageGroup>> = Lazy::new(|| {
+        vec![ResolvedPackageGroup {
+            system: "system".to_string(),
+            pages: vec![CatalogPage {
+                page: 1,
+                url: "url".to_string(),
+                packages: vec![PackageResolutionInfo {
+                    attr_path: "hello".to_string(),
+                    broken: false,
+                    derivation: "derivation".to_string(),
+                    description: "description".to_string(),
+                    license: "license".to_string(),
+                    locked_url: "locked_url".to_string(),
+                    name: "name".to_string(),
+                    outputs: vec![Output {
+                        name: "name".to_string(),
+                        store_path: "store_path".to_string(),
+                    }],
+                    outputs_to_install: vec!["name".to_string()],
+                    pname: "pname".to_string(),
+                    rev: "rev".to_string(),
+                    rev_count: 1,
+                    rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::offset::Utc),
+                    scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::offset::Utc),
+                    stabilities: vec!["stability".to_string()],
+                    unfree: false,
+                    version: "version".to_string(),
+                }],
+            }],
+            name: "group".to_string(),
+        }]
+    });
+
+    static TEST_LOCKED_MANIFEST: Lazy<LockedManifest> = Lazy::new(|| {
+        LockedManifest::Catalog(LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: TEST_TYPED_MANIFEST.clone(),
+            packages: vec![LockedPackageCatalog {
+                attr_path: "hello".to_string(),
+                broken: false,
+                derivation: "derivation".to_string(),
+                description: "description".to_string(),
+                license: "license".to_string(),
+                locked_url: "locked_url".to_string(),
+                name: "name".to_string(),
+                outputs: vec![("name".to_string(), "store_path".to_string())]
+                    .into_iter()
+                    .collect(),
+                outputs_to_install: vec!["name".to_string()],
+                pname: "pname".to_string(),
+                rev: "rev".to_string(),
+                rev_count: 1,
+                rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&chrono::offset::Utc),
+                scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&chrono::offset::Utc),
+                stabilities: vec!["stability".to_string()],
+                unfree: false,
+                version: "version".to_string(),
+                system: "system".to_string(),
+            }],
+        })
+    });
+
+    #[test]
+    fn resolve_params() {
+        let manifest = &*TEST_TYPED_MANIFEST;
+
+        let params = LockedManifestCatalog::collect_package_groups(manifest, Default::default())
+            .collect::<Vec<_>>();
+        assert_eq!(&params, &*TEST_RESOLUTION_PARAMS);
+    }
+
+    #[tokio::test]
+    async fn test_locking_1() {
+        let manifest = &*TEST_TYPED_MANIFEST;
+
+        let mut client = catalog::MockClient::new(None::<String>).unwrap();
+        client.push_resolve_response(TEST_RESOLUTION_RESPONSE.clone());
+
+        let locked_manifest = LockedManifestCatalog::new(manifest, None, &client)
+            .await
+            .unwrap();
+        assert_eq!(
+            &LockedManifest::Catalog(locked_manifest),
+            &*TEST_LOCKED_MANIFEST
         );
     }
 }
