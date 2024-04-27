@@ -488,7 +488,28 @@ impl PathEnvironment {
         };
         replaced = replaced.replace(FLOX_INSTALL_PLACEHOLDER, packages);
 
-        // Replace profile scripts
+        // Replace the hook section
+        let default_hook = if let Some(ref hook_on_activate_script) = customization.hook_on_activate
+        {
+            formatdoc! {r#"
+                on-activate = """
+                {}
+                """"#, indent::indent_all_by(2, hook_on_activate_script)}
+        } else {
+            formatdoc! {r#"
+                # on-activate = """
+                #     # Set variables, create files and directories
+                #     venv_dir="$(mktemp -d)"
+                #     export venv_dir
+                #
+                #     # Perform initialization steps, e.g. create a python venv
+                #     python -m venv "$venv_dir"
+                #
+                # """"#}
+        };
+        let replaced = replaced.replace(FLOX_HOOK_PLACEHOLDER, &default_hook);
+
+        // Replace the profile section
         let default_profile = match customization {
             InitCustomization {
                 profile_common: None,
@@ -528,27 +549,6 @@ impl PathEnvironment {
             },
         };
         let replaced = replaced.replace(FLOX_PROFILE_PLACEHOLDER, &default_profile);
-
-        // Replace the hook
-        let default_hook = if let Some(ref hook_on_activate_script) = customization.hook_on_activate
-        {
-            formatdoc! {r#"
-                on-activate = """
-                {}
-                """"#, indent::indent_all_by(2, hook_on_activate_script)}
-        } else {
-            formatdoc! {r#"
-                # on-activate = """
-                #     # Set variables, create files and directories
-                #     venv_dir="$(mktemp -d)"
-                #     export venv_dir
-                #
-                #     # Perform initialization steps, e.g. create a python venv
-                #     python -m venv "$venv_dir"
-                #
-                # """"#}
-        };
-        let replaced = replaced.replace(FLOX_HOOK_PLACEHOLDER, &default_hook);
 
         debug!(
             "manifest was updated successfully: {}",

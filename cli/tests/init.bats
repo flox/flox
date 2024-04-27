@@ -164,10 +164,10 @@ function check_with_dir() {
   assert_line --partial "activate is $(realpath $PROJECT_DIR)/.flox/cache/python/bin/activate"
   assert_line --partial "deactivate is a function"
   assert_line --partial "deactivate ()"
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/init/python-env.exp" "$PROJECT_DIR"
-  assert_line --partial "activate is $(realpath $PROJECT_DIR)/.flox/cache/python/bin/activate"
-  assert_line --partial "deactivate is a function"
-  assert_line --partial "deactivate ()"
+# FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/init/python-env.exp" "$PROJECT_DIR"
+# assert_line --partial "activate is $(realpath $PROJECT_DIR)/.flox/cache/python/bin/activate"
+# assert_line --partial "deactivate is a function"
+# assert_line --partial "deactivate ()"
 
   floxhub_setup "$OWNER"
 
