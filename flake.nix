@@ -27,6 +27,9 @@
   inputs.crane.url = "github:ipetkov/crane";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
 
+  inputs.fenix.url = "github:nix-community/fenix";
+  inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
+
   # This is needed to be able to calculate `git describe` format version of flox
   # without running `git describe`
   inputs.flox-latest.url = "git+ssh://git@github.com/flox/flox?ref=refs/tags/v1.0.3&rev=c50d78782713d19d6c790af271c8819b89b1a253";
@@ -40,6 +43,7 @@
     sqlite3pp,
     pre-commit-hooks,
     crane,
+    fenix,
     flox-latest,
     ...
   } @ inputs: let
@@ -100,6 +104,7 @@
       overlays.nix
       overlays.bear
       sqlite3pp.overlays.default
+      fenix.overlays.default
     ];
 
     # Packages defined in this repository.
@@ -109,10 +114,17 @@
           inherit inputs self;
           pkgsFor = final;
         });
-    in {
-      # Use bleeding edge `rustfmt'.
-      rustfmt = prev.rustfmt.override {asNightly = true;};
 
+      # We depend on several nightly features of rustfmt,
+      # so pick the current nightly version.
+      # We're using `default.withComponents`
+      # which _should_ only pull the nightly rustfmt component.
+      # Alternatively, we could use nixpkgs.rustfmt,
+      # and rebuild with a (stable) fenix toolchain and `asNightly = true`,
+      # which would avoid the need to pull another channel altogether.
+      rustfmt-nightly = final.fenix.default.withComponents ["rustfmt"];
+      rust-toolchain = final.fenix.stable;
+    in {
       # Generates a `.git/hooks/pre-commit' script.
       pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
         src = builtins.path {path = ./.;};
@@ -129,10 +141,11 @@
           rustfmt = let
             wrapper = final.symlinkJoin {
               name = "rustfmt-wrapped";
-              paths = [final.rustfmt];
+              paths = [rustfmt-nightly];
               nativeBuildInputs = [final.makeWrapper];
               postBuild = let
-                PATH = final.lib.makeBinPath [final.cargo final.rustfmt];
+                # Use nightly rustfmt
+                PATH = final.lib.makeBinPath [final.fenix.stable.cargo rustfmt-nightly];
               in ''
                 wrapProgram $out/bin/cargo-fmt --prefix PATH : ${PATH};
               '';
@@ -147,10 +160,13 @@
           # shellcheck.enable = true; # disabled until we have time to fix all the warnings
         };
         settings = {
+          clippy.denyWarnings = true;
           alejandra.verbosity = "quiet";
           rust.cargoManifestPath = "cli/Cargo.toml";
         };
         tools = {
+          # use fenix provided clippy
+          clippy = rust-toolchain.clippy;
           clang-tools = final.clang-tools_16;
         };
       };
@@ -162,7 +178,10 @@
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
 
       # Flox Command Line Interface ( development build ).
-      flox-cli = callPackage ./pkgs/flox-cli {};
+      flox-cli = callPackage ./pkgs/flox-cli {
+        rust-toolchain = rust-toolchain;
+        rustfmt = rustfmt-nightly;
+      };
 
       # Flox Command Line Interface Manpages
       flox-manpages = callPackage ./pkgs/flox-manpages {};
@@ -172,6 +191,7 @@
 
       # Wrapper scripts for running test suites.
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
+
       # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
       flox-tests-pure = callPackage ./pkgs/flox-tests-pure {inputs = inputs;};
@@ -216,7 +236,6 @@
         flox
         pre-commit-check
         flox-tests-pure
-        flox-dev
         ;
       default = pkgs.flox;
     });
