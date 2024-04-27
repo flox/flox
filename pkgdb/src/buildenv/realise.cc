@@ -381,7 +381,7 @@ esac
  * and with hashing disabled, that fails.  Therefore, disable that at the end,
  * in case it's used in the prior scripts (e.g. ~/.bashrc).
  */
-const char * const BASH_ACTIVATE_SCRIPT = R"_(
+const char * const BASH_ACTIVATE_SCRIPT_BEGIN = R"_(
 [ "${_FLOX_PKGDB_VERBOSITY:-0}" -le 1 ] || set -x
 
 # Assert that the expected _{add,del}_env variables are present.
@@ -397,18 +397,26 @@ then
     source ~/.bashrc
 fi
 
-# Disable command hashing to allow for newly installed flox packages
-# to be found immediately.
-set +h
-
 # Restore environment variables set in the previous bash initialization.
 eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' $_del_env)"
 eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
 )_";
 
+const char * const BASH_ACTIVATE_SCRIPT_END = R"_(
+# Disable command hashing to allow for newly installed flox packages
+# to be found immediately. We do this as the very last thing because
+# python venv activations can otherwise return nonzero return codes
+# when attempting to invoke `hash -r`.
+set +h
+
+if [ "${_FLOX_PKGDB_VERBOSITY:-0}" -ge 2 ]; then
+  set +x
+fi
+)_";
+
 
 // unlike bash, zsh activation calls this script from the user's shell rcfile
-const char * const ZSH_ACTIVATE_SCRIPT = R"_(
+const char * const ZSH_ACTIVATE_SCRIPT_BEGIN = R"_(
 [ "${_FLOX_PKGDB_VERBOSITY:-0}" -le 1 ] || set -x
 
 # Assert that the expected _{add,del}_env variables are present.
@@ -440,11 +448,6 @@ if [ ${#fpath_prepend[@]} -gt 0 ]; then
 fi
 unset fpath_prepend
 
-# Disable command hashing to allow for newly installed flox packages
-# to be found immediately.
-setopt nohashcmds
-setopt nohashdirs
-
 # Restore environment variables set in the previous bash initialization.
 eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' $_del_env)"
 eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
@@ -455,6 +458,19 @@ eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
 # their /etc/zshrc* files.
 export HISTFILE=$HOME/.zsh_history
 export SHELL_SESSION_DIR=$HOME/.zsh_sessions
+)_";
+
+const char * const ZSH_ACTIVATE_SCRIPT_END = R"_(
+# Disable command hashing to allow for newly installed flox packages
+# to be found immediately. We do this as the very last thing because
+# python venv activations can otherwise return nonzero return codes
+# when attempting to invoke `hash -r`.
+setopt nohashcmds
+setopt nohashdirs
+
+if [ "${_FLOX_PKGDB_VERBOSITY:-0}" -ge 2 ]; then
+  set +x
+fi
 )_";
 
 
@@ -1120,24 +1136,21 @@ makeActivationScripts( nix::EvalState &              state,
       addScriptToScriptsDir( envrcScript.str(), tempDir, "envrc" );
     }
 
-  /* Add the shell activate scripts */
+  /* Begin the shell activate scripts */
   bashScript << posixSetEnv( "_coreutils", FLOX_COREUTILS_PKG )
              << posixSetEnv( "_gnused", FLOX_GNUSED_PKG )
-             << BASH_ACTIVATE_SCRIPT
+             << BASH_ACTIVATE_SCRIPT_BEGIN
              << posixIfThen( "[ -t 1 ]",
                              "source " << ACTIVATE_D_SCRIPTS_DIR
-                                       << "/set-prompt.bash" )
-             << posixIfThen( "[ \"${_FLOX_PKGDB_VERBOSITY:-0}\" -gt 0 ]",
-                             "set +x" );
+                                       << "/set-prompt.bash" );
   zshScript << posixSetEnv( "_coreutils", FLOX_COREUTILS_PKG )
-            << posixSetEnv( "_gnused", FLOX_GNUSED_PKG ) << ZSH_ACTIVATE_SCRIPT
+            << posixSetEnv( "_gnused", FLOX_GNUSED_PKG )
+            << ZSH_ACTIVATE_SCRIPT_BEGIN
             << posixIfThen( "[ -t 1 ]",
                             "source " << ACTIVATE_D_SCRIPTS_DIR
-                                      << "/set-prompt.zsh" )
-            << posixIfThen( "[ \"${_FLOX_PKGDB_VERBOSITY:-0}\" -gt 0 ]",
-                            "set +x" );
+                                      << "/set-prompt.zsh" );
 
-  /* Add profile scripts */
+  /* Append profile script invocations in the middle */
   auto profile = manifest.profile;
   if ( profile.has_value() )
     {
@@ -1161,6 +1174,10 @@ makeActivationScripts( nix::EvalState &              state,
           appendSourcedScript( "profile-zsh", zshScript );
         }
     }
+
+  /* Append the ending part of the shell activate scripts */
+  bashScript << BASH_ACTIVATE_SCRIPT_END;
+  zshScript << ZSH_ACTIVATE_SCRIPT_END;
 
   /* Add 'hook-on-activate' script. */
   auto hook = manifest.hook;

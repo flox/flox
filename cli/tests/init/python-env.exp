@@ -13,12 +13,23 @@ expect_after {
   "*\r" { exp_continue }
 }
 
+# The Linux prompt on NixOS is split across two lines, so python venv
+# will prepend the "(python)" part to a different line so we look for
+# it separately.
+expect -re "\\\(python\\\)" {}
+
 # The prompt will be "(python) flox [name] (python) ..." if the venv is
 # activated twice, so specifically check that the first character after
 # "[name]" is not a "(".
-expect -re "^\\\(python\\\) flox \\\[name\\\] \[^\(\]" {}
-send "$flox list -c\r"
-send "type activate || exit 1\r"
+expect -re "flox \\\[name\\\] \[^\(\]" {}
+
+# Assert some things we know to be true when in an activated venv.
+send "test -n \"\$PYTHON_DIR\" || exit 1\r"
+send "test -f \"\$PYTHON_DIR/bin/activate\" || exit 1\r"
+send "test -n \"\$VIRTUAL_ENV_PROMPT\" || exit 1\r"
+
+# Identify where the deactivate() function is coming from for inspection
+# from init.bats, then exit.
 send "type deactivate || exit 1\r"
 send "exit\r"
 expect eof
