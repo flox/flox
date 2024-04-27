@@ -3,7 +3,7 @@
   runCommandCC,
   stdenv,
   lib,
-  bash,
+  bashInteractive,
   zsh,
   dash,
   bats,
@@ -43,7 +43,7 @@
 
   paths =
     [
-      bash
+      bashInteractive
       zsh
       dash
       batsWith
