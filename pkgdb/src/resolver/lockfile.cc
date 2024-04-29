@@ -11,6 +11,7 @@
 
 #include <algorithm>
 
+#include <nix/attrs.hh>
 #include <nix/hash.hh>
 
 #include "flox/core/util.hh"
@@ -426,9 +427,63 @@ LockfileRaw::clear()
 
 /* -------------------------------------------------------------------------- */
 void
+LockfileRaw::load_from_content( const nlohmann::json & jfrom )
+{
+  int version = jfrom["lockfile-version"];
+  debugLog( nix::fmt( "lockfile version %d", version ) );
+
+  switch ( version )
+    {
+      case 0: *this = jfrom; break;
+      case 1: this->from_v1_content( jfrom ); break;
+      default:
+        throw InvalidLockfileException( "unsupported lockfile version",
+                                        "only v0 and v1 are supprted" );
+    }
+}
+
+static void
+lockedPackageFromCatalogDescriptor( const nlohmann::json & jfrom,
+                                    LockedPackageRaw &     pkg )
+{
+  std::string attrPath = jfrom["attr_path"];
+  std::string system   = jfrom["system"];
+
+  // This would be more appropriately moved to `evalCacheCursorForInput` where
+  // we are introducing the concept of a flake, but that code won't know where
+  // the attrPath is coming from to make that detemination.
+  pkg.attrPath = splitAttrPath( "legacyPackages." + system + "." + attrPath );
+  pkg.priority = jfrom["priority"];
+  pkg.info     = jfrom;
+  pkg.input    = LockedInputRaw();
+
+  pkg.input.url   = jfrom["locked_url"];
+  pkg.input.attrs = nix::fetchers::Attrs();
+  // These attributes are needed by the current builder, and not included in the
+  // descriptor This will not always be true, but also may not be required to
+  // build depending on the path taken for future environment builds.
+  if ( std::string supportedUrl = "github:NixOS/nixpkgs";
+       pkg.input.url.substr( 0, supportedUrl.size() ) != supportedUrl )
+    {
+      throw InvalidLockfileException(
+        "unsupported lockfile URL for v1 lockfile",
+        "must begin with " + supportedUrl );
+    }
+  pkg.input.attrs["type"]  = "github";
+  pkg.input.attrs["owner"] = "NixOS";
+  pkg.input.attrs["repo"]  = "nixpkgs";
+
+  std::size_t found = pkg.input.url.rfind( "/" );
+  if ( found != std::string::npos )
+    {
+      pkg.input.attrs["rev"] = pkg.input.url.substr( found + 1 );
+    }
+}
+
+void
 LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
 {
-  infoLog( nix::fmt( "loading v1 lockfile content" ) );
+  debugLog( nix::fmt( "loading v1 lockfile content" ) );
 
   try
     {
@@ -472,16 +527,16 @@ LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
   // load packages as map<system, map<install-id, package>>
   try
     {
-      auto groups = jfrom["groups"];
-      for ( const auto & [idx, group] : groups.items() )
+      auto packages = jfrom["packages"];
+      for ( const auto & [idx, package] : packages.items() )
         {
-          std::string system     = group["system"];
-          std::string group_name = group["name"];
-          infoLog(
-            nix::fmt( "lockfile-v1: Processing group %s", group["name"] ) )
-          // get group["system"]
-          // for ["page"], get ["url"]
-          //    iterate over ["packages"]
+          LockedPackageRaw pkg = LockedPackageRaw();
+          lockedPackageFromCatalogDescriptor( package, pkg );
+          const std::string installId = package["install_id"];
+          const std::string system    = package["system"];
+
+          this->packages[system].insert(
+            { installId, std::make_optional( pkg ) } );
         }
     }
   catch ( nlohmann::json::exception & err )
@@ -490,8 +545,9 @@ LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
                                       extract_json_errmsg( err ) );
     }
 
-  infoLog( nix::fmt( "loaded lockfile v1" ) );
+  debugLog( nix::fmt( "loaded lockfile v1" ) );
 }
+
 
 void
 from_json( const nlohmann::json & jfrom, LockfileRaw & raw )

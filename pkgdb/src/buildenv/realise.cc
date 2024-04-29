@@ -561,7 +561,7 @@ static std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
 getLockedPackages( const resolver::LockfileRaw & lockfile,
                    const System &                system )
 {
-  traceLog( "creating FloxEnv" );
+  traceLog( "getting locked packages" );
   auto packages = lockfile.packages.find( system );
   if ( packages == lockfile.packages.end() )
     {
@@ -899,8 +899,10 @@ getRealisedPackages( nix::ref<nix::EvalState> &         state,
                      const resolver::LockedPackageRaw & lockedPackage,
                      const System &                     system )
 {
-  auto timeEvalStart = std::chrono::high_resolution_clock::now();
-  auto cursor        = evalCacheCursorForInput( state,
+  debugLog( nix::fmt( "getting cursor for %s",
+                      lockedPackage.attrPath[0] ) ) auto timeEvalStart
+    = std::chrono::high_resolution_clock::now();
+  auto cursor = evalCacheCursorForInput( state,
                                          lockedPackage.input,
                                          lockedPackage.attrPath );
 
@@ -1268,13 +1270,7 @@ createFloxEnv( nix::ref<nix::EvalState> & state,
                const nlohmann::json &     lockfileContent,
                const System &             system )
 {
-  int version = lockfileContent["lockfile-version"];
-  infoLog( nix::fmt( "lockfile version %d", version ) );
-
-  resolver::LockfileRaw lockfile;
-  if ( version == 0 ) { lockfile = lockfileContent; }
-  else { lockfile.from_v1_content( lockfileContent ); }
-
+  resolver::LockfileRaw lockfile( lockfileContent );
 
   auto locked_packages = getLockedPackages( lockfile, system );
 
@@ -1286,6 +1282,7 @@ createFloxEnv( nix::ref<nix::EvalState> & state,
 
   for ( auto const & [pId, package] : locked_packages )
     {
+
       auto realised = getRealisedPackages( state, pId, package, system );
       for ( auto [realisedPackage, output] : realised )
         {
