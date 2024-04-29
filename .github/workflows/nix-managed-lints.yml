@@ -6,7 +6,14 @@
 
 name: "Project Lints"
 on:
+  # Contrary to the ./ci.yml workflow,
+  # this one is _not_ triggered by the `push` events
+  # or `workflow_dispatch` invocations.
+  # That is because `pre-commit` computes the diff between the current and the
+  # target branch to skip the linting of unchanged files.
+  # `push` and `workflow_dispatch` events do not provide this context.
   pull_request:
+  merge_group:
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.head_ref || github.sha }}"
@@ -31,10 +38,26 @@ jobs:
           AWS_SECRET_ACCESS_KEY:  "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
           SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
-      - name: "Fetch target branch ( PR )"
-        if: ${{ github.event.pull_request }}
+
+
+      - name: "Determine target branch ( PR )"
+        if: ${{ github.event_name == 'pull_request' }}
+        # Unlike `github.event.merge_group.base_ref`, `github.base_ref`
+        # only includes the final ref name
+        # prepend `refs/heads/` to match the format of
+        # `github.event.merge_group.base_ref`.
         run: |
-          git fetch origin '${{ github.base_ref }}';
+          echo 'TARGET_BRANCH=refs/heads/${{ github.base_ref }}' >> "$GITHUB_ENV";
+
+      - name: "Fetch target branch ( Merge Queue )"
+        if: ${{ github.event_name == 'merge_group' }}
+        run: |
+          echo 'TARGET_BRANCH=${{ github.event.merge_group.base_ref }}' >> "$GITHUB_ENV";
+
+      # Fetch the target branch and create a local reference to it.
+      - name: "Fetch target branch"
+        run: |
+          git fetch origin "$TARGET_BRANCH:$TARGET_BRANCH";
 
       # avoid the next step being filled with nix substitution logs
       # and ensure that `pre-commit` can run cargo with the `--offline` flag
@@ -45,12 +68,15 @@ jobs:
             --manifest-path ./cli/Cargo.toml \
             --locked;
 
+      # Run pre-commit hooks on the diff between the target branch and HEAD.
+      # The target branch and HEAD are resolved to a revision using
+      # `git rev-parse`.
       - name: "Run Nix Git Hooks"
         run: |
           nix develop -L --no-update-lock-file --command \
             pre-commit run \
               --hook-stage manual \
-              --from-ref "$( git rev-parse origin/${{ github.base_ref }} )" \
+              --from-ref "$( git rev-parse "$TARGET_BRANCH" )" \
               --to-ref   "$( git rev-parse HEAD )";
 
 # ---------------------------------------------------------------------------- #
