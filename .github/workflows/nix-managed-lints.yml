@@ -37,9 +37,13 @@ jobs:
           git fetch origin '${{ github.base_ref }}';
 
       # avoid the next step being filled with nix substitution logs
-      - name: "Instantiate Development Shell"
+      # and ensure that `pre-commit` can run cargo with the `--offline` flag
+      - name: "Fetch rust dependencies"
         run: |
-          nix develop -L --no-update-lock-file --command true;
+          nix develop -L --no-update-lock-file --command \
+            cargo fetch \
+            --manifest-path ./cli/Cargo.toml \
+            --locked;
 
       - name: "Run Nix Git Hooks"
         run: |
