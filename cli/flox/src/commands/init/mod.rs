@@ -296,7 +296,7 @@ fn format_customization(customization: &InitCustomization) -> Result<String> {
             .or_insert_with(|| Item::Table(Table::new()));
         let hook_field_type = hook_field.type_name();
         hook_field.as_table_mut().context(format!(
-            "'install' must be a table, but found {hook_field_type} instead"
+            "'hook' must be a table, but found {hook_field_type} instead"
         ))?
     };
     if let Some(hook_on_activate_script) = &customization.hook_on_activate {
@@ -311,11 +311,11 @@ fn format_customization(customization: &InitCustomization) -> Result<String> {
     // Add the "profile" section to the toml document.
     let profile_table = {
         let profile_field = toml
-            .entry("hook")
+            .entry("profile")
             .or_insert_with(|| Item::Table(Table::new()));
         let profile_field_type = profile_field.type_name();
         profile_field.as_table_mut().context(format!(
-            "'install' must be a table, but found {profile_field_type} instead"
+            "'profile' must be a table, but found {profile_field_type} instead"
         ))?
     };
     if let Some(profile_common_script) = &customization.profile_common {
