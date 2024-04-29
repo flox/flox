@@ -11,6 +11,7 @@ use crate::data::{System, Version};
 use crate::models::pkgdb::PKGDB_BIN;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
+pub(super) const DEFAULT_PRIORITY: usize = 5;
 
 /// A wrapper around a [`toml_edit::DocumentMut`]
 /// that allows modifications of the raw manifest document,

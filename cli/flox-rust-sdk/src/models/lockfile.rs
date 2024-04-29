@@ -13,7 +13,12 @@ use thiserror::Error;
 
 use super::container_builder::ContainerBuilder;
 use super::environment::UpdateResult;
-use super::manifest::{ManifestPackageDescriptor, TypedManifestCatalog, DEFAULT_GROUP_NAME};
+use super::manifest::{
+    ManifestPackageDescriptor,
+    TypedManifestCatalog,
+    DEFAULT_GROUP_NAME,
+    DEFAULT_PRIORITY,
+};
 use super::pkgdb::CallPkgDbError;
 use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
 use crate::flox::Flox;
@@ -178,16 +183,20 @@ pub struct LockedPackageCatalog {
 
     // region: added fields
     pub system: System,
+    pub group: String,
+    pub priority: usize,
+    pub optional: bool,
     // endregion
 }
 
 impl LockedPackageCatalog {
-    /// Convert a [catalog::PackageResolutionInfo] response into a [LockedPackageCatalog]
-    /// and add fold in the system field of the containing group.
+    /// Construct a [LockedPackageCatalog] from a [ManifestPackageDescriptor],
+    /// the resolved [catalog::PackageResolutionInfo], and corresponding [System].
     ///
     /// There may be more validation/parsing we could do here in the future.
-    pub fn from_resolution_info_for_system(
+    pub fn from_parts(
         package: catalog::PackageResolutionInfo,
+        descriptor: ManifestPackageDescriptor,
         system: System,
     ) -> Self {
         // unpack package to avoid missing new fields
@@ -216,6 +225,14 @@ impl LockedPackageCatalog {
             .map(|output| (output.name, output.store_path))
             .collect();
 
+        let priority = descriptor.priority.unwrap_or(DEFAULT_PRIORITY);
+        let group = descriptor
+            .package_group
+            .as_deref()
+            .unwrap_or(DEFAULT_GROUP_NAME)
+            .to_string();
+        let optional = descriptor.optional;
+
         LockedPackageCatalog {
             attr_path,
             broken,
@@ -235,6 +252,9 @@ impl LockedPackageCatalog {
             unfree,
             version,
             system,
+            priority,
+            group,
+            optional,
         }
     }
 }
@@ -306,7 +326,7 @@ impl LockedManifestCatalog {
             .await
             .map_err(LockedManifestError::CatalogResolve)?;
 
-        let locked_packages = Self::locked_packages_from_resolution(resolved).collect();
+        let locked_packages = Self::locked_packages_from_resolution(manifest, resolved).collect();
 
         let lockfile = LockedManifestCatalog {
             version: Version::<1>,
@@ -401,22 +421,29 @@ impl LockedManifestCatalog {
     /// TODO: handle results from multiple pages
     ///       currently there is no api to request packages from specific pages
     /// TODO: handle json value conversion earlier in the shim (or the upstream spec)
-    fn locked_packages_from_resolution(
-        groups: impl IntoIterator<Item = ResolvedPackageGroup>,
-    ) -> impl Iterator<Item = LockedPackageCatalog> {
-        groups.into_iter().flat_map(|group| {
+    fn locked_packages_from_resolution<'manifest>(
+        manifest: &'manifest TypedManifestCatalog,
+        groups: impl IntoIterator<Item = ResolvedPackageGroup> + 'manifest,
+    ) -> impl Iterator<Item = LockedPackageCatalog> + 'manifest {
+        let infos = groups.into_iter().flat_map(|group| {
             group
                 .pages
                 .into_iter()
                 .take(1)
                 .flat_map(|page| page.packages.into_iter())
-                .map(move |package| {
-                    // unpack package to avoid missing new fields
-                    LockedPackageCatalog::from_resolution_info_for_system(
-                        package,
-                        group.system.clone(),
-                    )
-                })
+                .map(move |package| (package, group.system.clone()))
+        });
+
+        infos.filter_map(|(package, system)| {
+            let Some(descriptor) = manifest.install.get(&package.name).cloned() else {
+                debug!("Package {} is not in the manifest, skipping", package.name);
+                return None;
+            };
+
+            // unpack package to avoid missing new fields
+            Some(LockedPackageCatalog::from_parts(
+                package, descriptor, system,
+            ))
         })
     }
 }
@@ -735,7 +762,7 @@ pub struct LockfileCheckWarning {
     pub message: String,
 }
 
-#[cfg(any(test, feature = "test"))]
+#[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
@@ -938,6 +965,9 @@ mod tests {
                 unfree: false,
                 version: "version".to_string(),
                 system: "system".to_string(),
+                group: "group".to_string(),
+                priority: 5,
+                optional: false,
             }],
         })
     });
@@ -1260,15 +1290,22 @@ mod tests {
             name: "group".to_string(),
         }];
 
+        let manifest = &*TEST_TYPED_MANIFEST;
+
         let locked_packages =
-            LockedManifestCatalog::locked_packages_from_resolution(groups.clone())
+            LockedManifestCatalog::locked_packages_from_resolution(manifest, groups.clone())
                 .collect::<Vec<_>>();
 
         assert_eq!(locked_packages.len(), 1);
         assert_eq!(
             &locked_packages[0],
-            &LockedPackageCatalog::from_resolution_info_for_system(
+            &LockedPackageCatalog::from_parts(
                 groups[0].pages[0].packages[0].clone(),
+                manifest
+                    .install
+                    .get(&groups[0].pages[0].packages[0].name)
+                    .unwrap()
+                    .clone(),
                 groups[0].system.clone()
             )
         );

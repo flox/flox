@@ -45,5 +45,7 @@ proptest-derive.workspace = true
 serial_test.workspace = true
 
 [features]
+# allow exporting test helpers in dev mode only
+tests = []
 extra-tests = ["impure-unit-tests"]
 impure-unit-tests = []
