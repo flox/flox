@@ -297,13 +297,7 @@ impl LockedManifestCatalog {
         seed_lockfile: Option<&LockedManifestCatalog>,
         client: &impl catalog::ClientTrait,
     ) -> Result<LockedManifestCatalog, LockedManifestError> {
-        let locked_packages = if let Some(seed_lockfile) = seed_lockfile {
-            Self::make_seed_mapping(seed_lockfile)
-        } else {
-            HashMap::new()
-        };
-
-        let groups = Self::collect_package_groups(manifest, locked_packages).collect();
+        let groups = Self::collect_package_groups(manifest, seed_lockfile).collect();
 
         // lock existing packages
 
@@ -348,8 +342,10 @@ impl LockedManifestCatalog {
     /// These packages are used to constrain the resolution.
     fn collect_package_groups<'manifest>(
         manifest: &'manifest TypedManifestCatalog,
-        locked: HashMap<(&ManifestPackageDescriptor, &System), &LockedPackageCatalog>,
+        seed_lockfile: Option<&LockedManifestCatalog>,
     ) -> impl Iterator<Item = PackageGroup> + 'manifest {
+        let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
+
         // Using a btree map to ensure consistent ordering
         let mut map = BTreeMap::new();
 
@@ -381,7 +377,7 @@ impl LockedManifestCatalog {
                     system: system.clone(),
                 });
 
-                let locked_derivation = locked
+                let locked_derivation = seed_locked_packages
                     .get(&(manifest_descriptor, system))
                     .map(|p| p.derivation.clone());
 
@@ -950,8 +946,8 @@ mod tests {
     fn make_params_smoke() {
         let manifest = &*TEST_TYPED_MANIFEST;
 
-        let params = LockedManifestCatalog::collect_package_groups(manifest, Default::default())
-            .collect::<Vec<_>>();
+        let params =
+            LockedManifestCatalog::collect_package_groups(manifest, None).collect::<Vec<_>>();
         assert_eq!(&params, &*TEST_RESOLUTION_PARAMS);
     }
 
@@ -1015,8 +1011,7 @@ mod tests {
         ];
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, Default::default())
-                .collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1074,8 +1069,7 @@ mod tests {
         ];
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, Default::default())
-                .collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1123,8 +1117,7 @@ mod tests {
         ];
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, Default::default())
-                .collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1175,8 +1168,7 @@ mod tests {
         ];
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, Default::default())
-                .collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1201,9 +1193,8 @@ mod tests {
         let LockedManifest::Catalog(seed) = &*TEST_LOCKED_MANIFEST else {
             panic!("Expected a catalog lockfile");
         };
-        let seed_mapping = LockedManifestCatalog::make_seed_mapping(seed);
 
-        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, seed_mapping)
+        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, Some(seed))
             .collect::<Vec<_>>();
 
         let expected_params = vec![PackageGroup {
