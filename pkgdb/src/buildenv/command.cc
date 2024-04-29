@@ -84,8 +84,8 @@ BuildEnvCommand::run()
 
   debugLog( "lockfile: " + this->lockfileContent.dump( 2 ) );
 
-  resolver::LockfileRaw lockfile = this->lockfileContent;
-  auto system   = this->system.value_or( nix::settings.thisSystem.get() );
+
+  auto system = this->system.value_or( nix::settings.thisSystem.get() );
 
   auto store = this->getStore();
   auto state = this->getState();
@@ -113,7 +113,7 @@ BuildEnvCommand::run()
 
   debugLog( "building environment" );
 
-  auto storePath = createFloxEnv( state, lockfile, system );
+  auto storePath = createFloxEnv( state, this->lockfileContent, system );
 
   debugLog( "built environment: " + store->printStorePath( storePath ) );
 

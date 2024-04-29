@@ -1264,10 +1264,18 @@ makeProfileDScripts( nix::EvalState & state )
  * @return The store path of the environment.
  */
 nix::StorePath
-createFloxEnv( nix::ref<nix::EvalState> &    state,
-               const resolver::LockfileRaw & lockfile,
-               const System &                system )
+createFloxEnv( nix::ref<nix::EvalState> & state,
+               const nlohmann::json &     lockfileContent,
+               const System &             system )
 {
+  int version = lockfileContent["lockfile-version"];
+  infoLog( nix::fmt( "lockfile version %d", version ) );
+
+  resolver::LockfileRaw lockfile;
+  if ( version == 0 ) { lockfile = lockfileContent; }
+  else { lockfile.from_v1_content( lockfileContent ); }
+
+
   auto locked_packages = getLockedPackages( lockfile, system );
 
   /* Extract derivations */

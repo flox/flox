@@ -237,6 +237,9 @@ struct LockfileRaw
   void
   clear();
 
+  void
+  from_v1_content( const nlohmann::json & jfrom );
+
 
 }; /* End struct `LockfileRaw' */
 

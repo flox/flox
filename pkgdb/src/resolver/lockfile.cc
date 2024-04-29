@@ -425,6 +425,73 @@ LockfileRaw::clear()
 
 
 /* -------------------------------------------------------------------------- */
+void
+LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
+{
+  infoLog( nix::fmt( "loading v1 lockfile content" ) );
+
+  try
+    {
+      auto value = jfrom["manifest"]["vars"];
+      value.get_to( this->manifest.vars );
+    }
+  catch ( nlohmann::json::exception & err )
+    {
+      throw InvalidLockfileException(
+        "couldn't parse lockfile field 'manifest.vars'",
+        extract_json_errmsg( err ) );
+    }
+
+  try
+    {
+      auto hook = jfrom["manifest"]["hook"];
+      if ( auto key = "script"; hook.contains( key ) )
+        {
+          auto script = hook.at( key );
+          if ( ! script.is_null() )
+            {
+              this->manifest.hook->script = script.get<std::string>();
+            }
+        }
+      if ( auto key = "on-activate"; hook.contains( key ) )
+        {
+          auto onActivate = hook.at( key );
+          if ( ! onActivate.is_null() )
+            {
+              this->manifest.hook->onActivate = onActivate.get<std::string>();
+            }
+        }
+    }
+  catch ( nlohmann::json::exception & err )
+    {
+      throw InvalidLockfileException(
+        "couldn't parse lockfile field 'manifest.hook'",
+        extract_json_errmsg( err ) );
+    }
+
+  // load packages as map<system, map<install-id, package>>
+  try
+    {
+      auto groups = jfrom["groups"];
+      for ( const auto & [idx, group] : groups.items() )
+        {
+          std::string system     = group["system"];
+          std::string group_name = group["name"];
+          infoLog(
+            nix::fmt( "lockfile-v1: Processing group %s", group["name"] ) )
+          // get group["system"]
+          // for ["page"], get ["url"]
+          //    iterate over ["packages"]
+        }
+    }
+  catch ( nlohmann::json::exception & err )
+    {
+      throw InvalidLockfileException( "couldn't parse lockfile field 'groups'",
+                                      extract_json_errmsg( err ) );
+    }
+
+  infoLog( nix::fmt( "loaded lockfile v1" ) );
+}
 
 void
 from_json( const nlohmann::json & jfrom, LockfileRaw & raw )
