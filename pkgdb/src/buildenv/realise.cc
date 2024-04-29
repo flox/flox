@@ -1270,7 +1270,8 @@ createFloxEnv( nix::ref<nix::EvalState> & state,
                const nlohmann::json &     lockfileContent,
                const System &             system )
 {
-  resolver::LockfileRaw lockfile( lockfileContent );
+  resolver::LockfileRaw lockfile;
+  lockfile.load_from_content( lockfileContent );
 
   auto locked_packages = getLockedPackages( lockfile, system );
 

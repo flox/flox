@@ -211,12 +211,8 @@ struct LockfileRaw
   unsigned                                   lockfileVersion = 0;
 
 
-  ~LockfileRaw() = default;
-  LockfileRaw()  = default;
-  LockfileRaw( const nlohmann::json & jfrom )
-  {
-    this->load_from_content( jfrom );
-  }
+  ~LockfileRaw()                     = default;
+  LockfileRaw()                      = default;
   LockfileRaw( const LockfileRaw & ) = default;
   // NOLINTNEXTLINE(bugprone-exception-escape)
   LockfileRaw( LockfileRaw && ) = default;
