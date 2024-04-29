@@ -191,7 +191,7 @@ impl<State> CoreEnvironment<State> {
             }
         };
 
-        LockedManifestCatalog::new(&manifest, existing_lockfile.as_ref(), client)
+        LockedManifestCatalog::lock_manifest(&manifest, existing_lockfile.as_ref(), client)
             .block_on()
             .map_err(CoreEnvironmentError::LockedManifest)
     }

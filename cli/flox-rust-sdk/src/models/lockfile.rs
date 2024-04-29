@@ -292,7 +292,7 @@ impl LockedManifestCatalog {
     ///
     /// If a seed lockfile is provided, packages that are already locked
     /// will constrain the resolution.
-    pub async fn new(
+    pub async fn lock_manifest(
         manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
         client: &impl catalog::ClientTrait,
@@ -1290,7 +1290,7 @@ mod tests {
         let mut client = catalog::MockClient::new(None::<String>).unwrap();
         client.push_resolve_response(TEST_RESOLUTION_RESPONSE.clone());
 
-        let locked_manifest = LockedManifestCatalog::new(manifest, None, &client)
+        let locked_manifest = LockedManifestCatalog::lock_manifest(manifest, None, &client)
             .await
             .unwrap();
         assert_eq!(
