@@ -236,7 +236,7 @@ jobs:
 
   trigger-flox-installers-workflow:
     name: "Build installers"
-    #if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 120
 
