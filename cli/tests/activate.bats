@@ -273,6 +273,104 @@ env_is_activated() {
   refute_output --partial "sourcing profile.zsh"
 }
 
+# bats test_tags=activate,activate:hook,activate:hook:bash
+@test "bash: activate runs hook only once in nested activation" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+
+  MANIFEST_CONTENT="$(cat << "EOF"
+    [hook]
+    on-activate = """
+      echo "sourcing hook.on-activate"
+    """
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+  # Don't use run or assert_output because we can't use them for zsh below
+  {
+    FLOX_SHELL="bash" eval "$("$FLOX_BIN" activate 2>"$PROJECT_DIR/stderr_1")"
+    [[ "$(cat "$PROJECT_DIR/stderr_1")" == *"sourcing hook.on-activate"* ]]
+    FLOX_SHELL="bash" eval "$("$FLOX_BIN" activate 2>"$PROJECT_DIR/stderr_2")"
+    [[ "$(cat "$PROJECT_DIR/stderr_2")" != *"sourcing hook.on-activate"* ]]
+  }
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:zsh
+@test "zsh: activate runs hook only once in nested activations" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+
+  MANIFEST_CONTENT="$(cat << "EOF"
+    [hook]
+    on-activate = """
+      echo "sourcing hook.on-activate"
+    """
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+  # TODO: this gives unhelpful failures
+  # Don't use run or assert_output because we can't use them for zsh below
+  cat << 'EOF' | zsh
+    FLOX_SHELL="zsh" eval "$("$FLOX_BIN" activate 2>"$PROJECT_DIR/stderr_1")"
+    [[ "$(cat "$PROJECT_DIR/stderr_1")" == *"sourcing hook.on-activate"* ]]
+    FLOX_SHELL="zsh" eval "$("$FLOX_BIN" activate 2>"$PROJECT_DIR/stderr_2")"
+    [[ "$(cat "$PROJECT_DIR/stderr_2")" != *"sourcing hook.on-activate"* ]]
+EOF
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:bash
+@test "bash: activate runs profile twice in nested activation" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+
+  MANIFEST_CONTENT="$(cat << "EOF"
+    [profile]
+    bash = """
+      echo "sourcing profile.bash"
+    """
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+  # Don't use run or assert_output because we can't use them for zsh below
+  {
+    output="$(FLOX_SHELL="bash" eval "$("$FLOX_BIN" activate)")"
+    [[ "$output" == *"sourcing profile.bash"* ]]
+    output="$(FLOX_SHELL="bash" eval "$("$FLOX_BIN" activate)")"
+    [[ "$output" == *"sourcing profile.bash"* ]]
+  }
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:zsh
+@test "zsh: activate runs profile twice in nested activation" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+
+  MANIFEST_CONTENT="$(cat << "EOF"
+    [profile]
+    zsh = """
+      echo "sourcing profile.zsh"
+    """
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+  # TODO: this gives unhelpful failures
+  cat << 'EOF' | zsh
+    output="$(FLOX_SHELL="zsh" eval "$("$FLOX_BIN" activate)")"
+    [[ "$output" == *"sourcing profile.zsh"* ]]
+    output="$(FLOX_SHELL="zsh" eval "$("$FLOX_BIN" activate)")"
+    [[ "$output" == *"sourcing profile.zsh"* ]]
+EOF
+}
+
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:once
@@ -607,7 +705,7 @@ env_is_activated() {
   # - The [vars] section sets foo=bar
   # - The on-activate script exports foo=baz
   # - We echo $foo from within userShell and see "baz" as expected
-  SHELL="$(which bash)" run --separate-stderr "$FLOX_BIN" activate -- echo '$foo'
+  FLOX_SHELL="bash" run --separate-stderr "$FLOX_BIN" activate -- echo '$foo'
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "baz"
 }
@@ -623,9 +721,89 @@ env_is_activated() {
   # - The [vars] section sets foo=bar
   # - The on-activate script exports foo=baz
   # - We echo $foo from within userShell and see "baz" as expected
-  SHELL="$(which zsh)" run --separate-stderr "$FLOX_BIN" activate -- echo '$foo'
+  FLOX_SHELL="zsh" run --separate-stderr "$FLOX_BIN" activate -- echo '$foo'
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "baz"
+}
+
+@test "'hook.on-activate' modifies environment variables in nested activation (bash)" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
+
+  {
+    eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
+    [[ "$foo" == baz ]]
+    unset foo
+    eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
+    [[ "$foo" == baz ]]
+  }
+}
+
+# bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:zsh
+@test "'hook.on-activate' modifies environment variables in nested activation (zsh)" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
+
+  # TODO: this gives unhelpful failures
+  cat << 'EOF' | zsh
+    eval "$(FLOX_SHELL="zsh" "$FLOX_BIN" activate)"
+    [[ "$foo" == baz ]]
+    unset foo
+    eval "$(FLOX_SHELL="zsh" "$FLOX_BIN" activate)"
+    [[ "$foo" == baz ]]
+EOF
+}
+
+@test "'hook.on-activate' unsets environment variables in nested activation (bash)" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+
+  MANIFEST_CONTENT="$(cat << "EOF"
+    [hook]
+    on-activate = """
+      unset foo
+    """
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+  {
+    export foo=baz
+    eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
+    [[ -z "${foo:-}" ]]
+    export foo=baz
+    eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
+    [[ -z "${foo:-}" ]]
+  }
+}
+
+# bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:zsh
+@test "'hook.on-activate' unsets environment variables in nested activation (zsh)" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+
+  MANIFEST_CONTENT="$(cat << "EOF"
+    [hook]
+    on-activate = """
+      unset foo
+    """
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+  # TODO: this gives unhelpful failures
+  cat << 'EOF' | zsh
+    export foo=baz
+    eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
+    [[ -z "${foo:-}" ]]
+    export foo=baz
+    eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
+    [[ -z "${foo:-}" ]]
+EOF
 }
 
 # ---------------------------------------------------------------------------- #
