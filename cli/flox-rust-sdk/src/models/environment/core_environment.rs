@@ -6,6 +6,7 @@ use std::process::Command;
 use log::debug;
 use pollster::FutureExt;
 use thiserror::Error;
+use tracing::warn;
 
 use super::{
     copy_dir_recursive,
@@ -187,7 +188,12 @@ impl<State> CoreEnvironment<State> {
                 .map_err(CoreEnvironmentError::LockedManifest)?;
             match lockfile {
                 LockedManifest::Catalog(lockfile) => Some(lockfile),
-                _ => None,
+                _ => {
+                    warn!(
+                        "Found version 1 manifest, but lockfile doesn't match: Ignoring lockfile."
+                    );
+                    None
+                },
             }
         };
 
