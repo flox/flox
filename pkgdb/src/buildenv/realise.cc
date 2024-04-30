@@ -561,11 +561,9 @@ static std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
 getLockedPackages( const resolver::LockfileRaw & lockfile,
                    const System &                system )
 {
-  traceLog( "getting locked packages" );
-  auto packages = lockfile.packages.find( system );
-  if ( packages == lockfile.packages.end() )
+  auto systems = lockfile.manifest.getSystems();
+  if ( std::find( systems.begin(), systems.end(), system ) == systems.end() )
     {
-      // Custom exception for non supported system
       throw SystemNotSupportedByLockfile(
         "'" + system + "' not supported by this environment" );
     }
@@ -573,6 +571,11 @@ getLockedPackages( const resolver::LockfileRaw & lockfile,
   /* Extract all packages */
   std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
     locked_packages;
+
+  traceLog( "getting locked packages" );
+  auto packages = lockfile.packages.find( system );
+  /* The lockfile may not have any packages for this system */
+  if ( packages == lockfile.packages.end() ) { return locked_packages; }
 
   for ( auto const & package : packages->second )
     {
