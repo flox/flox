@@ -571,10 +571,6 @@ impl From<api_types::CatalogPageInput> for CatalogPage {
     }
 }
 
-/// TODO: Implement a shim for [api_types::PackageResolutionInfo] that
-/// converts `outputs` and `outputs_to_install` from
-/// [serde_json::Value] to [String] based types.
-///
 /// Since we plan to list resolved packages in a flat list within the lockfile,
 /// [lockfile::LockedPackageCatalog] adds (at least) a `system` field.
 /// We should consider whether adding a shim to [api_types::PackageResolutionInfo]

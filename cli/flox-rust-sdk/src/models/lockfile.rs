@@ -357,9 +357,11 @@ impl LockedManifestCatalog {
     /// A group is created for each unique combination of (descriptor.package_group ｘ descriptor.system).
     /// Each group contains a list of package descriptors that belong to that group.
     ///
-    /// `locked` is used to provide existing derivations for packages that are already locked,
+    /// `seed_lockfile` is used to provide existing derivations for packages that are already locked,
     /// e.g. by a previous lockfile.
     /// These packages are used to constrain the resolution.
+    /// If a package in `manifest` does not have a corresponding package in `seed_lockfile`,
+    /// that package will be unconstrained, allowing a first install.
     fn collect_package_groups<'manifest>(
         manifest: &'manifest TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
@@ -411,7 +413,7 @@ impl LockedManifestCatalog {
         map.into_values()
     }
 
-    /// Convert a resolution results into a list of locked packages
+    /// Convert resolution results into a list of locked packages
     ///
     /// * Flattens `Group(Page(PackageResolutionInfo+)+)` into `LockedPackageCatalog+`
     /// * Adds a `system` field to each locked package.
