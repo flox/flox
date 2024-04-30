@@ -17,6 +17,8 @@ use super::lockfile::FlakeRef;
 // the fallback to the binary available at build time if it is unset.
 pub static PKGDB_BIN: Lazy<String> =
     Lazy::new(|| env::var("PKGDB_BIN").unwrap_or(env!("PKGDB_BIN").to_string()));
+pub static GIT_PKG_BIN: Lazy<String> =
+    Lazy::new(|| env::var("GIT_PKG").unwrap_or(env!("GIT_PKG").to_string()) + "/bin");
 
 /// Error codes emitted by pkgdb
 /// matching the definitions in `pkgdb/include/flox/core/exceptions.hh`
@@ -89,7 +91,21 @@ pub enum CallPkgDbError {
 ///
 /// Error JSON is parsed into a [CallPkgDbError::PkgDbError].
 pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
+    // Configure pkgdb PATH with exact versions of everything it needs.
+    //
+    // Nix itself isn't pure, which is to say that it isn't built with a
+    // reference to `git` in its closure, so correspondingly depends upon
+    // finding it in $PATH to function.
+    //
+    // This just isn't OK for us as we're looking for flox to operate reliably
+    // in "hostile" environments, which includes situation where a user may
+    // redefine or blat their $PATH variable entirely, so we always invoke
+    // pkgdb with an explicit PATH of our making.
+    //
+    // It really shouldn't be necessary to append $PATH, so we won't.
+    let pkgdb_path = Path::new(&*GIT_PKG_BIN);
     let mut proc = pkgdb_cmd
+        .env("PATH", pkgdb_path)
         .stderr(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()

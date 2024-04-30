@@ -81,8 +81,8 @@ setup_file() {
     "$LOCKFILES/single-package/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/bash"
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/zsh"
+  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate.d/bash"
+  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate.d/zsh"
   assert "$TEST" -d "$BATS_TEST_TMPDIR/env/etc/profile.d"
 }
 
@@ -93,8 +93,8 @@ setup_file() {
   run "$PKGDB_BIN" buildenv "$LOCKFILES/hook-script/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/hook-script"
-  run "$CAT" "$BATS_TEST_TMPDIR/env/activate/hook-script"
+  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate.d/hook-script"
+  run "$CAT" "$BATS_TEST_TMPDIR/env/activate.d/hook-script"
   assert_output "script"
 }
 
@@ -104,7 +104,7 @@ setup_file() {
   run "$PKGDB_BIN" buildenv "$LOCKFILES/on-activate/manifest.lock" \
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/hook-on-activate"
+  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate.d/hook-on-activate"
 }
 
 # --------------------------------------------------------------------------- #
@@ -140,8 +140,8 @@ setup_file() {
     --out-link "$BATS_TEST_TMPDIR/env"
   assert_success
 
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate/bash"
-  run "$CAT" "$BATS_TEST_TMPDIR/env/activate/bash"
+  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate.d/envrc"
+  run "$CAT" "$BATS_TEST_TMPDIR/env/activate.d/envrc"
   assert_line "export singlequotes=''\''bar'\'''"
   assert_line "export singlequoteescaped='\'\''baz'"
 }

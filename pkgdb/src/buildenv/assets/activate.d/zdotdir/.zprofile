@@ -1,3 +1,7 @@
+# Source /etc/zprofile and "${FLOX_ORIG_ZDOTDIR:-$HOME}/.zprofile" if they exist.
+#
+# See README.md for more information on the initialization process.
+
 if [ -f /etc/zprofile ]
 then
     if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]

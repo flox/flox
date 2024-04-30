@@ -178,6 +178,8 @@ test_scriptsAreSourcedOrCalled( nix::ref<nix::EvalState> & state,
   auto output
     = flox::buildenv::makeActivationScripts( *state,
                                              lockfile.getLockfileRaw() );
+  auto activationScriptPath = std::filesystem::path( output.first.path )
+                              / flox::buildenv::ACTIVATION_SCRIPT_NAME;
   auto scriptsDir = std::filesystem::path( output.first.path )
                     / flox::buildenv::ACTIVATION_SUBDIR_NAME;
   std::vector<std::string> shells         = { "bash", "zsh" };
@@ -204,13 +206,19 @@ test_scriptsAreSourcedOrCalled( nix::ref<nix::EvalState> & state,
                                     shell );
       auto shellPos     = contents.str().find( shellPattern );
       EXPECT( shellPos != std::string::npos );
-
-      /* Look for 'hook-on-activate'*/
-      auto hookPattern = nix::fmt( "bash \"$FLOX_ENV/%s/hook-on-activate\"",
-                                   flox::buildenv::ACTIVATION_SUBDIR_NAME );
-      auto hookPos     = contents.str().find( hookPattern );
-      EXPECT( hookPos != std::string::npos );
     }
+
+  /* Look for 'hook-on-activate' in the activate script only. */
+  std::ifstream     file( activationScriptPath );
+  std::stringstream contents;
+  contents << file.rdbuf();
+  file.close();
+
+  auto hookPattern = nix::fmt( "\"$FLOX_ENV/%s/hook-on-activate\"",
+                               flox::buildenv::ACTIVATION_SUBDIR_NAME );
+  auto hookPos     = contents.str().find( hookPattern );
+  EXPECT( hookPos != std::string::npos );
+
   return true;
 }
 

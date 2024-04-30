@@ -123,19 +123,21 @@ function skip_if_linux() {
   skip_if_not_linux
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
-  run --separate-stderr podman run -q -i "$CONTAINER_ID" true
+  run --separate-stderr podman run -q -i "$CONTAINER_ID" -c 'echo $foo'
   assert_success
 
-  # checking
+  # check:
   # (1) if the variable `foo = bar` is set in the container
+  #   - printed to STDOUT by the container invocation
   # (2) if the binary `hello` is present in the container
   # (3) if the binary `hello` operates as expected
-  assert_output --regexp - << EOF
-bar
-\/nix\/store\/.*\/bin\/hello
-Hello, world!
-EOF
-
+  #   - printed to STDOUT by the on-activate hook, but then
+  #     redirected to STDERR by the flox activate script
+  assert_equal "${#lines[@]}" 1 # 1 result
+  assert_equal "${lines[0]}" "bar"
+  assert_equal "${#stderr_lines[@]}" 2
+  assert_regex "${stderr_lines[0]}" "\/nix\/store\/.*\/bin\/hello"
+  assert_equal "${stderr_lines[1]}" "Hello, world!"
 }
 
 # bats test_tags=containerize:run-container-no-i
@@ -143,19 +145,14 @@ EOF
   skip_if_not_linux
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
-  run --separate-stderr podman run "$CONTAINER_ID" true
+  run --separate-stderr podman run "$CONTAINER_ID" -c 'echo $foo'
   assert_success
 
-  # checking
-  # (1) if the variable `foo = bar` is set in the container
-  # (2) if the binary `hello` is present in the container
-  # (3) if the binary `hello` operates as expected
-  assert_output --regexp - << EOF
-bar
-\/nix\/store\/.*\/bin\/hello
-Hello, world!
-EOF
-
+  assert_equal "${#lines[@]}" 1 # 1 result
+  assert_equal "${lines[0]}" "bar"
+  assert_equal "${#stderr_lines[@]}" 2
+  assert_regex "${stderr_lines[0]}" "\/nix\/store\/.*\/bin\/hello"
+  assert_equal "${stderr_lines[1]}" "Hello, world!"
 }
 
 # ---------------------------------------------------------------------------- #

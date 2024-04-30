@@ -23,7 +23,7 @@ project_setup() {
   export Hello_HOOK=$(
     cat << EOF
 [hook]
-script = """
+on-activate = """
   echo "Welcome to your flox environment!";
 """
 EOF
