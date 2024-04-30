@@ -174,11 +174,11 @@ pub struct LockedPackageCatalog {
     pub stabilities: Vec<String>,
     pub unfree: bool,
     pub version: String,
+    pub outputs_to_install: Vec<String>,
     // endregion
 
     // region: converted fields
     pub outputs: BTreeMap<String, String>,
-    pub outputs_to_install: Vec<String>,
     // endregion
 
     // region: added fields
