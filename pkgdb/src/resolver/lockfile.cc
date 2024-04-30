@@ -461,7 +461,7 @@ lockedPackageFromCatalogDescriptor( const nlohmann::json & jfrom,
   pkg.input.url   = jfrom["locked_url"];
   pkg.input.attrs = nix::fetchers::Attrs();
   // These attributes are needed by the current builder, and not included in the
-  // descriptor This will not always be true, but also may not be required to
+  // descriptor. This will not always be true, but also may not be required to
   // build depending on the path taken for future environment builds.
   if ( std::string supportedUrl = "github:NixOS/nixpkgs";
        pkg.input.url.substr( 0, supportedUrl.size() ) != supportedUrl )
@@ -480,8 +480,6 @@ lockedPackageFromCatalogDescriptor( const nlohmann::json & jfrom,
       pkg.input.attrs["rev"] = pkg.input.url.substr( found + 1 );
     }
 }
-
-// void load_optional_string
 
 void
 LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
@@ -555,7 +553,7 @@ LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
     }
   catch ( nlohmann::json::exception & err )
     {
-      throw InvalidLockfileException( "couldn't parse lockfile field 'groups'",
+      throw InvalidLockfileException( "couldn't parse lockfile field 'packages'",
                                       extract_json_errmsg( err ) );
     }
 
