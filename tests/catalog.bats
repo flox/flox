@@ -13,6 +13,8 @@ load test_support.bash
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
+  skip "needs some changes serverside"
+
   common_file_setup
   export FLOX_FEATURES_USE_CATALOG=true
   if [ -z "${TESTING_FLOX_CATALOG_URL:-}" ]; then
