@@ -10,8 +10,8 @@ use catalog_api_v1::types::{
     self as api_types,
     error as api_error,
     ErrorResponse,
-    PackageInfoApiInput,
-    PackageInfoCommonInput,
+    PackageInfoApi,
+    PackageInfoCommon,
 };
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
@@ -79,7 +79,7 @@ pub enum MockDataError {
 }
 
 /// Reads a list of mock responses from disk.
-fn read_mock_responses(path: &impl AsRef<Path>) -> Result<VecDeque<Response>, MockDataError> {
+fn read_mock_responses(path: impl AsRef<Path>) -> Result<VecDeque<Response>, MockDataError> {
     let mut responses = VecDeque::new();
     let contents = std::fs::read_to_string(path).map_err(MockDataError::ReadMockFile)?;
     let deserialized: Vec<Response> =
@@ -123,7 +123,7 @@ pub struct MockClient {
 
 impl MockClient {
     /// Create a new mock client, potentially reading mock responses from disk
-    pub fn new(mock_data_path: Option<&impl AsRef<Path>>) -> Result<Self, CatalogClientError> {
+    pub fn new(mock_data_path: Option<impl AsRef<Path>>) -> Result<Self, CatalogClientError> {
         let mock_responses = if let Some(path) = mock_data_path {
             read_mock_responses(&path).expect("couldn't read mock responses from disk")
         } else {
@@ -287,7 +287,7 @@ impl ClientTrait for CatalogClient {
             |page_number, page_size| async move {
                 let response = self
                     .client
-                    .packages_api_v1_catalog_packages_pkgpath_get(
+                    .packages_api_v1_catalog_packages_pkg_path_get(
                         attr_path,
                         Some(page_number),
                         Some(page_size),
@@ -335,7 +335,6 @@ where
 {
     try_stream! {
         let mut page_number = 0;
-        // TODO: this will loop forever if page_size = 0
         loop {
             let (total_count, results) = generator(page_number, page_size.get().into()).await?;
 
@@ -453,7 +452,7 @@ impl ClientTrait for MockClient {
 /// we need.
 pub type PackageDescriptor = api_types::PackageDescriptor;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct PackageGroup {
     pub descriptors: Vec<PackageDescriptor>,
     pub name: String,
@@ -530,7 +529,7 @@ impl TryFrom<PackageGroup> for api_types::PackageGroup {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedPackageGroup {
     pub name: String,
     pub pages: Vec<CatalogPage>,
@@ -562,8 +561,8 @@ pub struct CatalogPage {
     pub url: String,
 }
 
-impl From<api_types::CatalogPage> for CatalogPage {
-    fn from(catalog_page: api_types::CatalogPage) -> Self {
+impl From<api_types::CatalogPageInput> for CatalogPage {
+    fn from(catalog_page: api_types::CatalogPageInput) -> Self {
         Self {
             packages: catalog_page.packages,
             page: catalog_page.page,
@@ -572,14 +571,18 @@ impl From<api_types::CatalogPage> for CatalogPage {
     }
 }
 
-/// TODO: fix types for outputs and outputs_to_install,
-/// at which point this will probably no longer be an alias.
-type PackageResolutionInfo = api_types::PackageResolutionInfo;
+/// TODO: Implement a shim for [api_types::PackageResolutionInfo]
+///
+/// Since we plan to list resolved packages in a flat list within the lockfile,
+/// [lockfile::LockedPackageCatalog] adds (at least) a `system` field.
+/// We should consider whether adding a shim to [api_types::PackageResolutionInfo]
+/// is not adding unnecessary complexity.
+pub type PackageResolutionInfo = api_types::PackageResolutionInfo;
 
-impl TryFrom<PackageInfoApiInput> for SearchResult {
+impl TryFrom<PackageInfoApi> for SearchResult {
     type Error = SearchError;
 
-    fn try_from(package_info: PackageInfoApiInput) -> Result<Self, SearchError> {
+    fn try_from(package_info: PackageInfoApi) -> Result<Self, SearchError> {
         Ok(Self {
             input: NIXPKGS_CATALOG.to_string(),
             system: package_info.system.to_string(),
@@ -597,10 +600,10 @@ impl TryFrom<PackageInfoApiInput> for SearchResult {
     }
 }
 
-impl TryFrom<PackageInfoCommonInput> for SearchResult {
+impl TryFrom<PackageInfoCommon> for SearchResult {
     type Error = VersionsError;
 
-    fn try_from(package_info: PackageInfoCommonInput) -> Result<Self, VersionsError> {
+    fn try_from(package_info: PackageInfoCommon) -> Result<Self, VersionsError> {
         Ok(Self {
             input: NIXPKGS_CATALOG.to_string(),
             system: package_info.system.to_string(),
@@ -620,6 +623,12 @@ impl TryFrom<PackageInfoCommonInput> for SearchResult {
 
 #[cfg(test)]
 mod tests {
+
+    use std::io::Write;
+    use std::path::PathBuf;
+
+    use pollster::FutureExt;
+    use tempfile::NamedTempFile;
 
     use super::*;
 
@@ -683,17 +692,6 @@ mod tests {
 
         assert_eq!(collected, (1..=3).collect::<Vec<_>>());
     }
-}
-
-#[cfg(test)]
-mod test {
-    use std::io::Write;
-    use std::path::PathBuf;
-
-    use pollster::FutureExt;
-    use tempfile::NamedTempFile;
-
-    use super::*;
 
     #[test]
     fn mock_client_uses_seeded_responses() {

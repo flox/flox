@@ -3,7 +3,7 @@ use serde_json::Value;
 
 pub type FlakeRef = Value;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -13,13 +13,24 @@ use thiserror::Error;
 
 use super::container_builder::ContainerBuilder;
 use super::environment::UpdateResult;
-use super::manifest::{TypedManifestCatalog, DEFAULT_GROUP_NAME};
+use super::manifest::{
+    ManifestPackageDescriptor,
+    TypedManifestCatalog,
+    DEFAULT_GROUP_NAME,
+    DEFAULT_PRIORITY,
+};
 use super::pkgdb::CallPkgDbError;
 use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
 use crate::flox::Flox;
 use crate::models::environment::{global_manifest_lockfile_path, global_manifest_path};
 use crate::models::pkgdb::{call_pkgdb, BuildEnvResult, PKGDB_BIN};
-use crate::providers::catalog::CatalogPage;
+use crate::providers::catalog::{
+    self,
+    CatalogPage,
+    PackageDescriptor,
+    PackageGroup,
+    ResolvedPackageGroup,
+};
 use crate::utils::CommandExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -36,7 +47,7 @@ pub struct Registry {
     _json: Value,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize /* , Deserialize implemented manually */)]
 #[serde(untagged)]
 pub enum LockedManifest {
     Catalog(LockedManifestCatalog),
@@ -130,14 +141,122 @@ impl ToString for LockedManifest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedManifestCatalog {
     #[serde(rename = "lockfile-version")]
-    version: Version<1>,
+    pub version: Version<1>,
     /// original manifest that was locked
-    manifest: TypedManifestCatalog,
-    /// locked groups
-    groups: Vec<LockedGroup>,
+    pub manifest: TypedManifestCatalog,
+    /// locked pacakges
+    pub packages: Vec<LockedPackageCatalog>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct LockedPackageCatalog {
+    // region: original fields from the service
+    // These fields are copied from the generated struct.
+    pub attr_path: String,
+    pub broken: bool,
+    pub derivation: String,
+    pub description: String,
+    pub license: String,
+    pub locked_url: String,
+    pub name: String,
+    pub pname: String,
+    pub rev: String,
+    pub rev_count: i64,
+    #[cfg_attr(test, proptest(strategy = "crate::utils::proptest_chrono_strategy()"))]
+    pub rev_date: chrono::DateTime<chrono::offset::Utc>,
+    #[cfg_attr(test, proptest(strategy = "crate::utils::proptest_chrono_strategy()"))]
+    pub scrape_date: chrono::DateTime<chrono::offset::Utc>,
+    pub stabilities: Vec<String>,
+    pub unfree: bool,
+    pub version: String,
+    pub outputs_to_install: Vec<String>,
+    // endregion
+
+    // region: converted fields
+    pub outputs: BTreeMap<String, String>,
+    // endregion
+
+    // region: added fields
+    pub system: System,
+    pub group: String,
+    pub priority: usize,
+    pub optional: bool,
+    // endregion
+}
+
+impl LockedPackageCatalog {
+    /// Construct a [LockedPackageCatalog] from a [ManifestPackageDescriptor],
+    /// the resolved [catalog::PackageResolutionInfo], and corresponding [System].
+    ///
+    /// There may be more validation/parsing we could do here in the future.
+    pub fn from_parts(
+        package: catalog::PackageResolutionInfo,
+        descriptor: ManifestPackageDescriptor,
+        system: System,
+    ) -> Self {
+        // unpack package to avoid missing new fields
+        let catalog::PackageResolutionInfo {
+            attr_path,
+            broken,
+            derivation,
+            description,
+            license,
+            locked_url,
+            name,
+            outputs,
+            outputs_to_install,
+            pname,
+            rev,
+            rev_count,
+            rev_date,
+            scrape_date,
+            stabilities,
+            unfree,
+            version,
+        } = package;
+
+        let outputs = outputs
+            .into_iter()
+            .map(|output| (output.name, output.store_path))
+            .collect();
+
+        let priority = descriptor.priority.unwrap_or(DEFAULT_PRIORITY);
+        let group = descriptor
+            .package_group
+            .as_deref()
+            .unwrap_or(DEFAULT_GROUP_NAME)
+            .to_string();
+        let optional = descriptor.optional;
+
+        LockedPackageCatalog {
+            attr_path,
+            broken,
+            derivation,
+            description,
+            license,
+            locked_url,
+            name,
+            outputs,
+            outputs_to_install,
+            pname,
+            rev,
+            rev_count,
+            rev_date,
+            scrape_date,
+            stabilities,
+            unfree,
+            version,
+            system,
+            priority,
+            group,
+            optional,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -159,46 +278,185 @@ impl LockedManifestCatalog {
     /// Convert a locked manifest to a list of installed packages for a given system
     /// in a format shared with the pkgdb based locked manifest.
     pub fn list_packages(&self, system: &System) -> Vec<InstalledPackage> {
-        self.groups
+        self.packages
             .iter()
-            .filter(|group| &group.system == system)
-            .flat_map(|group| {
-                group.page.packages.iter().cloned().map(|package| {
-                    let priority = self
-                        .manifest
-                        .install
-                        .values()
-                        .find(|install| {
-                            install.pkg_path == package.attr_path
-                                && install
-                                    .package_group
-                                    .as_deref()
-                                    .unwrap_or(DEFAULT_GROUP_NAME)
-                                    == group.name
-                        })
-                        .and_then(|install| install.priority);
+            .filter(|package| &package.system == system)
+            .map(|package| {
+                let priority = self
+                    .manifest
+                    .install
+                    .iter()
+                    .find(|(install_id, _)| install_id == &&package.name)
+                    .and_then(|(_, descriptor)| descriptor.priority);
 
-                    InstalledPackage {
-                        name: package.name,
-                        rel_path: package.attr_path,
-                        info: PackageInfo {
-                            description: Some(package.description),
-                            broken: package.broken,
-                            license: Some(package.license),
-                            pname: package.pname,
-                            unfree: package.unfree,
-                            version: Some(package.version),
-                        },
-                        priority,
-                    }
-                })
+                let package = package.clone();
+
+                InstalledPackage {
+                    name: package.name,
+                    rel_path: package.attr_path,
+                    info: PackageInfo {
+                        description: Some(package.description),
+                        broken: package.broken,
+                        license: Some(package.license),
+                        pname: package.pname,
+                        unfree: package.unfree,
+                        version: Some(package.version),
+                    },
+                    priority,
+                }
             })
             .collect()
+    }
+
+    /// Produce a lockfile for a given manifest using the catalog service.
+    ///
+    /// If a seed lockfile is provided, packages that are already locked
+    /// will constrain the resolution.
+    pub async fn lock_manifest(
+        manifest: &TypedManifestCatalog,
+        seed_lockfile: Option<&LockedManifestCatalog>,
+        client: &impl catalog::ClientTrait,
+    ) -> Result<LockedManifestCatalog, LockedManifestError> {
+        let groups = Self::collect_package_groups(manifest, seed_lockfile).collect();
+
+        // lock existing packages
+
+        let resolved = client
+            .resolve(groups)
+            .await
+            .map_err(LockedManifestError::CatalogResolve)?;
+
+        let locked_packages = Self::locked_packages_from_resolution(manifest, resolved).collect();
+
+        let lockfile = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: locked_packages,
+        };
+
+        Ok(lockfile)
+    }
+
+    /// Transform a lockfile into a mapping  that is easier to query:
+    /// Lockfile -> { (package, system): locked package }
+    fn make_seed_mapping(
+        seed: &LockedManifestCatalog,
+    ) -> HashMap<(&ManifestPackageDescriptor, &System), &LockedPackageCatalog> {
+        seed.packages
+            .iter()
+            .filter_map(|package| {
+                let system = &package.system;
+                let manifest = seed.manifest.install.get(&package.name)?;
+                Some(((manifest, system), package))
+            })
+            .collect()
+    }
+
+    /// Creates package groups from a flat map of install descriptors
+    ///
+    /// A group is created for each unique combination of (descriptor.package_group ｘ descriptor.system).
+    /// Each group contains a list of package descriptors that belong to that group.
+    ///
+    /// `seed_lockfile` is used to provide existing derivations for packages that are already locked,
+    /// e.g. by a previous lockfile.
+    /// These packages are used to constrain the resolution.
+    /// If a package in `manifest` does not have a corresponding package in `seed_lockfile`,
+    /// that package will be unconstrained, allowing a first install.
+    fn collect_package_groups<'manifest>(
+        manifest: &'manifest TypedManifestCatalog,
+        seed_lockfile: Option<&LockedManifestCatalog>,
+    ) -> impl Iterator<Item = PackageGroup> + 'manifest {
+        let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
+
+        // Using a btree map to ensure consistent ordering
+        let mut map = BTreeMap::new();
+
+        let default_systems = &manifest.options.systems;
+
+        for (install_id, manifest_descriptor) in manifest.install.iter() {
+            let resolved_descriptor = PackageDescriptor {
+                name: install_id.clone(),
+                pkg_path: manifest_descriptor.pkg_path.clone(),
+                derivation: None,
+                semver: None,
+                version: manifest_descriptor.version.clone(),
+            };
+
+            let group = manifest_descriptor
+                .package_group
+                .as_deref()
+                .unwrap_or(DEFAULT_GROUP_NAME);
+
+            let descriptor_systems = manifest_descriptor
+                .systems
+                .as_ref()
+                .unwrap_or(default_systems);
+
+            for system in descriptor_systems {
+                let resolved_group = map.entry((group, system)).or_insert_with(|| PackageGroup {
+                    descriptors: Vec::new(),
+                    name: group.to_string(),
+                    system: system.clone(),
+                });
+
+                // If the package was just added to the manifest, it will be missing in the seed,
+                // which is derived from the _previous_ lockfile.
+                // In this case, the derivation will be None, and the package will be unconstrained.
+                let locked_derivation = seed_locked_packages
+                    .get(&(manifest_descriptor, system))
+                    .map(|p| p.derivation.clone());
+
+                let mut resolved_descriptor = resolved_descriptor.clone();
+                resolved_descriptor.derivation = locked_derivation;
+
+                resolved_group.descriptors.push(resolved_descriptor);
+            }
+        }
+
+        map.into_values()
+    }
+
+    /// Convert resolution results into a list of locked packages
+    ///
+    /// * Flattens `Group(Page(PackageResolutionInfo+)+)` into `LockedPackageCatalog+`
+    /// * Adds a `system` field to each locked package.
+    /// * Converts [serde_json::Value] based `outputs` and `outputs_to_install` fields
+    /// into [`IndexMap<String, String>`] and [`Vec<String>`] respectively.
+    ///
+    /// TODO: handle results from multiple pages
+    ///       currently there is no api to request packages from specific pages
+    /// TODO: handle json value conversion earlier in the shim (or the upstream spec)
+    fn locked_packages_from_resolution<'manifest>(
+        manifest: &'manifest TypedManifestCatalog,
+        groups: impl IntoIterator<Item = ResolvedPackageGroup> + 'manifest,
+    ) -> impl Iterator<Item = LockedPackageCatalog> + 'manifest {
+        let infos = groups.into_iter().flat_map(|group| {
+            group
+                .pages
+                .into_iter()
+                .take(1)
+                .flat_map(|page| page.packages.into_iter())
+                .map(move |package| (package, group.system.clone()))
+        });
+
+        infos.filter_map(|(package, system)| {
+            let Some(descriptor) = manifest.install.get(&package.name).cloned() else {
+                debug!("Package {} is not in the manifest, skipping", package.name);
+                return None;
+            };
+
+            // unpack package to avoid missing new fields
+            Some(LockedPackageCatalog::from_parts(
+                package, descriptor, system,
+            ))
+        })
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LockedManifestPkgdb(Value);
+
+// region: pkgdb lockfile operations
 
 impl LockedManifestPkgdb {
     /// Use pkgdb to lock a manifest
@@ -382,19 +640,19 @@ impl LockedManifestPkgdb {
 pub struct TypedLockedManifestPkgdb {
     #[serde(rename = "lockfile-version")]
     lockfile_version: Version<0>,
-    packages: BTreeMap<System, BTreeMap<String, Option<LockedPackage>>>,
+    packages: BTreeMap<System, BTreeMap<String, Option<LockedPackagePkgdb>>>,
     registry: Registry,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-struct LockedPackage {
+struct LockedPackagePkgdb {
     info: PackageInfo,
     #[serde(rename = "attr-path")]
     abs_path: Vec<String>,
     priority: usize,
 }
 
-impl LockedPackage {
+impl LockedPackagePkgdb {
     pub fn rel_path(&self) -> String {
         self.abs_path
             .iter()
@@ -447,6 +705,10 @@ impl TypedLockedManifestPkgdb {
     }
 }
 
+// endregion
+
+// TODO: consider dropping this in favor of mapping to [LockedPackageCatalog]?
+/// A locked package with additionally derived attributes
 pub struct InstalledPackage {
     pub name: String,
     pub rel_path: String,
@@ -456,6 +718,9 @@ pub struct InstalledPackage {
 
 #[derive(Debug, Error)]
 pub enum LockedManifestError {
+    #[error("failed to resolve packages")]
+    CatalogResolve(#[from] catalog::ResolveError),
+
     #[error("failed to lock manifest")]
     LockManifest(#[source] CallPkgDbError),
     #[error("failed to check lockfile")]
@@ -506,14 +771,21 @@ pub struct LockfileCheckWarning {
 mod tests {
     use std::collections::HashMap;
 
+    use catalog_api_v1::types::Output;
+    use indoc::indoc;
+    use once_cell::sync::Lazy;
+    use pretty_assertions::assert_eq;
+
+    use self::catalog::PackageResolutionInfo;
     use super::*;
+    use crate::models::manifest::{RawManifest, TypedManifest};
 
     /// Validate that the parser for the locked manifest can handle null values
     /// for the `version`, `license`, and `description` fields.
     #[test]
     fn locked_package_tolerates_null_values() {
         let locked_packages =
-            serde_json::from_value::<HashMap<String, LockedPackage>>(serde_json::json!({
+            serde_json::from_value::<HashMap<String, LockedPackagePkgdb>>(serde_json::json!({
                     "complete": {
                         "info": {
                             "description": "A package",
@@ -592,6 +864,471 @@ mod tests {
                 .description
                 .as_deref(),
             None
+        );
+    }
+
+    static TEST_RAW_MANIFEST: Lazy<RawManifest> = Lazy::new(|| {
+        indoc! {r#"
+          version = 1
+
+          [install]
+          hello.pkg-path = "hello"
+          hello.package-group = "group"
+
+          [options]
+          systems = ["system"]
+        "#}
+        .parse()
+        .unwrap()
+    });
+
+    static TEST_TYPED_MANIFEST: Lazy<TypedManifestCatalog> = Lazy::new(|| {
+        let typed = TEST_RAW_MANIFEST.to_typed().unwrap();
+        match typed {
+            TypedManifest::Catalog(manifest) => *manifest,
+            _ => panic!("Expected a catalog manifest"),
+        }
+    });
+
+    static TEST_RESOLUTION_PARAMS: Lazy<Vec<PackageGroup>> = Lazy::new(|| {
+        vec![PackageGroup {
+            name: "group".to_string(),
+            system: "system".to_string(),
+            descriptors: vec![PackageDescriptor {
+                name: "hello".to_string(),
+                pkg_path: "hello".to_string(),
+                derivation: None,
+                semver: None,
+                version: None,
+            }],
+        }]
+    });
+
+    static TEST_RESOLUTION_RESPONSE: Lazy<Vec<ResolvedPackageGroup>> = Lazy::new(|| {
+        vec![ResolvedPackageGroup {
+            system: "system".to_string(),
+            pages: vec![CatalogPage {
+                page: 1,
+                url: "url".to_string(),
+                packages: vec![PackageResolutionInfo {
+                    attr_path: "hello".to_string(),
+                    broken: false,
+                    derivation: "derivation".to_string(),
+                    description: "description".to_string(),
+                    license: "license".to_string(),
+                    locked_url: "locked_url".to_string(),
+                    name: "hello".to_string(),
+                    outputs: vec![Output {
+                        name: "name".to_string(),
+                        store_path: "store_path".to_string(),
+                    }],
+                    outputs_to_install: vec!["name".to_string()],
+                    pname: "pname".to_string(),
+                    rev: "rev".to_string(),
+                    rev_count: 1,
+                    rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::offset::Utc),
+                    scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::offset::Utc),
+                    stabilities: vec!["stability".to_string()],
+                    unfree: false,
+                    version: "version".to_string(),
+                }],
+            }],
+            name: "group".to_string(),
+        }]
+    });
+
+    static TEST_LOCKED_MANIFEST: Lazy<LockedManifest> = Lazy::new(|| {
+        LockedManifest::Catalog(LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: TEST_TYPED_MANIFEST.clone(),
+            packages: vec![LockedPackageCatalog {
+                attr_path: "hello".to_string(),
+                broken: false,
+                derivation: "derivation".to_string(),
+                description: "description".to_string(),
+                license: "license".to_string(),
+                locked_url: "locked_url".to_string(),
+                name: "hello".to_string(),
+                outputs: vec![("name".to_string(), "store_path".to_string())]
+                    .into_iter()
+                    .collect(),
+                outputs_to_install: vec!["name".to_string()],
+                pname: "pname".to_string(),
+                rev: "rev".to_string(),
+                rev_count: 1,
+                rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&chrono::offset::Utc),
+                scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                    .unwrap()
+                    .with_timezone(&chrono::offset::Utc),
+                stabilities: vec!["stability".to_string()],
+                unfree: false,
+                version: "version".to_string(),
+                system: "system".to_string(),
+                group: "group".to_string(),
+                priority: 5,
+                optional: false,
+            }],
+        })
+    });
+
+    #[test]
+    fn make_params_smoke() {
+        let manifest = &*TEST_TYPED_MANIFEST;
+
+        let params =
+            LockedManifestCatalog::collect_package_groups(manifest, None).collect::<Vec<_>>();
+        assert_eq!(&params, &*TEST_RESOLUTION_PARAMS);
+    }
+
+    /// When `options.systems` defines multiple systems,
+    /// request groups for each system separately.
+    #[test]
+    fn make_params_multiple_systems() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            emacs.pkg-path = "emacs"
+
+            [options]
+            systems = ["system1", "system2"]
+        "#};
+        let manifest = toml::from_str(manifest_str).unwrap();
+
+        let expected_params = vec![
+            PackageGroup {
+                name: DEFAULT_GROUP_NAME.to_string(),
+                system: "system1".to_string(),
+                descriptors: vec![
+                    PackageDescriptor {
+                        name: "emacs".to_string(),
+                        pkg_path: "emacs".to_string(),
+                        derivation: None,
+                        semver: None,
+                        version: None,
+                    },
+                    PackageDescriptor {
+                        name: "vim".to_string(),
+                        pkg_path: "vim".to_string(),
+                        derivation: None,
+                        semver: None,
+                        version: None,
+                    },
+                ],
+            },
+            PackageGroup {
+                name: DEFAULT_GROUP_NAME.to_string(),
+                system: "system2".to_string(),
+                descriptors: vec![
+                    PackageDescriptor {
+                        name: "emacs".to_string(),
+                        pkg_path: "emacs".to_string(),
+                        derivation: None,
+                        semver: None,
+                        version: None,
+                    },
+                    PackageDescriptor {
+                        name: "vim".to_string(),
+                        pkg_path: "vim".to_string(),
+                        derivation: None,
+                        semver: None,
+                        version: None,
+                    },
+                ],
+            },
+        ];
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    /// When `options.systems` defines multiple systems,
+    /// request groups for each system separately.
+    /// If a package specifies systems, use those instead.
+    #[test]
+    fn make_params_limit_systems() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            emacs.pkg-path = "emacs"
+            emacs.systems = ["system1"]
+
+            [options]
+            systems = ["system1", "system2"]
+        "#};
+        let manifest = toml::from_str(manifest_str).unwrap();
+
+        let expected_params = vec![
+            PackageGroup {
+                name: DEFAULT_GROUP_NAME.to_string(),
+                system: "system1".to_string(),
+                descriptors: vec![
+                    PackageDescriptor {
+                        name: "emacs".to_string(),
+                        pkg_path: "emacs".to_string(),
+                        derivation: None,
+                        semver: None,
+                        version: None,
+                    },
+                    PackageDescriptor {
+                        name: "vim".to_string(),
+                        pkg_path: "vim".to_string(),
+                        derivation: None,
+                        semver: None,
+                        version: None,
+                    },
+                ],
+            },
+            PackageGroup {
+                name: DEFAULT_GROUP_NAME.to_string(),
+                system: "system2".to_string(),
+                descriptors: vec![PackageDescriptor {
+                    name: "vim".to_string(),
+                    pkg_path: "vim".to_string(),
+                    derivation: None,
+                    semver: None,
+                    version: None,
+                }],
+            },
+        ];
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    /// If a package specifies a system not in `options.systems`,
+    /// use those instead.
+    #[test]
+    fn make_params_override_systems() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            emacs.pkg-path = "emacs"
+            emacs.systems = ["system2"]
+
+            [options]
+            systems = ["system1",]
+        "#};
+        let manifest = toml::from_str(manifest_str).unwrap();
+
+        let expected_params = vec![
+            PackageGroup {
+                name: DEFAULT_GROUP_NAME.to_string(),
+                system: "system1".to_string(),
+                descriptors: vec![PackageDescriptor {
+                    name: "vim".to_string(),
+                    pkg_path: "vim".to_string(),
+                    derivation: None,
+                    semver: None,
+                    version: None,
+                }],
+            },
+            PackageGroup {
+                name: DEFAULT_GROUP_NAME.to_string(),
+                system: "system2".to_string(),
+                descriptors: vec![PackageDescriptor {
+                    name: "emacs".to_string(),
+                    pkg_path: "emacs".to_string(),
+                    derivation: None,
+                    semver: None,
+                    version: None,
+                }],
+            },
+        ];
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    /// If packages specify different groups,
+    /// create request groups for each group.
+    #[test]
+    fn make_params_groups() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            vim.pkg-path = "vim"
+            vim.package-group = "group1"
+
+            emacs.pkg-path = "emacs"
+            emacs.package-group = "group2"
+
+            [options]
+            systems = ["system"]
+        "#};
+
+        let manifest = toml::from_str(manifest_str).unwrap();
+
+        let expected_params = vec![
+            PackageGroup {
+                name: "group1".to_string(),
+                system: "system".to_string(),
+                descriptors: vec![PackageDescriptor {
+                    name: "vim".to_string(),
+                    pkg_path: "vim".to_string(),
+                    derivation: None,
+                    semver: None,
+                    version: None,
+                }],
+            },
+            PackageGroup {
+                name: "group2".to_string(),
+                system: "system".to_string(),
+                descriptors: vec![PackageDescriptor {
+                    name: "emacs".to_string(),
+                    pkg_path: "emacs".to_string(),
+                    derivation: None,
+                    semver: None,
+                    version: None,
+                }],
+            },
+        ];
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    #[test]
+    fn make_params_seeded() {
+        let mut manifest = TEST_TYPED_MANIFEST.clone();
+
+        // Add a package to the manifest that is not already locked
+        manifest
+            .install
+            .insert("unlocked".to_string(), ManifestPackageDescriptor {
+                pkg_path: "unlocked".to_string(),
+                package_group: Some("group".to_string()),
+                systems: None,
+                version: None,
+                priority: None,
+                optional: false,
+            });
+
+        let LockedManifest::Catalog(seed) = &*TEST_LOCKED_MANIFEST else {
+            panic!("Expected a catalog lockfile");
+        };
+
+        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, Some(seed))
+            .collect::<Vec<_>>();
+
+        let expected_params = vec![PackageGroup {
+            name: "group".to_string(),
+            system: "system".to_string(),
+            descriptors: vec![
+                // 'hello' was already locked, so it should have a derivation
+                PackageDescriptor {
+                    name: "hello".to_string(),
+                    pkg_path: "hello".to_string(),
+                    derivation: Some("derivation".to_string()),
+                    semver: None,
+                    version: None,
+                },
+                // The unlocked package should not have a derivation
+                PackageDescriptor {
+                    name: "unlocked".to_string(),
+                    pkg_path: "unlocked".to_string(),
+                    derivation: None,
+                    semver: None,
+                    version: None,
+                },
+            ],
+        }];
+
+        assert_eq!(actual_params, expected_params);
+    }
+
+    #[test]
+    fn ungroup_response() {
+        let groups = vec![ResolvedPackageGroup {
+            system: "system".to_string(),
+            pages: vec![CatalogPage {
+                page: 1,
+                url: "url".to_string(),
+                packages: vec![PackageResolutionInfo {
+                    attr_path: "hello".to_string(),
+                    broken: false,
+                    derivation: "derivation".to_string(),
+                    description: "description".to_string(),
+                    license: "license".to_string(),
+                    locked_url: "locked_url".to_string(),
+                    name: "hello".to_string(),
+                    outputs: vec![Output {
+                        name: "name".to_string(),
+                        store_path: "store_path".to_string(),
+                    }],
+                    outputs_to_install: vec!["name".to_string()],
+                    pname: "pname".to_string(),
+                    rev: "rev".to_string(),
+                    rev_count: 1,
+                    rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::offset::Utc),
+                    scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                        .unwrap()
+                        .with_timezone(&chrono::offset::Utc),
+                    stabilities: vec!["stability".to_string()],
+                    unfree: false,
+                    version: "version".to_string(),
+                }],
+            }],
+            name: "group".to_string(),
+        }];
+
+        let manifest = &*TEST_TYPED_MANIFEST;
+
+        let locked_packages =
+            LockedManifestCatalog::locked_packages_from_resolution(manifest, groups.clone())
+                .collect::<Vec<_>>();
+
+        assert_eq!(locked_packages.len(), 1);
+        assert_eq!(
+            &locked_packages[0],
+            &LockedPackageCatalog::from_parts(
+                groups[0].pages[0].packages[0].clone(),
+                manifest
+                    .install
+                    .get(&groups[0].pages[0].packages[0].name)
+                    .unwrap()
+                    .clone(),
+                groups[0].system.clone()
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_locking_1() {
+        let manifest = &*TEST_TYPED_MANIFEST;
+
+        let mut client = catalog::MockClient::new(None::<String>).unwrap();
+        client.push_resolve_response(TEST_RESOLUTION_RESPONSE.clone());
+
+        let locked_manifest = LockedManifestCatalog::lock_manifest(manifest, None, &client)
+            .await
+            .unwrap();
+        assert_eq!(
+            &LockedManifest::Catalog(locked_manifest),
+            &*TEST_LOCKED_MANIFEST
         );
     }
 }

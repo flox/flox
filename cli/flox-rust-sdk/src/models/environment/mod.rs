@@ -53,13 +53,24 @@ pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
+
+// The FLOX_* variables which follow are currently updated by the CLI as it
+// activates new environments, and they are consequently *not* updated with
+// manual invocations of the activation script. We want the activation script
+// to eventually have feature parity with the CLI, so in future we will need
+// to migrate this logic to the activation script itself. The only information
+// known by the CLI that cannot be easily derived at runtime is the description
+// text to be added to the prompt, and FLOX_ENV_DESCRIPTION_VAR was introduced
+// to provide the means by which the CLI will be able to communicate this detail
+// to the activation script.
+pub const FLOX_ENV_DESCRIPTION_VAR: &str = "FLOX_ENV_DESCRIPTION";
+
 pub const FLOX_ENV_CACHE_VAR: &str = "FLOX_ENV_CACHE";
 pub const FLOX_ENV_PROJECT_VAR: &str = "FLOX_ENV_PROJECT";
 pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
-pub const FLOX_PATH_PATCHED_VAR: &str = "FLOX_PATH_PATCHED";
 
 pub const N_HASH_CHARS: usize = 8;
 
@@ -257,26 +268,17 @@ impl ManagedPointer {
 }
 
 impl EnvironmentPointer {
-    /// The function attempts to open an environment at the specified path
-    /// by reading the contents of a file named .flox/[ENVIRONMENT_POINTER_FILENAME].
+    /// Attempt to read an environment pointer file ([ENVIRONMENT_POINTER_FILENAME])
+    /// in the specified `.flox` directory.
+    ///
     /// If the file is found and its contents can be deserialized,
     /// the function returns an [EnvironmentPointer] containing information about the environment.
-    /// If reading or parsing the file fails, an [EnvironmentError2] is returned.
+    /// If reading or parsing fails, an [EnvironmentError] is returned.
     ///
     /// Use this method to determine the type of an environment at a given path.
     /// The result should be used to call the appropriate `open` method
-    /// on either [PathEnvironment] or [ManagedEnvironment].
-    pub fn open(path: impl AsRef<Path>) -> Result<EnvironmentPointer, EnvironmentError> {
-        let dot_flox_path = path.as_ref().join(DOT_FLOX);
-        if !dot_flox_path.exists() {
-            debug!("couldn't find .flox at {}", dot_flox_path.display());
-            Err(EnvironmentError::DotFloxNotFound(
-                dot_flox_path
-                    .parent()
-                    .unwrap_or(&dot_flox_path)
-                    .to_path_buf(),
-            ))?
-        }
+    /// on either [path_environment::PathEnvironment] or [managed_environment::ManagedEnvironment].
+    fn open(dot_flox_path: &CanonicalPath) -> Result<EnvironmentPointer, EnvironmentError> {
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
         let pointer_contents = match fs::read(&pointer_path) {
             Ok(contents) => contents,
@@ -324,10 +326,21 @@ pub struct DotFlox {
 }
 
 impl DotFlox {
-    pub fn open(path: impl AsRef<Path>) -> Result<Self, EnvironmentError> {
+    /// Open `<parent_path>/.flox` as a [DotFlox] directory
+    ///
+    /// This method attempts to find a `.flox` directory in the specified parent path,
+    /// and open it as a [DotFlox] directory.
+    /// If the directory is not found, an [EnvironmentError::DotFloxNotFound] is returned.
+    pub fn open_in(parent_path: impl AsRef<Path>) -> Result<Self, EnvironmentError> {
+        let dot_flox_path = parent_path.as_ref().join(DOT_FLOX);
+        let dot_flox_path = CanonicalPath::new(&dot_flox_path)
+            .map_err(|_| EnvironmentError::DotFloxNotFound(dot_flox_path))?;
+
+        let pointer = EnvironmentPointer::open(&dot_flox_path)?;
+
         Ok(Self {
-            path: path.as_ref().to_path_buf(),
-            pointer: EnvironmentPointer::open(&path)?,
+            path: dot_flox_path.to_path_buf(),
+            pointer,
         })
     }
 }
@@ -337,7 +350,20 @@ pub enum EnvironmentError {
     // todo: candidate for impl specific error
     // * only path and managed env are defined in .Flox
     // region: path env open
-    #[error("Did not find an environment in '{0}'")]
+    /// The `.flox` directory was not found
+    /// This error is thrown by calling [DotFlox::open_default_in]
+    /// and callers in the `flox` crate if the `.flox` directory is not found.
+    ///
+    /// The error contains the path to the expected `.flox` directory,
+    /// **including** the final `.flox` component.
+    ///
+    /// The [Display] implementation of this error displays the path to the parent directory.
+    /// As for all practical purposes, we assume the final component to be `.flox`
+    /// and communicate the parent directory to user when mentioning environment paths.
+    #[error(
+        "Did not find an environment in '{}'",
+       .0.parent().map(PathBuf::from).as_ref().unwrap_or(.0).display()
+    )]
     DotFloxNotFound(PathBuf),
 
     #[error("could not locate the manifest for this environment")]
@@ -459,7 +485,6 @@ fn copy_dir_recursive(
     if !to.as_ref().exists() {
         std::fs::create_dir(to).unwrap();
     }
-
     for entry in WalkDir::new(from).into_iter().skip(1) {
         let entry = entry.unwrap();
         let new_path = to.as_ref().join(entry.path().strip_prefix(from).unwrap());
@@ -530,7 +555,7 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
     );
     // Look for an immediate child named `.flox`
     if tentative_dot_flox.exists() {
-        let pointer = DotFlox::open(&path).map_err(|err| EnvironmentError::InvalidDotFlox {
+        let pointer = DotFlox::open_in(&path).map_err(|err| EnvironmentError::InvalidDotFlox {
             path: tentative_dot_flox.clone(),
             source: Box::new(err),
         })?;
@@ -561,7 +586,7 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
 
         if tentative_dot_flox.exists() {
             let pointer =
-                DotFlox::open(ancestor).map_err(|err| EnvironmentError::InvalidDotFlox {
+                DotFlox::open_in(ancestor).map_err(|err| EnvironmentError::InvalidDotFlox {
                     path: ancestor.to_path_buf(),
                     source: Box::new(err),
                 })?;
@@ -693,7 +718,7 @@ mod test {
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_environment, DotFlox {
-            path: temp_dir.path().canonicalize().unwrap(),
+            path: temp_dir.path().join(DOT_FLOX).canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
         });
     }
@@ -720,7 +745,7 @@ mod test {
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_environment, DotFlox {
-            path: temp_dir.path().canonicalize().unwrap(),
+            path: temp_dir.path().join(DOT_FLOX).canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
         });
     }
@@ -755,7 +780,7 @@ mod test {
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_environment, DotFlox {
-            path: temp_dir.path().canonicalize().unwrap(),
+            path: temp_dir.path().join(DOT_FLOX).canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
         });
     }
@@ -793,7 +818,7 @@ mod test {
             .unwrap()
             .expect("expected to find dot flox");
         assert_eq!(found_environment, DotFlox {
-            path: foo.canonicalize().unwrap(),
+            path: foo.join(DOT_FLOX).canonicalize().unwrap(),
             pointer: (*MANAGED_ENV_POINTER).clone()
         });
     }

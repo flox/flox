@@ -11,6 +11,7 @@ mod list;
 mod pull;
 mod push;
 mod search;
+mod show;
 mod uninstall;
 mod update;
 mod upgrade;
@@ -23,6 +24,7 @@ use std::{env, fmt, fs, io, mem};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
+use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::{
     EnvironmentName,
     EnvironmentOwner,
@@ -36,6 +38,7 @@ use flox_rust_sdk::flox::{
     FLOX_SENTRY_ENV,
     FLOX_VERSION,
 };
+use flox_rust_sdk::models::env_registry::{EnvRegistry, ENV_REGISTRY_FILENAME};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
@@ -49,11 +52,10 @@ use flox_rust_sdk::models::environment::{
     DOT_FLOX,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
 };
-use flox_rust_sdk::models::environment_ref;
+use flox_rust_sdk::models::{env_registry, environment_ref};
 use futures::Future;
 use indoc::{formatdoc, indoc};
 use log::{debug, info};
-use once_cell::sync::Lazy;
 use sentry::integrations::anyhow::capture_anyhow;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
@@ -62,6 +64,7 @@ use time::{Duration, OffsetDateTime};
 use toml_edit::Key;
 use url::Url;
 
+use self::envs::DisplayEnvironments;
 use crate::commands::general::update_config;
 use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Dialog, Select};
@@ -86,21 +89,9 @@ static FLOX_DESCRIPTION: &'_ str = indoc! {"
     making them portable across the full software lifecycle."
 };
 
-static FLOX_WELCOME_MESSAGE: Lazy<String> = Lazy::new(|| {
-    let version = FLOX_VERSION.to_string();
-    formatdoc! {r#"
-    flox version {version}
-
-    Usage: flox OPTIONS (init|activate|search|install|...) [--help]
-
-    Use `flox --help` for full list of commands and more information
-
-    First time? Create an environment with `flox init`
-"#}
-});
-
+/// Manually documented commands that are to keep the help text short
 const ADDITIONAL_COMMANDS: &str = indoc! {"
-    update, upgrade, config, auth
+    auth, config, envs, update, upgrade
 "};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
@@ -200,7 +191,12 @@ impl FloxArgs {
 
         // Given no command, skip initialization and print welcome message
         if self.command.is_none() {
-            println!("{}", &*FLOX_WELCOME_MESSAGE);
+            let envs = env_registry::read_environment_registry(
+                config.flox.data_dir.join(ENV_REGISTRY_FILENAME),
+            )?
+            .unwrap_or_default();
+            let active_environments = activated_environments();
+            print_welcome_message(envs, active_environments);
             UpdateNotification::check_for_and_print_update_notification(&config.flox.cache_dir)
                 .await;
             return Ok(());
@@ -371,6 +367,45 @@ impl FloxArgs {
         }
 
         result
+    }
+}
+
+/// Print general welcome message with short usage instructions
+/// and give hints for creating and activating environments.
+/// List active environments if any are active.
+fn print_welcome_message(envs: EnvRegistry, active_environments: ActiveEnvironments) {
+    let welcome_message = {
+        let version = FLOX_VERSION.to_string();
+        formatdoc! {r#"
+            flox version {version}
+
+            Usage: flox OPTIONS (init|activate|search|install|...) [--help]
+
+            Use 'flox --help' for full list of commands and more information
+        "#}
+    };
+
+    message::plain(welcome_message);
+
+    // print trailer message
+    // - if no environments are known to Flox yet, hint at creating one
+    // - if no environments are active, hint at activating one
+    // - if environments are active, list them
+
+    if envs.entries.is_empty() {
+        message::plain("First time? Create an environment with 'flox init'\n");
+        return;
+    }
+
+    if active_environments.last_active().is_none() {
+        message::plain("No active environments. Use 'flox envs' to list all environments.\n");
+    } else {
+        message::created("Active environments:");
+        let envs = indent::indent_all_by(
+            2,
+            DisplayEnvironments::new(active_environments.iter(), true).to_string(),
+        );
+        message::plain(envs);
     }
 }
 
@@ -624,7 +659,7 @@ enum LocalDevelopmentCommands {
     Search(#[bpaf(external(search::search))] search::Search),
     /// Show details about a single package
     #[bpaf(command, long("show"), footer("Run 'man flox-show' for more details."))]
-    Show(#[bpaf(external(search::show))] search::Show),
+    Show(#[bpaf(external(show::show))] show::Show),
     /// Install packages into an environment
     #[bpaf(
         command,
@@ -961,7 +996,7 @@ pub fn detect_environment(
         // If there's both an activated environment and an environment in the
         // current directory or git repo, prompt for which to use.
         (Some(activated_env), Some(found)) => {
-            let found_in_current_dir = found.path == current_dir;
+            let found_in_current_dir = found.path == current_dir.join(DOT_FLOX);
             Some(query_which_environment(
                 message,
                 activated_env,
@@ -1012,7 +1047,7 @@ fn query_which_environment(
 
 /// Open an environment defined in `{path}/.flox`
 fn open_path(flox: &Flox, path: &PathBuf) -> Result<ConcreteEnvironment, EnvironmentError> {
-    DotFlox::open(path)
+    DotFlox::open_in(path)
         .map(UninitializedEnvironment::DotFlox)?
         .into_concrete_environment(flox)
 }
@@ -1073,14 +1108,14 @@ impl UninitializedEnvironment {
             ConcreteEnvironment::Path(path_env) => {
                 let pointer = path_env.pointer.clone().into();
                 Ok(Self::DotFlox(DotFlox {
-                    path: path_env.parent_path().unwrap(),
+                    path: path_env.path.to_path_buf(),
                     pointer,
                 }))
             },
             ConcreteEnvironment::Managed(managed_env) => {
                 let pointer = managed_env.pointer().clone().into();
                 Ok(Self::DotFlox(DotFlox {
-                    path: managed_env.parent_path().unwrap(),
+                    path: managed_env.path.to_path_buf(),
                     pointer,
                 }))
             },
@@ -1100,7 +1135,9 @@ impl UninitializedEnvironment {
     ) -> Result<ConcreteEnvironment, EnvironmentError> {
         match self {
             UninitializedEnvironment::DotFlox(dot_flox) => {
-                let dot_flox_path = dot_flox.path.join(DOT_FLOX);
+                let dot_flox_path = CanonicalPath::new(dot_flox.path)
+                    .map_err(|err| EnvironmentError::DotFloxNotFound(err.path))?;
+
                 let env = match dot_flox.pointer {
                     EnvironmentPointer::Path(path_pointer) => {
                         debug!("detected concrete environment type: path");

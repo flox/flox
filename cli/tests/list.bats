@@ -88,7 +88,7 @@ EOF
     [install]
 
     [hook]
-    script = "something suspicious"
+    on-activate = "something suspicious"
 EOF
 
   )"

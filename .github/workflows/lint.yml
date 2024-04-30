@@ -85,12 +85,12 @@ jobs:
         if: ${{ steps.set-has-targets.outputs.HAS_TARGETS }}
         uses: './.github/actions/common-setup'
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.NIX_GIT_TOKEN }}"
-          SUBSTITUTER:            "${{ vars.FLOX_CACHE_PUBLIC_BUCKET }}"
-          SUBSTITUTER_KEY:        "${{ secrets.FLOX_CACHE_PUBLIC_NIX_SECRET_KEY }}"
-          AWS_ACCESS_KEY_ID:      "${{ secrets.FLOX_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
-          AWS_SECRET_ACCESS_KEY:  "${{ secrets.FLOX_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
-          SSH_KEY:                "${{ secrets.FLOXBOT_SSH_KEY }}"
+          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
+          SUBSTITUTER:            "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
+          SUBSTITUTER_KEY:        "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
+          AWS_ACCESS_KEY_ID:      "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY:  "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_SECRET_ACCESS_KEY }}"
+          SSH_KEY:                "${{ secrets.MANAGED_FLOXBOT_SSH_KEY }}"
 
       - name: 'Create compile_commands.json'
         if: ${{ steps.set-has-targets.outputs.HAS_TARGETS }}

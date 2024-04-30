@@ -107,6 +107,7 @@ impl Shell {
     /// an error is returned.
     pub fn detect_from_parent_process() -> Result<Self> {
         let parent_process_exe = get_parent_process_exe()?;
+        debug!("Detected parent process exe: {parent_process_exe:?}");
 
         Self::try_from(parent_process_exe.as_path())
     }
@@ -239,11 +240,7 @@ mod tests {
     fn test_get_parent_process_exe() {
         let path = get_parent_process_exe().expect("should find parent process");
 
-        // The nix provided `cargo` binary wraps the real cargo binary
-        // `.cargo-wrapped`.
-        // This test assumes that the test environment of the test suite is
-        // provided by nix.
-        assert_eq!(path.file_name().unwrap(), ".cargo-wrapped");
+        assert_eq!(path.file_name().unwrap(), "cargo");
     }
 
     /// Test the detection of the shell from environment variables
