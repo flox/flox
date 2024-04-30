@@ -289,6 +289,8 @@ struct HookRaw
 
 }; /* End struct `HookRaw' */
 
+void
+from_json( const nlohmann::json & jfrom, HookRaw & hook );
 
 /* -------------------------------------------------------------------------- */
 
@@ -305,6 +307,9 @@ struct ProfileScriptsRaw
   /** @brief A script intended to be sourced only in Zsh shells. */
   std::optional<std::string> zsh;
 };
+
+void
+from_json( const nlohmann::json & jfrom, ProfileScriptsRaw & profile );
 
 
 /* -------------------------------------------------------------------------- */
