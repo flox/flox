@@ -489,9 +489,12 @@ LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
   debugLog( nix::fmt( "loading v1 lockfile content" ) );
 
   unsigned version = jfrom["lockfile-version"];
-  if (version != 1)
+  if ( version != 1 )
+    {
       throw InvalidLockfileException(
-        nix::fmt("trying to parse v%d lockfile as v1", version), "");
+        nix::fmt( "trying to parse v%d lockfile", version ),
+        "expected v1" );
+    }
 
   // Set the version
   this->lockfileVersion = version;
@@ -513,7 +516,7 @@ LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
   try
     {
       auto hook = jfrom["manifest"]["hook"];
-      hook.get_to(this->manifest.hook);
+      hook.get_to( this->manifest.hook );
     }
   catch ( nlohmann::json::exception & err )
     {
@@ -526,7 +529,7 @@ LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
   try
     {
       auto hook = jfrom["manifest"]["profile"];
-      hook.get_to(this->manifest.profile);
+      hook.get_to( this->manifest.profile );
     }
   catch ( nlohmann::json::exception & err )
     {

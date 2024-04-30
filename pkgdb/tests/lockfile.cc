@@ -91,7 +91,6 @@ static const std::string lockfileContentV1 = R"( {
 } )";
 
 
-
 /* -------------------------------------------------------------------------- */
 
 bool
@@ -134,36 +133,40 @@ bool
 test_LockfileFromV1()
 {
   using namespace flox::resolver;
-  nlohmann::json json = flox::parseOrReadJSONObject(lockfileContentV1);
-  LockfileRaw lockfile = LockfileRaw();
-  lockfile.load_from_content(json);
-  EXPECT(lockfile.lockfileVersion == 1);
-  EXPECT(lockfile.manifest.hook.has_value());
-  EXPECT_EQ(lockfile.manifest.hook.value().onActivate.value_or(""), "my_onactivate");
+  nlohmann::json json     = flox::parseOrReadJSONObject( lockfileContentV1 );
+  LockfileRaw    lockfile = LockfileRaw();
+  lockfile.load_from_content( json );
+  EXPECT( lockfile.lockfileVersion == 1 );
+  EXPECT( lockfile.manifest.hook.has_value() );
+  EXPECT_EQ( lockfile.manifest.hook.value().onActivate.value_or( "" ),
+             "my_onactivate" );
 
-  EXPECT(lockfile.manifest.profile.has_value());
-  EXPECT_EQ(lockfile.manifest.profile.value().common.value(), "profile.common");
-  EXPECT_EQ(lockfile.manifest.profile.value().bash.value(), "profile.bash");
-  EXPECT_EQ(lockfile.manifest.profile.value().zsh.value(), "profile.zsh");
-  
-  EXPECT(lockfile.manifest.vars.has_value());
-  EXPECT(lockfile.manifest.vars.value().size() == 1);
-  EXPECT_EQ(lockfile.manifest.vars.value()["TEST"], "VAR");
+  EXPECT( lockfile.manifest.profile.has_value() );
+  EXPECT_EQ( lockfile.manifest.profile.value().common.value(),
+             "profile.common" );
+  EXPECT_EQ( lockfile.manifest.profile.value().bash.value(), "profile.bash" );
+  EXPECT_EQ( lockfile.manifest.profile.value().zsh.value(), "profile.zsh" );
 
-  auto packages = lockfile.packages.at("x86_64-linux"); 
-  EXPECT(packages.size() == 1);
+  EXPECT( lockfile.manifest.vars.has_value() );
+  EXPECT( lockfile.manifest.vars.value().size() == 1 );
+  EXPECT_EQ( lockfile.manifest.vars.value()["TEST"], "VAR" );
+
+  auto packages = lockfile.packages.at( "x86_64-linux" );
+  EXPECT( packages.size() == 1 );
 
   auto pkg = packages["mycowsay"];
   // The attr path is pre-pended for compatibility reasons
-  flox::AttrPath attrPath = {"legacyPackages", "x86_64-linux", "cowsay"};
+  flox::AttrPath attrPath = { "legacyPackages", "x86_64-linux", "cowsay" };
   EXPECT( pkg.value().attrPath == attrPath );
 
-  EXPECT_EQ(pkg.value().input.url, "github:NixOS/nixpkgs/9a333eaa80901efe01df07eade2c16d183761fa3");
-  EXPECT_EQ(pkg.value().input.attrs["rev"], "9a333eaa80901efe01df07eade2c16d183761fa3");
+  EXPECT_EQ( pkg.value().input.url,
+             "github:NixOS/nixpkgs/9a333eaa80901efe01df07eade2c16d183761fa3" );
+  EXPECT_EQ( pkg.value().input.attrs["rev"],
+             "9a333eaa80901efe01df07eade2c16d183761fa3" );
   // These are assumed from v1
-  EXPECT_EQ(pkg.value().input.attrs["owner"], "NixOS");
-  EXPECT_EQ(pkg.value().input.attrs["type"], "github");
-  EXPECT_EQ(pkg.value().input.attrs["repo"], "nixpkgs");
+  EXPECT_EQ( pkg.value().input.attrs["owner"], "NixOS" );
+  EXPECT_EQ( pkg.value().input.attrs["type"], "github" );
+  EXPECT_EQ( pkg.value().input.attrs["repo"], "nixpkgs" );
   return true;
 }
 
