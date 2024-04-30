@@ -128,7 +128,7 @@ jobs:
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_GITHUB_ACCESS_TOKEN }}"
+          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
           SUBSTITUTER:            "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
           SUBSTITUTER_KEY:        "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
           AWS_ACCESS_KEY_ID:      "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
@@ -194,7 +194,7 @@ jobs:
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_GITHUB_ACCESS_TOKEN }}"
+          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
           SUBSTITUTER:            "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
           SUBSTITUTER_KEY:        "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
           AWS_ACCESS_KEY_ID:      "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
@@ -250,7 +250,7 @@ jobs:
         with:
           owner:              "flox"
           repo:               "flox-installers"
-          github_token:       "${{ secrets.MANAGED_GITHUB_ACCESS_TOKEN }}"
+          github_token:       "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
           github_user:        "floxbot"
           workflow_file_name: "ci.yml"
           ref:                "main"
@@ -325,7 +325,7 @@ jobs:
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
-          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_GITHUB_ACCESS_TOKEN }}"
+          GITHUB_ACCESS_TOKEN:    "${{ secrets.MANAGED_FLOXBOT_GITHUB_ACCESS_TOKEN_REPO_SCOPE }}"
           SUBSTITUTER:            "${{    vars.MANAGED_CACHE_PUBLIC_S3_BUCKET }}"
           SUBSTITUTER_KEY:        "${{ secrets.MANAGED_CACHE_PUBLIC_SECRET_KEY }}"
           AWS_ACCESS_KEY_ID:      "${{ secrets.MANAGED_CACHE_PUBLIC_AWS_ACCESS_KEY_ID }}"
