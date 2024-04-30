@@ -16,6 +16,7 @@
 
 #include "flox/core/util.hh"
 #include "flox/resolver/lockfile.hh"
+#include "flox/resolver/manifest-raw.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -429,7 +430,7 @@ LockfileRaw::clear()
 void
 LockfileRaw::load_from_content( const nlohmann::json & jfrom )
 {
-  int version = jfrom["lockfile-version"];
+  unsigned version = jfrom["lockfile-version"];
   debugLog( nix::fmt( "lockfile version %d", version ) );
 
   switch ( version )
@@ -480,11 +481,22 @@ lockedPackageFromCatalogDescriptor( const nlohmann::json & jfrom,
     }
 }
 
+// void load_optional_string
+
 void
 LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
 {
   debugLog( nix::fmt( "loading v1 lockfile content" ) );
 
+  unsigned version = jfrom["lockfile-version"];
+  if (version != 1)
+      throw InvalidLockfileException(
+        nix::fmt("trying to parse v%d lockfile as v1", version), "");
+
+  // Set the version
+  this->lockfileVersion = version;
+
+  // load vars
   try
     {
       auto value = jfrom["manifest"]["vars"];
@@ -497,30 +509,29 @@ LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
         extract_json_errmsg( err ) );
     }
 
+  // load hooks
   try
     {
       auto hook = jfrom["manifest"]["hook"];
-      if ( auto key = "script"; hook.contains( key ) )
-        {
-          auto script = hook.at( key );
-          if ( ! script.is_null() )
-            {
-              this->manifest.hook->script = script.get<std::string>();
-            }
-        }
-      if ( auto key = "on-activate"; hook.contains( key ) )
-        {
-          auto onActivate = hook.at( key );
-          if ( ! onActivate.is_null() )
-            {
-              this->manifest.hook->onActivate = onActivate.get<std::string>();
-            }
-        }
+      hook.get_to(this->manifest.hook);
     }
   catch ( nlohmann::json::exception & err )
     {
       throw InvalidLockfileException(
         "couldn't parse lockfile field 'manifest.hook'",
+        extract_json_errmsg( err ) );
+    }
+
+  // load profile
+  try
+    {
+      auto hook = jfrom["manifest"]["profile"];
+      hook.get_to(this->manifest.profile);
+    }
+  catch ( nlohmann::json::exception & err )
+    {
+      throw InvalidLockfileException(
+        "couldn't parse lockfile field 'manifest.profile'",
         extract_json_errmsg( err ) );
     }
 

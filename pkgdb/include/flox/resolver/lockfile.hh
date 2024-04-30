@@ -211,8 +211,8 @@ struct LockfileRaw
   unsigned                                   lockfileVersion = 0;
 
 
-  ~LockfileRaw()                     = default;
-  LockfileRaw()                      = default;
+  ~LockfileRaw() = default;
+  LockfileRaw()  = default;
   LockfileRaw( const LockfileRaw & ) = default;
   // NOLINTNEXTLINE(bugprone-exception-escape)
   LockfileRaw( LockfileRaw && ) = default;

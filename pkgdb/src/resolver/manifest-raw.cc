@@ -464,7 +464,7 @@ to_json( nlohmann::json & jto, const EnvBaseRaw & env )
 
 /* -------------------------------------------------------------------------- */
 
-static void
+void
 from_json( const nlohmann::json & jfrom, ProfileScriptsRaw & profile )
 {
   assertIsJSONObject<InvalidManifestFileException>(
@@ -539,7 +539,7 @@ to_json( nlohmann::json & jto, const ProfileScriptsRaw & profile )
 
 /* -------------------------------------------------------------------------- */
 
-static void
+void
 from_json( const nlohmann::json & jfrom, HookRaw & hook )
 {
   assertIsJSONObject<InvalidManifestFileException>( jfrom,
