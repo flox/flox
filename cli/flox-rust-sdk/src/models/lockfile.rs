@@ -399,6 +399,9 @@ impl LockedManifestCatalog {
                     system: system.clone(),
                 });
 
+                // If the package was just added to the manifest, it will be missing in the seed,
+                // which is derived from the _previous_ lockfile.
+                // In this case, the derivation will be None, and the package will be unconstrained.
                 let locked_derivation = seed_locked_packages
                     .get(&(manifest_descriptor, system))
                     .map(|p| p.derivation.clone());
