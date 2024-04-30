@@ -435,7 +435,9 @@ LockfileRaw::load_from_content( const nlohmann::json & jfrom )
 
   switch ( version )
     {
-      case 0: *this = jfrom; break;
+      // v0 can be de-serialized _naturally_ using the from_json helpers
+      case 0: jfrom.get_to( *this ); break;
+      // v1 needs to be coerced into the LockfileRaw structure
       case 1: this->from_v1_content( jfrom ); break;
       default:
         throw InvalidLockfileException( "unsupported lockfile version",
@@ -553,8 +555,9 @@ LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
     }
   catch ( nlohmann::json::exception & err )
     {
-      throw InvalidLockfileException( "couldn't parse lockfile field 'packages'",
-                                      extract_json_errmsg( err ) );
+      throw InvalidLockfileException(
+        "couldn't parse lockfile field 'packages'",
+        extract_json_errmsg( err ) );
     }
 
   debugLog( nix::fmt( "loaded lockfile v1" ) );

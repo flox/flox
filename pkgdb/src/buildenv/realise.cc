@@ -899,10 +899,9 @@ getRealisedPackages( nix::ref<nix::EvalState> &         state,
                      const resolver::LockedPackageRaw & lockedPackage,
                      const System &                     system )
 {
-  debugLog( nix::fmt( "getting cursor for %s",
-                      lockedPackage.attrPath[0] ) ) auto timeEvalStart
-    = std::chrono::high_resolution_clock::now();
-  auto cursor = evalCacheCursorForInput( state,
+  debugLog( nix::fmt( "getting cursor for %s", lockedPackage.attrPath[0] ) );
+  auto timeEvalStart = std::chrono::high_resolution_clock::now();
+  auto cursor        = evalCacheCursorForInput( state,
                                          lockedPackage.input,
                                          lockedPackage.attrPath );
 
