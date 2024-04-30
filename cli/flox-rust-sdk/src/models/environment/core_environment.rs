@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use log::debug;
+use pollster::FutureExt;
 use thiserror::Error;
+use tracing::warn;
 
 use super::{
     copy_dir_recursive,
@@ -19,13 +21,20 @@ use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment::{call_pkgdb, global_manifest_path};
-use crate::models::lockfile::{LockedManifest, LockedManifestError, LockedManifestPkgdb};
+use crate::models::lockfile::{
+    LockedManifest,
+    LockedManifestCatalog,
+    LockedManifestError,
+    LockedManifestPkgdb,
+};
 use crate::models::manifest::{
     insert_packages,
     remove_packages,
     Manifest,
     PackageToInstall,
     TomlEditError,
+    TypedManifest,
+    TypedManifestCatalog,
 };
 use crate::models::pkgdb::{
     error_codes,
@@ -35,6 +44,7 @@ use crate::models::pkgdb::{
     UpgradeResultJSON,
     PKGDB_BIN,
 };
+use crate::providers::catalog;
 use crate::utils::CommandExt;
 
 pub struct ReadOnly {}
@@ -80,9 +90,12 @@ impl<State> CoreEnvironment<State> {
 
     /// Lock the environment.
     ///
+    /// When a catalog client is provided, the catalog will be used to lock any
+    /// "V1" manifest.
+    /// Without a catalog client, only "V0" manifests can be locked using the pkgdb.
+    /// If a "V1" manifest is locked without a catalog client, an error will be returned.
+    ///
     /// This re-writes the lock if it exists.
-    /// If the lock doesn't exist, it uses the global lock, and then it writes
-    /// a new lock.
     ///
     /// Technically this does write to disk as a side effect for now.
     /// It's included in the [ReadOnly] struct for ergonomic reasons
@@ -90,6 +103,45 @@ impl<State> CoreEnvironment<State> {
     ///
     /// todo: should we always write the lockfile to disk?
     pub fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, CoreEnvironmentError> {
+        let manifest: TypedManifest = toml::from_str(&self.manifest_content()?)
+            .map_err(CoreEnvironmentError::DeserializeManifest)?;
+
+        let lockfile = match manifest {
+            TypedManifest::Pkgdb(_) => LockedManifest::Pkgdb(self.lock_with_pkgdb(flox)?),
+            TypedManifest::Catalog(manifest) => {
+                let Some(ref client) = flox.catalog_client else {
+                    return Err(CoreEnvironmentError::CatalogClientMissing);
+                };
+                LockedManifest::Catalog(self.lock_with_catalog_client(client, *manifest)?)
+            },
+        };
+
+        let environment_lockfile_path = self.lockfile_path();
+
+        // Write the lockfile to disk
+        // todo: do we always want to do this?
+        debug!(
+            "generated lockfile, writing to {}",
+            environment_lockfile_path.display()
+        );
+        std::fs::write(
+            &environment_lockfile_path,
+            serde_json::to_string_pretty(&lockfile).unwrap(),
+        )
+        .map_err(CoreEnvironmentError::WriteLockfile)?;
+
+        Ok(lockfile)
+    }
+
+    /// Lock the environment with the pkgdb
+    ///
+    /// Passes the manifest and the existing lockfile to `pkgdb manifest lock`.
+    /// The lockfile is used to lock the underlying package registry.
+    /// If the environment has no lockfile, the global lockfile is used as a base instead.
+    fn lock_with_pkgdb(
+        &mut self,
+        flox: &Flox,
+    ) -> Result<LockedManifestPkgdb, CoreEnvironmentError> {
         let manifest_path = self.manifest_path();
         let environment_lockfile_path = self.lockfile_path();
         let existing_lockfile_path = if environment_lockfile_path.exists() {
@@ -115,20 +167,39 @@ impl<State> CoreEnvironment<State> {
             &global_manifest_path(flox),
         )
         .map_err(CoreEnvironmentError::LockedManifest)?;
+        Ok(lockfile)
+    }
 
-        // Write the lockfile to disk
-        // todo: do we always want to do this?
-        debug!(
-            "generated lockfile, writing to {}",
-            environment_lockfile_path.display()
-        );
-        std::fs::write(
-            &environment_lockfile_path,
-            serde_json::to_string_pretty(&lockfile).unwrap(),
-        )
-        .map_err(CoreEnvironmentError::WriteLockfile)?;
+    /// Lock the environment with the catalog client
+    ///
+    /// If a lockfile exists, it is used as a base.
+    /// If the manifest should be locked without a base,
+    /// remove the lockfile before calling this function or use [Self::upgrade] (todo - 2024-04-24).
+    fn lock_with_catalog_client(
+        &self,
+        client: &catalog::Client,
+        manifest: TypedManifestCatalog,
+    ) -> Result<LockedManifestCatalog, CoreEnvironmentError> {
+        let existing_lockfile = 'lockfile: {
+            let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
+                break 'lockfile None;
+            };
+            let lockfile = LockedManifest::read_from_file(&lockfile_path)
+                .map_err(CoreEnvironmentError::LockedManifest)?;
+            match lockfile {
+                LockedManifest::Catalog(lockfile) => Some(lockfile),
+                _ => {
+                    warn!(
+                        "Found version 1 manifest, but lockfile doesn't match: Ignoring lockfile."
+                    );
+                    None
+                },
+            }
+        };
 
-        Ok(LockedManifest::Pkgdb(lockfile))
+        LockedManifestCatalog::lock_manifest(&manifest, existing_lockfile.as_ref(), client)
+            .block_on()
+            .map_err(CoreEnvironmentError::LockedManifest)
     }
 
     /// Build the environment, [Self::lock] if necessary.
@@ -699,6 +770,9 @@ pub enum CoreEnvironmentError {
     // endregion
     #[error("unsupported system to build container: {0}")]
     ContainerizeUnsupportedSystem(String),
+
+    #[error("Could not process catalog manifest without a catalog client")]
+    CatalogClientMissing,
 }
 
 impl CoreEnvironmentError {

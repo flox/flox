@@ -100,7 +100,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct CatalogPageInput {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         pub packages: Vec<PackageResolutionInfo>,
@@ -170,7 +170,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct CatalogPageOutput {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         pub packages: Vec<PackageResolutionInfo>,
@@ -250,7 +250,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct CatalogStatus {
         pub attribute_path_ct: i64,
         pub catalogs: Vec<String>,
@@ -292,7 +292,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ErrorResponse {
         pub detail: String,
         pub status_code: i64,
@@ -327,7 +327,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct Output {
         pub name: String,
         pub store_path: String,
@@ -392,7 +392,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageDescriptor {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub derivation: Option<String>,
@@ -469,7 +469,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageGroup {
         pub descriptors: Vec<PackageDescriptor>,
         pub name: String,
@@ -529,7 +529,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageGroups {
         pub items: Vec<PackageGroup>,
     }
@@ -670,7 +670,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageInfoApi {
         pub attr_path: String,
         pub description: String,
@@ -789,7 +789,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageInfoCommon {
         pub attr_path: String,
         pub description: String,
@@ -944,7 +944,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageResolutionInfo {
         pub attr_path: String,
         pub broken: bool,
@@ -1021,7 +1021,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageSearchResultInput {
         pub items: Vec<PackageInfoApi>,
         pub total_count: i64,
@@ -1083,7 +1083,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageSearchResultOutput {
         pub items: Vec<PackageInfoApi>,
         pub total_count: i64,
@@ -1121,7 +1121,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackagesResultInput {
         pub items: Vec<PackageInfoCommon>,
         pub total_count: i64,
@@ -1159,7 +1159,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackagesResultOutput {
         pub items: Vec<PackageInfoCommon>,
         pub total_count: i64,
@@ -1223,7 +1223,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ResolvedPackageGroupInput {
         pub name: String,
         pub pages: Vec<CatalogPageInput>,
@@ -1288,7 +1288,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ResolvedPackageGroupOutput {
         pub name: String,
         pub pages: Vec<CatalogPageOutput>,
@@ -1322,7 +1322,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ResolvedPackageGroupsInput {
         pub items: Vec<ResolvedPackageGroupInput>,
     }
@@ -1354,7 +1354,7 @@ pub mod types {
     ///}
     /// ```
     /// </details>
-    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ResolvedPackageGroupsOutput {
         pub items: Vec<ResolvedPackageGroupOutput>,
     }

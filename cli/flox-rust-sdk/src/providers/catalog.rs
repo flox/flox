@@ -452,7 +452,7 @@ impl ClientTrait for MockClient {
 /// we need.
 pub type PackageDescriptor = api_types::PackageDescriptor;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct PackageGroup {
     pub descriptors: Vec<PackageDescriptor>,
     pub name: String,
@@ -529,7 +529,7 @@ impl TryFrom<PackageGroup> for api_types::PackageGroup {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedPackageGroup {
     pub name: String,
     pub pages: Vec<CatalogPage>,
@@ -571,9 +571,13 @@ impl From<api_types::CatalogPageInput> for CatalogPage {
     }
 }
 
-/// Just an alias until the auto-generated PackageResolutionInfo diverges from
-/// what we need.
-type PackageResolutionInfo = api_types::PackageResolutionInfo;
+/// TODO: Implement a shim for [api_types::PackageResolutionInfo]
+///
+/// Since we plan to list resolved packages in a flat list within the lockfile,
+/// [lockfile::LockedPackageCatalog] adds (at least) a `system` field.
+/// We should consider whether adding a shim to [api_types::PackageResolutionInfo]
+/// is not adding unnecessary complexity.
+pub type PackageResolutionInfo = api_types::PackageResolutionInfo;
 
 impl TryFrom<PackageInfoApi> for SearchResult {
     type Error = SearchError;
