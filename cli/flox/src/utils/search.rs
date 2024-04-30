@@ -276,9 +276,7 @@ impl Display for DisplaySearchResults {
 
 impl DisplaySearchResults {
     pub fn search_results_truncated_hint(&self) -> Option<String> {
-        let Some(count) = self.count else {
-            return None;
-        };
+        let count = self.count?;
 
         // Don't show the message if we have exactly the number of results as the limit,
         // otherwise we would get messages like `Showing 10 of 10...`

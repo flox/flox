@@ -169,6 +169,9 @@ enum Provide<T> {
     Found(T),
     /// Found a provider, but it's invalid
     /// e.g. found a pyproject.toml, but it's not a valid poetry file
+    // We don't necessarily want to forget the error,
+    // but currently we don't do anything with it either.
+    #[allow(dead_code)]
     Invalid(Error),
     /// Provider not found
     NotFound,
@@ -332,7 +335,7 @@ impl Provider for PoetryPyProject {
         };
 
         InitCustomization {
-            profile: Some(
+            hook_on_activate: Some(
                 // TODO: when we support fish, we'll need to source activate.fish
                 indoc! {r#"
                 # Setup a Python virtual environment
@@ -344,10 +347,25 @@ impl Provider for PoetryPyProject {
                   poetry lock --quiet
                 fi
 
-                echo "Activating poetry virtual environment"
-                source "$(poetry env info --path)/bin/activate"
-
-                poetry install --quiet"#}
+                # Quietly activate venv and install packages in a subshell so
+                # that the venv can be freshly activated in the profile section.
+                (
+                  source "$(poetry env info --path)/bin/activate"
+                  poetry install --quiet
+                )"#}
+                .to_string(),
+            ),
+            profile_common: None,
+            profile_bash: Some(
+                indoc! {r#"
+                echo "Activating poetry virtual environment" >&2
+                source "$(poetry env info --path)/bin/activate""#}
+                .to_string(),
+            ),
+            profile_zsh: Some(
+                indoc! {r#"
+                echo "Activating poetry virtual environment" >&2
+                source "$(poetry env info --path)/bin/activate""#}
                 .to_string(),
             ),
             packages: Some(vec![
@@ -506,24 +524,38 @@ impl Provider for PyProject {
         };
 
         InitCustomization {
-            profile: Some(
+            hook_on_activate: Some(
                 // TODO: when we support fish, we'll need to source activate.fish
                 indoc! {r#"
                 # Setup a Python virtual environment
 
-                PYTHON_DIR="$FLOX_ENV_CACHE/python"
+                export PYTHON_DIR="$FLOX_ENV_CACHE/python"
                 if [ ! -d "$PYTHON_DIR" ]; then
                   echo "Creating python virtual environment in $PYTHON_DIR"
                   python -m venv "$PYTHON_DIR"
                 fi
 
-                echo "Activating python virtual environment"
-                source "$PYTHON_DIR/bin/activate"
-
-                # install the dependencies for this project based on pyproject.toml
-                # <https://pip.pypa.io/en/stable/cli/pip_install/>
-
-                pip install -e . --quiet"#}
+                # Quietly activate venv and install packages in a subshell so
+                # that the venv can be freshly activated in the profile section.
+                (
+                  source "$PYTHON_DIR/bin/activate"
+                  # install the dependencies for this project based on pyproject.toml
+                  # <https://pip.pypa.io/en/stable/cli/pip_install/>
+                  pip install -e . --quiet
+                )"#}
+                .to_string(),
+            ),
+            profile_common: None,
+            profile_bash: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate""#}
+                .to_string(),
+            ),
+            profile_zsh: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate""#}
                 .to_string(),
             ),
             packages: Some(vec![PackageToInstall {
@@ -634,21 +666,36 @@ impl Provider for Requirements {
             })
             .join("\n");
         InitCustomization {
-            profile: Some(
+            hook_on_activate: Some(
                 // TODO: when we support fish, we'll need to source activate.fish
                 formatdoc! {r#"
                 # Setup a Python virtual environment
 
-                PYTHON_DIR="$FLOX_ENV_CACHE/python"
+                export PYTHON_DIR="$FLOX_ENV_CACHE/python"
                 if [ ! -d "$PYTHON_DIR" ]; then
                   echo "Creating python virtual environment in $PYTHON_DIR"
                   python -m venv "$PYTHON_DIR"
                 fi
 
-                echo "Activating python virtual environment"
-                source "$PYTHON_DIR/bin/activate"
-
-                {pip_cmds}"#}
+                # Quietly activate venv and install packages in a subshell so
+                # that the venv can be freshly activated in the profile section.
+                (
+                  source "$PYTHON_DIR/bin/activate"
+                  {pip_cmds}
+                )"#}
+                .to_string(),
+            ),
+            profile_common: None,
+            profile_bash: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate""#}
+                .to_string(),
+            ),
+            profile_zsh: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate""#}
                 .to_string(),
             ),
             packages: Some(vec![PackageToInstall {
@@ -859,10 +906,10 @@ mod tests {
         let no_match = temp_dir.join("not_a_requirements.txt");
         let no_match2 = temp_dir.join("random_file.txt");
 
-        File::create(&no_match).unwrap();
-        File::create(&no_match2).unwrap();
+        File::create(no_match).unwrap();
+        File::create(no_match2).unwrap();
         let matches = Requirements::get_matches(&temp_dir).unwrap();
-        assert!(matches.len() == 0);
+        assert!(matches.is_empty());
     }
 
     /// Requirements::detect should match requirements.txt
@@ -871,7 +918,7 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let temp_dir = flox.temp_dir;
         let requirements_file = temp_dir.join("requirements.txt");
-        File::create(&requirements_file).unwrap();
+        File::create(requirements_file).unwrap();
         let matches = Requirements::get_matches(&temp_dir).unwrap();
         assert!(matches.len() == 1);
         assert_eq!(matches[0], "requirements.txt");
@@ -883,7 +930,7 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let temp_dir = flox.temp_dir;
         let requirements_file_unconventional = temp_dir.join("requirements_versioned.txt");
-        File::create(&requirements_file_unconventional).unwrap();
+        File::create(requirements_file_unconventional).unwrap();
         let matches = Requirements::get_matches(&temp_dir).unwrap();
         assert!(matches.len() == 1);
         assert_eq!(matches[0], "requirements_versioned.txt");
@@ -896,8 +943,8 @@ mod tests {
         let temp_dir = flox.temp_dir;
         let long_name = temp_dir.join("requirements_versioned_dev.txt");
         let short_name = temp_dir.join("requirements_versioned.txt");
-        File::create(&long_name).unwrap();
-        File::create(&short_name).unwrap();
+        File::create(long_name).unwrap();
+        File::create(short_name).unwrap();
         let matches = Requirements::get_matches(&temp_dir).unwrap();
         assert!(matches.len() == 2);
         // std::fs::read_dir does not guarantee order

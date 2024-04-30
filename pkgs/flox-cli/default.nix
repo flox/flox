@@ -1,28 +1,25 @@
 {
-  inputs,
-  lib,
-  clippy,
-  rust-analyzer,
-  rust,
-  rustc,
-  rustfmt,
-  rustPlatform,
-  hostPlatform,
-  targetPlatform,
-  openssl,
-  libssh2,
-  libgit2,
-  zlib,
-  pkg-config,
-  darwin,
   cacert,
-  glibcLocalesUtf8,
-  installShellFiles,
-  gnused,
-  gitMinimal,
-  nix,
-  pkgsFor,
+  darwin,
+  rust-toolchain,
   flox-pkgdb,
+  gitMinimal,
+  glibcLocalesUtf8,
+  gnused,
+  hostPlatform,
+  inputs,
+  installShellFiles,
+  lib,
+  libgit2,
+  libssh2,
+  nix,
+  openssl,
+  pkg-config,
+  pkgsFor,
+  rust-analyzer,
+  rustfmt ? rust-toolchain.rustfmt,
+  targetPlatform,
+  zlib,
 }: let
   flox-src = builtins.path {
     name = "flox-src";
@@ -42,7 +39,7 @@
   };
 
   # crane (<https://crane.dev/>) library for building rust packages
-  craneLib = inputs.crane.mkLib pkgsFor;
+  craneLib = (inputs.crane.mkLib pkgsFor).overrideToolchain rust-toolchain.toolchain;
 
   # build time environment variables
   envs = let
@@ -52,8 +49,9 @@
       # 3rd party CLIs
       # we want to use our own binaries by absolute path
       # rather than relying on or modifying the user's `PATH` variable
-      GIT_BIN = "${gitMinimal}/bin/git";
-      NIX_BIN = "${nix}/bin/nix";
+      GIT_PKG = gitMinimal;
+      NIX_PKG = nix;
+      NIX_BIN = "${nix}/bin/nix"; # only used for nix invocations in tests
       PKGDB_BIN =
         if flox-pkgdb == null
         then "pkgdb"
@@ -62,7 +60,6 @@
         if flox-pkgdb == null
         then "ld-floxlib.so"
         else "${flox-pkgdb}/lib/ld-floxlib.so";
-      FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
 
       # bundling of internally used nix scripts
       FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
@@ -188,7 +185,7 @@ in
       passthru = {
         inherit
           envs
-          rustPlatform
+          rust-toolchain
           cargoDepsArtifacts
           pkgsFor
           nix
@@ -199,16 +196,15 @@ in
 
         devPackages = [
           rustfmt
-          clippy
           rust-analyzer
-          rust.packages.stable.rustPlatform.rustLibSrc
-          rustc
+          rust-toolchain.rustc
+          rust-toolchain.clippy
         ];
 
         devEnvs =
           envs
           // {
-            RUST_SRC_PATH = rustPlatform.rustLibSrc.outPath;
+            RUST_SRC_PATH = "${rust-toolchain.rust-src}/lib/rustlib/src/rust/library";
             RUSTFMT = "${rustfmt}/bin/rustfmt";
           };
 

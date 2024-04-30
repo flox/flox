@@ -14,17 +14,16 @@ fn main() {
 
     let client = generate_client(&spec);
     let client_dst = generate_dir.join("client.rs");
-    fs::write(&client_dst, client).unwrap();
+    fs::write(client_dst, client).unwrap();
 
     // rerun if the spec changed
     println!("cargo:rerun-if-changed={}", spec_src.display());
-
-    // rerun if the generated files were changed manually
-    println!("cargo:rerun-if-changed={}", client_dst.display());
 }
 
 fn generate_client(spec: &OpenAPI) -> String {
-    let mut generator = progenitor::Generator::default();
+    let mut settings = progenitor::GenerationSettings::default();
+    settings.with_derive("PartialEq");
+    let mut generator = progenitor::Generator::new(&settings);
     let tokens = generator.generate_tokens(spec).unwrap();
     let ast = syn::parse2(tokens).unwrap();
     prettyplease::unparse(&ast)

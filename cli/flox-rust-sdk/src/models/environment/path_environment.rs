@@ -82,7 +82,10 @@ pub struct PathEnvironment {
 /// A profile script or list of packages to install when initializing an environment
 #[derive(Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct InitCustomization {
-    pub profile: Option<String>,
+    pub hook_on_activate: Option<String>,
+    pub profile_common: Option<String>,
+    pub profile_bash: Option<String>,
+    pub profile_zsh: Option<String>,
     pub packages: Option<Vec<PackageToInstall>>,
 }
 
@@ -485,27 +488,67 @@ impl PathEnvironment {
         };
         replaced = replaced.replace(FLOX_INSTALL_PLACEHOLDER, packages);
 
-        // Replace profile
-        let profile = if let Some(ref custom_profile) = customization.profile {
+        // Replace the hook section
+        let default_hook = if let Some(ref hook_on_activate_script) = customization.hook_on_activate
+        {
             formatdoc! {r#"
-                common = """
+                on-activate = """
                 {}
-                """"#, indent::indent_all_by(2, custom_profile)}
+                """"#, indent::indent_all_by(2, hook_on_activate_script)}
         } else {
             formatdoc! {r#"
-                # common = """
-                #   echo "it's gettin flox in here";
+                # on-activate = """
+                #     # Set variables, create files and directories
+                #     venv_dir="$(mktemp -d)"
+                #     export venv_dir
+                #
+                #     # Perform initialization steps, e.g. create a python venv
+                #     python -m venv "$venv_dir"
+                #
                 # """"#}
         };
-        replaced = replaced.replace(FLOX_PROFILE_PLACEHOLDER, &profile);
-
-        // Replace the hook
-        let default_hook = formatdoc! {r#"
-            # on-activate = """
-            #     mkdir my_data_dir
-            # """"#};
-
         let replaced = replaced.replace(FLOX_HOOK_PLACEHOLDER, &default_hook);
+
+        // Replace the profile section
+        let default_profile = match customization {
+            InitCustomization {
+                profile_common: None,
+                profile_bash: None,
+                profile_zsh: None,
+                ..
+            } => {
+                formatdoc! {r#"
+                    # common = """
+                    #     echo "it's gettin' flox in here"
+                    # """
+                    # bash = """
+                    #     source $venv_dir/bin/activate
+                    #     alias foo="echo bar"
+                    # """
+                    # zsh = """
+                    #     source $venv_dir/bin/activate
+                    #     alias foo="echo bar"
+                    # """"#}
+            },
+            _ => {
+                formatdoc! {r#"
+                    common = """
+                    {}
+                    """
+                    bash = """
+                    {}
+                    """
+                    zsh = """
+                    {}
+                    """
+                    "#,
+                    customization.profile_common.as_deref().map(|profile_common|indent::indent_all_by(2, profile_common)).unwrap_or("".to_string()),
+                    customization.profile_bash.as_deref().map(|profile_bash|indent::indent_all_by(2, profile_bash)).unwrap_or("".to_string()),
+                    customization.profile_zsh.as_deref().map(|profile_zsh|indent::indent_all_by(2, profile_zsh)).unwrap_or("".to_string()),
+                }
+            },
+        };
+        let replaced = replaced.replace(FLOX_PROFILE_PLACEHOLDER, &default_profile);
 
         debug!(
             "manifest was updated successfully: {}",

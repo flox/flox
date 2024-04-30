@@ -182,8 +182,8 @@ impl MetricsBuffer {
 
         let buffer_file_path = cache_dir.join(METRICS_EVENTS_FILE_NAME);
         let mut events_buffer_file = OpenOptions::new()
-            .write(true)
             .read(true)
+            .append(true)
             .create(true)
             .open(buffer_file_path)?;
 

@@ -11,12 +11,13 @@ use crate::data::{System, Version};
 use crate::models::pkgdb::PKGDB_BIN;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
+pub(super) const DEFAULT_PRIORITY: usize = 5;
 
 /// A wrapper around a [`toml_edit::DocumentMut`]
 /// that allows modifications of the raw manifest document,
 /// while preserving comments and user formatting.
 #[derive(Debug)]
-struct RawManifest(toml_edit::DocumentMut);
+pub struct RawManifest(toml_edit::DocumentMut);
 impl RawManifest {
     /// Get the version of the manifest, if it's present or default to version 1.
     fn get_version(&self) -> Option<i64> {
@@ -38,7 +39,7 @@ impl RawManifest {
     ///
     /// Discussion: using a string field as the version tag `version: "1"` vs `version: 1`
     /// could work today, but is still limited by the lack of an optional tag.
-    fn to_typed(&self) -> Result<TypedManifest, toml_edit::de::Error> {
+    pub fn to_typed(&self) -> Result<TypedManifest, toml_edit::de::Error> {
         match self.get_version() {
             Some(1) => Ok(TypedManifest::Catalog(toml_edit::de::from_document(
                 self.0.clone(),
@@ -75,7 +76,7 @@ impl FromStr for RawManifest {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(untagged)]
-enum TypedManifest {
+pub enum TypedManifest {
     /// v2 manifest, processed by flox and resolved using the catalog service
     Catalog(Box<TypedManifestCatalog>),
     /// deprecated v1 manifest, processed entirely by `pkgdb`
@@ -87,7 +88,7 @@ enum TypedManifest {
 /// Modifications should be made using the the raw functions in this module.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(super) struct TypedManifestCatalog {
+pub struct TypedManifestCatalog {
     version: Version<1>,
     /// The packages to install in the form of a map from package name
     /// to package descriptor.
@@ -105,42 +106,51 @@ pub(super) struct TypedManifestCatalog {
     profile: ManifestProfile,
     /// Options that control the behavior of the manifest.
     #[serde(default)]
-    options: ManifestOptions,
+    pub(super) options: ManifestOptions,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, derive_more::Deref)]
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Default,
+    PartialEq,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(super) struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
+pub struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
-pub(super) struct ManifestPackageDescriptor {
-    pub(super) pkg_path: String,
-    pub(super) package_group: Option<String>,
-    pub(super) priority: Option<usize>,
-    pub(super) version: Option<String>,
-    pub(super) systems: Option<Vec<System>>,
+pub struct ManifestPackageDescriptor {
+    pub(crate) pkg_path: String,
+    pub(crate) package_group: Option<String>,
+    pub(crate) priority: Option<usize>,
+    pub(crate) version: Option<String>,
+    pub(crate) systems: Option<Vec<System>>,
     #[serde(default)]
-    pub(super) optional: bool,
+    pub(crate) optional: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(super) struct ManifestVariables(BTreeMap<String, String>);
+pub struct ManifestVariables(BTreeMap<String, String>);
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
-pub(super) struct ManifestHook {
+pub struct ManifestHook {
     /// A script that is run at activation time,
     /// in a flox provided bash shell
     on_activate: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(super) struct ManifestProfile {
+pub struct ManifestProfile {
     /// When defined, this hook is run by _all_ shells upon activation
     common: Option<String>,
     /// When defined, this hook is run upon activation in a bash shell
@@ -151,13 +161,13 @@ pub(super) struct ManifestProfile {
     fish: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
-pub(super) struct ManifestOptions {
+pub struct ManifestOptions {
     /// A list of systems that each package is resolved for.
     #[serde(default)]
-    systems: Vec<System>,
+    pub(super) systems: Vec<System>,
     /// Options that control what types of packages are allowed.
     #[serde(default)]
     allows: Allows,
@@ -166,9 +176,9 @@ pub(super) struct ManifestOptions {
     semver: SemverOptions,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(super) struct Allows {
+pub struct Allows {
     /// Whether to allow packages that are marked as `unfree`
     unfree: Option<bool>,
     /// Whether to allow packages that are marked as `broken`
@@ -178,9 +188,9 @@ pub(super) struct Allows {
     licenses: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub(super) struct SemverOptions {
+pub struct SemverOptions {
     /// Whether to prefer pre-release versions when resolving
     #[serde(default)]
     prefer_pre_releases: Option<bool>,

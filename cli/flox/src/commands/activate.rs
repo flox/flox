@@ -1,9 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
-#[cfg(target_os = "macos")]
-use std::ffi::OsStr;
-use std::ffi::OsString;
 use std::io::stdout;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -19,11 +16,11 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError,
     FLOX_ACTIVE_ENVIRONMENTS_VAR,
     FLOX_ENV_CACHE_VAR,
+    FLOX_ENV_DESCRIPTION_VAR,
     FLOX_ENV_DIRS_VAR,
     FLOX_ENV_LIB_DIRS_VAR,
     FLOX_ENV_PROJECT_VAR,
     FLOX_ENV_VAR,
-    FLOX_PATH_PATCHED_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::lockfile::LockedManifestError;
@@ -139,43 +136,36 @@ impl Activate {
         let mut flox_active_environments = activated_environments();
 
         // install prefixes of all active environments
-        let flox_env_install_prefixes = IndexSet::from_iter(env::split_paths(
-            &env::var(FLOX_ENV_DIRS_VAR).unwrap_or_default(),
-        ));
-
-        // on macos: patch the existing PATH
-        // If this is [Some] the path will be restored from `$FLOX_PATH_PATCHED`
-        // As part of running $FLOX_ENV/etc/profile.d/0100_common-paths.sh during activation.
-        //
-        // NOTE: this does _not_ include any additions to the PATH
-        // due to the newly activated environment.
-        // Amending the path is strictly implemented by the activation scripts!
-        let fixed_up_original_path_joined =
-            Self::fixup_path(&flox_env_install_prefixes).transpose()?;
+        let flox_env_install_prefixes: IndexSet<PathBuf> = {
+            let mut set = IndexSet::new();
+            if !flox_active_environments.is_active(&now_active) {
+                set.insert(activation_path.clone());
+            }
+            let active_set: IndexSet<PathBuf> = {
+                if let Ok(var) = env::var(FLOX_ENV_DIRS_VAR) {
+                    if !var.is_empty() {
+                        IndexSet::from_iter(env::split_paths(&var))
+                    } else {
+                        IndexSet::new()
+                    }
+                } else {
+                    IndexSet::new()
+                }
+            };
+            set.extend(active_set);
+            set
+        };
 
         // Detect if the current environment is already active
         if flox_active_environments.is_active(&now_active) {
-            if !in_place {
-                // Error if interactive and already active
-                bail!(
-                    "Environment '{}' is already active.",
-                    now_active.bare_description()?
-                );
-            }
-            debug!("Environment is already active: environment={}. Ignoring activation (may patch PATH)", now_active.bare_description()?);
-            Self::reactivate_in_place(fixed_up_original_path_joined)?;
-            return Ok(());
+            debug!(
+                "Environment is already active: environment={}. Ignoring activation",
+                now_active.bare_description()?
+            );
+        } else {
+            // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
+            flox_active_environments.set_last_active(now_active.clone());
         }
-
-        // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
-        flox_active_environments.set_last_active(now_active.clone());
-
-        // Prepend the new environment to the list of active environments
-        let flox_env_install_prefixes = {
-            let mut set = IndexSet::from([activation_path.clone()]);
-            set.extend(flox_env_install_prefixes);
-            set
-        };
 
         // Set FLOX_ENV_DIRS and FLOX_ENV_LIB_DIRS
 
@@ -242,16 +232,18 @@ impl Activate {
                 FLOX_PROMPT_ENVIRONMENTS_VAR,
                 flox_prompt_environments.unwrap_or_default(),
             ),
+            // Export FLOX_ENV_DESCRIPTION for this environment and let the
+            // activation script take care of tracking active environments
+            // and invoking the appropriate script to set the prompt.
+            (
+                FLOX_ENV_DESCRIPTION_VAR,
+                now_active
+                    .bare_description()
+                    .expect("`bare_description` is infallible"),
+            ),
         ]);
 
         exports.extend(default_nix_env_vars());
-
-        if let Some(fixed_up_original_path_joined) = fixed_up_original_path_joined {
-            exports.insert(
-                FLOX_PATH_PATCHED_VAR,
-                fixed_up_original_path_joined.to_string_lossy().to_string(),
-            );
-        }
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
@@ -261,13 +253,13 @@ impl Activate {
         //
         //    eval "$(flox activate)"
         if in_place {
-            let shell = Self::detect_shell_for_in_place()?;
+            let shell = Self::detect_shell()?;
             Self::activate_in_place(&shell, &exports, &activation_path);
 
             return Ok(());
         }
 
-        let shell = Self::detect_shell_for_subshell()?;
+        let shell = Self::detect_shell()?;
         // These functions will only return if exec fails
         if !self.run_args.is_empty() {
             Self::activate_command(self.run_args, shell, exports, activation_path)
@@ -277,7 +269,7 @@ impl Activate {
     }
 
     /// Used for `flox activate -- run_args`
-    fn activate_command(
+    fn old_activate_command(
         run_args: Vec<String>,
         shell: Shell,
         exports: HashMap<&str, String>,
@@ -311,11 +303,54 @@ impl Activate {
         Err(command.exec().into())
     }
 
+    /// Used for `flox activate -- run_args`
+    fn activate_command(
+        run_args: Vec<String>,
+        shell: Shell,
+        exports: HashMap<&str, String>,
+        activation_path: PathBuf,
+    ) -> Result<()> {
+        // Previous versions of pkgdb rendered activation scripts into a
+        // subdirectory called "activate", but now that path is occupied by
+        // the activation script itself. The new activation scripts are in a
+        // subdirectory called "activate.d". If we find that the "activate"
+        // path is a directory, we assume it's the old style and invoke the
+        // old_activate_command function.
+        let activate_path = activation_path.join("activate");
+        if activate_path.is_dir() {
+            // We'll warn the user with a debug message for now, and when we
+            // are ready to start deprecating support for the old style we'll
+            // change this to an info message, and finally throw an error as
+            // we remove support entirely for the old style.
+            debug!(
+                "old-style activation directory found, \
+                 consider re-rendering environment: {}",
+                activate_path.display()
+            );
+            return Self::old_activate_command(run_args, shell, exports, activation_path);
+        }
+
+        let mut command = Command::new(activate_path);
+        command.env("FLOX_SHELL", shell.exe_path());
+        command.envs(exports);
+
+        // The activation script works like a shell in that it accepts the "-c"
+        // flag which takes exactly one argument to be passed verbatim to the
+        // userShell invocation. Take this opportunity to combine these args
+        // safely, and *exactly* as the user provided them in argv.
+        command.arg("-c").arg(Self::quote_run_args(&run_args));
+
+        debug!("running activation command: {:?}", command);
+
+        // exec should never return
+        Err(command.exec().into())
+    }
+
     /// Activate the environment interactively by spawning a new shell
     /// and running the respective activation scripts.
     ///
     /// This function should never return as it replaces the current process
-    fn activate_interactive(
+    fn old_activate_interactive(
         shell: Shell,
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
@@ -355,7 +390,10 @@ impl Activate {
                     command.env("FLOX_ORIG_ZDOTDIR", zdotdir);
                 }
                 command
-                    .env("ZDOTDIR", env!("FLOX_ZDOTDIR"))
+                    .env(
+                        "ZDOTDIR",
+                        activation_path.join("activate.d").join("zdotdir"),
+                    )
                     .env(
                         "FLOX_ZSH_INIT_SCRIPT",
                         activation_path.join("activate").join("zsh"),
@@ -375,118 +413,57 @@ impl Activate {
         Err(command.exec().into())
     }
 
-    /// Patch the PATH to undo the effects of `/usr/libexec/path_helper`
+    /// Activate the environment interactively by spawning a new shell
+    /// and running the respective activation scripts.
     ///
-    /// Darwin has a "path_helper" which indiscriminately reorders the path
-    /// to put the system curated path items first in the `PATH`,
-    /// which completely breaks the user's ability to manage their `PATH` in subshells,
-    /// e.g. when using tmux.
-    ///
-    /// On macos `/usr/libexec/path_helper` is typically invoked from
-    /// default shell rc files, e.g. `/etc/profile` and `/etc/zprofile`.
-    ///
-    /// Note: since the "path_helper" i only invoked by login shells,
-    /// we only need to setup the PATH patching for `flox activate` in shell rc files.
-    ///
-    /// ## Example
-    ///
-    /// > User has `eval "$(flox activate)"` in their `.zshrc`.
-    ///
-    ///  Without the path patching, the following happens:
-    ///
-    /// 1. Open a new terminal (login shell)
-    ///     -> `path_helper` runs (`PATH=<default envs>`)
-    ///     -> `flox activate` runs (`PATH=<flox_env>:<default envs>`)
-    /// 2. Open a new tmux session (login shell by default)
-    ///     -> `path_helper` runs (`PATH=<default envs>:<flox_env>`)
-    ///     -> `flox activate` runs
-    ///     -> ⚡️ environment already active, activate skipped
-    ///        without path patching: `PATH:<default envs>:<flox_env>` ❌
-    ///        with path patching: `PATH:<flox_env>:<default envs>`    ✅ flox env is not shadowed
-    ///
-    /// ## Implementation
-    ///
-    /// This function attempts to undo the effects of `/usr/libexec/path_helper`
-    /// by partitioning the `PATH` into two parts:
-    /// 1. known paths of activated flox environments
-    ///    and nix store paths (e.g. `/nix/store/...`) -- assumed to be `nix develop` paths
-    /// 2. everything else
-    ///
-    /// The `PATH` is then reordered to put the flox environment and nix store paths first.
-    /// The order within the two partitions is preserved.
-    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))] // on linux `flox_env_dirs` is not used
-    fn fixup_path(flox_env_dirs: &IndexSet<PathBuf>) -> Option<Result<OsString>> {
-        #[cfg(not(target_os = "macos"))]
-        {
-            None
-        }
-        #[cfg(target_os = "macos")]
-        {
-            if !Path::new("/usr/libexec/path_helper").exists() {
-                return None;
-            }
-            let path_var = env::var("PATH").unwrap_or_default();
-            let fixed_up_path = Self::fixup_path_with(path_var, flox_env_dirs);
-            let fixed_up_path_joined = env::join_paths(fixed_up_path).context(
-                "Cannot activate environment because its path contains an invalid character",
-            );
-            Some(fixed_up_path_joined)
-        }
-    }
-
-    /// Patch a given PATH value to undo the effects of `/usr/libexec/path_helper`
-    ///
-    /// See [Self::fixup_path] for more details.
-    #[cfg(target_os = "macos")]
-    fn fixup_path_with(
-        path_var: impl AsRef<OsStr>,
-        flox_env_dirs: &IndexSet<PathBuf>,
-    ) -> Vec<PathBuf> {
-        let path_iter = env::split_paths(&path_var);
-
-        let (flox_and_nix_path, path) = path_iter.partition::<Vec<_>, _>(|path| {
-            let is_flox_path = path
-                .parent()
-                .map(|path| flox_env_dirs.contains(path))
-                .unwrap_or_else(|| flox_env_dirs.contains(path));
-
-            path.starts_with("/nix/store") || is_flox_path
-        });
-
-        [flox_and_nix_path, path].into_iter().flatten().collect()
-    }
-
-    /// Used when the activated environment is already active
-    /// and executed non-interactively -- e.g. from a .bashrc.
-    ///
-    /// In the general case, this function produces a noop shell function
-    ///
-    ///     eval "$(flox activate)" -> eval "true"
-    ///
-    /// On macOS, we need to patch the PATH
-    /// to undo the effects of /usr/libexec/path_helper
-    ///
-    ///     eval "$(flox activate)" -> eval "export PATH=<flox_env_dirs>:$PATH"
-    ///
-    /// See [Self::fixup_path] for more details.
-    fn reactivate_in_place(fixed_up_path_joined: Option<OsString>) -> Result<(), anyhow::Error> {
-        if let Some(fixed_up_path_joined) = fixed_up_path_joined {
+    /// This function should never return as it replaces the current process
+    fn activate_interactive(
+        shell: Shell,
+        exports: HashMap<&str, String>,
+        activation_path: PathBuf,
+        now_active: UninitializedEnvironment,
+    ) -> Result<()> {
+        // Previous versions of pkgdb rendered activation scripts into a
+        // subdirectory called "activate", but now that path is occupied by
+        // the activation script itself. The new activation scripts are in a
+        // subdirectory called "activate.d". If we find that the "activate"
+        // path is a directory, we assume it's the old style and invoke the
+        // old_activate_interactive function.
+        let activate_path = activation_path.join("activate");
+        if activate_path.is_dir() {
+            // We'll warn the user with a debug message for now, and when we
+            // are ready to start deprecating support for the old style we'll
+            // change this to an info message, and finally throw an error as
+            // we remove support entirely for the old style.
             debug!(
-                "Patching PATH to {}",
-                fixed_up_path_joined.to_string_lossy()
+                "old-style activation directory found, \
+                 consider re-rendering environment: {}",
+                activate_path.display()
             );
-            println!(
-                "export PATH={}",
-                shell_escape::escape(fixed_up_path_joined.to_string_lossy())
-            );
-        } else {
-            debug!("No path patching needed");
-        };
-        Ok(())
+            return Self::old_activate_interactive(shell, exports, activation_path, now_active);
+        }
+
+        let mut command = Command::new(activate_path);
+        command.env("FLOX_SHELL", shell.exe_path());
+        command.envs(exports);
+
+        debug!("running activation command: {:?}", command);
+
+        let message = formatdoc! {"
+                You are now using the environment {}.
+                To stop using this environment, type 'exit'\n", now_active.message_description()?};
+        message::updated(message);
+
+        // exec should never return
+        Err(command.exec().into())
     }
 
     /// Used for `eval "$(flox activate)"`
-    fn activate_in_place(shell: &Shell, exports: &HashMap<&str, String>, activation_path: &Path) {
+    fn old_activate_in_place(
+        shell: &Shell,
+        exports: &HashMap<&str, String>,
+        activation_path: &Path,
+    ) {
         let exports_rendered = exports
             .iter()
             .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
@@ -510,6 +487,57 @@ impl Activate {
         println!("{script}");
     }
 
+    /// Used for `eval "$(flox activate)"`
+    fn activate_in_place(shell: &Shell, exports: &HashMap<&str, String>, activation_path: &Path) {
+        // Previous versions of pkgdb rendered activation scripts into a
+        // subdirectory called "activate", but now that path is occupied by
+        // the activation script itself. The new activation scripts are in a
+        // subdirectory called "activate.d". If we find that the "activate"
+        // path is a directory, we assume it's the old style and invoke the
+        // old_activate_in_place function.
+        let activate_path = activation_path.join("activate");
+        if activate_path.is_dir() {
+            // We'll warn the user with a debug message for now, and when we
+            // are ready to start deprecating support for the old style we'll
+            // change this to an info message, and finally throw an error as
+            // we remove support entirely for the old style.
+            debug!(
+                "old-style activation directory found, \
+                 consider re-rendering environment: {}",
+                activate_path.display()
+            );
+            return Self::old_activate_in_place(shell, exports, activation_path);
+        }
+
+        let mut command = Command::new(&activate_path);
+        command.env("FLOX_SHELL", shell.exe_path());
+        command.envs(exports);
+
+        debug!("running activation command: {:?}", command);
+
+        let output = command.output().expect("failed to run activation script");
+        eprint!("{}", String::from_utf8_lossy(&output.stderr));
+
+        // Render the exports in the correct shell dialect.
+        let exports_rendered = exports
+            .iter()
+            .map(|(key, value)| (key, shell_escape::escape(Cow::Borrowed(value))))
+            .map(|(key, value)| match shell {
+                Shell::Bash(_) => format!("export {key}={value};",),
+                Shell::Zsh(_) => format!("export {key}={value};",),
+            })
+            .join("\n");
+
+        let script = formatdoc! {"
+            {exports_rendered}
+            {output}
+        ",
+        output = String::from_utf8_lossy(&output.stdout),
+        };
+
+        print!("{script}");
+    }
+
     /// Quote run args so that words don't get split,
     /// but don't escape all characters.
     ///
@@ -519,30 +547,28 @@ impl Activate {
     fn quote_run_args(run_args: &[String]) -> String {
         run_args
             .iter()
-            .map(|arg| format!(r#""{}""#, arg.replace('"', r#"\""#)))
+            .map(|arg| {
+                if arg.contains(' ') || arg.contains('"') {
+                    format!(r#""{}""#, arg.replace('"', r#"\""#))
+                } else {
+                    arg.to_string()
+                }
+            })
             .join(" ")
     }
 
-    /// Detect the shell to use for activation
+    /// Detect the shell to use for all activation methods
     ///
-    /// Used to determine shell for
-    /// `flox activate` and `flox activate -- CMD`
-    fn detect_shell_for_subshell() -> Result<Shell> {
-        Shell::detect_from_env("FLOX_SHELL").or_else(|_| Shell::detect_from_env("SHELL"))
-    }
-
-    /// Detect the shell to use for in-place activation
-    ///
-    /// Used to determine shell for `eval "$(flox activate)"` / `flox activate --print-script`
-    fn detect_shell_for_in_place() -> Result<Shell> {
-        Self::detect_shell_for_in_place_with(Shell::detect_from_parent_process)
+    /// This was previously more complicated, now it's not.
+    fn detect_shell() -> Result<Shell> {
+        Shell::detect_from_env("FLOX_SHELL")
+            .or_else(|_| Self::detect_shell_with(Shell::detect_from_parent_process))
+            .or_else(|_| Shell::detect_from_env("SHELL"))
     }
 
     /// Utility method for testing implementing the logic of shell detection
     /// for in-place activation, generically over a parent shell detection function.
-    fn detect_shell_for_in_place_with(
-        parent_shell_fn: impl Fn() -> Result<Shell>,
-    ) -> Result<Shell> {
+    fn detect_shell_with(parent_shell_fn: impl Fn() -> Result<Shell>) -> Result<Shell> {
         Shell::detect_from_env("FLOX_SHELL")
             .or_else(|_| parent_shell_fn())
             .or_else(|err| {
@@ -611,20 +637,6 @@ mod tests {
         })
     });
 
-    #[test]
-    #[cfg(target_os = "macos")]
-    fn test_fixup_path() {
-        let flox_env_dirs = IndexSet::from(["/flox/env"].map(PathBuf::from));
-        let fixed_up_path = Activate::fixup_path_with(PATH, &flox_env_dirs);
-        let joined = env::join_paths(fixed_up_path).unwrap();
-
-        assert_eq!(
-            joined.to_string_lossy(),
-            "/flox/env/bin:/nix/store/some/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
-            "PATH was not reordered correctly"
-        );
-    }
-
     const SHELL_SET: (&'_ str, Option<&'_ str>) = ("SHELL", Some("/shell/bash"));
     const FLOX_SHELL_SET: (&'_ str, Option<&'_ str>) = ("FLOX_SHELL", Some("/flox_shell/bash"));
     const SHELL_UNSET: (&'_ str, Option<&'_ str>) = ("SHELL", None);
@@ -634,50 +646,47 @@ mod tests {
         &|| Err(anyhow::anyhow!("parent shell detection failed"));
 
     #[test]
-    fn test_detect_shell_for_subshell() {
+    fn test_detect_shell() {
         temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_SET], || {
-            let shell = Activate::detect_shell_for_subshell().unwrap();
+            let shell = Activate::detect_shell().unwrap();
             assert_eq!(shell, Shell::Bash("/shell/bash".into()));
         });
 
         temp_env::with_vars([FLOX_SHELL_SET, SHELL_SET], || {
-            let shell = Activate::detect_shell_for_subshell().unwrap();
+            let shell = Activate::detect_shell().unwrap();
             assert_eq!(shell, Shell::Bash("/flox_shell/bash".into()));
         });
 
         temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_UNSET], || {
-            let shell = Activate::detect_shell_for_subshell();
+            let shell = Activate::detect_shell();
             assert!(shell.is_err());
         });
-    }
 
-    #[test]
-    fn test_detect_shell_for_in_place() {
         // $SHELL is used as a fallback only if parent detection fails
         temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_SET], || {
-            let shell = Activate::detect_shell_for_in_place_with(PARENT_DETECTED).unwrap();
+            let shell = Activate::detect_shell_with(PARENT_DETECTED).unwrap();
             assert_eq!(shell, Shell::Bash("/parent/bash".into()));
 
             // fall back to $SHELL if parent detection fails
-            let shell = Activate::detect_shell_for_in_place_with(PARENT_UNDETECTED).unwrap();
+            let shell = Activate::detect_shell_with(PARENT_UNDETECTED).unwrap();
             assert_eq!(shell, Shell::Bash("/shell/bash".into()));
         });
 
         // $FLOX_SHELL takes precedence over $SHELL and detected parent shell
         temp_env::with_vars([FLOX_SHELL_SET, SHELL_SET], || {
-            let shell = Activate::detect_shell_for_in_place_with(PARENT_DETECTED).unwrap();
+            let shell = Activate::detect_shell_with(PARENT_DETECTED).unwrap();
             assert_eq!(shell, Shell::Bash("/flox_shell/bash".into()));
 
-            let shell = Activate::detect_shell_for_in_place_with(PARENT_UNDETECTED).unwrap();
+            let shell = Activate::detect_shell_with(PARENT_UNDETECTED).unwrap();
             assert_eq!(shell, Shell::Bash("/flox_shell/bash".into()));
         });
 
         // if both $FLOX_SHELL and $SHELL are unset, we should fail iff parent detection fails
         temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_UNSET], || {
-            let shell = Activate::detect_shell_for_in_place_with(PARENT_DETECTED).unwrap();
+            let shell = Activate::detect_shell_with(PARENT_DETECTED).unwrap();
             assert_eq!(shell, Shell::Bash("/parent/bash".into()));
 
-            let shell = Activate::detect_shell_for_in_place_with(PARENT_UNDETECTED);
+            let shell = Activate::detect_shell_with(PARENT_UNDETECTED);
             assert!(shell.is_err());
         });
     }
