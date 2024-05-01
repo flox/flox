@@ -282,3 +282,24 @@ teardown() {
   assert_line --partial "The package 'yi' is marked as broken."
   assert_output --partial "'options.allow.broken = true'"
 }
+
+# Catalog functionality tests
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=install:catalog
+@test "'flox install' installs package from catalog and builds it" {
+  export FLOX_FEATURES_USE_CATALOG=true
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello_resolution.json"
+
+  "$FLOX_BIN" init
+  # create a catalog manifest
+  echo "version = 1" > ".flox/env/manifest.toml"
+  echo 'options.systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]' >> ".flox/env/manifest.toml"
+
+  run "$FLOX_BIN" install hello
+  assert_success
+
+  run "$FLOX_BIN" activate -- hello
+  assert_success
+  assert_output "Hello, world!"
+}
