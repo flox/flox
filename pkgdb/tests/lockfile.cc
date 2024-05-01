@@ -42,7 +42,7 @@ static const std::string lockfileContentV1 = R"( {
         "unfree": null
       },
       "semver": {
-        "prefer_pre_releases": null
+        "prefer-pre-releases": null
       },
       "systems": [
         "system"
