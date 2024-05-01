@@ -127,7 +127,7 @@ pub struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 #[serde(rename_all = "kebab-case")]
 pub struct ManifestPackageDescriptor {
     pub(crate) pkg_path: String,
-    pub(crate) package_group: Option<String>,
+    pub(crate) pkg_group: Option<String>,
     pub(crate) priority: Option<usize>,
     pub(crate) version: Option<String>,
     pub(crate) systems: Option<Vec<System>>,

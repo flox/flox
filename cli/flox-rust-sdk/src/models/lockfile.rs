@@ -227,7 +227,7 @@ impl LockedPackageCatalog {
 
         let priority = descriptor.priority.unwrap_or(DEFAULT_PRIORITY);
         let group = descriptor
-            .package_group
+            .pkg_group
             .as_deref()
             .unwrap_or(DEFAULT_GROUP_NAME)
             .to_string();
@@ -384,7 +384,7 @@ impl LockedManifestCatalog {
             };
 
             let group = manifest_descriptor
-                .package_group
+                .pkg_group
                 .as_deref()
                 .unwrap_or(DEFAULT_GROUP_NAME);
 
@@ -874,7 +874,7 @@ mod tests {
 
           [install]
           hello.pkg-path = "hello"
-          hello.package-group = "group"
+          hello.pkg-group = "group"
 
           [options]
           systems = ["system"]
@@ -1167,10 +1167,10 @@ mod tests {
 
             [install]
             vim.pkg-path = "vim"
-            vim.package-group = "group1"
+            vim.pkg-group = "group1"
 
             emacs.pkg-path = "emacs"
-            emacs.package-group = "group2"
+            emacs.pkg-group = "group2"
 
             [options]
             systems = ["system"]
@@ -1219,7 +1219,7 @@ mod tests {
             .install
             .insert("unlocked".to_string(), ManifestPackageDescriptor {
                 pkg_path: "unlocked".to_string(),
-                package_group: Some("group".to_string()),
+                pkg_group: Some("group".to_string()),
                 systems: None,
                 version: None,
                 priority: None,
