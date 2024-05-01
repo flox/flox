@@ -163,7 +163,7 @@ pub struct LockedPackageCatalog {
     pub description: String,
     pub license: String,
     pub locked_url: String,
-    pub name: String,
+    pub install_id: String,
     pub pname: String,
     pub rev: String,
     pub rev_count: i64,
@@ -232,6 +232,7 @@ impl LockedPackageCatalog {
             .unwrap_or(DEFAULT_GROUP_NAME)
             .to_string();
         let optional = descriptor.optional;
+        let install_id = name;
 
         LockedPackageCatalog {
             attr_path,
@@ -240,7 +241,6 @@ impl LockedPackageCatalog {
             description,
             license,
             locked_url,
-            name,
             outputs,
             outputs_to_install,
             pname,
@@ -255,6 +255,7 @@ impl LockedPackageCatalog {
             priority,
             group,
             optional,
+            install_id,
         }
     }
 }
@@ -286,13 +287,13 @@ impl LockedManifestCatalog {
                     .manifest
                     .install
                     .iter()
-                    .find(|(install_id, _)| install_id == &&package.name)
+                    .find(|(install_id, _)| install_id == &&package.install_id)
                     .and_then(|(_, descriptor)| descriptor.priority);
 
                 let package = package.clone();
 
                 InstalledPackage {
-                    name: package.name,
+                    name: package.install_id,
                     rel_path: package.attr_path,
                     info: PackageInfo {
                         description: Some(package.description),
@@ -346,7 +347,7 @@ impl LockedManifestCatalog {
             .iter()
             .filter_map(|package| {
                 let system = &package.system;
-                let manifest = seed.manifest.install.get(&package.name)?;
+                let manifest = seed.manifest.install.get(&package.install_id)?;
                 Some(((manifest, system), package))
             })
             .collect()
@@ -952,7 +953,7 @@ mod tests {
                 description: "description".to_string(),
                 license: "license".to_string(),
                 locked_url: "locked_url".to_string(),
-                name: "hello".to_string(),
+                install_id: "hello".to_string(),
                 outputs: vec![("name".to_string(), "store_path".to_string())]
                     .into_iter()
                     .collect(),
