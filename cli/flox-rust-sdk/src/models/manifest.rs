@@ -90,7 +90,7 @@ pub enum TypedManifest {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct TypedManifestCatalog {
     version: Version<1>,
-    /// The packages to install in the form of a map from package name
+    /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
     pub(super) install: ManifestInstall,
@@ -171,7 +171,7 @@ pub struct ManifestOptions {
     allow: Allows,
     /// Options that control how semver versions are resolved.
     #[serde(default)]
-    semver: SemverOptions,
+    pub semver: SemverOptions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
@@ -192,7 +192,7 @@ pub struct Allows {
 pub struct SemverOptions {
     /// Whether to prefer pre-release versions when resolving
     #[serde(default)]
-    prefer_pre_releases: Option<bool>,
+    pub prefer_pre_releases: Option<bool>,
 }
 
 /// Deserialize the manifest as a [serde_json::Value],

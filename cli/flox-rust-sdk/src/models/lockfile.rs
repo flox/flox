@@ -29,6 +29,7 @@ use crate::providers::catalog::{
     CatalogPage,
     PackageDescriptor,
     PackageGroup,
+    PackageResolutionInfo,
     ResolvedPackageGroup,
 };
 use crate::utils::CommandExt;
@@ -160,10 +161,11 @@ pub struct LockedPackageCatalog {
     pub attr_path: String,
     pub broken: bool,
     pub derivation: String,
-    pub description: String,
-    pub license: String,
-    pub locked_url: String,
+    pub description: Option<String>,
     pub install_id: String,
+    pub license: Option<String>,
+    pub locked_url: String,
+    pub name: String,
     pub pname: String,
     pub rev: String,
     pub rev_count: i64,
@@ -171,14 +173,14 @@ pub struct LockedPackageCatalog {
     pub rev_date: chrono::DateTime<chrono::offset::Utc>,
     #[cfg_attr(test, proptest(strategy = "crate::utils::proptest_chrono_strategy()"))]
     pub scrape_date: chrono::DateTime<chrono::offset::Utc>,
-    pub stabilities: Vec<String>,
-    pub unfree: bool,
+    pub stabilities: Option<Vec<String>>,
+    pub unfree: Option<bool>,
     pub version: String,
-    pub outputs_to_install: Vec<String>,
+    pub outputs_to_install: Option<Vec<String>>,
     // endregion
 
     // region: converted fields
-    pub outputs: BTreeMap<String, String>,
+    pub outputs: Option<BTreeMap<String, String>>,
     // endregion
 
     // region: added fields
@@ -205,6 +207,7 @@ impl LockedPackageCatalog {
             broken,
             derivation,
             description,
+            install_id,
             license,
             locked_url,
             name,
@@ -220,10 +223,12 @@ impl LockedPackageCatalog {
             version,
         } = package;
 
-        let outputs = outputs
-            .into_iter()
-            .map(|output| (output.name, output.store_path))
-            .collect();
+        let outputs = outputs.map(|outputs| {
+            outputs
+                .into_iter()
+                .map(|output| (output.name, output.store_path))
+                .collect()
+        });
 
         let priority = descriptor.priority.unwrap_or(DEFAULT_PRIORITY);
         let group = descriptor
@@ -232,15 +237,16 @@ impl LockedPackageCatalog {
             .unwrap_or(DEFAULT_GROUP_NAME)
             .to_string();
         let optional = descriptor.optional;
-        let install_id = name;
 
         LockedPackageCatalog {
             attr_path,
             broken,
             derivation,
             description,
+            install_id,
             license,
             locked_url,
+            name,
             outputs,
             outputs_to_install,
             pname,
@@ -255,7 +261,6 @@ impl LockedPackageCatalog {
             priority,
             group,
             optional,
-            install_id,
         }
     }
 }
@@ -293,12 +298,12 @@ impl LockedManifestCatalog {
                 let package = package.clone();
 
                 InstalledPackage {
-                    name: package.install_id,
+                    install_id: package.install_id,
                     rel_path: package.attr_path,
                     info: PackageInfo {
-                        description: Some(package.description),
+                        description: package.description,
                         broken: package.broken,
-                        license: Some(package.license),
+                        license: package.license,
                         pname: package.pname,
                         unfree: package.unfree,
                         version: Some(package.version),
@@ -327,7 +332,7 @@ impl LockedManifestCatalog {
             .await
             .map_err(LockedManifestError::CatalogResolve)?;
 
-        let locked_packages = Self::locked_packages_from_resolution(manifest, resolved).collect();
+        let locked_packages = Self::locked_packages_from_resolution(manifest, resolved)?.collect();
 
         let lockfile = LockedManifestCatalog {
             version: Version::<1>,
@@ -376,11 +381,11 @@ impl LockedManifestCatalog {
 
         for (install_id, manifest_descriptor) in manifest.install.iter() {
             let resolved_descriptor = PackageDescriptor {
-                name: install_id.clone(),
-                pkg_path: manifest_descriptor.pkg_path.clone(),
+                install_id: install_id.clone(),
+                attr_path: manifest_descriptor.pkg_path.clone(),
                 derivation: None,
-                semver: None,
                 version: manifest_descriptor.version.clone(),
+                allow_pre_releases: manifest.options.semver.prefer_pre_releases,
             };
 
             let group = manifest_descriptor
@@ -430,19 +435,39 @@ impl LockedManifestCatalog {
     fn locked_packages_from_resolution<'manifest>(
         manifest: &'manifest TypedManifestCatalog,
         groups: impl IntoIterator<Item = ResolvedPackageGroup> + 'manifest,
-    ) -> impl Iterator<Item = LockedPackageCatalog> + 'manifest {
-        let infos = groups.into_iter().flat_map(|group| {
-            group
-                .pages
+    ) -> Result<impl Iterator<Item = LockedPackageCatalog> + 'manifest, LockedManifestError> {
+        // For each group, extract the first page and its system.
+        // Error if the first page doesn't contain any packages.
+        let first_pages: Vec<(Vec<PackageResolutionInfo>, String)> = groups
+            .into_iter()
+            .map(|group| {
+                group
+                    .pages
+                    .into_iter()
+                    .take(1)
+                    .map(|page| {
+                        page.packages
+                            .map(|packages| (packages, group.system.clone()))
+                    })
+                    .next()
+                    .flatten()
+                    .ok_or(LockedManifestError::NoPackagesOnFirstPage)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Flatten packages from all the groups into a single iterator
+        let infos = first_pages.into_iter().flat_map(|(packages, system)| {
+            packages
                 .into_iter()
-                .take(1)
-                .flat_map(|page| page.packages.into_iter())
-                .map(move |package| (package, group.system.clone()))
+                .map(move |package| (package, system.clone()))
         });
 
-        infos.filter_map(|(package, system)| {
-            let Some(descriptor) = manifest.install.get(&package.name).cloned() else {
-                debug!("Package {} is not in the manifest, skipping", package.name);
+        Ok(infos.filter_map(|(package, system)| {
+            let Some(descriptor) = manifest.install.get(&package.install_id).cloned() else {
+                debug!(
+                    "Package {} is not in the manifest, skipping",
+                    package.install_id
+                );
                 return None;
             };
 
@@ -450,7 +475,7 @@ impl LockedManifestCatalog {
             Some(LockedPackageCatalog::from_parts(
                 package, descriptor, system,
             ))
-        })
+        }))
     }
 }
 
@@ -670,7 +695,7 @@ pub struct PackageInfo {
     pub broken: bool,
     pub license: Option<String>,
     pub pname: String,
-    pub unfree: bool,
+    pub unfree: Option<bool>,
     pub version: Option<String>,
 }
 
@@ -694,7 +719,7 @@ impl TypedLockedManifestPkgdb {
             for (name, locked_package) in system_packages {
                 if let Some(locked_package) = locked_package {
                     packages.push(InstalledPackage {
-                        name: name.clone(),
+                        install_id: name.clone(),
                         rel_path: locked_package.rel_path(),
                         info: locked_package.info.clone(),
                         priority: Some(locked_package.priority),
@@ -711,7 +736,7 @@ impl TypedLockedManifestPkgdb {
 // TODO: consider dropping this in favor of mapping to [LockedPackageCatalog]?
 /// A locked package with additionally derived attributes
 pub struct InstalledPackage {
-    pub name: String,
+    pub install_id: String,
     pub rel_path: String,
     pub info: PackageInfo,
     pub priority: Option<usize>,
@@ -721,7 +746,8 @@ pub struct InstalledPackage {
 pub enum LockedManifestError {
     #[error("failed to resolve packages")]
     CatalogResolve(#[from] catalog::ResolveError),
-
+    #[error("didn't find a first catalog page with packages")]
+    NoPackagesOnFirstPage,
     #[error("failed to lock manifest")]
     LockManifest(#[source] CallPkgDbError),
     #[error("failed to check lockfile")]
@@ -873,8 +899,8 @@ mod tests {
           version = 1
 
           [install]
-          hello.pkg-path = "hello"
-          hello.pkg-group = "group"
+          hello_install_id.pkg-path = "hello"
+          hello_install_id.pkg-group = "group"
 
           [options]
           systems = ["system"]
@@ -896,11 +922,11 @@ mod tests {
             name: "group".to_string(),
             system: "system".to_string(),
             descriptors: vec![PackageDescriptor {
-                name: "hello".to_string(),
-                pkg_path: "hello".to_string(),
+                install_id: "hello_install_id".to_string(),
+                attr_path: "hello".to_string(),
                 derivation: None,
-                semver: None,
                 version: None,
+                allow_pre_releases: None,
             }],
         }]
     });
@@ -911,19 +937,20 @@ mod tests {
             pages: vec![CatalogPage {
                 page: 1,
                 url: "url".to_string(),
-                packages: vec![PackageResolutionInfo {
+                packages: Some(vec![PackageResolutionInfo {
                     attr_path: "hello".to_string(),
                     broken: false,
                     derivation: "derivation".to_string(),
-                    description: "description".to_string(),
-                    license: "license".to_string(),
+                    description: Some("description".to_string()),
+                    install_id: "hello_install_id".to_string(),
+                    license: Some("license".to_string()),
                     locked_url: "locked_url".to_string(),
                     name: "hello".to_string(),
-                    outputs: vec![Output {
+                    outputs: Some(vec![Output {
                         name: "name".to_string(),
                         store_path: "store_path".to_string(),
-                    }],
-                    outputs_to_install: vec!["name".to_string()],
+                    }]),
+                    outputs_to_install: Some(vec!["name".to_string()]),
                     pname: "pname".to_string(),
                     rev: "rev".to_string(),
                     rev_count: 1,
@@ -933,10 +960,10 @@ mod tests {
                     scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
                         .unwrap()
                         .with_timezone(&chrono::offset::Utc),
-                    stabilities: vec!["stability".to_string()],
-                    unfree: false,
+                    stabilities: Some(vec!["stability".to_string()]),
+                    unfree: Some(false),
                     version: "version".to_string(),
-                }],
+                }]),
             }],
             name: "group".to_string(),
         }]
@@ -950,14 +977,17 @@ mod tests {
                 attr_path: "hello".to_string(),
                 broken: false,
                 derivation: "derivation".to_string(),
-                description: "description".to_string(),
-                license: "license".to_string(),
+                description: Some("description".to_string()),
+                install_id: "hello_install_id".to_string(),
+                license: Some("license".to_string()),
                 locked_url: "locked_url".to_string(),
-                install_id: "hello".to_string(),
-                outputs: vec![("name".to_string(), "store_path".to_string())]
-                    .into_iter()
-                    .collect(),
-                outputs_to_install: vec!["name".to_string()],
+                name: "hello".to_string(),
+                outputs: Some(
+                    vec![("name".to_string(), "store_path".to_string())]
+                        .into_iter()
+                        .collect(),
+                ),
+                outputs_to_install: Some(vec!["name".to_string()]),
                 pname: "pname".to_string(),
                 rev: "rev".to_string(),
                 rev_count: 1,
@@ -967,8 +997,8 @@ mod tests {
                 scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
                     .unwrap()
                     .with_timezone(&chrono::offset::Utc),
-                stabilities: vec!["stability".to_string()],
-                unfree: false,
+                stabilities: Some(vec!["stability".to_string()]),
+                unfree: Some(false),
                 version: "version".to_string(),
                 system: "system".to_string(),
                 group: "group".to_string(),
@@ -1009,17 +1039,17 @@ mod tests {
                 system: "system1".to_string(),
                 descriptors: vec![
                     PackageDescriptor {
-                        name: "emacs".to_string(),
-                        pkg_path: "emacs".to_string(),
+                        allow_pre_releases: None,
+                        attr_path: "emacs".to_string(),
                         derivation: None,
-                        semver: None,
+                        install_id: "emacs".to_string(),
                         version: None,
                     },
                     PackageDescriptor {
-                        name: "vim".to_string(),
-                        pkg_path: "vim".to_string(),
+                        allow_pre_releases: None,
+                        attr_path: "vim".to_string(),
                         derivation: None,
-                        semver: None,
+                        install_id: "vim".to_string(),
                         version: None,
                     },
                 ],
@@ -1029,17 +1059,17 @@ mod tests {
                 system: "system2".to_string(),
                 descriptors: vec![
                     PackageDescriptor {
-                        name: "emacs".to_string(),
-                        pkg_path: "emacs".to_string(),
+                        allow_pre_releases: None,
+                        attr_path: "emacs".to_string(),
                         derivation: None,
-                        semver: None,
+                        install_id: "emacs".to_string(),
                         version: None,
                     },
                     PackageDescriptor {
-                        name: "vim".to_string(),
-                        pkg_path: "vim".to_string(),
+                        allow_pre_releases: None,
+                        attr_path: "vim".to_string(),
                         derivation: None,
-                        semver: None,
+                        install_id: "vim".to_string(),
                         version: None,
                     },
                 ],
@@ -1076,17 +1106,17 @@ mod tests {
                 system: "system1".to_string(),
                 descriptors: vec![
                     PackageDescriptor {
-                        name: "emacs".to_string(),
-                        pkg_path: "emacs".to_string(),
+                        allow_pre_releases: None,
+                        attr_path: "emacs".to_string(),
+                        install_id: "emacs".to_string(),
                         derivation: None,
-                        semver: None,
                         version: None,
                     },
                     PackageDescriptor {
-                        name: "vim".to_string(),
-                        pkg_path: "vim".to_string(),
+                        allow_pre_releases: None,
+                        attr_path: "vim".to_string(),
                         derivation: None,
-                        semver: None,
+                        install_id: "vim".to_string(),
                         version: None,
                     },
                 ],
@@ -1095,10 +1125,10 @@ mod tests {
                 name: DEFAULT_GROUP_NAME.to_string(),
                 system: "system2".to_string(),
                 descriptors: vec![PackageDescriptor {
-                    name: "vim".to_string(),
-                    pkg_path: "vim".to_string(),
+                    allow_pre_releases: None,
+                    attr_path: "vim".to_string(),
                     derivation: None,
-                    semver: None,
+                    install_id: "vim".to_string(),
                     version: None,
                 }],
             },
@@ -1132,10 +1162,10 @@ mod tests {
                 name: DEFAULT_GROUP_NAME.to_string(),
                 system: "system1".to_string(),
                 descriptors: vec![PackageDescriptor {
-                    name: "vim".to_string(),
-                    pkg_path: "vim".to_string(),
+                    allow_pre_releases: None,
+                    attr_path: "vim".to_string(),
                     derivation: None,
-                    semver: None,
+                    install_id: "vim".to_string(),
                     version: None,
                 }],
             },
@@ -1143,10 +1173,10 @@ mod tests {
                 name: DEFAULT_GROUP_NAME.to_string(),
                 system: "system2".to_string(),
                 descriptors: vec![PackageDescriptor {
-                    name: "emacs".to_string(),
-                    pkg_path: "emacs".to_string(),
+                    allow_pre_releases: None,
+                    attr_path: "emacs".to_string(),
                     derivation: None,
-                    semver: None,
+                    install_id: "emacs".to_string(),
                     version: None,
                 }],
             },
@@ -1183,10 +1213,10 @@ mod tests {
                 name: "group1".to_string(),
                 system: "system".to_string(),
                 descriptors: vec![PackageDescriptor {
-                    name: "vim".to_string(),
-                    pkg_path: "vim".to_string(),
+                    allow_pre_releases: None,
+                    attr_path: "vim".to_string(),
                     derivation: None,
-                    semver: None,
+                    install_id: "vim".to_string(),
                     version: None,
                 }],
             },
@@ -1194,10 +1224,10 @@ mod tests {
                 name: "group2".to_string(),
                 system: "system".to_string(),
                 descriptors: vec![PackageDescriptor {
-                    name: "emacs".to_string(),
-                    pkg_path: "emacs".to_string(),
+                    allow_pre_releases: None,
+                    attr_path: "emacs".to_string(),
                     derivation: None,
-                    semver: None,
+                    install_id: "emacs".to_string(),
                     version: None,
                 }],
             },
@@ -1239,18 +1269,18 @@ mod tests {
             descriptors: vec![
                 // 'hello' was already locked, so it should have a derivation
                 PackageDescriptor {
-                    name: "hello".to_string(),
-                    pkg_path: "hello".to_string(),
+                    allow_pre_releases: None,
+                    attr_path: "hello".to_string(),
                     derivation: Some("derivation".to_string()),
-                    semver: None,
+                    install_id: "hello_install_id".to_string(),
                     version: None,
                 },
                 // The unlocked package should not have a derivation
                 PackageDescriptor {
-                    name: "unlocked".to_string(),
-                    pkg_path: "unlocked".to_string(),
+                    allow_pre_releases: None,
+                    attr_path: "unlocked".to_string(),
                     derivation: None,
-                    semver: None,
+                    install_id: "unlocked".to_string(),
                     version: None,
                 },
             ],
@@ -1266,19 +1296,20 @@ mod tests {
             pages: vec![CatalogPage {
                 page: 1,
                 url: "url".to_string(),
-                packages: vec![PackageResolutionInfo {
+                packages: Some(vec![PackageResolutionInfo {
                     attr_path: "hello".to_string(),
                     broken: false,
                     derivation: "derivation".to_string(),
-                    description: "description".to_string(),
-                    license: "license".to_string(),
+                    description: Some("description".to_string()),
+                    install_id: "hello_install_id".to_string(),
+                    license: Some("license".to_string()),
                     locked_url: "locked_url".to_string(),
                     name: "hello".to_string(),
-                    outputs: vec![Output {
+                    outputs: Some(vec![Output {
                         name: "name".to_string(),
                         store_path: "store_path".to_string(),
-                    }],
-                    outputs_to_install: vec!["name".to_string()],
+                    }]),
+                    outputs_to_install: Some(vec!["name".to_string()]),
                     pname: "pname".to_string(),
                     rev: "rev".to_string(),
                     rev_count: 1,
@@ -1288,10 +1319,10 @@ mod tests {
                     scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
                         .unwrap()
                         .with_timezone(&chrono::offset::Utc),
-                    stabilities: vec!["stability".to_string()],
-                    unfree: false,
+                    stabilities: Some(vec!["stability".to_string()]),
+                    unfree: Some(false),
                     version: "version".to_string(),
-                }],
+                }]),
             }],
             name: "group".to_string(),
         }];
@@ -1300,16 +1331,17 @@ mod tests {
 
         let locked_packages =
             LockedManifestCatalog::locked_packages_from_resolution(manifest, groups.clone())
+                .unwrap()
                 .collect::<Vec<_>>();
 
         assert_eq!(locked_packages.len(), 1);
         assert_eq!(
             &locked_packages[0],
             &LockedPackageCatalog::from_parts(
-                groups[0].pages[0].packages[0].clone(),
+                groups[0].pages[0].packages.as_ref().unwrap()[0].clone(),
                 manifest
                     .install
-                    .get(&groups[0].pages[0].packages[0].name)
+                    .get(&groups[0].pages[0].packages.as_ref().unwrap()[0].install_id)
                     .unwrap()
                     .clone(),
                 groups[0].system.clone()

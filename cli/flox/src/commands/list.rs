@@ -105,7 +105,7 @@ impl List {
 
     /// print package ids only
     fn print_name_only(packages: &[InstalledPackage]) {
-        packages.iter().for_each(|p| println!("{}", p.name));
+        packages.iter().for_each(|p| println!("{}", p.install_id));
     }
 
     /// print package ids, as well as path and version
@@ -117,7 +117,7 @@ impl List {
         packages.iter().for_each(|p| {
             println!(
                 "{id}: {path} ({version})",
-                id = p.name,
+                id = p.install_id,
                 path = p.rel_path,
                 version = p.info.version.as_deref().unwrap_or("N/A")
             )
@@ -127,7 +127,7 @@ impl List {
     /// print package ids, as well as extended detailed information
     fn print_detail(packages: &[InstalledPackage]) {
         for InstalledPackage {
-            name,
+            install_id: name,
             rel_path,
             info:
                 PackageInfo {
@@ -155,6 +155,7 @@ impl List {
                 priority = priority.map(|p| p.to_string()).as_deref().unwrap_or("N/A"),
                 version = version.as_deref().unwrap_or("N/A"),
                 license = license.as_deref().unwrap_or("N/A"),
+                unfree = unfree.map(|u|u.to_string()).as_deref().unwrap_or("N/A"),
             };
 
             println!("{message}");
