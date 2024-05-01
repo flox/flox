@@ -65,7 +65,7 @@ jobs:
               \)                                      \
               -print > targets;
           else
-            git fetch origin '${{ github.base_ref }}';
+            git fetch origin main;
             echo "Checking changed sources" >&2;
             ./pkgdb/build-aux/changed-sources.sh > targets;
           fi
