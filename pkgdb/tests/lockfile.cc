@@ -36,13 +36,13 @@ static const std::string lockfileContentV1 = R"( {
       }
     },
     "options": {
-      "allows": {
+      "allow": {
         "broken": null,
         "licenses": [],
         "unfree": null
       },
       "semver": {
-        "prefer_pre_releases": null
+        "prefer-pre-releases": null
       },
       "systems": [
         "system"

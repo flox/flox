@@ -157,8 +157,6 @@ pub struct ManifestProfile {
     bash: Option<String>,
     /// When defined, this hook is run upon activation in a zsh shell
     zsh: Option<String>,
-    /// When defined, this hook is run upon activation in a fish shell
-    fish: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
@@ -170,7 +168,7 @@ pub struct ManifestOptions {
     pub(super) systems: Vec<System>,
     /// Options that control what types of packages are allowed.
     #[serde(default)]
-    allows: Allows,
+    allow: Allows,
     /// Options that control how semver versions are resolved.
     #[serde(default)]
     semver: SemverOptions,
@@ -190,6 +188,7 @@ pub struct Allows {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
 pub struct SemverOptions {
     /// Whether to prefer pre-release versions when resolving
     #[serde(default)]

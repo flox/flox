@@ -560,6 +560,19 @@ LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
         extract_json_errmsg( err ) );
     }
 
+  // load options
+  try
+    {
+      auto options = jfrom["manifest"]["options"];
+      options.get_to( this->manifest.options );
+    }
+  catch ( nlohmann::json::exception & err )
+    {
+      throw InvalidLockfileException(
+        "couldn't parse lockfile field 'manifest.options'",
+        extract_json_errmsg( err ) );
+    }
+
   debugLog( nix::fmt( "loaded lockfile v1" ) );
 }
 
