@@ -44,7 +44,7 @@ use crate::models::pkgdb::{
     UpgradeResultJSON,
     PKGDB_BIN,
 };
-use crate::providers::catalog;
+use crate::providers::catalog::{self, ClientTrait};
 use crate::utils::CommandExt;
 
 pub struct ReadOnly {}
@@ -473,7 +473,26 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         groups_or_iids: &[String],
     ) -> Result<UpgradeResult, CoreEnvironmentError> {
-        // TODO double check canonicalization
+        let manifest = toml::from_str(&self.manifest_content()?)
+            .map_err(CoreEnvironmentError::DeserializeManifest)?;
+
+        match manifest {
+            TypedManifest::Pkgdb(_) => self.upgrade_with_pkgdb(flox, groups_or_iids),
+            TypedManifest::Catalog(catalog) => {
+                let client = flox
+                    .catalog_client
+                    .as_ref()
+                    .ok_or(CoreEnvironmentError::CatalogClientMissing)?;
+                self.upgrade_with_catalog_client(flox, client, groups_or_iids, &catalog)
+            },
+        }
+    }
+
+    fn upgrade_with_pkgdb(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: &[String],
+    ) -> Result<UpgradeResult, CoreEnvironmentError> {
         let manifest_path = self.manifest_path();
         let lockfile_path = self.lockfile_path();
         let maybe_lockfile = if lockfile_path.exists() {
@@ -513,6 +532,66 @@ impl CoreEnvironment<ReadOnly> {
             packages: json.result.0,
             store_path: Some(store_path),
         })
+    }
+
+    fn upgrade_with_catalog_client(
+        &mut self,
+        flox: &Flox,
+        client: &impl ClientTrait,
+        groups_or_iids: &[String],
+        manifest: &TypedManifestCatalog,
+    ) -> Result<UpgradeResult, CoreEnvironmentError> {
+        let mut existing_lockfile = 'lockfile: {
+            let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
+                break 'lockfile None;
+            };
+            let lockfile = LockedManifest::read_from_file(&lockfile_path)
+                .map_err(CoreEnvironmentError::LockedManifest)?;
+            match lockfile {
+                LockedManifest::Catalog(lockfile) => Some(lockfile),
+                _ => {
+                    warn!(
+                        "Found version 1 manifest, but lockfile doesn't match: Ignoring lockfile."
+                    );
+                    None
+                },
+            }
+        };
+
+        if let Some(ref mut lockfile) = existing_lockfile {
+            let locked_packages = std::mem::take(&mut lockfile.packages);
+
+            lockfile.packages = locked_packages
+                .into_iter()
+                .filter(|pkg| {
+                    !(groups_or_iids.contains(&pkg.group)
+                        || groups_or_iids.contains(&pkg.install_id))
+                })
+                .collect();
+        }
+
+        let upgraded =
+            LockedManifestCatalog::lock_manifest(manifest, existing_lockfile.as_ref(), client)
+                .block_on()
+                .map_err(CoreEnvironmentError::LockedManifest)?;
+
+        let store_path =
+            self.transact_with_lockfile_contents(serde_json::json!(upgraded).to_string(), flox)?;
+
+        let result = UpgradeResult {
+            packages: upgraded
+                .packages
+                .clone()
+                .into_iter()
+                .filter(|pkg| {
+                    groups_or_iids.contains(&pkg.group) || groups_or_iids.contains(&pkg.install_id)
+                })
+                .map(|pkg| pkg.install_id)
+                .collect(),
+            store_path: Some(store_path),
+        };
+
+        Ok(result)
     }
 
     /// Makes a temporary copy of the environment so modifications to the manifest
