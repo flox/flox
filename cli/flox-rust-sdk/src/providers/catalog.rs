@@ -281,7 +281,7 @@ impl ClientTrait for CatalogClient {
             |page_number, page_size| async move {
                 let response = self
                     .client
-                    .packages_api_v1_catalog_packages_pkg_path_get(
+                    .packages_api_v1_catalog_packages_attr_path_get(
                         attr_path,
                         Some(page_number),
                         Some(page_size),
@@ -548,7 +548,7 @@ impl TryFrom<api_types::ResolvedPackageGroupInput> for ResolvedPackageGroup {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogPage {
-    pub packages: Vec<PackageResolutionInfo>,
+    pub packages: Option<Vec<PackageResolutionInfo>>,
     pub page: i64,
     pub url: String,
 }
@@ -569,7 +569,7 @@ impl From<api_types::CatalogPageInput> for CatalogPage {
 /// [lockfile::LockedPackageCatalog] adds (at least) a `system` field.
 /// We should consider whether adding a shim to [api_types::PackageResolutionInfo]
 /// is not adding unnecessary complexity.
-pub type PackageResolutionInfo = api_types::PackageResolutionInfo;
+pub type PackageResolutionInfo = api_types::ResolvedPackageDescriptor;
 
 impl TryFrom<PackageInfoApi> for SearchResult {
     type Error = SearchError;
@@ -586,8 +586,8 @@ impl TryFrom<PackageInfoApi> for SearchResult {
                 .collect(),
             pname: Some(package_info.pname),
             version: Some(package_info.version),
-            description: Some(package_info.description),
-            license: Some(package_info.license),
+            description: package_info.description,
+            license: package_info.license,
         })
     }
 }
@@ -607,8 +607,8 @@ impl TryFrom<PackageInfoCommon> for SearchResult {
                 .collect(),
             pname: Some(package_info.pname),
             version: Some(package_info.version),
-            description: Some(package_info.description),
-            license: Some(package_info.license),
+            description: package_info.description,
+            license: package_info.license,
         })
     }
 }
