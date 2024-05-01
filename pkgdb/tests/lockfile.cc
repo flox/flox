@@ -36,7 +36,7 @@ static const std::string lockfileContentV1 = R"( {
       }
     },
     "options": {
-      "allows": {
+      "allow": {
         "broken": null,
         "licenses": [],
         "unfree": null
