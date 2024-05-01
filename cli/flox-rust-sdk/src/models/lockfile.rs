@@ -312,8 +312,10 @@ impl LockedManifestCatalog {
         manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
         client: &impl catalog::ClientTrait,
+        default_system: &str,
     ) -> Result<LockedManifestCatalog, LockedManifestError> {
-        let groups = Self::collect_package_groups(manifest, seed_lockfile).collect();
+        let groups =
+            Self::collect_package_groups(manifest, seed_lockfile, default_system).collect();
 
         // lock existing packages
 
@@ -350,7 +352,8 @@ impl LockedManifestCatalog {
 
     /// Creates package groups from a flat map of install descriptors
     ///
-    /// A group is created for each unique combination of (descriptor.package_group ｘ descriptor.system).
+    /// A group is created for each unique combination of (descriptor.package_group ｘ descriptor.systems).
+    /// If descriptor.systems is None, a group with default_system is created for each package_group.
     /// Each group contains a list of package descriptors that belong to that group.
     ///
     /// `seed_lockfile` is used to provide existing derivations for packages that are already locked,
@@ -358,16 +361,18 @@ impl LockedManifestCatalog {
     /// These packages are used to constrain the resolution.
     /// If a package in `manifest` does not have a corresponding package in `seed_lockfile`,
     /// that package will be unconstrained, allowing a first install.
-    fn collect_package_groups<'manifest>(
-        manifest: &'manifest TypedManifestCatalog,
+    fn collect_package_groups(
+        manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
-    ) -> impl Iterator<Item = PackageGroup> + 'manifest {
+        default_system: &str,
+    ) -> impl Iterator<Item = PackageGroup> {
         let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
 
         // Using a btree map to ensure consistent ordering
         let mut map = BTreeMap::new();
 
-        let default_systems = &manifest.options.systems;
+        let default_system = vec![default_system.to_string()];
+        let default_systems = manifest.options.systems.as_ref().unwrap_or(&default_system);
 
         for (install_id, manifest_descriptor) in manifest.install.iter() {
             let resolved_descriptor = PackageDescriptor {
@@ -389,11 +394,13 @@ impl LockedManifestCatalog {
                 .unwrap_or(default_systems);
 
             for system in descriptor_systems {
-                let resolved_group = map.entry((group, system)).or_insert_with(|| PackageGroup {
-                    descriptors: Vec::new(),
-                    name: group.to_string(),
-                    system: system.clone(),
-                });
+                let resolved_group = map
+                    .entry((group.to_string(), system.clone()))
+                    .or_insert_with(|| PackageGroup {
+                        descriptors: Vec::new(),
+                        name: group.to_string(),
+                        system: system.clone(),
+                    });
 
                 // If the package was just added to the manifest, it will be missing in the seed,
                 // which is derived from the _previous_ lockfile.
@@ -1001,7 +1008,8 @@ mod tests {
         let manifest = &*TEST_TYPED_MANIFEST;
 
         let params =
-            LockedManifestCatalog::collect_package_groups(manifest, None).collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(manifest, None, "default_system")
+                .collect::<Vec<_>>();
         assert_eq!(&params, &*TEST_RESOLUTION_PARAMS);
     }
 
@@ -1065,7 +1073,8 @@ mod tests {
         ];
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(&manifest, None, "default_system")
+                .collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1123,7 +1132,8 @@ mod tests {
         ];
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(&manifest, None, "default_system")
+                .collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1171,7 +1181,8 @@ mod tests {
         ];
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(&manifest, None, "default_system")
+                .collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1222,7 +1233,8 @@ mod tests {
         ];
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(&manifest, None, "default_system")
+                .collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1248,8 +1260,9 @@ mod tests {
             panic!("Expected a catalog lockfile");
         };
 
-        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, Some(seed))
-            .collect::<Vec<_>>();
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest, Some(seed), "default_system")
+                .collect::<Vec<_>>();
 
         let expected_params = vec![PackageGroup {
             name: "group".to_string(),
@@ -1344,12 +1357,32 @@ mod tests {
         let mut client = catalog::MockClient::new(None::<String>).unwrap();
         client.push_resolve_response(TEST_RESOLUTION_RESPONSE.clone());
 
-        let locked_manifest = LockedManifestCatalog::lock_manifest(manifest, None, &client)
-            .await
-            .unwrap();
+        let locked_manifest =
+            LockedManifestCatalog::lock_manifest(manifest, None, &client, "default_system")
+                .await
+                .unwrap();
         assert_eq!(
             &LockedManifest::Catalog(locked_manifest),
             &*TEST_LOCKED_MANIFEST
         );
+    }
+
+    // If a manifest doesn't have `options.systems`, `default_system` is used
+    #[test]
+    fn collect_package_groups_uses_default_system() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            hello_install_id.pkg-path = "hello"
+        "#};
+        let manifest: TypedManifestCatalog = toml::from_str(manifest_str).unwrap();
+        let package_groups: Vec<_> =
+            LockedManifestCatalog::collect_package_groups(&manifest, None, "default_system")
+                .collect();
+
+        assert_eq!(package_groups.len(), 1);
+        let toplevel_group = &package_groups[0];
+        assert_eq!(toplevel_group.system, "default_system".to_string());
     }
 }

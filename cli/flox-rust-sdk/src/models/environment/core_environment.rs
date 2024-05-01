@@ -112,7 +112,11 @@ impl<State> CoreEnvironment<State> {
                 let Some(ref client) = flox.catalog_client else {
                     return Err(CoreEnvironmentError::CatalogClientMissing);
                 };
-                LockedManifest::Catalog(self.lock_with_catalog_client(client, *manifest)?)
+                LockedManifest::Catalog(self.lock_with_catalog_client(
+                    client,
+                    *manifest,
+                    &flox.system,
+                )?)
             },
         };
 
@@ -179,6 +183,7 @@ impl<State> CoreEnvironment<State> {
         &self,
         client: &catalog::Client,
         manifest: TypedManifestCatalog,
+        default_system: &str,
     ) -> Result<LockedManifestCatalog, CoreEnvironmentError> {
         let existing_lockfile = 'lockfile: {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
@@ -197,9 +202,14 @@ impl<State> CoreEnvironment<State> {
             }
         };
 
-        LockedManifestCatalog::lock_manifest(&manifest, existing_lockfile.as_ref(), client)
-            .block_on()
-            .map_err(CoreEnvironmentError::LockedManifest)
+        LockedManifestCatalog::lock_manifest(
+            &manifest,
+            existing_lockfile.as_ref(),
+            client,
+            default_system,
+        )
+        .block_on()
+        .map_err(CoreEnvironmentError::LockedManifest)
     }
 
     /// Build the environment, [Self::lock] if necessary.
