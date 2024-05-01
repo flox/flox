@@ -19,7 +19,7 @@ pub(super) const DEFAULT_PRIORITY: usize = 5;
 #[derive(Debug)]
 pub struct RawManifest(toml_edit::DocumentMut);
 impl RawManifest {
-    /// Get the version of the manifest, if it's present or default to version 1.
+    /// Get the version of the manifest.
     fn get_version(&self) -> Option<i64> {
         self.0.get("version").and_then(Item::as_integer)
     }
@@ -77,9 +77,9 @@ impl FromStr for RawManifest {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(untagged)]
 pub enum TypedManifest {
-    /// v2 manifest, processed by flox and resolved using the catalog service
+    /// v1 manifest, processed by flox and resolved using the catalog service
     Catalog(Box<TypedManifestCatalog>),
-    /// deprecated v1 manifest, processed entirely by `pkgdb`
+    /// deprecated ~v0~ manifest, processed entirely by `pkgdb`
     #[cfg_attr(test, proptest(skip))]
     Pkgdb(TypedManifestPkgdb),
 }
