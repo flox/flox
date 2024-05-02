@@ -546,8 +546,32 @@ LockfileRaw::from_v1_content( const nlohmann::json & jfrom )
         {
           LockedPackageRaw pkg = LockedPackageRaw();
           lockedPackageFromCatalogDescriptor( package, pkg );
-          const std::string installId = package["install_id"];
-          const std::string system    = package["system"];
+
+          std::string installId;
+          std::string system;
+          try
+            {
+              installId = package["install_id"];
+            }
+          catch ( nlohmann::json::exception & err )
+            {
+              throw InvalidLockfileException(
+                "couldn't parse lockfile field 'packages[" + idx
+                  + "].install_id'",
+                extract_json_errmsg( err ) );
+            }
+
+          try
+            {
+              system = package["system"];
+            }
+          catch ( nlohmann::json::exception & err )
+            {
+              throw InvalidLockfileException(
+                "couldn't parse lockfile field 'packages[" + idx + "].system'",
+                extract_json_errmsg( err ) );
+            }
+
 
           this->packages[system].insert(
             { installId, std::make_optional( pkg ) } );

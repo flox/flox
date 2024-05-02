@@ -19,7 +19,7 @@ pub(super) const DEFAULT_PRIORITY: usize = 5;
 #[derive(Debug)]
 pub struct RawManifest(toml_edit::DocumentMut);
 impl RawManifest {
-    /// Get the version of the manifest, if it's present or default to version 1.
+    /// Get the version of the manifest.
     fn get_version(&self) -> Option<i64> {
         self.0.get("version").and_then(Item::as_integer)
     }
@@ -77,9 +77,9 @@ impl FromStr for RawManifest {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(untagged)]
 pub enum TypedManifest {
-    /// v2 manifest, processed by flox and resolved using the catalog service
+    /// v1 manifest, processed by flox and resolved using the catalog service
     Catalog(Box<TypedManifestCatalog>),
-    /// deprecated v1 manifest, processed entirely by `pkgdb`
+    /// deprecated ~v0~ manifest, processed entirely by `pkgdb`
     #[cfg_attr(test, proptest(skip))]
     Pkgdb(TypedManifestPkgdb),
 }
@@ -127,7 +127,7 @@ pub struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 #[serde(rename_all = "kebab-case")]
 pub struct ManifestPackageDescriptor {
     pub(crate) pkg_path: String,
-    pub(crate) package_group: Option<String>,
+    pub(crate) pkg_group: Option<String>,
     pub(crate) priority: Option<usize>,
     pub(crate) version: Option<String>,
     pub(crate) systems: Option<Vec<System>>,
@@ -190,9 +190,9 @@ pub struct Allows {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 pub struct SemverOptions {
-    /// Whether to prefer pre-release versions when resolving
+    /// Whether to allow pre-release versions when resolving
     #[serde(default)]
-    pub prefer_pre_releases: Option<bool>,
+    pub allow_pre_releases: Option<bool>,
 }
 
 /// Deserialize the manifest as a [serde_json::Value],
@@ -241,11 +241,11 @@ pub struct TypedManifestPkgdb {
 pub type Manifest = TypedManifestPkgdb;
 
 /// An error encountered while installing packages.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, PartialEq)]
 pub enum TomlEditError {
     /// The provided string couldn't be parsed into a valid TOML document
     #[error("couldn't parse manifest contents: {0}")]
-    ParseManifest(toml_edit::TomlError),
+    ParseManifest(toml_edit::de::Error),
     /// The provided string was a valid TOML file, but it didn't have
     /// the format that we anticipated.
     #[error("'install' must be a table, but found {0} instead")]
@@ -260,6 +260,9 @@ pub enum TomlEditError {
     MalformedOptionsTable(String),
     #[error("'options' must be an array, but found {0} instead")]
     MalformedOptionsSystemsArray(String),
+
+    #[error("'{0}' is not a supported attribute in manifest version 1")]
+    UnsupportedAttributeV1(String),
 }
 
 /// Records the result of trying to install a collection of packages to the
@@ -303,9 +306,13 @@ pub fn insert_packages(
 ) -> Result<PackageInsertion, TomlEditError> {
     debug!("attempting to insert packages into manifest");
     let mut already_installed: HashMap<String, bool> = HashMap::new();
-    let mut toml = manifest_contents
-        .parse::<DocumentMut>()
+    let manifest = manifest_contents
+        .parse::<RawManifest>()
         .map_err(TomlEditError::ParseManifest)?;
+
+    let manifest_version = manifest.get_version();
+
+    let mut toml = manifest.0;
 
     let install_table = {
         let install_field = toml
@@ -329,6 +336,13 @@ pub fn insert_packages(
                 descriptor_table.insert("version", Value::String(Formatted::new(version.clone())));
             }
             if let Some(ref input) = pkg.input {
+                // TODO: drop input from `PackageToInstall` when removing support for v0 manifests
+                if let Some(1) = manifest_version {
+                    Err(TomlEditError::UnsupportedAttributeV1(format!(
+                        "{}.input",
+                        pkg.id
+                    )))?;
+                }
                 descriptor_table.insert("input", Value::String(Formatted::new(input.clone())));
             }
             descriptor_table.set_dotted(true);
@@ -361,8 +375,9 @@ pub fn remove_packages(
 ) -> Result<DocumentMut, TomlEditError> {
     debug!("attempting to remove packages from the manifest");
     let mut toml = manifest_contents
-        .parse::<DocumentMut>()
-        .map_err(TomlEditError::ParseManifest)?;
+        .parse::<RawManifest>()
+        .map_err(TomlEditError::ParseManifest)?
+        .0;
 
     let installs_table = {
         let installs_field = toml
@@ -409,8 +424,9 @@ pub fn contains_package(toml: &DocumentMut, pkg_name: &str) -> Result<bool, Toml
 /// Add a `system` to the `[options.systems]` array of a manifest
 pub fn add_system(toml: &str, system: &str) -> Result<DocumentMut, TomlEditError> {
     let mut doc = toml
-        .parse::<DocumentMut>()
-        .map_err(TomlEditError::ParseManifest)?;
+        .parse::<RawManifest>()
+        .map_err(TomlEditError::ParseManifest)?
+        .0;
 
     // extract the `[options]` table
     let options_table = doc
@@ -557,6 +573,10 @@ python = {}
 ripgrep = {}
         "#;
 
+    const CATALOG_MANIFEST: &str = indoc! {r#"
+        version = 1
+    "#};
+
     #[test]
     fn detect_pkgdb_manifest() {
         const PKGDB_MANIFEST: &str = indoc! {r#"
@@ -571,10 +591,6 @@ ripgrep = {}
 
     #[test]
     fn detect_catalog_manifest() {
-        const CATALOG_MANIFEST: &str = indoc! {r#"
-            version = 1
-        "#};
-
         assert!(matches!(
             toml_edit::de::from_str(CATALOG_MANIFEST),
             Ok(TypedManifest::Catalog(_))
@@ -691,6 +707,16 @@ ripgrep = {}
             .and_then(|p| p.as_str())
             .unwrap();
         assert_eq!(inserted_path, r#"foo."bar.baz".qux"#);
+    }
+
+    #[test]
+    fn insert_into_v1_throws_error_with_input() {
+        let test_packages = temporary_parse_descriptor("nixpkgs:foo.bar@=1.2.3").unwrap();
+        let attempted_insertion = insert_packages(CATALOG_MANIFEST, &[test_packages]);
+        assert_eq!(
+            attempted_insertion.expect_err("insertion should fail"),
+            TomlEditError::UnsupportedAttributeV1("bar.input".to_string())
+        )
     }
 
     #[test]
