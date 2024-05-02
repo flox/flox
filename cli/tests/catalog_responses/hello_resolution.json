@@ -12,7 +12,7 @@
               "description": "description",
               "license": "license",
               "locked_url": "github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd",
-              "install_id": "hello",
+              "install_id": "hello_install_id",
               "name": "hello",
               "outputs": [
                 {
@@ -49,7 +49,7 @@
               "description": "description",
               "license": "license",
               "locked_url": "github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd",
-              "install_id": "hello",
+              "install_id": "hello_install_id",
               "name": "hello",
               "outputs": [
                 {
@@ -86,7 +86,7 @@
               "description": "description",
               "license": "license",
               "locked_url": "github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd",
-              "install_id": "hello",
+              "install_id": "hello_install_id",
               "name": "hello",
               "outputs": [
                 {
@@ -123,7 +123,7 @@
               "description": "description",
               "license": "license",
               "locked_url": "github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd",
-              "install_id": "hello",
+              "install_id": "hello_install_id",
               "name": "hello",
               "outputs": [
                 {
@@ -163,7 +163,7 @@
               "description": "description",
               "license": "license",
               "locked_url": "github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd",
-              "install_id": "hello",
+              "install_id": "hello_install_id",
               "name": "hello",
               "outputs": [
                 {
@@ -200,7 +200,7 @@
               "description": "description",
               "license": "license",
               "locked_url": "github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd",
-              "install_id": "hello",
+              "install_id": "hello_install_id",
               "name": "hello",
               "outputs": [
                 {
@@ -237,7 +237,7 @@
               "description": "description",
               "license": "license",
               "locked_url": "github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd",
-              "install_id": "hello",
+              "install_id": "hello_install_id",
               "name": "hello",
               "outputs": [
                 {
@@ -274,7 +274,7 @@
               "description": "description",
               "license": "license",
               "locked_url": "github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd",
-              "install_id": "hello",
+              "install_id": "hello_install_id",
               "name": "hello",
               "outputs": [
                 {

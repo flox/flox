@@ -296,7 +296,7 @@ teardown() {
   echo "version = 1" > ".flox/env/manifest.toml"
   echo 'options.systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]' >> ".flox/env/manifest.toml"
 
-  run "$FLOX_BIN" install hello
+  run "$FLOX_BIN" install -i hello_install_id hello
   assert_success
 
   run "$FLOX_BIN" activate -- hello
