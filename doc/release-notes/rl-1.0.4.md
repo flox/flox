@@ -25,8 +25,6 @@
 
 - `flox pull --force` now accepts `owner/name` as a parameter. Previously,
   force didn't allow for other parameters. (#1300)
-- Spinners are now displayed for `flox pull` in all cases. Previously this was
-  not consistent. (#1337)
 
 ### Packaging
 
@@ -46,5 +44,3 @@
   hook (#1227)
 * [Óscar Carrasco](https://github.com/oxcabe) - refactor: reimplement
   `InitHook` trait to avoid invalid states caused by `should_run` (#1313)
-* [Conor](https://github.com/crsche) - feat(PyProject::detect): detect
-  unconventional requirements.txt (#1323) (#1336)
