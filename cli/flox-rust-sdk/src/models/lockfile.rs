@@ -287,29 +287,19 @@ impl LockedManifestCatalog {
         self.packages
             .iter()
             .filter(|package| &package.system == system)
-            .map(|package| {
-                let priority = self
-                    .manifest
-                    .install
-                    .iter()
-                    .find(|(install_id, _)| install_id == &&package.install_id)
-                    .and_then(|(_, descriptor)| descriptor.priority);
-
-                let package = package.clone();
-
-                InstalledPackage {
-                    install_id: package.install_id,
-                    rel_path: package.attr_path,
-                    info: PackageInfo {
-                        description: package.description,
-                        broken: package.broken,
-                        license: package.license,
-                        pname: package.pname,
-                        unfree: package.unfree,
-                        version: Some(package.version),
-                    },
-                    priority,
-                }
+            .cloned()
+            .map(|package| InstalledPackage {
+                install_id: package.install_id,
+                rel_path: package.attr_path,
+                info: PackageInfo {
+                    description: package.description,
+                    broken: package.broken,
+                    license: package.license,
+                    pname: package.pname,
+                    unfree: package.unfree,
+                    version: Some(package.version),
+                },
+                priority: Some(package.priority),
             })
             .collect()
     }
@@ -440,18 +430,17 @@ impl LockedManifestCatalog {
         // Error if the first page doesn't contain any packages.
         let first_pages: Vec<(Vec<PackageResolutionInfo>, String)> = groups
             .into_iter()
-            .map(|group| {
+            .map(|mut group| {
                 group
                     .pages
-                    .into_iter()
-                    .take(1)
-                    .map(|page| {
-                        page.packages
+                    .first_mut()
+                    .and_then(|page| {
+                        std::mem::take(&mut page.packages)
                             .map(|packages| (packages, group.system.clone()))
                     })
-                    .next()
-                    .flatten()
-                    .ok_or(LockedManifestError::NoPackagesOnFirstPage)
+                    .ok_or_else(|| {
+                        LockedManifestError::NoPackagesOnFirstPage(group.name, group.system)
+                    })
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -471,7 +460,6 @@ impl LockedManifestCatalog {
                 return None;
             };
 
-            // unpack package to avoid missing new fields
             Some(LockedPackageCatalog::from_parts(
                 package, descriptor, system,
             ))
@@ -716,10 +704,10 @@ impl TypedLockedManifestPkgdb {
     pub fn list_packages(&self, system: &System) -> Vec<InstalledPackage> {
         let mut packages = vec![];
         if let Some(system_packages) = self.packages.get(system) {
-            for (name, locked_package) in system_packages {
+            for (install_id, locked_package) in system_packages {
                 if let Some(locked_package) = locked_package {
                     packages.push(InstalledPackage {
-                        install_id: name.clone(),
+                        install_id: install_id.clone(),
                         rel_path: locked_package.rel_path(),
                         info: locked_package.info.clone(),
                         priority: Some(locked_package.priority),
@@ -746,8 +734,8 @@ pub struct InstalledPackage {
 pub enum LockedManifestError {
     #[error("failed to resolve packages")]
     CatalogResolve(#[from] catalog::ResolveError),
-    #[error("didn't find a first catalog page with packages")]
-    NoPackagesOnFirstPage,
+    #[error("didn't find packages on the first page of the group {0} for system {1}")]
+    NoPackagesOnFirstPage(String, String),
     #[error("failed to lock manifest")]
     LockManifest(#[source] CallPkgDbError),
     #[error("failed to check lockfile")]
