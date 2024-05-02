@@ -202,24 +202,39 @@ impl<State> CoreEnvironment<State> {
             .map_err(CoreEnvironmentError::LockedManifest)
     }
 
-    /// Build the environment, [Self::lock] if necessary.
+    /// Build the environment.
     ///
     /// Technically this does write to disk as a side effect for now.
     /// It's included in the [ReadOnly] struct for ergonomic reasons
     /// and because it doesn't modify the manifest.
     ///
-    /// Does not link the environment to an out path.
-    /// Linking should be done explicitly by the caller using [Self::link].
+    /// Does not lock the manifest or link the environment to an out path.
+    /// Each should be done explicitly if necessary by the caller
+    /// using [Self::lock] and [Self::link]:
     ///
-    /// todo: should we always write the lockfile to disk?
+    /// ```no_run
+    /// # use flox_rust_sdk::models::environment::CoreEnvironment;
+    /// # use flox_rust_sdk::flox::Flox;
+    /// let flox: Flox = unimplemented!();
+    /// let core_env: CoreEnvironment = unimplemented!();
+    ///
+    /// core_env.lock(&flox).unwrap();
+    /// let store_path = core_env.build(&flox).unwrap();
+    /// core_env
+    ///     .link(&flox, "/path/to/out-link", &Some(store_path))
+    ///     .unwrap();
+    /// ```
     #[must_use = "don't discard the store path of built environments"]
     pub fn build(&mut self, flox: &Flox) -> Result<PathBuf, CoreEnvironmentError> {
-        let lockfile = self.lock(flox)?;
+        let lockfile_path = CanonicalPath::new(self.lockfile_path())
+            .map_err(CoreEnvironmentError::BadLockfilePath)?;
+        let lockfile = LockedManifest::read_from_file(&lockfile_path)
+            .map_err(CoreEnvironmentError::LockedManifest)?;
 
         debug!(
             "building environment: system={}, lockfilePath={}",
             &flox.system,
-            self.lockfile_path().display()
+            lockfile_path.display()
         );
 
         let store_path = lockfile
@@ -281,8 +296,17 @@ impl<State> CoreEnvironment<State> {
     }
 
     /// Create a new out-link for the environment at the given path.
+    /// Optionally a store path to the built environment can be provided,
+    /// to avoid building the environment again.
+    /// Such a store path can be obtained e.g. from [Self::build].
     ///
     /// Builds the environment if necessary.
+    ///
+    /// Like [Self::build], this requires the environment to be locked.
+    /// This method will _not_ create or update the lockfile.
+    ///
+    /// Errors if the environment  is not locked or cannot be built.
+    ///
     /// TODO: should we always build implicitly?
     pub fn link(
         &mut self,
@@ -290,13 +314,18 @@ impl<State> CoreEnvironment<State> {
         out_link_path: impl AsRef<Path>,
         store_path: &Option<PathBuf>,
     ) -> Result<(), CoreEnvironmentError> {
-        let lockfile = self.lock(flox)?;
+        let lockfile_path = CanonicalPath::new(self.lockfile_path())
+            .map_err(CoreEnvironmentError::BadLockfilePath)?;
+        let lockfile = LockedManifest::read_from_file(&lockfile_path)
+            .map_err(CoreEnvironmentError::LockedManifest)?;
+
         debug!(
             "linking environment: system={}, lockfilePath={}, outLinkPath={}",
             &flox.system,
-            self.lockfile_path().display(),
+            lockfile_path.display(),
             out_link_path.as_ref().display()
         );
+
         lockfile
             .build(
                 Path::new(&*PKGDB_BIN),
@@ -424,6 +453,13 @@ impl CoreEnvironment<ReadOnly> {
         temp_env.update_manifest(&contents)?;
 
         debug!("transaction: building environment, ignoring errors (unsafe)");
+
+        if let Err(lock_err) = temp_env.lock(flox) {
+            debug!("transaction: lock failed: {:?}", lock_err);
+            debug!("transaction: replacing environment");
+            self.replace_with(temp_env)?;
+            return Ok(Err(lock_err));
+        };
 
         let build_attempt = temp_env.build(flox);
 
@@ -675,6 +711,9 @@ impl CoreEnvironment<ReadOnly> {
 
         debug!("transaction: updating manifest");
         temp_env.update_manifest(&manifest_contents)?;
+
+        debug!("transaction: locking environment");
+        temp_env.lock(flox)?;
 
         debug!("transaction: building environment");
         let store_path = temp_env.build(flox)?;
@@ -991,7 +1030,7 @@ mod tests {
         temp_env
             .update_manifest(MANIFEST_INCOMPATIBLE_SYSTEM)
             .unwrap();
-        env_view.lock(&flox).unwrap();
+        temp_env.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 
         let result = env_view.build(&flox).unwrap_err();
@@ -1045,7 +1084,7 @@ mod tests {
             .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
             .unwrap();
         temp_env.update_manifest(&manifest_contents).unwrap();
-        env_view.lock(&flox).unwrap();
+        temp_env.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 
         let result = env_view.build(&flox).unwrap_err();
@@ -1068,7 +1107,7 @@ mod tests {
             .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
             .unwrap();
         temp_env.update_manifest(manifest_content).unwrap();
-        env_view.lock(&flox).unwrap();
+        temp_env.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 
         let result = env_view.build(&flox).unwrap_err();
@@ -1177,6 +1216,7 @@ mod tests {
 
         let mut env_view = CoreEnvironment::new(&env_path);
 
+        env_view.lock(&flox).expect("locking should succeed");
         env_view.build(&flox).expect("build should succeed");
         env_view
             .link(&flox, env_path.path().with_extension("out-link"), &None)

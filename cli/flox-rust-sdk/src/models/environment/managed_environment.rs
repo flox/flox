@@ -136,6 +136,9 @@ pub enum ManagedEnvironmentError {
     #[error("could not commit generation")]
     CommitGeneration(#[source] GenerationsError),
 
+    #[error("could not lock environment")]
+    Lock(#[source] CoreEnvironmentError),
+
     #[error("could not build environment")]
     Build(#[source] CoreEnvironmentError),
 
@@ -184,6 +187,7 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
+        temporary.lock(flox)?;
         let store_path = temporary.build(flox)?;
         temporary.link(flox, &self.out_link, &Some(store_path))?;
 
@@ -946,6 +950,13 @@ impl ManagedEnvironment {
 
         let mut core_environment = path_environment.into_core_environment();
 
+        // Ensure the environment is locked
+        // PathEnvironment may not have a lockfile or an outdated lockfile
+        // if the environment was modified primarily through editing the manifest manually.
+        core_environment
+            .lock(flox)
+            .map_err(ManagedEnvironmentError::Lock)?;
+
         // Ensure the environment builds before we push it
         core_environment
             .build(flox)
@@ -1046,6 +1057,8 @@ impl ManagedEnvironment {
         // So we have to verify we don't have a "broken" generation before pushing.
         {
             let mut env = self.get_current_generation(flox)?;
+            // [sic] We do not _lock_ the environment here,
+            // as a valid lockfile is a precondition for creating a generation.
             env.build(flox).map_err(ManagedEnvironmentError::Build)?;
         }
 
