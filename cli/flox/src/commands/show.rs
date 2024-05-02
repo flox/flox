@@ -190,7 +190,6 @@ mod test {
         client.push_error_response(
             ApiErrorResponse {
                 detail: "detail".to_string(),
-                status_code: 404,
             },
             404,
         );
