@@ -190,9 +190,9 @@ pub struct Allows {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 pub struct SemverOptions {
-    /// Whether to prefer pre-release versions when resolving
+    /// Whether to allow pre-release versions when resolving
     #[serde(default)]
-    pub prefer_pre_releases: Option<bool>,
+    pub allow_pre_releases: Option<bool>,
 }
 
 /// Deserialize the manifest as a [serde_json::Value],

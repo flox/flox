@@ -375,7 +375,7 @@ impl LockedManifestCatalog {
                 attr_path: manifest_descriptor.pkg_path.clone(),
                 derivation: None,
                 version: manifest_descriptor.version.clone(),
-                allow_pre_releases: manifest.options.semver.prefer_pre_releases,
+                allow_pre_releases: manifest.options.semver.allow_pre_releases,
             };
 
             let group = manifest_descriptor
