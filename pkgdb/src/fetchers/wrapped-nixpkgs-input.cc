@@ -259,12 +259,13 @@ githubAttrsToFloxNixpkgsAttrs( const nix::fetchers::Attrs & attrs )
   auto owner = nix::fetchers::getStrAttr( attrs, "owner" );
   auto repo  = nix::fetchers::getStrAttr( attrs, "repo" );
 
-  if ( nix::toLower( owner ) != "nixos" || nix::toLower( repo ) != "nixpkgs" )
+  if ( ! ( nix::toLower( owner ) == "nixos" || nix::toLower( owner ) == "flox" )
+       || nix::toLower( repo ) != "nixpkgs" )
     {
-      throw nix::Error(
-        "unsupported input owner/repo '%s/%s' expected 'NixOS/nixpkgs'",
-        owner,
-        repo );
+      throw nix::Error( "unsupported input owner/repo '%s/%s' expected "
+                        "'NixOS/nixpkgs' or 'flox/nixpkgs'",
+                        owner,
+                        repo );
     }
 
 

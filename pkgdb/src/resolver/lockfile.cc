@@ -460,27 +460,20 @@ lockedPackageFromCatalogDescriptor( const nlohmann::json & jfrom,
   pkg.info     = jfrom;
   pkg.input    = LockedInputRaw();
 
-  pkg.input.url   = jfrom["locked_url"];
-  pkg.input.attrs = nix::fetchers::Attrs();
+  pkg.input.url = jfrom["locked_url"];
+
   // These attributes are needed by the current builder, and not included in the
   // descriptor. This will not always be true, but also may not be required to
   // build depending on the path taken for future environment builds.
-  if ( std::string supportedUrl = "github:NixOS/nixpkgs";
+  if ( std::string supportedUrl = "github:flox/nixpkgs";
        pkg.input.url.substr( 0, supportedUrl.size() ) != supportedUrl )
     {
       throw InvalidLockfileException(
         "unsupported lockfile URL for v1 lockfile",
         "must begin with " + supportedUrl );
     }
-  pkg.input.attrs["type"]  = "github";
-  pkg.input.attrs["owner"] = "NixOS";
-  pkg.input.attrs["repo"]  = "nixpkgs";
-
-  std::size_t found = pkg.input.url.rfind( "/" );
-  if ( found != std::string::npos )
-    {
-      pkg.input.attrs["rev"] = pkg.input.url.substr( found + 1 );
-    }
+  nix::FlakeRef parsed = nix::parseFlakeRef( pkg.input.url );
+  pkg.input.attrs      = parsed.toAttrs();
 }
 
 void
