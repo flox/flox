@@ -131,7 +131,7 @@ from_json( const nlohmann::json & jfrom, Options::Semver & semver )
 
   for ( const auto & [key, value] : jfrom.items() )
     {
-      if ( key == "prefer-pre-releases" )
+      if ( key == "prefer-pre-releases" || key == "allow-pre-releases" )
         {
           try
             {
