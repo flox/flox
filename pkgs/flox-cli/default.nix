@@ -60,6 +60,7 @@
         if flox-pkgdb == null
         then "ld-floxlib.so"
         else "${flox-pkgdb}/lib/ld-floxlib.so";
+      FLOX_ZDOTDIR = ../../pkgdb/src/buildenv/assets/activate.d/zdotdir;
 
       # bundling of internally used nix scripts
       FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
