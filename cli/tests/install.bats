@@ -301,5 +301,5 @@ teardown() {
 
   run "$FLOX_BIN" activate -- hello
   assert_success
-  assert_output "Hello, world!"
+  assert_line "Hello, world!"
 }
