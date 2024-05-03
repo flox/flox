@@ -67,7 +67,7 @@ static const std::string lockfileContentV1 = R"( {
       "derivation": "derivation",
       "description": "description",
       "license": "license",
-      "locked_url": "github:NixOS/nixpkgs/9a333eaa80901efe01df07eade2c16d183761fa3",
+      "locked_url": "github:flox/nixpkgs/9a333eaa80901efe01df07eade2c16d183761fa3",
       "name": "hello",
       "outputs": {
         "name": "store_path"
@@ -160,11 +160,11 @@ test_LockfileFromV1()
   EXPECT( pkg.value().attrPath == attrPath );
 
   EXPECT_EQ( pkg.value().input.url,
-             "github:NixOS/nixpkgs/9a333eaa80901efe01df07eade2c16d183761fa3" );
+             "github:flox/nixpkgs/9a333eaa80901efe01df07eade2c16d183761fa3" );
   EXPECT_EQ( pkg.value().input.attrs["rev"],
              "9a333eaa80901efe01df07eade2c16d183761fa3" );
   // These are assumed from v1
-  EXPECT_EQ( pkg.value().input.attrs["owner"], "NixOS" );
+  EXPECT_EQ( pkg.value().input.attrs["owner"], "flox" );
   EXPECT_EQ( pkg.value().input.attrs["type"], "github" );
   EXPECT_EQ( pkg.value().input.attrs["repo"], "nixpkgs" );
   return true;
