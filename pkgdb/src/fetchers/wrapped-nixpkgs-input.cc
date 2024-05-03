@@ -209,7 +209,7 @@ floxNixpkgsAttrsToGithubAttrs( const nix::fetchers::Attrs & attrs )
   _attrs["repo"] = "nixpkgs";
 
   /* Inherit owner field (could be NixOS or flox) */
-  _attr["owner"] = nix::fetchers::getStrAttr( attrs, "type" );
+  _attrs["owner"] = nix::fetchers::getStrAttr( attrs, "owner" );
 
   /* Inherit `rev' and `ref' fields */
   if ( auto rev = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
@@ -310,8 +310,9 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
 
   for ( const auto & [name, value] : attrs )
     {
-      if ( ( name != "type" ) && ( name != "ref" ) && ( name != "rev" )
-           && ( name != "narHash" ) && ( name != "version" ) )
+      if ( ( name != "owner" ) && ( name != "type" ) && ( name != "ref" )
+           && ( name != "rev" ) && ( name != "narHash" )
+           && ( name != "version" ) )
         {
           throw nix::Error( "unsupported flox-nixpkgs input attribute '%s'",
                             name );
