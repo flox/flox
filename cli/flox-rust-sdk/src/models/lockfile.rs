@@ -350,7 +350,8 @@ impl LockedManifestCatalog {
 
     /// Creates package groups from a flat map of install descriptors
     ///
-    /// A group is created for each unique combination of (descriptor.package_group ｘ descriptor.system).
+    /// A group is created for each unique combination of (descriptor.package_group ｘ descriptor.systems).
+    /// If descriptor.systems is None, a group with default_system is created for each package_group.
     /// Each group contains a list of package descriptors that belong to that group.
     ///
     /// `seed_lockfile` is used to provide existing derivations for packages that are already locked,
@@ -358,16 +359,26 @@ impl LockedManifestCatalog {
     /// These packages are used to constrain the resolution.
     /// If a package in `manifest` does not have a corresponding package in `seed_lockfile`,
     /// that package will be unconstrained, allowing a first install.
-    fn collect_package_groups<'manifest>(
-        manifest: &'manifest TypedManifestCatalog,
+    fn collect_package_groups(
+        manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
-    ) -> impl Iterator<Item = PackageGroup> + 'manifest {
+    ) -> impl Iterator<Item = PackageGroup> {
         let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
 
         // Using a btree map to ensure consistent ordering
         let mut map = BTreeMap::new();
 
-        let default_systems = &manifest.options.systems;
+        let default_systems = vec![
+            "aarch64-darwin".to_string(),
+            "aarch64-linux".to_string(),
+            "x86_64-darwin".to_string(),
+            "x86_64-linux".to_string(),
+        ];
+        let manifest_systems = manifest
+            .options
+            .systems
+            .as_ref()
+            .unwrap_or(&default_systems);
 
         for (install_id, manifest_descriptor) in manifest.install.iter() {
             let resolved_descriptor = PackageDescriptor {
@@ -386,20 +397,22 @@ impl LockedManifestCatalog {
             let descriptor_systems = manifest_descriptor
                 .systems
                 .as_ref()
-                .unwrap_or(default_systems);
+                .unwrap_or(manifest_systems);
 
             for system in descriptor_systems {
-                let resolved_group = map.entry((group, system)).or_insert_with(|| PackageGroup {
-                    descriptors: Vec::new(),
-                    name: group.to_string(),
-                    system: system.clone(),
-                });
+                let resolved_group = map
+                    .entry((group.to_string(), system.clone()))
+                    .or_insert_with(|| PackageGroup {
+                        descriptors: Vec::new(),
+                        name: group.to_string(),
+                        system: system.clone(),
+                    });
 
                 // If the package was just added to the manifest, it will be missing in the seed,
                 // which is derived from the _previous_ lockfile.
                 // In this case, the derivation will be None, and the package will be unconstrained.
                 let locked_derivation = seed_locked_packages
-                    .get(&(manifest_descriptor, system))
+                    .get(&(manifest_descriptor, &system.to_string()))
                     .map(|p| p.derivation.clone());
 
                 let mut resolved_descriptor = resolved_descriptor.clone();
@@ -1351,5 +1364,32 @@ mod tests {
             &LockedManifest::Catalog(locked_manifest),
             &*TEST_LOCKED_MANIFEST
         );
+    }
+
+    /// If a manifest doesn't have `options.systems`, it defaults to locking for
+    /// 4 default systems
+    #[test]
+    fn collect_package_groups_defaults_to_four_systems() {
+        let manifest_str = indoc! {r#"
+            version = 1
+
+            [install]
+            hello_install_id.pkg-path = "hello"
+        "#};
+        let manifest: TypedManifestCatalog = toml::from_str(manifest_str).unwrap();
+        let package_groups: Vec<_> =
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect();
+
+        assert_eq!(package_groups.len(), 4);
+        let expected_systems = [
+            "aarch64-darwin".to_string(),
+            "aarch64-linux".to_string(),
+            "x86_64-darwin".to_string(),
+            "x86_64-linux".to_string(),
+        ];
+
+        for group in package_groups {
+            assert!(expected_systems.contains(&group.system))
+        }
     }
 }
