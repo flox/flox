@@ -209,11 +209,7 @@ floxNixpkgsAttrsToGithubAttrs( const nix::fetchers::Attrs & attrs )
   _attrs["repo"] = "nixpkgs";
 
   /* Inherit owner field (could be NixOS or flox) */
-  if ( auto owner = nix::fetchers::maybeGetStrAttr( attrs, "owner" ) )
-    {
-      _attrs["owner"] = *owner;
-    }
-  else { throw nix::Error( "missing 'owner' field in 'flox-nixpkgs' input" ); }
+  _attr["owner"] = nix::fetchers::getStrAttr( attrs, "type" );
 
   /* Inherit `rev' and `ref' fields */
   if ( auto rev = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
@@ -278,6 +274,9 @@ githubAttrsToFloxNixpkgsAttrs( const nix::fetchers::Attrs & attrs )
   nix::fetchers::Attrs _attrs;
   _attrs["type"]    = "flox-nixpkgs";
   _attrs["version"] = latestWrapperVersion;
+
+  /* Inherit `owner' field */
+  _attrs["owner"] = owner;
 
   /* Inherit `rev' and `ref' fields */
   if ( auto rev = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
