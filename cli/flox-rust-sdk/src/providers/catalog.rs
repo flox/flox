@@ -17,6 +17,7 @@ use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, TryStreamExt};
+use log::debug;
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -115,16 +116,17 @@ impl CatalogClient {
 
     /// Serialize data to the file pointed to by FLOX_CATALOG_DUMP_DATA_VAR if
     /// it is set
-    fn maybe_dump_response<T>(response: &T)
+    fn maybe_dump_shim_response<T>(response: &T)
     where
         T: ?Sized + Serialize,
     {
         if let Ok(path_str) = std::env::var(FLOX_CATALOG_DUMP_DATA_VAR) {
+            debug!("writing response to {path_str}");
             std::fs::write(
                 PathBuf::from(path_str),
-                serde_json::to_string_pretty(response).unwrap(),
+                serde_json::to_string_pretty(response).expect("failed to serialize shim response"),
             )
-            .unwrap();
+            .expect("failed to write shim reponse to file");
         }
     }
 }
@@ -242,7 +244,7 @@ impl ClientTrait for CatalogClient {
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
 
-        Self::maybe_dump_response(&resolved_package_groups);
+        Self::maybe_dump_shim_response(&resolved_package_groups);
 
         Ok(resolved_package_groups)
     }
@@ -288,7 +290,7 @@ impl ClientTrait for CatalogClient {
             ),
         };
 
-        Self::maybe_dump_response(&search_results);
+        Self::maybe_dump_shim_response(&search_results);
 
         Ok(search_results)
     }
@@ -335,7 +337,7 @@ impl ClientTrait for CatalogClient {
 
         let search_results = SearchResults { results, count };
 
-        Self::maybe_dump_response(&search_results);
+        Self::maybe_dump_shim_response(&search_results);
 
         Ok(search_results)
     }
