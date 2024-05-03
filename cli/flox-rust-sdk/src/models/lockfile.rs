@@ -312,10 +312,8 @@ impl LockedManifestCatalog {
         manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
         client: &impl catalog::ClientTrait,
-        default_system: &str,
     ) -> Result<LockedManifestCatalog, LockedManifestError> {
-        let groups =
-            Self::collect_package_groups(manifest, seed_lockfile, default_system).collect();
+        let groups = Self::collect_package_groups(manifest, seed_lockfile).collect();
 
         // lock existing packages
 
@@ -364,15 +362,23 @@ impl LockedManifestCatalog {
     fn collect_package_groups(
         manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
-        default_system: &str,
     ) -> impl Iterator<Item = PackageGroup> {
         let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
 
         // Using a btree map to ensure consistent ordering
         let mut map = BTreeMap::new();
 
-        let default_system = vec![default_system.to_string()];
-        let default_systems = manifest.options.systems.as_ref().unwrap_or(&default_system);
+        let default_systems = vec![
+            "aarch64-darwin".to_string(),
+            "aarch64-linux".to_string(),
+            "x86_64-darwin".to_string(),
+            "x86_64-linux".to_string(),
+        ];
+        let manifest_systems = manifest
+            .options
+            .systems
+            .as_ref()
+            .unwrap_or(&default_systems);
 
         for (install_id, manifest_descriptor) in manifest.install.iter() {
             let resolved_descriptor = PackageDescriptor {
@@ -391,7 +397,7 @@ impl LockedManifestCatalog {
             let descriptor_systems = manifest_descriptor
                 .systems
                 .as_ref()
-                .unwrap_or(default_systems);
+                .unwrap_or(manifest_systems);
 
             for system in descriptor_systems {
                 let resolved_group = map
@@ -406,7 +412,7 @@ impl LockedManifestCatalog {
                 // which is derived from the _previous_ lockfile.
                 // In this case, the derivation will be None, and the package will be unconstrained.
                 let locked_derivation = seed_locked_packages
-                    .get(&(manifest_descriptor, system))
+                    .get(&(manifest_descriptor, &system.to_string()))
                     .map(|p| p.derivation.clone());
 
                 let mut resolved_descriptor = resolved_descriptor.clone();
@@ -1008,8 +1014,7 @@ mod tests {
         let manifest = &*TEST_TYPED_MANIFEST;
 
         let params =
-            LockedManifestCatalog::collect_package_groups(manifest, None, "default_system")
-                .collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(manifest, None).collect::<Vec<_>>();
         assert_eq!(&params, &*TEST_RESOLUTION_PARAMS);
     }
 
@@ -1073,8 +1078,7 @@ mod tests {
         ];
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, None, "default_system")
-                .collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1132,8 +1136,7 @@ mod tests {
         ];
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, None, "default_system")
-                .collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1181,8 +1184,7 @@ mod tests {
         ];
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, None, "default_system")
-                .collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1233,8 +1235,7 @@ mod tests {
         ];
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, None, "default_system")
-                .collect::<Vec<_>>();
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1260,9 +1261,8 @@ mod tests {
             panic!("Expected a catalog lockfile");
         };
 
-        let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, Some(seed), "default_system")
-                .collect::<Vec<_>>();
+        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, Some(seed))
+            .collect::<Vec<_>>();
 
         let expected_params = vec![PackageGroup {
             name: "group".to_string(),
@@ -1357,19 +1357,19 @@ mod tests {
         let mut client = catalog::MockClient::new(None::<String>).unwrap();
         client.push_resolve_response(TEST_RESOLUTION_RESPONSE.clone());
 
-        let locked_manifest =
-            LockedManifestCatalog::lock_manifest(manifest, None, &client, "default_system")
-                .await
-                .unwrap();
+        let locked_manifest = LockedManifestCatalog::lock_manifest(manifest, None, &client)
+            .await
+            .unwrap();
         assert_eq!(
             &LockedManifest::Catalog(locked_manifest),
             &*TEST_LOCKED_MANIFEST
         );
     }
 
-    // If a manifest doesn't have `options.systems`, `default_system` is used
+    /// If a manifest doesn't have `options.systems`, it defaults to locking for
+    /// 4 default systems
     #[test]
-    fn collect_package_groups_uses_default_system() {
+    fn collect_package_groups_defaults_to_four_systems() {
         let manifest_str = indoc! {r#"
             version = 1
 
@@ -1378,11 +1378,18 @@ mod tests {
         "#};
         let manifest: TypedManifestCatalog = toml::from_str(manifest_str).unwrap();
         let package_groups: Vec<_> =
-            LockedManifestCatalog::collect_package_groups(&manifest, None, "default_system")
-                .collect();
+            LockedManifestCatalog::collect_package_groups(&manifest, None).collect();
 
-        assert_eq!(package_groups.len(), 1);
-        let toplevel_group = &package_groups[0];
-        assert_eq!(toplevel_group.system, "default_system".to_string());
+        assert_eq!(package_groups.len(), 4);
+        let expected_systems = [
+            "aarch64-darwin".to_string(),
+            "aarch64-linux".to_string(),
+            "x86_64-darwin".to_string(),
+            "x86_64-linux".to_string(),
+        ];
+
+        for group in package_groups {
+            assert!(expected_systems.contains(&group.system))
+        }
     }
 }

@@ -164,7 +164,6 @@ pub struct ManifestProfile {
 #[serde(rename_all = "kebab-case")]
 pub struct ManifestOptions {
     /// A list of systems that each package is resolved for.
-    #[serde(default)]
     pub(super) systems: Option<Vec<System>>,
     /// Options that control what types of packages are allowed.
     #[serde(default)]
