@@ -465,15 +465,49 @@ lockedPackageFromCatalogDescriptor( const nlohmann::json & jfrom,
   // These attributes are needed by the current builder, and not included in the
   // descriptor. This will not always be true, but also may not be required to
   // build depending on the path taken for future environment builds.
-  if ( std::string supportedUrl = "github:flox/nixpkgs";
+
+  /* We need to convert a URL of the form
+   * https://github.com/flox/nixpkgs?rev=XXX
+   * to one of the form
+   * github:flox/nixpkgs/XXX
+   */
+  if ( std::string supportedUrl = "https://github.com/flox/nixpkgs";
        pkg.input.url.substr( 0, supportedUrl.size() ) != supportedUrl )
     {
       throw InvalidLockfileException(
         "unsupported lockfile URL for v1 lockfile",
         "must begin with " + supportedUrl );
     }
-  nix::FlakeRef parsed = nix::parseFlakeRef( pkg.input.url );
-  pkg.input.attrs      = parsed.toAttrs();
+  /* Copy rev and ref if they exist */
+  auto httpsAttrs = nix::parseFlakeRef( pkg.input.url ).toAttrs();
+  if ( auto rev = nix::fetchers::maybeGetStrAttr( httpsAttrs, "rev" ) )
+    {
+      pkg.input.attrs["rev"] = rev;
+    };
+  if ( auto ref = nix::fetchers::maybeGetStrAttr( httpsAttrs, "ref" ) )
+    {
+      pkg.input.attrs["ref"] = ref;
+    };
+  httpsAttrs.erase( "ref" );
+  httpsAttrs.erase( "rev" );
+
+  /* We've already checked these are correct values with the supportedUrl check
+   */
+  pkg.input.attrs["type"]  = "github";
+  pkg.input.attrs["owner"] = "flox";
+  pkg.input.attrs["repo"]  = "nixpkgs";
+  httpsAttrs.erase( "type" );
+  httpsAttrs.erase( "url" );
+
+  /* Throw if there's anything in the URL that can't be converted from a git to
+   * a github flakeref (see GitInputScheme:allowedAttrs for an exhaustive
+   * list) */
+  if ( ! httpsAttrs.empty() )
+    {
+      throw InvalidLockfileException(
+        "unsupported lockfile URL for v1 lockfile: '" + pkg.input.url
+        + "' contains attributes other than 'url', 'ref', and 'rev'" );
+    }
 }
 
 void
