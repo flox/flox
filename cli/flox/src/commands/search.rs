@@ -77,7 +77,7 @@ impl Search {
             // TODO: Don't handle the `--all` case yet, what limit would we set?
             client
                 .search(
-                    "hello",
+                    &self.search_term,
                     flox.system.clone(),
                     limit.unwrap_or(
                         DEFAULT_SEARCH_LIMIT.expect("default search limit didn't have a value"),

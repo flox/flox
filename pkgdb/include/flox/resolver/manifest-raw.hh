@@ -216,7 +216,20 @@ struct GlobalManifestRaw
 
   explicit operator GlobalManifestRawGA() const;
 
-
+  /**
+   * @brief Get the list of systems requested by the manifest.
+   *
+   * Default to the current system if systems is not specified.
+   */
+  [[nodiscard]] std::vector<System>
+  getSystems() const
+  {
+    if ( this->options.has_value() && this->options->systems.has_value() )
+      {
+        return *this->options->systems;
+      }
+    return std::vector<System> { nix::settings.thisSystem.get() };
+  }
 }; /* End struct `GlobalManifestRaw' */
 
 
@@ -289,6 +302,8 @@ struct HookRaw
 
 }; /* End struct `HookRaw' */
 
+void
+from_json( const nlohmann::json & jfrom, HookRaw & hook );
 
 /* -------------------------------------------------------------------------- */
 
@@ -305,6 +320,9 @@ struct ProfileScriptsRaw
   /** @brief A script intended to be sourced only in Zsh shells. */
   std::optional<std::string> zsh;
 };
+
+void
+from_json( const nlohmann::json & jfrom, ProfileScriptsRaw & profile );
 
 
 /* -------------------------------------------------------------------------- */
@@ -483,6 +501,21 @@ struct GlobalManifestRawGA
     return ManifestRaw( static_cast<GlobalManifestRaw>( *this ) );
   }
 
+  /**
+   * @brief Get the list of systems requested by the manifest.
+   *
+   * Default to the current system if systems is not specified.
+   * TODO: deduplicate this with `GlobalManifestRaw::getSystems()` or drop.
+   */
+  [[nodiscard]] std::vector<System>
+  getSystems() const
+  {
+    if ( this->options.has_value() && this->options->systems.has_value() )
+      {
+        return *this->options->systems;
+      }
+    return std::vector<System> { nix::settings.thisSystem.get() };
+  }
 
 }; /* End struct `GlobalManifestRawGA' */
 

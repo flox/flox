@@ -561,11 +561,9 @@ static std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
 getLockedPackages( const resolver::LockfileRaw & lockfile,
                    const System &                system )
 {
-  traceLog( "creating FloxEnv" );
-  auto packages = lockfile.packages.find( system );
-  if ( packages == lockfile.packages.end() )
+  auto systems = lockfile.manifest.getSystems();
+  if ( std::find( systems.begin(), systems.end(), system ) == systems.end() )
     {
-      // Custom exception for non supported system
       throw SystemNotSupportedByLockfile(
         "'" + system + "' not supported by this environment" );
     }
@@ -573,6 +571,11 @@ getLockedPackages( const resolver::LockfileRaw & lockfile,
   /* Extract all packages */
   std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
     locked_packages;
+
+  traceLog( "getting locked packages" );
+  auto packages = lockfile.packages.find( system );
+  /* The lockfile may not have any packages for this system */
+  if ( packages == lockfile.packages.end() ) { return locked_packages; }
 
   for ( auto const & package : packages->second )
     {
@@ -899,6 +902,7 @@ getRealisedPackages( nix::ref<nix::EvalState> &         state,
                      const resolver::LockedPackageRaw & lockedPackage,
                      const System &                     system )
 {
+  debugLog( nix::fmt( "getting cursor for %s", lockedPackage.attrPath[0] ) );
   auto timeEvalStart = std::chrono::high_resolution_clock::now();
   auto cursor        = evalCacheCursorForInput( state,
                                          lockedPackage.input,
@@ -1264,10 +1268,13 @@ makeProfileDScripts( nix::EvalState & state )
  * @return The store path of the environment.
  */
 nix::StorePath
-createFloxEnv( nix::ref<nix::EvalState> &    state,
-               const resolver::LockfileRaw & lockfile,
-               const System &                system )
+createFloxEnv( nix::ref<nix::EvalState> & state,
+               const nlohmann::json &     lockfileContent,
+               const System &             system )
 {
+  resolver::LockfileRaw lockfile;
+  lockfile.load_from_content( lockfileContent );
+
   auto locked_packages = getLockedPackages( lockfile, system );
 
   /* Extract derivations */
@@ -1278,6 +1285,7 @@ createFloxEnv( nix::ref<nix::EvalState> &    state,
 
   for ( auto const & [pId, package] : locked_packages )
     {
+
       auto realised = getRealisedPackages( state, pId, package, system );
       for ( auto [realisedPackage, output] : realised )
         {

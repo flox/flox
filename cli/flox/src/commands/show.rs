@@ -8,9 +8,10 @@ use flox_rust_sdk::models::search::{
     Query,
     SearchParams,
     SearchResult,
+    SearchResults,
     ShowError,
 };
-use flox_rust_sdk::providers::catalog::ClientTrait;
+use flox_rust_sdk::providers::catalog::{ClientTrait, VersionsError};
 use log::debug;
 use tracing::instrument;
 
@@ -38,7 +39,21 @@ impl Show {
 
         let (results, exit_status) = if let Some(client) = flox.catalog_client {
             tracing::debug!("using catalog client for show");
-            (client.package_versions(&self.search_term).await?, None)
+            match client.package_versions(&self.search_term).await {
+                Ok(results) => (results, None),
+                // Below, results.is_empty() is used to mean the search_term
+                // didn't match a package.
+                // So translate 404 into an empty vec![].
+                // Once we drop the pkgdb code path, we can clean this up.
+                Err(VersionsError::Versions(e)) if e.status() == 404 => (
+                    SearchResults {
+                        results: vec![],
+                        count: None,
+                    },
+                    None,
+                ),
+                Err(e) => Err(e)?,
+            }
         } else {
             tracing::debug!("using pkgdb for show");
 
@@ -157,4 +172,39 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
     println!("{pkg_name} - {description}");
     println!("    {pkg_name} - {versions}");
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::providers::catalog::{ApiErrorResponse, Client};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn show_handles_404() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let Client::Mock(ref mut client) = flox.catalog_client.as_mut().unwrap() else {
+            panic!()
+        };
+        client.push_error_response(
+            ApiErrorResponse {
+                detail: "detail".to_string(),
+            },
+            404,
+        );
+        let search_term = "search_term";
+        let err = Show {
+            all: false,
+            search_term: search_term.to_string(),
+        }
+        .handle(flox)
+        .await
+        .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            format!("no packages matched this search term: '{}'", search_term)
+        );
+    }
 }
