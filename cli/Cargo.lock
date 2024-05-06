@@ -247,7 +247,7 @@ dependencies = [
  "progenitor",
  "progenitor-client",
  "regress 0.9.1",
- "reqwest 0.11.27",
+ "reqwest 0.12.4",
  "serde",
  "serde_json",
  "syn 2.0.60",
@@ -680,7 +680,7 @@ dependencies = [
  "once_cell",
  "pretty_assertions",
  "regex",
- "reqwest 0.11.27",
+ "reqwest 0.12.4",
  "semver",
  "sentry",
  "serde",
@@ -730,7 +730,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "proptest-derive",
- "reqwest 0.11.27",
+ "reqwest 0.12.4",
  "serde",
  "serde_json",
  "serde_with",
@@ -934,6 +934,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "h2"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "816ec7294445779408f36fe57bc5b7fc1cf59664059096c65f905c1c61f58069"
+dependencies = [
+ "bytes",
+ "fnv",
+ "futures-core",
+ "futures-sink",
+ "futures-util",
+ "http 1.1.0",
+ "indexmap 2.2.6",
+ "slab",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1062,7 +1081,7 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-util",
- "h2",
+ "h2 0.3.26",
  "http 0.2.12",
  "http-body 0.4.6",
  "httparse",
@@ -1085,6 +1104,7 @@ dependencies = [
  "bytes",
  "futures-channel",
  "futures-util",
+ "h2 0.4.4",
  "http 1.1.0",
  "http-body 1.0.0",
  "httparse",
@@ -1107,19 +1127,6 @@ dependencies = [
  "rustls",
  "tokio",
  "tokio-rustls",
-]
-
-[[package]]
-name = "hyper-tls"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
-dependencies = [
- "bytes",
- "hyper 0.14.28",
- "native-tls",
- "tokio",
- "tokio-native-tls",
 ]
 
 [[package]]
@@ -2144,17 +2151,15 @@ dependencies = [
  "encoding_rs",
  "futures-core",
  "futures-util",
- "h2",
+ "h2 0.3.26",
  "http 0.2.12",
  "http-body 0.4.6",
  "hyper 0.14.28",
  "hyper-rustls",
- "hyper-tls 0.5.0",
  "ipnet",
  "js-sys",
  "log",
  "mime",
- "native-tls",
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
@@ -2166,7 +2171,6 @@ dependencies = [
  "sync_wrapper",
  "system-configuration",
  "tokio",
- "tokio-native-tls",
  "tokio-rustls",
  "tokio-util",
  "tower-service",
@@ -2187,14 +2191,16 @@ checksum = "566cafdd92868e0939d3fb961bd0dc25fcfaaed179291093b3d43e6b3150ea10"
 dependencies = [
  "base64 0.22.0",
  "bytes",
+ "encoding_rs",
  "futures-channel",
  "futures-core",
  "futures-util",
+ "h2 0.4.4",
  "http 1.1.0",
  "http-body 1.0.0",
  "http-body-util",
  "hyper 1.3.1",
- "hyper-tls 0.6.0",
+ "hyper-tls",
  "hyper-util",
  "ipnet",
  "js-sys",
@@ -2209,12 +2215,15 @@ dependencies = [
  "serde_json",
  "serde_urlencoded",
  "sync_wrapper",
+ "system-configuration",
  "tokio",
  "tokio-native-tls",
+ "tokio-util",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-streams",
  "web-sys",
  "winreg 0.52.0",
 ]
@@ -2591,18 +2600,18 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.199"
+version = "1.0.200"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c9f6e76df036c77cd94996771fb40db98187f096dd0b9af39c6c6e452ba966a"
+checksum = "ddc6f9cc94d67c0e21aaf7eda3a010fd3af78ebf6e096aa6e2e13c79749cce4f"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.199"
+version = "1.0.200"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11bd257a6541e141e42ca6d24ae26f7714887b47e89aa739099104c7e4d3b7fc"
+checksum = "856f046b9400cee3c8c94ed572ecdb752444c24528c035cd35882aad6f492bcb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2902,9 +2911,9 @@ dependencies = [
 
 [[package]]
 name = "sysinfo"
-version = "0.30.11"
+version = "0.30.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87341a165d73787554941cd5ef55ad728011566fe714e987d1b976c15dbc3a83"
+checksum = "732ffa00f53e6b2af46208fba5718d9662a421049204e156328b66791ffa15ae"
 dependencies = [
  "cfg-if",
  "core-foundation-sys",

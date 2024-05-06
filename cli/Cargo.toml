@@ -35,7 +35,7 @@ pollster = "0.3.0"
 progenitor-client = "0.6"
 proptest = "1.4.0"
 proptest-derive = "0.4.0"
-reqwest = { version = "0.11", features = ["json", "blocking"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
 semver = "1.0.22"
 sentry = { version = "0.32.3", features = ["test"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -45,7 +45,7 @@ serde_yaml = "0.9"
 shell-escape = "0.1.5"
 supports-color = "3.0.0"
 # provides process tools for shell detection
-sysinfo = "0.30.11"
+sysinfo = "0.30.12"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
