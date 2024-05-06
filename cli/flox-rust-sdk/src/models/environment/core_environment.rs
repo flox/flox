@@ -327,6 +327,8 @@ impl<State> CoreEnvironment<State> {
             out_link_path.as_ref().display()
         );
 
+        // Note: when `store_path` is `Some`, `--store-path` is passed to `pkgdb buildenv`
+        // which skips the build and only attempts to link the environment.
         lockfile
             .build(
                 Path::new(&*PKGDB_BIN),
