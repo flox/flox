@@ -313,21 +313,32 @@ impl LockedManifestCatalog {
         seed_lockfile: Option<&LockedManifestCatalog>,
         client: &impl catalog::ClientTrait,
     ) -> Result<LockedManifestCatalog, LockedManifestError> {
-        let groups = Self::collect_package_groups(manifest, seed_lockfile).collect();
+        let groups = Self::collect_package_groups(manifest, seed_lockfile);
+        let (already_locked_packages, groups_to_lock) =
+            Self::split_fully_locked_groups(groups, seed_lockfile);
 
-        // lock existing packages
+        if groups_to_lock.is_empty() {
+            debug!("All packages are already locked, skipping resolution");
+            return Ok(LockedManifestCatalog {
+                version: Version::<1>,
+                manifest: manifest.clone(),
+                packages: already_locked_packages,
+            });
+        }
 
+        // lock packages
         let resolved = client
-            .resolve(groups)
+            .resolve(groups_to_lock)
             .await
             .map_err(LockedManifestError::CatalogResolve)?;
 
+        // unpack locked packages from response
         let locked_packages = Self::locked_packages_from_resolution(manifest, resolved)?.collect();
 
         let lockfile = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest.clone(),
-            packages: locked_packages,
+            packages: [already_locked_packages, locked_packages].concat(),
         };
 
         Ok(lockfile)
@@ -430,6 +441,35 @@ impl LockedManifestCatalog {
         }
 
         map.into_values()
+    }
+
+    fn split_fully_locked_groups(
+        groups: impl IntoIterator<Item = PackageGroup>,
+        seed_lockfile: Option<&LockedManifestCatalog>,
+    ) -> (Vec<LockedPackageCatalog>, Vec<PackageGroup>) {
+        let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
+
+        let (already_locked_groups, groups_to_lock): (Vec<_>, Vec<_>) =
+            groups.into_iter().partition(|group| {
+                group
+                    .descriptors
+                    .iter()
+                    .all(|descriptor| descriptor.derivation.is_some())
+            });
+
+        // convert already locked groups back to locked packages
+        let already_locked_packages = already_locked_groups
+            .iter()
+            .flat_map(|group| {
+                group.descriptors.iter().flat_map(|d| {
+                    seed_locked_packages
+                        .get(&(&d.install_id, &group.system))
+                        .map(|(_, locked)| LockedPackageCatalog::clone(locked))
+                })
+            })
+            .collect::<Vec<_>>();
+
+        (already_locked_packages, groups_to_lock)
     }
 
     /// Convert resolution results into a list of locked packages
