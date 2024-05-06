@@ -460,7 +460,6 @@ lockedPackageFromCatalogDescriptor( const nlohmann::json & jfrom,
   pkg.info     = jfrom;
   pkg.input    = LockedInputRaw();
 
-  pkg.input.url = jfrom["locked_url"];
 
   // These attributes are needed by the current builder, and not included in the
   // descriptor. This will not always be true, but also may not be required to
@@ -471,15 +470,17 @@ lockedPackageFromCatalogDescriptor( const nlohmann::json & jfrom,
    * to one of the form
    * github:flox/nixpkgs/XXX
    */
+  std::string locked_url = jfrom["locked_url"];
+
   if ( std::string supportedUrl = "https://github.com/flox/nixpkgs";
-       pkg.input.url.substr( 0, supportedUrl.size() ) != supportedUrl )
+       locked_url.substr( 0, supportedUrl.size() ) != supportedUrl )
     {
       throw InvalidLockfileException(
         "unsupported lockfile URL for v1 lockfile",
         "must begin with " + supportedUrl );
     }
   /* Copy rev and ref if they exist */
-  auto httpsAttrs = nix::parseFlakeRef( pkg.input.url ).toAttrs();
+  auto httpsAttrs = nix::parseFlakeRef( locked_url ).toAttrs();
   if ( auto rev = nix::fetchers::maybeGetStrAttr( httpsAttrs, "rev" ) )
     {
       pkg.input.attrs["rev"] = rev;
@@ -508,6 +509,8 @@ lockedPackageFromCatalogDescriptor( const nlohmann::json & jfrom,
         "unsupported lockfile URL for v1 lockfile: '" + pkg.input.url
         + "' contains attributes other than 'url', 'ref', and 'rev'" );
     }
+
+  pkg.input.url = nix::FlakeRef::fromAttrs( pkg.input.attrs ).to_string();
 }
 
 void

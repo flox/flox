@@ -1,5 +1,6 @@
 environment
 exceptions
+flox-nixpkgs
 gc
 is_sqlite3
 lockfile

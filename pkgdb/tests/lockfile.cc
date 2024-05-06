@@ -67,7 +67,7 @@ static const std::string lockfileContentV1 = R"( {
       "derivation": "derivation",
       "description": "description",
       "license": "license",
-      "locked_url": "github:flox/nixpkgs/9a333eaa80901efe01df07eade2c16d183761fa3",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=9a333eaa80901efe01df07eade2c16d183761fa3",
       "name": "hello",
       "outputs": {
         "name": "store_path"
