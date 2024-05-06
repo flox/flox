@@ -478,6 +478,22 @@ impl LockedManifestCatalog {
             ))
         }))
     }
+
+    /// Filter out packages from the locked manifest by install_id or group
+    ///
+    /// This is used to create a seed lockfile to upgrade a subset of packages,
+    /// as packages that are not in the seed lockfile will be re-resolved unconstrained.
+    pub(crate) fn unlock_packages_by_group_or_iid(
+        &mut self,
+        groups_or_iids: &[String],
+    ) -> &mut Self {
+        self.packages.retain(|package| {
+            !groups_or_iids.contains(&package.install_id)
+                && !groups_or_iids.contains(&package.group)
+        });
+
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1348,6 +1364,42 @@ mod tests {
                 groups[0].system.clone()
             )
         );
+    }
+
+    #[test]
+    fn unlock_by_iid() {
+        let LockedManifest::Catalog(mut seed) = TEST_LOCKED_MANIFEST.clone() else {
+            panic!("Expected a catalog lockfile");
+        };
+
+        seed.unlock_packages_by_group_or_iid(&["hello_install_id".to_string()]);
+
+        assert_eq!(seed.packages, vec![]);
+    }
+
+    #[test]
+    fn unlock_by_group() {
+        let LockedManifest::Catalog(mut seed) = TEST_LOCKED_MANIFEST.clone() else {
+            panic!("Expected a catalog lockfile");
+        };
+
+        seed.unlock_packages_by_group_or_iid(&["group".to_string()]);
+
+        assert_eq!(seed.packages, vec![]);
+    }
+
+    #[test]
+    fn unlock_by_iid_noop_if_already_unlocked() {
+        let LockedManifest::Catalog(mut seed) = TEST_LOCKED_MANIFEST.clone() else {
+            panic!("Expected a catalog lockfile");
+        };
+
+        // If the package is not in the seed, the lockfile should be unchanged
+        let expected = seed.packages.clone();
+
+        seed.unlock_packages_by_group_or_iid(&["not in here".to_string()]);
+
+        assert_eq!(seed.packages, expected,);
     }
 
     #[tokio::test]

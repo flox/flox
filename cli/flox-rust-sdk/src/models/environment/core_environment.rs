@@ -633,9 +633,7 @@ impl CoreEnvironment<ReadOnly> {
         // Create a seed lockfile by "unlocking" (i.e. removing the locked entries of)
         // all packages matching the given groups or iids
         let seed_lockfile = existing_lockfile.map(|mut lockfile| {
-            lockfile.packages.retain(|pkg| {
-                !(groups_or_iids.contains(&pkg.group) || groups_or_iids.contains(&pkg.install_id))
-            });
+            lockfile.unlock_packages_by_group_or_iid(groups_or_iids);
             lockfile
         });
 
