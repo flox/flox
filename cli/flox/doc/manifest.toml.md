@@ -255,25 +255,23 @@ SERVER_PORT = "3000"
 
 ## `[hook]`
 
-The `on-activate` script in the `[hook]` section
-is useful for performing initialization
-in a predictable bash shell environment.
+The `on-activate` script in the `[hook]` section is useful for performing
+initialization in a predictable Bash shell environment.
 
 ### `on-activate`
 
 The `on-activate` script is sourced from a **bash** shell,
-and it can be useful for spawning processes,
-dynamically setting environment variables,
-and creating files and directories
-to be used by the subsequent profile scripts, commands, and shells.
+and it can be useful for spawning processes, dynamically setting environment
+variables, and creating files and directories to be used by the subsequent
+profile scripts, commands, and shells.
 
 Hook scripts inherit environment variables set in the `[vars]` section,
-and variables set here will in turn be inherited by
-the `[profile]` scripts described below.
+and variables set here will in turn be inherited by the `[profile]` scripts
+described below.
 
-Any output written to `stdout` in a hook script is redirected to `stderr`
-to avoid it being mixed with the output of profile section scripts
-that write to `stdout` for "in-place" activations.
+Any output written to `stdout` in a hook script is redirected to `stderr` to
+avoid it being mixed with the output of profile section scripts that write to
+`stdout` for "in-place" activations.
 
 ```toml
 [hook]
@@ -302,6 +300,8 @@ Currently, environment variables set by the first run of the `on-activate`
 script are captured and then later set by the nested activation,
 but this behavior may change.
 
+It is best to write hooks defensively, assuming the user is using the
+environment from any directory on their machine.
 
 ### `script` - DEPRECATED
 This field was deprecated in favor of the `profile` section.
@@ -309,21 +309,16 @@ It will be removed in a later release.
 
 ## `[profile]`
 
-Scripts defined in the `[profile]` section
-are sourced by *your shell*
-and inherit environment variables
-set in the `[vars]` section
-and by the `[hook]` scripts.
-The `profile.common` script is sourced
-for every shell
-and special care should be taken
-to ensure compatibility with all shells.
-The `profile.bash` and `profile.zsh` scripts
-are then sourced *after* `profile.common`
-by the corresponding shell.
+Scripts defined in the `[profile]` section are sourced by *your shell* and
+inherit environment variables set in the `[vars]` section and by the `[hook]`
+scripts.
+The `profile.common` script is sourced for every shell,
+and special care should be taken to ensure compatibility with all shells.
+The `profile.<shell>` scripts are then sourced *after* `profile.common` by the
+corresponding shell.
 
-These scripts are useful for performing shell-specific customizations
-such as setting aliases or configuring the prompt.
+These scripts are useful for performing shell-specific customizations such as
+setting aliases or configuring the prompt.
 
 ```toml
 [profile]
