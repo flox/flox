@@ -570,6 +570,12 @@ impl CoreEnvironment<ReadOnly> {
         })
     }
 
+    /// Upgrade the given groups or install ids in the environment using the catalog client.
+    /// The environment is upgraded by locking the existing manifest
+    /// using [LockedManifestCatalog::lock_manifest] with the existing lockfile as a seed,
+    /// where the upgraded packages have been filtered out causing them to be re-resolved.
+    /// Upon successful locking, the environment is built and the lockfile is replaced atomically
+    /// if the build is successful.
     fn upgrade_with_catalog_client(
         &mut self,
         flox: &Flox,
@@ -577,7 +583,7 @@ impl CoreEnvironment<ReadOnly> {
         groups_or_iids: &[String],
         manifest: &TypedManifestCatalog,
     ) -> Result<UpgradeResult, CoreEnvironmentError> {
-        let mut existing_lockfile = 'lockfile: {
+        let existing_lockfile = 'lockfile: {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
                 break 'lockfile None;
             };
@@ -594,35 +600,44 @@ impl CoreEnvironment<ReadOnly> {
             }
         };
 
-        if let Some(ref mut lockfile) = existing_lockfile {
-            let locked_packages = std::mem::take(&mut lockfile.packages);
+        let previous_packages = if let Some(ref lockfile) = existing_lockfile {
+            lockfile.packages.clone()
+        } else {
+            vec![]
+        };
 
-            lockfile.packages = locked_packages
-                .into_iter()
-                .filter(|pkg| {
-                    !(groups_or_iids.contains(&pkg.group)
-                        || groups_or_iids.contains(&pkg.install_id))
-                })
-                .collect();
-        }
+        // Create a seed lockfile by "unlocking" (i.e. removing the locked entries of)
+        // all packages matching the given groups or iids
+        let seed_lockfile = existing_lockfile.map(|mut lockfile| {
+            lockfile.packages.retain(|pkg| {
+                !(groups_or_iids.contains(&pkg.group) || groups_or_iids.contains(&pkg.install_id))
+            });
+            lockfile
+        });
 
         let upgraded =
-            LockedManifestCatalog::lock_manifest(manifest, existing_lockfile.as_ref(), client)
+            LockedManifestCatalog::lock_manifest(manifest, seed_lockfile.as_ref(), client)
                 .block_on()
                 .map_err(CoreEnvironmentError::LockedManifest)?;
 
         let store_path =
             self.transact_with_lockfile_contents(serde_json::json!(upgraded).to_string(), flox)?;
 
+        // find all packages that after upgrading have a different derivation
+        let upgraded_packages = {
+            upgraded.packages.into_iter().filter_map(|pkg| {
+                previous_packages
+                    .iter()
+                    .find(|prev| {
+                        prev.install_id == pkg.install_id && prev.derivation != pkg.derivation
+                    })
+                    .map(|prev| (prev, pkg))
+            })
+        };
+
         let result = UpgradeResult {
-            packages: upgraded
-                .packages
-                .clone()
-                .into_iter()
-                .filter(|pkg| {
-                    groups_or_iids.contains(&pkg.group) || groups_or_iids.contains(&pkg.install_id)
-                })
-                .map(|pkg| pkg.install_id)
+            packages: upgraded_packages
+                .map(|(_prev, upgraded)| upgraded.install_id)
                 .collect(),
             store_path: Some(store_path),
         };
