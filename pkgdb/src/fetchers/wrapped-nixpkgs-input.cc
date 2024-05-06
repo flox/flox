@@ -351,7 +351,7 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
 
 /**
  * @brief Parses an input from a URL with the schema
- *        `flox-nixpkgs:v<RULES-VERSION>/<REV-OR-REF>`.
+ *        `flox-nixpkgs:owner/v<RULES-VERSION>/<REV-OR-REF>`.
  */
 std::optional<nix::fetchers::Input>
 WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
@@ -363,22 +363,37 @@ WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
 
   auto path = nix::tokenizeString<std::vector<std::string>>( url.path, "/" );
 
-  if ( path.size() != 2 )
+  if ( path.size() != 3 )
     {
       throw nix::BadURL( "URL '%s' is invalid", url.url );
     }
 
-  if ( ( path[0].front() == 'v' )
-       && ( std::find_if( path[0].begin() + 1,
-                          path[0].end(),
+  auto owner = path[0];
+  if ( nix::toLower( owner ) == "nixos" || nix::toLower( owner ) == "flox" )
+    {
+      input.attrs.insert_or_assign( "owner", owner );
+    }
+  else
+    {
+      throw nix::BadURL(
+        "in URL '%s', '%s' is not 'NixOS' or 'flox' (case-insensitive)",
+        url.url,
+        owner );
+    }
+
+
+  auto version = path[1];
+  if ( ( version.front() == 'v' )
+       && ( std::find_if( version.begin() + 1,
+                          version.end(),
                           []( unsigned char chr )
                           { return std::isdigit( chr ) == 0; } )
-            == path[0].end() ) )
+            == version.end() ) )
     {
       input.attrs.insert_or_assign(
         "version",
         nix::string2Int<uint64_t>(
-          std::string_view( path[0].begin() + 1, path[0].end() ) )
+          std::string_view( version.begin() + 1, version.end() ) )
           .value() );
     }
   else
@@ -386,23 +401,24 @@ WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
       throw nix::BadURL(
         "in URL '%s', '%s' is not a rules version tag like 'v<NUMBER>'",
         url.url,
-        path[0] );
+        version );
     }
 
-  if ( std::regex_match( path[1], nix::revRegex ) )
+  auto ref_or_rev = path[2];
+  if ( std::regex_match( ref_or_rev, nix::revRegex ) )
     {
-      input.attrs.insert_or_assign( "rev", path[1] );
+      input.attrs.insert_or_assign( "rev", ref_or_rev );
     }
-  else if ( std::regex_match( path[1], nix::refRegex ) )
+  else if ( std::regex_match( ref_or_rev, nix::refRegex ) )
     {
-      if ( std::regex_match( path[1], nix::badGitRefRegex ) )
+      if ( std::regex_match( ref_or_rev, nix::badGitRefRegex ) )
         {
           throw nix::BadURL(
             "in URL '%s', '%s' is not a valid Git branch/tag name",
             url.url,
-            path[1] );
+            ref_or_rev );
         }
-      input.attrs.insert_or_assign( "ref", path[1] );
+      input.attrs.insert_or_assign( "ref", ref_or_rev );
     }
   else
     {
@@ -429,7 +445,11 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
       url.path = "v" + std::to_string( *version );
     }
   else { throw nix::Error( "missing 'version' attribute in input" ); }
-
+  if ( auto owner = nix::fetchers::maybeGetIntAttr( input.attrs, "owner" ) )
+    {
+      url.path += "/" + std::to_string( *owner );
+    }
+  else { throw nix::Error( "missing 'owner' attribute in input" ); }
   if ( auto rev = nix::fetchers::maybeGetStrAttr( input.attrs, "rev" ) )
     {
       url.path += "/" + *rev;

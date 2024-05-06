@@ -812,7 +812,7 @@ evalCacheCursorForInput( nix::ref<nix::EvalState> &             state,
   /**
    * Ensure the input is fetched with `flox-nixpkgs`.
    * Currently, the 'flox-nixpkgs' fetcher requires the original input to be
-   * a rev or ref of `github:nixos/nixpkgs`.
+   * a rev or ref of `github:nixos/nixpkgs` or `github:flox/nixpkgs`.
    */
   auto floxNixpkgsAttrs = flox::githubAttrsToFloxNixpkgsAttrs( input.attrs );
   auto packageInputRef  = nix::FlakeRef::fromAttrs( floxNixpkgsAttrs );
