@@ -26,6 +26,7 @@ use crate::models::lockfile::{
     LockedManifestCatalog,
     LockedManifestError,
     LockedManifestPkgdb,
+    LockedPackageCatalog,
 };
 use crate::models::manifest::{
     insert_packages,
@@ -504,6 +505,10 @@ impl CoreEnvironment<ReadOnly> {
     }
 
     /// Atomically upgrade packages in this environment
+    ///
+    /// First resolve a new lockfile with upgraded packages using either pkgdb or the catalog client.
+    /// Then verify the new lockfile by building the environment.
+    /// Finally replace the existing environment with the new, upgraded one.
     pub fn upgrade(
         &mut self,
         flox: &Flox,
@@ -512,23 +517,43 @@ impl CoreEnvironment<ReadOnly> {
         let manifest = toml::from_str(&self.manifest_content()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
 
-        match manifest {
-            TypedManifest::Pkgdb(_) => self.upgrade_with_pkgdb(flox, groups_or_iids),
+        let (lockfile, upgraded) = match manifest {
+            TypedManifest::Pkgdb(_) => {
+                let (lockfile, upgraded) = self.upgrade_with_pkgdb(flox, groups_or_iids)?;
+                (LockedManifest::Pkgdb(lockfile), upgraded)
+            },
             TypedManifest::Catalog(catalog) => {
                 let client = flox
                     .catalog_client
                     .as_ref()
                     .ok_or(CoreEnvironmentError::CatalogClientMissing)?;
-                self.upgrade_with_catalog_client(flox, client, groups_or_iids, &catalog)
+
+                let (lockfile, upgraded) =
+                    self.upgrade_with_catalog_client(client, groups_or_iids, &catalog)?;
+
+                let upgraded = upgraded
+                    .into_iter()
+                    .map(|(_, pkg)| pkg.install_id.clone())
+                    .collect();
+
+                (LockedManifest::Catalog(lockfile), upgraded)
             },
-        }
+        };
+
+        let store_path =
+            self.transact_with_lockfile_contents(serde_json::json!(&lockfile).to_string(), flox)?;
+
+        Ok(UpgradeResult {
+            packages: upgraded,
+            store_path: Some(store_path),
+        })
     }
 
     fn upgrade_with_pkgdb(
         &mut self,
         flox: &Flox,
         groups_or_iids: &[String],
-    ) -> Result<UpgradeResult, CoreEnvironmentError> {
+    ) -> Result<(LockedManifestPkgdb, Vec<String>), CoreEnvironmentError> {
         let manifest_path = self.manifest_path();
         let lockfile_path = self.lockfile_path();
         let maybe_lockfile = if lockfile_path.exists() {
@@ -562,27 +587,25 @@ impl CoreEnvironment<ReadOnly> {
         )
         .map_err(CoreEnvironmentError::ParseUpgradeOutput)?;
 
-        let store_path = self.transact_with_lockfile_contents(json.lockfile.to_string(), flox)?;
-
-        Ok(UpgradeResult {
-            packages: json.result.0,
-            store_path: Some(store_path),
-        })
+        Ok((json.lockfile, json.result.0))
     }
 
     /// Upgrade the given groups or install ids in the environment using the catalog client.
     /// The environment is upgraded by locking the existing manifest
     /// using [LockedManifestCatalog::lock_manifest] with the existing lockfile as a seed,
     /// where the upgraded packages have been filtered out causing them to be re-resolved.
-    /// Upon successful locking, the environment is built and the lockfile is replaced atomically
-    /// if the build is successful.
     fn upgrade_with_catalog_client(
         &mut self,
-        flox: &Flox,
         client: &impl ClientTrait,
         groups_or_iids: &[String],
         manifest: &TypedManifestCatalog,
-    ) -> Result<UpgradeResult, CoreEnvironmentError> {
+    ) -> Result<
+        (
+            LockedManifestCatalog,
+            Vec<(LockedPackageCatalog, LockedPackageCatalog)>,
+        ),
+        CoreEnvironmentError,
+    > {
         let existing_lockfile = 'lockfile: {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
                 break 'lockfile None;
@@ -600,11 +623,10 @@ impl CoreEnvironment<ReadOnly> {
             }
         };
 
-        let previous_packages = if let Some(ref lockfile) = existing_lockfile {
-            lockfile.packages.clone()
-        } else {
-            vec![]
-        };
+        let previous_packages = existing_lockfile
+            .as_ref()
+            .map(|lockfile| lockfile.packages.clone())
+            .unwrap_or_default();
 
         // Create a seed lockfile by "unlocking" (i.e. removing the locked entries of)
         // all packages matching the given groups or iids
@@ -620,29 +642,21 @@ impl CoreEnvironment<ReadOnly> {
                 .block_on()
                 .map_err(CoreEnvironmentError::LockedManifest)?;
 
-        let store_path =
-            self.transact_with_lockfile_contents(serde_json::json!(upgraded).to_string(), flox)?;
-
         // find all packages that after upgrading have a different derivation
-        let upgraded_packages = {
-            upgraded.packages.into_iter().filter_map(|pkg| {
+        let package_diff = upgraded
+            .packages
+            .iter()
+            .filter_map(move |pkg| {
                 previous_packages
                     .iter()
                     .find(|prev| {
                         prev.install_id == pkg.install_id && prev.derivation != pkg.derivation
                     })
-                    .map(|prev| (prev, pkg))
+                    .map(|prev| (prev.clone(), pkg.clone()))
             })
-        };
+            .collect();
 
-        let result = UpgradeResult {
-            packages: upgraded_packages
-                .map(|(_prev, upgraded)| upgraded.install_id)
-                .collect(),
-            store_path: Some(store_path),
-        };
-
-        Ok(result)
+        Ok((upgraded, package_diff))
     }
 
     /// Makes a temporary copy of the environment so modifications to the manifest
