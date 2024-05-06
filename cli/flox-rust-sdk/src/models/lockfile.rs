@@ -333,17 +333,18 @@ impl LockedManifestCatalog {
         Ok(lockfile)
     }
 
-    /// Transform a lockfile into a mapping  that is easier to query:
-    /// Lockfile -> { (package, system): locked package }
+    /// Transform a lockfile into a mapping that is easier to query:
+    /// Lockfile -> { (install_id, system): (package_descriptor, locked_package) }
     fn make_seed_mapping(
         seed: &LockedManifestCatalog,
-    ) -> HashMap<(&ManifestPackageDescriptor, &System), &LockedPackageCatalog> {
+    ) -> HashMap<(&String, &System), (&ManifestPackageDescriptor, &LockedPackageCatalog)> {
         seed.packages
             .iter()
-            .filter_map(|package| {
-                let system = &package.system;
-                let manifest = seed.manifest.install.get(&package.install_id)?;
-                Some(((manifest, system), package))
+            .filter_map(|locked| {
+                let system = &locked.system;
+                let install_id = &locked.install_id;
+                let descriptor = seed.manifest.install.get(&locked.install_id)?;
+                Some(((install_id, system), (descriptor, locked)))
             })
             .collect()
     }
@@ -408,14 +409,20 @@ impl LockedManifestCatalog {
                         system: system.clone(),
                     });
 
+                let mut resolved_descriptor = resolved_descriptor.clone();
+
                 // If the package was just added to the manifest, it will be missing in the seed,
                 // which is derived from the _previous_ lockfile.
                 // In this case, the derivation will be None, and the package will be unconstrained.
+                // If the package was already locked, but the descriptor has changed in a way
+                // that invalidates the existing resolution, the derivation will be None.
                 let locked_derivation = seed_locked_packages
-                    .get(&(manifest_descriptor, &system.to_string()))
-                    .map(|p| p.derivation.clone());
+                    .get(&(install_id, &system.to_string()))
+                    .filter(|(descriptor, _)| {
+                        !descriptor.invalidates_existing_resolution(manifest_descriptor)
+                    })
+                    .map(|(_, locked_package)| locked_package.derivation.clone());
 
-                let mut resolved_descriptor = resolved_descriptor.clone();
                 resolved_descriptor.derivation = locked_derivation;
 
                 resolved_group.descriptors.push(resolved_descriptor);
