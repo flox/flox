@@ -443,6 +443,10 @@ impl LockedManifestCatalog {
         map.into_values()
     }
 
+    /// Eliminate groups that are already fully locked
+    /// by extracting them into a separate list of locked packages.
+    ///
+    /// This is used to avoid re-resolving packages that are already locked.
     fn split_fully_locked_groups(
         groups: impl IntoIterator<Item = PackageGroup>,
         seed_lockfile: Option<&LockedManifestCatalog>,
