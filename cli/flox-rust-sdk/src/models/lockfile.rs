@@ -814,6 +814,7 @@ pub struct LockfileCheckWarning {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::vec;
 
     use catalog_api_v1::types::Output;
     use indoc::indoc;
@@ -1024,6 +1025,52 @@ mod tests {
             }],
         })
     });
+
+    fn fake_package(
+        name: &str,
+        group: Option<&str>,
+    ) -> (String, ManifestPackageDescriptor, LockedPackageCatalog) {
+        let install_id = format!("{}_install_id", name);
+
+        let descriptor = ManifestPackageDescriptor {
+            pkg_path: name.to_string(),
+            pkg_group: group.map(|s| s.to_string()),
+            systems: Some(vec!["system".to_string()]),
+            version: None,
+            priority: None,
+            optional: false,
+        };
+
+        let locked = LockedPackageCatalog {
+            attr_path: name.to_string(),
+            broken: false,
+            derivation: "derivation".to_string(),
+            description: None,
+            install_id: install_id.clone(),
+            license: None,
+            locked_url: "".to_string(),
+            name: name.to_string(),
+            outputs: None,
+            outputs_to_install: None,
+            pname: name.to_string(),
+            rev: "".to_string(),
+            rev_count: 0,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            stabilities: None,
+            unfree: None,
+            version: "".to_string(),
+            system: "system".to_string(),
+            group: group.unwrap_or(DEFAULT_GROUP_NAME).to_string(),
+            priority: 5,
+            optional: false,
+        };
+        (install_id, descriptor, locked)
+    }
 
     #[test]
     fn make_params_smoke() {
