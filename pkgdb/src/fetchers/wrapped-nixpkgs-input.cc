@@ -135,67 +135,6 @@ createWrappedFlakeDir( const nix::FlakeRef & nixpkgsRef, uint64_t version = 0 )
 
 /* -------------------------------------------------------------------------- */
 
-/** @brief Fetches a `nixpkgs` input and wraps it with a few modifications. */
-struct WrappedNixpkgsInputScheme : nix::fetchers::InputScheme
-{
-
-  [[nodiscard]] virtual std::string
-  type() const
-  {
-    return "flox-nixpkgs";
-  }
-
-  /** @brief Convert raw attributes into an input. */
-  [[nodiscard]] std::optional<nix::fetchers::Input>
-  inputFromAttrs( const nix::fetchers::Attrs & attrs ) const override;
-
-  /** @brief Convert a URL string into an input. */
-  [[nodiscard]] std::optional<nix::fetchers::Input>
-  inputFromURL( const nix::ParsedURL & url ) const override;
-
-  /** @brief Convert input to a URL representation. */
-  [[nodiscard]] nix::ParsedURL
-  toURL( const nix::fetchers::Input & input ) const override;
-
-  /**
-   * @brief Check to see if the input has all information necessary for use
-   *        with SQLite caches.
-   *
-   * We require `rev` and `version` fields to be present.
-   */
-  [[nodiscard]] bool
-  hasAllInfo( const nix::fetchers::Input & input ) const override;
-
-  /**
-   * @brief Override an input with a different `ref` or `rev`.
-   *
-   * This is unlikely to be used for our purposes; but because it's a part of
-   * the `nix` fetcher interface, we implement it.
-   */
-  [[nodiscard]] nix::fetchers::Input
-  applyOverrides( const nix::fetchers::Input & _input,
-                  std::optional<std::string>   ref,
-                  std::optional<nix::Hash>     rev ) const override;
-
-  /**
-   * @brief Clone the `nixpkgs` repository to prime the cache.
-   *
-   * This function is used by `nix flake archive` to pre-fetch sources.
-   */
-  void
-  clone( const nix::fetchers::Input & input,
-         const nix::Path &            destDir ) const override;
-
-  /** @brief Generate a flake with wraps `nixpkgs`. */
-  [[nodiscard]] std::pair<nix::StorePath, nix::fetchers::Input>
-  fetch( nix::ref<nix::Store>         store,
-         const nix::fetchers::Input & _input ) override;
-
-
-}; /* End class `WrappedNixpkgsInputScheme' */
-
-
-/* -------------------------------------------------------------------------- */
 
 /**
  * @brief Helper used to convert a `flox-nixpkgs` attribute set representation,
@@ -205,9 +144,11 @@ static nix::fetchers::Attrs
 floxNixpkgsAttrsToGithubAttrs( const nix::fetchers::Attrs & attrs )
 {
   nix::fetchers::Attrs _attrs;
-  _attrs["type"]  = "github";
-  _attrs["owner"] = "NixOS";
-  _attrs["repo"]  = "nixpkgs";
+  _attrs["type"] = "github";
+  _attrs["repo"] = "nixpkgs";
+
+  /* Inherit owner field (could be NixOS or flox) */
+  _attrs["owner"] = nix::fetchers::getStrAttr( attrs, "owner" );
 
   /* Inherit `rev' and `ref' fields */
   if ( auto rev = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
@@ -259,18 +200,22 @@ githubAttrsToFloxNixpkgsAttrs( const nix::fetchers::Attrs & attrs )
   auto owner = nix::fetchers::getStrAttr( attrs, "owner" );
   auto repo  = nix::fetchers::getStrAttr( attrs, "repo" );
 
-  if ( nix::toLower( owner ) != "nixos" || nix::toLower( repo ) != "nixpkgs" )
+  if ( ! ( nix::toLower( owner ) == "nixos" || nix::toLower( owner ) == "flox" )
+       || nix::toLower( repo ) != "nixpkgs" )
     {
-      throw nix::Error(
-        "unsupported input owner/repo '%s/%s' expected 'NixOS/nixpkgs'",
-        owner,
-        repo );
+      throw nix::Error( "unsupported input owner/repo '%s/%s' expected "
+                        "'NixOS/nixpkgs' or 'flox/nixpkgs'",
+                        owner,
+                        repo );
     }
 
 
   nix::fetchers::Attrs _attrs;
   _attrs["type"]    = "flox-nixpkgs";
   _attrs["version"] = latestWrapperVersion;
+
+  /* Inherit `owner' field */
+  _attrs["owner"] = owner;
 
   /* Inherit `rev' and `ref' fields */
   if ( auto rev = nix::fetchers::maybeGetStrAttr( attrs, "rev" ) )
@@ -304,8 +249,9 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
 
   for ( const auto & [name, value] : attrs )
     {
-      if ( ( name != "type" ) && ( name != "ref" ) && ( name != "rev" )
-           && ( name != "narHash" ) && ( name != "version" ) )
+      if ( ( name != "owner" ) && ( name != "type" ) && ( name != "ref" )
+           && ( name != "rev" ) && ( name != "narHash" )
+           && ( name != "version" ) )
         {
           throw nix::Error( "unsupported flox-nixpkgs input attribute '%s'",
                             name );
@@ -344,7 +290,7 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
 
 /**
  * @brief Parses an input from a URL with the schema
- *        `flox-nixpkgs:v<RULES-VERSION>/<REV-OR-REF>`.
+ *        `flox-nixpkgs:v<RULES-VERSION>/owner/<REV-OR-REF>`.
  */
 std::optional<nix::fetchers::Input>
 WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
@@ -356,22 +302,24 @@ WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
 
   auto path = nix::tokenizeString<std::vector<std::string>>( url.path, "/" );
 
-  if ( path.size() != 2 )
+  if ( path.size() != 3 )
     {
       throw nix::BadURL( "URL '%s' is invalid", url.url );
     }
 
-  if ( ( path[0].front() == 'v' )
-       && ( std::find_if( path[0].begin() + 1,
-                          path[0].end(),
+  // Extract version
+  auto version = path[0];
+  if ( ( version.front() == 'v' )
+       && ( std::find_if( version.begin() + 1,
+                          version.end(),
                           []( unsigned char chr )
                           { return std::isdigit( chr ) == 0; } )
-            == path[0].end() ) )
+            == version.end() ) )
     {
       input.attrs.insert_or_assign(
         "version",
         nix::string2Int<uint64_t>(
-          std::string_view( path[0].begin() + 1, path[0].end() ) )
+          std::string_view( version.begin() + 1, version.end() ) )
           .value() );
     }
   else
@@ -379,23 +327,39 @@ WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url ) const
       throw nix::BadURL(
         "in URL '%s', '%s' is not a rules version tag like 'v<NUMBER>'",
         url.url,
-        path[0] );
+        version );
     }
 
-  if ( std::regex_match( path[1], nix::revRegex ) )
+  // Extract owner
+  auto owner = path[1];
+  if ( nix::toLower( owner ) == "nixos" || nix::toLower( owner ) == "flox" )
     {
-      input.attrs.insert_or_assign( "rev", path[1] );
+      input.attrs.insert_or_assign( "owner", owner );
     }
-  else if ( std::regex_match( path[1], nix::refRegex ) )
+  else
     {
-      if ( std::regex_match( path[1], nix::badGitRefRegex ) )
+      throw nix::BadURL(
+        "in URL '%s', '%s' is not 'NixOS' or 'flox' (case-insensitive)",
+        url.url,
+        owner );
+    }
+
+  // Extract ref or rev
+  auto ref_or_rev = path[2];
+  if ( std::regex_match( ref_or_rev, nix::revRegex ) )
+    {
+      input.attrs.insert_or_assign( "rev", ref_or_rev );
+    }
+  else if ( std::regex_match( ref_or_rev, nix::refRegex ) )
+    {
+      if ( std::regex_match( ref_or_rev, nix::badGitRefRegex ) )
         {
           throw nix::BadURL(
             "in URL '%s', '%s' is not a valid Git branch/tag name",
             url.url,
-            path[1] );
+            ref_or_rev );
         }
-      input.attrs.insert_or_assign( "ref", path[1] );
+      input.attrs.insert_or_assign( "ref", ref_or_rev );
     }
   else
     {
@@ -422,7 +386,11 @@ WrappedNixpkgsInputScheme::toURL( const nix::fetchers::Input & input ) const
       url.path = "v" + std::to_string( *version );
     }
   else { throw nix::Error( "missing 'version' attribute in input" ); }
-
+  if ( auto owner = nix::fetchers::maybeGetStrAttr( input.attrs, "owner" ) )
+    {
+      url.path += "/" + *owner;
+    }
+  else { throw nix::Error( "missing 'owner' attribute in input" ); }
   if ( auto rev = nix::fetchers::maybeGetStrAttr( input.attrs, "rev" ) )
     {
       url.path += "/" + *rev;
@@ -533,6 +501,7 @@ WrappedNixpkgsInputScheme::fetch( nix::ref<nix::Store>         store,
   nix::fetchers::Attrs lockedAttrs(
     { { "type", "flox-nixpkgs" },
       { "version", nix::fetchers::getIntAttr( input.attrs, "version" ) },
+      { "owner", nix::fetchers::getStrAttr( input.attrs, "owner" ) },
       { "rev", rev->gitRev() } } );
 
   /* If we're already cached then we're done. */
