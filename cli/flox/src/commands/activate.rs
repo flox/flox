@@ -624,10 +624,6 @@ mod tests {
     use super::*;
     use crate::commands::ActiveEnvironments;
 
-    #[cfg(target_os = "macos")]
-    const PATH: &str =
-        "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/flox/env/bin:/nix/store/some/bin";
-
     static DEFAULT_ENV: Lazy<UninitializedEnvironment> = Lazy::new(|| {
         UninitializedEnvironment::DotFlox(DotFlox {
             path: PathBuf::from(""),
