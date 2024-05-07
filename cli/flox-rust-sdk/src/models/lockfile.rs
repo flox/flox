@@ -1578,4 +1578,58 @@ pub(crate) mod tests {
             assert!(expected_systems.contains(&group.system))
         }
     }
+
+    #[test]
+    fn test_split_out_fully_locked_packages() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", Some("group1"));
+        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", Some("group1"));
+        let (baz_iid, baz_descriptor, baz_locked) = fake_package("baz", Some("group2"));
+        let (yeet_iid, yeet_descriptor, _) = fake_package("yeet", Some("group2"));
+
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        manifest.install.insert(foo_iid, foo_descriptor.clone());
+        manifest.install.insert(bar_iid, bar_descriptor.clone());
+        manifest
+            .install
+            .insert(baz_iid.clone(), baz_descriptor.clone());
+        manifest
+            .install
+            .insert(yeet_iid.clone(), yeet_descriptor.clone());
+
+        let locked = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone(), bar_locked.clone(), baz_locked.clone()],
+        };
+
+        let groups = LockedManifestCatalog::collect_package_groups(&manifest, Some(&locked));
+
+        let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
+            LockedManifestCatalog::split_fully_locked_groups(groups, Some(&locked));
+
+        // All packages of group1 are locked
+        assert_eq!(&fully_locked, &[bar_locked, foo_locked]);
+
+        // Only one package of group2 is locked, so it should be in to_resolve as a group
+        assert_eq!(to_resolve, vec![PackageGroup {
+            name: "group2".to_string(),
+            system: "system".to_string(),
+            descriptors: vec![
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "baz".to_string(),
+                    derivation: Some(baz_locked.derivation.clone()),
+                    install_id: baz_iid,
+                    version: None,
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "yeet".to_string(),
+                    derivation: None,
+                    install_id: yeet_iid,
+                    version: None,
+                }
+            ],
+        }]);
+    }
 }
