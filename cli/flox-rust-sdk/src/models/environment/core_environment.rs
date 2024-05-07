@@ -107,11 +107,15 @@ impl<State> CoreEnvironment<State> {
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
 
         let lockfile = match manifest {
-            TypedManifest::Pkgdb(_) => LockedManifest::Pkgdb(self.lock_with_pkgdb(flox)?),
+            TypedManifest::Pkgdb(_) => {
+                tracing::debug!("using pkgdb to lock");
+                LockedManifest::Pkgdb(self.lock_with_pkgdb(flox)?)
+            },
             TypedManifest::Catalog(manifest) => {
                 let Some(ref client) = flox.catalog_client else {
                     return Err(CoreEnvironmentError::CatalogClientMissing);
                 };
+                tracing::debug!("using catalog client to lock");
                 LockedManifest::Catalog(self.lock_with_catalog_client(client, *manifest)?)
             },
         };
