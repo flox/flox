@@ -1405,6 +1405,73 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn make_params_unlock_if_invalidated() {
+        let (foo_before_iid, foo_before_descriptor, foo_before_locked) = fake_package("foo", None);
+        let mut manifest_before = manifest::test::empty_catalog_manifest();
+        manifest_before
+            .install
+            .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
+
+        let seed = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest_before.clone(),
+            packages: vec![foo_before_locked.clone()],
+        };
+
+        // ---------------------------------------------------------------------
+        // 1) if the package is unchanged, it should not be re-resolved
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest_before, Some(&seed))
+                .collect::<Vec<_>>();
+
+        // the original derivation should be present and unchanged
+        assert_eq!(
+            actual_params[0].descriptors[0].derivation.as_ref(),
+            Some(&foo_before_locked.derivation)
+        );
+
+        // ---------------------------------------------------------------------
+        // 2) changes to the described pkg-path invalidate the derivation
+        let (foo_after_iid, mut foo_after_descriptor, _) = fake_package("foo", None);
+        foo_after_descriptor.pkg_path = "bar".to_string();
+        assert!(foo_after_descriptor.invalidates_existing_resolution(&foo_before_descriptor));
+
+        let mut manifest_after = manifest::test::empty_catalog_manifest();
+        manifest_after
+            .install
+            .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest_after, Some(&seed))
+                .collect::<Vec<_>>();
+
+        // if the package changed, it should be re-resolved
+        // i.e. the derivation should be None
+        assert_eq!(actual_params[0].descriptors[0].derivation.as_ref(), None);
+
+        // ---------------------------------------------------------------------
+        // 3) changes to the priority do not invalidate the derivation
+        let (foo_after_iid, mut foo_after_descriptor, _) = fake_package("foo", None);
+        foo_after_descriptor.priority = Some(10);
+        assert!(!foo_after_descriptor.invalidates_existing_resolution(&foo_before_descriptor));
+
+        let mut manifest_after = manifest::test::empty_catalog_manifest();
+        manifest_after
+            .install
+            .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest_after, Some(&seed))
+                .collect::<Vec<_>>();
+
+        assert_eq!(
+            actual_params[0].descriptors[0].derivation.as_ref(),
+            Some(&foo_before_locked.derivation)
+        );
+    }
+
+    #[test]
     fn ungroup_response() {
         let groups = vec![ResolvedPackageGroup {
             system: "system".to_string(),
