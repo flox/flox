@@ -175,7 +175,7 @@ impl<State> CoreEnvironment<State> {
     ///
     /// If a lockfile exists, it is used as a base.
     /// If the manifest should be locked without a base,
-    /// remove the lockfile before calling this function or use [Self::upgrade] (todo - 2024-04-24).
+    /// remove the lockfile before calling this function or use [Self::upgrade].
     fn lock_with_catalog_client(
         &self,
         client: &catalog::Client,
@@ -999,6 +999,7 @@ mod tests {
     use tempfile::{tempdir_in, TempDir};
     use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
 
+    use self::catalog::MockClient;
     use self::test_helpers::new_core_environment;
     use super::*;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_global_lock};
@@ -1176,6 +1177,58 @@ mod tests {
         assert!(matches!(result, EditResult::ReActivateRequired {
             store_path: _
         }));
+    }
+
+    #[test]
+    fn locking_of_v1_manifest_requires_catalog_client() {
+        let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
+        flox.catalog_client = None;
+
+        fs::write(env_view.manifest_path(), r#"version = 1"#).unwrap();
+
+        let err = env_view
+            .lock(&flox)
+            .expect_err("should fail to lock v1 lockfile with pkgdb");
+
+        assert!(matches!(err, CoreEnvironmentError::CatalogClientMissing));
+
+        let mut mock_client = MockClient::new(None::<&str>).unwrap();
+        mock_client.push_resolve_response(vec![]);
+        flox.catalog_client = Option::Some(mock_client.into());
+
+        env_view
+            .lock(&flox)
+            .expect("lock should succeed with catalog client");
+    }
+
+    #[test]
+    fn upgrade_with_catalog_client_requires_catalog_client() {
+        // flox already has a catalog client
+        let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
+        fs::write(env_view.manifest_path(), r#"version = 1"#).unwrap();
+
+        {
+            let mut mock_client = MockClient::new(None::<&str>).unwrap();
+            mock_client.push_resolve_response(vec![]);
+            flox.catalog_client = Option::Some(mock_client.into());
+            env_view.lock(&flox).unwrap();
+        }
+
+        flox.catalog_client = None;
+        let err = env_view
+            .upgrade(&flox, &[])
+            .expect_err("upgrade of v1 manifest should fail without client");
+
+        assert!(matches!(err, CoreEnvironmentError::CatalogClientMissing));
+
+        {
+            let mut mock_client = MockClient::new(None::<&str>).unwrap();
+            mock_client.push_resolve_response(vec![]);
+            flox.catalog_client = Option::Some(mock_client.into());
+            env_view
+                .upgrade(&flox, &[])
+                .expect("upgrade should succeed with catalog client");
+        }
     }
 
     /// replacing an environment should fail if a backup exists
