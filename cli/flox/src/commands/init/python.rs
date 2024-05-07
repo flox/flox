@@ -23,9 +23,10 @@ use super::{
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 
+#[derive(Debug)]
 pub(super) struct Python {
-    providers: Vec<Provide<Box<dyn Provider>>>,
-    selected_provider: Option<Box<dyn Provider>>,
+    providers: Vec<Provide<PythonProvider>>,
+    selected_provider: Option<PythonProvider>,
 }
 
 impl Python {
@@ -58,7 +59,7 @@ impl Python {
 
 impl InitHook for Python {
     /// Empties the [Python::providers] and stores the selected provider in [Python::selected_provider]
-    fn prompt_user(&mut self, _flox: &Flox, _path: &Path) -> Result<bool> {
+    async fn prompt_user(&mut self, _flox: &Flox, _path: &Path) -> Result<bool> {
         let mut found_providers = std::mem::take(&mut self.providers)
             .into_iter()
             .filter_map(|provider| match provider {
@@ -67,7 +68,7 @@ impl InitHook for Python {
             })
             .collect::<Vec<_>>();
 
-        fn describe_provider(provider: &dyn Provider) -> String {
+        fn describe_provider(provider: &impl Provider) -> String {
             format!(
                 "* {} ({})\n\n{}",
                 provider.describe_provider(),
@@ -80,7 +81,7 @@ impl InitHook for Python {
             Flox detected a Python project with the following Python provider(s):
 
             {}
-        ", found_providers.iter().map(|p| describe_provider(p.as_ref())).join("\n")});
+        ", found_providers.iter().map(|p| describe_provider(p)).join("\n")});
 
         let message = formatdoc! {"
             Would you like Flox to set up a standard Python environment?
@@ -187,6 +188,77 @@ impl<P: Provider + 'static> From<Result<Option<P>>> for Provide<Box<dyn Provider
     }
 }
 
+impl From<Result<Option<PoetryPyProject>>> for Provide<PythonProvider> {
+    fn from(result: Result<Option<PoetryPyProject>>) -> Self {
+        match result {
+            Ok(Some(provider)) => Provide::Found(PythonProvider::Poetry(provider)),
+            Ok(None) => Provide::NotFound,
+            Err(err) => Provide::Invalid(err),
+        }
+    }
+}
+
+impl From<Result<Option<PyProject>>> for Provide<PythonProvider> {
+    fn from(result: Result<Option<PyProject>>) -> Self {
+        match result {
+            Ok(Some(provider)) => Provide::Found(PythonProvider::PyProjectToml(provider)),
+            Ok(None) => Provide::NotFound,
+            Err(err) => Provide::Invalid(err),
+        }
+    }
+}
+
+impl From<Result<Option<Requirements>>> for Provide<PythonProvider> {
+    fn from(result: Result<Option<Requirements>>) -> Self {
+        match result {
+            Ok(Some(provider)) => Provide::Found(PythonProvider::Requirements(provider)),
+            Ok(None) => Provide::NotFound,
+            Err(err) => Provide::Invalid(err),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(super) enum PythonProvider {
+    Poetry(PoetryPyProject),
+    PyProjectToml(PyProject),
+    Requirements(Requirements),
+}
+
+impl Provider for PythonProvider {
+    fn describe_provider(&self) -> Cow<'static, str> {
+        match self {
+            PythonProvider::Poetry(p) => p.describe_provider(),
+            PythonProvider::PyProjectToml(p) => p.describe_provider(),
+            PythonProvider::Requirements(p) => p.describe_provider(),
+        }
+    }
+
+    fn describe_reason(&self) -> Cow<'_, str> {
+        match self {
+            PythonProvider::Poetry(p) => p.describe_reason(),
+            PythonProvider::PyProjectToml(p) => p.describe_reason(),
+            PythonProvider::Requirements(p) => p.describe_reason(),
+        }
+    }
+
+    fn describe_customization(&self) -> Cow<'_, str> {
+        match self {
+            PythonProvider::Poetry(p) => p.describe_customization(),
+            PythonProvider::PyProjectToml(p) => p.describe_customization(),
+            PythonProvider::Requirements(p) => p.describe_customization(),
+        }
+    }
+
+    fn get_init_customization(&self) -> InitCustomization {
+        match self {
+            PythonProvider::Poetry(p) => p.get_init_customization(),
+            PythonProvider::PyProjectToml(p) => p.get_init_customization(),
+            PythonProvider::Requirements(p) => p.get_init_customization(),
+        }
+    }
+}
+
 trait Provider: Debug {
     fn describe_provider(&self) -> Cow<'static, str>;
 
@@ -203,8 +275,8 @@ trait Provider: Debug {
 
 /// Information gathered from a pyproject.toml file for poetry
 /// <https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/#configuring-setup-py>
-#[derive(Debug, PartialEq)]
-struct PoetryPyProject {
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct PoetryPyProject {
     /// Provided python version
     ///
     /// [ProvidedVersion::Compatible] if a version compatible with the requirement
@@ -388,8 +460,8 @@ impl Provider for PoetryPyProject {
 
 /// Information gathered from a pyproject.toml file
 /// <https://packaging.python.org/en/latest/guides/distributing-packages-using-setuptools/#configuring-setup-py>
-#[derive(Debug, PartialEq)]
-struct PyProject {
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct PyProject {
     /// Provided python version
     ///
     /// [ProvidedVersion::Compatible] if a version compatible with the requirement
@@ -568,7 +640,7 @@ impl Provider for PyProject {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct Requirements {
     /// The latest version of python3 found in the catalogs
     python_version: String,

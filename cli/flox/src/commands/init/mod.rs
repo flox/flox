@@ -43,6 +43,32 @@ use python::Python;
 
 const AUTO_SETUP_HINT: &str = "Use '--auto-setup' to apply Flox recommendations in the future.";
 
+/// The different types of init customizations
+#[derive(Debug)]
+enum InitHookType {
+    Go(Go),
+    Node(Node),
+    Python(Python),
+}
+
+impl InitHook for InitHookType {
+    async fn prompt_user(&mut self, flox: &Flox, path: &Path) -> Result<bool> {
+        match self {
+            InitHookType::Go(hook) => hook.prompt_user(flox, path).await,
+            InitHookType::Node(hook) => hook.prompt_user(flox, path).await,
+            InitHookType::Python(hook) => hook.prompt_user(flox, path).await,
+        }
+    }
+
+    fn get_init_customization(&self) -> InitCustomization {
+        match self {
+            InitHookType::Go(hook) => hook.get_init_customization(),
+            InitHookType::Node(hook) => hook.get_init_customization(),
+            InitHookType::Python(hook) => hook.get_init_customization(),
+        }
+    }
+}
+
 // Create an environment in the current directory
 #[derive(Bpaf, Clone)]
 pub struct Init {
@@ -89,36 +115,41 @@ impl Init {
 
         // Don't run language hooks in home dir
         let customization = if dir != home_dir || self.auto_setup {
-            Dialog {
-                message: "Generating database for flox packages...",
-                help_message: None,
-                typed: Spinner::new(|| {
-                    // Some language hooks run searches,
-                    // so run a scrape first
-                    let global_lockfile = LockedManifestPkgdb::ensure_global_lockfile(&flox)?;
+            // Some language hooks run searches, so scrape with pkgdb if necessary
+            if flox.catalog_client.is_none() {
+                tracing::debug!("using pkgdb for init");
+                Dialog {
+                    message: "Generating database for flox packages...",
+                    help_message: None,
+                    typed: Spinner::new(|| {
+                        let global_lockfile = LockedManifestPkgdb::ensure_global_lockfile(&flox)?;
 
-                    let lockfile: LockedManifest =
-                        LockedManifest::read_from_file(&CanonicalPath::new(global_lockfile)?)?;
+                        let lockfile: LockedManifest =
+                            LockedManifest::read_from_file(&CanonicalPath::new(global_lockfile)?)?;
 
-                    let LockedManifest::Pkgdb(lockfile) = lockfile else {
-                        return Err(anyhow!("Expected a Pkgdb lockfile"));
-                    };
+                        let LockedManifest::Pkgdb(lockfile) = lockfile else {
+                            return Err(anyhow!("Expected a Pkgdb lockfile"));
+                        };
 
-                    let lockfile = TypedLockedManifestPkgdb::try_from(lockfile)?;
+                        let lockfile = TypedLockedManifestPkgdb::try_from(lockfile)?;
 
-                    // --ga-registry forces a single input
-                    if let Some((_, input)) = lockfile.registry().inputs.iter().next() {
-                        scrape_input(&input.from)?;
-                    };
-                    Ok::<(), Error>(())
-                }),
-            }
-            .spin_with_delay(Duration::from_secs_f32(0.25))?;
+                        // --ga-registry forces a single input
+                        if let Some((_, input)) = lockfile.registry().inputs.iter().next() {
+                            scrape_input(&input.from)?;
+                        };
+                        Ok::<(), Error>(())
+                    }),
+                }
+                .spin_with_delay(Duration::from_secs_f32(0.25))?;
+            };
 
-            self.run_language_hooks(&flox, &dir).unwrap_or_else(|e| {
-                message::warning(format!("Failed to generate init suggestions: {}", e));
-                InitCustomization::default()
-            })
+            // FIXME: Make sure catalog client is used for everything in here
+            self.run_language_hooks(&flox, &dir)
+                .await
+                .unwrap_or_else(|e| {
+                    message::warning(format!("Failed to generate init suggestions: {}", e));
+                    InitCustomization::default()
+                })
         } else {
             debug!("Skipping language hooks in home directory");
             InitCustomization::default()
@@ -174,26 +205,26 @@ impl Init {
     }
 
     /// Run all language hooks and return a single combined customization
-    fn run_language_hooks(&self, flox: &Flox, path: &Path) -> Result<InitCustomization> {
-        let mut hooks: Vec<Box<dyn InitHook>> = vec![];
+    async fn run_language_hooks(&self, flox: &Flox, path: &Path) -> Result<InitCustomization> {
+        let mut hooks: Vec<InitHookType> = vec![];
 
-        if let Some(node) = Node::new(flox, path)? {
-            hooks.push(Box::new(node));
+        if let Some(node) = Node::new(flox, path).await? {
+            hooks.push(InitHookType::Node(node));
         }
 
         if let Some(python) = Python::new(flox, path) {
-            hooks.push(Box::new(python));
+            hooks.push(InitHookType::Python(python));
         }
 
         if let Some(go) = Go::new(flox, path)? {
-            hooks.push(Box::new(go));
+            hooks.push(InitHookType::Go(go));
         }
 
         let mut customizations = vec![];
 
         for mut hook in hooks {
             // Run hooks if we can't prompt
-            if self.auto_setup || (Dialog::can_prompt() && hook.prompt_user(flox, path)?) {
+            if self.auto_setup || (Dialog::can_prompt() && hook.prompt_user(flox, path).await?) {
                 customizations.push(hook.get_init_customization())
             }
         }
@@ -276,7 +307,7 @@ impl Init {
 
 // TODO: clean up how we pass around path and flox
 trait InitHook {
-    fn prompt_user(&mut self, flox: &Flox, path: &Path) -> Result<bool>;
+    async fn prompt_user(&mut self, flox: &Flox, path: &Path) -> Result<bool>;
 
     fn get_init_customization(&self) -> InitCustomization;
 }

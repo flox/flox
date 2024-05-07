@@ -37,6 +37,7 @@ const GO_HOOK: &str = indoc! {"
 ///   if user commands to do so. Else, return `true` or `false` based on whether
 ///   the user desires or not the presented customization.
 /// - [Self::get_init_customization]: Returns a Go specific customization based on [Self::module_system].
+#[derive(Debug, Clone)]
 pub(super) struct Go {
     /// Stores the version required to generate a customization with [Self::get_init_customization].
     /// Becomes initialized in [Self::new].
@@ -69,7 +70,7 @@ impl Go {
 impl InitHook for Go {
     /// Returns `true` if the user accepts the prompt. In that case,
     /// the hook customizes the manifest with the default Go environment.
-    fn prompt_user(&mut self, _flox: &Flox, _path: &Path) -> Result<bool> {
+    async fn prompt_user(&mut self, _flox: &Flox, _path: &Path) -> Result<bool> {
         let module_system = self.module_system.get_system();
 
         message::plain(formatdoc! {"
@@ -149,7 +150,7 @@ impl InitHook for Go {
 }
 
 /// Represents Go module system files.
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum GoModuleSystemKind {
     /// Single module based system [GoModSystem].
     Module(GoModSystem),
@@ -193,7 +194,7 @@ trait GoModuleSystemMode {
 }
 
 /// Represents the single-module system from the content of `go.mod` files.
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct GoModSystem {
     /// Represents the version obtained from the `go` statement inside the `go.mod` file.
     version: ProvidedVersion,
@@ -234,7 +235,7 @@ impl GoModuleSystemMode for GoModSystem {
 }
 
 /// Represents the multi-module workspace system from the content of `go.work` files.
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct GoWorkSystem {
     /// Represents the version obtained from the `go` statement inside the `go.work` file.
     version: ProvidedVersion,

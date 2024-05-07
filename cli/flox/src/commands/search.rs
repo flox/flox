@@ -18,7 +18,7 @@ use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
 use crate::utils::message;
 use crate::utils::search::{construct_search_params, manifest_and_lockfile, DisplaySearchResults};
 
-const DEFAULT_SEARCH_LIMIT: Option<u8> = Some(10);
+pub(crate) const DEFAULT_SEARCH_LIMIT: Option<u8> = Some(10);
 const FLOX_SHOW_HINT: &str = "Use 'flox show <package>' to see available versions";
 
 #[derive(Bpaf, Clone)]

@@ -48,6 +48,7 @@ use crate::models::environment::{
     FLOX_INSTALL_PLACEHOLDER,
     FLOX_PROFILE_PLACEHOLDER,
     FLOX_SYSTEM_PLACEHOLDER,
+    FLOX_VERSION_PLACEHOLDER,
     MANIFEST_FILENAME,
 };
 use crate::models::environment_ref::EnvironmentName;
@@ -386,8 +387,12 @@ impl PathEnvironment {
         let template_contents = fs::read_to_string(env!("MANIFEST_TEMPLATE"))
             .map_err(EnvironmentError::ReadManifest)?;
 
-        let manifest_contents =
-            Self::replace_placeholders(&template_contents, system, customization);
+        let manifest_contents = Self::replace_placeholders(
+            &template_contents,
+            system,
+            customization,
+            flox.catalog_client.is_some(),
+        );
 
         let mut environment = Self::write_new(
             flox,
@@ -473,9 +478,14 @@ impl PathEnvironment {
         contents: &String,
         system: &str,
         customization: &InitCustomization,
+        use_catalog: bool,
     ) -> String {
+        // Add version
+        let version = if use_catalog { "version = 1" } else { "" };
+        let mut replaced = contents.replace(FLOX_VERSION_PLACEHOLDER, version);
+
         // Replace system
-        let mut replaced = contents.replace(FLOX_SYSTEM_PLACEHOLDER, system);
+        replaced = replaced.replace(FLOX_SYSTEM_PLACEHOLDER, system);
 
         // Don't add example packages if packages are being installed
         let packages = if customization.packages.is_some() {
