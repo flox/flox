@@ -253,13 +253,13 @@ impl Activate {
         //
         //    eval "$(flox activate)"
         if in_place {
-            let shell = Self::detect_shell()?;
+            let shell = Self::detect_shell_for_in_place()?;
             Self::activate_in_place(&shell, &exports, &activation_path);
 
             return Ok(());
         }
 
-        let shell = Self::detect_shell()?;
+        let shell = Self::detect_shell_for_subshell()?;
         // These functions will only return if exec fails
         if !self.run_args.is_empty() {
             Self::activate_command(self.run_args, shell, exports, activation_path)
@@ -554,18 +554,26 @@ impl Activate {
             .join(" ")
     }
 
-    /// Detect the shell to use for all activation methods
+    /// Detect the shell to use for activation
     ///
-    /// This was previously more complicated, now it's not.
-    fn detect_shell() -> Result<Shell> {
-        Shell::detect_from_env("FLOX_SHELL")
-            .or_else(|_| Self::detect_shell_with(Shell::detect_from_parent_process))
-            .or_else(|_| Shell::detect_from_env("SHELL"))
+    /// Used to determine shell for
+    /// `flox activate` and `flox activate -- CMD`
+    fn detect_shell_for_subshell() -> Result<Shell> {
+        Shell::detect_from_env("FLOX_SHELL").or_else(|_| Shell::detect_from_env("SHELL"))
+    }
+
+    /// Detect the shell to use for in-place activation
+    ///
+    /// Used to determine shell for `eval "$(flox activate)"` / `flox activate --print-script`
+    fn detect_shell_for_in_place() -> Result<Shell> {
+        Self::detect_shell_for_in_place_with(Shell::detect_from_parent_process)
     }
 
     /// Utility method for testing implementing the logic of shell detection
     /// for in-place activation, generically over a parent shell detection function.
-    fn detect_shell_with(parent_shell_fn: impl Fn() -> Result<Shell>) -> Result<Shell> {
+    fn detect_shell_for_in_place_with(
+        parent_shell_fn: impl Fn() -> Result<Shell>,
+    ) -> Result<Shell> {
         Shell::detect_from_env("FLOX_SHELL")
             .or_else(|_| parent_shell_fn())
             .or_else(|err| {
@@ -616,10 +624,6 @@ mod tests {
     use super::*;
     use crate::commands::ActiveEnvironments;
 
-    #[cfg(target_os = "macos")]
-    const PATH: &str =
-        "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/flox/env/bin:/nix/store/some/bin";
-
     static DEFAULT_ENV: Lazy<UninitializedEnvironment> = Lazy::new(|| {
         UninitializedEnvironment::DotFlox(DotFlox {
             path: PathBuf::from(""),
@@ -643,47 +647,50 @@ mod tests {
         &|| Err(anyhow::anyhow!("parent shell detection failed"));
 
     #[test]
-    fn test_detect_shell() {
+    fn test_detect_shell_for_subshell() {
         temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_SET], || {
-            let shell = Activate::detect_shell().unwrap();
+            let shell = Activate::detect_shell_for_subshell().unwrap();
             assert_eq!(shell, Shell::Bash("/shell/bash".into()));
         });
 
         temp_env::with_vars([FLOX_SHELL_SET, SHELL_SET], || {
-            let shell = Activate::detect_shell().unwrap();
+            let shell = Activate::detect_shell_for_subshell().unwrap();
             assert_eq!(shell, Shell::Bash("/flox_shell/bash".into()));
         });
 
         temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_UNSET], || {
-            let shell = Activate::detect_shell();
+            let shell = Activate::detect_shell_for_subshell();
             assert!(shell.is_err());
         });
+    }
 
+    #[test]
+    fn test_detect_shell_for_in_place() {
         // $SHELL is used as a fallback only if parent detection fails
         temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_SET], || {
-            let shell = Activate::detect_shell_with(PARENT_DETECTED).unwrap();
+            let shell = Activate::detect_shell_for_in_place_with(PARENT_DETECTED).unwrap();
             assert_eq!(shell, Shell::Bash("/parent/bash".into()));
 
             // fall back to $SHELL if parent detection fails
-            let shell = Activate::detect_shell_with(PARENT_UNDETECTED).unwrap();
+            let shell = Activate::detect_shell_for_in_place_with(PARENT_UNDETECTED).unwrap();
             assert_eq!(shell, Shell::Bash("/shell/bash".into()));
         });
 
         // $FLOX_SHELL takes precedence over $SHELL and detected parent shell
         temp_env::with_vars([FLOX_SHELL_SET, SHELL_SET], || {
-            let shell = Activate::detect_shell_with(PARENT_DETECTED).unwrap();
+            let shell = Activate::detect_shell_for_in_place_with(PARENT_DETECTED).unwrap();
             assert_eq!(shell, Shell::Bash("/flox_shell/bash".into()));
 
-            let shell = Activate::detect_shell_with(PARENT_UNDETECTED).unwrap();
+            let shell = Activate::detect_shell_for_in_place_with(PARENT_UNDETECTED).unwrap();
             assert_eq!(shell, Shell::Bash("/flox_shell/bash".into()));
         });
 
         // if both $FLOX_SHELL and $SHELL are unset, we should fail iff parent detection fails
         temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_UNSET], || {
-            let shell = Activate::detect_shell_with(PARENT_DETECTED).unwrap();
+            let shell = Activate::detect_shell_for_in_place_with(PARENT_DETECTED).unwrap();
             assert_eq!(shell, Shell::Bash("/parent/bash".into()));
 
-            let shell = Activate::detect_shell_with(PARENT_UNDETECTED);
+            let shell = Activate::detect_shell_for_in_place_with(PARENT_UNDETECTED);
             assert!(shell.is_err());
         });
     }
