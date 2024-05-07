@@ -176,14 +176,15 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
 
 #[cfg(test)]
 mod test {
-    use flox_rust_sdk::flox::test_helpers::flox_instance;
+    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
     use flox_rust_sdk::providers::catalog::{ApiErrorResponse, Client};
 
     use super::*;
 
     #[tokio::test]
     async fn show_handles_404() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
+        let (mut flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(None, true);
         let Client::Mock(ref mut client) = flox.catalog_client.as_mut().unwrap() else {
             panic!()
         };
