@@ -823,7 +823,7 @@ mod tests {
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
-    use crate::models::manifest::{RawManifest, TypedManifest};
+    use crate::models::manifest::{self, RawManifest, TypedManifest};
 
     /// Validate that the parser for the locked manifest can handle null values
     /// for the `version`, `license`, and `description` fields.
@@ -1413,26 +1413,62 @@ mod tests {
         );
     }
 
+    /// unlocking by iid should remove only the package with that iid
     #[test]
     fn unlock_by_iid() {
-        let LockedManifest::Catalog(mut seed) = TEST_LOCKED_MANIFEST.clone() else {
-            panic!("Expected a catalog lockfile");
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", None);
+        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", None);
+        manifest.install.insert(foo_iid.clone(), foo_descriptor);
+        manifest.install.insert(bar_iid.clone(), bar_descriptor);
+        let mut lockfile = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone(), bar_locked.clone()],
         };
 
-        seed.unlock_packages_by_group_or_iid(&["hello_install_id".to_string()]);
+        lockfile.unlock_packages_by_group_or_iid(&[foo_iid.clone()]);
 
-        assert_eq!(seed.packages, vec![]);
+        assert_eq!(lockfile.packages, vec![bar_locked]);
     }
 
+    /// Unlocking by group should remove all packages in that group
     #[test]
     fn unlock_by_group() {
-        let LockedManifest::Catalog(mut seed) = TEST_LOCKED_MANIFEST.clone() else {
-            panic!("Expected a catalog lockfile");
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", Some("group"));
+        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", Some("group"));
+        manifest.install.insert(foo_iid.clone(), foo_descriptor);
+        manifest.install.insert(bar_iid.clone(), bar_descriptor);
+        let mut lockfile = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone(), bar_locked.clone()],
         };
 
-        seed.unlock_packages_by_group_or_iid(&["group".to_string()]);
+        lockfile.unlock_packages_by_group_or_iid(&["group".to_string()]);
 
-        assert_eq!(seed.packages, vec![]);
+        assert_eq!(lockfile.packages, vec![]);
+    }
+
+    /// If an unlocked iid is also used as a group, remove both the group
+    /// and the package
+    #[test]
+    fn unlock_by_iid_and_group() {
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", Some("foo_install_id"));
+        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", Some("foo_install_id"));
+        manifest.install.insert(foo_iid.clone(), foo_descriptor);
+        manifest.install.insert(bar_iid.clone(), bar_descriptor);
+        let mut lockfile = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone(), bar_locked.clone()],
+        };
+
+        lockfile.unlock_packages_by_group_or_iid(&[foo_iid.clone()]);
+
+        assert_eq!(lockfile.packages, vec![]);
     }
 
     #[test]
