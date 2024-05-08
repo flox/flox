@@ -347,24 +347,24 @@ pub enum TypedManifest {
 
 /// Not meant for writing manifest files, only for reading them.
 /// Modifications should be made using the the raw functions in this module.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct TypedManifestCatalog {
-    version: Version<1>,
+    pub(super) version: Version<1>,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
     pub(super) install: ManifestInstall,
     /// Variables that are exported to the shell environment upon activation.
     #[serde(default)]
-    vars: ManifestVariables,
+    pub(super) vars: ManifestVariables,
     /// Hooks that are run at various times during the lifecycle of the manifest
     /// in a known shell environment.
     #[serde(default)]
-    hook: ManifestHook,
+    pub(super) hook: ManifestHook,
     /// Profile scripts that are run in the user's shell upon activation.
     #[serde(default)]
-    profile: ManifestProfile,
+    pub(super) profile: ManifestProfile,
     /// Options that control the behavior of the manifest.
     #[serde(default)]
     pub(super) options: ManifestOptions,
@@ -394,6 +394,32 @@ pub struct ManifestPackageDescriptor {
     pub(crate) systems: Option<Vec<System>>,
     #[serde(default)]
     pub(crate) optional: bool,
+}
+
+impl ManifestPackageDescriptor {
+    /// Check if two package descriptors should have the same resolution.
+    /// This is used to determine if a package needs to be re-resolved
+    /// in the presence of an existing lock.
+    ///
+    /// * Descriptors are resolved per system,
+    ///   changing the supported systems does not invalidate _existing_ resolutions.
+    /// * Priority is not used in resolution, so it is ignored.
+    pub(super) fn invalidates_existing_resolution(&self, other: &Self) -> bool {
+        // unpack to avoid forgetting to update this method when new fields are added
+        let ManifestPackageDescriptor {
+            pkg_path,
+            pkg_group,
+            version,
+            optional,
+            systems: _,
+            priority: _,
+        } = self;
+
+        pkg_path != &other.pkg_path
+            || pkg_group != &other.pkg_group
+            || version != &other.version
+            || optional != &other.optional
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
@@ -829,7 +855,7 @@ pub fn temporary_parse_descriptor(descriptor: &str) -> Result<PackageToInstall, 
 }
 
 #[cfg(test)]
-mod test {
+pub(super) mod test {
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -854,6 +880,17 @@ ripgrep = {}
     const CATALOG_MANIFEST: &str = indoc! {r#"
         version = 1
     "#};
+
+    pub fn empty_catalog_manifest() -> TypedManifestCatalog {
+        TypedManifestCatalog {
+            version: Version,
+            install: ManifestInstall::default(),
+            vars: ManifestVariables::default(),
+            hook: ManifestHook::default(),
+            profile: ManifestProfile::default(),
+            options: ManifestOptions::default(),
+        }
+    }
 
     #[test]
     fn detect_pkgdb_manifest() {

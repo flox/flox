@@ -744,7 +744,7 @@ mod tests {
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
                 requested: None,
-                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
+                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6",),
             },
         });
     }

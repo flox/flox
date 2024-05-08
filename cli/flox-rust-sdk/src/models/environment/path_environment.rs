@@ -173,6 +173,7 @@ impl Environment for PathEnvironment {
     ///   any new packages.
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        env_view.lock(flox)?;
         let store_path = env_view.build(flox)?;
         env_view.link(flox, self.out_link(&flox.system)?, &Some(store_path))?;
 

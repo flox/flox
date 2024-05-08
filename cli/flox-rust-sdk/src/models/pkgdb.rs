@@ -10,7 +10,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
 
-use super::lockfile::FlakeRef;
+use super::lockfile::{FlakeRef, LockedManifestPkgdb};
 
 // This is the `PKGDB` path that we actually use.
 // This is set once and prefers the `PKGDB` env variable, but will use
@@ -51,7 +51,7 @@ pub mod error_codes {
 #[derive(Deserialize)]
 pub struct UpgradeResultJSON {
     pub result: UpgradeResultInner,
-    pub lockfile: Value,
+    pub lockfile: LockedManifestPkgdb,
 }
 
 #[derive(Debug, Deserialize)]
