@@ -1000,15 +1000,20 @@ pub mod test_helpers {
 mod tests {
     use std::os::unix::fs::PermissionsExt;
 
+    use catalog_api_v1::types::ResolvedPackageDescriptor;
+    use chrono::{DateTime, Utc};
     use indoc::{formatdoc, indoc};
     use serial_test::serial;
     use tempfile::{tempdir_in, TempDir};
     use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
 
-    use self::catalog::MockClient;
+    use self::catalog::{CatalogPage, MockClient, ResolvedPackageGroup};
     use self::test_helpers::new_core_environment;
     use super::*;
+    use crate::data::Version;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_global_lock};
+    use crate::models::manifest::DEFAULT_GROUP_NAME;
+    use crate::models::{lockfile, manifest};
 
     /// Create a CoreEnvironment with an empty manifest
     ///
@@ -1226,6 +1231,62 @@ mod tests {
         env_view
             .upgrade(&flox, &[])
             .expect("upgrade should succeed with catalog client");
+    }
+
+    /// Check that with an empty list of packages to upgrade, all packages are upgraded
+    // TODO: add fixtures for resolve mocks if we add more of these tests
+    #[test]
+    fn upgrade_with_empty_list_upgrades_all() {
+        let (mut env_view, _flox, _temp_dir_handle) = empty_core_environment();
+
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        let (foo_iid, foo_descriptor, foo_locked) = lockfile::tests::fake_package("foo", None);
+        manifest.install.insert(foo_iid.clone(), foo_descriptor);
+        let lockfile = lockfile::LockedManifestCatalog {
+            version: Version,
+            packages: vec![foo_locked.clone()],
+            manifest: manifest.clone(),
+        };
+
+        let lockfile_str = serde_json::to_string_pretty(&lockfile).unwrap();
+
+        fs::write(env_view.lockfile_path(), lockfile_str).unwrap();
+
+        let mut mock_client = MockClient::new(None::<&str>).unwrap();
+        mock_client.push_resolve_response(vec![ResolvedPackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            pages: vec![CatalogPage {
+                packages: Some(vec![ResolvedPackageDescriptor {
+                    attr_path: "foo".to_string(),
+                    broken: false,
+                    derivation: "new derivation".to_string(),
+                    description: Some("description".to_string()),
+                    install_id: foo_iid.clone(),
+                    license: None,
+                    locked_url: "locked-url".to_string(),
+                    name: "foo".to_string(),
+                    outputs: None,
+                    outputs_to_install: None,
+                    pname: "foo".to_string(),
+                    rev: "rev".to_string(),
+                    rev_count: 42,
+                    rev_date: DateTime::<Utc>::MIN_UTC,
+                    scrape_date: DateTime::<Utc>::MIN_UTC,
+                    stabilities: None,
+                    unfree: None,
+                    version: "1.0".to_string(),
+                }]),
+                page: 1,
+                url: "url".to_string(),
+            }],
+            system: "system".to_string(),
+        }]);
+
+        let (_, upgraded_packages) = env_view
+            .upgrade_with_catalog_client(&mock_client, &[], &manifest)
+            .unwrap();
+
+        assert!(upgraded_packages.len() == 1);
     }
 
     /// replacing an environment should fail if a backup exists

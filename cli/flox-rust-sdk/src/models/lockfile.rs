@@ -812,7 +812,7 @@ pub struct LockfileCheckWarning {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::collections::HashMap;
     use std::vec;
 
@@ -1026,7 +1026,7 @@ mod tests {
         })
     });
 
-    fn fake_package(
+    pub(crate) fn fake_package(
         name: &str,
         group: Option<&str>,
     ) -> (String, ManifestPackageDescriptor, LockedPackageCatalog) {
