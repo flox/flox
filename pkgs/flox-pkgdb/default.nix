@@ -231,11 +231,12 @@ in
               then gdb
               else lldb
             )
-          ]
-          ++ (lib.optionals stdenv.isLinux [
-            valgrind
-            massif-visualizer
-          ]);
+          ];
+          # Uncomment if you need to do memory profiling/sanitization.
+          #++ (lib.optionals stdenv.isLinux [
+          #  valgrind
+          #  massif-visualizer
+          #]);
 
         devEnvs =
           envs
