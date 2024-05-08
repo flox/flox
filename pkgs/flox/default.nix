@@ -12,7 +12,8 @@
   FLOX_VERSION ? null,
 }: let
   version =
-    if (FLOX_VERSION != null) then FLOX_VERSION
+    if (FLOX_VERSION != null)
+    then FLOX_VERSION
     else lib.fileContents "${inputs.self}/VERSION";
 in
   symlinkJoin {
