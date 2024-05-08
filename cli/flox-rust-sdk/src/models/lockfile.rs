@@ -1404,8 +1404,10 @@ pub(crate) mod tests {
         assert_eq!(actual_params, expected_params);
     }
 
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    /// 1) If the package is unchanged, it should not be re-resolved.
     #[test]
-    fn make_params_unlock_if_invalidated() {
+    fn make_params_seeded_unchanged() {
         let (foo_before_iid, foo_before_descriptor, foo_before_locked) = fake_package("foo", None);
         let mut manifest_before = manifest::test::empty_catalog_manifest();
         manifest_before
@@ -1419,7 +1421,6 @@ pub(crate) mod tests {
         };
 
         // ---------------------------------------------------------------------
-        // 1) if the package is unchanged, it should not be re-resolved
 
         let actual_params =
             LockedManifestCatalog::collect_package_groups(&manifest_before, Some(&seed))
@@ -1430,9 +1431,27 @@ pub(crate) mod tests {
             actual_params[0].descriptors[0].derivation.as_ref(),
             Some(&foo_before_locked.derivation)
         );
+    }
+
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    /// 2) Changes that invalidate the locked package should cause it to be re-resolved.
+    ///    Here, the package path is changed.
+    #[test]
+    fn make_params_seeded_unlock_if_invalidated() {
+        let (foo_before_iid, foo_before_descriptor, foo_before_locked) = fake_package("foo", None);
+        let mut manifest_before = manifest::test::empty_catalog_manifest();
+        manifest_before
+            .install
+            .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
+
+        let seed = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest_before.clone(),
+            packages: vec![foo_before_locked.clone()],
+        };
 
         // ---------------------------------------------------------------------
-        // 2) changes to the described pkg-path invalidate the derivation
+
         let (foo_after_iid, mut foo_after_descriptor, _) = fake_package("foo", None);
         foo_after_descriptor.pkg_path = "bar".to_string();
         assert!(foo_after_descriptor.invalidates_existing_resolution(&foo_before_descriptor));
@@ -1449,9 +1468,28 @@ pub(crate) mod tests {
         // if the package changed, it should be re-resolved
         // i.e. the derivation should be None
         assert_eq!(actual_params[0].descriptors[0].derivation.as_ref(), None);
+    }
+
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    /// 3) Changes to the descriptor that do not invalidate the derivation
+    ///    should not cause it to be re-resolved.
+    ///    Here, the priority is changed.
+    #[test]
+    fn make_params_seeded_changed_no_invalidation() {
+        let (foo_before_iid, foo_before_descriptor, foo_before_locked) = fake_package("foo", None);
+        let mut manifest_before = manifest::test::empty_catalog_manifest();
+        manifest_before
+            .install
+            .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
+
+        let seed = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest_before.clone(),
+            packages: vec![foo_before_locked.clone()],
+        };
 
         // ---------------------------------------------------------------------
-        // 3) changes to the priority do not invalidate the derivation
+
         let (foo_after_iid, mut foo_after_descriptor, _) = fake_package("foo", None);
         foo_after_descriptor.priority = Some(10);
         assert!(!foo_after_descriptor.invalidates_existing_resolution(&foo_before_descriptor));
