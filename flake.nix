@@ -30,11 +30,6 @@
   inputs.fenix.url = "github:nix-community/fenix";
   inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
 
-  # This is needed to be able to calculate `git describe` format version of flox
-  # without running `git describe`
-  inputs.flox-latest.url = "git+ssh://git@github.com/flox/flox?ref=refs/tags/v1.0.3&rev=c50d78782713d19d6c790af271c8819b89b1a253";
-  inputs.flox-latest.flake = false;
-
   # -------------------------------------------------------------------------- #
 
   outputs = {
@@ -44,7 +39,6 @@
     pre-commit-hooks,
     crane,
     fenix,
-    flox-latest,
     ...
   } @ inputs: let
     # Given a function `fn' which takes system names as an argument, produce an

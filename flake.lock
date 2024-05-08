@@ -75,24 +75,6 @@
         "type": "github"
       }
     },
-    "flox-latest": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1712673935,
-        "narHash": "sha256-PdGM5BOpebs6sdM3qCPh/W5R/0o6RSgSrAG5qEvL7ms=",
-        "ref": "refs/tags/v1.0.3",
-        "rev": "c50d78782713d19d6c790af271c8819b89b1a253",
-        "revCount": 1173,
-        "type": "git",
-        "url": "ssh://git@github.com/flox/flox"
-      },
-      "original": {
-        "ref": "refs/tags/v1.0.3",
-        "rev": "c50d78782713d19d6c790af271c8819b89b1a253",
-        "type": "git",
-        "url": "ssh://git@github.com/flox/flox"
-      }
-    },
     "gitignore": {
       "inputs": {
         "nixpkgs": [
@@ -190,7 +172,6 @@
       "inputs": {
         "crane": "crane",
         "fenix": "fenix",
-        "flox-latest": "flox-latest",
         "nixpkgs": "nixpkgs",
         "nixpkgs-bear": "nixpkgs-bear",
         "pre-commit-hooks": "pre-commit-hooks",
