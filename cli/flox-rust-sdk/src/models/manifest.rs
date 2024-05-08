@@ -3,6 +3,7 @@ use std::ops::{Deref, DerefMut};
 use std::process::Command;
 use std::str::FromStr;
 
+use indoc::indoc;
 use log::debug;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
@@ -32,7 +33,8 @@ pub struct RawManifest(toml_edit::DocumentMut);
 impl RawManifest {
     pub fn new(systems: Vec<&str>, customization: &InitCustomization) -> RawManifest {
         let mut manifest = DocumentMut::new();
-        // Add system to `systems` array
+
+        // Add `systems` array
         manifest[MANIFEST_SYSTEMS_ARRAY_KEY] = value(Array::from_iter(systems));
 
         // Add packages to install
@@ -42,10 +44,17 @@ impl RawManifest {
                 .map(|pkg| (pkg.id.clone(), Value::InlineTable(InlineTable::from(pkg))))
                 .collect();
             manifest[MANIFEST_INSTALL_TABLE_KEY] = Item::Table(Table::from_iter(packages));
+        } else {
+            // Add example packages comment
+            // The install method adds a newline, so add one here as well
+            let _ = indoc! {r#"
+                # hello.pkg-path = "hello"
+                # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
+            "#};
         }
 
-        // TODO: Replace profile
-        if let Some(ref _custom_profile) = customization.profile {
+        // Replace the profile section
+        if let Some(ref _custom_profile) = customization.profile_common {
             // .map(|table| table.insert("common", indent::indent_all_by(2, custom_profile)))
             // manifest[MANIFEST_PROFILE_TABLE_KEY];
             dbg!(MANIFEST_PROFILE_TABLE_KEY);
@@ -360,7 +369,7 @@ impl From<&PackageToInstall> for Vec<(&'static str, String)> {
 
 impl From<&PackageToInstall> for InlineTable {
     fn from(val: &PackageToInstall) -> Self {
-        InlineTable::from_iter(Vec::from(val).into_iter())
+        InlineTable::from_iter(Vec::from(val))
     }
 }
 
@@ -621,7 +630,6 @@ pub fn temporary_parse_descriptor(descriptor: &str) -> Result<PackageToInstall, 
 
 #[cfg(test)]
 mod test {
-    use indoc::indoc;
     use pretty_assertions::assert_eq;
 
     use super::*;

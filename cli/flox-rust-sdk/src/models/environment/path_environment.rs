@@ -435,8 +435,8 @@ impl PathEnvironment {
         }
 
         // Write `manifest.toml`
-        let write_res = fs::write(manifest_path, manifest.as_ref().to_string())
-            .map_err(EnvironmentError::WriteManifest);
+        let write_res =
+            fs::write(manifest_path, manifest.as_ref()).map_err(EnvironmentError::WriteManifest);
         if let Err(e) = write_res {
             debug!("writing manifest did not complete successfully");
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
@@ -458,6 +458,7 @@ impl PathEnvironment {
     /// Replace all placeholders in the manifest file contents
     ///
     /// TODO: we should probably be using toml_edit
+    /*
     fn replace_placeholders(
         contents: &String,
         system: &str,
@@ -547,6 +548,7 @@ impl PathEnvironment {
 
         replaced
     }
+    */
 
     /// Determine if the environment needs to be rebuilt
     /// based on the modification times of the manifest and the out link
@@ -589,7 +591,7 @@ pub mod test_helpers {
             pointer,
             tempdir_in(&flox.temp_dir).unwrap().into_path(),
             &flox.temp_dir,
-            &contents,
+            contents,
         )
         .unwrap()
     }
