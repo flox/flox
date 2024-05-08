@@ -26,17 +26,22 @@
         (lowPriority containerPkgs.coreutils) # for just the basic utils
       ];
     };
+    # Activate script requires writable /tmp.
+    extraCommands = ''
+      mkdir -m 1777 tmp
+    '';
     config = {
-      # * run -it # [interactive, no args]
-      #   -> runs <Entrypoint> <Cmd>
-      #   -> bash -c -i bash --rcfile <activate>
-      #   (skip activation for the first bash and runs default rcfiles)
-      #
-      # * run cmd... # [non-interactive, with arguments]
-      #   -> BASH_ENV=<activate> bash -c cmd
-
-      # * follow convention of sh -c being container entrypoint
-      Entrypoint = ["${containerPkgs.bashInteractive}/bin/bash" "-c"];
+      # Use activate script as the [one] entrypoint capable of
+      # detecting interactive vs. command activation modes.
+      # Usage:
+      #   podman run -it
+      #     -> launches interactive shell with controlling terminal
+      #   podman run -i <cmd>
+      #     -> invokes interactive command
+      #   podman run -i [SIC]
+      #     -> launches crippled interactive shell with no controlling
+      #        terminal .. kinda useless
+      Entrypoint = ["${environment}/activate"];
 
       Env = lib.mapAttrsToList (name: value: "${name}=${value}") {
         "FLOX_ENV" = environment;
@@ -45,11 +50,9 @@
         "FLOX_PROMPT_COLOR_2" = "141";
         "_FLOX_ACTIVE_ENVIRONMENTS" = "[]";
         "FLOX_SOURCED_FROM_SHELL_RC" = "1"; # don't source from shell rc (again)
-        "BASH_ENV" = "${environment}/activate/bash";
+        "_FLOX_FORCE_INTERACTIVE" = "1"; # Required when running podman without "-t"
+        "FLOX_SHELL" = "${containerPkgs.bashInteractive}/bin/bash";
       };
-
-      # source original .bashrc, then start another shell that runs activation
-      Cmd = ["-i" "${containerPkgs.bashInteractive}/bin/bash --rcfile ${environment}/activate/bash"];
     };
   };
 in

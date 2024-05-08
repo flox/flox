@@ -1,0 +1,33 @@
+[hook]
+
+on-activate = """
+  if [ -n "$_already_ran_hook_on_activate" ]; then
+    echo "ERROR: hook section sourced twice"
+    exit 1
+  else
+    echo "sourcing hook.on-activate for first time"
+  fi
+  export _already_ran_hook_on_activate=1
+"""
+
+[profile]
+
+bash = """
+  if [ -n "$_already_ran_profile_bash" ]; then
+    echo "ERROR: profile section sourced twice" >&2
+    exit 1
+  else
+    echo "sourcing profile.bash for first time" >&2
+  fi
+  export _already_ran_profile_bash=1
+"""
+
+zsh = """
+  if [ -n "$_already_ran_profile_zsh" ]; then
+    echo "ERROR: profile section sourced twice" >&2
+    exit 1
+  else
+    echo "sourcing profile.zsh for first time" >&2
+  fi
+  export _already_ran_profile_zsh=1
+"""

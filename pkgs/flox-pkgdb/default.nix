@@ -28,6 +28,8 @@
   bats,
   git,
   coreutils,
+  gnused,
+  procps,
   parallel,
   llvm, # for `llvm-symbolizer'
   gdb ? throw "`gdb' is required for debugging with `g++'",
@@ -77,15 +79,9 @@
         joined;
 
       # Used by `buildenv' to set shell prompts on activation.
-      SET_PROMPT_BASH_SH = builtins.path {
-        name = "set-prompt.bash.sh";
-        path = ../../pkgdb/src/buildenv/assets/set-prompt.bash.sh;
-      };
-
-      # Used by `buildenv' to set shell prompts on activation.
-      SET_PROMPT_ZSH_SH = builtins.path {
-        name = "set-prompt.zsh.sh";
-        path = ../../pkgdb/src/buildenv/assets/set-prompt.zsh.sh;
+      ACTIVATE_D_SCRIPTS_DIR = builtins.path {
+        name = "flox-activate.d";
+        path = ../../pkgdb/src/buildenv/assets/activate.d;
       };
 
       # Used by `buildenv --container' to create a container builder script.
@@ -94,8 +90,12 @@
         path = ../../pkgdb/src/buildenv/assets/mkContainer.nix;
       };
 
-      # The Bash executable to use for `hook.on-activate`
-      FLOX_BASH_BIN = "${bash}/bin/bash";
+      # Packages required for the (bash) activate script.
+      FLOX_BASH_PKG = bash;
+      FLOX_COREUTILS_PKG = coreutils;
+      FLOX_GNUSED_PKG = gnused;
+      FLOX_PROCPS_PKG = procps;
+      FLOX_CACERT_PKG = cacert;
 
       # used so that `nix` calls that require an SSL cert don't fail
       NIXPKGS_CACERT_BUNDLE_CRT =
@@ -181,7 +181,7 @@ in
         runHook preConfigure;
         export PREFIX="$out";
         echo "PROFILE_D_SCRIPTS_DIR: $PROFILE_D_SCRIPTS_DIR" >&2;
-        echo "SET_PROMPT_BASH_SH: $SET_PROMPT_BASH_SH" >&2;
+        echo "ACTIVATE_D_SCRIPTS_DIR: $ACTIVATE_D_SCRIPTS_DIR" >&2;
         if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
           makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
         fi

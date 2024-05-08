@@ -335,7 +335,7 @@ impl Provider for PoetryPyProject {
         };
 
         InitCustomization {
-            profile: Some(
+            hook_on_activate: Some(
                 // TODO: when we support fish, we'll need to source activate.fish
                 indoc! {r#"
                 # Setup a Python virtual environment
@@ -347,10 +347,25 @@ impl Provider for PoetryPyProject {
                   poetry lock --quiet
                 fi
 
-                echo "Activating poetry virtual environment"
-                source "$(poetry env info --path)/bin/activate"
-
-                poetry install --quiet"#}
+                # Quietly activate venv and install packages in a subshell so
+                # that the venv can be freshly activated in the profile section.
+                (
+                  source "$(poetry env info --path)/bin/activate"
+                  poetry install --quiet
+                )"#}
+                .to_string(),
+            ),
+            profile_common: None,
+            profile_bash: Some(
+                indoc! {r#"
+                echo "Activating poetry virtual environment" >&2
+                source "$(poetry env info --path)/bin/activate""#}
+                .to_string(),
+            ),
+            profile_zsh: Some(
+                indoc! {r#"
+                echo "Activating poetry virtual environment" >&2
+                source "$(poetry env info --path)/bin/activate""#}
                 .to_string(),
             ),
             packages: Some(vec![
@@ -509,24 +524,38 @@ impl Provider for PyProject {
         };
 
         InitCustomization {
-            profile: Some(
+            hook_on_activate: Some(
                 // TODO: when we support fish, we'll need to source activate.fish
                 indoc! {r#"
                 # Setup a Python virtual environment
 
-                PYTHON_DIR="$FLOX_ENV_CACHE/python"
+                export PYTHON_DIR="$FLOX_ENV_CACHE/python"
                 if [ ! -d "$PYTHON_DIR" ]; then
                   echo "Creating python virtual environment in $PYTHON_DIR"
                   python -m venv "$PYTHON_DIR"
                 fi
 
-                echo "Activating python virtual environment"
-                source "$PYTHON_DIR/bin/activate"
-
-                # install the dependencies for this project based on pyproject.toml
-                # <https://pip.pypa.io/en/stable/cli/pip_install/>
-
-                pip install -e . --quiet"#}
+                # Quietly activate venv and install packages in a subshell so
+                # that the venv can be freshly activated in the profile section.
+                (
+                  source "$PYTHON_DIR/bin/activate"
+                  # install the dependencies for this project based on pyproject.toml
+                  # <https://pip.pypa.io/en/stable/cli/pip_install/>
+                  pip install -e . --quiet
+                )"#}
+                .to_string(),
+            ),
+            profile_common: None,
+            profile_bash: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate""#}
+                .to_string(),
+            ),
+            profile_zsh: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate""#}
                 .to_string(),
             ),
             packages: Some(vec![PackageToInstall {
@@ -637,21 +666,36 @@ impl Provider for Requirements {
             })
             .join("\n");
         InitCustomization {
-            profile: Some(
+            hook_on_activate: Some(
                 // TODO: when we support fish, we'll need to source activate.fish
                 formatdoc! {r#"
                 # Setup a Python virtual environment
 
-                PYTHON_DIR="$FLOX_ENV_CACHE/python"
+                export PYTHON_DIR="$FLOX_ENV_CACHE/python"
                 if [ ! -d "$PYTHON_DIR" ]; then
                   echo "Creating python virtual environment in $PYTHON_DIR"
                   python -m venv "$PYTHON_DIR"
                 fi
 
-                echo "Activating python virtual environment"
-                source "$PYTHON_DIR/bin/activate"
-
-                {pip_cmds}"#}
+                # Quietly activate venv and install packages in a subshell so
+                # that the venv can be freshly activated in the profile section.
+                (
+                  source "$PYTHON_DIR/bin/activate"
+                  {pip_cmds}
+                )"#}
+                .to_string(),
+            ),
+            profile_common: None,
+            profile_bash: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate""#}
+                .to_string(),
+            ),
+            profile_zsh: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate""#}
                 .to_string(),
             ),
             packages: Some(vec![PackageToInstall {

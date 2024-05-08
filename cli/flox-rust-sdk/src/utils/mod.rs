@@ -162,3 +162,16 @@ pub fn traceable_path(p: &impl AsRef<Path>) -> impl tracing::Value {
     let path = p.as_ref();
     path.display().to_string()
 }
+
+#[cfg(any(test, feature = "test"))]
+pub fn proptest_chrono_strategy(
+) -> impl proptest::strategy::Strategy<Value = chrono::DateTime<chrono::Utc>> {
+    use chrono::TimeZone;
+    use proptest::prelude::*;
+
+    let start = chrono::Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
+    let end = chrono::Utc.with_ymd_and_hms(2100, 1, 1, 0, 0, 0).unwrap();
+
+    (start.timestamp()..end.timestamp())
+        .prop_map(|timestamp| chrono::Utc.timestamp_opt(timestamp, 0).unwrap())
+}

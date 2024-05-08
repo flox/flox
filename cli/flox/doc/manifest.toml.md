@@ -27,8 +27,8 @@ tables:
 
 - [`[install]`](#install)
 - [`[vars]`](#vars)
-- [`[profile]`](#profile)
 - [`[hook]`](#hook)
+- [`[profile]`](#profile)
 - [`[options]`](#options)
 
 ## `[install]`
@@ -172,7 +172,7 @@ Each option is described below:
     an exact match,
     otherwise the `version` string is matched as a semver range.
     Versions that don't conform to semver must be specified with '='.
-    
+
     The semantic version can be specified with the typical qualifiers such as
     `^`, `>=`, etc.
     Semantic versions that do not specify all three fields
@@ -215,7 +215,7 @@ Each option is described below:
     and instead has to do with internal Flox implementation details.
     The abs-path can be specified for all systems by using `*` or `null` as
     the system.
-    
+
     You should rarely ever need this option and should instead prefer the
     `pkg-path` option.
 
@@ -253,67 +253,96 @@ DB_URL = "http://localhost:2000"
 SERVER_PORT = "3000"
 ```
 
-## `[profile]`
-
-The `[profile]` section of the manifest allows you to specify scripts that will
-be *sourced* by your shell immediately after activating the environment.
-These scripts can be used to perform additional setup for a consumer of the
-environment e.g. spawning a background process, dynamically setting environment
-variables, or creating files and directories.  The environment variables
-declared in the `[vars]` section can be used in the `profile` scripts.
-
-```toml
-[profile]
-common = """
-    export SERVER_URL="http://localhost:$SERVER_PORT"
-"""
-
-bash = """
-    export MYSHELL="bash"
-"""
-
-zsh = """
-    export MYSHELL="zsh"
-"""
-```
-
-The `profile.common` script is intended to be common setup that can be sourced
-by any shell, but it is your responsibility to make sure that the script is
-compatible with any shells that may consume the environment.  The `profile.bash`
-and `profile.zsh` scripts are sourced *after* the `profile.common` script, and
-are only sourced by the corresponding shell.  The shell-specific profile scripts
-are intended to contain any shell functions, aliases, variables, etc that could
-be specific to a user's shell.
-
 ## `[hook]`
 
-The `[hook]` section of the manifest allows you to specify scripts that are
-*executed* after the `profile` scripts have been sourced.
-Since hooks run after activation, the environment variables in the `[vars]`
-section may be referenced within the hook, as well as anything sourced from the
-`profile` scripts.  There is currently only one hook defined for use, the
-`on-activate` hook.
+The `on-activate` script in the `[hook]` section is useful for performing
+initialization in a predictable Bash shell environment.
 
 ### `on-activate`
-The `on-activate` script is *executed* non-interactively in a Bash subshell
-after the environment is activated.  This is useful for environment
-initialization that you want done in a consistent shell so that you don't need
-to worry about shell compatibility.
+
+The `on-activate` script is sourced from a **bash** shell,
+and it can be useful for spawning processes, dynamically setting environment
+variables, and creating files and directories to be used by the subsequent
+profile scripts, commands, and shells.
+
+Hook scripts inherit environment variables set in the `[vars]` section,
+and variables set here will in turn be inherited by the `[profile]` scripts
+described below.
+
+Any output written to `stdout` in a hook script is redirected to `stderr` to
+avoid it being mixed with the output of profile section scripts that write to
+`stdout` for "in-place" activations.
 
 ```toml
 [hook]
 on-activate = """
-    mkdir -p data_dir
+    # Interact with the tty as you would in any script
+    echo "Starting up $FLOX_ENV_DESCRIPTION environment ..."
+    read -e -p "Favourite colour or favorite color? " value
+
+    # Set variables, create files and directories
+    venv_dir="$(mktemp -d)"
+    export venv_dir
+
+    # Perform initialization steps, e.g. create a python venv
+    python -m venv "$venv_dir"
+
+    # Invoke apps that configure the environment via stdout
+    eval "$(ssh-agent)"
 """
 ```
 
-Since the script runs in a sub-shell, it cannot modify environment variables in
-the user's shell.
+The `on-activate` script is not re-run when activations are nested.
+A nested activation can occur when an environment is already active and either
+`eval "$(flox activate)"` or `flox activate -- CMD` is run.
+In this scenario, `on-activate` is not re-run.
+Currently, environment variables set by the first run of the `on-activate`
+script are captured and then later set by the nested activation,
+but this behavior may change.
+
+It is best to write hooks defensively, assuming the user is using the
+environment from any directory on their machine.
 
 ### `script` - DEPRECATED
-This `script` option was previously the only way to define a script that is
-*sourced* by the user's interactive shell.  This functionality has been replaced
-by the `[profile]` section.  It will be removed in a later release.
+This field was deprecated in favor of the `profile` section.
+It will be removed in a later release.
+
+## `[profile]`
+
+Scripts defined in the `[profile]` section are sourced by *your shell* and
+inherit environment variables set in the `[vars]` section and by the `[hook]`
+scripts.
+The `profile.common` script is sourced for every shell,
+and special care should be taken to ensure compatibility with all shells.
+The `profile.<shell>` scripts are then sourced *after* `profile.common` by the
+corresponding shell.
+
+These scripts are useful for performing shell-specific customizations such as
+setting aliases or configuring the prompt.
+
+```toml
+[profile]
+common = """
+    echo "it's gettin' flox in here"
+"""
+bash = """
+    source $venv_dir/bin/activate
+    alias foo="echo bar"
+    set -o vi
+"""
+zsh = """
+    source $venv_dir/bin/activate
+    alias foo="echo bar"
+    bindkey -v
+"""
+```
+
+Profile scripts are re-run for nested activations.
+A nested activation can occur when an environment is already active and either
+`eval "$(flox activate)"` or `flox activate -- CMD` is run.
+In this scenario, profile scripts are run a second time.
+Re-running profile scripts allows aliases to be set in subshells that inherit
+from a parent shell with an already active environment.
 
 ## `[options]`
 

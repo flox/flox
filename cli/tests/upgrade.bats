@@ -144,7 +144,7 @@ EOF
 
   run "$FLOX_BIN" upgrade hello
   assert_failure
-  assert_output --partial "package in a group with multiple packages"
+  assert_output --partial "package in the group 'toplevel' with multiple packages"
 }
 
 @test "check confirmation when all packages are up to date" {

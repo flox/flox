@@ -1,3 +1,8 @@
+# Source /etc/zshrc and "${FLOX_ORIG_ZDOTDIR:-$HOME}/.zshrc" if they exist
+# prior to performing Flox-specific initialization.
+#
+# See README.md for more information on the initialization process.
+
 zshrc="${FLOX_ORIG_ZDOTDIR:-$HOME}/.zshrc"
 flox_zdotdir="$ZDOTDIR"
 
@@ -8,10 +13,10 @@ flox_zdotdir="$ZDOTDIR"
 # after we reset ZDOTDIR.
 if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
 then
-	export ZDOTDIR="$FLOX_ORIG_ZDOTDIR"
-	unset FLOX_ORIG_ZDOTDIR
+    export ZDOTDIR="$FLOX_ORIG_ZDOTDIR"
+    unset FLOX_ORIG_ZDOTDIR
 else
-	unset ZDOTDIR
+    unset ZDOTDIR
 fi
 
 if [ -f /etc/zshrc ]

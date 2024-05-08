@@ -21,7 +21,9 @@ fn main() {
 }
 
 fn generate_client(spec: &OpenAPI) -> String {
-    let mut generator = progenitor::Generator::default();
+    let mut settings = progenitor::GenerationSettings::default();
+    settings.with_derive("PartialEq");
+    let mut generator = progenitor::Generator::new(&settings);
     let tokens = generator.generate_tokens(spec).unwrap();
     let ast = syn::parse2(tokens).unwrap();
     prettyplease::unparse(&ast)

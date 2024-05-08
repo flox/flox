@@ -73,6 +73,11 @@ pub struct FloxConfig {
     /// The URL of the FloxHub instance to use
     pub floxhub_url: Option<Url>,
 
+    /// The URL of the catalog instance to use
+    // Using a URL here adds an extra trailing slash,
+    // so just use a String.
+    pub catalog_url: Option<String>,
+
     /// Rule whether to change the shell prompt in activated environments
     pub shell_prompt: Option<EnvironmentPromptConfig>,
 }
