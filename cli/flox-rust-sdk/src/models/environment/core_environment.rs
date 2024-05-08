@@ -634,7 +634,7 @@ impl CoreEnvironment<ReadOnly> {
         // all packages matching the given groups or iids.
         // If no groups or iids are provided, all packages are unlocked.
         let seed_lockfile = if groups_or_iids.is_empty() {
-            debug!("no groups or iids provided, not unlocking all packages");
+            debug!("no groups or iids provided, unlocking all packages");
             None
         } else {
             existing_lockfile.map(|mut lockfile| {
