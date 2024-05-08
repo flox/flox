@@ -16,7 +16,6 @@
   openssl,
   pkg-config,
   pkgsFor,
-  rust-analyzer,
   rustfmt ? rust-toolchain.rustfmt,
   targetPlatform,
   zlib,
@@ -197,9 +196,6 @@ in
 
         devPackages = [
           rustfmt
-          rust-analyzer
-          rust-toolchain.rustc
-          rust-toolchain.clippy
         ];
 
         devEnvs =
