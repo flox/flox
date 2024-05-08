@@ -20,6 +20,8 @@
   targetPlatform,
   zlib,
 }: let
+  FLOX_VERSION = lib.fileContents ./../../VERSION;
+
   flox-src = builtins.path {
     name = "flox-src";
     path = "${./../../cli}";
@@ -87,7 +89,7 @@
         cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
       # The current version of flox being built
-      FLOX_VERSION = cargoToml.package.version;
+      inherit FLOX_VERSION;
 
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
@@ -110,12 +112,11 @@
       LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
     };
 
-  cargoToml = lib.importTOML (flox-src + "/flox/Cargo.toml");
-
   # incremental build of thrid party crates
   cargoDepsArtifacts = craneLib.buildDepsOnly {
-    pname = cargoToml.package.name;
-    version = cargoToml.package.version;
+    pname = "flox-cli";
+    version = FLOX_VERSION;
+
     src = craneLib.cleanCargoSource (craneLib.path flox-src);
 
     # runtime dependencies of the dependent crates
@@ -139,7 +140,7 @@
   };
 in
   craneLib.buildPackage ({
-      pname = cargoToml.package.name;
+      pname = "flox-cli";
       version = envs.FLOX_VERSION;
       src = flox-src;
 
