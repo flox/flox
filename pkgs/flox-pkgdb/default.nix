@@ -213,29 +213,29 @@ in
           doxygen
         ];
 
-        devPackages =
-          [
-            # For profiling
-            lcov
-            remake
-            # For IDEs
-            ccls
-            bear
-            # For lints/fmt
-            clang-tools_16
-            include-what-you-use
-            llvm # for `llvm-symbolizer'
-            # For debugging
-            (
-              if stdenv.cc.isGNU or false
-              then gdb
-              else lldb
-            )
-          ]
-          ++ (lib.optionals stdenv.isLinux [
-            valgrind
-            massif-visualizer
-          ]);
+        devPackages = [
+          # For profiling
+          lcov
+          remake
+          # For IDEs
+          ccls
+          bear
+          # For lints/fmt
+          clang-tools_16
+          include-what-you-use
+          llvm # for `llvm-symbolizer'
+          # For debugging
+          (
+            if stdenv.cc.isGNU or false
+            then gdb
+            else lldb
+          )
+        ];
+        # Uncomment if you need to do memory profiling/sanitization.
+        #++ (lib.optionals stdenv.isLinux [
+        #  valgrind
+        #  massif-visualizer
+        #]);
 
         devEnvs =
           envs
