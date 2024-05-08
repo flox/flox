@@ -13,11 +13,10 @@
 }: let
   fileVersion = lib.fileContents "${inputs.self}/VERSION";
   version =
-    if (FLOX_VERSION != null)
-    then FLOX_VERSION
-    else if self ? shortRev
-    then "${fileVersion}-g${self.shortRev}"
-    else "${fileVersion}-dirty";
+    if (FLOX_VERSION != null) then FLOX_VERSION
+    else if !(self ? revCount || self ? shortRev) then "${fileVersion}-dirty"
+    else if !(self ? revCount) then "${fileVersion}-g${self.shortRev}"
+    else fileVersion;
 in
   symlinkJoin {
     name = "flox";
