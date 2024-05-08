@@ -389,13 +389,15 @@ pub(crate) struct ProvidedPackage {
     pub name: String,
     /// Path to the package in the catalog
     /// Checked to be non-empty
-    pub rel_path: Vec<String>,
+    pub rel_path: String,
     /// Version of the package in the catalog
     /// "N/A" if not found
     ///
     /// Used for display purposes only,
     /// version constraints should be added based on the original query.
     pub display_version: String,
+    /// The actual version of the package
+    pub version: Option<String>,
 }
 
 impl TryFrom<SearchResult> for ProvidedPackage {
@@ -411,8 +413,9 @@ impl TryFrom<SearchResult> for ProvidedPackage {
 
         Ok(ProvidedPackage {
             name,
-            rel_path: value.rel_path,
-            display_version: value.version.unwrap_or("N/A".to_string()),
+            rel_path: value.rel_path.join("."),
+            display_version: value.version.clone().unwrap_or("N/A".to_string()),
+            version: value.version,
         })
     }
 }
@@ -421,9 +424,9 @@ impl From<ProvidedPackage> for PackageToInstall {
     fn from(value: ProvidedPackage) -> Self {
         PackageToInstall {
             id: value.name,
-            pkg_path: value.rel_path.join("."),
+            pkg_path: value.rel_path,
             input: None,
-            version: None,
+            version: value.version,
         }
     }
 }
@@ -501,12 +504,17 @@ mod tests {
         pub(crate) fn new(
             name: impl ToString,
             rel_path: impl IntoIterator<Item = impl ToString>,
-            display_version: impl ToString,
+            version: &str,
         ) -> Self {
             Self {
                 name: name.to_string(),
                 rel_path: rel_path.into_iter().map(|s| s.to_string()).collect(),
-                display_version: display_version.to_string(),
+                display_version: version.to_string(),
+                version: if version != "N/A" {
+                    Some(version.to_string())
+                } else {
+                    None
+                },
             }
         }
     }
