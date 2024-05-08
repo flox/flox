@@ -9,10 +9,10 @@
   flox-manpages,
   SENTRY_DSN ? null,
   SENTRY_ENV ? null,
-  VERSION ? null,
+  FLOX_VERSION ? null,
 }: let
   version =
-    if (VERSION == null) then VERSION
+    if (FLOX_VERSION != null) then FLOX_VERSION
     else lib.fileContents "${inputs.self}/VERSION";
 in
   symlinkJoin {
