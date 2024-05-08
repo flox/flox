@@ -386,12 +386,9 @@ impl PathEnvironment {
             manifest.to_string(),
         )?;
 
-        if let Some(ref packages) = customization.packages {
-            // Ignore the result, because we know there can't be packages already installed
-            // TODO: once we use toml_edit for replace_placeholders,
-            // we should add packages using insert_packages() in replace_placeholders
-            // and then do a build instead of calling `install`.
-            environment.install(packages, flox)?;
+        // Build environment if manifest has packages installed
+        if manifest.get_packages().is_some() {
+            environment.build(flox)?;
         }
 
         Ok(environment)
@@ -455,30 +452,7 @@ impl PathEnvironment {
         Self::open(flox, pointer, dot_flox_path, temp_dir)
     }
 
-    /// Replace all placeholders in the manifest file contents
-    ///
-    /// TODO: we should probably be using toml_edit
     /*
-    fn replace_placeholders(
-        contents: &String,
-        system: &str,
-        customization: &InitCustomization,
-    ) -> String {
-        // Replace system
-        let mut replaced = contents.replace(FLOX_SYSTEM_PLACEHOLDER, system);
-
-        // Don't add example packages if packages are being installed
-        let packages = if customization.packages.is_some() {
-            ""
-        } else {
-            // The install method adds a newline, so add one here as well
-            indoc! {r#"
-            # hello.pkg-path = "hello"
-            # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
-        "#}
-        };
-        replaced = replaced.replace(FLOX_INSTALL_PLACEHOLDER, packages);
-
         // Replace the hook section
         let default_hook = if let Some(ref hook_on_activate_script) = customization.hook_on_activate
         {
@@ -540,14 +514,6 @@ impl PathEnvironment {
             },
         };
         let replaced = replaced.replace(FLOX_PROFILE_PLACEHOLDER, &default_profile);
-
-        debug!(
-            "manifest was updated successfully: {}",
-            contents != &replaced
-        );
-
-        replaced
-    }
     */
 
     /// Determine if the environment needs to be rebuilt

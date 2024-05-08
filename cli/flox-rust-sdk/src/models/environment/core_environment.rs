@@ -103,6 +103,7 @@ impl<State> CoreEnvironment<State> {
     ///
     /// todo: should we always write the lockfile to disk?
     pub fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, CoreEnvironmentError> {
+        // println!("{}", &self.manifest_content().unwrap());
         let manifest: TypedManifest = toml::from_str(&self.manifest_content()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
 

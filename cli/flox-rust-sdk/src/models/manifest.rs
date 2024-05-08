@@ -7,7 +7,19 @@ use indoc::indoc;
 use log::debug;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
-use toml_edit::{self, value, Array, DocumentMut, Formatted, InlineTable, Item, Table, Value};
+use toml_edit::{
+    self,
+    value,
+    Array,
+    Decor,
+    DocumentMut,
+    Formatted,
+    InlineTable,
+    Item,
+    Key,
+    Table,
+    Value,
+};
 
 use super::environment::path_environment::InitCustomization;
 use crate::data::{System, Version};
@@ -18,10 +30,14 @@ pub(super) const DEFAULT_PRIORITY: usize = 5;
 
 /// Represents the `[install]` table key in manifest.toml
 pub const MANIFEST_INSTALL_TABLE_KEY: &str = "install";
-/// Represents the `[profile]` table key in manifest.toml
-pub const MANIFEST_PROFILE_TABLE_KEY: &str = "profile";
+/// Represents the `[vars]` table key in manifest.toml
+pub const MANIFEST_VARS_TABLE_KEY: &str = "vars";
 /// Represents the `[hook]` table key in manifest.toml
 pub const MANIFEST_HOOK_TABLE_KEY: &str = "hook";
+/// Represents the `[profile]` table key in manifest.toml
+pub const MANIFEST_PROFILE_TABLE_KEY: &str = "profile";
+/// Represents the `[options]` table key in manifest.toml
+pub const MANIFEST_OPTIONS_TABLE_KEY: &str = "options";
 /// Represents the `systems = []` array key in manifest.toml
 pub const MANIFEST_SYSTEMS_ARRAY_KEY: &str = "systems";
 
@@ -34,34 +50,106 @@ impl RawManifest {
     pub fn new(systems: Vec<&str>, customization: &InitCustomization) -> RawManifest {
         let mut manifest = DocumentMut::new();
 
-        // Add `systems` array
-        manifest[MANIFEST_SYSTEMS_ARRAY_KEY] = value(Array::from_iter(systems));
-
-        // Add packages to install
-        if let Some(packages) = &customization.packages {
+        // `[install]` table
+        let mut install_table = if let Some(packages) = &customization.packages {
             let packages: Vec<(String, Value)> = packages
                 .iter()
                 .map(|pkg| (pkg.id.clone(), Value::InlineTable(InlineTable::from(pkg))))
                 .collect();
-            manifest[MANIFEST_INSTALL_TABLE_KEY] = Item::Table(Table::from_iter(packages));
+
+            Table::from_iter(packages)
         } else {
-            // Add example packages comment
-            // The install method adds a newline, so add one here as well
-            let _ = indoc! {r#"
+            // Add comment with example packages
+            let mut table = Table::new();
+
+            table.decor_mut().set_suffix(indoc! {r#"
+
                 # hello.pkg-path = "hello"
                 # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
-            "#};
-        }
+            "#});
 
-        // Replace the profile section
+            table
+        };
+
+        install_table.decor_mut().set_prefix(indoc! {r#"
+            #
+            # This is a Flox environment manifest.
+            # Visit flox.dev/docs/concepts/manifest/
+            # or see flox-edit(1), manifest.toml(1) for more information.
+            #
+
+            # List packages you wish to install in your environment inside
+            # the `[install]` section.
+        "#});
+
+        manifest.insert(MANIFEST_INSTALL_TABLE_KEY, Item::Table(install_table));
+
+        // `[vars]` table
+        let mut vars_table = Table::new();
+
+        vars_table.decor_mut().set_prefix(indoc! {r#"
+            # Set environment variables in the `[vars]` section. These variables may not
+            # reference once another, and are added to the environment without first
+            # expanding them. They are available for use in the `[profile]` and `[hook]`
+            # scripts.
+        "#});
+        vars_table.decor_mut().set_suffix(indoc! {r#"
+
+            # message = "Howdy"
+        "#});
+
+        manifest.insert(MANIFEST_VARS_TABLE_KEY, Item::Table(vars_table));
+
+        // TODO: `[hook]` table
+
+        // TODO: `[profile]` table
+        /*
         if let Some(ref _custom_profile) = customization.profile_common {
             // .map(|table| table.insert("common", indent::indent_all_by(2, custom_profile)))
             // manifest[MANIFEST_PROFILE_TABLE_KEY];
             dbg!(MANIFEST_PROFILE_TABLE_KEY);
             todo!();
         }
+        */
+
+        // `[options]` table
+        let mut options_table = Table::new();
+
+        options_table.decor_mut().set_prefix(indoc! {r#"
+            # Additional options can be set in the `[options]` section. Refer to
+            # manifest.toml(1) for a list of available options.
+        "#});
+
+        // `systems` array
+        options_table.insert_formatted(
+            &Key::new(MANIFEST_SYSTEMS_ARRAY_KEY).with_leaf_decor(Decor::new(
+                indoc! {r#"
+
+                    # An environment that works on one system is guaranteed to work on the same type
+                    # of system, but other systems may not have the same packages available, etc.
+                    # In order to use the environment on a system you must explicitly add it to the
+                    # `options.systems` list.
+                "#},
+                " ",
+            )),
+            value(Array::from_iter(systems)),
+        );
+
+        manifest.insert_formatted(
+            &Key::new(MANIFEST_OPTIONS_TABLE_KEY),
+            Item::Table(options_table),
+        );
 
         RawManifest(manifest)
+    }
+
+    pub fn get_packages(
+        &self,
+    ) -> std::option::Option<Vec<(Vec<&toml_edit::Key>, &toml_edit::Value)>> {
+        self.as_table()
+            .get(MANIFEST_INSTALL_TABLE_KEY)
+            .and_then(|item| item.as_table().map(|table| table.get_values()))
+            .and_then(|vec| if vec.is_empty() { Some(vec) } else { None })
     }
 
     /// Get the version of the manifest.
