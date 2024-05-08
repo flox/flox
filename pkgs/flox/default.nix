@@ -11,13 +11,17 @@
   SENTRY_ENV ? null,
   FLOX_VERSION ? null,
 }: let
+  fileVersion = lib.fileContents "${inputs.self}/VERSION";
   version =
     if (FLOX_VERSION != null)
-    then FLOX_VERSION
-    else lib.fileContents "${inputs.self}/VERSION";
+      then FLOX_VERSION
+    else if self ? shortRev
+      then "${fileVersion}-g${self.shortRev}"
+    else
+      "${fileVersion}-dirty";
 in
   symlinkJoin {
-    name = "${flox-cli.pname}-${version}";
+    name = "flox";
     inherit version;
 
     paths = [flox-cli flox-manpages];
