@@ -894,18 +894,31 @@ EOF
 @test "bash: test for infinite source loop" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
-  echo 'eval "$('"$FLOX_BIN"' activate -d '"$PWD"')"' >> "$HOME/.bashrc"
-  run timeout 1 bash -c 'eval "$("$FLOX_BIN" activate)"'
-  assert_success
+  cat << 'EOF' >> "$HOME/.bashrc"
+if [ -z "$ALREADY_SOURCED" ]; then
+  export ALREADY_SOURCED=1
+elif [ "$ALREADY_SOURCED" == 1 ]; then
+  export ALREADY_SOURCED=2
+else
+  exit 2
+fi
+
+eval "$("$FLOX_BIN" activate -d "$PWD")"
+EOF
+  bash -ic true
 }
 
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:zsh
 @test "zsh: test for infinite source loop" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
-  echo 'eval "$('"$FLOX_BIN"' activate -d '"$PWD"')"' >> "$HOME/.zshrc"
-  run timeout 1 zsh -c 'eval "$("$FLOX_BIN" activate)"'
-  assert_success
+  cat << 'EOF' >> "$HOME/.zshrc"
+[ "$ALREADY_SOURCED" == 1 ] && exit 2
+export ALREADY_SOURCED=1
+
+eval "$("$FLOX_BIN" activate -d "$PWD")"
+EOF
+  zsh -ic true
 }
 
 # ---------------------------------------------------------------------------- #
