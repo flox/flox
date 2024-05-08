@@ -135,6 +135,32 @@ pub struct ManifestPackageDescriptor {
     pub(crate) optional: bool,
 }
 
+impl ManifestPackageDescriptor {
+    /// Check if two package descriptors should have the same resolution.
+    /// This is used to determine if a package needs to be re-resolved
+    /// in the presence of an existing lock.
+    ///
+    /// * Descriptors are resolved per system,
+    ///   changing the supported systems does not invalidate _existing_ resolutions.
+    /// * Priority is not used in resolution, so it is ignored.
+    pub(super) fn invalidates_existing_resolution(&self, other: &Self) -> bool {
+        // unpack to avoid forgetting to update this method when new fields are added
+        let ManifestPackageDescriptor {
+            pkg_path,
+            pkg_group,
+            version,
+            optional,
+            systems: _,
+            priority: _,
+        } = self;
+
+        pkg_path != &other.pkg_path
+            || pkg_group != &other.pkg_group
+            || version != &other.version
+            || optional != &other.optional
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestVariables(BTreeMap<String, String>);
