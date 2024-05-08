@@ -593,6 +593,7 @@ mod tests {
 
     /// Pulling an environment without packages for the current platform should
     /// succeed if force is passed
+    // handle_pull_result() calls spin() which depends on tokio
     #[tokio::test]
     async fn test_handle_pull_result_2() {
         let owner = "owner".parse().unwrap();
@@ -643,6 +644,7 @@ mod tests {
     /// Pulling an environment without packages for the current platform should
     /// prompt about adding system
     /// When the user confirms, the environment should not be removed
+    // handle_pull_result() calls spin() which depends on tokio
     #[tokio::test]
     async fn test_handle_pull_result_4() {
         let owner = "owner".parse().unwrap();
