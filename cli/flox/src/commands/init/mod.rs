@@ -22,6 +22,7 @@ use flox_rust_sdk::models::lockfile::{
 use flox_rust_sdk::models::manifest::{insert_packages, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::scrape_input;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
+use flox_rust_sdk::providers::catalog::PackageResolutionInfo;
 use indoc::formatdoc;
 use log::debug;
 use path_dedot::ParseDot;
@@ -464,6 +465,28 @@ impl From<ProvidedPackage> for PackageToInstall {
     }
 }
 
+impl From<PackageResolutionInfo> for ProvidedPackage {
+    fn from(value: PackageResolutionInfo) -> Self {
+        Self {
+            name: value.install_id,
+            rel_path: value.attr_path,
+            display_version: value.version.clone(),
+            version: Some(value.version),
+        }
+    }
+}
+
+impl From<&PackageResolutionInfo> for ProvidedPackage {
+    fn from(value: &PackageResolutionInfo) -> Self {
+        Self {
+            name: value.install_id.clone(),
+            rel_path: value.attr_path.clone(),
+            display_version: value.version.clone(),
+            version: Some(value.version.clone()),
+        }
+    }
+}
+
 /// Get nixpkgs#rel_path optionally verifying that it satisfies a version constraint.
 fn get_default_package_if_compatible(
     flox: &Flox,
@@ -533,6 +556,14 @@ fn try_find_compatible_version(
 
 #[cfg(test)]
 mod tests {
+
+    use flox_rust_sdk::data::System;
+    use flox_rust_sdk::providers::catalog::{CatalogPage, ResolvedPackageGroup};
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
     impl ProvidedPackage {
         pub(crate) fn new(
             name: impl ToString,
@@ -552,10 +583,89 @@ mod tests {
         }
     }
 
-    use indoc::indoc;
-    use pretty_assertions::assert_eq;
+    // This function should really be a #[cfg(test)] method on ResolvedPackageGroup,
+    // but you can't import test features across crates
+    pub fn resolved_pkg_group_with_dummy_package(
+        group_name: &str,
+        system: &System,
+        install_id: &str,
+        pkg_path: &str,
+        version: &str,
+    ) -> ResolvedPackageGroup {
+        let pkg = PackageResolutionInfo {
+            attr_path: pkg_path.to_string(),
+            broken: false,
+            derivation: String::new(),
+            description: None,
+            install_id: install_id.to_string(),
+            license: None,
+            locked_url: String::new(),
+            name: String::new(),
+            outputs: None,
+            outputs_to_install: None,
+            pname: String::new(),
+            rev: String::new(),
+            rev_count: 0,
+            rev_date: chrono::offset::Utc::now(),
+            scrape_date: chrono::offset::Utc::now(),
+            stabilities: None,
+            unfree: None,
+            version: version.to_string(),
+        };
+        let page = CatalogPage {
+            packages: Some(vec![pkg]),
+            page: 0,
+            url: String::new(),
+        };
+        ResolvedPackageGroup {
+            name: group_name.to_string(),
+            pages: vec![page],
+            system: system.to_string(),
+        }
+    }
 
-    use super::*;
+    // This function should really be a #[cfg(test)] method on ResolvedPackageGroup,
+    // but you can't import test features across crates
+    #[allow(dead_code)]
+    pub fn push_dummy_package_to_first_page_of_pkg_group(
+        resolved_group: &mut ResolvedPackageGroup,
+        install_id: &str,
+        pkg_path: &str,
+        version: &str,
+    ) {
+        let pkg = PackageResolutionInfo {
+            attr_path: pkg_path.to_string(),
+            broken: false,
+            derivation: String::new(),
+            description: None,
+            install_id: install_id.to_string(),
+            license: None,
+            locked_url: String::new(),
+            name: String::new(),
+            outputs: None,
+            outputs_to_install: None,
+            pname: String::new(),
+            rev: String::new(),
+            rev_count: 0,
+            rev_date: chrono::offset::Utc::now(),
+            scrape_date: chrono::offset::Utc::now(),
+            stabilities: None,
+            unfree: None,
+            version: version.to_string(),
+        };
+        if let Some(page) = resolved_group.pages.first_mut() {
+            let mut pkgs = page.packages.take().unwrap();
+            pkgs.push(pkg);
+            page.packages = Some(pkgs);
+        } else {
+            let page = CatalogPage {
+                packages: Some(vec![pkg]),
+                page: 0,
+                url: String::new(),
+            };
+            resolved_group.pages = vec![page];
+        }
+    }
 
     /// combine_customizations() deduplicates a package and correctly concatenates customization scripts
     #[test]

@@ -396,7 +396,7 @@ impl ClientTrait for MockClient {
                 return Ok(resp);
             },
             Some(Response::Search(_)) => {
-                panic!("found search response, expect resolve response");
+                panic!("found search response, expected resolve response");
             },
             Some(Response::Error(err)) => {
                 return Err(ResolveError::Resolve(
@@ -426,7 +426,7 @@ impl ClientTrait for MockClient {
                 return Ok(resp);
             },
             Some(Response::Resolve(_)) => {
-                panic!("found resolve response, expect search response");
+                panic!("found resolve response, expected search response");
             },
             Some(Response::Error(err)) => {
                 return Err(SearchError::Search(
@@ -454,7 +454,7 @@ impl ClientTrait for MockClient {
                 return Ok(resp);
             },
             Some(Response::Resolve(_)) => {
-                panic!("found resolve response, expect search response");
+                panic!("found resolve response, expected search response");
             },
             Some(Response::Error(err)) => {
                 return Err(VersionsError::Versions(
@@ -558,6 +558,17 @@ pub struct ResolvedPackageGroup {
     pub system: System,
 }
 
+impl ResolvedPackageGroup {
+    pub fn packages(&self) -> impl Iterator<Item = PackageResolutionInfo> {
+        self.pages
+            .iter()
+            .filter_map(|page| page.packages.clone())
+            .flat_map(|pkgs| pkgs.into_iter())
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+}
+
 impl TryFrom<api_types::ResolvedPackageGroupInput> for ResolvedPackageGroup {
     type Error = CatalogClientError;
 
@@ -576,6 +587,7 @@ impl TryFrom<api_types::ResolvedPackageGroupInput> for ResolvedPackageGroup {
     }
 }
 
+/// Packages from a single revision of the catalog
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CatalogPage {
     pub packages: Option<Vec<PackageResolutionInfo>>,

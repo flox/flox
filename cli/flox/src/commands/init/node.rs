@@ -6,8 +6,13 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::environment::{global_manifest_lockfile_path, global_manifest_path};
 use flox_rust_sdk::models::manifest::PackageToInstall;
-use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
-use flox_rust_sdk::providers::catalog::ClientTrait;
+use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams};
+use flox_rust_sdk::providers::catalog::{
+    ClientTrait,
+    PackageDescriptor,
+    PackageGroup,
+    PackageResolutionInfo,
+};
 use indoc::{formatdoc, indoc};
 use semver::VersionReq;
 
@@ -186,7 +191,7 @@ impl Node {
             }) => {
                 match Self::try_find_compatible_version(flox, "nodejs", node_version, None).await? {
                     None => Some(PackageJSONVersion::Unavailable),
-                    Some(result) => Some(PackageJSONVersion::Found(result.try_into()?)),
+                    Some(result) => Some(PackageJSONVersion::Found(result)),
                 }
             },
             Some(_) => Some(PackageJSONVersion::Unspecified),
@@ -286,8 +291,7 @@ impl Node {
             None => Self::get_default_node_if_compatible(flox, None)
                 .await?
                 .ok_or(anyhow!("Flox couldn't find nodejs in nixpkgs"))?,
-        }
-        .try_into()?;
+        };
 
         // We assume that yarn is built with found_node, which is currently true
         // in nixpkgs
@@ -296,9 +300,7 @@ impl Node {
                 Self::try_find_compatible_version(flox, "yarn", yarn_version, None).await?
             },
             _ => Some(Self::get_default_package(flox, "yarn").await?),
-        }
-        .map(|yarn| yarn.try_into())
-        .transpose()?;
+        };
 
         Ok(found_yarn.map(|found_yarn| YarnInstall {
             yarn: found_yarn,
@@ -324,7 +326,7 @@ impl Node {
             RequestedNVMRCVersion::Found(version) => {
                 match Self::try_find_compatible_version(flox, "nodejs", &version, None).await? {
                     None => Some(NVMRCVersion::Unavailable),
-                    Some(result) => Some(NVMRCVersion::Found(result.try_into()?)),
+                    Some(result) => Some(NVMRCVersion::Found(result)),
                 }
             },
         };
@@ -374,22 +376,40 @@ impl Node {
         pname: &str,
         version: &str,
         rel_path: Option<Vec<String>>,
-    ) -> Result<Option<SearchResult>> {
-        let mut results = if let Some(client) = flox.catalog_client.as_ref() {
+    ) -> Result<Option<ProvidedPackage>> {
+        let pkg = if let Some(client) = flox.catalog_client.as_ref() {
             tracing::debug!(
                 pname,
                 version,
                 "using catalog client to find compatible package version"
             );
-            let mut results = client.package_versions(pname).await?;
-            let matching_version = results
-                .results
-                .iter()
-                .filter(|&res| res.version.as_ref().is_some_and(|v| v == version))
-                .cloned()
-                .collect::<Vec<_>>();
-            results.results = matching_version;
-            results
+            let resolved_groups = client
+                .resolve(vec![PackageGroup {
+                    descriptors: vec![PackageDescriptor {
+                        attr_path: pname.to_string(),
+                        install_id: pname.to_string(),
+                        version: Some(version.to_string()),
+                        allow_pre_releases: None,
+                        derivation: None,
+                    }],
+                    name: pname.to_string(),
+                    system: flox.system.clone(),
+                }])
+                .await?;
+            let pkg: Option<ProvidedPackage> = resolved_groups
+                .first()
+                .and_then(|pkg_group| pkg_group.pages.first())
+                .and_then(|page| page.packages.as_ref())
+                .and_then(|pkgs| pkgs.first().cloned())
+                .map(|pkg| {
+                    // Type-inference fails without the fully-qualified method call
+                    <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
+                });
+            let Some(pkg) = pkg else {
+                tracing::debug!(pname, version, "no compatible package version found");
+                return Ok(None);
+            };
+            pkg
         } else {
             tracing::debug!("using pkgdb to find default node version");
             let query = Query {
@@ -407,24 +427,20 @@ impl Node {
                 query,
             };
 
-            let (results, _) = do_search(&params)?;
-            results
+            let (mut results, _) = do_search(&params)?;
+            if results.results.is_empty() {
+                return Ok(None);
+            }
+            let matching_package = results.results.swap_remove(0);
+            matching_package.try_into()?
         };
 
-        if results.results.is_empty() {
-            return Ok(None);
-        }
-
-        let matching_package = results.results.swap_remove(0);
         tracing::debug!(
             pname,
-            version = matching_package
-                .version
-                .as_ref()
-                .unwrap_or(&"null".to_string()),
+            version = pkg.version.as_ref().unwrap_or(&"null".to_string()),
             "found matching package version"
         );
-        Ok(Some(matching_package))
+        Ok(Some(pkg))
     }
 
     /// Get nixpkgs#nodejs,
@@ -432,20 +448,36 @@ impl Node {
     async fn get_default_node_if_compatible(
         flox: &Flox,
         version: Option<String>,
-    ) -> Result<Option<SearchResult>> {
-        let mut results = if let Some(client) = flox.catalog_client.as_ref() {
+    ) -> Result<Option<ProvidedPackage>> {
+        let node = if let Some(client) = flox.catalog_client.as_ref() {
             tracing::debug!("using catalog client to find default node version");
-            let mut results = client.package_versions("nodejs").await?;
-            if let Some(version) = version {
-                let matching_version = results
-                    .results
-                    .iter()
-                    .filter(|&res| res.version.as_ref().is_some_and(|v| v == &version))
-                    .cloned()
-                    .collect::<Vec<_>>();
-                results.results = matching_version;
-            }
-            results
+            let resolved_groups = client
+                .resolve(vec![PackageGroup {
+                    descriptors: vec![PackageDescriptor {
+                        attr_path: "nodejs".to_string(),
+                        install_id: "nodejs".to_string(),
+                        version,
+                        allow_pre_releases: None,
+                        derivation: None,
+                    }],
+                    name: "nodejs".to_string(),
+                    system: flox.system.clone(),
+                }])
+                .await?;
+            let pkg: Option<ProvidedPackage> = resolved_groups
+                .first()
+                .and_then(|pkg_group| pkg_group.pages.first())
+                .and_then(|page| page.packages.as_ref())
+                .and_then(|pkgs| pkgs.first().cloned())
+                .map(|pkg| {
+                    // Type-inference fails without the fully-qualified method call
+                    <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
+                });
+            let Some(pkg) = pkg else {
+                tracing::debug!("no compatible node version found");
+                return Ok(None);
+            };
+            pkg
         } else {
             tracing::debug!("using pkgdb to find default node version");
             let query = Query {
@@ -462,15 +494,14 @@ impl Node {
                 query,
             };
 
-            let (results, _) = do_search(&params)?;
-            results
+            let (mut results, _) = do_search(&params)?;
+            if results.results.is_empty() {
+                tracing::debug!("no compatible node version found");
+                return Ok(None);
+            }
+            let node = results.results.swap_remove(0);
+            node.try_into()?
         };
-
-        if results.results.is_empty() {
-            tracing::debug!("no compatible node version found");
-            return Ok(None);
-        }
-        let node = results.results.swap_remove(0);
         tracing::debug!(
             version = node.version.as_ref().unwrap_or(&"null".to_string()),
             "found default node version"
@@ -479,10 +510,36 @@ impl Node {
     }
 
     /// Get a package as if installed with `flox install {package}`
-    async fn get_default_package(flox: &Flox, package: &str) -> Result<SearchResult> {
-        let mut results = if let Some(client) = flox.catalog_client.as_ref() {
+    async fn get_default_package(flox: &Flox, package: &str) -> Result<ProvidedPackage> {
+        let pkg = if let Some(client) = flox.catalog_client.as_ref() {
             tracing::debug!(package, "using catalog client to find default package");
-            client.package_versions(package).await?
+            let resolved_groups = client
+                .resolve(vec![PackageGroup {
+                    descriptors: vec![PackageDescriptor {
+                        attr_path: package.to_string(),
+                        install_id: package.to_string(),
+                        version: None,
+                        allow_pre_releases: None,
+                        derivation: None,
+                    }],
+                    name: package.to_string(),
+                    system: flox.system.clone(),
+                }])
+                .await?;
+            let pkg: Option<ProvidedPackage> = resolved_groups
+                .first()
+                .and_then(|pkg_group| pkg_group.pages.first())
+                .and_then(|page| page.packages.as_ref())
+                .and_then(|pkgs| pkgs.first().cloned())
+                .map(|pkg| {
+                    // Type-inference fails without the fully-qualified method call
+                    <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
+                });
+            let Some(pkg) = pkg else {
+                tracing::debug!("no default package found");
+                return Err(anyhow!("Flox couldn't find any versions of {package}"))?;
+            };
+            pkg
         } else {
             tracing::debug!(package, "using pkgdb to find default package");
             let query = Query::new(package, Features::parse()?.search_strategy, Some(1), false)?;
@@ -493,21 +550,19 @@ impl Node {
                 query,
             };
 
-            let (results, _) = do_search(&params)?;
-            results
+            let (mut results, _) = do_search(&params)?;
+            if results.results.is_empty() {
+                Err(anyhow!("Flox couldn't find any versions of {package}"))?
+            }
+            results.results.swap_remove(0).try_into()?
         };
 
-        if results.results.is_empty() {
-            Err(anyhow!("Flox couldn't find any versions of {package}"))?
-        }
-
-        let matched = results.results.swap_remove(0);
         tracing::debug!(
-            version = matched.version.as_ref().unwrap_or(&"null".to_string()),
+            version = pkg.version.as_ref().unwrap_or(&"null".to_string()),
             package,
             "found default package"
         );
-        Ok(matched)
+        Ok(pkg)
     }
 
     /// Return whether to skip the nodejs hook entirely, install a requested
@@ -690,9 +745,7 @@ impl Node {
         let node_version = Self::format_version_or_empty(
             match &node_install.node {
                 Some(found_node) => found_node.clone(),
-                None => Self::get_default_package(flox, "nodejs")
-                    .await?
-                    .try_into()?,
+                None => Self::get_default_package(flox, "nodejs").await?,
             }
             .version
             .as_ref(),
@@ -823,16 +876,17 @@ impl InitHook for Node {
 
 #[cfg(test)]
 mod tests {
+    use flox_rust_sdk::data::System;
     use flox_rust_sdk::flox::test_helpers::{
         flox_instance_with_global_lock,
         flox_instance_with_optional_floxhub_and_client,
     };
-    use flox_rust_sdk::models::search::SearchResults;
     use flox_rust_sdk::providers::catalog::Client;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
 
     use super::*;
+    use crate::commands::init::tests::resolved_pkg_group_with_dummy_package;
 
     #[test]
     fn test_parse_nvmrc_version_some() {
@@ -1109,8 +1163,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
-        assert!(yarn_install.node.version.unwrap().starts_with("18"));
         assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
+        assert!(yarn_install.node.version.unwrap().starts_with("18"));
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
 
@@ -1123,24 +1177,22 @@ mod tests {
             flox_instance_with_optional_floxhub_and_client(None, true);
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
-            client.push_search_response(SearchResults {
-                results: vec![SearchResult {
-                    rel_path: vec!["nodejs".to_string()],
-                    pname: Some(String::from("nodejs")),
-                    version: Some(String::from("18")),
-                    ..Default::default()
-                }],
-                count: None,
-            });
-            client.push_search_response(SearchResults {
-                results: vec![SearchResult {
-                    rel_path: vec!["yarn".to_string()],
-                    pname: Some(String::from("yarn")),
-                    version: Some(String::from("18")),
-                    ..Default::default()
-                }],
-                count: None,
-            })
+            // Response for unconstrained nodejs version
+            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                "nodejs_group",
+                &System::from("aarch64-darwin"),
+                "nodejs",
+                "nodejs",
+                "18",
+            )]);
+            // Response for unconstrained yarn version
+            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                "yarn_group",
+                &System::from("aarch64-darwin"),
+                "yarn",
+                "yarn",
+                "1.22",
+            )]);
         }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
             yarn: None,
@@ -1157,7 +1209,27 @@ mod tests {
     /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
     #[tokio::test]
     async fn test_try_find_compatible_yarn_node_available_catalog() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (mut flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(None, true);
+
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+            // Response when nodejs 18 is requested
+            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                "nodejs_group",
+                &System::from("aarch64-darwin"),
+                "nodejs",
+                "nodejs",
+                "18",
+            )]);
+            // Response for unconstrained yarn version
+            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                "yarn_group",
+                &System::from("aarch64-darwin"),
+                "yarn",
+                "yarn",
+                "1.22",
+            )]);
+        }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
             yarn: None,
             node: Some("18".to_string()),
@@ -1166,16 +1238,23 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, vec!["nodejs".to_string()]);
+        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.rel_path, vec!["yarn".to_string()]);
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
     }
 
     /// Test finding yarn with a version of node other than that of
     /// nixpkgs#nodejs fails
     #[tokio::test]
     async fn test_try_find_compatible_yarn_node_unavailable_catalog() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (mut flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(None, true);
+
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+            // The default version is something other than "20",
+            // so resolution fails and you get no groups back
+            client.push_resolve_response(vec![]);
+        }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
             yarn: None,
             node: Some("20".to_string()),
@@ -1189,7 +1268,27 @@ mod tests {
     /// Test finding yarn with the version nixpkgs#yarn specified succeeds
     #[tokio::test]
     async fn test_try_find_compatible_yarn_yarn_available_catalog() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (mut flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(None, true);
+
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+            // Response for unconstrained nodejs version
+            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                "nodejs_group",
+                &System::from("aarch64-darwin"),
+                "nodejs",
+                "nodejs",
+                "18",
+            )]);
+            // Reponse when yarn version 1 is requested
+            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                "yarn_group",
+                &System::from("aarch64-darwin"),
+                "yarn",
+                "yarn",
+                "1.22",
+            )]);
+        }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
             yarn: Some("1".to_string()),
             node: None,
@@ -1198,8 +1297,8 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, vec!["nodejs".to_string()]);
-        assert_eq!(yarn_install.yarn.rel_path, vec!["yarn".to_string()]);
+        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
 
@@ -1207,7 +1306,21 @@ mod tests {
     /// nixpkgs#yarn fails
     #[tokio::test]
     async fn test_try_find_compatible_yarn_yarn_unavailable_catalog() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (mut flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(None, true);
+
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+            // Response for unconstrained nodejs version
+            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                "nodejs_group",
+                &System::from("aarch64-darwin"),
+                "nodejs",
+                "nodejs",
+                "18",
+            )]);
+            // Response for yarn version 2 (resolution failure)
+            client.push_resolve_response(vec![]);
+        }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
             yarn: Some("2".to_string()),
             node: None,
@@ -1222,7 +1335,27 @@ mod tests {
     /// specified succeeds
     #[tokio::test]
     async fn test_try_find_compatible_yarn_both_available_catalog() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (mut flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(None, true);
+
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+            // Response for nodejs version 18
+            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                "nodejs_group",
+                &System::from("aarch64-darwin"),
+                "nodejs",
+                "nodejs",
+                "18",
+            )]);
+            // Response for yarn version 1
+            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                "yarn_group",
+                &System::from("aarch64-darwin"),
+                "yarn",
+                "yarn",
+                "1.22",
+            )]);
+        }
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
             yarn: Some("1".to_string()),
             node: Some("18".to_string()),
@@ -1234,129 +1367,6 @@ mod tests {
         assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
         assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
-        assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
-    }
-
-    ////////
-
-    /// Test finding yarn with no constraints succeeds
-    #[tokio::test]
-    async fn test_try_find_compatible_yarn_no_constraints_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
-
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
-            client.push_search_response(SearchResults {
-                results: vec![SearchResult {
-                    rel_path: vec!["nodejs".to_string()],
-                    pname: Some(String::from("nodejs")),
-                    version: Some(String::from("18")),
-                    ..Default::default()
-                }],
-                count: None,
-            });
-            client.push_search_response(SearchResults {
-                results: vec![SearchResult {
-                    rel_path: vec!["yarn".to_string()],
-                    pname: Some(String::from("yarn")),
-                    version: Some(String::from("18")),
-                    ..Default::default()
-                }],
-                count: None,
-            })
-        }
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
-            yarn: None,
-            node: None,
-        })
-        .await
-        .unwrap()
-        .unwrap();
-
-        assert_eq!(yarn_install.node.rel_path, vec!["nodejs".to_string()]);
-        assert_eq!(yarn_install.yarn.rel_path, vec!["yarn".to_string()]);
-    }
-
-    /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
-    #[tokio::test]
-    async fn test_try_find_compatible_yarn_node_available_catalog() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
-            yarn: None,
-            node: Some("18".to_string()),
-        })
-        .await
-        .unwrap()
-        .unwrap();
-
-        assert_eq!(yarn_install.node.rel_path, vec!["nodejs".to_string()]);
-        assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.rel_path, vec!["yarn".to_string()]);
-    }
-
-    /// Test finding yarn with a version of node other than that of
-    /// nixpkgs#nodejs fails
-    #[tokio::test]
-    async fn test_try_find_compatible_yarn_node_unavailable_catalog() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
-            yarn: None,
-            node: Some("20".to_string()),
-        })
-        .await
-        .unwrap();
-
-        assert_eq!(yarn_install, None);
-    }
-
-    /// Test finding yarn with the version nixpkgs#yarn specified succeeds
-    #[tokio::test]
-    async fn test_try_find_compatible_yarn_yarn_available_catalog() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
-            yarn: Some("1".to_string()),
-            node: None,
-        })
-        .await
-        .unwrap()
-        .unwrap();
-
-        assert_eq!(yarn_install.node.rel_path, vec!["nodejs".to_string()]);
-        assert_eq!(yarn_install.yarn.rel_path, vec!["yarn".to_string()]);
-        assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
-    }
-
-    /// Test finding yarn with a version of yarn other than that of
-    /// nixpkgs#yarn fails
-    #[tokio::test]
-    async fn test_try_find_compatible_yarn_yarn_unavailable_catalog() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
-            yarn: Some("2".to_string()),
-            node: None,
-        })
-        .await
-        .unwrap();
-
-        assert_eq!(yarn_install, None);
-    }
-
-    /// Test finding yarn with versions of nixpkgs#yarn and nixpkgs#nodejs
-    /// specified succeeds
-    #[tokio::test]
-    async fn test_try_find_compatible_yarn_both_available_catalog() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
-            yarn: Some("1".to_string()),
-            node: Some("18".to_string()),
-        })
-        .await
-        .unwrap()
-        .unwrap();
-
-        assert_eq!(yarn_install.node.rel_path, vec!["nodejs".to_string()]);
-        assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.rel_path, vec!["yarn".to_string()]);
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
 }
