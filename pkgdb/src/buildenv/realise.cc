@@ -391,10 +391,13 @@ const char * const BASH_ACTIVATE_SCRIPT_BEGIN = R"_(
 }
 
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
-# so source that here.
-if [ -f ~/.bashrc ]
+# so source that here, but not if we're already in the process of sourcing
+# bashrc in a parent process.
+if [ -f ~/.bashrc -a -z "$_flox_already_sourcing_bashrc" ]
 then
+    export _flox_already_sourcing_bashrc=1
     source ~/.bashrc
+    unset _flox_already_sourcing_bashrc
 fi
 
 # Restore environment variables set in the previous bash initialization.
