@@ -11,7 +11,7 @@
               "derivation": "???",
               "description": "description",
               "license": "license",
-              "locked_url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=e8039594435c68eb4f780f3e9bf3972a7399c4b1",
               "install_id": "hello_install_id",
               "name": "hello",
               "outputs": [
@@ -48,7 +48,7 @@
               "derivation": "???",
               "description": "description",
               "license": "license",
-              "locked_url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=e8039594435c68eb4f780f3e9bf3972a7399c4b1",
               "install_id": "hello_install_id",
               "name": "hello",
               "outputs": [
@@ -85,7 +85,7 @@
               "derivation": "???",
               "description": "description",
               "license": "license",
-              "locked_url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=e8039594435c68eb4f780f3e9bf3972a7399c4b1",
               "install_id": "hello_install_id",
               "name": "hello",
               "outputs": [
@@ -122,7 +122,7 @@
               "derivation": "???",
               "description": "description",
               "license": "license",
-              "locked_url": "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=e8039594435c68eb4f780f3e9bf3972a7399c4b1",
               "install_id": "hello_install_id",
               "name": "hello",
               "outputs": [

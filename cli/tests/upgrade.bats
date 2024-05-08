@@ -172,7 +172,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=upgrade:catalog
-@test "'flox install' installs package from catalog and builds it" {
+@test "'flox upgrade' upgrades with catalog" {
   export FLOX_FEATURES_USE_CATALOG=true
 
   "$FLOX_BIN" init
