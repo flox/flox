@@ -1207,13 +1207,6 @@ mod tests {
         let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
         fs::write(env_view.manifest_path(), r#"version = 1"#).unwrap();
 
-        {
-            let mut mock_client = MockClient::new(None::<&str>).unwrap();
-            mock_client.push_resolve_response(vec![]);
-            flox.catalog_client = Option::Some(mock_client.into());
-            env_view.lock(&flox).unwrap();
-        }
-
         flox.catalog_client = None;
         let err = env_view
             .upgrade(&flox, &[])
@@ -1221,14 +1214,12 @@ mod tests {
 
         assert!(matches!(err, CoreEnvironmentError::CatalogClientMissing));
 
-        {
-            let mut mock_client = MockClient::new(None::<&str>).unwrap();
-            mock_client.push_resolve_response(vec![]);
-            flox.catalog_client = Option::Some(mock_client.into());
-            env_view
-                .upgrade(&flox, &[])
-                .expect("upgrade should succeed with catalog client");
-        }
+        let mut mock_client = MockClient::new(None::<&str>).unwrap();
+        mock_client.push_resolve_response(vec![]);
+        flox.catalog_client = Option::Some(mock_client.into());
+        env_view
+            .upgrade(&flox, &[])
+            .expect("upgrade should succeed with catalog client");
     }
 
     /// replacing an environment should fail if a backup exists
