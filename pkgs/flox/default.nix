@@ -22,8 +22,7 @@
     else fileVersion;
 in
   symlinkJoin {
-    name = "flox";
-    inherit version;
+    name = "flox-${version}";
 
     paths = [flox-cli flox-manpages];
     nativeBuildInputs = [makeBinaryWrapper];
