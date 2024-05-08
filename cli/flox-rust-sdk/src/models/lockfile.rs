@@ -787,7 +787,7 @@ pub enum LockedManifestError {
     BadManifestPath(CanonicalizeError),
     #[error(transparent)]
     BadLockfilePath(CanonicalizeError),
-    #[error("could not open manifest file")]
+    #[error("could not open lockfile")]
     ReadLockfile(#[source] std::io::Error),
     /// when parsing the contents of a lockfile into a [LockedManifest]
     #[error("could not parse lockfile")]
