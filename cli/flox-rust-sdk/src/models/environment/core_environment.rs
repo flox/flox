@@ -631,11 +631,17 @@ impl CoreEnvironment<ReadOnly> {
             .unwrap_or_default();
 
         // Create a seed lockfile by "unlocking" (i.e. removing the locked entries of)
-        // all packages matching the given groups or iids
-        let seed_lockfile = existing_lockfile.map(|mut lockfile| {
-            lockfile.unlock_packages_by_group_or_iid(groups_or_iids);
-            lockfile
-        });
+        // all packages matching the given groups or iids.
+        // If no groups or iids are provided, all packages are unlocked.
+        let seed_lockfile = if groups_or_iids.is_empty() {
+            debug!("no groups or iids provided, not unlocking all packages");
+            None
+        } else {
+            existing_lockfile.map(|mut lockfile| {
+                lockfile.unlock_packages_by_group_or_iid(groups_or_iids);
+                lockfile
+            })
+        };
 
         let upgraded =
             LockedManifestCatalog::lock_manifest(manifest, seed_lockfile.as_ref(), client)
