@@ -26,6 +26,7 @@ use crate::models::lockfile::{
     LockedManifestCatalog,
     LockedManifestError,
     LockedManifestPkgdb,
+    LockedPackageCatalog,
 };
 use crate::models::manifest::{
     insert_packages,
@@ -44,7 +45,7 @@ use crate::models::pkgdb::{
     UpgradeResultJSON,
     PKGDB_BIN,
 };
-use crate::providers::catalog;
+use crate::providers::catalog::{self, ClientTrait};
 use crate::utils::CommandExt;
 
 pub struct ReadOnly {}
@@ -174,7 +175,7 @@ impl<State> CoreEnvironment<State> {
     ///
     /// If a lockfile exists, it is used as a base.
     /// If the manifest should be locked without a base,
-    /// remove the lockfile before calling this function or use [Self::upgrade] (todo - 2024-04-24).
+    /// remove the lockfile before calling this function or use [Self::upgrade].
     fn lock_with_catalog_client(
         &self,
         client: &catalog::Client,
@@ -202,24 +203,39 @@ impl<State> CoreEnvironment<State> {
             .map_err(CoreEnvironmentError::LockedManifest)
     }
 
-    /// Build the environment, [Self::lock] if necessary.
+    /// Build the environment.
     ///
     /// Technically this does write to disk as a side effect for now.
     /// It's included in the [ReadOnly] struct for ergonomic reasons
     /// and because it doesn't modify the manifest.
     ///
-    /// Does not link the environment to an out path.
-    /// Linking should be done explicitly by the caller using [Self::link].
+    /// Does not lock the manifest or link the environment to an out path.
+    /// Each should be done explicitly if necessary by the caller
+    /// using [Self::lock] and [Self::link]:
     ///
-    /// todo: should we always write the lockfile to disk?
+    /// ```no_run
+    /// # use flox_rust_sdk::models::environment::CoreEnvironment;
+    /// # use flox_rust_sdk::flox::Flox;
+    /// let flox: Flox = unimplemented!();
+    /// let core_env: CoreEnvironment = unimplemented!();
+    ///
+    /// core_env.lock(&flox).unwrap();
+    /// let store_path = core_env.build(&flox).unwrap();
+    /// core_env
+    ///     .link(&flox, "/path/to/out-link", &Some(store_path))
+    ///     .unwrap();
+    /// ```
     #[must_use = "don't discard the store path of built environments"]
     pub fn build(&mut self, flox: &Flox) -> Result<PathBuf, CoreEnvironmentError> {
-        let lockfile = self.lock(flox)?;
+        let lockfile_path = CanonicalPath::new(self.lockfile_path())
+            .map_err(CoreEnvironmentError::BadLockfilePath)?;
+        let lockfile = LockedManifest::read_from_file(&lockfile_path)
+            .map_err(CoreEnvironmentError::LockedManifest)?;
 
         debug!(
             "building environment: system={}, lockfilePath={}",
             &flox.system,
-            self.lockfile_path().display()
+            lockfile_path.display()
         );
 
         let store_path = lockfile
@@ -281,8 +297,17 @@ impl<State> CoreEnvironment<State> {
     }
 
     /// Create a new out-link for the environment at the given path.
+    /// Optionally a store path to the built environment can be provided,
+    /// to avoid building the environment again.
+    /// Such a store path can be obtained e.g. from [Self::build].
     ///
     /// Builds the environment if necessary.
+    ///
+    /// Like [Self::build], this requires the environment to be locked.
+    /// This method will _not_ create or update the lockfile.
+    ///
+    /// Errors if the environment  is not locked or cannot be built.
+    ///
     /// TODO: should we always build implicitly?
     pub fn link(
         &mut self,
@@ -290,13 +315,20 @@ impl<State> CoreEnvironment<State> {
         out_link_path: impl AsRef<Path>,
         store_path: &Option<PathBuf>,
     ) -> Result<(), CoreEnvironmentError> {
-        let lockfile = self.lock(flox)?;
+        let lockfile_path = CanonicalPath::new(self.lockfile_path())
+            .map_err(CoreEnvironmentError::BadLockfilePath)?;
+        let lockfile = LockedManifest::read_from_file(&lockfile_path)
+            .map_err(CoreEnvironmentError::LockedManifest)?;
+
         debug!(
             "linking environment: system={}, lockfilePath={}, outLinkPath={}",
             &flox.system,
-            self.lockfile_path().display(),
+            lockfile_path.display(),
             out_link_path.as_ref().display()
         );
+
+        // Note: when `store_path` is `Some`, `--store-path` is passed to `pkgdb buildenv`
+        // which skips the build and only attempts to link the environment.
         lockfile
             .build(
                 Path::new(&*PKGDB_BIN),
@@ -425,6 +457,13 @@ impl CoreEnvironment<ReadOnly> {
 
         debug!("transaction: building environment, ignoring errors (unsafe)");
 
+        if let Err(lock_err) = temp_env.lock(flox) {
+            debug!("transaction: lock failed: {:?}", lock_err);
+            debug!("transaction: replacing environment");
+            self.replace_with(temp_env)?;
+            return Ok(Err(lock_err));
+        };
+
         let build_attempt = temp_env.build(flox);
 
         debug!("transaction: replacing environment");
@@ -468,12 +507,55 @@ impl CoreEnvironment<ReadOnly> {
     }
 
     /// Atomically upgrade packages in this environment
+    ///
+    /// First resolve a new lockfile with upgraded packages using either pkgdb or the catalog client.
+    /// Then verify the new lockfile by building the environment.
+    /// Finally replace the existing environment with the new, upgraded one.
     pub fn upgrade(
         &mut self,
         flox: &Flox,
         groups_or_iids: &[String],
     ) -> Result<UpgradeResult, CoreEnvironmentError> {
-        // TODO double check canonicalization
+        let manifest = toml::from_str(&self.manifest_content()?)
+            .map_err(CoreEnvironmentError::DeserializeManifest)?;
+
+        let (lockfile, upgraded) = match manifest {
+            TypedManifest::Pkgdb(_) => {
+                let (lockfile, upgraded) = self.upgrade_with_pkgdb(flox, groups_or_iids)?;
+                (LockedManifest::Pkgdb(lockfile), upgraded)
+            },
+            TypedManifest::Catalog(catalog) => {
+                let client = flox
+                    .catalog_client
+                    .as_ref()
+                    .ok_or(CoreEnvironmentError::CatalogClientMissing)?;
+
+                let (lockfile, upgraded) =
+                    self.upgrade_with_catalog_client(client, groups_or_iids, &catalog)?;
+
+                let upgraded = upgraded
+                    .into_iter()
+                    .map(|(_, pkg)| pkg.install_id.clone())
+                    .collect();
+
+                (LockedManifest::Catalog(lockfile), upgraded)
+            },
+        };
+
+        let store_path =
+            self.transact_with_lockfile_contents(serde_json::json!(&lockfile).to_string(), flox)?;
+
+        Ok(UpgradeResult {
+            packages: upgraded,
+            store_path: Some(store_path),
+        })
+    }
+
+    fn upgrade_with_pkgdb(
+        &mut self,
+        flox: &Flox,
+        groups_or_iids: &[String],
+    ) -> Result<(LockedManifestPkgdb, Vec<String>), CoreEnvironmentError> {
         let manifest_path = self.manifest_path();
         let lockfile_path = self.lockfile_path();
         let maybe_lockfile = if lockfile_path.exists() {
@@ -507,12 +589,80 @@ impl CoreEnvironment<ReadOnly> {
         )
         .map_err(CoreEnvironmentError::ParseUpgradeOutput)?;
 
-        let store_path = self.transact_with_lockfile_contents(json.lockfile.to_string(), flox)?;
+        Ok((json.lockfile, json.result.0))
+    }
 
-        Ok(UpgradeResult {
-            packages: json.result.0,
-            store_path: Some(store_path),
-        })
+    /// Upgrade the given groups or install ids in the environment using the catalog client.
+    /// The environment is upgraded by locking the existing manifest
+    /// using [LockedManifestCatalog::lock_manifest] with the existing lockfile as a seed,
+    /// where the upgraded packages have been filtered out causing them to be re-resolved.
+    fn upgrade_with_catalog_client(
+        &mut self,
+        client: &impl ClientTrait,
+        groups_or_iids: &[String],
+        manifest: &TypedManifestCatalog,
+    ) -> Result<
+        (
+            LockedManifestCatalog,
+            Vec<(LockedPackageCatalog, LockedPackageCatalog)>,
+        ),
+        CoreEnvironmentError,
+    > {
+        let existing_lockfile = 'lockfile: {
+            let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
+                break 'lockfile None;
+            };
+            let lockfile = LockedManifest::read_from_file(&lockfile_path)
+                .map_err(CoreEnvironmentError::LockedManifest)?;
+            match lockfile {
+                LockedManifest::Catalog(lockfile) => Some(lockfile),
+                _ => {
+                    warn!(
+                        "Found version 1 manifest, but lockfile doesn't match: Ignoring lockfile."
+                    );
+                    None
+                },
+            }
+        };
+
+        let previous_packages = existing_lockfile
+            .as_ref()
+            .map(|lockfile| lockfile.packages.clone())
+            .unwrap_or_default();
+
+        // Create a seed lockfile by "unlocking" (i.e. removing the locked entries of)
+        // all packages matching the given groups or iids.
+        // If no groups or iids are provided, all packages are unlocked.
+        let seed_lockfile = if groups_or_iids.is_empty() {
+            debug!("no groups or iids provided, unlocking all packages");
+            None
+        } else {
+            existing_lockfile.map(|mut lockfile| {
+                lockfile.unlock_packages_by_group_or_iid(groups_or_iids);
+                lockfile
+            })
+        };
+
+        let upgraded =
+            LockedManifestCatalog::lock_manifest(manifest, seed_lockfile.as_ref(), client)
+                .block_on()
+                .map_err(CoreEnvironmentError::LockedManifest)?;
+
+        // find all packages that after upgrading have a different derivation
+        let package_diff = upgraded
+            .packages
+            .iter()
+            .filter_map(move |pkg| {
+                previous_packages
+                    .iter()
+                    .find(|prev| {
+                        prev.install_id == pkg.install_id && prev.derivation != pkg.derivation
+                    })
+                    .map(|prev| (prev.clone(), pkg.clone()))
+            })
+            .collect();
+
+        Ok((upgraded, package_diff))
     }
 
     /// Makes a temporary copy of the environment so modifications to the manifest
@@ -596,6 +746,9 @@ impl CoreEnvironment<ReadOnly> {
 
         debug!("transaction: updating manifest");
         temp_env.update_manifest(&manifest_contents)?;
+
+        debug!("transaction: locking environment");
+        temp_env.lock(flox)?;
 
         debug!("transaction: building environment");
         let store_path = temp_env.build(flox)?;
@@ -847,14 +1000,20 @@ pub mod test_helpers {
 mod tests {
     use std::os::unix::fs::PermissionsExt;
 
+    use catalog_api_v1::types::ResolvedPackageDescriptor;
+    use chrono::{DateTime, Utc};
     use indoc::{formatdoc, indoc};
     use serial_test::serial;
     use tempfile::{tempdir_in, TempDir};
     use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
 
+    use self::catalog::{CatalogPage, MockClient, ResolvedPackageGroup};
     use self::test_helpers::new_core_environment;
     use super::*;
+    use crate::data::Version;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_global_lock};
+    use crate::models::manifest::DEFAULT_GROUP_NAME;
+    use crate::models::{lockfile, manifest};
 
     /// Create a CoreEnvironment with an empty manifest
     ///
@@ -912,7 +1071,7 @@ mod tests {
         temp_env
             .update_manifest(MANIFEST_INCOMPATIBLE_SYSTEM)
             .unwrap();
-        env_view.lock(&flox).unwrap();
+        temp_env.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 
         let result = env_view.build(&flox).unwrap_err();
@@ -966,7 +1125,7 @@ mod tests {
             .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
             .unwrap();
         temp_env.update_manifest(&manifest_contents).unwrap();
-        env_view.lock(&flox).unwrap();
+        temp_env.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 
         let result = env_view.build(&flox).unwrap_err();
@@ -989,7 +1148,7 @@ mod tests {
             .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
             .unwrap();
         temp_env.update_manifest(manifest_content).unwrap();
-        env_view.lock(&flox).unwrap();
+        temp_env.lock(&flox).unwrap();
         env_view.replace_with(temp_env).unwrap();
 
         let result = env_view.build(&flox).unwrap_err();
@@ -1029,6 +1188,105 @@ mod tests {
         assert!(matches!(result, EditResult::ReActivateRequired {
             store_path: _
         }));
+    }
+
+    #[test]
+    fn locking_of_v1_manifest_requires_catalog_client() {
+        let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
+        flox.catalog_client = None;
+
+        fs::write(env_view.manifest_path(), r#"version = 1"#).unwrap();
+
+        let err = env_view
+            .lock(&flox)
+            .expect_err("should fail to lock v1 lockfile with pkgdb");
+
+        assert!(matches!(err, CoreEnvironmentError::CatalogClientMissing));
+
+        let mut mock_client = MockClient::new(None::<&str>).unwrap();
+        mock_client.push_resolve_response(vec![]);
+        flox.catalog_client = Option::Some(mock_client.into());
+
+        env_view
+            .lock(&flox)
+            .expect("lock should succeed with catalog client");
+    }
+
+    #[test]
+    fn upgrade_with_catalog_client_requires_catalog_client() {
+        // flox already has a catalog client
+        let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
+        fs::write(env_view.manifest_path(), r#"version = 1"#).unwrap();
+
+        flox.catalog_client = None;
+        let err = env_view
+            .upgrade(&flox, &[])
+            .expect_err("upgrade of v1 manifest should fail without client");
+
+        assert!(matches!(err, CoreEnvironmentError::CatalogClientMissing));
+
+        let mut mock_client = MockClient::new(None::<&str>).unwrap();
+        mock_client.push_resolve_response(vec![]);
+        flox.catalog_client = Option::Some(mock_client.into());
+        env_view
+            .upgrade(&flox, &[])
+            .expect("upgrade should succeed with catalog client");
+    }
+
+    /// Check that with an empty list of packages to upgrade, all packages are upgraded
+    // TODO: add fixtures for resolve mocks if we add more of these tests
+    #[test]
+    fn upgrade_with_empty_list_upgrades_all() {
+        let (mut env_view, _flox, _temp_dir_handle) = empty_core_environment();
+
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        let (foo_iid, foo_descriptor, foo_locked) = lockfile::tests::fake_package("foo", None);
+        manifest.install.insert(foo_iid.clone(), foo_descriptor);
+        let lockfile = lockfile::LockedManifestCatalog {
+            version: Version,
+            packages: vec![foo_locked.clone()],
+            manifest: manifest.clone(),
+        };
+
+        let lockfile_str = serde_json::to_string_pretty(&lockfile).unwrap();
+
+        fs::write(env_view.lockfile_path(), lockfile_str).unwrap();
+
+        let mut mock_client = MockClient::new(None::<&str>).unwrap();
+        mock_client.push_resolve_response(vec![ResolvedPackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            pages: vec![CatalogPage {
+                packages: Some(vec![ResolvedPackageDescriptor {
+                    attr_path: "foo".to_string(),
+                    broken: false,
+                    derivation: "new derivation".to_string(),
+                    description: Some("description".to_string()),
+                    install_id: foo_iid.clone(),
+                    license: None,
+                    locked_url: "locked-url".to_string(),
+                    name: "foo".to_string(),
+                    outputs: None,
+                    outputs_to_install: None,
+                    pname: "foo".to_string(),
+                    rev: "rev".to_string(),
+                    rev_count: 42,
+                    rev_date: DateTime::<Utc>::MIN_UTC,
+                    scrape_date: DateTime::<Utc>::MIN_UTC,
+                    stabilities: None,
+                    unfree: None,
+                    version: "1.0".to_string(),
+                }]),
+                page: 1,
+                url: "url".to_string(),
+            }],
+            system: "system".to_string(),
+        }]);
+
+        let (_, upgraded_packages) = env_view
+            .upgrade_with_catalog_client(&mock_client, &[], &manifest)
+            .unwrap();
+
+        assert!(upgraded_packages.len() == 1);
     }
 
     /// replacing an environment should fail if a backup exists
@@ -1098,6 +1356,7 @@ mod tests {
 
         let mut env_view = CoreEnvironment::new(&env_path);
 
+        env_view.lock(&flox).expect("locking should succeed");
         env_view.build(&flox).expect("build should succeed");
         env_view
             .link(&flox, env_path.path().with_extension("out-link"), &None)
