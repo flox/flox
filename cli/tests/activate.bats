@@ -889,3 +889,23 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:infinite_source,activate:infinite_source:bash
+@test "bash: test for infinite source loop" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  echo 'eval "$('"$FLOX_BIN"' activate -d '"$PWD"')"' >> "$HOME/.bashrc"
+  run timeout 1 bash -c 'eval "$("$FLOX_BIN" activate)"'
+  assert_success
+}
+
+# bats test_tags=activate,activate:infinite_source,activate:infinite_source:zsh
+@test "zsh: test for infinite source loop" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  echo 'eval "$('"$FLOX_BIN"' activate -d '"$PWD"')"' >> "$HOME/.zshrc"
+  run timeout 1 zsh -c 'eval "$("$FLOX_BIN" activate)"'
+  assert_success
+}
+
+# ---------------------------------------------------------------------------- #
