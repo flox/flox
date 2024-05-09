@@ -149,7 +149,7 @@ jobs:
         if: always()
         run: |
           echo "targets:" >&2;
-          cat ./targets >&3;
+          cat ./targets >&2;
           if [[ -s ./targets ]]; then
             echo ":white_check_mark: PASS: no files were linted"  \
               >> "$GITHUB_STEP_SUMMARY";
