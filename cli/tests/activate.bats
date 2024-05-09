@@ -894,6 +894,8 @@ EOF
 @test "bash: test for infinite source loop" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
+  # The bash -ic invocation sources .bashrc, and then the activate sources it a
+  # second time and disables further sourcing.
   cat << 'EOF' >> "$HOME/.bashrc"
 if [ -z "$ALREADY_SOURCED" ]; then
   export ALREADY_SOURCED=1
