@@ -52,6 +52,7 @@ const AUTO_SETUP_HINT: &str = "Use '--auto-setup' to apply Flox recommendations 
 
 /// The different types of init customizations
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum InitHookType {
     Go(Go),
     Node(Node),
@@ -150,7 +151,6 @@ impl Init {
                 .spin_with_delay(Duration::from_secs_f32(0.25))?;
             };
 
-            // FIXME: Make sure catalog client is used for everything in here
             self.run_language_hooks(&flox, &dir)
                 .await
                 .unwrap_or_else(|e| {
