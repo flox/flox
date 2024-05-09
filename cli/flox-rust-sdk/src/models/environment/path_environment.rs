@@ -387,8 +387,6 @@ impl PathEnvironment {
             manifest.to_string(),
         )?;
 
-        // Build environment if manifest has packages installed
-        if manifest.get_packages().is_some() {
         // Build environment if customization installs at least one package
         if matches!(customization.packages.as_deref(), Some([_, ..])) {
             environment.build(flox)?;
