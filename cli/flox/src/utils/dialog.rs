@@ -159,8 +159,13 @@ impl<'a, T: Display> Dialog<'a, Select<T>> {
 
 impl<'a, F: FnOnce() -> T + Send, T: Send> Dialog<'a, Spinner<F>> {
     pub fn spin_with_delay(self, start_spinning_after: Duration) -> T {
+        let handle = tokio::runtime::Handle::current();
         std::thread::scope(|s| {
-            let y = s.spawn(|| (self.typed.0)());
+            let y = s.spawn(move || {
+                // self.typed.0 may be a function that requires tokio
+                let _guard = handle.enter();
+                (self.typed.0)()
+            });
             let mut dialog: Option<ProgressBar> = None;
             let started = Instant::now();
             loop {

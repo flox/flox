@@ -43,3 +43,15 @@ teardown_file() {
   assert_output --partial "using catalog client for show"
   assert_output --partial "hello - hello@2.12.1"
 }
+
+@test "'flox install' and 'flox activate' work with catalog server" {
+  "$FLOX_BIN" init
+  # TODO: drop this when flox init sets version = 1
+  echo 'version = 1' | "$FLOX_BIN" edit -f -
+  run "$FLOX_BIN" install hello -vvv
+  assert_success
+  assert_output --partial "using catalog client to lock"
+  run "$FLOX_BIN" activate -- hello
+  assert_success
+  assert_output --partial "Hello, world!"
+}
