@@ -143,6 +143,17 @@ for d in "${flox_env_dirs[@]}"; do
 done
 if [ $flox_env_found -eq 0 ]; then
 
+  # If interactive and a command has not been passed, this is an interactive
+  # activate,
+  # and we print a message to the user
+  # TODO: should this be printed after scripts?
+  # Should it be in Rust using message::updated?
+  if [ -t 1 ] && [ $# -eq 0 ]; then
+    echo "✅ You are now using the environment '$FLOX_ENV_DESCRIPTION'." >&2
+    echo "To stop using this environment, type 'exit'" >&2
+    echo >&2
+  fi
+
   # First activation of this environment. Snapshot environment to start.
   _start_env="$($_coreutils/bin/mktemp --suffix=.start-env)"
   export | $_coreutils/bin/sort > "$_start_env"
@@ -228,7 +239,8 @@ else
   # If we're attempting to launch an interactive shell then just print a
   # message to say that the environment has already been activated.
   if [ -t 1 ] && [ $# -eq 0 ]; then
-    echo "ERROR: Environment '$FLOX_ENV_DESCRIPTION' is already active." >&2
+    # TODO: should this be in Rust using message::error?
+    echo "❌ ERROR: Environment '$FLOX_ENV_DESCRIPTION' is already active." >&2
     exit 1
   fi
 

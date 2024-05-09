@@ -446,11 +446,6 @@ impl Activate {
 
         debug!("running activation command: {:?}", command);
 
-        let message = formatdoc! {"
-                You are now using the environment {}.
-                To stop using this environment, type 'exit'\n", now_active.message_description()?};
-        message::updated(message);
-
         // exec should never return
         Err(command.exec().into())
     }
