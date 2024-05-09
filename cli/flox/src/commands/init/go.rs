@@ -329,9 +329,15 @@ impl GoVersion {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::flox::test_helpers::flox_instance_with_global_lock;
+    use flox_rust_sdk::data::System;
+    use flox_rust_sdk::flox::test_helpers::{
+        flox_instance_with_global_lock,
+        flox_instance_with_optional_floxhub_and_client,
+    };
+    use flox_rust_sdk::providers::catalog::Client;
 
     use super::*;
+    use crate::commands::init::tests::resolved_pkg_group_with_dummy_package;
     use crate::commands::init::ProvidedPackage;
 
     #[tokio::test]
@@ -425,5 +431,80 @@ mod tests {
         let version = GoVersion::parse_content_version_string(content);
 
         assert!(version.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_go_mod_system_returns_none_if_gomod_is_dir_catalog() {
+        let (flox, temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+
+        std::fs::create_dir_all(temp_dir_handle.path().join("go.mod/")).unwrap();
+
+        let module_system = GoModSystem::try_new_from_path(&flox, temp_dir_handle.path())
+            .await
+            .unwrap();
+        assert!(module_system.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_go_work_system_returns_none_if_gowork_is_dir_catalog() {
+        let (flox, temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+
+        std::fs::create_dir_all(temp_dir_handle.path().join("go.work/")).unwrap();
+
+        let module_system = GoWorkSystem::try_new_from_path(&flox, temp_dir_handle.path())
+            .await
+            .unwrap();
+        assert!(module_system.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_go_version_from_content_returns_compatible_version_catalog() {
+        let (mut flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(None, true);
+
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+            // Response for go 1.21.4
+            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                "go_group",
+                &System::from("aarch64-darwin"),
+                "go",
+                "go",
+                "1.21.4",
+            )]);
+        }
+
+        let content = indoc! {r#"
+                // valid go version
+                go 1.21.4
+            "#};
+
+        let version = GoVersion::from_content(&flox, content)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(version, ProvidedVersion::Compatible {
+            requested: Some("^1.21.4".to_string()),
+            compatible: ProvidedPackage::new("go", vec!["go"], "1.21.4")
+        });
+    }
+
+    #[tokio::test]
+    async fn test_go_version_from_content_returns_none_on_incompatible_version_catalog() {
+        let (mut flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(None, true);
+
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+            // Response for incompatible go version
+            client.push_resolve_response(vec![]);
+        }
+        let content = indoc! {r#"
+                // incompatible go version
+                go 0.0.0
+            "#};
+
+        let version = GoVersion::from_content(&flox, content).await.unwrap();
+
+        assert_eq!(version, None);
     }
 }
