@@ -37,6 +37,7 @@ const GO_HOOK: &str = indoc! {"
 ///   if user commands to do so. Else, return `true` or `false` based on whether
 ///   the user desires or not the presented customization.
 /// - [Self::get_init_customization]: Returns a Go specific customization based on [Self::module_system].
+#[derive(Debug, Clone)]
 pub(super) struct Go {
     /// Stores the version required to generate a customization with [Self::get_init_customization].
     /// Becomes initialized in [Self::new].
@@ -46,19 +47,21 @@ pub(super) struct Go {
 impl Go {
     /// Creates and returns the [Go] hook with the detected [GoModuleSystemKind] module system.
     /// If no module system is detected, returns [None].
-    pub fn new(flox: &Flox, path: &Path) -> Result<Option<Self>> {
-        Ok(Self::detect_module_system(flox, path)?.map(|module_system| Self { module_system }))
+    pub async fn new(flox: &Flox, path: &Path) -> Result<Option<Self>> {
+        Ok(Self::detect_module_system(flox, path)
+            .await?
+            .map(|module_system| Self { module_system }))
     }
 
     /// Determines which [GoModuleSystemKind] is being used.
     /// Since the [GO_WORK_FILENAME] file declares a multiple module based workspace, it takes
     /// precedence over any other [GO_MOD_FILENAME] file that could possibly be found.
-    fn detect_module_system(flox: &Flox, path: &Path) -> Result<Option<GoModuleSystemKind>> {
-        if let Some(go_work) = GoWorkSystem::try_new_from_path(flox, path)? {
+    async fn detect_module_system(flox: &Flox, path: &Path) -> Result<Option<GoModuleSystemKind>> {
+        if let Some(go_work) = GoWorkSystem::try_new_from_path(flox, path).await? {
             return Ok(Some(GoModuleSystemKind::Workspace(go_work)));
         }
 
-        if let Some(go_mod) = GoModSystem::try_new_from_path(flox, path)? {
+        if let Some(go_mod) = GoModSystem::try_new_from_path(flox, path).await? {
             return Ok(Some(GoModuleSystemKind::Module(go_mod)));
         }
 
@@ -69,7 +72,7 @@ impl Go {
 impl InitHook for Go {
     /// Returns `true` if the user accepts the prompt. In that case,
     /// the hook customizes the manifest with the default Go environment.
-    fn prompt_user(&mut self, _flox: &Flox, _path: &Path) -> Result<bool> {
+    async fn prompt_user(&mut self, _flox: &Flox, _path: &Path) -> Result<bool> {
         let module_system = self.module_system.get_system();
 
         message::plain(formatdoc! {"
@@ -149,7 +152,7 @@ impl InitHook for Go {
 }
 
 /// Represents Go module system files.
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum GoModuleSystemKind {
     /// Single module based system [GoModSystem].
     Module(GoModSystem),
@@ -173,14 +176,14 @@ trait GoModuleSystemMode {
     /// from the content of a module or workspace file, respectively.
     /// This method should return `true` when there isn't any valid `go` versioning
     /// statements inside the module or workspace content.
-    fn try_new_from_content(flox: &Flox, module_content: &str) -> Result<Option<Self>>
+    async fn try_new_from_content(flox: &Flox, module_content: &str) -> Result<Option<Self>>
     where
         Self: Sized;
 
     /// Detects and returns the possible instance of a Go module or workspace system
     /// from a given filesystem path. If the detected system inside is a directory,
     /// it must be rejected and return `None`.
-    fn try_new_from_path(flox: &Flox, path: &Path) -> Result<Option<Self>>
+    async fn try_new_from_path(flox: &Flox, path: &Path) -> Result<Option<Self>>
     where
         Self: Sized;
 
@@ -193,7 +196,7 @@ trait GoModuleSystemMode {
 }
 
 /// Represents the single-module system from the content of `go.mod` files.
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct GoModSystem {
     /// Represents the version obtained from the `go` statement inside the `go.mod` file.
     version: ProvidedVersion,
@@ -205,22 +208,22 @@ impl GoModuleSystemMode for GoModSystem {
     /// of a module file.
     /// This method should return `true` when there isn't any valid `go` versioning
     /// statements inside the module content.
-    fn try_new_from_content(flox: &Flox, module_content: &str) -> Result<Option<Self>> {
-        match GoVersion::from_content(flox, module_content)? {
+    async fn try_new_from_content(flox: &Flox, module_content: &str) -> Result<Option<Self>> {
+        match GoVersion::from_content(flox, module_content).await? {
             Some(version) => Ok(Some(Self { version })),
             None => Ok(None),
         }
     }
 
     /// This method returns `None` if [GO_MOD_FILENAME] is a directory.
-    fn try_new_from_path(flox: &Flox, path: &Path) -> Result<Option<Self>> {
+    async fn try_new_from_path(flox: &Flox, path: &Path) -> Result<Option<Self>> {
         let mod_path = path.join(GO_MOD_FILENAME);
         if !mod_path.exists() || mod_path.is_dir() {
             return Ok(None);
         }
 
         let mod_content = fs::read_to_string(mod_path)?;
-        Self::try_new_from_content(flox, &mod_content)
+        Self::try_new_from_content(flox, &mod_content).await
     }
 
     #[inline(always)]
@@ -234,7 +237,7 @@ impl GoModuleSystemMode for GoModSystem {
 }
 
 /// Represents the multi-module workspace system from the content of `go.work` files.
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct GoWorkSystem {
     /// Represents the version obtained from the `go` statement inside the `go.work` file.
     version: ProvidedVersion,
@@ -242,22 +245,22 @@ struct GoWorkSystem {
 
 /// Represents the functionality for the multi-module workspace mode.
 impl GoModuleSystemMode for GoWorkSystem {
-    fn try_new_from_content(flox: &Flox, workspace_content: &str) -> Result<Option<Self>> {
-        match GoVersion::from_content(flox, workspace_content)? {
+    async fn try_new_from_content(flox: &Flox, workspace_content: &str) -> Result<Option<Self>> {
+        match GoVersion::from_content(flox, workspace_content).await? {
             Some(version) => Ok(Some(Self { version })),
             None => Ok(None),
         }
     }
 
     /// This method returns `None` if [GO_WORK_FILENAME] is a directory.
-    fn try_new_from_path(flox: &Flox, path: &Path) -> Result<Option<Self>> {
+    async fn try_new_from_path(flox: &Flox, path: &Path) -> Result<Option<Self>> {
         let work_path = path.join(GO_WORK_FILENAME);
         if !work_path.exists() || work_path.is_dir() {
             return Ok(None);
         }
 
         let work_content = fs::read_to_string(work_path)?;
-        Self::try_new_from_content(flox, &work_content)
+        Self::try_new_from_content(flox, &work_content).await
     }
 
     #[inline(always)]
@@ -277,13 +280,18 @@ struct GoVersion;
 impl GoVersion {
     /// Returns the version contained in the content of a Go module system file
     /// as a [ProvidedVersion].
-    fn from_content(flox: &Flox, content: &str) -> Result<Option<ProvidedVersion>> {
+    async fn from_content(flox: &Flox, content: &str) -> Result<Option<ProvidedVersion>> {
         let Some(required_go_version) = Self::parse_content_version_string(content)? else {
             return Ok(None);
         };
 
-        let provided_go_version =
-            try_find_compatible_version(flox, "go", Some(&required_go_version), None::<Vec<&str>>)?;
+        let provided_go_version = try_find_compatible_version(
+            flox,
+            "go",
+            required_go_version.as_ref(),
+            None::<Vec<String>>,
+        )
+        .await?;
 
         if let Some(found_go_version) = provided_go_version {
             let found_go_version = TryInto::<ProvidedPackage>::try_into(found_go_version)?;
@@ -321,38 +329,51 @@ impl GoVersion {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::flox::test_helpers::flox_instance_with_global_lock;
+    use flox_rust_sdk::data::System;
+    use flox_rust_sdk::flox::test_helpers::{
+        flox_instance_with_global_lock,
+        flox_instance_with_optional_floxhub_and_client,
+    };
+    use flox_rust_sdk::providers::catalog::Client;
 
     use super::*;
+    use crate::commands::init::tests::resolved_pkg_group_with_dummy_package;
     use crate::commands::init::ProvidedPackage;
 
-    #[test]
-    fn test_go_mod_system_returns_none_if_gomod_is_dir() {
+    #[tokio::test]
+    async fn go_mod_system_returns_none_if_gomod_is_dir() {
         let (flox, temp_dir_handle) = flox_instance_with_global_lock();
         std::fs::create_dir_all(temp_dir_handle.path().join("go.mod/")).unwrap();
 
-        let module_system = GoModSystem::try_new_from_path(&flox, temp_dir_handle.path()).unwrap();
+        let module_system = GoModSystem::try_new_from_path(&flox, temp_dir_handle.path())
+            .await
+            .unwrap();
         assert!(module_system.is_none());
     }
 
-    #[test]
-    fn test_go_work_system_returns_none_if_gowork_is_dir() {
+    #[tokio::test]
+    async fn go_work_system_returns_none_if_gowork_is_dir() {
         let (flox, temp_dir_handle) = flox_instance_with_global_lock();
         std::fs::create_dir_all(temp_dir_handle.path().join("go.work/")).unwrap();
 
-        let module_system = GoWorkSystem::try_new_from_path(&flox, temp_dir_handle.path()).unwrap();
+        let module_system = GoWorkSystem::try_new_from_path(&flox, temp_dir_handle.path())
+            .await
+            .unwrap();
         assert!(module_system.is_none());
     }
 
-    #[test]
-    fn test_go_version_from_content_returns_compatible_version() {
+    #[tokio::test]
+    async fn go_version_from_content_returns_compatible_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
                 // valid go version
                 go 1.21.4
             "#};
 
-        let version = GoVersion::from_content(&flox, content).unwrap().unwrap();
+        let version = GoVersion::from_content(&flox, content)
+            .await
+            .unwrap()
+            .unwrap();
 
         assert_eq!(version, ProvidedVersion::Compatible {
             requested: Some("^1.21.4".to_string()),
@@ -360,34 +381,34 @@ mod tests {
         });
     }
 
-    #[test]
-    fn test_go_version_from_content_returns_none_on_incompatible_version() {
+    #[tokio::test]
+    async fn go_version_from_content_returns_none_on_incompatible_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
                 // incompatible go version
                 go 0.0.0
             "#};
 
-        let version = GoVersion::from_content(&flox, content).unwrap();
+        let version = GoVersion::from_content(&flox, content).await.unwrap();
 
         assert_eq!(version, None);
     }
 
-    #[test]
-    fn test_go_version_from_content_returns_error_on_invalid_version() {
+    #[tokio::test]
+    async fn go_version_from_content_returns_error_on_invalid_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
                 // invalid go version
                 go invalid
             "#};
 
-        let version = GoVersion::from_content(&flox, content);
+        let version = GoVersion::from_content(&flox, content).await;
 
         assert!(version.is_err());
     }
 
     #[test]
-    fn test_go_version_string_parsing_succeeds_with_valid_version() {
+    fn go_version_string_parsing_succeeds_with_valid_version() {
         let content = indoc! {r#"
                 // valid go version
                 go 1.21.0
@@ -401,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn test_go_version_string_parsing_fails_with_invalid_version() {
+    fn go_version_string_parsing_fails_with_invalid_version() {
         let content = indoc! {r#"
                 // invalid go version
                 go invalid
@@ -410,5 +431,84 @@ mod tests {
         let version = GoVersion::parse_content_version_string(content);
 
         assert!(version.is_err());
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Catalog tests
+    ///////////////////////////////////////////////////////////////////////////
+
+    #[tokio::test]
+    async fn go_mod_system_returns_none_if_gomod_is_dir_with_catalog() {
+        let (flox, temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+
+        std::fs::create_dir_all(temp_dir_handle.path().join("go.mod/")).unwrap();
+
+        let module_system = GoModSystem::try_new_from_path(&flox, temp_dir_handle.path())
+            .await
+            .unwrap();
+        assert!(module_system.is_none());
+    }
+
+    #[tokio::test]
+    async fn go_work_system_returns_none_if_gowork_is_dir_with_catalog() {
+        let (flox, temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+
+        std::fs::create_dir_all(temp_dir_handle.path().join("go.work/")).unwrap();
+
+        let module_system = GoWorkSystem::try_new_from_path(&flox, temp_dir_handle.path())
+            .await
+            .unwrap();
+        assert!(module_system.is_none());
+    }
+
+    #[tokio::test]
+    async fn go_version_from_content_returns_compatible_version_with_catalog() {
+        let (mut flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(None, true);
+
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+            // Response for go 1.21.4
+            client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
+                "go_group",
+                &System::from("aarch64-darwin"),
+                "go",
+                "go",
+                "1.21.4",
+            )]);
+        }
+
+        let content = indoc! {r#"
+                // valid go version
+                go 1.21.4
+            "#};
+
+        let version = GoVersion::from_content(&flox, content)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(version, ProvidedVersion::Compatible {
+            requested: Some("^1.21.4".to_string()),
+            compatible: ProvidedPackage::new("go", vec!["go"], "1.21.4")
+        });
+    }
+
+    #[tokio::test]
+    async fn go_version_from_content_returns_none_on_incompatible_version_with_catalog() {
+        let (mut flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(None, true);
+
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+            // Response for incompatible go version
+            client.push_resolve_response(vec![]);
+        }
+        let content = indoc! {r#"
+                // incompatible go version
+                go 0.0.0
+            "#};
+
+        let version = GoVersion::from_content(&flox, content).await.unwrap();
+
+        assert_eq!(version, None);
     }
 }
