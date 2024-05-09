@@ -678,6 +678,7 @@ dependencies = [
  "nix",
  "oauth2",
  "once_cell",
+ "path-dedot",
  "pretty_assertions",
  "regex",
  "reqwest 0.11.27",
@@ -1716,6 +1717,15 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-targets 0.48.5",
+]
+
+[[package]]
+name = "path-dedot"
+version = "3.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07ba0ad7e047712414213ff67533e6dd477af0a4e1d14fb52343e53d30ea9397"
+dependencies = [
+ "once_cell",
 ]
 
 [[package]]
