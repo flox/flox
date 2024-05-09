@@ -53,10 +53,9 @@ impl RawManifest {
         // `[install]` table
         let mut install_table = if let Some(packages) = &customization.packages {
             let packages: Vec<(String, Value)> = packages
+            let packages = packages
                 .iter()
-                .map(|pkg| (pkg.id.clone(), Value::InlineTable(InlineTable::from(pkg))))
-                .collect();
-
+                .map(|pkg| (&pkg.id, InlineTable::from(pkg)));
             Table::from_iter(packages)
         } else {
             // Add comment with example packages
