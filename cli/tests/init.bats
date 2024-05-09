@@ -110,6 +110,28 @@ function check_with_dir() {
   assert_output ".flox"
 }
 
+@test "c2.1: \`flox init\` with \`--dir .\` will create an environment in current working directory." {
+  run "$FLOX_BIN" init -d .
+  assert_success
+  run ls -A
+  assert_output ".flox"
+}
+
+@test "c2.1: \`flox init\` with \`--dir ..\` will create an environment in parent working directory." {
+  mkdir -p "$PROJECT_DIR/other"
+
+  pushd other
+  run "$FLOX_BIN" init -d ..
+  assert_success
+  popd
+
+  run ls -A
+  assert_output - <<EOF
+.flox
+other
+EOF
+}
+
 @test "c2.1: \`flox init\` with \`--dir <path>\` will create an environment in \`<path>\`. (relative)" {
   mkdir -p "$PROJECT_DIR/other"
 

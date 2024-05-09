@@ -24,6 +24,7 @@ use flox_rust_sdk::models::pkgdb::scrape_input;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
 use indoc::formatdoc;
 use log::debug;
+use path_dedot::ParseDot;
 use toml_edit::{DocumentMut, Formatted, Item, Table, Value};
 use tracing::instrument;
 
@@ -79,6 +80,7 @@ impl Init {
             EnvironmentName::from_str(DEFAULT_NAME)?
         } else {
             let name = dir
+                .parse_dot()?
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .context("Can't init in root")?;
