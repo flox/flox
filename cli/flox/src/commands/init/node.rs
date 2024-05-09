@@ -696,7 +696,7 @@ mod tests {
     use crate::commands::init::tests::resolved_pkg_group_with_dummy_package;
 
     #[test]
-    fn test_parse_nvmrc_version_some() {
+    fn parse_nvmrc_version_some() {
         assert_eq!(
             Node::parse_nvmrc_version("v0.1.14"),
             RequestedNVMRCVersion::Found("0.1.14".to_string())
@@ -728,7 +728,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_nvmrc_version_unsure() {
+    fn parse_nvmrc_version_unsure() {
         assert_eq!(
             Node::parse_nvmrc_version("node"),
             RequestedNVMRCVersion::Unsure
@@ -740,14 +740,14 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_nvmrc_version_none() {
+    fn parse_nvmrc_version_none() {
         assert_eq!(Node::parse_nvmrc_version(""), RequestedNVMRCVersion::None);
         assert_eq!(Node::parse_nvmrc_version("\n"), RequestedNVMRCVersion::None);
     }
 
     /// Test get_init_customization() for action InstallYarn
     #[test]
-    fn test_get_init_customization_yarn() {
+    fn get_init_customization_yarn() {
         assert_eq!(
             Node {
                 package_json_node_version: None,
@@ -786,7 +786,7 @@ mod tests {
     /// Test get_init_customization() for action InstallYarnOrNode and npm_hook
     /// true
     #[test]
-    fn test_get_init_customization_yarn_or_node() {
+    fn get_init_customization_yarn_or_node() {
         assert_eq!(
             Node {
                 package_json_node_version: None,
@@ -834,7 +834,7 @@ mod tests {
     }
     /// Test get_init_customization() for action InstallNode and npm_hook false
     #[test]
-    fn test_get_init_customization_node() {
+    fn get_init_customization_node() {
         assert_eq!(
             Node {
                 package_json_node_version: None,
@@ -873,7 +873,7 @@ mod tests {
     /// Test finding yarn with no constraints succeeds
     #[tokio::test]
     #[serial]
-    async fn test_try_find_compatible_yarn_no_constraints() {
+    async fn try_find_compatible_yarn_no_constraints() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
             yarn: None,
@@ -890,7 +890,7 @@ mod tests {
     /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
     #[tokio::test]
     #[serial]
-    async fn test_try_find_compatible_yarn_node_available() {
+    async fn try_find_compatible_yarn_node_available() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
             yarn: None,
@@ -909,7 +909,7 @@ mod tests {
     /// nixpkgs#nodejs fails
     #[tokio::test]
     #[serial]
-    async fn test_try_find_compatible_yarn_node_unavailable() {
+    async fn try_find_compatible_yarn_node_unavailable() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
             yarn: None,
@@ -924,7 +924,7 @@ mod tests {
     /// Test finding yarn with the version nixpkgs#yarn specified succeeds
     #[tokio::test]
     #[serial]
-    async fn test_try_find_compatible_yarn_yarn_available() {
+    async fn try_find_compatible_yarn_yarn_available() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
             yarn: Some("1".to_string()),
@@ -943,7 +943,7 @@ mod tests {
     /// nixpkgs#yarn fails
     #[tokio::test]
     #[serial]
-    async fn test_try_find_compatible_yarn_yarn_unavailable() {
+    async fn try_find_compatible_yarn_yarn_unavailable() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
             yarn: Some("2".to_string()),
@@ -959,7 +959,7 @@ mod tests {
     /// specified succeeds
     #[tokio::test]
     #[serial]
-    async fn test_try_find_compatible_yarn_both_available() {
+    async fn try_find_compatible_yarn_both_available() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
             yarn: Some("1".to_string()),
@@ -975,11 +975,13 @@ mod tests {
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
 
-    ////////
+    ///////////////////////////////////////////////////////////////////////////
+    // Catalog tests
+    ///////////////////////////////////////////////////////////////////////////
 
     /// Test finding yarn with no constraints succeeds
     #[tokio::test]
-    async fn test_try_find_compatible_yarn_no_constraints_catalog() {
+    async fn try_find_compatible_yarn_no_constraints_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1015,7 +1017,7 @@ mod tests {
 
     /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
     #[tokio::test]
-    async fn test_try_find_compatible_yarn_node_available_catalog() {
+    async fn try_find_compatible_yarn_node_available_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1053,7 +1055,7 @@ mod tests {
     /// Test finding yarn with a version of node other than that of
     /// nixpkgs#nodejs fails
     #[tokio::test]
-    async fn test_try_find_compatible_yarn_node_unavailable_catalog() {
+    async fn try_find_compatible_yarn_node_unavailable_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1074,7 +1076,7 @@ mod tests {
 
     /// Test finding yarn with the version nixpkgs#yarn specified succeeds
     #[tokio::test]
-    async fn test_try_find_compatible_yarn_yarn_available_catalog() {
+    async fn try_find_compatible_yarn_yarn_available_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1112,7 +1114,7 @@ mod tests {
     /// Test finding yarn with a version of yarn other than that of
     /// nixpkgs#yarn fails
     #[tokio::test]
-    async fn test_try_find_compatible_yarn_yarn_unavailable_catalog() {
+    async fn try_find_compatible_yarn_yarn_unavailable_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1141,7 +1143,7 @@ mod tests {
     /// Test finding yarn with versions of nixpkgs#yarn and nixpkgs#nodejs
     /// specified succeeds
     #[tokio::test]
-    async fn test_try_find_compatible_yarn_both_available_catalog() {
+    async fn try_find_compatible_yarn_both_available_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 

@@ -806,7 +806,7 @@ mod tests {
 
     /// An invalid pyproject.toml should return an error
     #[tokio::test]
-    async fn test_pyproject_invalid() {
+    async fn pyproject_invalid() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
@@ -821,7 +821,7 @@ mod tests {
     /// ProvidedVersion::Compatible should be returned for an empty pyproject.toml
     #[tokio::test]
     #[serial]
-    async fn test_pyproject_empty() {
+    async fn pyproject_empty() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let pyproject = PyProject::from_pyproject_content(&flox, "").await.unwrap();
@@ -837,7 +837,7 @@ mod tests {
     /// ProvidedVersion::Compatible should be returned for requires-python = ">=3.8"
     #[tokio::test]
     #[serial]
-    async fn test_pyproject_available_version() {
+    async fn pyproject_available_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
@@ -860,7 +860,7 @@ mod tests {
     /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
     #[tokio::test]
     #[serial]
-    async fn test_pyproject_unavailable_version() {
+    async fn pyproject_unavailable_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
@@ -883,7 +883,7 @@ mod tests {
     /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
     #[tokio::test]
     #[serial]
-    async fn test_pyproject_parse_version() {
+    async fn pyproject_parse_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         // python docs have a space in the version (>= 3.8):
@@ -908,7 +908,7 @@ mod tests {
 
     /// An invalid pyproject.toml should return an error
     #[tokio::test]
-    async fn test_poetry_pyproject_invalid() {
+    async fn poetry_pyproject_invalid() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
@@ -922,7 +922,7 @@ mod tests {
 
     /// None should be returned for an empty pyproject.toml
     #[tokio::test]
-    async fn test_poetry_pyproject_empty() {
+    async fn poetry_pyproject_empty() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let pyproject = PoetryPyProject::from_pyproject_content(&flox, "")
@@ -935,7 +935,7 @@ mod tests {
     /// Err should be returned for a pyproject.toml with `tool.poetry` but not
     /// `tool.poetry.dependencies.python`
     #[tokio::test]
-    async fn test_poetry_pyproject_no_python() {
+    async fn poetry_pyproject_no_python() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
@@ -950,7 +950,7 @@ mod tests {
     /// ProvidedVersion::Compatible should be returned for python = "^3.7"
     #[tokio::test]
     #[serial]
-    async fn test_poetry_pyproject_available_version() {
+    async fn poetry_pyproject_available_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
@@ -974,7 +974,7 @@ mod tests {
     /// ProvidedVersion::Incompatible should be returned for python = "1"
     #[tokio::test]
     #[serial]
-    async fn test_poetry_pyproject_unavailable_version() {
+    async fn poetry_pyproject_unavailable_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
@@ -997,7 +997,7 @@ mod tests {
 
     /// Requirements::get_matches should return an empty Vec if no requirements files are found
     #[test]
-    fn test_requirements_no_match() {
+    fn requirements_no_match() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let temp_dir = flox.temp_dir;
         let no_match = temp_dir.join("not_a_requirements.txt");
@@ -1011,7 +1011,7 @@ mod tests {
 
     /// Requirements::detect should match requirements.txt
     #[test]
-    fn test_requirements_matches_conventional() {
+    fn requirements_matches_conventional() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let temp_dir = flox.temp_dir;
         let requirements_file = temp_dir.join("requirements.txt");
@@ -1023,7 +1023,7 @@ mod tests {
 
     /// Requirements::detect should match requirements_versioned.txt
     #[test]
-    fn test_requirements_matches_unconventional() {
+    fn requirements_matches_unconventional() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let temp_dir = flox.temp_dir;
         let requirements_file_unconventional = temp_dir.join("requirements_versioned.txt");
@@ -1035,7 +1035,7 @@ mod tests {
 
     /// Requirements::detect should return all matches
     #[test]
-    fn test_requirements_matches_all() {
+    fn requirements_matches_all() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let temp_dir = flox.temp_dir;
         let long_name = temp_dir.join("requirements_versioned_dev.txt");
@@ -1051,11 +1051,13 @@ mod tests {
         assert!(matches.iter().any(|s| s == "requirements_versioned.txt"));
     }
 
-    //////////
+    ///////////////////////////////////////////////////////////////////////////
+    // Catalog tests
+    ///////////////////////////////////////////////////////////////////////////
 
     /// An invalid pyproject.toml should return an error
     #[tokio::test]
-    async fn test_pyproject_invalid_catalog() {
+    async fn pyproject_invalid_with_catalog() {
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
 
         let content = indoc! {r#"
@@ -1070,7 +1072,7 @@ mod tests {
     /// ProvidedVersion::Compatible should be returned for an empty pyproject.toml
     #[tokio::test]
     #[serial]
-    async fn test_pyproject_empty_catalog() {
+    async fn pyproject_empty_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1098,7 +1100,7 @@ mod tests {
     /// ProvidedVersion::Compatible should be returned for requires-python = ">=3.8"
     #[tokio::test]
     #[serial]
-    async fn test_pyproject_available_version_catalog() {
+    async fn pyproject_available_version_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1133,7 +1135,7 @@ mod tests {
     /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
     #[tokio::test]
     #[serial]
-    async fn test_pyproject_unavailable_version_catalog() {
+    async fn pyproject_unavailable_version_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1170,7 +1172,7 @@ mod tests {
     /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
     #[tokio::test]
     #[serial]
-    async fn test_pyproject_parse_version_catalog() {
+    async fn pyproject_parse_version_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1207,7 +1209,7 @@ mod tests {
 
     /// An invalid pyproject.toml should return an error
     #[tokio::test]
-    async fn test_poetry_pyproject_invalid_catalog() {
+    async fn poetry_pyproject_invalid_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1227,7 +1229,7 @@ mod tests {
 
     /// None should be returned for an empty pyproject.toml
     #[tokio::test]
-    async fn test_poetry_pyproject_empty_catalog() {
+    async fn poetry_pyproject_empty_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1246,7 +1248,7 @@ mod tests {
     /// Err should be returned for a pyproject.toml with `tool.poetry` but not
     /// `tool.poetry.dependencies.python`
     #[tokio::test]
-    async fn test_poetry_pyproject_no_python_catalog() {
+    async fn poetry_pyproject_no_python_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1267,7 +1269,7 @@ mod tests {
     /// ProvidedVersion::Compatible should be returned for python = "^3.7"
     #[tokio::test]
     #[serial]
-    async fn test_poetry_pyproject_available_version_catalog() {
+    async fn poetry_pyproject_available_version_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -1311,7 +1313,7 @@ mod tests {
     /// ProvidedVersion::Incompatible should be returned for python = "1"
     #[tokio::test]
     #[serial]
-    async fn test_poetry_pyproject_unavailable_version_catalog() {
+    async fn poetry_pyproject_unavailable_version_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 

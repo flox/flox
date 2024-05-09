@@ -341,7 +341,7 @@ mod tests {
     use crate::commands::init::ProvidedPackage;
 
     #[tokio::test]
-    async fn test_go_mod_system_returns_none_if_gomod_is_dir() {
+    async fn go_mod_system_returns_none_if_gomod_is_dir() {
         let (flox, temp_dir_handle) = flox_instance_with_global_lock();
         std::fs::create_dir_all(temp_dir_handle.path().join("go.mod/")).unwrap();
 
@@ -352,7 +352,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_go_work_system_returns_none_if_gowork_is_dir() {
+    async fn go_work_system_returns_none_if_gowork_is_dir() {
         let (flox, temp_dir_handle) = flox_instance_with_global_lock();
         std::fs::create_dir_all(temp_dir_handle.path().join("go.work/")).unwrap();
 
@@ -363,7 +363,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_go_version_from_content_returns_compatible_version() {
+    async fn go_version_from_content_returns_compatible_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
                 // valid go version
@@ -382,7 +382,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_go_version_from_content_returns_none_on_incompatible_version() {
+    async fn go_version_from_content_returns_none_on_incompatible_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
                 // incompatible go version
@@ -395,7 +395,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_go_version_from_content_returns_error_on_invalid_version() {
+    async fn go_version_from_content_returns_error_on_invalid_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let content = indoc! {r#"
                 // invalid go version
@@ -408,7 +408,7 @@ mod tests {
     }
 
     #[test]
-    fn test_go_version_string_parsing_succeeds_with_valid_version() {
+    fn go_version_string_parsing_succeeds_with_valid_version() {
         let content = indoc! {r#"
                 // valid go version
                 go 1.21.0
@@ -422,7 +422,7 @@ mod tests {
     }
 
     #[test]
-    fn test_go_version_string_parsing_fails_with_invalid_version() {
+    fn go_version_string_parsing_fails_with_invalid_version() {
         let content = indoc! {r#"
                 // invalid go version
                 go invalid
@@ -433,8 +433,12 @@ mod tests {
         assert!(version.is_err());
     }
 
+    ///////////////////////////////////////////////////////////////////////////
+    // Catalog tests
+    ///////////////////////////////////////////////////////////////////////////
+
     #[tokio::test]
-    async fn test_go_mod_system_returns_none_if_gomod_is_dir_catalog() {
+    async fn go_mod_system_returns_none_if_gomod_is_dir_with_catalog() {
         let (flox, temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
 
         std::fs::create_dir_all(temp_dir_handle.path().join("go.mod/")).unwrap();
@@ -446,7 +450,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_go_work_system_returns_none_if_gowork_is_dir_catalog() {
+    async fn go_work_system_returns_none_if_gowork_is_dir_with_catalog() {
         let (flox, temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
 
         std::fs::create_dir_all(temp_dir_handle.path().join("go.work/")).unwrap();
@@ -458,7 +462,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_go_version_from_content_returns_compatible_version_catalog() {
+    async fn go_version_from_content_returns_compatible_version_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -490,7 +494,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_go_version_from_content_returns_none_on_incompatible_version_catalog() {
+    async fn go_version_from_content_returns_none_on_incompatible_version_with_catalog() {
         let (mut flox, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
 
