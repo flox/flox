@@ -71,7 +71,7 @@ jobs:
       - name: 'Detect Empty Target List'
         id: set-has-targets
         run: |
-          if [[ -s targets ]]; then
+          if [[ -s ./targets ]]; then
             echo 'HAS_TARGETS=true' >> "$GITHUB_OUTPUT";
             _changed="$( wc -l targets|cut -d' ' -f1; )";
             echo "$_changed files require linting!" >> "$GITHUB_STEP_SUMMARY";
@@ -148,9 +148,7 @@ jobs:
       - name: 'Report'
         if: always()
         run: |
-          echo "targets:" >&2;
-          cat ./targets >&2;
-          if [[ -s ./targets ]]; then
+          if [[ -z "$( < ./targets; )" ]]; then
             echo ":white_check_mark: PASS: no files were linted"  \
               >> "$GITHUB_STEP_SUMMARY";
           else
