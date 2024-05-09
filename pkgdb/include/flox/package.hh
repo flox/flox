@@ -147,7 +147,6 @@ public:
   getSemver() const
   {
     std::optional<std::string> version = this->getVersion();
-    if ( ! version.has_value() ) { return std::nullopt; }
     return versions::coerceSemver( *version );
   }
 
