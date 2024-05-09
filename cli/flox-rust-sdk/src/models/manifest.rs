@@ -47,7 +47,7 @@ pub const MANIFEST_SYSTEMS_ARRAY_KEY: &str = "systems";
 #[derive(Debug)]
 pub struct RawManifest(toml_edit::DocumentMut);
 impl RawManifest {
-    pub fn new(systems: Vec<&str>, customization: &InitCustomization) -> RawManifest {
+    pub fn new(systems: &[&System], customization: &InitCustomization) -> RawManifest {
         let mut manifest = DocumentMut::new();
 
         // `[install]` table
