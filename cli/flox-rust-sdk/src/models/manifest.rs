@@ -17,17 +17,17 @@ pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub(super) const DEFAULT_PRIORITY: usize = 5;
 
 /// Represents the `[install]` table key in manifest.toml
-pub const MANIFEST_INSTALL_TABLE_KEY: &str = "install";
+pub const MANIFEST_INSTALL_KEY: &str = "install";
 /// Represents the `[vars]` table key in manifest.toml
-pub const MANIFEST_VARS_TABLE_KEY: &str = "vars";
+pub const MANIFEST_VARS_KEY: &str = "vars";
 /// Represents the `[hook]` table key in manifest.toml
-pub const MANIFEST_HOOK_TABLE_KEY: &str = "hook";
+pub const MANIFEST_HOOK_KEY: &str = "hook";
 /// Represents the `[profile]` table key in manifest.toml
-pub const MANIFEST_PROFILE_TABLE_KEY: &str = "profile";
+pub const MANIFEST_PROFILE_KEY: &str = "profile";
 /// Represents the `[options]` table key in manifest.toml
-pub const MANIFEST_OPTIONS_TABLE_KEY: &str = "options";
+pub const MANIFEST_OPTIONS_KEY: &str = "options";
 /// Represents the `systems = []` array key in manifest.toml
-pub const MANIFEST_SYSTEMS_ARRAY_KEY: &str = "systems";
+pub const MANIFEST_SYSTEMS_KEY: &str = "systems";
 
 /// A wrapper around a [`toml_edit::DocumentMut`]
 /// that allows modifications of the raw manifest document,
@@ -71,7 +71,7 @@ impl RawManifest {
             # the `[install]` section.
         "#});
 
-        manifest.insert(MANIFEST_INSTALL_TABLE_KEY, Item::Table(install_table));
+        manifest.insert(MANIFEST_INSTALL_KEY, Item::Table(install_table));
 
         // `[vars]` table
         let mut vars_table = Table::new();
@@ -87,7 +87,7 @@ impl RawManifest {
             # message = "Howdy"
         "#});
 
-        manifest.insert(MANIFEST_VARS_TABLE_KEY, Item::Table(vars_table));
+        manifest.insert(MANIFEST_VARS_KEY, Item::Table(vars_table));
 
         // `[hook]` table
         let mut hook_table = Table::new();
@@ -123,7 +123,7 @@ impl RawManifest {
             "#});
         };
 
-        manifest.insert(MANIFEST_HOOK_TABLE_KEY, Item::Table(hook_table));
+        manifest.insert(MANIFEST_HOOK_KEY, Item::Table(hook_table));
 
         // `[profile]` table
         let mut profile_table = Table::new();
@@ -204,7 +204,7 @@ impl RawManifest {
             },
         };
 
-        manifest.insert(MANIFEST_PROFILE_TABLE_KEY, Item::Table(profile_table));
+        manifest.insert(MANIFEST_PROFILE_KEY, Item::Table(profile_table));
 
         // `[options]` table
         let mut options_table = Table::new();
@@ -215,7 +215,7 @@ impl RawManifest {
         "#});
 
         // `systems` array
-        let mut systems_key = Key::new(MANIFEST_SYSTEMS_ARRAY_KEY);
+        let mut systems_key = Key::new(MANIFEST_SYSTEMS_KEY);
         systems_key.leaf_decor_mut().set_prefix(indoc! {r#"
 
                 # An environment that works on one system is guaranteed to work on the same type
@@ -229,7 +229,7 @@ impl RawManifest {
             value(Array::from_iter(systems.iter().copied())),
         );
 
-        manifest.insert(MANIFEST_OPTIONS_TABLE_KEY, Item::Table(options_table));
+        manifest.insert(MANIFEST_OPTIONS_KEY, Item::Table(options_table));
 
         RawManifest(manifest)
     }
