@@ -118,6 +118,14 @@ function check_with_dir() {
   check_with_dir
 }
 
+@test "c2.1: \`flox init\` with \`--dir <path>\` will not create an environment where \`<path>\` is a file" {
+  touch "$PROJECT_DIR/other"
+
+  run "$FLOX_BIN" init -d ./other
+  assert_failure
+  assert_line --partial "Could not prepare a '.flox' directory: Not a directory"
+}
+
 @test "c2.1: \`flox init\` with \`--dir <path>\` will create an environment in \`<path>\`. (absolute)" {
   mkdir -p "$PROJECT_DIR/other"
 
