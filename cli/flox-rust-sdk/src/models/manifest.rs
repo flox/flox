@@ -47,7 +47,12 @@ pub const MANIFEST_SYSTEMS_ARRAY_KEY: &str = "systems";
 #[derive(Debug)]
 pub struct RawManifest(toml_edit::DocumentMut);
 impl RawManifest {
-    pub fn new(systems: &[&System], customization: &InitCustomization) -> RawManifest {
+    /// Creates a new [RawManifest] instance, populating its configuration from
+    /// fields in `customization` [InitCustomization] and systems [System] arguments.
+    ///
+    /// Additionally, this method prefixes each table with documentation on its usage, and
+    /// and inserts commented configuration examples for tables left empty.
+    pub fn new_documented(systems: &[&System], customization: &InitCustomization) -> RawManifest {
         let mut manifest = DocumentMut::new();
 
         // `[install]` table
@@ -243,7 +248,7 @@ impl RawManifest {
                 "#},
                 " ",
             )),
-            value(Array::from_iter(systems)),
+            value(Array::from_iter(systems.iter().map(|&s| s))),
         );
 
         manifest.insert_formatted(

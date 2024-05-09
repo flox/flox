@@ -377,7 +377,7 @@ impl PathEnvironment {
         }
 
         // Create manifest
-        let manifest = RawManifest::new(vec![system], customization);
+        let manifest = RawManifest::new_documented(&[&system.to_string()], customization);
 
         let mut environment = Self::write_new_unchecked(
             flox,
