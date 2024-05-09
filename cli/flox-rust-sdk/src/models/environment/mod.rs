@@ -444,8 +444,6 @@ pub enum EnvironmentError {
 
     #[error("could not read manifest")]
     ReadManifest(#[source] std::io::Error),
-    #[error("Failed editing contents of manifest")]
-    EditManifest,
     #[error("couldn't write manifest")]
     WriteManifest(#[source] std::io::Error),
 
