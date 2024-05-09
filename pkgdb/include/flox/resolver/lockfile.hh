@@ -237,6 +237,26 @@ struct LockfileRaw
   void
   clear();
 
+  /** @brief Loads a JSON object to @a flox::resolver::LockfileRaw
+   * dispatching by the `lockfile-version` field.
+   *
+   * V0 lockfile schema was owned by `pkgdb` and thus had the entire schema
+   * implemented and strongly typed, allowing it to be fully loaded using
+   * `from_json` helpers.  V1 lockfile schema is owned by the Rust side as
+   * we transistion to the catalog service.  Therefore much less needs to be
+   * be known in `pkgdb` and for the transistion it was easiest to extract
+   * the parts needed and move them into the existing data structures, allowing
+   * everything else to remain the same.
+   * */
+  void
+  load_from_content( const nlohmann::json & jfrom );
+
+  /** @brief Helper to convert a JSON object to a @a flox::resolver::LockfileRaw
+   * assuming the content is a V1 lockfile, coercing fields as needed.
+   * */
+  void
+  from_v1_content( const nlohmann::json & jfrom );
+
 
 }; /* End struct `LockfileRaw' */
 

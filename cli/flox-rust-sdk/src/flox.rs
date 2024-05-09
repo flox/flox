@@ -248,7 +248,7 @@ pub mod test_helpers {
                 .new_lockfile
         });
 
-        let (flox, tempdir_handle) = flox_instance_with_optional_floxhub(owner);
+        let (flox, tempdir_handle) = flox_instance_with_optional_floxhub_and_client(owner, false);
 
         // All Flox instances created by flox_instance() have the same global
         // manifest,
@@ -264,13 +264,16 @@ pub mod test_helpers {
     }
 
     pub fn flox_instance() -> (Flox, TempDir) {
-        flox_instance_with_optional_floxhub(None)
+        flox_instance_with_optional_floxhub_and_client(None, false)
     }
 
     /// If owner is None, no mock FloxHub is setup.
     /// If it is Some, a mock FloxHub with a repo for that owner will be setup,
     /// but no other owners will work.
-    fn flox_instance_with_optional_floxhub(owner: Option<&EnvironmentOwner>) -> (Flox, TempDir) {
+    pub fn flox_instance_with_optional_floxhub_and_client(
+        owner: Option<&EnvironmentOwner>,
+        use_client: bool,
+    ) -> (Flox, TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
         let cache_dir = tempdir_handle.path().join("caches");
@@ -306,7 +309,11 @@ pub mod test_helpers {
             )
             .unwrap(),
             floxhub_token: None,
-            catalog_client: Some(MockClient::default().into()),
+            catalog_client: if use_client {
+                Some(MockClient::default().into())
+            } else {
+                None
+            },
         };
 
         init_global_manifest(&global_manifest_path(&flox)).unwrap();

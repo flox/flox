@@ -29,7 +29,7 @@ use crate::providers::git::{
 use crate::utils::copy_file_without_permissions;
 
 mod core_environment;
-pub use core_environment::{test_helpers, CoreEnvironmentError, EditResult};
+pub use core_environment::{test_helpers, CoreEnvironment, CoreEnvironmentError, EditResult};
 
 pub mod generations;
 pub mod managed_environment;
@@ -53,13 +53,24 @@ pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
+
+// The FLOX_* variables which follow are currently updated by the CLI as it
+// activates new environments, and they are consequently *not* updated with
+// manual invocations of the activation script. We want the activation script
+// to eventually have feature parity with the CLI, so in future we will need
+// to migrate this logic to the activation script itself. The only information
+// known by the CLI that cannot be easily derived at runtime is the description
+// text to be added to the prompt, and FLOX_ENV_DESCRIPTION_VAR was introduced
+// to provide the means by which the CLI will be able to communicate this detail
+// to the activation script.
+pub const FLOX_ENV_DESCRIPTION_VAR: &str = "FLOX_ENV_DESCRIPTION";
+
 pub const FLOX_ENV_CACHE_VAR: &str = "FLOX_ENV_CACHE";
 pub const FLOX_ENV_PROJECT_VAR: &str = "FLOX_ENV_PROJECT";
 pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
-pub const FLOX_PATH_PATCHED_VAR: &str = "FLOX_PATH_PATCHED";
 pub const FLOX_SYSTEM_PLACEHOLDER: &str = "_FLOX_INIT_SYSTEM";
 pub const FLOX_PROFILE_PLACEHOLDER: &str = "_FLOX_INIT_PROFILE";
 pub const FLOX_HOOK_PLACEHOLDER: &str = "_FLOX_INIT_HOOK";

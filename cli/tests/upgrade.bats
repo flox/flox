@@ -144,7 +144,7 @@ EOF
 
   run "$FLOX_BIN" upgrade hello
   assert_failure
-  assert_output --partial "package in a group with multiple packages"
+  assert_output --partial "package in the group 'toplevel' with multiple packages"
 }
 
 @test "check confirmation when all packages are up to date" {
@@ -165,4 +165,33 @@ EOF
   run "$FLOX_BIN" upgrade
   assert_success
   assert_output --partial "No packages need to be upgraded"
+}
+
+
+# Catalog functionality tests
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=upgrade:catalog
+@test "'flox upgrade' upgrades with catalog" {
+  export FLOX_FEATURES_USE_CATALOG=true
+
+  "$FLOX_BIN" init
+  # create a catalog manifest
+  echo "version = 1" > ".flox/env/manifest.toml"
+  echo 'options.systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]' >> ".flox/env/manifest.toml"
+
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello_resolution_old.json" \
+  "$FLOX_BIN" install -i hello_install_id hello
+
+  run "$FLOX_BIN" list
+  assert_success
+  assert_line "hello_install_id: hello (old_version)"
+
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello_resolution.json" \
+  run "$FLOX_BIN" upgrade hello_install_id
+  assert_success
+
+  run "$FLOX_BIN" list
+  assert_success
+  assert_line "hello_install_id: hello (version)"
 }

@@ -10,7 +10,7 @@ use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, 
 use indoc::{formatdoc, indoc};
 use semver::VersionReq;
 
-use super::{format_customization, InitHook, AUTO_SETUP_HINT};
+use super::{format_customization, InitHook, ProvidedPackage, AUTO_SETUP_HINT};
 use crate::config::features::Features;
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
@@ -55,22 +55,26 @@ pub(super) struct Node {
     nvmrc_version: Option<NVMRCVersion>,
 }
 
+/// Information about the version specifier found in the `.nvmrc` file
 #[derive(Debug, PartialEq)]
 enum RequestedNVMRCVersion {
     /// .nvmrc not present or empty
     None,
     /// .nvmrc contains an alias or something we can't parse as a version.
     Unsure,
+    /// The version specifier in the .nvmrc file
     Found(String),
 }
 
+/// Information about the result of finding a node version compatible with what the `.nvmrc` file
+/// requested
 enum NVMRCVersion {
-    /// .nvmrc contains a version,
-    /// but flox doesn't provide it.
+    /// .nvmrc contains a version, but flox doesn't provide it.
     Unavailable,
     /// .nvmrc contains an alias or something we can't parse as a version.
     Unsure,
-    Found(Box<SearchResult>),
+    /// An available version of nodejs that matches the version specifier in the .nvmrc file
+    Found(ProvidedPackage),
 }
 
 enum PackageJSONVersion {
@@ -80,26 +84,29 @@ enum PackageJSONVersion {
     Unavailable,
     /// package.json specifies a version,
     /// and we found a search result satisfying that version constraint
-    Found(Box<SearchResult>),
+    Found(ProvidedPackage),
 }
 
+/// Which node and yarn versions to install together
 #[derive(Clone, Debug, PartialEq)]
 struct YarnInstall {
-    yarn: SearchResult,
-    node: SearchResult,
+    yarn: ProvidedPackage,
+    node: ProvidedPackage,
 }
 
+/// Which node version to install if desired
 #[derive(Clone)]
 struct NodeInstall {
-    node: Option<SearchResult>,
+    node: Option<ProvidedPackage>,
     npm_hook: bool,
 }
 
+/// Which node ecosystem packages to install
 #[derive(Clone)]
 enum NodeInstallAction {
-    Yarn(Box<YarnInstall>),
-    YarnOrNode(Box<YarnInstall>, Box<NodeInstall>),
-    Node(Box<NodeInstall>),
+    Yarn(YarnInstall),
+    YarnOrNode(YarnInstall, NodeInstall),
+    Node(NodeInstall),
 }
 
 struct PackageJSONVersions {
@@ -159,7 +166,7 @@ impl Node {
         if let Some(yarn_install) = &yarn_install {
             if !package_json_and_package_lock {
                 return Ok(Some(Self {
-                    action: NodeInstallAction::Yarn(Box::new(yarn_install.clone())),
+                    action: NodeInstallAction::Yarn(yarn_install.clone()),
                     package_json_node_version: None,
                     nvmrc_version: None,
                 }));
@@ -174,7 +181,7 @@ impl Node {
                 ..
             }) => match Self::try_find_compatible_version(flox, "nodejs", node_version, None)? {
                 None => Some(PackageJSONVersion::Unavailable),
-                Some(result) => Some(PackageJSONVersion::Found(Box::new(result))),
+                Some(result) => Some(PackageJSONVersion::Found(result.try_into()?)),
             },
             Some(_) => Some(PackageJSONVersion::Unspecified),
             _ => None,
@@ -198,14 +205,11 @@ impl Node {
                     valid_package_json,
                 )
                 .map_or(
-                    Some(NodeInstallAction::Yarn(Box::new(yarn_install.clone()))),
+                    Some(NodeInstallAction::Yarn(yarn_install.clone())),
                     |node_install| {
                         // We know at this point that package-lock.json exists,
                         // because otherwise we would have returned above
-                        Some(NodeInstallAction::YarnOrNode(
-                            Box::new(yarn_install),
-                            Box::new(node_install),
-                        ))
+                        Some(NodeInstallAction::YarnOrNode(yarn_install, node_install))
                     },
                 )
             },
@@ -221,7 +225,7 @@ impl Node {
                     if yarn_lock_exists {
                         node_install.npm_hook = false;
                     }
-                    NodeInstallAction::Node(Box::new(node_install))
+                    NodeInstallAction::Node(node_install)
                 })
             },
         };
@@ -274,16 +278,19 @@ impl Node {
             },
             None => Self::get_default_node_if_compatible(flox, None)?
                 .ok_or(anyhow!("Flox couldn't find nodejs in nixpkgs"))?,
-        };
+        }
+        .try_into()?;
 
         // We assume that yarn is built with found_node, which is currently true
         // in nixpkgs
-        let found_yarn = match yarn {
+        let found_yarn: Option<ProvidedPackage> = match yarn {
             Some(yarn_version) => {
                 Self::try_find_compatible_version(flox, "yarn", yarn_version, None)?
             },
             _ => Some(Self::get_default_package(flox, "yarn")?),
-        };
+        }
+        .map(|yarn| yarn.try_into())
+        .transpose()?;
 
         Ok(found_yarn.map(|found_yarn| YarnInstall {
             yarn: found_yarn,
@@ -309,7 +316,7 @@ impl Node {
             RequestedNVMRCVersion::Found(version) => {
                 match Self::try_find_compatible_version(flox, "nodejs", &version, None)? {
                     None => Some(NVMRCVersion::Unavailable),
-                    Some(result) => Some(NVMRCVersion::Found(Box::new(result))),
+                    Some(result) => Some(NVMRCVersion::Found(result.try_into()?)),
                 }
             },
         };
@@ -442,14 +449,14 @@ impl Node {
     ) -> Option<NodeInstall> {
         match (package_json_node_version, nvmrc_version) {
             // package.json takes precedence over .nvmrc
-            (Some(PackageJSONVersion::Found(result)), _) => Some(NodeInstall {
-                node: Some(*result.clone()),
+            (Some(PackageJSONVersion::Found(package)), _) => Some(NodeInstall {
+                node: Some(package.clone()),
                 npm_hook,
             }),
             // Treat the version in package.json strictly; if we can't find it, don't suggest something else.
             (Some(PackageJSONVersion::Unavailable), _) => None,
-            (_, Some(NVMRCVersion::Found(result))) => Some(NodeInstall {
-                node: Some(*result.clone()),
+            (_, Some(NVMRCVersion::Found(package))) => Some(NodeInstall {
+                node: Some(package.clone()),
                 npm_hook,
             }),
             (_, Some(NVMRCVersion::Unsure)) => Some(NodeInstall {
@@ -606,7 +613,7 @@ impl Node {
         let node_version = Self::format_version_or_empty(
             match &node_install.node {
                 Some(found_node) => found_node.clone(),
-                None => Self::get_default_package(flox, "nodejs")?,
+                None => Self::get_default_package(flox, "nodejs")?.try_into()?,
             }
             .version
             .as_ref(),
@@ -645,9 +652,9 @@ impl Node {
             // Temporarily set choice so self.get_init_customization() returns
             // the correct hook
             if choice == 3 {
-                self.action = NodeInstallAction::Node(Box::new(node_install.clone()))
+                self.action = NodeInstallAction::Node(node_install.clone())
             } else if choice == 4 {
-                self.action = NodeInstallAction::Yarn(Box::new(yarn_install.clone()))
+                self.action = NodeInstallAction::Yarn(yarn_install.clone())
             }
             message::plain(format_customization(&self.get_init_customization())?);
 
@@ -655,9 +662,9 @@ impl Node {
         }
 
         if choice == 0 {
-            self.action = NodeInstallAction::Node(Box::new(node_install.clone()))
+            self.action = NodeInstallAction::Node(node_install.clone())
         } else if choice == 1 {
-            self.action = NodeInstallAction::Yarn(Box::new(yarn_install.clone()))
+            self.action = NodeInstallAction::Yarn(yarn_install.clone())
         }
         Ok(choice == 0 || choice == 1)
     }
@@ -674,7 +681,7 @@ impl InitHook for Node {
         match &self.action {
             NodeInstallAction::Yarn(yarn_install) => self.prompt_with_yarn(yarn_install),
             NodeInstallAction::YarnOrNode(yarn_install, node_install) => {
-                self.prompt_for_package_manager(flox, *yarn_install.clone(), *node_install.clone())
+                self.prompt_for_package_manager(flox, yarn_install.clone(), node_install.clone())
             },
             NodeInstallAction::Node(node_install) => self.prompt_with_node(flox, node_install),
         }
@@ -683,11 +690,11 @@ impl InitHook for Node {
     fn get_init_customization(&self) -> InitCustomization {
         let mut packages = vec![];
 
-        let profile = match &self.action {
+        let hook_on_activate = match &self.action {
             NodeInstallAction::Yarn(yarn_install) => {
                 packages.push(PackageToInstall {
                     id: "yarn".to_string(),
-                    pkg_path: yarn_install.yarn.rel_path.join("."),
+                    pkg_path: yarn_install.yarn.rel_path.clone(),
                     // TODO: we probably shouldn't pin this when we're just
                     // providing the default
                     version: yarn_install.yarn.version.clone(),
@@ -702,7 +709,7 @@ impl InitHook for Node {
                 let nodejs_to_install = match &node_install.node {
                     Some(result) => PackageToInstall {
                         id: "nodejs".to_string(),
-                        pkg_path: result.rel_path.join("."),
+                        pkg_path: result.rel_path.clone(),
                         version: result.version.clone(),
                         input: None,
                     },
@@ -723,7 +730,10 @@ impl InitHook for Node {
         };
 
         InitCustomization {
-            profile,
+            hook_on_activate,
+            profile_common: None,
+            profile_bash: None,
+            profile_zsh: None,
             packages: Some(packages),
         }
     }
@@ -794,14 +804,20 @@ mod tests {
             Node {
                 package_json_node_version: None,
                 nvmrc_version: None,
-                action: NodeInstallAction::Yarn(Box::new(YarnInstall {
-                    yarn: SearchResult {
-                        rel_path: vec!["yarn".to_string(), "path".to_string()],
+                action: NodeInstallAction::Yarn(YarnInstall {
+                    yarn: ProvidedPackage {
+                        rel_path: "yarn.path".to_string(),
                         version: Some("1".to_string()),
-                        ..Default::default()
+                        name: "yarn".to_string(),
+                        display_version: "1".to_string(),
                     },
-                    node: SearchResult::default(),
-                })),
+                    node: ProvidedPackage {
+                        name: "nodejs".to_string(),
+                        rel_path: "nodejs".to_string(),
+                        display_version: "N/A".to_string(),
+                        version: None
+                    },
+                }),
             }
             .get_init_customization(),
             InitCustomization {
@@ -811,7 +827,10 @@ mod tests {
                     version: Some("1".to_string()),
                     input: None,
                 }]),
-                profile: Some(YARN_HOOK.to_string()),
+                hook_on_activate: Some(YARN_HOOK.to_string()),
+                profile_common: None,
+                profile_bash: None,
+                profile_zsh: None,
             }
         );
     }
@@ -825,18 +844,29 @@ mod tests {
                 package_json_node_version: None,
                 nvmrc_version: None,
                 action: NodeInstallAction::YarnOrNode(
-                    Box::new(YarnInstall {
-                        yarn: SearchResult::default(),
-                        node: SearchResult::default(),
-                    }),
-                    Box::new(NodeInstall {
-                        node: Some(SearchResult {
-                            rel_path: vec!["nodejs".to_string(), "path".to_string()],
+                    YarnInstall {
+                        yarn: ProvidedPackage {
+                            name: "yarn".to_string(),
+                            rel_path: "yarn".to_string(),
+                            display_version: "N/A".to_string(),
+                            version: None
+                        },
+                        node: ProvidedPackage {
+                            name: "nodejs".to_string(),
+                            rel_path: "nodejs".to_string(),
+                            display_version: "N/A".to_string(),
+                            version: None
+                        },
+                    },
+                    NodeInstall {
+                        node: Some(ProvidedPackage {
+                            rel_path: "nodejs.path".to_string(),
                             version: Some("1".to_string()),
-                            ..Default::default()
+                            name: "nodejs".to_string(),
+                            display_version: "1".to_string()
                         }),
                         npm_hook: true,
-                    })
+                    }
                 ),
             }
             .get_init_customization(),
@@ -847,7 +877,10 @@ mod tests {
                     version: Some("1".to_string()),
                     input: None,
                 }]),
-                profile: Some(NPM_HOOK.to_string()),
+                hook_on_activate: Some(NPM_HOOK.to_string()),
+                profile_common: None,
+                profile_bash: None,
+                profile_zsh: None,
             }
         );
     }
@@ -858,14 +891,15 @@ mod tests {
             Node {
                 package_json_node_version: None,
                 nvmrc_version: None,
-                action: NodeInstallAction::Node(Box::new(NodeInstall {
-                    node: Some(SearchResult {
-                        rel_path: vec!["nodejs".to_string(), "path".to_string()],
+                action: NodeInstallAction::Node(NodeInstall {
+                    node: Some(ProvidedPackage {
+                        rel_path: "nodejs.path".to_string(),
                         version: Some("1".to_string()),
-                        ..Default::default()
+                        name: "nodejs".to_string(),
+                        display_version: "1".to_string()
                     }),
                     npm_hook: false,
-                })),
+                })
             }
             .get_init_customization(),
             InitCustomization {
@@ -875,7 +909,10 @@ mod tests {
                     version: Some("1".to_string()),
                     input: None,
                 }]),
-                profile: None,
+                hook_on_activate: None,
+                profile_common: None,
+                profile_bash: None,
+                profile_zsh: None,
             }
         );
     }
@@ -897,8 +934,8 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, vec!["nodejs".to_string()]);
-        assert_eq!(yarn_install.yarn.rel_path, vec!["yarn".to_string()]);
+        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
     }
 
     /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
@@ -913,9 +950,9 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, vec!["nodejs".to_string()]);
+        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.rel_path, vec!["yarn".to_string()]);
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
     }
 
     /// Test finding yarn with a version of node other than that of
@@ -945,8 +982,8 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, vec!["nodejs".to_string()]);
-        assert_eq!(yarn_install.yarn.rel_path, vec!["yarn".to_string()]);
+        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
 
@@ -978,9 +1015,9 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, vec!["nodejs".to_string()]);
+        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.rel_path, vec!["yarn".to_string()]);
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
 }

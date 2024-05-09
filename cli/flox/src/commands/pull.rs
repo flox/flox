@@ -593,8 +593,9 @@ mod tests {
 
     /// Pulling an environment without packages for the current platform should
     /// succeed if force is passed
-    #[test]
-    fn test_handle_pull_result_2() {
+    // handle_pull_result() calls spin() which depends on tokio
+    #[tokio::test]
+    async fn test_handle_pull_result_2() {
         let owner = "owner".parse().unwrap();
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
 
@@ -643,8 +644,9 @@ mod tests {
     /// Pulling an environment without packages for the current platform should
     /// prompt about adding system
     /// When the user confirms, the environment should not be removed
-    #[test]
-    fn test_handle_pull_result_4() {
+    // handle_pull_result() calls spin() which depends on tokio
+    #[tokio::test]
+    async fn test_handle_pull_result_4() {
         let owner = "owner".parse().unwrap();
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
 
