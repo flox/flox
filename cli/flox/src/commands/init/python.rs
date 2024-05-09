@@ -33,11 +33,11 @@ impl Python {
     /// Creates and returns the [Python] hook with any detected
     /// [Provider] instances.
     /// If no providers are detected, returns [None].
-    pub fn new(flox: &Flox, path: &Path) -> Option<Self> {
+    pub async fn new(flox: &Flox, path: &Path) -> Option<Self> {
         let providers = vec![
-            PoetryPyProject::detect(flox, path).into(),
-            PyProject::detect(flox, path).into(),
-            Requirements::detect(flox, path).into(),
+            PoetryPyProject::detect(flox, path).await.into(),
+            PyProject::detect(flox, path).await.into(),
+            Requirements::detect(flox, path).await.into(),
         ];
 
         debug!("Detected Python providers: {:#?}", providers);
@@ -81,7 +81,7 @@ impl InitHook for Python {
             Flox detected a Python project with the following Python provider(s):
 
             {}
-        ", found_providers.iter().map(|p| describe_provider(p)).join("\n")});
+        ", found_providers.iter().map(describe_provider).join("\n")});
 
         let message = formatdoc! {"
             Would you like Flox to set up a standard Python environment?
@@ -292,7 +292,7 @@ pub(super) struct PoetryPyProject {
 }
 
 impl PoetryPyProject {
-    fn detect(flox: &Flox, path: &Path) -> Result<Option<Self>> {
+    async fn detect(flox: &Flox, path: &Path) -> Result<Option<Self>> {
         debug!("Detecting poetry pyproject.toml at {:?}", path);
 
         let pyproject_toml = path.join("pyproject.toml");
@@ -304,10 +304,10 @@ impl PoetryPyProject {
 
         let content = std::fs::read_to_string(&pyproject_toml)?;
 
-        Self::from_pyproject_content(flox, &content)
+        Self::from_pyproject_content(flox, &content).await
     }
 
-    fn from_pyproject_content(flox: &Flox, content: &str) -> Result<Option<PoetryPyProject>> {
+    async fn from_pyproject_content(flox: &Flox, content: &str) -> Result<Option<PoetryPyProject>> {
         let toml = toml_edit::DocumentMut::from_str(content)?;
 
         // poetry _requires_ `tool.poetry.dependencies.python` to be set [1],
@@ -334,9 +334,10 @@ impl PoetryPyProject {
             let compatible = try_find_compatible_version(
                 flox,
                 "python3",
-                Some(&required_python_version),
-                None::<Vec<&str>>,
-            )?;
+                required_python_version.as_ref(),
+                None::<Vec<String>>,
+            )
+            .await?;
 
             if let Some(found_version) = compatible {
                 break 'version ProvidedVersion::Compatible {
@@ -347,9 +348,11 @@ impl PoetryPyProject {
 
             log::debug!("poetry config requires python version {required_python_version}, but no compatible version found in the catalogs");
 
-            let substitute = get_default_package_if_compatible(flox, ["python3"], None)?
-                .context("No python3 in the catalogs")?
-                .try_into()?;
+            let substitute =
+                get_default_package_if_compatible(flox, vec!["python3".to_string()], None)
+                    .await?
+                    .context("No python3 in the catalogs")?
+                    .try_into()?;
 
             ProvidedVersion::Incompatible {
                 substitute,
@@ -357,10 +360,12 @@ impl PoetryPyProject {
             }
         };
 
-        let poetry_version = get_default_package_if_compatible(flox, ["poetry"], None)?
-            .context("Did not find poetry in the catalogs")?
-            .version
-            .unwrap_or_else(|| "N/A".to_string());
+        let poetry_version =
+            get_default_package_if_compatible(flox, vec!["poetry".to_string()], None)
+                .await?
+                .context("Did not find poetry in the catalogs")?
+                .version
+                .unwrap_or_else(|| "N/A".to_string());
 
         Ok(Some(PoetryPyProject {
             provided_python_version,
@@ -483,7 +488,7 @@ pub(super) struct PyProject {
 }
 
 impl PyProject {
-    fn detect(flox: &Flox, path: &Path) -> Result<Option<Self>> {
+    async fn detect(flox: &Flox, path: &Path) -> Result<Option<Self>> {
         let pyproject_toml = path.join("pyproject.toml");
 
         if !pyproject_toml.exists() {
@@ -492,10 +497,10 @@ impl PyProject {
 
         let content = std::fs::read_to_string(&pyproject_toml)?;
 
-        Self::from_pyproject_content(flox, &content)
+        Self::from_pyproject_content(flox, &content).await
     }
 
-    fn from_pyproject_content(flox: &Flox, content: &str) -> Result<Option<PyProject>> {
+    async fn from_pyproject_content(flox: &Flox, content: &str) -> Result<Option<PyProject>> {
         let toml = toml_edit::DocumentMut::from_str(content)?;
 
         // unlike in poetry, `project.require-python` does not seem to be required
@@ -515,16 +520,17 @@ impl PyProject {
             .map(|req| req.to_string());
 
         let provided_python_version = 'version: {
-            let search_default = || {
-                let default = get_default_package_if_compatible(flox, ["python3"], None)?
-                    .context("No python3 in the catalogs")?
-                    .try_into()?;
+            let search_default = || async {
+                let default =
+                    get_default_package_if_compatible(flox, vec!["python3".to_string()], None)
+                        .await?
+                        .context("No python3 in the catalogs")?;
                 Ok::<_, Error>(default)
             };
 
             let Some(required_python_version) = required_python_version else {
                 break 'version ProvidedVersion::Compatible {
-                    compatible: search_default()?,
+                    compatible: search_default().await?,
                     requested: None,
                 };
             };
@@ -532,13 +538,14 @@ impl PyProject {
             let compatible = try_find_compatible_version(
                 flox,
                 "python3",
-                Some(required_python_version.clone()),
-                None::<Vec<&str>>,
-            )?;
+                required_python_version.as_ref(),
+                None::<Vec<String>>,
+            )
+            .await?;
 
             if let Some(found_version) = compatible {
                 break 'version ProvidedVersion::Compatible {
-                    compatible: found_version.try_into()?,
+                    compatible: found_version,
                     requested: Some(required_python_version),
                 };
             }
@@ -546,7 +553,7 @@ impl PyProject {
             log::debug!("pyproject.toml requires python version {required_python_version}, but no compatible version found in the catalogs");
 
             ProvidedVersion::Incompatible {
-                substitute: search_default()?,
+                substitute: search_default().await?,
                 requested: required_python_version.clone(),
             }
         };
@@ -683,12 +690,13 @@ impl Requirements {
         Ok(matches)
     }
 
-    fn detect(flox: &Flox, path: &Path) -> Result<Option<Self>> {
+    async fn detect(flox: &Flox, path: &Path) -> Result<Option<Self>> {
         debug!("Detecting python requirements.txt at {:?}", path);
         let matches = Self::get_matches(path)?;
 
         if !matches.is_empty() {
-            let result = get_default_package_if_compatible(flox, ["python3"], None)?
+            let result = get_default_package_if_compatible(flox, vec!["python3".to_string()], None)
+                .await?
                 .context("Did not find python3 in the catalogs")?;
             // given our catalog is based on nixpkgs,
             // we can assume that the version is always present.
@@ -792,26 +800,26 @@ mod tests {
     use crate::commands::init::ProvidedPackage;
 
     /// An invalid pyproject.toml should return an error
-    #[test]
-    fn test_pyproject_invalid() {
+    #[tokio::test]
+    async fn test_pyproject_invalid() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
         ,
         "#};
 
-        let pyproject = PyProject::from_pyproject_content(&flox, content);
+        let pyproject = PyProject::from_pyproject_content(&flox, content).await;
 
         assert!(pyproject.is_err());
     }
 
     /// ProvidedVersion::Compatible should be returned for an empty pyproject.toml
-    #[test]
+    #[tokio::test]
     #[serial]
-    fn test_pyproject_empty() {
+    async fn test_pyproject_empty() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
-        let pyproject = PyProject::from_pyproject_content(&flox, "").unwrap();
+        let pyproject = PyProject::from_pyproject_content(&flox, "").await.unwrap();
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
@@ -822,9 +830,9 @@ mod tests {
     }
 
     /// ProvidedVersion::Compatible should be returned for requires-python = ">=3.8"
-    #[test]
+    #[tokio::test]
     #[serial]
-    fn test_pyproject_available_version() {
+    async fn test_pyproject_available_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
@@ -832,7 +840,9 @@ mod tests {
         requires-python = ">= 3.8"
         "#};
 
-        let pyproject = PyProject::from_pyproject_content(&flox, content).unwrap();
+        let pyproject = PyProject::from_pyproject_content(&flox, content)
+            .await
+            .unwrap();
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
@@ -843,9 +853,9 @@ mod tests {
     }
 
     /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
-    #[test]
+    #[tokio::test]
     #[serial]
-    fn test_pyproject_unavailable_version() {
+    async fn test_pyproject_unavailable_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
@@ -853,7 +863,9 @@ mod tests {
         requires-python = "1"
         "#};
 
-        let pyproject = PyProject::from_pyproject_content(&flox, content).unwrap();
+        let pyproject = PyProject::from_pyproject_content(&flox, content)
+            .await
+            .unwrap();
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Incompatible {
@@ -864,9 +876,9 @@ mod tests {
     }
 
     /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
-    #[test]
+    #[tokio::test]
     #[serial]
-    fn test_pyproject_parse_version() {
+    async fn test_pyproject_parse_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         // python docs have a space in the version (>= 3.8):
@@ -877,7 +889,9 @@ mod tests {
         requires-python = ">= 3.8" # < with space
         "#};
 
-        let pyproject = PyProject::from_pyproject_content(&flox, content).unwrap();
+        let pyproject = PyProject::from_pyproject_content(&flox, content)
+            .await
+            .unwrap();
 
         assert_eq!(pyproject.unwrap(), PyProject {
             provided_python_version: ProvidedVersion::Compatible {
@@ -888,48 +902,50 @@ mod tests {
     }
 
     /// An invalid pyproject.toml should return an error
-    #[test]
-    fn test_poetry_pyproject_invalid() {
+    #[tokio::test]
+    async fn test_poetry_pyproject_invalid() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
         ,
         "#};
 
-        let pyproject = PoetryPyProject::from_pyproject_content(&flox, content);
+        let pyproject = PoetryPyProject::from_pyproject_content(&flox, content).await;
 
         assert!(pyproject.is_err());
     }
 
     /// None should be returned for an empty pyproject.toml
-    #[test]
-    fn test_poetry_pyproject_empty() {
+    #[tokio::test]
+    async fn test_poetry_pyproject_empty() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
-        let pyproject = PoetryPyProject::from_pyproject_content(&flox, "").unwrap();
+        let pyproject = PoetryPyProject::from_pyproject_content(&flox, "")
+            .await
+            .unwrap();
 
         assert_eq!(pyproject, None);
     }
 
     /// Err should be returned for a pyproject.toml with `tool.poetry` but not
     /// `tool.poetry.dependencies.python`
-    #[test]
-    fn test_poetry_pyproject_no_python() {
+    #[tokio::test]
+    async fn test_poetry_pyproject_no_python() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
         [tool.poetry]
         "#};
 
-        let pyproject = PoetryPyProject::from_pyproject_content(&flox, content);
+        let pyproject = PoetryPyProject::from_pyproject_content(&flox, content).await;
 
         assert!(pyproject.is_err());
     }
 
     /// ProvidedVersion::Compatible should be returned for python = "^3.7"
-    #[test]
+    #[tokio::test]
     #[serial]
-    fn test_poetry_pyproject_available_version() {
+    async fn test_poetry_pyproject_available_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
@@ -937,7 +953,9 @@ mod tests {
         python = "^3.7"
         "#};
 
-        let pyproject = PoetryPyProject::from_pyproject_content(&flox, content).unwrap();
+        let pyproject = PoetryPyProject::from_pyproject_content(&flox, content)
+            .await
+            .unwrap();
 
         assert_eq!(pyproject.unwrap(), PoetryPyProject {
             provided_python_version: ProvidedVersion::Compatible {
@@ -949,9 +967,9 @@ mod tests {
     }
 
     /// ProvidedVersion::Incompatible should be returned for python = "1"
-    #[test]
+    #[tokio::test]
     #[serial]
-    fn test_poetry_pyproject_unavailable_version() {
+    async fn test_poetry_pyproject_unavailable_version() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
 
         let content = indoc! {r#"
@@ -959,7 +977,9 @@ mod tests {
         python = "1"
         "#};
 
-        let pyproject = PoetryPyProject::from_pyproject_content(&flox, content).unwrap();
+        let pyproject = PoetryPyProject::from_pyproject_content(&flox, content)
+            .await
+            .unwrap();
 
         assert_eq!(pyproject.unwrap(), PoetryPyProject {
             provided_python_version: ProvidedVersion::Incompatible {

@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Context, Error, Result};
 use bpaf::Bpaf;
-use flox_rust_sdk::data::CanonicalPath;
+use flox_rust_sdk::data::{AttrPath, CanonicalPath};
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{
@@ -22,7 +22,12 @@ use flox_rust_sdk::models::lockfile::{
 use flox_rust_sdk::models::manifest::{insert_packages, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::scrape_input;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
-use flox_rust_sdk::providers::catalog::PackageResolutionInfo;
+use flox_rust_sdk::providers::catalog::{
+    ClientTrait,
+    PackageDescriptor,
+    PackageGroup,
+    PackageResolutionInfo,
+};
 use indoc::formatdoc;
 use log::debug;
 use path_dedot::ParseDot;
@@ -30,6 +35,7 @@ use toml_edit::{DocumentMut, Formatted, Item, Table, Value};
 use tracing::instrument;
 
 use crate::commands::{environment_description, ConcreteEnvironment};
+use crate::config::features::Features;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
@@ -213,11 +219,11 @@ impl Init {
             hooks.push(InitHookType::Node(node));
         }
 
-        if let Some(python) = Python::new(flox, path) {
+        if let Some(python) = Python::new(flox, path).await {
             hooks.push(InitHookType::Python(python));
         }
 
-        if let Some(go) = Go::new(flox, path)? {
+        if let Some(go) = Go::new(flox, path).await? {
             hooks.push(InitHookType::Go(go));
         }
 
@@ -423,7 +429,7 @@ pub(crate) struct ProvidedPackage {
     pub name: String,
     /// Path to the package in the catalog
     /// Checked to be non-empty
-    pub rel_path: String,
+    pub rel_path: AttrPath,
     /// Version of the package in the catalog
     /// "N/A" if not found
     ///
@@ -447,7 +453,7 @@ impl TryFrom<SearchResult> for ProvidedPackage {
 
         Ok(ProvidedPackage {
             name,
-            rel_path: value.rel_path.join("."),
+            rel_path: value.rel_path.into(),
             display_version: value.version.clone().unwrap_or("N/A".to_string()),
             version: value.version,
         })
@@ -458,7 +464,7 @@ impl From<ProvidedPackage> for PackageToInstall {
     fn from(value: ProvidedPackage) -> Self {
         PackageToInstall {
             id: value.name,
-            pkg_path: value.rel_path,
+            pkg_path: value.rel_path.into(),
             input: None,
             version: value.version,
         }
@@ -469,7 +475,7 @@ impl From<PackageResolutionInfo> for ProvidedPackage {
     fn from(value: PackageResolutionInfo) -> Self {
         Self {
             name: value.install_id,
-            rel_path: value.attr_path,
+            rel_path: value.attr_path.into(),
             display_version: value.version.clone(),
             version: Some(value.version),
         }
@@ -480,78 +486,218 @@ impl From<&PackageResolutionInfo> for ProvidedPackage {
     fn from(value: &PackageResolutionInfo) -> Self {
         Self {
             name: value.install_id.clone(),
-            rel_path: value.attr_path.clone(),
+            rel_path: value.attr_path.clone().into(),
             display_version: value.version.clone(),
             version: Some(value.version.clone()),
         }
     }
 }
 
-/// Get nixpkgs#rel_path optionally verifying that it satisfies a version constraint.
-fn get_default_package_if_compatible(
+/// Get nixpkgs#rel_path,
+/// optionally verifying that it satisfies a version constraint.
+async fn get_default_package_if_compatible(
     flox: &Flox,
-    rel_path: impl IntoIterator<Item = impl ToString>,
+    rel_path: Vec<String>,
     version: Option<String>,
-) -> Result<Option<SearchResult>> {
-    let rel_path = rel_path
-        .into_iter()
-        .map(|s| s.to_string())
-        .collect::<Vec<String>>();
+) -> Result<Option<ProvidedPackage>> {
+    let pkg = if let Some(client) = flox.catalog_client.as_ref() {
+        tracing::debug!("using catalog client to find default compatible package");
+        let resolved_groups = client
+            .resolve(vec![PackageGroup {
+                descriptors: vec![PackageDescriptor {
+                    attr_path: rel_path.join("."),
+                    install_id: "default".to_string(),
+                    version,
+                    allow_pre_releases: None,
+                    derivation: None,
+                }],
+                name: "default".to_string(),
+                system: flox.system.clone(),
+            }])
+            .await?;
+        let pkg: Option<ProvidedPackage> = resolved_groups
+            .first()
+            .and_then(|pkg_group| pkg_group.pages.first())
+            .and_then(|page| page.packages.as_ref())
+            .and_then(|pkgs| pkgs.first().cloned())
+            .map(|pkg| {
+                // Type-inference fails without the fully-qualified method call
+                <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
+            });
+        let Some(pkg) = pkg else {
+            tracing::debug!("no compatible default package");
+            return Ok(None);
+        };
+        pkg
+    } else {
+        tracing::debug!("using pkgdb to find default compatible package");
+        let query = Query {
+            rel_path: Some(rel_path),
+            semver: version,
+            limit: Some(1),
+            deduplicate: false,
+            ..Default::default()
+        };
+        let params = SearchParams {
+            manifest: None,
+            global_manifest: PathOrJson::Path(global_manifest_path(flox)),
+            lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
+            query,
+        };
 
-    let query = Query {
-        rel_path: Some(rel_path),
-        semver: version,
-        limit: Some(1),
-        deduplicate: false,
-        ..Default::default()
+        let (mut results, _) = do_search(&params)?;
+        if results.results.is_empty() {
+            tracing::debug!("no compatible default package version found");
+            return Ok(None);
+        }
+        let pkg = results.results.swap_remove(0);
+        pkg.try_into()?
     };
-    let params = SearchParams {
-        manifest: None,
-        global_manifest: PathOrJson::Path(global_manifest_path(flox)),
-        lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
-        query,
+    tracing::debug!(
+        version = pkg.version.as_ref().unwrap_or(&"null".to_string()),
+        "found default package version"
+    );
+    Ok(Some(pkg))
+}
+
+/// Get a package as if installed with `flox install {package}`
+async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<ProvidedPackage> {
+    let pkg = if let Some(client) = flox.catalog_client.as_ref() {
+        tracing::debug!(
+            package = package.to_string(),
+            "using catalog client to find default package"
+        );
+        let resolved_groups = client
+            .resolve(vec![PackageGroup {
+                descriptors: vec![PackageDescriptor {
+                    attr_path: package.to_string(),
+                    install_id: package.to_string(),
+                    version: None,
+                    allow_pre_releases: None,
+                    derivation: None,
+                }],
+                name: package.to_string(),
+                system: flox.system.clone(),
+            }])
+            .await?;
+        let pkg: Option<ProvidedPackage> = resolved_groups
+            .first()
+            .and_then(|pkg_group| pkg_group.pages.first())
+            .and_then(|page| page.packages.as_ref())
+            .and_then(|pkgs| pkgs.first().cloned())
+            .map(|pkg| {
+                // Type-inference fails without the fully-qualified method call
+                <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
+            });
+        let Some(pkg) = pkg else {
+            tracing::debug!("no default package found");
+            return Err(anyhow!("Flox couldn't find any versions of {package}"))?;
+        };
+        pkg
+    } else {
+        tracing::debug!(
+            package = package.to_string(),
+            "using pkgdb to find default package"
+        );
+        let query = Query::new(
+            package.to_string().as_ref(),
+            Features::parse()?.search_strategy,
+            Some(1),
+            false,
+        )?;
+        let params = SearchParams {
+            manifest: None,
+            global_manifest: PathOrJson::Path(global_manifest_path(flox)),
+            lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
+            query,
+        };
+
+        let (mut results, _) = do_search(&params)?;
+        if results.results.is_empty() {
+            Err(anyhow!("Flox couldn't find any versions of {package}"))?
+        }
+        results.results.swap_remove(0).try_into()?
     };
 
-    let (mut results, _) = do_search(&params)?;
-
-    if results.results.is_empty() {
-        return Ok(None);
-    }
-    Ok(Some(results.results.swap_remove(0)))
+    tracing::debug!(
+        version = pkg.version.as_ref().unwrap_or(&"null".to_string()),
+        package = package.to_string(),
+        "found default package"
+    );
+    Ok(pkg)
 }
 
 /// Searches for a given pname and version, optionally restricting rel_path
-fn try_find_compatible_version(
+async fn try_find_compatible_version(
     flox: &Flox,
-    pname: impl Into<String>,
-    version: Option<impl Into<String>>,
-    rel_path: Option<impl IntoIterator<Item = impl Into<String>>>,
-) -> Result<Option<SearchResult>> {
-    let rel_path = rel_path.map(|r| r.into_iter().map(|s| s.into()).collect::<Vec<String>>());
+    pname: &str,
+    version: &str,
+    rel_path: Option<Vec<String>>,
+) -> Result<Option<ProvidedPackage>> {
+    let pkg = if let Some(client) = flox.catalog_client.as_ref() {
+        tracing::debug!(
+            pname,
+            version,
+            "using catalog client to find compatible package version"
+        );
+        let resolved_groups = client
+            .resolve(vec![PackageGroup {
+                descriptors: vec![PackageDescriptor {
+                    attr_path: pname.to_string(),
+                    install_id: pname.to_string(),
+                    version: Some(version.to_string()),
+                    allow_pre_releases: None,
+                    derivation: None,
+                }],
+                name: pname.to_string(),
+                system: flox.system.clone(),
+            }])
+            .await?;
+        let pkg: Option<ProvidedPackage> = resolved_groups
+            .first()
+            .and_then(|pkg_group| pkg_group.pages.first())
+            .and_then(|page| page.packages.as_ref())
+            .and_then(|pkgs| pkgs.first().cloned())
+            .map(|pkg| {
+                // Type-inference fails without the fully-qualified method call
+                <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
+            });
+        let Some(pkg) = pkg else {
+            tracing::debug!(pname, version, "no compatible package version found");
+            return Ok(None);
+        };
+        pkg
+    } else {
+        tracing::debug!("using pkgdb to find default node version");
+        let query = Query {
+            pname: Some(pname.to_string()),
+            semver: Some(version.to_string()),
+            limit: Some(1),
+            deduplicate: false,
+            rel_path,
+            ..Default::default()
+        };
+        let params = SearchParams {
+            manifest: None,
+            global_manifest: PathOrJson::Path(global_manifest_path(flox)),
+            lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
+            query,
+        };
 
-    let version = version.map(|v| v.into());
-
-    let query = Query {
-        pname: Some(pname.into()),
-        semver: version,
-        limit: Some(1),
-        deduplicate: false,
-        rel_path,
-        ..Default::default()
+        let (mut results, _) = do_search(&params)?;
+        if results.results.is_empty() {
+            return Ok(None);
+        }
+        let matching_package = results.results.swap_remove(0);
+        matching_package.try_into()?
     };
-    let params = SearchParams {
-        manifest: None,
-        global_manifest: PathOrJson::Path(global_manifest_path(flox)),
-        lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
-        query,
-    };
 
-    let (mut results, _) = do_search(&params)?;
-
-    if results.results.is_empty() {
-        return Ok(None);
-    }
-    Ok(Some(results.results.swap_remove(0)))
+    tracing::debug!(
+        pname,
+        version = pkg.version.as_ref().unwrap_or(&"null".to_string()),
+        "found matching package version"
+    );
+    Ok(Some(pkg))
 }
 
 #[cfg(test)]
@@ -572,7 +718,11 @@ mod tests {
         ) -> Self {
             Self {
                 name: name.to_string(),
-                rel_path: rel_path.into_iter().map(|s| s.to_string()).collect(),
+                rel_path: rel_path
+                    .into_iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+                    .into(),
                 display_version: version.to_string(),
                 version: if version != "N/A" {
                     Some(version.to_string())

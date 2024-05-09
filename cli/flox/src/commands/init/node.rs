@@ -4,20 +4,19 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
-use flox_rust_sdk::models::environment::{global_manifest_lockfile_path, global_manifest_path};
 use flox_rust_sdk::models::manifest::PackageToInstall;
-use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams};
-use flox_rust_sdk::providers::catalog::{
-    ClientTrait,
-    PackageDescriptor,
-    PackageGroup,
-    PackageResolutionInfo,
-};
 use indoc::{formatdoc, indoc};
 use semver::VersionReq;
 
-use super::{format_customization, InitHook, ProvidedPackage, AUTO_SETUP_HINT};
-use crate::config::features::Features;
+use super::{
+    format_customization,
+    get_default_package,
+    get_default_package_if_compatible,
+    try_find_compatible_version,
+    InitHook,
+    ProvidedPackage,
+    AUTO_SETUP_HINT,
+};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::message;
 
@@ -188,11 +187,9 @@ impl Node {
             Some(PackageJSONVersions {
                 node: Some(ref node_version),
                 ..
-            }) => {
-                match Self::try_find_compatible_version(flox, "nodejs", node_version, None).await? {
-                    None => Some(PackageJSONVersion::Unavailable),
-                    Some(result) => Some(PackageJSONVersion::Found(result)),
-                }
+            }) => match try_find_compatible_version(flox, "nodejs", node_version, None).await? {
+                None => Some(PackageJSONVersion::Unavailable),
+                Some(result) => Some(PackageJSONVersion::Found(result)),
             },
             Some(_) => Some(PackageJSONVersion::Unspecified),
             _ => None,
@@ -281,14 +278,19 @@ impl Node {
 
         let found_node = match node {
             Some(node_version) => {
-                match Self::get_default_node_if_compatible(flox, Some(node_version.clone())).await?
+                match get_default_package_if_compatible(
+                    flox,
+                    vec!["nodejs".to_string()],
+                    Some(node_version.clone()),
+                )
+                .await?
                 {
                     // If the corresponding node isn't compatible, don't install yarn
                     None => return Ok(None),
                     Some(found_node) => found_node,
                 }
             },
-            None => Self::get_default_node_if_compatible(flox, None)
+            None => get_default_package_if_compatible(flox, vec!["nodejs".to_string()], None)
                 .await?
                 .ok_or(anyhow!("Flox couldn't find nodejs in nixpkgs"))?,
         };
@@ -297,9 +299,9 @@ impl Node {
         // in nixpkgs
         let found_yarn: Option<ProvidedPackage> = match yarn {
             Some(yarn_version) => {
-                Self::try_find_compatible_version(flox, "yarn", yarn_version, None).await?
+                try_find_compatible_version(flox, "yarn", yarn_version, None).await?
             },
-            _ => Some(Self::get_default_package(flox, "yarn").await?),
+            _ => Some(get_default_package(flox, &"yarn".into()).await?),
         };
 
         Ok(found_yarn.map(|found_yarn| YarnInstall {
@@ -324,7 +326,7 @@ impl Node {
             RequestedNVMRCVersion::None => None,
             RequestedNVMRCVersion::Unsure => Some(NVMRCVersion::Unsure),
             RequestedNVMRCVersion::Found(version) => {
-                match Self::try_find_compatible_version(flox, "nodejs", &version, None).await? {
+                match try_find_compatible_version(flox, "nodejs", &version, None).await? {
                     None => Some(NVMRCVersion::Unavailable),
                     Some(result) => Some(NVMRCVersion::Found(result)),
                 }
@@ -368,201 +370,6 @@ impl Node {
                 }
             },
         }
-    }
-
-    /// Searches for a given pname and version, optionally restricting rel_path
-    async fn try_find_compatible_version(
-        flox: &Flox,
-        pname: &str,
-        version: &str,
-        rel_path: Option<Vec<String>>,
-    ) -> Result<Option<ProvidedPackage>> {
-        let pkg = if let Some(client) = flox.catalog_client.as_ref() {
-            tracing::debug!(
-                pname,
-                version,
-                "using catalog client to find compatible package version"
-            );
-            let resolved_groups = client
-                .resolve(vec![PackageGroup {
-                    descriptors: vec![PackageDescriptor {
-                        attr_path: pname.to_string(),
-                        install_id: pname.to_string(),
-                        version: Some(version.to_string()),
-                        allow_pre_releases: None,
-                        derivation: None,
-                    }],
-                    name: pname.to_string(),
-                    system: flox.system.clone(),
-                }])
-                .await?;
-            let pkg: Option<ProvidedPackage> = resolved_groups
-                .first()
-                .and_then(|pkg_group| pkg_group.pages.first())
-                .and_then(|page| page.packages.as_ref())
-                .and_then(|pkgs| pkgs.first().cloned())
-                .map(|pkg| {
-                    // Type-inference fails without the fully-qualified method call
-                    <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
-                });
-            let Some(pkg) = pkg else {
-                tracing::debug!(pname, version, "no compatible package version found");
-                return Ok(None);
-            };
-            pkg
-        } else {
-            tracing::debug!("using pkgdb to find default node version");
-            let query = Query {
-                pname: Some(pname.to_string()),
-                semver: Some(version.to_string()),
-                limit: Some(1),
-                deduplicate: false,
-                rel_path,
-                ..Default::default()
-            };
-            let params = SearchParams {
-                manifest: None,
-                global_manifest: PathOrJson::Path(global_manifest_path(flox)),
-                lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
-                query,
-            };
-
-            let (mut results, _) = do_search(&params)?;
-            if results.results.is_empty() {
-                return Ok(None);
-            }
-            let matching_package = results.results.swap_remove(0);
-            matching_package.try_into()?
-        };
-
-        tracing::debug!(
-            pname,
-            version = pkg.version.as_ref().unwrap_or(&"null".to_string()),
-            "found matching package version"
-        );
-        Ok(Some(pkg))
-    }
-
-    /// Get nixpkgs#nodejs,
-    /// optionally verifying that it satisfies a version constraint.
-    async fn get_default_node_if_compatible(
-        flox: &Flox,
-        version: Option<String>,
-    ) -> Result<Option<ProvidedPackage>> {
-        let node = if let Some(client) = flox.catalog_client.as_ref() {
-            tracing::debug!("using catalog client to find default node version");
-            let resolved_groups = client
-                .resolve(vec![PackageGroup {
-                    descriptors: vec![PackageDescriptor {
-                        attr_path: "nodejs".to_string(),
-                        install_id: "nodejs".to_string(),
-                        version,
-                        allow_pre_releases: None,
-                        derivation: None,
-                    }],
-                    name: "nodejs".to_string(),
-                    system: flox.system.clone(),
-                }])
-                .await?;
-            let pkg: Option<ProvidedPackage> = resolved_groups
-                .first()
-                .and_then(|pkg_group| pkg_group.pages.first())
-                .and_then(|page| page.packages.as_ref())
-                .and_then(|pkgs| pkgs.first().cloned())
-                .map(|pkg| {
-                    // Type-inference fails without the fully-qualified method call
-                    <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
-                });
-            let Some(pkg) = pkg else {
-                tracing::debug!("no compatible node version found");
-                return Ok(None);
-            };
-            pkg
-        } else {
-            tracing::debug!("using pkgdb to find default node version");
-            let query = Query {
-                rel_path: Some(vec!["nodejs".to_string()]),
-                semver: version,
-                limit: Some(1),
-                deduplicate: false,
-                ..Default::default()
-            };
-            let params = SearchParams {
-                manifest: None,
-                global_manifest: PathOrJson::Path(global_manifest_path(flox)),
-                lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
-                query,
-            };
-
-            let (mut results, _) = do_search(&params)?;
-            if results.results.is_empty() {
-                tracing::debug!("no compatible node version found");
-                return Ok(None);
-            }
-            let node = results.results.swap_remove(0);
-            node.try_into()?
-        };
-        tracing::debug!(
-            version = node.version.as_ref().unwrap_or(&"null".to_string()),
-            "found default node version"
-        );
-        Ok(Some(node))
-    }
-
-    /// Get a package as if installed with `flox install {package}`
-    async fn get_default_package(flox: &Flox, package: &str) -> Result<ProvidedPackage> {
-        let pkg = if let Some(client) = flox.catalog_client.as_ref() {
-            tracing::debug!(package, "using catalog client to find default package");
-            let resolved_groups = client
-                .resolve(vec![PackageGroup {
-                    descriptors: vec![PackageDescriptor {
-                        attr_path: package.to_string(),
-                        install_id: package.to_string(),
-                        version: None,
-                        allow_pre_releases: None,
-                        derivation: None,
-                    }],
-                    name: package.to_string(),
-                    system: flox.system.clone(),
-                }])
-                .await?;
-            let pkg: Option<ProvidedPackage> = resolved_groups
-                .first()
-                .and_then(|pkg_group| pkg_group.pages.first())
-                .and_then(|page| page.packages.as_ref())
-                .and_then(|pkgs| pkgs.first().cloned())
-                .map(|pkg| {
-                    // Type-inference fails without the fully-qualified method call
-                    <PackageResolutionInfo as Into<ProvidedPackage>>::into(pkg)
-                });
-            let Some(pkg) = pkg else {
-                tracing::debug!("no default package found");
-                return Err(anyhow!("Flox couldn't find any versions of {package}"))?;
-            };
-            pkg
-        } else {
-            tracing::debug!(package, "using pkgdb to find default package");
-            let query = Query::new(package, Features::parse()?.search_strategy, Some(1), false)?;
-            let params = SearchParams {
-                manifest: None,
-                global_manifest: PathOrJson::Path(global_manifest_path(flox)),
-                lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
-                query,
-            };
-
-            let (mut results, _) = do_search(&params)?;
-            if results.results.is_empty() {
-                Err(anyhow!("Flox couldn't find any versions of {package}"))?
-            }
-            results.results.swap_remove(0).try_into()?
-        };
-
-        tracing::debug!(
-            version = pkg.version.as_ref().unwrap_or(&"null".to_string()),
-            package,
-            "found default package"
-        );
-        Ok(pkg)
     }
 
     /// Return whether to skip the nodejs hook entirely, install a requested
@@ -639,19 +446,19 @@ impl Node {
                 (message, result.version.clone())
             },
             (_, Some(NVMRCVersion::Unsure)) => {
-                let result = Self::get_default_package(flox, "nodejs").await?;
+                let result = get_default_package(flox, &"nodejs".into()).await?;
                 let message = format!("Flox detected an .nvmrc with a version specifier not understood by Flox, but Flox can provide {}",
                        result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
                 (message, result.version)
             },
             (_, Some(NVMRCVersion::Unavailable)) => {
-                let result = Self::get_default_package(flox, "nodejs").await?;
+                let result = get_default_package(flox, &"nodejs".into()).await?;
                 let message = format!("Flox detected an .nvmrc with a version of nodejs not provided by Flox, but Flox can provide {}",
                 result.version.as_ref().map(|version|format!("version {version}")).unwrap_or("another version".to_string()));
                 (message, result.version.clone())
             },
             (Some(PackageJSONVersion::Unspecified), None) => {
-                let result = Self::get_default_package(flox, "nodejs").await?;
+                let result = get_default_package(flox, &"nodejs".into()).await?;
                 mentions_package_json = true;
                 ("Flox detected a package.json".to_string(), result.version)
             },
@@ -745,7 +552,7 @@ impl Node {
         let node_version = Self::format_version_or_empty(
             match &node_install.node {
                 Some(found_node) => found_node.clone(),
-                None => Self::get_default_package(flox, "nodejs").await?,
+                None => get_default_package(flox, &"nodejs".into()).await?,
             }
             .version
             .as_ref(),
@@ -829,7 +636,7 @@ impl InitHook for Node {
             NodeInstallAction::Yarn(yarn_install) => {
                 packages.push(PackageToInstall {
                     id: "yarn".to_string(),
-                    pkg_path: yarn_install.yarn.rel_path.clone(),
+                    pkg_path: yarn_install.yarn.rel_path.clone().into(),
                     // TODO: we probably shouldn't pin this when we're just
                     // providing the default
                     version: yarn_install.yarn.version.clone(),
@@ -844,7 +651,7 @@ impl InitHook for Node {
                 let nodejs_to_install = match &node_install.node {
                     Some(result) => PackageToInstall {
                         id: "nodejs".to_string(),
-                        pkg_path: result.rel_path.clone(),
+                        pkg_path: result.rel_path.clone().into(),
                         version: result.version.clone(),
                         input: None,
                     },
@@ -947,14 +754,14 @@ mod tests {
                 nvmrc_version: None,
                 action: NodeInstallAction::Yarn(YarnInstall {
                     yarn: ProvidedPackage {
-                        rel_path: "yarn.path".to_string(),
+                        rel_path: "yarn.path".into(),
                         version: Some("1".to_string()),
                         name: "yarn".to_string(),
                         display_version: "1".to_string(),
                     },
                     node: ProvidedPackage {
                         name: "nodejs".to_string(),
-                        rel_path: "nodejs".to_string(),
+                        rel_path: "nodejs".into(),
                         display_version: "N/A".to_string(),
                         version: None
                     },
@@ -988,20 +795,20 @@ mod tests {
                     YarnInstall {
                         yarn: ProvidedPackage {
                             name: "yarn".to_string(),
-                            rel_path: "yarn".to_string(),
+                            rel_path: "yarn".into(),
                             display_version: "N/A".to_string(),
                             version: None
                         },
                         node: ProvidedPackage {
                             name: "nodejs".to_string(),
-                            rel_path: "nodejs".to_string(),
+                            rel_path: "nodejs".into(),
                             display_version: "N/A".to_string(),
                             version: None
                         },
                     },
                     NodeInstall {
                         node: Some(ProvidedPackage {
-                            rel_path: "nodejs.path".to_string(),
+                            rel_path: "nodejs.path".into(),
                             version: Some("1".to_string()),
                             name: "nodejs".to_string(),
                             display_version: "1".to_string()
@@ -1034,7 +841,7 @@ mod tests {
                 nvmrc_version: None,
                 action: NodeInstallAction::Node(NodeInstall {
                     node: Some(ProvidedPackage {
-                        rel_path: "nodejs.path".to_string(),
+                        rel_path: "nodejs.path".into(),
                         version: Some("1".to_string()),
                         name: "nodejs".to_string(),
                         display_version: "1".to_string()
@@ -1076,8 +883,8 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
+        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
     }
 
     /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
@@ -1093,9 +900,9 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
+        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
     }
 
     /// Test finding yarn with a version of node other than that of
@@ -1127,8 +934,8 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
+        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
 
@@ -1162,8 +969,8 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
+        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
@@ -1202,8 +1009,8 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
+        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
     }
 
     /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
@@ -1238,9 +1045,9 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
+        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
     }
 
     /// Test finding yarn with a version of node other than that of
@@ -1297,8 +1104,8 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
+        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
 
@@ -1364,9 +1171,9 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(yarn_install.node.rel_path, "nodejs".to_string());
+        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
         assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".to_string());
+        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
         assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
 }
