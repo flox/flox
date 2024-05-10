@@ -264,6 +264,9 @@ setup_file() {
   FLOX_FEATURES_USE_CATALOG=true \
   _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello_show.json" \
   run --separate-stderr "$FLOX_BIN" show hello -vvv
-  assert_output --partial "hello@2.12.1"
+  assert_output - <<EOF
+hello - A program that produces a familiar, friendly greeting
+    hello - hello@2.12.1
+EOF
   assert_regex "$stderr" "using catalog client for show"
 }
