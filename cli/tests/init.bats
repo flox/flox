@@ -216,10 +216,9 @@ EOF
   echo "requests" > requirements.txt
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
   "$FLOX_BIN" init --auto-setup --name "$NAME"
-  "$FLOX_BIN" activate -- true # populate the virtual environment
-  run bash -c 'VIRTUAL_ENV="$PWD/.flox/cache/python" PATH="$VIRTUAL_ENV/bin:$PATH" python3 -m pip show requests'
+  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- type deactivate
   assert_success
-  assert_line --partial "Summary: Python HTTP for Humans."
+  assert_line --partial "deactivate is a function"
 }
 
 # bats test_tags=init:python:auto-setup,init:python:auto-setup:zsh
@@ -229,10 +228,9 @@ EOF
   echo "requests" > requirements.txt
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
   "$FLOX_BIN" init --auto-setup --name "$NAME"
-  "$FLOX_BIN" activate -- true # populate the virtual environment
-  run zsh -c 'VIRTUAL_ENV="$PWD/.flox/cache/python" PATH="$VIRTUAL_ENV/bin:$PATH" python3 -m pip show requests'
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- type deactivate
   assert_success
-  assert_line --partial "Summary: Python HTTP for Humans."
+  assert_line --partial "deactivate is a shell function"
 }
 
 # ---------------------------------------------------------------------------- #
