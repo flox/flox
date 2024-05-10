@@ -12,7 +12,7 @@ flox-show - show detailed information about a single package
 # SYNOPSIS
 
 ```
-flox [<general-options>] show <search-term>
+flox [<general-options>] show <pkg-path>
 ```
 
 # DESCRIPTION
@@ -35,7 +35,7 @@ and version.
 
 ## Show Options
 
-`<search-term>`
+`<pkg-path>`
 :   Package name to show details for.
 
 # EXAMPLES:
