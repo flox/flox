@@ -28,18 +28,18 @@ pub struct Show {
 
     /// The package to show detailed information about. Must be an exact match
     /// for a pkg-path e.g. something copy-pasted from the output of `flox search`.
-    #[bpaf(positional("search-term"))]
-    pub search_term: String,
+    #[bpaf(positional("pkg-path"))]
+    pub pkg_path: String,
 }
 
 impl Show {
-    #[instrument(name = "show", fields(show_all = self.all, search_term = self.search_term), skip_all)]
+    #[instrument(name = "show", fields(show_all = self.all, pkg_path = self.pkg_path), skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
 
         let (results, exit_status) = if let Some(client) = flox.catalog_client {
             tracing::debug!("using catalog client for show");
-            match client.package_versions(&self.search_term).await {
+            match client.package_versions(&self.pkg_path).await {
                 Ok(results) => (results, None),
                 // Below, results.is_empty() is used to mean the search_term
                 // didn't match a package.
@@ -60,7 +60,7 @@ impl Show {
             let (manifest, lockfile) = manifest_and_lockfile(&flox, "Show using")
                 .context("failed while looking for manifest and lockfile")?;
             let search_params = construct_show_params(
-                &self.search_term,
+                &self.pkg_path,
                 manifest.map(|p| p.try_into()).transpose()?,
                 global_manifest_path(&flox).try_into()?,
                 PathOrJson::Path(lockfile),
@@ -71,10 +71,7 @@ impl Show {
         };
 
         if results.results.is_empty() {
-            bail!(
-                "no packages matched this search term: '{}'",
-                self.search_term
-            );
+            bail!("no packages matched this pkg-path: '{}'", self.pkg_path);
         }
         // Render what we have no matter what, then indicate whether we encountered an error.
         render_show(results.results.as_slice(), self.all)?;
@@ -197,7 +194,7 @@ mod test {
         let search_term = "search_term";
         let err = Show {
             all: false,
-            search_term: search_term.to_string(),
+            pkg_path: search_term.to_string(),
         }
         .handle(flox)
         .await
@@ -205,7 +202,7 @@ mod test {
 
         assert_eq!(
             err.to_string(),
-            format!("no packages matched this search term: '{}'", search_term)
+            format!("no packages matched this pkg-path: '{}'", search_term)
         );
     }
 }
