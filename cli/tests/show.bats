@@ -262,11 +262,11 @@ setup_file() {
 # bats test_tags=catalog,catalog:show
 @test "mock client reads 'show' data from disk" {
   FLOX_FEATURES_USE_CATALOG=true \
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello_show.json" \
-  run --separate-stderr "$FLOX_BIN" show hello -vvv
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/bash_show.json" \
+  run --separate-stderr "$FLOX_BIN" show bash -vvv
   assert_output - <<EOF
-hello - A program that produces a familiar, friendly greeting
-    hello - hello@2.12.1
+bash - GNU Bourne-Again Shell, the de facto standard shell on Linux
+    bash - bash@5.2p26
 EOF
   assert_regex "$stderr" "using catalog client for show"
 }
