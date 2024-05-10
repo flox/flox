@@ -80,10 +80,11 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' - hello --all" {
-  run "$FLOX_BIN" show hello --all
+  run --separate-stderr "$FLOX_BIN" show hello --all
   assert_success
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
   assert_equal "${lines[1]}" "    hello - hello@2.12.1"
+  assert_regex "$stderr" "'--all' .* deprecated"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -102,10 +103,11 @@ setup_file() {
 # bats test_tags=python
 
 @test "'flox show' - python27Full --all" {
-  run "$FLOX_BIN" show python27Full --all
+  run --separate-stderr "$FLOX_BIN" show python27Full --all
   assert_success
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language"
   assert_equal "${lines[1]}" "    python27Full - python27Full@2.7.18.6"
+  assert_regex "$stderr" "'--all' .* deprecated"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -266,7 +268,7 @@ setup_file() {
   run --separate-stderr "$FLOX_BIN" show bash -vvv
   assert_output - <<EOF
 bash - GNU Bourne-Again Shell, the de facto standard shell on Linux
-    bash - bash@5.2p26
+    bash - bash@5.2p26, bash@5.2-p21
 EOF
   assert_regex "$stderr" "using catalog client for show"
 }
