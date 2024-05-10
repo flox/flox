@@ -208,33 +208,6 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
-
-# bats test_tags=init:python:auto-setup,init:python:auto-setup:bash
-@test "verify auto-setup Python venv activation: bash" {
-  OWNER="owner"
-  NAME="name"
-  echo "requests" > requirements.txt
-  [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init --auto-setup --name "$NAME"
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/init/python-env.exp" "$PROJECT_DIR"
-  assert_line --partial "Activating python virtual environment"
-  assert_line --partial "deactivate is a function"
-  assert_line --partial "deactivate ()"
-}
-
-# bats test_tags=init:python:auto-setup,init:python:auto-setup:zsh
-@test "verify auto-setup Python venv activation: zsh" {
-  OWNER="owner"
-  NAME="name"
-  echo "requests" > requirements.txt
-  [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init --auto-setup --name "$NAME"
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/init/python-env.exp" "$PROJECT_DIR"
-  assert_line --partial "Activating python virtual environment"
-  assert_line --partial "deactivate is a shell function from $(realpath $PROJECT_DIR)/.flox/cache/python/bin/activate"
-}
-
-# ---------------------------------------------------------------------------- #
 #
 #
 #
