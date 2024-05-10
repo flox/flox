@@ -1,0 +1,29 @@
+[
+  {
+    "results": [
+      {
+        "input": "nixpkgs",
+        "system": "aarch64-darwin",
+        "relPath": [
+          "bash"
+        ],
+        "pname": "bash",
+        "version": "5.2p26",
+        "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
+        "license": "GPL-3.0-or-later"
+      },
+      {
+        "input": "nixpkgs",
+        "system": "aarch64-darwin",
+        "relPath": [
+          "bash"
+        ],
+        "pname": "bash",
+        "version": "5.2-p21",
+        "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
+        "license": "GPL-3.0-or-later"
+      }
+    ],
+    "count": 2
+  }
+]
