@@ -19,14 +19,14 @@ pub(crate) fn error(v: impl Display) {
 pub(crate) fn created(v: impl Display) {
     print_message(std::format_args!("✨ {v}"));
 }
-/// double width chracter, add an additional space for alignment
+/// double width character, add an additional space for alignment
 pub(crate) fn deleted(v: impl Display) {
     print_message(std::format_args!("🗑️  {v}"));
 }
 pub(crate) fn updated(v: impl Display) {
     print_message(std::format_args!("✅ {v}"));
 }
-/// double width chracter, add an additional space for alignment
+/// double width character, add an additional space for alignment
 pub(crate) fn warning(v: impl Display) {
     print_message(std::format_args!("⚠️  {v}"));
 }
