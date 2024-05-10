@@ -108,3 +108,27 @@ teardown() {
   assert_success
   assert_line "<class 'numpy.ndarray'>"
 }
+
+# bats test_tags=init:python:auto-setup,init:python:auto-setup:bash
+@test "verify auto-setup Python venv activation: bash" {
+  OWNER="owner"
+  NAME="name"
+  echo "requests" > requirements.txt
+  [ ! -e .flox ] || "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init --auto-setup --name "$NAME"
+  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- type deactivate
+  assert_success
+  assert_line --partial "deactivate is a function"
+}
+
+# bats test_tags=init:python:auto-setup,init:python:auto-setup:zsh
+@test "verify auto-setup Python venv activation: zsh" {
+  OWNER="owner"
+  NAME="name"
+  echo "requests" > requirements.txt
+  [ ! -e .flox ] || "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init --auto-setup --name "$NAME"
+  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- type deactivate
+  assert_success
+  assert_line --partial "deactivate is a shell function"
+}
