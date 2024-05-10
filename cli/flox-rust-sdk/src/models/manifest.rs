@@ -87,6 +87,7 @@ impl RawManifest {
             # expanding them. They are available for use in the `[profile]` and `[hook]`
             # scripts.
         "#});
+        // [sic]: vars not customized using InitCustomization yet
         vars_table.decor_mut().set_suffix(indoc! {r#"
 
             # message = "Howdy"
