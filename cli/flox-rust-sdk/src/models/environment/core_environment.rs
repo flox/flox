@@ -525,10 +525,12 @@ impl CoreEnvironment<ReadOnly> {
 
         let (lockfile, upgraded) = match manifest {
             TypedManifest::Pkgdb(_) => {
+                tracing::debug!("using pkgdb to upgrade");
                 let (lockfile, upgraded) = self.upgrade_with_pkgdb(flox, groups_or_iids)?;
                 (LockedManifest::Pkgdb(lockfile), upgraded)
             },
             TypedManifest::Catalog(catalog) => {
+                tracing::debug!("using catalog client to upgrade");
                 let client = flox
                     .catalog_client
                     .as_ref()
