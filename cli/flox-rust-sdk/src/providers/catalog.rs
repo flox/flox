@@ -30,6 +30,7 @@ pub const DEFAULT_CATALOG_URL: &str = "https://flox-catalog.flox.dev";
 const NIXPKGS_CATALOG: &str = "nixpkgs";
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
+pub const FLOX_CATALOG_TRACE_HTTP_VAR: &str = "_FLOX_CATALOG_TRACE_HTTP";
 
 type ResolvedGroups = Vec<ResolvedPackageGroup>;
 
@@ -109,8 +110,16 @@ pub struct CatalogClient {
 
 impl CatalogClient {
     pub fn new(baseurl: &str) -> Self {
+        let verbose = std::env::var(FLOX_CATALOG_TRACE_HTTP_VAR).is_ok();
+        let timeout = std::time::Duration::from_secs(15);
+        let rclient = reqwest::ClientBuilder::new()
+            .connect_timeout(timeout)
+            .timeout(timeout)
+            .connection_verbose(verbose)
+            .build()
+            .unwrap();
         Self {
-            client: APIClient::new(baseurl),
+            client: APIClient::new_with_client(baseurl, rclient),
         }
     }
 
