@@ -161,10 +161,12 @@ fn render_show(search_results: &[SearchResult]) -> Result<()> {
             // the resolver will always rank versioned packages higher.
             sr.version.clone().map(|version| [name, version].join("@"))
         })
-        .collect::<Vec<_>>()
-        .join(", ");
+        .collect::<Vec<_>>();
+
     println!("{pkg_name} - {description}");
-    println!("    {pkg_name} - {versions}");
+    for version in versions {
+        println!("    {version}");
+    }
     Ok(())
 }
 
