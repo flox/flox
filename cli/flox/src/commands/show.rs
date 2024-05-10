@@ -153,19 +153,16 @@ fn render_show(search_results: &[SearchResult]) -> Result<()> {
         .as_ref()
         .map(|d| d.replace('\n', " "))
         .unwrap_or(DEFAULT_DESCRIPTION.into());
-    let versions = results
-        .iter()
-        .filter_map(|sr| {
-            let name = sr.rel_path.join(".");
-            // We don't print packages that don't have a version since
-            // the resolver will always rank versioned packages higher.
-            sr.version.clone().map(|version| [name, version].join("@"))
-        })
-        .collect::<Vec<_>>();
 
     println!("{pkg_name} - {description}");
-    for version in versions {
-        println!("    {version}");
+    for result in results.iter() {
+        let name = result.rel_path.join(".");
+        // We don't print packages that don't have a version since
+        // the resolver will always rank versioned packages higher.
+        let Some(version) = result.version.clone() else {
+            continue;
+        };
+        println!("    {name}@{version}");
     }
     Ok(())
 }
