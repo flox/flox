@@ -96,7 +96,7 @@ genParamsNixpkgsFlox() {
 
   # Make sure we have > 0 packages, save the rules hash
   real_package_count=$(get_package_count $dbpath)
-  assert [ $real_package_count > 0 ]
+  assert [ $real_package_count -gt 0 ]
   old_rules_hash=$(get_scrape_meta $dbpath scrape_rules_hash)
   
   # Delete the packages, and assert it's empty
