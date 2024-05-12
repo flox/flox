@@ -65,8 +65,8 @@ impl RawManifest {
             table.decor_mut().set_suffix(indoc! {r#"
 
                 # hello.pkg-path = "hello"
-                # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
-            "#});
+                # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }"#
+            });
 
             table
         } else {
@@ -76,8 +76,8 @@ impl RawManifest {
         install_table.decor_mut().set_prefix(indoc! {r#"
 
             # List packages you wish to install in your environment inside
-            # the `[install]` section.
-        "#});
+            # the `[install]` section."#
+        });
 
         manifest.insert(MANIFEST_INSTALL_KEY, Item::Table(install_table));
 
@@ -85,16 +85,17 @@ impl RawManifest {
         let mut vars_table = Table::new();
 
         vars_table.decor_mut().set_prefix(indoc! {r#"
+
             # Set environment variables in the `[vars]` section. These variables may not
             # reference once another, and are added to the environment without first
             # expanding them. They are available for use in the `[profile]` and `[hook]`
             # scripts.
         "#});
+
         // [sic]: vars not customized using InitCustomization yet
         vars_table.decor_mut().set_suffix(indoc! {r#"
 
-            # message = "Howdy"
-        "#});
+            # message = "Howdy""#});
 
         manifest.insert(MANIFEST_VARS_KEY, Item::Table(vars_table));
 
@@ -102,6 +103,7 @@ impl RawManifest {
         let mut hook_table = Table::new();
 
         hook_table.decor_mut().set_prefix(indoc! {r#"
+
             # The `hook.on-activate` script is run by the *bash* shell immediately upon
             # activating an environment, and will not be invoked if Flox detects that the
             # environment has previously been activated. Variables set by the script will
@@ -123,9 +125,8 @@ impl RawManifest {
                 #
                 #     # Perform initialization steps, e.g. create a python venv
                 #     python -m venv "$venv_dir"
-                #
-                # """
-            "#});
+                # """"#
+            });
         };
 
         manifest.insert(MANIFEST_HOOK_KEY, Item::Table(hook_table));
@@ -134,6 +135,7 @@ impl RawManifest {
         let mut profile_table = Table::new();
 
         profile_table.decor_mut().set_prefix(indoc! {r#"
+
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
@@ -152,8 +154,8 @@ impl RawManifest {
 
                     # common = """
                     #     echo "it's gettin' flox in here"
-                    # """
-                "#});
+                    # """"#
+                });
             },
             _ => {
                 if let Some(profile_common) = &customization.profile_common {
@@ -174,6 +176,7 @@ impl RawManifest {
         let mut options_table = Table::new();
 
         options_table.decor_mut().set_prefix(indoc! {r#"
+
             # Additional options can be set in the `[options]` section. Refer to
             # manifest.toml(1) for a list of available options.
         "#});
