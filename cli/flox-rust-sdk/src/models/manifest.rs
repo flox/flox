@@ -815,22 +815,22 @@ pub(super) mod test {
 
     use super::*;
 
-    const DUMMY_MANIFEST: &str = r#"
-[install]
-hello = {}
+    const DUMMY_MANIFEST: &str = indoc! {r#"
+        [install]
+        hello = {}
 
-[install.ripgrep]
-[install.bat]
-        "#;
+        [install.ripgrep]
+        [install.bat]
+    "#};
 
     // This is an array of tables called `install` rather than a table called `install`.
-    const BAD_MANIFEST: &str = r#"
-[[install]]
-python = {}
+    const BAD_MANIFEST: &str = indoc! {r#"
+        [[install]]
+        python = {}
 
-[[install]]
-ripgrep = {}
-        "#;
+        [[install]]
+        ripgrep = {}
+    "#};
 
     const CATALOG_MANIFEST: &str = indoc! {r#"
         version = 1
@@ -845,6 +845,45 @@ ripgrep = {}
             profile: ManifestProfile::default(),
             options: ManifestOptions::default(),
         }
+    }
+
+    #[test]
+    fn create_minimal_documented_manifest() {
+        let systems = [];
+        let customization = InitCustomization {
+            hook_on_activate: None,
+            profile_common: None,
+            profile_bash: None,
+            profile_zsh: None,
+            packages: None,
+        };
+
+        let _manifest = RawManifest::new_documented(systems.as_slice(), &customization, false);
+        assert!(false);
+    }
+
+    #[test]
+    fn create_full_documented_manifest() {
+        let systems = [&"x86_64-linux".to_string()];
+        let customization = InitCustomization {
+            hook_on_activate: Some(
+                indoc! {r#"
+                    # Print something
+                    echo "hello world"
+
+                    # Set a environment variable
+                    $FOO="bar"
+                "#}
+                .to_string(),
+            ),
+            profile_common: Some("".to_string()),
+            profile_bash: Some("".to_string()),
+            profile_zsh: Some("".to_string()),
+            packages: Some(vec![]),
+        };
+
+        let _manifest = RawManifest::new_documented(systems.as_slice(), &customization, true);
+        assert!(false);
     }
 
     #[test]
