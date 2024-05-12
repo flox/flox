@@ -7,7 +7,7 @@ use indoc::{formatdoc, indoc};
 use log::debug;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
-use toml_edit::{self, value, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
+use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
 
 use super::environment::path_environment::InitCustomization;
 use crate::data::{System, Version};
@@ -51,7 +51,7 @@ impl RawManifest {
 
         // `version` number
         if use_catalog {
-            manifest.insert(MANIFEST_VERSION_KEY, value(1));
+            manifest.insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
         }
 
         // `[install]` table
@@ -107,13 +107,9 @@ impl RawManifest {
         "#});
 
         if let Some(ref hook_on_activate_script) = customization.hook_on_activate {
-            let on_activate_content = formatdoc! {r#"
-                """
-                {}
-                """"#
-            , indent::indent_all_by(2, hook_on_activate_script)};
+            let on_activate_content = indent::indent_all_by(4, hook_on_activate_script);
 
-            hook_table.insert("on-activate", value(on_activate_content));
+            hook_table.insert("on-activate", toml_edit::value(on_activate_content));
         } else {
             hook_table.decor_mut().set_suffix(indoc! {r#"
 
@@ -154,59 +150,18 @@ impl RawManifest {
                     # common = """
                     #     echo "it's gettin' flox in here"
                     # """
-                    # bash = """
-                    #     source $venv_dir/bin/activate
-                    #     alias foo="echo bar"
-                    # """
-                    # zsh = """
-                    #     source $venv_dir/bin/activate
-                    #     alias foo="echo bar"
-                    # """
                 "#});
             },
             _ => {
-                profile_table.insert(
-                    "common",
-                    value(formatdoc! {r#"
-                        """
-                        {}
-                        """
-                    "#, value(
-                    customization
-                        .profile_common
-                        .as_deref()
-                        .map(|profile_common| indent::indent_all_by(2, profile_common))
-                        .unwrap_or("".to_string()),
-                    )}),
-                );
-                profile_table.insert(
-                    "bash",
-                    value(formatdoc! {r#"
-                        """
-                        {}
-                        """
-                    "#, value(
-                    customization
-                        .profile_bash
-                        .as_deref()
-                        .map(|profile_bash| indent::indent_all_by(2, profile_bash))
-                        .unwrap_or("".to_string()),
-                    )}),
-                );
-                profile_table.insert(
-                    "zsh",
-                    value(formatdoc! {r#"
-                        """
-                        {}
-                        """
-                    "#, value(
-                    customization
-                        .profile_zsh
-                        .as_deref()
-                        .map(|profile_zsh| indent::indent_all_by(2, profile_zsh))
-                        .unwrap_or("".to_string()),
-                    )}),
-                );
+                if let Some(profile_common) = &customization.profile_common {
+                    profile_table.insert("common", toml_edit::value(profile_common));
+                }
+                if let Some(profile_bash) = &customization.profile_bash {
+                    profile_table.insert("bash", toml_edit::value(profile_bash));
+                }
+                if let Some(profile_zsh) = &customization.profile_zsh {
+                    profile_table.insert("zsh", toml_edit::value(profile_zsh));
+                }
             },
         };
 
@@ -232,7 +187,7 @@ impl RawManifest {
 
         options_table.insert(
             &systems_key,
-            value(Array::from_iter(systems.iter().copied())),
+            toml_edit::value(Array::from_iter(systems.iter().copied())),
         );
 
         manifest.insert(MANIFEST_OPTIONS_KEY, Item::Table(options_table));
