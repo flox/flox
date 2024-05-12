@@ -55,10 +55,10 @@ impl RawManifest {
         }
 
         // `[install]` table
-        let mut install_table = if let Some(packages) = &customization.packages {
-            let packages = packages.iter().map(|pkg| (&pkg.id, InlineTable::from(pkg)));
-            Table::from_iter(packages)
-        } else {
+        let packages_vec = vec![];
+        let packages = customization.packages.as_ref().unwrap_or(&packages_vec);
+
+        let mut install_table = if packages.is_empty() {
             // Add comment with example packages
             let mut table = Table::new();
 
@@ -69,9 +69,12 @@ impl RawManifest {
             "#});
 
             table
+        } else {
+            Table::from_iter(packages.iter().map(|pkg| (&pkg.id, InlineTable::from(pkg))))
         };
 
         install_table.decor_mut().set_prefix(indoc! {r#"
+
             # List packages you wish to install in your environment inside
             # the `[install]` section.
         "#});
@@ -193,20 +196,21 @@ impl RawManifest {
         manifest.insert(MANIFEST_OPTIONS_KEY, Item::Table(options_table));
 
         // Insert heading comment
-        if let Some(decor) = manifest
-            .iter_mut()
-            .next()
-            .and_then(|(_, first)| first.as_table_mut().map(|value| value.decor_mut()))
-        {
-            decor.set_prefix(formatdoc! {r#"
-                 #
-                 # This is a Flox environment manifest.
-                 # Visit flox.dev/docs/concepts/manifest/
-                 # or see flox-edit(1), manifest.toml(1) for more information.
-                 #
-
-                 {}"#,
-            decor.prefix().and_then(|raw_str| raw_str.as_str()).unwrap_or("")})
+        if let Some((mut key, item)) = manifest.iter_mut().next() {
+            if let Some(decor) = match item {
+                Item::Value(_) => Some(key.leaf_decor_mut()),
+                Item::Table(table) => Some(table.decor_mut()),
+                _ => None,
+            } {
+                decor.set_prefix(formatdoc! {r#"
+                  #
+                  # This is a Flox environment manifest.
+                  # Visit flox.dev/docs/concepts/manifest/
+                  # or see flox-edit(1), manifest.toml(1) for more information.
+                  #
+                  {}"#,
+                decor.prefix().and_then(|raw_str| raw_str.as_str()).unwrap_or("")})
+            }
         }
 
         RawManifest(manifest)
