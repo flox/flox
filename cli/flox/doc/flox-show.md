@@ -44,7 +44,8 @@ Display detailed information about the `ripgrep` package:
 ```
 $ flox show ripgrep
 ripgrep - A utility that combines the usability of The Silver Searcher with the raw speed of grep
-    ripgrep - ripgrep@13.0.0
+    ripgrep@13.0.0
+    ripgrep@14.1.0
 ```
 
 # SEE ALSO

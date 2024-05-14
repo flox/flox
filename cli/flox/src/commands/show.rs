@@ -17,14 +17,15 @@ use tracing::instrument;
 
 use crate::config::features::Features;
 use crate::subcommand_metric;
+use crate::utils::message;
 use crate::utils::search::{manifest_and_lockfile, DEFAULT_DESCRIPTION, SEARCH_INPUT_SEPARATOR};
 
 // Show detailed package information
 #[derive(Debug, Bpaf, Clone)]
 pub struct Show {
     /// Whether to show all available package versions
-    #[bpaf(long)]
-    pub all: bool,
+    #[bpaf(long, hide)]
+    pub all: bool, // TODO: Remove in future release.
 
     /// The package to show detailed information about. Must be an exact match
     /// for a pkg-path e.g. something copy-pasted from the output of `flox search`.
@@ -36,6 +37,10 @@ impl Show {
     #[instrument(name = "show", fields(show_all = self.all, pkg_path = self.pkg_path), skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
+
+        if self.all {
+            message::warning("'--all' is now the default and the flag has been deprecated.");
+        }
 
         let (results, exit_status) = if let Some(client) = flox.catalog_client {
             tracing::debug!("using catalog client for show");
@@ -74,7 +79,7 @@ impl Show {
             bail!("no packages matched this pkg-path: '{}'", self.pkg_path);
         }
         // Render what we have no matter what, then indicate whether we encountered an error.
-        render_show(results.results.as_slice(), self.all)?;
+        render_show(results.results.as_slice())?;
         if let Some(status) = exit_status {
             if status.success() {
                 return Ok(());
@@ -121,7 +126,7 @@ fn construct_show_params(
     Ok(search_params)
 }
 
-fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
+fn render_show(search_results: &[SearchResult]) -> Result<()> {
     let mut pkg_name = None;
     let mut results = Vec::new();
     // Collect all versions of the top search result
@@ -145,29 +150,17 @@ fn render_show(search_results: &[SearchResult], all: bool) -> Result<()> {
         .as_ref()
         .map(|d| d.replace('\n', " "))
         .unwrap_or(DEFAULT_DESCRIPTION.into());
-    let versions = if all {
-        let multiple_versions = results
-            .iter()
-            .filter_map(|sr| {
-                let name = sr.rel_path.join(".");
-                // We don't print packages that don't have a version since
-                // the resolver will always rank versioned packages higher.
-                sr.version.clone().map(|version| [name, version].join("@"))
-            })
-            .collect::<Vec<_>>();
-        multiple_versions.join(", ")
-    } else {
-        let sr = results[0];
-        let name = sr.rel_path.join(".");
-        let version = sr.version.clone();
-        if let Some(version) = version {
-            [name, version].join("@")
-        } else {
-            name
-        }
-    };
+
     println!("{pkg_name} - {description}");
-    println!("    {pkg_name} - {versions}");
+    for result in results.iter() {
+        let name = result.rel_path.join(".");
+        // We don't print packages that don't have a version since
+        // the resolver will always rank versioned packages higher.
+        let Some(version) = result.version.clone() else {
+            continue;
+        };
+        println!("    {name}@{version}");
+    }
     Ok(())
 }
 
@@ -193,7 +186,7 @@ mod test {
         );
         let search_term = "search_term";
         let err = Show {
-            all: false,
+            all: true, // unused
             pkg_path: search_term.to_string(),
         }
         .handle(flox)

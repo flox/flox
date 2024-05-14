@@ -772,6 +772,7 @@ enum AdditionalCommands {
     #[bpaf(command, hide, footer("Run 'man flox-config' for more details."))]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
 
+    /// Show active and available environments
     #[bpaf(command, hide, footer("Run 'man flox-envs' for more details."))]
     Envs(#[bpaf(external(envs::envs))] envs::Envs),
 }

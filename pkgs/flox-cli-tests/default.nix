@@ -130,7 +130,7 @@ in
     }
     ${
       if PKGDB_BIN == null
-      then "export PKGDB_BIN='pkgdb';"
+      then ''export PKGDB_BIN="$(command -v pkgdb)";''
       else "export PKGDB_BIN='${PKGDB_BIN}';"
     }
     ${
