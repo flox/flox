@@ -29,7 +29,7 @@ use crate::providers::git::{
 use crate::utils::copy_file_without_permissions;
 
 mod core_environment;
-pub use core_environment::{test_helpers, CoreEnvironmentError, EditResult};
+pub use core_environment::{test_helpers, CoreEnvironment, CoreEnvironmentError, EditResult};
 
 pub mod generations;
 pub mod managed_environment;
@@ -75,6 +75,7 @@ pub const FLOX_SYSTEM_PLACEHOLDER: &str = "_FLOX_INIT_SYSTEM";
 pub const FLOX_PROFILE_PLACEHOLDER: &str = "_FLOX_INIT_PROFILE";
 pub const FLOX_HOOK_PLACEHOLDER: &str = "_FLOX_INIT_HOOK";
 pub const FLOX_INSTALL_PLACEHOLDER: &str = "_FLOX_INIT_INSTALL";
+pub const FLOX_VERSION_PLACEHOLDER: &str = "_FLOX_INIT_VERSION";
 
 pub const N_HASH_CHARS: usize = 8;
 

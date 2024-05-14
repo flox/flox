@@ -747,6 +747,13 @@ enum AdditionalCommands {
     #[bpaf(command, hide, footer("Run 'man flox-update' for more details."))]
     Update(#[bpaf(external(update::update))] update::Update),
     /// Upgrade packages in an environment
+    // TODO: catalog release:
+    // When no arguments are specified, all packages in the environment are upgraded.\n\n
+    //
+    // Packages to upgrade can be specified by either group name, or ID.
+    // If the specified argument is both a pkg-group name and an install ID,
+    // both the package with the install ID
+    // and packages belonging to the pkg-group are upgraded. \n\n
     #[bpaf(command, hide, footer("Run 'man flox-upgrade' for more details."), header(indoc! {"
         When no arguments are specified, all packages in the environment are upgraded.\n\n
 
@@ -765,6 +772,7 @@ enum AdditionalCommands {
     #[bpaf(command, hide, footer("Run 'man flox-config' for more details."))]
     Config(#[bpaf(external(general::config_args))] general::ConfigArgs),
 
+    /// Show active and available environments
     #[bpaf(command, hide, footer("Run 'man flox-envs' for more details."))]
     Envs(#[bpaf(external(envs::envs))] envs::Envs),
 }

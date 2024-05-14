@@ -313,37 +313,49 @@ impl LockedManifestCatalog {
         seed_lockfile: Option<&LockedManifestCatalog>,
         client: &impl catalog::ClientTrait,
     ) -> Result<LockedManifestCatalog, LockedManifestError> {
-        let groups = Self::collect_package_groups(manifest, seed_lockfile).collect();
+        let groups = Self::collect_package_groups(manifest, seed_lockfile);
+        let (already_locked_packages, groups_to_lock) =
+            Self::split_fully_locked_groups(groups, seed_lockfile);
 
-        // lock existing packages
+        if groups_to_lock.is_empty() {
+            debug!("All packages are already locked, skipping resolution");
+            return Ok(LockedManifestCatalog {
+                version: Version::<1>,
+                manifest: manifest.clone(),
+                packages: already_locked_packages,
+            });
+        }
 
+        // lock packages
         let resolved = client
-            .resolve(groups)
+            .resolve(groups_to_lock)
             .await
             .map_err(LockedManifestError::CatalogResolve)?;
 
+        // unpack locked packages from response
         let locked_packages = Self::locked_packages_from_resolution(manifest, resolved)?.collect();
 
         let lockfile = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest.clone(),
-            packages: locked_packages,
+            packages: [already_locked_packages, locked_packages].concat(),
         };
 
         Ok(lockfile)
     }
 
-    /// Transform a lockfile into a mapping  that is easier to query:
-    /// Lockfile -> { (package, system): locked package }
+    /// Transform a lockfile into a mapping that is easier to query:
+    /// Lockfile -> { (install_id, system): (package_descriptor, locked_package) }
     fn make_seed_mapping(
         seed: &LockedManifestCatalog,
-    ) -> HashMap<(&ManifestPackageDescriptor, &System), &LockedPackageCatalog> {
+    ) -> HashMap<(&String, &System), (&ManifestPackageDescriptor, &LockedPackageCatalog)> {
         seed.packages
             .iter()
-            .filter_map(|package| {
-                let system = &package.system;
-                let manifest = seed.manifest.install.get(&package.install_id)?;
-                Some(((manifest, system), package))
+            .filter_map(|locked| {
+                let system = &locked.system;
+                let install_id = &locked.install_id;
+                let descriptor = seed.manifest.install.get(&locked.install_id)?;
+                Some(((install_id, system), (descriptor, locked)))
             })
             .collect()
     }
@@ -408,14 +420,20 @@ impl LockedManifestCatalog {
                         system: system.clone(),
                     });
 
+                let mut resolved_descriptor = resolved_descriptor.clone();
+
                 // If the package was just added to the manifest, it will be missing in the seed,
                 // which is derived from the _previous_ lockfile.
                 // In this case, the derivation will be None, and the package will be unconstrained.
+                // If the package was already locked, but the descriptor has changed in a way
+                // that invalidates the existing resolution, the derivation will be None.
                 let locked_derivation = seed_locked_packages
-                    .get(&(manifest_descriptor, &system.to_string()))
-                    .map(|p| p.derivation.clone());
+                    .get(&(install_id, &system.to_string()))
+                    .filter(|(descriptor, _)| {
+                        !descriptor.invalidates_existing_resolution(manifest_descriptor)
+                    })
+                    .map(|(_, locked_package)| locked_package.derivation.clone());
 
-                let mut resolved_descriptor = resolved_descriptor.clone();
                 resolved_descriptor.derivation = locked_derivation;
 
                 resolved_group.descriptors.push(resolved_descriptor);
@@ -423,6 +441,39 @@ impl LockedManifestCatalog {
         }
 
         map.into_values()
+    }
+
+    /// Eliminate groups that are already fully locked
+    /// by extracting them into a separate list of locked packages.
+    ///
+    /// This is used to avoid re-resolving packages that are already locked.
+    fn split_fully_locked_groups(
+        groups: impl IntoIterator<Item = PackageGroup>,
+        seed_lockfile: Option<&LockedManifestCatalog>,
+    ) -> (Vec<LockedPackageCatalog>, Vec<PackageGroup>) {
+        let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
+
+        let (already_locked_groups, groups_to_lock): (Vec<_>, Vec<_>) =
+            groups.into_iter().partition(|group| {
+                group
+                    .descriptors
+                    .iter()
+                    .all(|descriptor| descriptor.derivation.is_some())
+            });
+
+        // convert already locked groups back to locked packages
+        let already_locked_packages = already_locked_groups
+            .iter()
+            .flat_map(|group| {
+                group.descriptors.iter().flat_map(|d| {
+                    seed_locked_packages
+                        .get(&(&d.install_id, &group.system))
+                        .map(|(_, locked)| LockedPackageCatalog::clone(locked))
+                })
+            })
+            .collect::<Vec<_>>();
+
+        (already_locked_packages, groups_to_lock)
     }
 
     /// Convert resolution results into a list of locked packages
@@ -477,6 +528,22 @@ impl LockedManifestCatalog {
                 package, descriptor, system,
             ))
         }))
+    }
+
+    /// Filter out packages from the locked manifest by install_id or group
+    ///
+    /// This is used to create a seed lockfile to upgrade a subset of packages,
+    /// as packages that are not in the seed lockfile will be re-resolved unconstrained.
+    pub(crate) fn unlock_packages_by_group_or_iid(
+        &mut self,
+        groups_or_iids: &[String],
+    ) -> &mut Self {
+        self.packages.retain(|package| {
+            !groups_or_iids.contains(&package.install_id)
+                && !groups_or_iids.contains(&package.group)
+        });
+
+        self
     }
 }
 
@@ -796,8 +863,9 @@ pub struct LockfileCheckWarning {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::collections::HashMap;
+    use std::vec;
 
     use catalog_api_v1::types::Output;
     use indoc::indoc;
@@ -806,7 +874,7 @@ mod tests {
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
-    use crate::models::manifest::{RawManifest, TypedManifest};
+    use crate::models::manifest::{self, RawManifest, TypedManifest};
 
     /// Validate that the parser for the locked manifest can handle null values
     /// for the `version`, `license`, and `description` fields.
@@ -1008,6 +1076,52 @@ mod tests {
             }],
         })
     });
+
+    pub(crate) fn fake_package(
+        name: &str,
+        group: Option<&str>,
+    ) -> (String, ManifestPackageDescriptor, LockedPackageCatalog) {
+        let install_id = format!("{}_install_id", name);
+
+        let descriptor = ManifestPackageDescriptor {
+            pkg_path: name.to_string(),
+            pkg_group: group.map(|s| s.to_string()),
+            systems: Some(vec!["system".to_string()]),
+            version: None,
+            priority: None,
+            optional: false,
+        };
+
+        let locked = LockedPackageCatalog {
+            attr_path: name.to_string(),
+            broken: false,
+            derivation: "derivation".to_string(),
+            description: None,
+            install_id: install_id.clone(),
+            license: None,
+            locked_url: "".to_string(),
+            name: name.to_string(),
+            outputs: None,
+            outputs_to_install: None,
+            pname: name.to_string(),
+            rev: "".to_string(),
+            rev_count: 0,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            stabilities: None,
+            unfree: None,
+            version: "".to_string(),
+            system: "system".to_string(),
+            group: group.unwrap_or(DEFAULT_GROUP_NAME).to_string(),
+            priority: 5,
+            optional: false,
+        };
+        (install_id, descriptor, locked)
+    }
 
     #[test]
     fn make_params_smoke() {
@@ -1290,6 +1404,111 @@ mod tests {
         assert_eq!(actual_params, expected_params);
     }
 
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    /// 1) If the package is unchanged, it should not be re-resolved.
+    #[test]
+    fn make_params_seeded_unchanged() {
+        let (foo_before_iid, foo_before_descriptor, foo_before_locked) = fake_package("foo", None);
+        let mut manifest_before = manifest::test::empty_catalog_manifest();
+        manifest_before
+            .install
+            .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
+
+        let seed = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest_before.clone(),
+            packages: vec![foo_before_locked.clone()],
+        };
+
+        // ---------------------------------------------------------------------
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest_before, Some(&seed))
+                .collect::<Vec<_>>();
+
+        // the original derivation should be present and unchanged
+        assert_eq!(
+            actual_params[0].descriptors[0].derivation.as_ref(),
+            Some(&foo_before_locked.derivation)
+        );
+    }
+
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    /// 2) Changes that invalidate the locked package should cause it to be re-resolved.
+    ///    Here, the package path is changed.
+    #[test]
+    fn make_params_seeded_unlock_if_invalidated() {
+        let (foo_before_iid, foo_before_descriptor, foo_before_locked) = fake_package("foo", None);
+        let mut manifest_before = manifest::test::empty_catalog_manifest();
+        manifest_before
+            .install
+            .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
+
+        let seed = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest_before.clone(),
+            packages: vec![foo_before_locked.clone()],
+        };
+
+        // ---------------------------------------------------------------------
+
+        let (foo_after_iid, mut foo_after_descriptor, _) = fake_package("foo", None);
+        foo_after_descriptor.pkg_path = "bar".to_string();
+        assert!(foo_after_descriptor.invalidates_existing_resolution(&foo_before_descriptor));
+
+        let mut manifest_after = manifest::test::empty_catalog_manifest();
+        manifest_after
+            .install
+            .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest_after, Some(&seed))
+                .collect::<Vec<_>>();
+
+        // if the package changed, it should be re-resolved
+        // i.e. the derivation should be None
+        assert_eq!(actual_params[0].descriptors[0].derivation.as_ref(), None);
+    }
+
+    /// If a seed mapping is provided, use the derivations from the seed where possible
+    /// 3) Changes to the descriptor that do not invalidate the derivation
+    ///    should not cause it to be re-resolved.
+    ///    Here, the priority is changed.
+    #[test]
+    fn make_params_seeded_changed_no_invalidation() {
+        let (foo_before_iid, foo_before_descriptor, foo_before_locked) = fake_package("foo", None);
+        let mut manifest_before = manifest::test::empty_catalog_manifest();
+        manifest_before
+            .install
+            .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
+
+        let seed = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest_before.clone(),
+            packages: vec![foo_before_locked.clone()],
+        };
+
+        // ---------------------------------------------------------------------
+
+        let (foo_after_iid, mut foo_after_descriptor, _) = fake_package("foo", None);
+        foo_after_descriptor.priority = Some(10);
+        assert!(!foo_after_descriptor.invalidates_existing_resolution(&foo_before_descriptor));
+
+        let mut manifest_after = manifest::test::empty_catalog_manifest();
+        manifest_after
+            .install
+            .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
+
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest_after, Some(&seed))
+                .collect::<Vec<_>>();
+
+        assert_eq!(
+            actual_params[0].descriptors[0].derivation.as_ref(),
+            Some(&foo_before_locked.derivation)
+        );
+    }
+
     #[test]
     fn ungroup_response() {
         let groups = vec![ResolvedPackageGroup {
@@ -1350,6 +1569,78 @@ mod tests {
         );
     }
 
+    /// unlocking by iid should remove only the package with that iid
+    #[test]
+    fn unlock_by_iid() {
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", None);
+        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", None);
+        manifest.install.insert(foo_iid.clone(), foo_descriptor);
+        manifest.install.insert(bar_iid.clone(), bar_descriptor);
+        let mut lockfile = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone(), bar_locked.clone()],
+        };
+
+        lockfile.unlock_packages_by_group_or_iid(&[foo_iid.clone()]);
+
+        assert_eq!(lockfile.packages, vec![bar_locked]);
+    }
+
+    /// Unlocking by group should remove all packages in that group
+    #[test]
+    fn unlock_by_group() {
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", Some("group"));
+        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", Some("group"));
+        manifest.install.insert(foo_iid.clone(), foo_descriptor);
+        manifest.install.insert(bar_iid.clone(), bar_descriptor);
+        let mut lockfile = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone(), bar_locked.clone()],
+        };
+
+        lockfile.unlock_packages_by_group_or_iid(&["group".to_string()]);
+
+        assert_eq!(lockfile.packages, vec![]);
+    }
+
+    /// If an unlocked iid is also used as a group, remove both the group
+    /// and the package
+    #[test]
+    fn unlock_by_iid_and_group() {
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", Some("foo_install_id"));
+        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", Some("foo_install_id"));
+        manifest.install.insert(foo_iid.clone(), foo_descriptor);
+        manifest.install.insert(bar_iid.clone(), bar_descriptor);
+        let mut lockfile = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone(), bar_locked.clone()],
+        };
+
+        lockfile.unlock_packages_by_group_or_iid(&[foo_iid.clone()]);
+
+        assert_eq!(lockfile.packages, vec![]);
+    }
+
+    #[test]
+    fn unlock_by_iid_noop_if_already_unlocked() {
+        let LockedManifest::Catalog(mut seed) = TEST_LOCKED_MANIFEST.clone() else {
+            panic!("Expected a catalog lockfile");
+        };
+
+        // If the package is not in the seed, the lockfile should be unchanged
+        let expected = seed.packages.clone();
+
+        seed.unlock_packages_by_group_or_iid(&["not in here".to_string()]);
+
+        assert_eq!(seed.packages, expected,);
+    }
+
     #[tokio::test]
     async fn test_locking_1() {
         let manifest = &*TEST_TYPED_MANIFEST;
@@ -1391,5 +1682,59 @@ mod tests {
         for group in package_groups {
             assert!(expected_systems.contains(&group.system))
         }
+    }
+
+    #[test]
+    fn test_split_out_fully_locked_packages() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", Some("group1"));
+        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", Some("group1"));
+        let (baz_iid, baz_descriptor, baz_locked) = fake_package("baz", Some("group2"));
+        let (yeet_iid, yeet_descriptor, _) = fake_package("yeet", Some("group2"));
+
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        manifest.install.insert(foo_iid, foo_descriptor.clone());
+        manifest.install.insert(bar_iid, bar_descriptor.clone());
+        manifest
+            .install
+            .insert(baz_iid.clone(), baz_descriptor.clone());
+        manifest
+            .install
+            .insert(yeet_iid.clone(), yeet_descriptor.clone());
+
+        let locked = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone(), bar_locked.clone(), baz_locked.clone()],
+        };
+
+        let groups = LockedManifestCatalog::collect_package_groups(&manifest, Some(&locked));
+
+        let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
+            LockedManifestCatalog::split_fully_locked_groups(groups, Some(&locked));
+
+        // All packages of group1 are locked
+        assert_eq!(&fully_locked, &[bar_locked, foo_locked]);
+
+        // Only one package of group2 is locked, so it should be in to_resolve as a group
+        assert_eq!(to_resolve, vec![PackageGroup {
+            name: "group2".to_string(),
+            system: "system".to_string(),
+            descriptors: vec![
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "baz".to_string(),
+                    derivation: Some(baz_locked.derivation.clone()),
+                    install_id: baz_iid,
+                    version: None,
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "yeet".to_string(),
+                    derivation: None,
+                    install_id: yeet_iid,
+                    version: None,
+                }
+            ],
+        }]);
     }
 }

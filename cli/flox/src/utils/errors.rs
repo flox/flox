@@ -468,6 +468,9 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
 
             Please ensure that the path exists and that you have read permissions.
         "},
+        ManagedEnvironmentError::Lock(core_environment_error) => {
+            format_core_error(core_environment_error)
+        },
         ManagedEnvironmentError::Build(core_environment_error) => {
             format_core_error(core_environment_error)
         },

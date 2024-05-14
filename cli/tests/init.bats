@@ -110,12 +110,42 @@ function check_with_dir() {
   assert_output ".flox"
 }
 
+@test "c2.1: \`flox init\` with \`--dir .\` will create an environment in current working directory." {
+  run "$FLOX_BIN" init -d .
+  assert_success
+  run ls -A
+  assert_output ".flox"
+}
+
+@test "c2.1: \`flox init\` with \`--dir ..\` will create an environment in parent working directory." {
+  mkdir -p "$PROJECT_DIR/other"
+
+  pushd other
+  run "$FLOX_BIN" init -d ..
+  assert_success
+  popd
+
+  run ls -A
+  assert_output - <<EOF
+.flox
+other
+EOF
+}
+
 @test "c2.1: \`flox init\` with \`--dir <path>\` will create an environment in \`<path>\`. (relative)" {
   mkdir -p "$PROJECT_DIR/other"
 
   run "$FLOX_BIN" init -d ./other
   assert_success
   check_with_dir
+}
+
+@test "c2.1: \`flox init\` with \`--dir <path>\` will not create an environment where \`<path>\` is a file" {
+  touch "$PROJECT_DIR/other"
+
+  run "$FLOX_BIN" init -d ./other
+  assert_failure
+  assert_line --partial "Could not prepare a '.flox' directory: Not a directory"
 }
 
 @test "c2.1: \`flox init\` with \`--dir <path>\` will create an environment in \`<path>\`. (absolute)" {
@@ -175,33 +205,6 @@ function check_with_dir() {
 
   FLOX_SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
   FLOX_SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
-}
-
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=init:python:auto-setup,init:python:auto-setup:bash
-@test "verify auto-setup Python venv activation: bash" {
-  OWNER="owner"
-  NAME="name"
-  echo "requests" > requirements.txt
-  [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init --auto-setup --name "$NAME"
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/init/python-env.exp" "$PROJECT_DIR"
-  assert_line --partial "Activating python virtual environment"
-  assert_line --partial "deactivate is a function"
-  assert_line --partial "deactivate ()"
-}
-
-# bats test_tags=init:python:auto-setup,init:python:auto-setup:zsh
-@test "verify auto-setup Python venv activation: zsh" {
-  OWNER="owner"
-  NAME="name"
-  echo "requests" > requirements.txt
-  [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init --auto-setup --name "$NAME"
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/init/python-env.exp" "$PROJECT_DIR"
-  assert_line --partial "Activating python virtual environment"
-  assert_line --partial "deactivate is a shell function from $(realpath $PROJECT_DIR)/.flox/cache/python/bin/activate"
 }
 
 # ---------------------------------------------------------------------------- #

@@ -26,6 +26,7 @@ use crate::utils::message;
 enum Mode {
     #[bpaf(long, hide)]
     All,
+    /// Show only the active environments
     #[bpaf(long)]
     Active,
 }
@@ -34,6 +35,7 @@ enum Mode {
 pub struct Envs {
     #[bpaf(external(mode))]
     mode: Mode,
+    /// Format output as JSON
     #[bpaf(long)]
     json: bool,
 }
