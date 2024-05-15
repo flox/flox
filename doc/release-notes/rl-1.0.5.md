@@ -1,4 +1,4 @@
-## Release 1.0.5 (UNRELEASED)
+## Release 1.0.5
 
 ### Pull/Push Improvements
 
