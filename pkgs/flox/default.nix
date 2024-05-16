@@ -9,27 +9,20 @@
   flox-manpages,
   SENTRY_DSN ? null,
   SENTRY_ENV ? null,
+  FLOX_VERSION ? null,
 }: let
-  # Inherit version from Cargo.toml, aligning with the CLI version.
-  # We also inject some indication about the `git' revision of the repository.
-  cargoToml = (lib.importTOML "${inputs.self}/cli/flox/Cargo.toml").package.version or "dirty";
-  cargoTomlLatest = (lib.importTOML "${inputs.flox-latest}/cli/flox/Cargo.toml").package.version or "dirty";
-  revCountDiff = self.revCount - inputs.flox-latest.revCount;
+  fileVersion = lib.fileContents "${inputs.self}/VERSION";
   version =
-    if !(self ? revCount || self ? shortRev)
-    then # path://$PWD
-      "${cargoToml}-dirty"
+    if (FLOX_VERSION != null)
+    then FLOX_VERSION
+    else if !(self ? revCount || self ? shortRev)
+    then "${fileVersion}-dirty"
     else if !(self ? revCount)
-    then # github:flox/flox
-      "${cargoToml}-g${self.shortRev}"
-    else if revCountDiff == 0
-    then # for release, only possible with overrides/follows
-      "${cargoToml}"
-    else # git+ssh://git@github.com/flox/flox
-      "${cargoTomlLatest}-${builtins.toString revCountDiff}-g${self.shortRev}";
+    then "${fileVersion}-g${self.shortRev}"
+    else fileVersion;
 in
   symlinkJoin {
-    name = "${flox-cli.pname}-${version}";
+    name = "flox-${version}";
     inherit version;
 
     paths = [flox-cli flox-manpages];
