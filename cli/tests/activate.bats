@@ -924,3 +924,23 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:zdotdir,activate:zdotdir:bash
+@test "bash: preserve custom ZDOTDIR" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  FLOX_SHELL=bash ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -- echo '$ZDOTDIR'
+  assert_success
+  assert_line "/custom/zdotdir"
+}
+
+# bats test_tags=activate,activate:zdotdir,activate:zdotdir:zsh
+@test "zsh: preserve custom ZDOTDIR" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  FLOX_SHELL=zsh ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -- echo '$ZDOTDIR'
+  assert_success
+  assert_line "/custom/zdotdir"
+}
+
+# ---------------------------------------------------------------------------- #

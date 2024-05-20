@@ -4,9 +4,14 @@ export _coreutils="@coreutils@"
 export _gnused="@gnused@"
 export _zdotdir="@out@/activate.d/zdotdir"
 
-# Flox environment activation script.
-export _FLOX_PKGDB_VERBOSITY="${_FLOX_PKGDB_VERBOSITY:-0}"
-[ "$_FLOX_PKGDB_VERBOSITY" -eq 0 ] || set -x
+# Top-level Flox environment activation script.
+
+# Trace levels supported by activation scripts:
+#   1. (-v) top-level activate script
+#   2. (-vv) language-specific profile scripts
+#   3. (-vvv) zsh `autoload -U compinit` (very verbose)
+export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
+[ "$_flox_activate_tracelevel" -eq 0 ] || set -x
 
 
 # TODO: add getopt arg parser for following args:
@@ -274,16 +279,16 @@ fi
 # line.
 case "$FLOX_SHELL" in
   *bash)
+    echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
     echo "export FLOX_ENV=\"$FLOX_ENV\";"
-    echo "export _FLOX_PKGDB_VERBOSITY=\"$_FLOX_PKGDB_VERBOSITY\";"
     echo "export _add_env=\"$_add_env\";"
     echo "export _del_env=\"$_del_env\";"
     echo "source '$FLOX_ENV/activate.d/bash';"
     ;;
   *zsh)
+    echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
     echo "export FLOX_ENV=\"$FLOX_ENV\";"
-    echo "export _FLOX_PKGDB_VERBOSITY=\"$_FLOX_PKGDB_VERBOSITY\";"
-    echo "export FLOX_ORIG_ZDOTDIR=\"$FLOX_ORIG_ZDOTDIR\";"
+    echo "export FLOX_ORIG_ZDOTDIR=\"$ZDOTDIR\";"
     echo "export ZDOTDIR=\"$_zdotdir\";"
     echo "export FLOX_ZSH_INIT_SCRIPT=\"$FLOX_ENV/activate.d/zsh\";"
     echo "export _add_env=\"$_add_env\";"

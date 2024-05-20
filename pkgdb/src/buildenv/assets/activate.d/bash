@@ -1,6 +1,10 @@
 # shellcheck shell=bash disable=all
 export _gnused="@gnused@"
-[ "${_FLOX_PKGDB_VERBOSITY:-0}" -le 1 ] || set -x
+
+# Enable shell-specific profile script startup with verbosity 2.
+if [ "$_flox_activate_tracelevel" -ge 2 ]; then
+  set -x
+fi
 
 # Assert that the expected _{add,del}_env variables are present.
 [ -n "$_add_env" -a -n "$_del_env" ] || {
@@ -39,6 +43,8 @@ done
 # when attempting to invoke `hash -r`.
 set +h
 
-if [ "${_FLOX_PKGDB_VERBOSITY:-0}" -ge 2 ]; then
+# Disable tracing before potentially launching into user shell.
+if [ "$_flox_activate_tracelevel" -ge 2 ]; then
   set +x
 fi
+unset _flox_activate_tracelevel

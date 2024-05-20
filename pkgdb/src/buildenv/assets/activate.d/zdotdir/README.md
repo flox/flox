@@ -18,6 +18,20 @@ followed by the flox-specific initialization.
 
 The `flox` script is responsible for setting `ZDOTDIR` to point to this
 directory as it invokes `zsh --no-globalrcs`, but not before preserving the
-original value of `ZDOTDIR` (if defined) in `FLOX_ORIG_ZDOTDIR`. The `.zshrc`
-script then uses this environment variable to restore `ZDOTDIR` to its original
-value prior to sourcing the system and user-provided configuration files.
+original value of `ZDOTDIR` (if defined) in `FLOX_ORIG_ZDOTDIR`.
+
+The zsh initialization sequence as described in the `zsh(1)` man page is:
+
+1. source `/etc/zshenv` followed by `$ZDOTDIR/.zshenv`
+2. if a *login shell*, source `/etc/zprofile` followed by `$ZDOTDIR/.zprofile`
+3. if an *interactive shell*, source `/etc/zshrc` followed by `$ZDOTDIR/.zshrc`
+4. if a *login shell*, source `/etc/zlogin` followed by `$ZDOTDIR/.zlogin`
+
+Our goal is to source our own `$FLOX_ZSH_INIT_SCRIPT` last, so we must apply
+conditional logic to figure out which of the first, third or fourth case above
+will be the last to be sourced, then append the sourcing of our script to that.
+This logic can be found at the end of each of the `.{zshenv,zshrc,zlogin}`
+scripts.
+
+The `ZDOTDIR` environment variable is restored to its original value by the
+`$FLOX_ZSH_INIT_SCRIPT` as it is sourced.

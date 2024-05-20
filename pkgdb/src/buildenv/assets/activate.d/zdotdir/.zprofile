@@ -22,3 +22,7 @@ then
         ZDOTDIR= source "$zprofile"
     fi
 fi
+
+# Do not bring in the Nix and Flox environment customizations from this file
+# because one of the neighbouring .zshrc or .zlogin files will always be
+# sourced after this one.
