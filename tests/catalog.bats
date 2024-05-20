@@ -30,9 +30,6 @@ teardown_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' works with catalog server" {
-  # warm up the server - it can be slow to connect to the DB
-  # TODO: drop
-  "$FLOX_BIN" search hello || true
 
   run "$FLOX_BIN" search hello -vvv
   assert_output --partial "using catalog client for search"
@@ -41,10 +38,6 @@ teardown_file() {
 }
 
 @test "'flox show' works with catalog server" {
-  # warm up the server - it can be slow to connect to the DB
-  # TODO: drop
-  "$FLOX_BIN" show hello || true
-
   run "$FLOX_BIN" show hello -vvv
   assert_output --partial "using catalog client for show"
   assert_output --partial "hello@2.12.1"
