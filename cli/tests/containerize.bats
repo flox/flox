@@ -37,7 +37,7 @@ env_setup() {
 # However, that directory is not writable
 # and thus fails to be deleted by bats as part of the test teardown.
 podman_cache_reset() {
-  echo "Resetting podman cache" >&3
+  # echo "Resetting podman cache" >&3
   is_linux && podman system reset --force
   true
 }
@@ -150,9 +150,19 @@ function skip_if_linux() {
 
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${lines[0]}" "bar"
-  assert_equal "${#stderr_lines[@]}" 2
-  assert_regex "${stderr_lines[0]}" "\/nix\/store\/.*\/bin\/hello"
-  assert_equal "${stderr_lines[1]}" "Hello, world!"
+
+  # Podman generates some errors/warnings about UIDs/GIDs due to how the rootless
+  # setup works: https://github.com/containers/podman/issues/15611
+  # Another error you may see is that the container file already exists, which is
+  # harmless and can be ignored.
+  # So, we can't rely on the *number* of stderr lines, but we know the lines we
+  # care about will be the last two lines.
+
+  n_stderr_lines="${#stderr_lines[@]}"
+  hello_line="$(($n_stderr_lines - 1))"
+  store_path_line="$(($n_stderr_lines - 2))"
+  assert_regex "${stderr_lines[$store_path_line]}" "\/nix\/store\/.*\/bin\/hello"
+  assert_equal "${stderr_lines[$hello_line]}" "Hello, world!"
 }
 
 # ---------------------------------------------------------------------------- #
