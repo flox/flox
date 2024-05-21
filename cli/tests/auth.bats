@@ -16,8 +16,7 @@ load test_support.bash
 setup_file() {
   common_file_setup
   export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="${BATS_FILE_TMPDIR}/empty-responses.json"
-  echo "[]" > "$_FLOX_USE_CATALOG_MOCK"
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
 }
 
 teardown_file() {
