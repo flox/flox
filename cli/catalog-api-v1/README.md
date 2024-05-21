@@ -35,7 +35,7 @@ Mid-term updating the client library and proposing it as a PR will be done by au
 
 1. Start the interface and leave it running in a separate terminal:
 
-        nix run 'nixpkgs/release-23.11#mitmproxy'
+        mitmproxy
 
 1. Install the Certificate Authority per [these instructions](https://docs.mitmproxy.org/stable/concepts-certificates/).
 1. Run a `flox` command, using the catalog and the proxy:
