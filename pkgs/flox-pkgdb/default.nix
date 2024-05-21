@@ -120,11 +120,7 @@
 in
   stdenv.mkDerivation ({
       pname = "flox-pkgdb";
-      version = let
-        contents = builtins.readFile ./../../pkgdb/.version;
-      in
-        builtins.replaceStrings ["\n"] [""] contents;
-
+      version = lib.fileContents ./../../VERSION;
       src = builtins.path {
         path = ./../../pkgdb;
         filter = name: type: let

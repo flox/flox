@@ -13,8 +13,6 @@ load test_support.bash
 # ---------------------------------------------------------------------------- #
 
 setup_file() {
-  skip "needs some changes serverside"
-
   common_file_setup
   export FLOX_FEATURES_USE_CATALOG=true
   if [ -z "${TESTING_FLOX_CATALOG_URL:-}" ]; then
@@ -32,6 +30,7 @@ teardown_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox search' works with catalog server" {
+
   run "$FLOX_BIN" search hello -vvv
   assert_output --partial "using catalog client for search"
   assert_output --partial "hello"
@@ -41,17 +40,42 @@ teardown_file() {
 @test "'flox show' works with catalog server" {
   run "$FLOX_BIN" show hello -vvv
   assert_output --partial "using catalog client for show"
-  assert_output --partial "hello - hello@2.12.1"
+  assert_output --partial "hello@2.12.1"
 }
 
 @test "'flox install' and 'flox activate' work with catalog server" {
   "$FLOX_BIN" init
-  # TODO: drop this when flox init sets version = 1
-  echo 'version = 1' | "$FLOX_BIN" edit -f -
+
   run "$FLOX_BIN" install hello -vvv
   assert_success
   assert_output --partial "using catalog client to lock"
+
   run "$FLOX_BIN" activate -- hello
   assert_success
   assert_output --partial "Hello, world!"
+
+  "$FLOX_BIN" delete
+}
+
+# bats test_tags=upgrade:catalog
+@test "'flox upgrade' works with catalog server" {
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello_resolution_old.json" \
+    "$FLOX_BIN" install -i hello_install_id hello
+
+  run "$FLOX_BIN" list
+  assert_success
+  assert_line "hello_install_id: hello (old_version)"
+
+  run "$FLOX_BIN" upgrade -vvv
+  assert_success
+  assert_output --partial "using catalog client to upgrade"
+  assert_output --partial "Upgraded 'hello_install_id'"
+
+  run "$FLOX_BIN" list
+  assert_success
+  assert_line "hello_install_id: hello (2.12.1)"
+
+  "$FLOX_BIN" delete
 }
