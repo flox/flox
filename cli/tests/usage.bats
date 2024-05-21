@@ -20,7 +20,6 @@ setup_file() {
 
 teardown_file() {
   unset FLOX_FEATURES_USE_CATALOG
-  rm "$_FLOX_USE_CATALOG_MOCK"
   unset _FLOX_USE_CATALOG_MOCK
 }
 
