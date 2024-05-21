@@ -41,18 +41,11 @@ setup_file() {
   )"
 
   export OWNER="floxEM"
-
-  export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
 }
 
 teardown_file() {
   "$FLOX_BIN" config --delete floxhub_url
   unset FLOX_FLOXHUB_TOKEN
-
-  unset FLOX_FEATURES_USE_CATALOG
-  rm "$_FLOX_USE_CATALOG_MOCK"
-  unset _FLOX_USE_CATALOG_MOCK
 }
 
 # ---------------------------------------------------------------------------- #
