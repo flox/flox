@@ -1,4 +1,3 @@
-
 # Tweak the (already customized) prompt: add a flox indicator.
 
 _floxPrompt1="${FLOX_PROMPT-flox}"

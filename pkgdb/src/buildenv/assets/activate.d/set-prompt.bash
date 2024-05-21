@@ -1,3 +1,4 @@
+# shellcheck shell=bash disable=all
 # Tweak the (already customized) prompt: add a flox indicator.
 
 _esc="\x1b["

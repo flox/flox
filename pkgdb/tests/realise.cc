@@ -158,67 +158,12 @@ test_scriptsAreAddedToScriptsDir( nix::ref<nix::EvalState> & state,
   auto scriptsDir = std::filesystem::path( output.first.path )
                     / flox::buildenv::ACTIVATION_SUBDIR_NAME;
   std::vector<std::string> scripts
-    = { "profile-common",   "profile-bash", "profile-zsh",
-        "hook-on-activate", "bash",         "zsh" };
+    = { "profile-common", "profile-bash", "profile-zsh", "hook-on-activate" };
   for ( const auto & script : scripts )
     {
       auto path = scriptsDir / script;
       EXPECT( std::filesystem::exists( path ) );
     }
-  return true;
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-bool
-test_scriptsAreSourcedOrCalled( nix::ref<nix::EvalState> & state,
-                                flox::resolver::Lockfile & lockfile )
-{
-  auto output
-    = flox::buildenv::makeActivationScripts( *state,
-                                             lockfile.getLockfileRaw() );
-  auto activationScriptPath = std::filesystem::path( output.first.path )
-                              / flox::buildenv::ACTIVATION_SCRIPT_NAME;
-  auto scriptsDir = std::filesystem::path( output.first.path )
-                    / flox::buildenv::ACTIVATION_SUBDIR_NAME;
-  std::vector<std::string> shells         = { "bash", "zsh" };
-  std::vector<std::string> profileScripts = { "common" };
-  profileScripts.insert( profileScripts.begin(), shells.begin(), shells.end() );
-  for ( const auto & shell : shells )
-    {
-      auto              scriptPath = scriptsDir / shell;
-      std::ifstream     file( scriptPath );
-      std::stringstream contents;
-      contents << file.rdbuf();
-      file.close();
-
-      /* Look for 'profile-common'*/
-      auto commonPattern = nix::fmt( "\"$FLOX_ENV/%s/profile-%s\"",
-                                     flox::buildenv::ACTIVATION_SUBDIR_NAME,
-                                     "common" );
-      auto commonPos     = contents.str().find( commonPattern );
-      EXPECT( commonPos != std::string::npos );
-
-      /* Look for 'profile-<shell>'*/
-      auto shellPattern = nix::fmt( "\"$FLOX_ENV/%s/profile-%s\"",
-                                    flox::buildenv::ACTIVATION_SUBDIR_NAME,
-                                    shell );
-      auto shellPos     = contents.str().find( shellPattern );
-      EXPECT( shellPos != std::string::npos );
-    }
-
-  /* Look for 'hook-on-activate' in the activate script only. */
-  std::ifstream     file( activationScriptPath );
-  std::stringstream contents;
-  contents << file.rdbuf();
-  file.close();
-
-  auto hookPattern = nix::fmt( "\"$FLOX_ENV/%s/hook-on-activate\"",
-                               flox::buildenv::ACTIVATION_SUBDIR_NAME );
-  auto hookPos     = contents.str().find( hookPattern );
-  EXPECT( hookPos != std::string::npos );
-
   return true;
 }
 
@@ -250,7 +195,6 @@ main( int argc, char * argv[] )
   auto lockfile = testLockfile();
 
   RUN_TEST( scriptsAreAddedToScriptsDir, state, lockfile );
-  RUN_TEST( scriptsAreSourcedOrCalled, state, lockfile );
 
   return exitCode;
 }

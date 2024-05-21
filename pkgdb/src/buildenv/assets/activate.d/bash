@@ -1,0 +1,44 @@
+# shellcheck shell=bash disable=all
+export _gnused="@gnused@"
+[ "${_FLOX_PKGDB_VERBOSITY:-0}" -le 1 ] || set -x
+
+# Assert that the expected _{add,del}_env variables are present.
+[ -n "$_add_env" -a -n "$_del_env" ] || {
+  echo 'ERROR (bash): $_add_env and $_del_env not found in environment' >&2;
+  exit 1;
+}
+
+# We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
+# so source that here, but not if we're already in the process of sourcing
+# bashrc in a parent process.
+if [ -f ~/.bashrc -a -z "$_flox_already_sourcing_bashrc" ]
+then
+    export _flox_already_sourcing_bashrc=1
+    source ~/.bashrc
+    unset _flox_already_sourcing_bashrc
+fi
+
+# Restore environment variables set in the previous bash initialization.
+eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' $_del_env)"
+eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
+
+if [ -t 1 ]; then
+  source "$FLOX_ENV/activate.d/set-prompt.bash"
+fi
+
+# Source user-specified profile scripts if they exist.
+for i in profile-common profile-bash hook-script; do
+  if [ -e "$FLOX_ENV/activate.d/$i" ]; then
+    source "$FLOX_ENV/activate.d/$i"
+  fi
+done
+
+# Disable command hashing to allow for newly installed flox packages
+# to be found immediately. We do this as the very last thing because
+# python venv activations can otherwise return nonzero return codes
+# when attempting to invoke `hash -r`.
+set +h
+
+if [ "${_FLOX_PKGDB_VERBOSITY:-0}" -ge 2 ]; then
+  set +x
+fi

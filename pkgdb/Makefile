@@ -149,16 +149,18 @@ endif  # ifndef TOOLCHAIN
 VERSION := $(file < $(PKGDB_ROOT)/.version)
 
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
-# WARNING: these assignments are normally done within pkgs/flox-pkgdb/default.nix.
-# If you want to develop iteratively without using the packages created at the
-# time of running `nix develop` then unset the corresponding variables in your
-# develop shell environment.
-PROFILE_D_SCRIPTS_DIR ?= $(shell                            \
-  $(NIX) build .\#flox-pkgdb.envs.PROFILE_D_SCRIPTS_DIR --print-out-paths)
-ACTIVATE_D_SCRIPTS_DIR ?= $(shell                                                  \
-  $(NIX) store add-path -n flox-activate.d src/buildenv/assets/activate.d)
-CONTAINER_BUILDER_PATH ?= $(shell                                                  \
-  $(NIX) store add-path -n mkContainer.nix src/buildenv/assets/mkContainer.nix)
+# WARNING: the flox-activate package is normally created from within
+# pkgs/flox-pkgdb/default.nix, but if working in a `nix develop' shell
+# then run `unset ACTIVATE_PACKAGE_DIR' to regenerate the package with
+# each build.
+ACTIVATE_PACKAGE_DIR ?= $(shell \
+  $(NIX) store add-path -n flox-activate src/buildenv/assets)
+
+# The reference to CONTAINER_BUILDER_PATH in realise.cc requires that
+# libexec/mkContainer.nix be rendered as a single-file package in the
+# Nix store.
+CONTAINER_BUILDER_PATH ?= $(shell \
+  $(NIX) store add-path -n mkContainer.nix src/libexec/mkContainer.nix)
 
 COMMON_NIXPKGS_URL ?= $(shell \
   $(NIX) eval --raw .\#flox-pkgdb.envs.COMMON_NIXPKGS_URL)
@@ -361,11 +363,8 @@ endif # ifeq (Linux,$(OS))
 # Flags for Specific Files
 # ------------------------
 
-src/buildenv/realise.o: CXXFLAGS +=                   \
-	'-DPROFILE_D_SCRIPTS_DIR="$(PROFILE_D_SCRIPTS_DIR)"'
-
 src/buildenv/realise.o: CXXFLAGS +=               \
-	'-DACTIVATE_D_SCRIPTS_DIR ="$(ACTIVATE_D_SCRIPTS_DIR)"'
+	'-DACTIVATE_PACKAGE_DIR="$(ACTIVATE_PACKAGE_DIR)"'
 
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DCONTAINER_BUILDER_PATH="$(CONTAINER_BUILDER_PATH)"'
@@ -375,9 +374,6 @@ src/buildenv/realise.o: CXXFLAGS +=               \
 
 src/buildenv/realise.o: CXXFLAGS +=                 \
 	'-DFLOX_BASH_PKG="$(FLOX_BASH_PKG)"'            \
-	'-DFLOX_COREUTILS_PKG="$(FLOX_COREUTILS_PKG)"'  \
-	'-DFLOX_GNUSED_PKG="$(FLOX_GNUSED_PKG)"'        \
-	'-DFLOX_PROCPS_PKG="$(FLOX_PROCPS_PKG)"'        \
 	'-DFLOX_CACERT_PKG="$(FLOX_CACERT_PKG)"'        \
 	'-DFLOX_LOCALE_ARCHIVE="$(LOCALE_ARCHIVE)"'     \
 	'-DFLOX_PATH_LOCALE="$(PATH_LOCALE)"'           \
