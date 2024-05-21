@@ -1,11 +1,25 @@
 export _gnused="@gnused@"
-[ "${_FLOX_PKGDB_VERBOSITY:-0}" -le 1 ] || set -x
+
+# Enable shell-specific profile script startup with verbosity 2.
+if [ "$_flox_activate_tracelevel" -ge 2 ]; then
+  set -x
+fi
 
 # Assert that the expected _{add,del}_env variables are present.
 [ -n "$_add_env" -a -n "$_del_env" ] || {
   echo 'ERROR (zsh): $_add_env and $_del_env not found in environment' >&2;
   exit 1;
 }
+
+# This is the final script to be called in the zsh startup sequence so start
+# by restoring the original value of ZDOTDIR if it was set previously.
+if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
+then
+  export ZDOTDIR="$FLOX_ORIG_ZDOTDIR"
+  unset FLOX_ORIG_ZDOTDIR
+else
+  unset ZDOTDIR
+fi
 
 # Modify dynamic zsh fpath in preference to FPATH in environment.
 # See https://github.com/flox/flox/pull/1299 for more details.
@@ -26,7 +40,21 @@ done
 if [ ${#fpath_prepend[@]} -gt 0 ]; then
   fpath=( "${fpath_prepend[@]}" "${fpath[@]}" )
   autoload -U compinit
-  compinit
+
+  # compinit tracing is very verbose so only enable with tracelevel 3 or above.
+  if [ "$_flox_activate_tracelevel" -eq 2 ]; then
+    # Disable tracing for the compinit invocation then re-enable.
+    : compinit tracing suppressed
+    set +x
+    compinit
+    set -x
+  else
+    # Tracing will either have already been enabled for tracelevels greater or
+    # equal to 2 or not enabled for tracelevels below 2, but either way we can
+    # leave tracing as-is and just invoke compinit.
+    compinit
+  fi
+
 fi
 unset fpath_prepend
 
@@ -59,6 +87,8 @@ done
 setopt nohashcmds
 setopt nohashdirs
 
-if [ "${_FLOX_PKGDB_VERBOSITY:-0}" -ge 2 ]; then
+# Disable tracing before potentially launching into user shell.
+if [ "$_flox_activate_tracelevel" -ge 2 ]; then
   set +x
 fi
+unset _flox_activate_tracelevel
