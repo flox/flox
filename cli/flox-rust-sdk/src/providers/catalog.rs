@@ -1,6 +1,10 @@
 use std::collections::VecDeque;
+use std::fmt::Debug;
+use std::fs::OpenOptions;
+use std::io::Read;
 use std::num::NonZeroU32;
-use std::path::{Path, PathBuf};
+use std::os::unix::fs::FileExt;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
@@ -17,14 +21,15 @@ use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, TryStreamExt};
-use log::debug;
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use thiserror::Error;
 
 use crate::data::System;
 use crate::models::search::{SearchResult, SearchResults};
+use crate::utils::traceable_path;
 
 pub const DEFAULT_CATALOG_URL: &str = "https://flox-catalog.flox.dev";
 const NIXPKGS_CATALOG: &str = "nixpkgs";
@@ -118,15 +123,41 @@ impl CatalogClient {
     /// it is set
     fn maybe_dump_shim_response<T>(response: &T)
     where
-        T: ?Sized + Serialize,
+        T: ?Sized + Serialize + Debug,
     {
         if let Ok(path_str) = std::env::var(FLOX_CATALOG_DUMP_DATA_VAR) {
-            debug!("writing response to {path_str}");
-            std::fs::write(
-                PathBuf::from(path_str),
-                serde_json::to_string_pretty(response).expect("failed to serialize shim response"),
-            )
-            .expect("failed to write shim reponse to file");
+            let path = Path::new(&path_str);
+            tracing::debug!(path = traceable_path(&path), "reading dumped response file");
+            let mut options = OpenOptions::new();
+            let mut file = options
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(path)
+                .expect("couldn't open dumped response file");
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)
+                .expect("couldn't read dumped response file contents");
+            let mut json: Value = serde_json::from_str(&contents)
+                .or::<serde_json::Error>(Ok(
+                    serde_json::from_str("[]").expect("failed to make empty json array")
+                ))
+                .expect("couldn't convert file contents to json");
+            let new_response =
+                serde_json::to_value(response).expect("couldn't serialize response to json");
+            if let Value::Array(ref mut responses) = json {
+                responses.push(new_response);
+            } else {
+                panic!("expected file to contain a json array, found something else");
+            }
+            let contents =
+                serde_json::to_string_pretty(&json).expect("couldn't serialize responses to json");
+            tracing::debug!(
+                path = traceable_path(&path),
+                "writing response to dumped response file"
+            );
+            file.write_all_at(contents.as_bytes(), 0)
+                .expect("failed writing dumped response file");
         }
     }
 }
