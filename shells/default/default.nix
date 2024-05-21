@@ -7,6 +7,7 @@
   mkShell,
   pre-commit-check,
   shfmt,
+  mitmproxy,
   flox-cli,
   flox-cli-tests,
   flox-pkgdb,
@@ -42,6 +43,7 @@
       commitizen
       alejandra
       shfmt
+      mitmproxy
     ];
 in
   mkShell (
