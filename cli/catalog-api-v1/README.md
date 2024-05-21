@@ -28,3 +28,18 @@ $ cargo check -p catalog-api-v1
 
 Finally, remember to check-in the updated sources.
 Mid-term updating the client library and proposing it as a PR will be done by automation.
+
+## Debugging
+
+[mitmproxy](https://mitmproxy.org/) can be used to debug requests and responses from the Catalog API.
+
+1. Start the interface and leave it running in a separate terminal:
+
+        mitmproxy
+
+1. Install the Certificate Authority per [these instructions](https://docs.mitmproxy.org/stable/concepts-certificates/).
+1. Run a `flox` command, using the catalog and the proxy:
+
+        HTTPS_PROXY=http://localhost:8080 flox show bash
+
+1. Explore the recorded flows in the `mitmproxy` interface.
