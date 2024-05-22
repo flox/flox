@@ -289,6 +289,14 @@ $ nix develop
 $ just functional-tests
 ```
 
+#### Mock catalog responses
+
+Mock catalog responses for use with integration and functional tests can be generated with:
+
+```console
+_FLOX_CATALOG_DUMP_RESPONSE_FILE=<file.json> flox <command>
+```
+
 #### Continuous testing
 When working on the test you would probably want to run them continuously on
 every change. In that case run the following:
