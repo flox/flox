@@ -952,14 +952,14 @@ EOF
   echo "echo sourcing .zlogin" > "$HOME/.zlogin"
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
-  run "$FLOX_BIN" install hello
-  assert_success
-  run zsh -c 'eval "$("$FLOX_BIN" activate)"; hello'
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+  run zsh -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
   assert_line "sourcing .zshenv"
   refute_line "sourcing .zshrc"
   refute_line "sourcing .zlogin"
-  assert_line "Hello, world!"
+  assert_line "sourcing hook.on-activate for first time"
+  assert_line "sourcing profile.zsh for first time"
 }
 
 # bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshrc
@@ -969,14 +969,14 @@ EOF
   echo "echo sourcing .zlogin" > "$HOME/.zlogin"
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
-  run "$FLOX_BIN" install hello
-  assert_success
-  run zsh -i -c 'eval "$("$FLOX_BIN" activate)"; hello'
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+  run zsh -i -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
   assert_line "sourcing .zshenv"
   assert_line "sourcing .zshrc"
   refute_line "sourcing .zlogin"
-  assert_line "Hello, world!"
+  assert_line "sourcing hook.on-activate for first time"
+  assert_line "sourcing profile.zsh for first time"
 }
 
 # bats test_tags=activate,activate:zdotdir,activate:zdotdir:zlogin
@@ -986,14 +986,14 @@ EOF
   echo "echo sourcing .zlogin" > "$HOME/.zlogin"
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
-  run "$FLOX_BIN" install hello
-  assert_success
-  run zsh -i -l -c 'eval "$("$FLOX_BIN" activate)"; hello'
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+  run zsh -i -l -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
   assert_line "sourcing .zshenv"
   assert_line "sourcing .zshrc"
   assert_line "sourcing .zlogin"
-  assert_line "Hello, world!"
+  assert_line "sourcing hook.on-activate for first time"
+  assert_line "sourcing profile.zsh for first time"
 }
 
 # ---------------------------------------------------------------------------- #
