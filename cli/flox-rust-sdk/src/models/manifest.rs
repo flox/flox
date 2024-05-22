@@ -87,7 +87,7 @@ impl RawManifest {
         vars_table.decor_mut().set_prefix(indoc! {r#"
 
             # Set environment variables in the `[vars]` section. These variables may not
-            # reference once another, and are added to the environment without first
+            # reference one another, and are added to the environment without first
             # expanding them. They are available for use in the `[profile]` and `[hook]`
             # scripts.
         "#});
@@ -948,7 +948,7 @@ pub(super) mod test {
             # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
 
             # Set environment variables in the `[vars]` section. These variables may not
-            # reference once another, and are added to the environment without first
+            # reference one another, and are added to the environment without first
             # expanding them. They are available for use in the `[profile]` and `[hook]`
             # scripts.
             [vars]
@@ -1018,7 +1018,7 @@ pub(super) mod test {
             python3 = { pkg-path = "python3", version = "3.11.6" }
 
             # Set environment variables in the `[vars]` section. These variables may not
-            # reference once another, and are added to the environment without first
+            # reference one another, and are added to the environment without first
             # expanding them. They are available for use in the `[profile]` and `[hook]`
             # scripts.
             [vars]
@@ -1093,7 +1093,7 @@ pub(super) mod test {
             # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
 
             # Set environment variables in the `[vars]` section. These variables may not
-            # reference once another, and are added to the environment without first
+            # reference one another, and are added to the environment without first
             # expanding them. They are available for use in the `[profile]` and `[hook]`
             # scripts.
             [vars]
@@ -1163,7 +1163,7 @@ pub(super) mod test {
             # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
 
             # Set environment variables in the `[vars]` section. These variables may not
-            # reference once another, and are added to the environment without first
+            # reference one another, and are added to the environment without first
             # expanding them. They are available for use in the `[profile]` and `[hook]`
             # scripts.
             [vars]
