@@ -88,15 +88,21 @@ pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credent
 
     let done = Arc::new(AtomicBool::default());
 
+    let verification_uri = details
+        .verification_uri_complete()
+        .expect("Verification URI is always provided by the auth server")
+        .secret()
+        .as_str();
+    let code = details.user_code().secret();
+
     match opener {
         Ok(opener) => {
             let message = formatdoc! {"
-            First copy your one-time code: {code}
+            Your one-time activation code is: {code}
 
             Press enter to open {url} in your browser...
             ",
                 url = floxhub_url.host_str().unwrap_or(floxhub_url.as_str()),
-                code = details.user_code().secret()
             };
 
             debug!(
@@ -111,13 +117,12 @@ pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credent
             }
             .checkpoint()?;
 
-            let url = details.verification_uri().url().as_str();
             let mut command = opener.to_command();
-            command.arg(url);
+            command.arg(verification_uri);
 
             if command.spawn().is_err() {
                 message::warning(format!(
-                    "Could not open browser. Please open the following URL manually: {url}"
+                    "Could not open browser. Please open the following URL manually: {verification_uri}"
                 ));
             }
         },
@@ -125,12 +130,10 @@ pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credent
             debug!("Unable to open browser: {e}");
 
             message::plain(formatdoc! {"
-            Go to {url} in your browser
+            Go to {verification_uri} in your browser
 
-            Then enter your one-time code: {code}
-            ",
-                url = details.verification_uri().url(),
-                code = details.user_code().secret()
+            Your one-time activation code is: {code}
+            "
             });
         },
     }
