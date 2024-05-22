@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck shell=bash disable=all
+# shellcheck shell=bash disable=SC1090,SC1091
 export _coreutils="@coreutils@"
 export _gnused="@gnused@"
 export _zdotdir="@out@/activate.d/zdotdir"
@@ -27,7 +27,7 @@ export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
 #       container invocations, and it would have the incorrect value for
 #       nested flox activations.
 _FLOX_ENV="$( $_coreutils/bin/dirname -- "${BASH_SOURCE[0]}" )"
-if [ -n "$FLOX_ENV" -a "$FLOX_ENV" != "$_FLOX_ENV" ]; then
+if [ -n "$FLOX_ENV" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
   echo "WARN: detected change in FLOX_ENV: $FLOX_ENV -> $_FLOX_ENV" >&2
 fi
 export FLOX_ENV="$_FLOX_ENV"
@@ -93,11 +93,11 @@ if [ $flox_env_found -eq 0 ]; then
   # other things) prepending this environment's bin directory to the PATH.
   if [ -d "$FLOX_ENV/etc/profile.d" ]; then
     declare -a _prof_scripts;
-    _prof_scripts=( $(
-      cd "$FLOX_ENV/etc/profile.d";
+    read -r -d '' -a _prof_scripts < <(
+      cd "$FLOX_ENV/etc/profile.d" || exit;
       shopt -s nullglob;
       echo *.sh;
-    ) );
+    );
     for p in "${_prof_scripts[@]}"; do . "$FLOX_ENV/etc/profile.d/$p"; done
     unset _prof_scripts;
   fi
@@ -136,12 +136,12 @@ if [ $flox_env_found -eq 0 ]; then
   # Capture environment variables to _set_ as "key=value" pairs.
   # comm -13: only env declarations unique to `$_end_env` (new declarations)
   $_coreutils/bin/comm -13 "$_start_env" "$_end_env" | \
-    $_gnused/bin/sed -e 's/^declare -x //' > $_add_env
+    $_gnused/bin/sed -e 's/^declare -x //' > "$_add_env"
 
   # Capture environment variables to _unset_ as a list of keys.
   # TODO: remove from $_del_env keys set in $_add_env
   $_coreutils/bin/comm -23 "$_start_env" "$_end_env" | \
-    $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > $_del_env
+    $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
 
   # Don't need these anymore.
   $_coreutils/bin/rm -f "$_start_env" "$_end_env"
@@ -159,18 +159,18 @@ else
   fi
 
   # Assert that the expected _{add,del}_env variables are present.
-  [ -n "$_add_env" -a -n "$_del_env" ] || {
-    echo 'ERROR (activate): $_add_env and $_del_env not found in environment' >&2;
+  if [ -z "$_add_env" ] || [ -z "$_del_env" ]; then
+    echo "ERROR (activate): \$_add_env and \$_del_env not found in environment" >&2;
     if [ -h "$FLOX_ENV" ]; then
       echo "moving $FLOX_ENV link to $FLOX_ENV.$$ - please try again" >&2;
-      $_coreutils/bin/mv $FLOX_ENV $FLOX_ENV.$$
+      $_coreutils/bin/mv "$FLOX_ENV" "$FLOX_ENV.$$"
     fi
     exit 1;
-  }
+  fi
 
   # Replay the environment for the benefit of this shell.
-  eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' $_del_env)"
-  eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
+  eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' "$_del_env")"
+  eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_add_env")"
 
 fi
 
@@ -181,12 +181,12 @@ fi
 #   b. source the relevant activation script
 #   c. invoke the command in one of "stdin" or "-c" modes
 if [ $# -gt 0 ]; then
-  if [ $# -ne 2 -o "$1" != "-c" ]; then
+  if [ $# -ne 2 ] || [ "$1" != "-c" ]; then
     # Marshal the provided args into a single safely-quoted string.
     # We use the magic "${@@Q}" parameter transformation to return
     # each element of "$@" as a safely quoted string.
     declare -a cmdarray=()
-    cmdarray=("-c" "$(echo "${@@Q}")")
+    cmdarray=("-c" "${@@Q}")
     set -- "${cmdarray[@]}"
   fi
   if [ -n "$FLOX_TURBO" ]; then
@@ -232,7 +232,7 @@ fi
 # 2. "interactive" mode: invoke the user's shell with args that:
 #   a. defeat the shell's normal startup scripts
 #   b. source the relevant activation script
-if [ -t 1 -o -n "$_FLOX_FORCE_INTERACTIVE" ]; then
+if [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
   case "$FLOX_SHELL" in
     *bash)
       if [ -n "$FLOX_NO_PROFILES" ]; then

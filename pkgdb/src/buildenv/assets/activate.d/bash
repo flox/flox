@@ -1,4 +1,4 @@
-# shellcheck shell=bash disable=all
+# shellcheck shell=bash disable=SC1090,SC1091,SC2154
 export _gnused="@gnused@"
 
 # Enable shell-specific profile script startup with verbosity 2.
@@ -7,15 +7,16 @@ if [ "$_flox_activate_tracelevel" -ge 2 ]; then
 fi
 
 # Assert that the expected _{add,del}_env variables are present.
-[ -n "$_add_env" -a -n "$_del_env" ] || {
-  echo 'ERROR (bash): $_add_env and $_del_env not found in environment' >&2;
+if [ -z "$_add_env" ] || [ -z "$_del_env" ]
+then
+  echo "ERROR (bash): \$_add_env and \$_del_env not found in environment" >&2;
   exit 1;
-}
+fi
 
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here, but not if we're already in the process of sourcing
 # bashrc in a parent process.
-if [ -f ~/.bashrc -a -z "$_flox_already_sourcing_bashrc" ]
+if [ -f ~/.bashrc ] && [ -z "$_flox_already_sourcing_bashrc" ]
 then
     export _flox_already_sourcing_bashrc=1
     source ~/.bashrc
@@ -23,8 +24,8 @@ then
 fi
 
 # Restore environment variables set in the previous bash initialization.
-eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' $_del_env)"
-eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
+eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' "$_del_env")"
+eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_add_env")"
 
 if [ -t 1 ]; then
   source "$FLOX_ENV/activate.d/set-prompt.bash"

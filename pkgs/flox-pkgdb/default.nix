@@ -79,6 +79,10 @@
           substituteInPlace $out/activate.d/zsh \
             --replace "@gnused@" "${gnused}"
 
+          for i in $out/etc/profile.d/*; do
+            substituteInPlace $i --replace "@coreutils@" "${coreutils}"
+          done
+
           ${shellcheck}/bin/shellcheck \
             $out/activate \
             $out/activate.d/bash \
