@@ -1,3 +1,4 @@
+# shellcheck shell=bash disable=all
 # ============================================================================ #
 #
 # Setup common paths.

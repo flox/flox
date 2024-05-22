@@ -1,0 +1,94 @@
+export _gnused="@gnused@"
+
+# Enable shell-specific profile script startup with verbosity 2.
+if [ "$_flox_activate_tracelevel" -ge 2 ]; then
+  set -x
+fi
+
+# Assert that the expected _{add,del}_env variables are present.
+[ -n "$_add_env" -a -n "$_del_env" ] || {
+  echo 'ERROR (zsh): $_add_env and $_del_env not found in environment' >&2;
+  exit 1;
+}
+
+# This is the final script to be called in the zsh startup sequence so start
+# by restoring the original value of ZDOTDIR if it was set previously.
+if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
+then
+  export ZDOTDIR="$FLOX_ORIG_ZDOTDIR"
+  unset FLOX_ORIG_ZDOTDIR
+else
+  unset ZDOTDIR
+fi
+
+# Modify dynamic zsh fpath in preference to FPATH in environment.
+# See https://github.com/flox/flox/pull/1299 for more details.
+declare -a fpath_prepend=()
+for i in "${(@s/:/)FLOX_ENV_DIRS}"; do
+  # Check if fpath already contains this env's site-functions directory.
+  # The trick here is that the "i" means inverse subscript, meaning that
+  # it returns the index of the value which follows, and "e" specifies an
+  # exact match. If the value is found it returns the index of the matching
+  # element, but if not it returns the length of the array + 1, hence we
+  # check for any value greater than the length of the array.
+  # TODO: apple puts their stuff first so re-sort fpath by putting flox envs
+  #       first by paring the latter appearances from fpath.
+  if [[ -n "$i" && $fpath[(ie)$i/share/zsh/site-functions] -gt ${#fpath} ]]; then
+    fpath_prepend+=( "$i"/share/zsh/site-functions "$i"/share/zsh/vendor-completions )
+  fi
+done
+if [ ${#fpath_prepend[@]} -gt 0 ]; then
+  fpath=( "${fpath_prepend[@]}" "${fpath[@]}" )
+  autoload -U compinit
+
+  # compinit tracing is very verbose so only enable with tracelevel 3 or above.
+  if [ "$_flox_activate_tracelevel" -eq 2 ]; then
+    # Disable tracing for the compinit invocation then re-enable.
+    : compinit tracing suppressed
+    set +x
+    compinit
+    set -x
+  else
+    # Tracing will either have already been enabled for tracelevels greater or
+    # equal to 2 or not enabled for tracelevels below 2, but either way we can
+    # leave tracing as-is and just invoke compinit.
+    compinit
+  fi
+
+fi
+unset fpath_prepend
+
+# Restore environment variables set in the previous bash initialization.
+eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' $_del_env)"
+eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
+
+# On MacOS Apple have reinvented the wheel and broken our ability to define
+# HISTFILE and SHELL_SESSION_DIR variables, so define them up-front here
+# so that our env variable replay feature can fix the damage caused by
+# their /etc/zshrc* files.
+export HISTFILE=$HOME/.zsh_history
+export SHELL_SESSION_DIR=$HOME/.zsh_sessions
+
+if [ -t 1 ]; then
+  source "$FLOX_ENV/activate.d/set-prompt.zsh"
+fi
+
+# Source user-specified profile scripts if they exist.
+for i in profile-common profile-zsh hook-script; do
+  if [ -e "$FLOX_ENV/activate.d/$i" ]; then
+    source "$FLOX_ENV/activate.d/$i"
+  fi
+done
+
+# Disable command hashing to allow for newly installed flox packages
+# to be found immediately. We do this as the very last thing because
+# python venv activations can otherwise return nonzero return codes
+# when attempting to invoke `hash -r`.
+setopt nohashcmds
+setopt nohashdirs
+
+# Disable tracing before potentially launching into user shell.
+if [ "$_flox_activate_tracelevel" -ge 2 ]; then
+  set +x
+fi
+unset _flox_activate_tracelevel

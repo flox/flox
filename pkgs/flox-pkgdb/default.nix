@@ -1,6 +1,8 @@
 {
   stdenv,
   lib,
+  runCommand,
+  shellcheck,
   argparse,
   doxygen,
   bear,
@@ -52,49 +54,40 @@
       yaml_PREFIX = yaml-cpp.outPath;
       semver_PREFIX = cpp-semver.outPath;
       libExt = stdenv.hostPlatform.extensions.sharedLibrary;
-      # Used by `buildenv' to provide activation hook extensions.
-      PROFILE_D_SCRIPTS_DIR = let
-        path = builtins.path {
-          name = "etc-profile.d";
-          path = ../../pkgdb/src/buildenv/assets/etc/profile.d;
-        };
-
-        dependencies = {
-          realpath = coreutils + "/bin/realpath";
-        };
-
-        scripts = lib.mapAttrs (name: type:
-          substituteAll ({
-              src = path + "/${name}";
-              dir = "etc/profile.d";
-              isExecutable = true;
-            }
-            // dependencies)) (builtins.readDir path);
-
-        joined = symlinkJoin {
-          name = "profile-d-scripts";
-          paths = lib.attrValues scripts;
-        };
-      in
-        joined;
-
-      # Used by `buildenv' to set shell prompts on activation.
-      ACTIVATE_D_SCRIPTS_DIR = builtins.path {
-        name = "flox-activate.d";
-        path = ../../pkgdb/src/buildenv/assets/activate.d;
-      };
 
       # Used by `buildenv --container' to create a container builder script.
       CONTAINER_BUILDER_PATH = builtins.path {
         name = "mkContainer.nix";
-        path = ../../pkgdb/src/buildenv/assets/mkContainer.nix;
+        path = ../../pkgdb/src/libexec/mkContainer.nix;
       };
+
+      # Used by `buildenv' to install the activation package.
+      ACTIVATE_PACKAGE_DIR =
+        runCommand "flox-activate" {
+          buildInputs = [bash coreutils gnused];
+        } ''
+          cp -R ${../../pkgdb/src/buildenv/assets} $out
+
+          substituteInPlace $out/activate \
+            --replace "@coreutils@" "${coreutils}" \
+            --replace "@gnused@" "${gnused}" \
+            --replace "@out@" "$out" \
+            --replace "/usr/bin/env bash" "${bash}/bin/bash"
+
+          substituteInPlace $out/activate.d/bash \
+            --replace "@gnused@" "${gnused}"
+          substituteInPlace $out/activate.d/zsh \
+            --replace "@gnused@" "${gnused}"
+
+          ${shellcheck}/bin/shellcheck \
+            $out/activate \
+            $out/activate.d/bash \
+            $out/activate.d/set-prompt.bash \
+            $out/etc/profile.d/*
+        '';
 
       # Packages required for the (bash) activate script.
       FLOX_BASH_PKG = bash;
-      FLOX_COREUTILS_PKG = coreutils;
-      FLOX_GNUSED_PKG = gnused;
-      FLOX_PROCPS_PKG = procps;
       FLOX_CACERT_PKG = cacert;
 
       # used so that `nix` calls that require an SSL cert don't fail
@@ -176,8 +169,7 @@ in
       configurePhase = ''
         runHook preConfigure;
         export PREFIX="$out";
-        echo "PROFILE_D_SCRIPTS_DIR: $PROFILE_D_SCRIPTS_DIR" >&2;
-        echo "ACTIVATE_D_SCRIPTS_DIR: $ACTIVATE_D_SCRIPTS_DIR" >&2;
+        echo "ACTIVATE_PACKAGE_DIR: $ACTIVATE_PACKAGE_DIR" >&2;
         if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
           makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
         fi

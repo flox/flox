@@ -924,3 +924,76 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:custom_zdotdir,activate:custom_zdotdir:bash
+@test "bash: preserve custom ZDOTDIR" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  FLOX_SHELL=bash ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -- echo '$ZDOTDIR'
+  assert_success
+  assert_line "/custom/zdotdir"
+}
+
+# bats test_tags=activate,activate:custom_zdotdir,activate:custom_zdotdir:zsh
+@test "zsh: preserve custom ZDOTDIR" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  FLOX_SHELL=zsh ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -- echo '$ZDOTDIR'
+  assert_success
+  assert_line "/custom/zdotdir"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshenv
+@test "zdotdir: test zshenv activation" {
+  echo "echo sourcing .zshenv" > "$HOME/.zshenv"
+  echo "echo sourcing .zshrc" > "$HOME/.zshrc"
+  echo "echo sourcing .zlogin" > "$HOME/.zlogin"
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
+  assert_success
+  run zsh -c 'eval "$("$FLOX_BIN" activate)"; hello'
+  assert_success
+  assert_line "sourcing .zshenv"
+  refute_line "sourcing .zshrc"
+  refute_line "sourcing .zlogin"
+  assert_line "Hello, world!"
+}
+
+# bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshrc
+@test "zdotdir: test zshrc activation" {
+  echo "echo sourcing .zshenv" > "$HOME/.zshenv"
+  echo "echo sourcing .zshrc" > "$HOME/.zshrc"
+  echo "echo sourcing .zlogin" > "$HOME/.zlogin"
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
+  assert_success
+  run zsh -i -c 'eval "$("$FLOX_BIN" activate)"; hello'
+  assert_success
+  assert_line "sourcing .zshenv"
+  assert_line "sourcing .zshrc"
+  refute_line "sourcing .zlogin"
+  assert_line "Hello, world!"
+}
+
+# bats test_tags=activate,activate:zdotdir,activate:zdotdir:zlogin
+@test "zdotdir: test zlogin activation" {
+  echo "echo sourcing .zshenv" > "$HOME/.zshenv"
+  echo "echo sourcing .zshrc" > "$HOME/.zshrc"
+  echo "echo sourcing .zlogin" > "$HOME/.zlogin"
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
+  assert_success
+  run zsh -i -l -c 'eval "$("$FLOX_BIN" activate)"; hello'
+  assert_success
+  assert_line "sourcing .zshenv"
+  assert_line "sourcing .zshrc"
+  assert_line "sourcing .zlogin"
+  assert_line "Hello, world!"
+}
+
+# ---------------------------------------------------------------------------- #
