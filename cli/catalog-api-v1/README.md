@@ -40,6 +40,6 @@ Mid-term updating the client library and proposing it as a PR will be done by au
 1. Install the Certificate Authority per [these instructions](https://docs.mitmproxy.org/stable/concepts-certificates/).
 1. Run a `flox` command, using the catalog and the proxy:
 
-        HTTPS_PROXY=http://localhost:8080 flox show bash
+        HTTPS_PROXY=http://localhost:8080 SSL_CERT_FILE=~/.mitmproxy/mitmproxy-ca-cert.pem flox show bash
 
 1. Explore the recorded flows in the `mitmproxy` interface.
