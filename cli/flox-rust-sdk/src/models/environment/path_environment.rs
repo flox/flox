@@ -18,7 +18,7 @@ use std::fs::{self};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use indoc::{formatdoc, indoc};
+use indoc::formatdoc;
 use log::debug;
 
 use super::core_environment::CoreEnvironment;
@@ -42,18 +42,10 @@ use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::env_registry::{deregister, ensure_registered};
-use crate::models::environment::{
-    ENV_DIR_NAME,
-    FLOX_HOOK_PLACEHOLDER,
-    FLOX_INSTALL_PLACEHOLDER,
-    FLOX_PROFILE_PLACEHOLDER,
-    FLOX_SYSTEM_PLACEHOLDER,
-    FLOX_VERSION_PLACEHOLDER,
-    MANIFEST_FILENAME,
-};
+use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::LockedManifest;
-use crate::models::manifest::PackageToInstall;
+use crate::models::manifest::{PackageToInstall, RawManifest};
 use crate::models::pkgdb::UpgradeResult;
 use crate::utils::mtime_of;
 
@@ -384,30 +376,24 @@ impl PathEnvironment {
             ))?,
         }
 
-        let template_contents = fs::read_to_string(env!("MANIFEST_TEMPLATE"))
-            .map_err(EnvironmentError::ReadManifest)?;
-
-        let manifest_contents = Self::replace_placeholders(
-            &template_contents,
-            system,
+        // Create manifest
+        let manifest = RawManifest::new_documented(
+            &[&system.to_string()],
             customization,
             flox.catalog_client.is_some(),
         );
 
-        let mut environment = Self::write_new(
+        let mut environment = Self::write_new_unchecked(
             flox,
             pointer,
             dot_flox_parent_path,
             temp_dir,
-            &manifest_contents,
+            manifest.to_string(),
         )?;
 
-        if let Some(ref packages) = customization.packages {
-            // Ignore the result, because we know there can't be packages already installed
-            // TODO: once we use toml_edit for replace_placeholders,
-            // we should add packages using insert_packages() in replace_placeholders
-            // and then do a build instead of calling `install`.
-            environment.install(packages, flox)?;
+        // Build environment if customization installs at least one package
+        if matches!(customization.packages.as_deref(), Some([_, ..])) {
+            environment.build(flox)?;
         }
 
         Ok(environment)
@@ -426,12 +412,12 @@ impl PathEnvironment {
     ///       to make this safe in practice.
     ///
     /// This functionality is shared between [PathEnvironment::init] and tests.
-    fn write_new(
+    fn write_new_unchecked(
         flox: &Flox,
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
-        manifest_contents: &str,
+        manifest: impl AsRef<str>,
     ) -> Result<Self, EnvironmentError> {
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
         let env_dir = dot_flox_path.join(ENV_DIR_NAME);
@@ -452,7 +438,7 @@ impl PathEnvironment {
 
         // Write `manifest.toml`
         let write_res =
-            fs::write(manifest_path, manifest_contents).map_err(EnvironmentError::WriteManifest);
+            fs::write(manifest_path, manifest.as_ref()).map_err(EnvironmentError::WriteManifest);
         if let Err(e) = write_res {
             debug!("writing manifest did not complete successfully");
             fs::remove_dir_all(&env_dir).map_err(EnvironmentError::InitEnv)?;
@@ -469,104 +455,6 @@ impl PathEnvironment {
         let dot_flox_path = CanonicalPath::new(dot_flox_path).expect("the directory just created");
 
         Self::open(flox, pointer, dot_flox_path, temp_dir)
-    }
-
-    /// Replace all placeholders in the manifest file contents
-    ///
-    /// TODO: we should probably be using toml_edit
-    fn replace_placeholders(
-        contents: &String,
-        system: &str,
-        customization: &InitCustomization,
-        use_catalog: bool,
-    ) -> String {
-        // Add version
-        let version = if use_catalog { "version = 1" } else { "" };
-        let mut replaced = contents.replace(FLOX_VERSION_PLACEHOLDER, version);
-
-        // Replace system
-        replaced = replaced.replace(FLOX_SYSTEM_PLACEHOLDER, system);
-
-        // Don't add example packages if packages are being installed
-        let packages = if customization.packages.is_some() {
-            ""
-        } else {
-            // The install method adds a newline, so add one here as well
-            indoc! {r#"
-            # hello.pkg-path = "hello"
-            # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
-        "#}
-        };
-        replaced = replaced.replace(FLOX_INSTALL_PLACEHOLDER, packages);
-
-        // Replace the hook section
-        let default_hook = if let Some(ref hook_on_activate_script) = customization.hook_on_activate
-        {
-            formatdoc! {r#"
-                on-activate = """
-                {}
-                """"#, indent::indent_all_by(2, hook_on_activate_script)}
-        } else {
-            formatdoc! {r#"
-                # on-activate = """
-                #     # Set variables, create files and directories
-                #     venv_dir="$(mktemp -d)"
-                #     export venv_dir
-                #
-                #     # Perform initialization steps, e.g. create a python venv
-                #     python -m venv "$venv_dir"
-                #
-                # """"#}
-        };
-        let replaced = replaced.replace(FLOX_HOOK_PLACEHOLDER, &default_hook);
-
-        // Replace the profile section
-        let default_profile = match customization {
-            InitCustomization {
-                profile_common: None,
-                profile_bash: None,
-                profile_zsh: None,
-                ..
-            } => {
-                formatdoc! {r#"
-                    # common = """
-                    #     echo "it's gettin' flox in here"
-                    # """
-                    # bash = """
-                    #     source $venv_dir/bin/activate
-                    #     alias foo="echo bar"
-                    # """
-                    # zsh = """
-                    #     source $venv_dir/bin/activate
-                    #     alias foo="echo bar"
-                    # """"#}
-            },
-            _ => {
-                formatdoc! {r#"
-                    common = """
-                    {}
-                    """
-                    bash = """
-                    {}
-                    """
-                    zsh = """
-                    {}
-                    """
-                    "#,
-                    customization.profile_common.as_deref().map(|profile_common|indent::indent_all_by(2, profile_common)).unwrap_or("".to_string()),
-                    customization.profile_bash.as_deref().map(|profile_bash|indent::indent_all_by(2, profile_bash)).unwrap_or("".to_string()),
-                    customization.profile_zsh.as_deref().map(|profile_zsh|indent::indent_all_by(2, profile_zsh)).unwrap_or("".to_string()),
-                }
-            },
-        };
-        let replaced = replaced.replace(FLOX_PROFILE_PLACEHOLDER, &default_profile);
-
-        debug!(
-            "manifest was updated successfully: {}",
-            contents != &replaced
-        );
-
-        replaced
     }
 
     /// Determine if the environment needs to be rebuilt
@@ -605,7 +493,7 @@ pub mod test_helpers {
 
     pub fn new_path_environment(flox: &Flox, contents: &str) -> PathEnvironment {
         let pointer = PathPointer::new("name".parse().unwrap());
-        PathEnvironment::write_new(
+        PathEnvironment::write_new_unchecked(
             flox,
             pointer,
             tempdir_in(&flox.temp_dir).unwrap().into_path(),
