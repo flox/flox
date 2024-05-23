@@ -19,7 +19,7 @@ use catalog_api_v1::types::{
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
-use futures::{Future, StreamExt, TryStreamExt};
+use futures::{Future, StreamExt};
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -325,12 +325,25 @@ impl ClientTrait for CatalogClient {
             PAGE_SIZE,
         );
 
-        let results: Vec<SearchResult> = if let Some(limit) = limit {
-            stream.take(limit as usize).try_collect().await?
-        } else {
-            stream.try_collect().await?
-        };
-        let count = Some(results.len() as u64);
+        let mut count: Option<u64> = None;
+        let mut results = Vec::new();
+        let mut stream = Box::pin(stream);
+
+        while let Some(result) = stream.next().await {
+            match result? {
+                StreamItem::TotalCount(tc) => {
+                    count = Some(tc as u64);
+                },
+                StreamItem::Result(item) => {
+                    results.push(item);
+                    if let Some(limit) = limit {
+                        if results.len() >= limit as usize {
+                            break;
+                        }
+                    }
+                },
+            }
+        }
 
         let search_results = SearchResults { results, count };
 
@@ -375,8 +388,20 @@ impl ClientTrait for CatalogClient {
             PAGE_SIZE,
         );
 
-        let results: Vec<SearchResult> = stream.try_collect().await?;
-        let count = Some(results.len() as u64);
+        let mut count: Option<u64> = None;
+        let mut results = Vec::new();
+        let mut stream = Box::pin(stream);
+
+        while let Some(result) = stream.next().await {
+            match result? {
+                StreamItem::TotalCount(tc) => {
+                    count = Some(tc as u64);
+                },
+                StreamItem::Result(item) => {
+                    results.push(item);
+                },
+            }
+        }
 
         let search_results = SearchResults { results, count };
 
@@ -386,26 +411,46 @@ impl ClientTrait for CatalogClient {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+enum StreamItem<T> {
+    TotalCount(i64),
+    Result(T),
+}
+
+impl<T> From<T> for StreamItem<T> {
+    fn from(value: T) -> Self {
+        Self::Result(value)
+    }
+}
+
 /// Take a function that takes a page_number and page_size and returns a
 /// total_count of results and a Vec of results on a page.
 ///
-/// Create a stream that yields all results from all pages.
+/// Create a stream that yields TotalCount as the first item and then all
+/// Results from all pages.
 fn make_depaging_stream<T, E, Fut>(
     generator: impl Fn(i64, i64) -> Fut,
     page_size: NonZeroU32,
-) -> impl Stream<Item = Result<T, E>>
+) -> impl Stream<Item = Result<StreamItem<T>, E>>
 where
     Fut: Future<Output = Result<(i64, Vec<T>), E>>,
 {
     try_stream! {
         let mut page_number = 0;
+        let mut total_count_yielded = false;
+
         loop {
             let (total_count, results) = generator(page_number, page_size.get().into()).await?;
 
             let items_on_page = results.len();
 
+            if !total_count_yielded {
+                yield StreamItem::TotalCount(total_count);
+                total_count_yielded = true;
+            }
+
             for result in results {
-                yield result;
+                yield StreamItem::Result(result)
             }
 
             // If there are fewer items on this page than page_size, it should
@@ -691,6 +736,7 @@ mod tests {
     use std::io::Write;
     use std::path::PathBuf;
 
+    use futures::TryStreamExt;
     use pollster::FutureExt;
     use tempfile::NamedTempFile;
 
@@ -699,7 +745,7 @@ mod tests {
     /// make_depaging_stream collects items from multiple pages
     #[tokio::test]
     async fn test_depage_multiple_pages() {
-        let results = vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]];
+        let results: Vec<Vec<i32>> = vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]];
         let results = &results;
         let stream = make_depaging_stream(
             |page_number, _page_size| async move {
@@ -711,15 +757,15 @@ mod tests {
             NonZeroU32::new(3).unwrap(),
         );
 
-        let collected: Vec<i32> = stream.try_collect().await.unwrap();
+        let collected: Vec<StreamItem<i32>> = stream.try_collect().await.unwrap();
 
-        assert_eq!(collected, (1..=9).collect::<Vec<_>>());
+        assert_eq!(collected, (1..=9).map(StreamItem::from).collect::<Vec<_>>());
     }
 
     /// make_depaging_stream stops if a page has fewer than page_size items
     #[tokio::test]
     async fn test_depage_stops_on_small_page() {
-        let results = vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]];
+        let results: Vec<Vec<i32>> = vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]];
         let results = &results;
         let stream = make_depaging_stream(
             |page_number, _page_size| async move {
@@ -732,15 +778,15 @@ mod tests {
             NonZeroU32::new(4).unwrap(),
         );
 
-        let collected: Vec<i32> = stream.try_collect().await.unwrap();
+        let collected: Vec<StreamItem<i32>> = stream.try_collect().await.unwrap();
 
-        assert_eq!(collected, (1..=3).collect::<Vec<_>>());
+        assert_eq!(collected, (1..=3).map(StreamItem::from).collect::<Vec<_>>());
     }
 
     /// make_depaging_stream stops when total_count is reached
     #[tokio::test]
     async fn test_depage_stops_at_total_count() {
-        let results = vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]];
+        let results: Vec<Vec<i32>> = vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]];
         let results = &results;
         let stream = make_depaging_stream(
             |page_number, _page_size| async move {
@@ -752,9 +798,14 @@ mod tests {
             NonZeroU32::new(3).unwrap(),
         );
 
-        let collected: Vec<i32> = stream.try_collect().await.unwrap();
+        let collected: Vec<StreamItem<i32>> = stream.try_collect().await.unwrap();
 
-        assert_eq!(collected, (1..=3).collect::<Vec<_>>());
+        assert_eq!(collected, [
+            StreamItem::TotalCount(3),
+            StreamItem::Result(1),
+            StreamItem::Result(2),
+            StreamItem::Result(3)
+        ]);
     }
 
     #[test]
