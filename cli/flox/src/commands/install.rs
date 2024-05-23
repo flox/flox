@@ -52,7 +52,7 @@ pub struct PkgWithIdOption {
     #[bpaf(positional("id"))]
     pub id: String,
 
-    /// Name or relative path of the package to install as shown by 'flox search'
+    /// The pkg-path of the package to install as shown by 'flox search'
     #[bpaf(positional("package"))]
     pub path: String,
 }

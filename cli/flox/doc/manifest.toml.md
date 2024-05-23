@@ -106,7 +106,6 @@ Descriptor ::= {
 , optional           = null | <BOOL>
 , pkg-group          = null | <STRING>
 , version            = null | <STRING>
-, semver             = null | <STRING>
 , systems            = null | [<STRING>, ...]
 , pkg-path           = null | <STRING> | [<STRING>, ...]
 , abs-path           = null | <STRING> | [<STRING>, ...]

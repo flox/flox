@@ -66,7 +66,7 @@ options.
 :   The install ID of the package as it will appear in the manifest.
 
 `<package>`
-:   The pkg-path of the package to install.
+:   The pkg-path of the package to install as shown by 'flox search'
 
 ```{.include}
 ./include/environment-options.md
