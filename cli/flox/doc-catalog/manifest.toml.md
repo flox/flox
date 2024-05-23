@@ -102,51 +102,27 @@ The descriptor options allow you to specify in detail the package to install.
 The full list of descriptor options are shown below:
 ```
 Descriptor ::= {
-  name               = null | <STRING>
-, optional           = null | <BOOL>
-, pkg-group          = null | <STRING>
+  pkg-group          = null | <STRING>
 , version            = null | <STRING>
-, semver             = null | <STRING>
 , systems            = null | [<STRING>, ...]
-, pkg-path           = null | <STRING> | [<STRING>, ...]
-, abs-path           = null | <STRING> | [<STRING>, ...]
+, pkg-path           = <STRING>
 , priority           = null | <INT>
 }
 ```
 
-None of these options are required,
-and leaving them unset instructs Flox to simply find the best match for the
-package name and latest version given the install ID.
-If you omit all options,
-setting `package = {}`,
-the install ID will be used as the pkg-path.
-This behavior is subject to change and is not recommended.
+Only `pkg-path` is required.
 
 By specifying some of these options you create a set of requirements that the
 installed program must satisfy,
 otherwise installation will fail.
-The most common option will likely be the `semver` option,
-which allows you to specify a semantic version range.
+
+By default, all packages belong to the same `pkg-group`, which means providing
+specific versions for two different packages can quickly lead to installation
+failures.
+To avoid such failures, either give a looser `version` constraint,
+or move one of the packages to a different package group.
 
 Each option is described below:
-
-`name`
-:   Matches either the last attribute of the `pkg-path` or the package metadata
-    fields `name` or `pname` as set by the catalog.
-    This option is mutually exclusive with the `pkg-path` and `abs-path`
-    options.
-    You shouldn't need to use this option and should instead prefer the
-    `pkg-path` option.
-
-`optional`
-:   Marks this package as an optional requirement for the environment.
-    By default an environment will fail to build if a specified package can't
-    be found in the catalog.
-    However, some packages are platform specific and will never be found in the
-    catalog for some systems.
-    Thus, the way you mark a package as platform specific is by setting
-    `optional = true` or using the `systems` option to list the systems on
-    which the package is required.
 
 `pkg-group`
 :   Marks a package as belonging to a pkg-group.
@@ -183,10 +159,6 @@ Each option is described below:
 
     This option is mutually exclusive with the `semver` option.
 
-`semver`
-:   This option is similar to `version` except it _only_ allows semantic
-    versions.
-
 `systems`
 :   A list of systems on which to install this package.
     When omitted this defaults to the same systems that the manifest
@@ -206,18 +178,6 @@ Each option is described below:
     option.
 
     This option is mutually exclusive with `abs-path`.
-
-`abs-path`
-:   The fully-qualified location of a package within a catalog.
-    For the `ripgrep` package in the Flox base catalog for an `x86_64-linux`
-    system this would be `legacyPackages.x86_64-linux.ripgrep`.
-    Note that "legacyPackages" has nothing to do packages being out of date,
-    and instead has to do with internal Flox implementation details.
-    The abs-path can be specified for all systems by using `*` or `null` as
-    the system.
-
-    You should rarely ever need this option and should instead prefer the
-    `pkg-path` option.
 
 `priority`
 :   A priority used to resolve file conflicts where lower values indicate
@@ -371,7 +331,7 @@ Allows ::= {
 }
 
 Semver ::= {
-  prefer-pre-releases = <BOOL>
+  allow-pre-releases = <BOOL>
 }
 ```
 
@@ -396,12 +356,11 @@ Semver ::= {
 :   A whitelist of software licenses to allow in search results in installs.
     Valid entries are [SPDX Identifiers](https://spdx.org/licenses).
 
-`semver.prefer-pre-releases`
-:   Whether to prefer pre-release software over stable versions for the
-    purposes of search results and package installations.
+`semver.allow-pre-releases`
+:   Whether to allow pre-release software for package installations.
     The default is `false`.
-    Setting this value to `true` would prefer a package version `4.2.0-pre`
-    over `4.1.9`.
+    Setting this value to `true` would allow a package version `4.2.0-pre`
+    rather than `4.1.9`.
 
 # SEE ALSO
 [`flox-init(1)`](./flox-init.md),
