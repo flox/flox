@@ -3,6 +3,7 @@
   commitizen,
   hivemind,
   just,
+  yq,
   lib,
   mkShell,
   pre-commit-check,
@@ -44,6 +45,7 @@
       alejandra
       shfmt
       mitmproxy
+      yq
     ];
 in
   mkShell (

@@ -520,6 +520,7 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         groups_or_iids: &[String],
     ) -> Result<UpgradeResult, CoreEnvironmentError> {
+        tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let manifest = toml::from_str(&self.manifest_content()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
 
@@ -614,6 +615,7 @@ impl CoreEnvironment<ReadOnly> {
         ),
         CoreEnvironmentError,
     > {
+        tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let existing_lockfile = 'lockfile: {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
                 break 'lockfile None;

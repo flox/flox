@@ -1,0 +1,45 @@
+[
+  [
+    {
+      "name": "toplevel",
+      "pages": [
+        {
+          "packages": [
+            {
+              "attr_path": "hello",
+              "broken": false,
+              "derivation": "/nix/store/052y1njzgp8kkrxpk42zplvwn1b9pig3-hello-2.12.1.drv",
+              "description": "A program that produces a familiar, friendly greeting",
+              "install_id": "hello",
+              "license": "GPL-3.0-or-later",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "name": "hello-2.0",
+              "outputs": [
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/lm16cv8n49182v96q1lkww4lay4gk24b-hello-2.12.1"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "hello",
+              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "rev_count": 629266,
+              "rev_date": "2024-05-21T12:07:05Z",
+              "scrape_date": "2024-05-22T20:43:04Z",
+              "stabilities": [
+                "unstable"
+              ],
+              "unfree": false,
+              "version": "2.0"
+            }
+          ],
+          "page": 629266,
+          "url": ""
+        }
+      ],
+      "system": "aarch64-darwin"
+    }
+  ]
+]
