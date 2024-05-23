@@ -258,7 +258,7 @@ jobs:
           workflow_file_name: "ci.yml"
           ref:                "main"
           wait_interval:      10
-          client_payload:     '{"FLOX_SRC":"github:flox/flox/${{ github.event.pull_request.head.ref_name || github.ref_name }}&rev=${{ github.event.pull_request.head.sha || github.sha }}"}'
+          client_payload:     '{"FLOX_SRC":"github:flox/flox/${{ github.event.pull_request.head.sha || github.sha }}"}'
           propagate_failure:  true
           trigger_workflow:   true
           wait_workflow:      true
