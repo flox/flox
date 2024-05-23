@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - "main"
+      - "fix-triggering-by-commit-release-for-real"
   pull_request:
   merge_group:
 
@@ -237,7 +238,8 @@ jobs:
 
   trigger-flox-installers-workflow:
     name: "Build installers"
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    #if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    if: ${{ github.ref == 'refs/heads/fix-triggering-by-commit-release-for-real' && github.event_name == 'push' }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 120
 
@@ -281,7 +283,8 @@ jobs:
     name: "Report Failure"
     runs-on: "ubuntu-latest"
 
-    if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    #if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    if: ${{ failure() && github.ref == 'refs/heads/fix-triggering-by-commit-release-for-real' && github.event_name == 'push' }}
 
     needs:
       - "nix-build"
