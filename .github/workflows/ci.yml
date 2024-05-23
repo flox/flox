@@ -279,30 +279,30 @@ jobs:
           name: "shipit"
           path: "shipit.json"
 
-  report-failure:
-    name: "Report Failure"
-    runs-on: "ubuntu-latest"
+  #report-failure:
+  #  name: "Report Failure"
+  #  runs-on: "ubuntu-latest"
 
-    #if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
-    if: ${{ failure() && github.ref == 'refs/heads/fix-triggering-by-commit-release-for-real' && github.event_name == 'push' }}
+  #  #if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+  #  if: ${{ failure() && github.ref == 'refs/heads/fix-triggering-by-commit-release-for-real' && github.event_name == 'push' }}
 
-    needs:
-      - "nix-build"
-      - "pkgdb-dev"
-      - "cli-dev"
-      # TODO: enable these when deemed reliable - "nix-build-bats-tests"
+  #  needs:
+  #    - "nix-build"
+  #    - "pkgdb-dev"
+  #    - "cli-dev"
+  #    # TODO: enable these when deemed reliable - "nix-build-bats-tests"
 
-    steps:
-      - name: "Slack Notification"
-        uses: "rtCamp/action-slack-notify@v2"
-        env:
-          SLACK_TITLE:      "Something broke CI for flox/flox on main"
-          SLACK_FOOTER:     "Thank you for caring"
-          SLACK_WEBHOOK:    "${{ secrets.MANAGED_SLACK_WEBHOOK }}"
-          SLACK_USERNAME:   "GitHub"
-          SLACK_ICON_EMOJI: ":poop:"
-          SLACK_COLOR:      "#ff2800"  # ferrari red -> https://encycolorpedia.com/ff2800
-          SLACK_LINK_NAMES: true
+  #  steps:
+  #    - name: "Slack Notification"
+  #      uses: "rtCamp/action-slack-notify@v2"
+  #      env:
+  #        SLACK_TITLE:      "Something broke CI for flox/flox on main"
+  #        SLACK_FOOTER:     "Thank you for caring"
+  #        SLACK_WEBHOOK:    "${{ secrets.MANAGED_SLACK_WEBHOOK }}"
+  #        SLACK_USERNAME:   "GitHub"
+  #        SLACK_ICON_EMOJI: ":poop:"
+  #        SLACK_COLOR:      "#ff2800"  # ferrari red -> https://encycolorpedia.com/ff2800
+  #        SLACK_LINK_NAMES: true
 
   #nix-build-bats-tests:
   #  name: "Flox Bats Tests"
