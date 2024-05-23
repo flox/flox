@@ -288,40 +288,49 @@ impl ClientTrait for CatalogClient {
         &self,
         search_term: impl AsRef<str> + Send + Sync,
         system: System,
-        limit: u8,
+        _limit: u8,
     ) -> Result<SearchResults, SearchError> {
-        let response = self
-            .client
-            .search_api_v1_catalog_search_get(
-                Some(NIXPKGS_CATALOG),
-                None,
-                Some(limit.into()),
-                &api_types::SearchTerm::from_str(search_term.as_ref())
-                    .map_err(SearchError::InvalidSearchTerm)?,
-                system
-                    .try_into()
-                    .map_err(CatalogClientError::UnsupportedSystem)?,
-            )
-            .await
-            .map_err(|e| match e {
-                APIError::ErrorResponse(e) => SearchError::Search(e),
-                _ => CatalogClientError::UnexpectedError(e).into(),
-            })?;
+        let search_term = search_term.as_ref();
+        let system = system
+            .try_into()
+            .map_err(CatalogClientError::UnsupportedSystem)?;
 
-        let api_search_result = response.into_inner();
-        let search_results = SearchResults {
-            results: api_search_result
-                .items
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<Vec<_>, _>>()?,
-            count: Some(
-                api_search_result
-                    .total_count
-                    .try_into()
-                    .map_err(|_| CatalogClientError::NegativeNumberOfResults)?,
-            ),
-        };
+        let stream = make_depaging_stream(
+            |page_number, page_size| async move {
+                let response = self
+                    .client
+                    .search_api_v1_catalog_search_get(
+                        Some(NIXPKGS_CATALOG),
+                        Some(page_number),
+                        Some(page_size),
+                        &api_types::SearchTerm::from_str(search_term)
+                            .map_err(SearchError::InvalidSearchTerm)?,
+                        system,
+                    )
+                    .await
+                    .map_err(|e| match e {
+                        APIError::ErrorResponse(e) => SearchError::Search(e),
+                        _ => CatalogClientError::UnexpectedError(e).into(),
+                    })?;
+
+                let packages = response.into_inner();
+
+                Ok::<_, SearchError>((
+                    packages.total_count,
+                    packages
+                        .items
+                        .into_iter()
+                        .map(TryInto::<SearchResult>::try_into)
+                        .collect::<Result<Vec<_>, _>>()?,
+                ))
+            },
+            PAGE_SIZE,
+        );
+
+        let results: Vec<SearchResult> = stream.try_collect().await?;
+        let count = Some(results.len() as u64);
+
+        let search_results = SearchResults { results, count };
 
         Self::maybe_dump_shim_response(&search_results);
 
