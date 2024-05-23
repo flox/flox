@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - "main"
-      - "fix-triggering-by-commit-release-for-real"
   pull_request:
   merge_group:
 
@@ -238,8 +237,7 @@ jobs:
 
   trigger-flox-installers-workflow:
     name: "Build installers"
-    #if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
-    if: ${{ github.ref == 'refs/heads/fix-triggering-by-commit-release-for-real' && github.event_name == 'push' }}
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
     runs-on: "ubuntu-latest"
     timeout-minutes: 120
 
@@ -258,6 +256,11 @@ jobs:
           workflow_file_name: "ci.yml"
           ref:                "main"
           wait_interval:      10
+          # XXX: this will only work with the default branch due to the missing
+          # implementation of `ref` with `nix flake clone`.
+          # See https://github.com/NixOS/nix/issues/8226.
+          # For now this is good enough, but we might want to improve this
+          # upstream.
           client_payload:     '{"FLOX_SRC":"github:flox/flox/${{ github.event.pull_request.head.sha || github.sha }}"}'
           propagate_failure:  true
           trigger_workflow:   true
@@ -283,8 +286,7 @@ jobs:
     name: "Report Failure"
     runs-on: "ubuntu-latest"
 
-    #if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
-    if: ${{ failure() && github.ref == 'refs/heads/fix-triggering-by-commit-release-for-real' && github.event_name == 'push' }}
+    if: ${{ failure() && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
 
     needs:
       - "nix-build"
