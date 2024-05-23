@@ -74,15 +74,8 @@ impl Search {
 
         let results = if let Some(client) = flox.catalog_client {
             tracing::debug!("using catalog client for search");
-            // TODO: Don't handle the `--all` case yet, what limit would we set?
             client
-                .search(
-                    &self.search_term,
-                    flox.system.clone(),
-                    limit.unwrap_or(
-                        DEFAULT_SEARCH_LIMIT.expect("default search limit didn't have a value"),
-                    ),
-                )
+                .search(&self.search_term, flox.system.clone(), limit)
                 .await?
         } else {
             tracing::debug!("using pkgdb for search");

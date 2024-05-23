@@ -19,7 +19,7 @@ use catalog_api_v1::types::{
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
-use futures::{Future, TryStreamExt};
+use futures::{Future, StreamExt, TryStreamExt};
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -232,7 +232,7 @@ pub trait ClientTrait {
         &self,
         search_term: impl AsRef<str> + Send + Sync,
         system: System,
-        limit: u8,
+        limit: Option<u8>,
     ) -> Result<SearchResults, SearchError>;
 
     /// Get all versions of an attr_path
@@ -286,7 +286,7 @@ impl ClientTrait for CatalogClient {
         &self,
         search_term: impl AsRef<str> + Send + Sync,
         system: System,
-        _limit: u8,
+        limit: Option<u8>,
     ) -> Result<SearchResults, SearchError> {
         let search_term = search_term.as_ref();
         let system = system
@@ -325,7 +325,11 @@ impl ClientTrait for CatalogClient {
             PAGE_SIZE,
         );
 
-        let results: Vec<SearchResult> = stream.try_collect().await?;
+        let results: Vec<SearchResult> = if let Some(limit) = limit {
+            stream.take(limit as usize).try_collect().await?
+        } else {
+            stream.try_collect().await?
+        };
         let count = Some(results.len() as u64);
 
         let search_results = SearchResults { results, count };
@@ -448,7 +452,7 @@ impl ClientTrait for MockClient {
         &self,
         _search_term: impl AsRef<str> + Send + Sync,
         _system: System,
-        _limit: u8,
+        _limit: Option<u8>,
     ) -> Result<SearchResults, SearchError> {
         let mock_resp = self
             .mock_responses
