@@ -724,7 +724,10 @@ makeActivationScripts( nix::EvalState &              state,
                    "\033[0m" /* ANSI_NORMAL */
                    " "
                    "[hook.script] is deprecated and support for "
-                   "it will be removed in an upcoming release\n" );
+                   "it will be removed in an upcoming release. "
+                   "Consider moving its contents to one of "
+                   "[hook.on-activate] or [profile.common]. "
+                   "See manifest.toml(5) for more information.\n" );
           debugLog( "adding 'hook.script' to activation scripts" );
           addScriptToScriptsDir( *hook->script, tempDir, "hook-script" );
         }
