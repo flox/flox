@@ -17,6 +17,7 @@ futures.workspace = true
 indent.workspace = true
 indexmap.workspace = true
 indoc.workspace = true
+itertools.workspace = true
 jsonwebtoken.workspace = true
 log.workspace = true
 once_cell.workspace = true
