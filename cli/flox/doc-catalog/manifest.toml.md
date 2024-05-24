@@ -309,13 +309,6 @@ from a parent shell with an already active environment.
 The `[options]` section of the manifest details settings for the environment
 itself.
 
-The most common option to set is `systems`,
-which specifies which systems the environment supports.
-A user that attempts to pull an environment from FloxHub when their environment
-isn't explicitly supported will be prompted whether to automatically add their
-system to this list.
-See [`flox-pull(1)`](./flox-pull.md) for more details.
-
 The full set of options are listed below:
 ```
 Options ::= {
@@ -341,6 +334,11 @@ Semver ::= {
     `x86_64-darwin`, and `aarch64-darwin`.
     [`flox init`](./flox-init.md) automatically populates this list with the
     current system type.
+    A user that attempts to pull an environment from FloxHub when their environment
+    isn't explicitly supported will be prompted whether to automatically add their
+    system to this list.
+    See [`flox-pull(1)`](./flox-pull.md) for more details.
+
 
 `allow.unfree`
 :   Allows packages with unfree licenses to be installed and appear in search
