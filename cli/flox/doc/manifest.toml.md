@@ -1,6 +1,6 @@
 ---
 title: MANIFEST.TOML
-section: 1
+section: 5
 header: "Flox User Manuals"
 ...
 

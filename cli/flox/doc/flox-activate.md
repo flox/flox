@@ -55,7 +55,7 @@ This means that for each shell hook various environment variables such as
 `PATH`, `MANPATH`, `PKG_CONFIG_PATH`, `PYTHONPATH`, etc,
 are set to the appropriate values for the environment in which the shell
 hook was defined.
-See [`manifest.toml(1)`](./manifest.toml.md) for more details on shell hooks.
+See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 
 # OPTIONS
 

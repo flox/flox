@@ -76,4 +76,4 @@ options.
 ## SEE ALSO
 [`flox-uninstall(1)`](./flox-uninstall.md),
 [`flox-edit(1)`](./flox-edit.md),
-[`manifest-toml(1)`](./manifest.toml.md)
+[`manifest.toml(5)`](./manifest.toml.md)
