@@ -35,7 +35,9 @@ export FLOX_ENV="$_FLOX_ENV"
 # The rust CLI contains sophisticated logic to set $FLOX_SHELL based on the
 # process listening on STDOUT, but that won't happen when activating from
 # the top-level activation script, so fall back to $SHELL as a default.
-FLOX_SHELL="${FLOX_SHELL:-$SHELL}"
+declare -r _flox_shell="${FLOX_SHELL:-$SHELL}"
+# Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
+unset FLOX_SHELL
 
 # Set all other variables derived from FLOX_ENV. We previously did this
 # from within the rust CLI but we've moved it to this top-level activation
@@ -195,35 +197,35 @@ if [ $# -gt 0 ]; then
     eval "exec $2"
   fi
   # "-c" command mode: pass both [2] arguments unaltered to shell invocation
-  case "$FLOX_SHELL" in
+  case "$_flox_shell" in
     *bash)
       if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$FLOX_SHELL" --noprofile --norc "$@"
+        exec "$_flox_shell" --noprofile --norc "$@"
       else
         if [ -t 1 ]; then
-          exec "$FLOX_SHELL" --noprofile --rcfile "$FLOX_ENV/activate.d/bash" "$@"
+          exec "$_flox_shell" --noprofile --rcfile "$FLOX_ENV/activate.d/bash" "$@"
         else
           # The bash --rcfile option only works for interactive shells
           # so we need to cobble together our own means of sourcing our
           # startup script for non-interactive shells.
-          exec "$FLOX_SHELL" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash && $2"
+          exec "$_flox_shell" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash && $2"
         fi
       fi
       ;;
     *zsh)
       if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$FLOX_SHELL" -o NO_GLOBAL_RCS -o NO_RCS "$@"
+        exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS "$@"
       else
         export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
         export ZDOTDIR="$_zdotdir"
         export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
         # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
         # automatically sourcing /etc/zshrc et al.
-        exec "$FLOX_SHELL" -o NO_GLOBAL_RCS "$@"
+        exec "$_flox_shell" -o NO_GLOBAL_RCS "$@"
       fi
       ;;
     *)
-      echo "Unsupported shell: $FLOX_SHELL" >&2
+      echo "Unsupported shell: $_flox_shell" >&2
       exit 1
       ;;
   esac
@@ -233,13 +235,13 @@ fi
 #   a. defeat the shell's normal startup scripts
 #   b. source the relevant activation script
 if [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
-  case "$FLOX_SHELL" in
+  case "$_flox_shell" in
     *bash)
       if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$FLOX_SHELL" --noprofile --norc
+        exec "$_flox_shell" --noprofile --norc
       else
         if [ -t 1 ]; then
-          exec "$FLOX_SHELL" --noprofile --rcfile "$FLOX_ENV/activate.d/bash"
+          exec "$_flox_shell" --noprofile --rcfile "$FLOX_ENV/activate.d/bash"
         else
           # The bash --rcfile option only works for interactive shells
           # so we need to cobble together our own means of sourcing our
@@ -247,24 +249,24 @@ if [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
           # XXX Is this case even a thing? What's the point of activating with
           #     no command to be invoked and no controlling terminal from which
           #     to issue commands?!? A broken docker experience maybe?!?
-          exec "$FLOX_SHELL" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash"
+          exec "$_flox_shell" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash"
         fi
       fi
       ;;
     *zsh)
       if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$FLOX_SHELL" -o NO_GLOBAL_RCS -o NO_RCS
+        exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS
       else
         export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
         export ZDOTDIR="$_zdotdir"
         export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
         # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
         # automatically sourcing /etc/zshrc et al.
-        exec "$FLOX_SHELL" -o NO_GLOBAL_RCS
+        exec "$_flox_shell" -o NO_GLOBAL_RCS
       fi
       ;;
     *)
-      echo "Unsupported shell: $FLOX_SHELL" >&2
+      echo "Unsupported shell: $_flox_shell" >&2
       exit 1
       ;;
   esac
@@ -277,7 +279,7 @@ fi
 # the effect of removing newlines from the output, so we must ensure that
 # the output is a valid shell script fragment when represented on a single
 # line.
-case "$FLOX_SHELL" in
+case "$_flox_shell" in
   *bash)
     echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
     echo "export FLOX_ENV=\"$FLOX_ENV\";"
@@ -296,7 +298,7 @@ case "$FLOX_SHELL" in
     echo "source '$FLOX_ENV/activate.d/zsh';"
     ;;
   *)
-    echo "unsupported shell: $FLOX_SHELL" >&2
+    echo "unsupported shell: $_flox_shell" >&2
     exit 1
     ;;
 esac
