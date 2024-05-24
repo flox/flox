@@ -82,6 +82,15 @@ on-activate = """
 EOF
   )
 
+  export DEPRECATED_HOOK_SCRIPT=$(
+    cat <<- EOF
+[hook]
+script = """
+  echo "sourcing deprecated hook.script";
+"""
+EOF
+  )
+
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
@@ -1004,6 +1013,17 @@ EOF
   assert_success
   refute_output "FLOX_SHELL="
   refute_output "_flox_shell="
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:deprecate_hook_script
+@test "use of [hook.script] prints deprecation warning" {
+  sed -i -e "s/^\[hook\]/${DEPRECATED_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  FLOX_SHELL="bash" run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
+  assert_success
+  assert_output --partial "[hook.script] is deprecated and support for it will be removed in an upcoming release"
+  assert_output --partial "sourcing deprecated hook.script"
 }
 
 # ---------------------------------------------------------------------------- #

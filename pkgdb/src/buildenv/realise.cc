@@ -716,11 +716,15 @@ makeActivationScripts( nix::EvalState &              state,
   auto hook = manifest.hook;
   if ( hook.has_value() )
     {
-      // [hook.script] is deprecated, in favor of [profile.*].  For now we will
-      // allow it.
-      // TODO: print a warning??
       if ( hook->script.has_value() )
         {
+          fprintf( stderr,
+                   "\033[35;1m" /* ANSI_WARNING */
+                   "warning:"
+                   "\033[0m" /* ANSI_NORMAL */
+                   " "
+                   "[hook.script] is deprecated and support for "
+                   "it will be removed in an upcoming release\n" );
           debugLog( "adding 'hook.script' to activation scripts" );
           addScriptToScriptsDir( *hook->script, tempDir, "hook-script" );
         }

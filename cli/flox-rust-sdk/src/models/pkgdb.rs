@@ -8,6 +8,7 @@ use log::debug;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::Value;
+use strip_ansi_escapes::strip;
 use thiserror::Error;
 
 use super::lockfile::{FlakeRef, LockedManifestPkgdb};
@@ -121,6 +122,11 @@ pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
                 .lines()
                 .map_while(Result::ok)
                 .for_each(|line| {
+                    let stripped_line = strip(&line);
+                    let line_str = String::from_utf8_lossy(&stripped_line);
+                    if line_str.starts_with("warning:") {
+                        eprintln!("{}", std::format_args!("⚠️  {line}"));
+                    }
                     debug!(target: "pkgdb", "{line}");
                 });
         });
