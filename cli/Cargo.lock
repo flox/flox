@@ -713,7 +713,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-stream",
- "async-trait",
  "blake3",
  "catalog-api-v1",
  "chrono",

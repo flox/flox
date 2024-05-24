@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 async-stream.workspace = true
-async-trait.workspace = true
 blake3.workspace = true
 catalog-api-v1.workspace = true
 chrono.workspace = true
