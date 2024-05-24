@@ -997,3 +997,13 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:do_not_leak_FLOX_SHELL
+@test "activation does not leak FLOX_SHELL variable" {
+  FLOX_SHELL="bash" run $FLOX_BIN activate --dir "$PROJECT_DIR" -- env
+  assert_success
+  refute_output "FLOX_SHELL="
+  refute_output "_flox_shell="
+}
+
+# ---------------------------------------------------------------------------- #
