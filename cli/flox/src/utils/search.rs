@@ -8,7 +8,14 @@ use crossterm::style::Stylize;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::lockfile::LockedManifestPkgdb;
-use flox_rust_sdk::models::search::{PathOrJson, Query, SearchParams, SearchResult, SearchResults};
+use flox_rust_sdk::models::search::{
+    PathOrJson,
+    Query,
+    SearchLimit,
+    SearchParams,
+    SearchResult,
+    SearchResults,
+};
 use log::debug;
 
 use crate::commands::{detect_environment, UninitializedEnvironment};
@@ -77,7 +84,7 @@ fn manifest_and_lockfile_from_detected_environment(
 /// using available manifests and lockfiles for resolution.
 pub(crate) fn construct_search_params(
     search_term: &str,
-    results_limit: Option<u8>,
+    results_limit: SearchLimit,
     manifest: Option<PathOrJson>,
     global_manifest: PathOrJson,
     lockfile: PathOrJson,

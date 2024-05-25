@@ -1,4 +1,5 @@
 use std::io::{BufRead, BufReader};
+use std::num::NonZeroU8;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::mpsc::SendError;
@@ -12,6 +13,8 @@ use serde_with::skip_serializing_none;
 use super::pkgdb::PkgDbError;
 use crate::models::pkgdb::PKGDB_BIN;
 use crate::utils::CommandExt;
+
+pub type SearchLimit = Option<NonZeroU8>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SearchError {
@@ -160,7 +163,7 @@ pub struct Query {
     /// Match against the package name or '.' joined relPath
     pub match_name_or_rel_path: Option<String>,
     /// Limit search results to a specified number
-    pub limit: Option<u8>,
+    pub limit: SearchLimit,
     /// Return a single result for each package descriptor used by `search` and
     /// `install`.
     pub deduplicate: bool,
@@ -178,7 +181,7 @@ impl Query {
     pub fn new(
         search_term: &str,
         search_strategy: SearchStrategy,
-        limit: Option<u8>,
+        limit: SearchLimit,
         deduplicate: bool,
     ) -> Result<Self, SearchError> {
         // If there's an '@' in the query, it means the user is trying to use the semver
@@ -252,8 +255,9 @@ pub enum Subtree {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResults {
     pub results: Vec<SearchResult>,
-    pub count: Option<u64>,
+    pub count: ResultCount,
 }
+pub type ResultCount = Option<u64>;
 
 /// The types of JSON records that `pkgdb` can emit on stdout during a search
 #[derive(Debug, PartialEq, Deserialize)]
@@ -501,7 +505,13 @@ mod test {
             manifest: Some(PathOrJson::Path("/path/to/manifest".into())),
             global_manifest: PathOrJson::Path("/path/to/manifest".into()),
             lockfile: PathOrJson::Path("/path/to/lockfile".into()),
-            query: Query::new(EXAMPLE_SEARCH_TERM, SearchStrategy::Match, Some(10), true).unwrap(),
+            query: Query::new(
+                EXAMPLE_SEARCH_TERM,
+                SearchStrategy::Match,
+                NonZeroU8::new(10),
+                true,
+            )
+            .unwrap(),
         };
         let json = serde_json::to_string(&params).unwrap();
         // Convert both to `serde_json::Value` to test equality without worrying about whitespace

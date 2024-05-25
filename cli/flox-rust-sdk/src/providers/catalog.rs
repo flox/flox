@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::fs::OpenOptions;
+use std::future::ready;
 use std::io::Read;
 use std::num::NonZeroU32;
 use std::os::unix::fs::FileExt;
@@ -19,7 +20,7 @@ use catalog_api_v1::types::{
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
-use futures::{Future, StreamExt};
+use futures::{Future, StreamExt, TryStreamExt};
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -27,7 +28,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::data::System;
-use crate::models::search::{SearchResult, SearchResults};
+use crate::models::search::{ResultCount, SearchLimit, SearchResult, SearchResults};
 use crate::utils::traceable_path;
 
 pub const DEFAULT_CATALOG_URL: &str = "https://flox-catalog.flox.dev";
@@ -234,7 +235,7 @@ pub trait ClientTrait {
         &self,
         search_term: impl AsRef<str> + Send + Sync,
         system: System,
-        limit: Option<u8>,
+        limit: SearchLimit,
     ) -> Result<SearchResults, SearchError>;
 
     /// Get all versions of an attr_path
@@ -286,7 +287,7 @@ impl ClientTrait for CatalogClient {
         &self,
         search_term: impl AsRef<str> + Send + Sync,
         system: System,
-        limit: Option<u8>,
+        limit: SearchLimit,
     ) -> Result<SearchResults, SearchError> {
         let search_term = search_term.as_ref();
         let system = system
@@ -325,26 +326,7 @@ impl ClientTrait for CatalogClient {
             RESPONSE_PAGE_SIZE,
         );
 
-        let mut count: Option<u64> = None;
-        let mut results = Vec::new();
-        let mut stream = Box::pin(stream);
-
-        while let Some(result) = stream.next().await {
-            match result? {
-                StreamItem::TotalCount(tc) => {
-                    count = Some(tc);
-                },
-                StreamItem::Result(item) => {
-                    results.push(item);
-                    if let Some(limit) = limit {
-                        if results.len() >= limit as usize {
-                            break;
-                        }
-                    }
-                },
-            }
-        }
-
+        let (count, results) = collect_search_results(stream, limit).await?;
         let search_results = SearchResults { results, count };
 
         Self::maybe_dump_shim_response(&search_results);
@@ -388,27 +370,44 @@ impl ClientTrait for CatalogClient {
             RESPONSE_PAGE_SIZE,
         );
 
-        let mut count: Option<u64> = None;
-        let mut results = Vec::new();
-        let mut stream = Box::pin(stream);
-
-        while let Some(result) = stream.next().await {
-            match result? {
-                StreamItem::TotalCount(tc) => {
-                    count = Some(tc);
-                },
-                StreamItem::Result(item) => {
-                    results.push(item);
-                },
-            }
-        }
-
+        let (count, results) = collect_search_results(stream, None).await?;
         let search_results = SearchResults { results, count };
 
         Self::maybe_dump_shim_response(&search_results);
 
         Ok(search_results)
     }
+}
+
+/// Collects a stream of search results into a container, returning the total count as well.
+///
+/// Note: it is assumed that the first element of the stream contains the total count.
+async fn collect_search_results<T, E>(
+    stream: impl Stream<Item = Result<StreamItem<T>, E>>,
+    limit: SearchLimit,
+) -> Result<(ResultCount, Vec<T>), E> {
+    let mut count = None;
+    let actual_limit = if let Some(checked_limit) = limit {
+        checked_limit.get() as usize
+    } else {
+        // If we survive long enough that this becomes a problem, I'll fix it
+        usize::MAX
+    };
+    let results = stream
+        .try_filter_map(|item| {
+            let new_item = match item {
+                StreamItem::TotalCount(total) => {
+                    count = Some(total);
+                    None
+                },
+                StreamItem::Result(res) => Some(res),
+            };
+            ready(Ok(new_item))
+        })
+        .take(actual_limit)
+        .try_collect::<Vec<_>>()
+        .await?;
+    Ok((count, results))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -497,7 +496,7 @@ impl ClientTrait for MockClient {
         &self,
         _search_term: impl AsRef<str> + Send + Sync,
         _system: System,
-        _limit: Option<u8>,
+        _limit: SearchLimit,
     ) -> Result<SearchResults, SearchError> {
         let mock_resp = self
             .mock_responses
@@ -736,11 +735,14 @@ impl TryFrom<PackageInfoCommon> for SearchResult {
 mod tests {
 
     use std::io::Write;
+    use std::num::NonZeroU8;
     use std::path::PathBuf;
 
     use futures::TryStreamExt;
     use itertools::Itertools;
     use pollster::FutureExt;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
     use tempfile::NamedTempFile;
 
     use super::*;
@@ -835,6 +837,30 @@ mod tests {
             StreamItem::Result(2),
             StreamItem::Result(3)
         ]);
+    }
+
+    proptest! {
+        #[test]
+        fn collects_correct_number_of_results(results in vec(any::<i32>(), 0..10), raw_limit in 0..10_u8) {
+            let total = results.len();
+            let results_ref = &results;
+            let stream = async_stream::stream! {
+                yield Ok::<StreamItem<i32>, String>(StreamItem::TotalCount(total as u64));
+                for item in results_ref.iter() {
+                    yield Ok(StreamItem::Result(*item));
+                }
+            };
+            let limit = NonZeroU8::new(raw_limit); // None if raw_limit == 0
+            let (found_count, collected_results) = collect_search_results(stream, limit).block_on().unwrap();
+            prop_assert_eq!(found_count, Some(total as u64));
+
+            let expected_results = if limit.is_some() {
+                results.into_iter().take(raw_limit as usize).collect::<Vec<_>>()
+            } else {
+                results
+            };
+            prop_assert_eq!(expected_results, collected_results);
+        }
     }
 
     #[test]

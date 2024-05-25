@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::num::NonZeroU8;
 
 use anyhow::Result;
 use flox_rust_sdk::flox::Flox;
@@ -69,7 +70,7 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
 
         let search_params = construct_search_params(
             term,
-            Some(SUGGESTION_SEARCH_LIMIT),
+            NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
             Some(environment.manifest_path(flox)?.try_into()?),
             global_manifest_path(flox).try_into()?,
             lockfile,
@@ -177,7 +178,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
     ) -> Result<SearchResults> {
         let search_params = construct_search_params(
             term,
-            Some(SUGGESTION_SEARCH_LIMIT),
+            NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
             manifest,
             global_manifest,
             lockfile,
