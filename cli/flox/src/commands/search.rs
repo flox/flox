@@ -75,9 +75,18 @@ impl Search {
 
         let results = if let Some(client) = flox.catalog_client {
             tracing::debug!("using catalog client for search");
-            client
-                .search(&self.search_term, flox.system.clone(), limit)
-                .await?
+            Dialog {
+                message: "Searching for packages...",
+                help_message: None,
+                typed: Spinner::new(|| {
+                    tokio::runtime::Handle::current().block_on(client.search(
+                        &self.search_term,
+                        flox.system.clone(),
+                        limit,
+                    ))
+                }),
+            }
+            .spin_with_delay(Duration::from_secs(1))?
         } else {
             tracing::debug!("using pkgdb for search");
 
