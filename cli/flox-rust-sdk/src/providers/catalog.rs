@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::Read;
 use std::num::NonZeroU32;
 use std::os::unix::fs::FileExt;
@@ -126,38 +126,54 @@ impl CatalogClient {
     {
         if let Ok(path_str) = std::env::var(FLOX_CATALOG_DUMP_DATA_VAR) {
             let path = Path::new(&path_str);
-            tracing::debug!(path = traceable_path(&path), "reading dumped response file");
-            let mut options = OpenOptions::new();
-            let mut file = options
-                .read(true)
-                .write(true)
-                .create(true)
-                .open(path)
-                .expect("couldn't open dumped response file");
-            let mut contents = String::new();
-            file.read_to_string(&mut contents)
-                .expect("couldn't read dumped response file contents");
-            let mut json: Value = serde_json::from_str(&contents)
-                .or::<serde_json::Error>(Ok(
-                    serde_json::from_str("[]").expect("failed to make empty json array")
-                ))
-                .expect("couldn't convert file contents to json");
-            let new_response =
-                serde_json::to_value(response).expect("couldn't serialize response to json");
-            if let Value::Array(ref mut responses) = json {
-                responses.push(new_response);
-            } else {
-                panic!("expected file to contain a json array, found something else");
-            }
-            let contents =
-                serde_json::to_string_pretty(&json).expect("couldn't serialize responses to json");
-            tracing::debug!(
-                path = traceable_path(&path),
-                "writing response to dumped response file"
-            );
-            file.write_all_at(contents.as_bytes(), 0)
-                .expect("failed writing dumped response file");
+            let (file, mut json) = CatalogClient::read_dump_file(path);
+            CatalogClient::append_dumped_response(&mut json, response);
+            CatalogClient::write_dump_file(json, file, path);
         }
+    }
+
+    fn read_dump_file(path: impl AsRef<Path>) -> (File, Value) {
+        tracing::debug!(path = traceable_path(&path), "reading dumped response file");
+        let mut options = OpenOptions::new();
+        let mut file = options
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(path)
+            .expect("couldn't open dumped response file");
+        let mut contents = String::new();
+        let bytes_read = file
+            .read_to_string(&mut contents)
+            .expect("couldn't read dumped response file contents");
+        tracing::debug!(was_empty = bytes_read == 0, "read response file");
+        let json: Value = serde_json::from_str(contents.as_ref())
+            .or::<serde_json::Error>(Ok(Value::Array(vec![])))
+            .expect("couldn't convert file contents to json");
+        (file, json)
+    }
+
+    fn append_dumped_response<T>(json: &mut Value, response: &T)
+    where
+        T: ?Sized + Serialize + Debug,
+    {
+        let new_response =
+            serde_json::to_value(response).expect("couldn't convert response to json");
+        if let Value::Array(ref mut responses) = json {
+            responses.push(new_response);
+        } else {
+            panic!("expected file to contain a json array, found something else");
+        }
+    }
+
+    fn write_dump_file(json: Value, file: File, path: impl AsRef<Path>) {
+        let contents =
+            serde_json::to_string_pretty(&json).expect("couldn't serialize responses to json");
+        tracing::debug!(
+            path = traceable_path(&path),
+            "writing response to dumped response file"
+        );
+        file.write_all_at(contents.as_bytes(), 0)
+            .expect("failed writing dumped response file");
     }
 }
 
@@ -249,6 +265,7 @@ impl ClientTrait for CatalogClient {
         &self,
         package_groups: Vec<PackageGroup>,
     ) -> Result<Vec<ResolvedPackageGroup>, ResolveError> {
+        tracing::debug!(n_groups = package_groups.len(), "resolving package groups");
         let package_groups = api_types::PackageGroups {
             items: package_groups
                 .into_iter()
@@ -273,6 +290,11 @@ impl ClientTrait for CatalogClient {
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
 
+        tracing::debug!(
+            n_groups = resolved_package_groups.len(),
+            "received resolved package groups"
+        );
+
         Self::maybe_dump_shim_response(&resolved_package_groups);
 
         Ok(resolved_package_groups)
@@ -286,6 +308,12 @@ impl ClientTrait for CatalogClient {
         system: System,
         limit: u8,
     ) -> Result<SearchResults, SearchError> {
+        tracing::debug!(
+            search_term = search_term.as_ref().to_string(),
+            system,
+            limit,
+            "sending search request"
+        );
         let response = self
             .client
             .search_api_v1_catalog_search_get(
@@ -783,5 +811,13 @@ mod tests {
         let client = MockClient::new(Some(&tmp)).unwrap();
         let resp = client.resolve(vec![]).block_on().unwrap();
         assert!(resp.is_empty());
+    }
+
+    #[test]
+    fn nonexistent_dump_file_makes_empty_array() {
+        let tmp = NamedTempFile::new().expect("failed to create tempfile");
+        // Empty file will fail to deserialize, so we should get the default (an empty array)
+        let (_, json) = CatalogClient::read_dump_file(tmp.path());
+        assert!(matches!(json, Value::Array(_)));
     }
 }

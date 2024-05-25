@@ -23,6 +23,10 @@ impl Upgrade {
     #[instrument(name = "upgrade", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("upgrade");
+        tracing::debug!(
+            to_upgrade = self.groups_or_iids.join(","),
+            "upgrading groups and install ids"
+        );
 
         let concrete_environment = self
             .environment
