@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::num::NonZeroU8;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
@@ -538,7 +539,7 @@ async fn get_default_package_if_compatible(
         let query = Query {
             rel_path: Some(rel_path),
             semver: version,
-            limit: Some(1),
+            limit: NonZeroU8::new(1),
             deduplicate: false,
             ..Default::default()
         };
@@ -606,7 +607,7 @@ async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<Provided
         let query = Query::new(
             package.to_string().as_ref(),
             Features::parse()?.search_strategy,
-            Some(1),
+            NonZeroU8::new(1),
             false,
         )?;
         let params = SearchParams {
@@ -676,7 +677,7 @@ async fn try_find_compatible_version(
         let query = Query {
             pname: Some(pname.to_string()),
             semver: Some(version.to_string()),
-            limit: Some(1),
+            limit: NonZeroU8::new(1),
             deduplicate: false,
             rel_path,
             ..Default::default()
