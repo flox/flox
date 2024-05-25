@@ -47,8 +47,7 @@ in
 
 
     fd ".*\.md" -d 1 ./ -x ${compileManPageBin} {} $buildDir/{/.}.1
-    rm -f $buildDir/manifest.toml.1
-    ${compileManPageBin} manifest.toml.md $buildDir/manifest.toml.5
+    mv $buildDir/manifest.toml.1 $buildDir/manifest.toml.5
 
     ls $buildDir
 
