@@ -407,7 +407,7 @@ fn format_customization(customization: &InitCustomization) -> Result<String> {
     };
     if let Some(profile_fish_script) = &customization.profile_fish {
         profile_table.insert(
-            "bash",
+            "fish",
             Item::Value(Value::String(Formatted::new(formatdoc! {r#"
                 {}
             "#, indent::indent_all_by(2, profile_fish_script)}))),
@@ -415,7 +415,7 @@ fn format_customization(customization: &InitCustomization) -> Result<String> {
     };
     if let Some(profile_tcsh_script) = &customization.profile_tcsh {
         profile_table.insert(
-            "bash",
+            "tcsh",
             Item::Value(Value::String(Formatted::new(formatdoc! {r#"
                 {}
             "#, indent::indent_all_by(2, profile_tcsh_script)}))),
