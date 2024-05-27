@@ -265,7 +265,6 @@ environment from any directory on their machine.
 
 ### `script` - DEPRECATED
 This field was deprecated in favor of the `profile` section.
-It will be removed in a later release.
 
 ## `[profile]`
 
