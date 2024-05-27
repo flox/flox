@@ -26,7 +26,7 @@ The editor is found by querying `$EDITOR`, `$VISUAL`,
 and then by looking for common editors in `$PATH`.
 The manifest of an environment on FloxHub or in a different directory
 can be edited via the `-r` or `-d` flags respectively.
-See [`manifest.toml(1)`](./manifest.toml.md) for more details on the manifest
+See [`manifest.toml(5)`](./manifest.toml.md) for more details on the manifest
 format.
 
 Once the editor is closed the environment is built in order to validate the

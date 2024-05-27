@@ -33,7 +33,7 @@ pkg-group named 'toplevel'.
 The packages in that pkg-group can be upgraded without updating any other
 pkg-groups by passing 'toplevel' as the pkg-group name.
 
-See [`manifest.toml(1)`](./manifest.toml.md) for more on using pkg-groups.
+See [`manifest.toml(5)`](./manifest.toml.md) for more on using pkg-groups.
 
 # OPTIONS
 
@@ -50,4 +50,4 @@ See [`manifest.toml(1)`](./manifest.toml.md) for more on using pkg-groups.
 # SEE ALSO
 
 [`flox-update(1)`](./flox-update.md)
-[`manifest.toml(1)`](./manifest.toml.md),
+[`manifest.toml(5)`](./manifest.toml.md),

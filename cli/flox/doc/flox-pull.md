@@ -46,7 +46,7 @@ environment's manifest.
 This may create a broken environment that cannot be pushed back to FloxHub until
 it is repaired with [`flox-edit(1)`](./flox-edit.md) or
 [`flox-remove(1)`](./flox-remove.md).
-See [`manifest.toml(1)`](./manifest.toml.md) for more on multi-system
+See [`manifest.toml(5)`](./manifest.toml.md) for more on multi-system
 environments.
 
 # OPTIONS
@@ -78,4 +78,4 @@ environments.
 [`flox-push(1)`](./flox-push.md)
 [`flox-edit(1)`](./flox-edit.md)
 [`flox-remove(1)`](./flox-remove.md)
-[`manifest.toml(1)`](./manifest.toml.md)
+[`manifest.toml(5)`](./manifest.toml.md)

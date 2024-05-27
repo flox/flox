@@ -187,7 +187,7 @@ impl RawManifest {
         options_table.decor_mut().set_prefix(indoc! {r#"
 
             # Additional options can be set in the `[options]` section. Refer to
-            # manifest.toml(1) for a list of available options.
+            # manifest.toml(5) for a list of available options.
         "#});
 
         // `systems` array
@@ -218,7 +218,7 @@ impl RawManifest {
                   #
                   # This is a Flox environment manifest.
                   # Visit flox.dev/docs/concepts/manifest/
-                  # or see flox-edit(1), manifest.toml(1) for more information.
+                  # or see flox-edit(1), manifest.toml(5) for more information.
                   #
                   {}"#,
                 decor.prefix().and_then(|raw_str| raw_str.as_str()).unwrap_or("")})
@@ -871,7 +871,7 @@ pub(super) mod test {
             #
             # This is a Flox environment manifest.
             # Visit flox.dev/docs/concepts/manifest/
-            # or see flox-edit(1), manifest.toml(1) for more information.
+            # or see flox-edit(1), manifest.toml(5) for more information.
             #
 
             # List packages you wish to install in your environment inside
@@ -913,7 +913,7 @@ pub(super) mod test {
             # """
 
             # Additional options can be set in the `[options]` section. Refer to
-            # manifest.toml(1) for a list of available options.
+            # manifest.toml(5) for a list of available options.
             [options]
             systems = []
         "#};
@@ -937,7 +937,7 @@ pub(super) mod test {
             #
             # This is a Flox environment manifest.
             # Visit flox.dev/docs/concepts/manifest/
-            # or see flox-edit(1), manifest.toml(1) for more information.
+            # or see flox-edit(1), manifest.toml(5) for more information.
             #
             version = 1
 
@@ -980,7 +980,7 @@ pub(super) mod test {
             # """
 
             # Additional options can be set in the `[options]` section. Refer to
-            # manifest.toml(1) for a list of available options.
+            # manifest.toml(5) for a list of available options.
             [options]
             systems = []
         "#};
@@ -1009,7 +1009,7 @@ pub(super) mod test {
             #
             # This is a Flox environment manifest.
             # Visit flox.dev/docs/concepts/manifest/
-            # or see flox-edit(1), manifest.toml(1) for more information.
+            # or see flox-edit(1), manifest.toml(5) for more information.
             #
 
             # List packages you wish to install in your environment inside
@@ -1050,7 +1050,7 @@ pub(super) mod test {
             # """
 
             # Additional options can be set in the `[options]` section. Refer to
-            # manifest.toml(1) for a list of available options.
+            # manifest.toml(5) for a list of available options.
             [options]
             systems = []
         "#};
@@ -1083,7 +1083,7 @@ pub(super) mod test {
             #
             # This is a Flox environment manifest.
             # Visit flox.dev/docs/concepts/manifest/
-            # or see flox-edit(1), manifest.toml(1) for more information.
+            # or see flox-edit(1), manifest.toml(5) for more information.
             #
 
             # List packages you wish to install in your environment inside
@@ -1124,7 +1124,7 @@ pub(super) mod test {
             # """
 
             # Additional options can be set in the `[options]` section. Refer to
-            # manifest.toml(1) for a list of available options.
+            # manifest.toml(5) for a list of available options.
             [options]
             systems = ["x86_64-linux"]
         "#};
@@ -1153,7 +1153,7 @@ pub(super) mod test {
             #
             # This is a Flox environment manifest.
             # Visit flox.dev/docs/concepts/manifest/
-            # or see flox-edit(1), manifest.toml(1) for more information.
+            # or see flox-edit(1), manifest.toml(5) for more information.
             #
 
             # List packages you wish to install in your environment inside
@@ -1195,7 +1195,7 @@ pub(super) mod test {
             """
 
             # Additional options can be set in the `[options]` section. Refer to
-            # manifest.toml(1) for a list of available options.
+            # manifest.toml(5) for a list of available options.
             [options]
             systems = ["x86_64-linux"]
         "#};
