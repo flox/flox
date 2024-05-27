@@ -289,7 +289,7 @@ teardown() {
 # bats test_tags=install:catalog
 @test "'flox install' installs package from catalog and builds it" {
   export FLOX_FEATURES_USE_CATALOG=true
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello_resolution.json"
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
 
   "$FLOX_BIN" init
   # create a catalog manifest
