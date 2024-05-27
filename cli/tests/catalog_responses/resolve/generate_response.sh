@@ -3,7 +3,8 @@
 # Call this script with TESTING_FLOX_CATALOG_URL set and a list of packages.
 # It will generate a JSON response file produced by running
 # `flox install -i pkg1_install_id pkg1 -i pkg2_install_id pkg2 ...`
-# and save it in a file `pkg1_pkg2.jsoon`.
+# and save it in a file `pkg1_pkg2.json`.
+# If the dump file already exists, it will be deleted.
 
 set -euo pipefail
 
@@ -31,12 +32,19 @@ done
 
 filename+=".json"
 
+rm -f "$filename"
+
 # dump
 export FLOX_FEATURES_USE_CATALOG=true
 export _FLOX_CATALOG_DUMP_RESPONSE_FILE="$PWD/$filename"
 mkdir tmp
 pushd tmp
 flox init
+
+# TODO: should be able to drop this once we default to all systems
+flox list -c |
+  tomlq --toml-output '.options.systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]' |
+  flox edit -f -
 
 if flox install -v "${install_args[@]}"; then
   rc=0
