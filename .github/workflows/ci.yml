@@ -337,6 +337,9 @@ jobs:
           REMOTE_BUILDERS:        "${{    vars.MANAGED_REMOTE_BUILDERS }}"
           SYSTEM:                 "${{ matrix.system }}"
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: "Build flox"
         run: |
           git clean -xfd
