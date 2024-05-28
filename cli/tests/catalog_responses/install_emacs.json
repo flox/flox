@@ -1,0 +1,75 @@
+[
+  [
+    {
+      "name": "toplevel",
+      "pages": [
+        {
+          "packages": [
+            {
+              "attr_path": "emacs",
+              "broken": false,
+              "derivation": "/nix/store/77r7blav0jv02n1kjw0l7bd8h4sa514h-emacs-29.3.drv",
+              "description": "The extensible, customizable GNU text editor",
+              "install_id": "emacs",
+              "license": "GPL-3.0-or-later",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+              "name": "emacs-29.3",
+              "outputs": [
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/15q4wzvn0ganspgpa2icvj59nr65jhx0-emacs-29.3"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "emacs",
+              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+              "rev_count": 630835,
+              "rev_date": "2024-05-24T00:06:08Z",
+              "scrape_date": "2024-05-27T14:10:22Z",
+              "stabilities": null,
+              "unfree": false,
+              "version": "29.3"
+            },
+            {
+              "attr_path": "vim",
+              "broken": false,
+              "derivation": "/nix/store/kz5c2fdvlaz0xzsyb0q3qy2lbv88l1cm-vim-9.1.0377.drv",
+              "description": "The most popular clone of the VI editor",
+              "install_id": "vim",
+              "license": "Vim",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+              "name": "vim-9.1.0377",
+              "outputs": [
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/lmx8m6kzyvipfb0s0jfpmwvrfaakvr16-vim-9.1.0377"
+                },
+                {
+                  "name": "xxd",
+                  "store_path": "/nix/store/plkqnw8bx49w9kapywwcqlvid3f24lpy-vim-9.1.0377-xxd"
+                }
+              ],
+              "outputs_to_install": [
+                "out",
+                "xxd"
+              ],
+              "pname": "vim",
+              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+              "rev_count": 630835,
+              "rev_date": "2024-05-24T00:06:08Z",
+              "scrape_date": "2024-05-27T14:10:22Z",
+              "stabilities": null,
+              "unfree": false,
+              "version": "9.1.0377"
+            }
+          ],
+          "page": 630835,
+          "url": ""
+        }
+      ],
+      "system": "aarch64-darwin"
+    }
+  ]
+]
