@@ -7,6 +7,7 @@ use std::{env, fs};
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
 use flox_rust_sdk::flox::EnvironmentRef;
+use flox_rust_sdk::models::search::SearchLimit;
 use itertools::{Either, Itertools};
 use log::{debug, trace};
 use once_cell::sync::OnceCell;
@@ -64,7 +65,7 @@ pub struct FloxConfig {
     pub floxhub_token: Option<String>,
 
     /// How many items `flox search` should show by default
-    pub search_limit: Option<u8>,
+    pub search_limit: SearchLimit,
 
     /// Remote environments that are trusted for activation
     #[serde(default)]

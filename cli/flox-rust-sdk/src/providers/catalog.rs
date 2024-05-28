@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
+use std::future::ready;
 use std::io::Read;
 use std::num::NonZeroU32;
 use std::os::unix::fs::FileExt;
@@ -19,7 +20,7 @@ use catalog_api_v1::types::{
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
-use futures::{Future, TryStreamExt};
+use futures::{Future, StreamExt, TryStreamExt};
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -27,13 +28,15 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::data::System;
-use crate::models::search::{SearchResult, SearchResults};
+use crate::models::search::{ResultCount, SearchLimit, SearchResult, SearchResults};
 use crate::utils::traceable_path;
 
 pub const DEFAULT_CATALOG_URL: &str = "https://flox-catalog.flox.dev";
 const NIXPKGS_CATALOG: &str = "nixpkgs";
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
+
+const RESPONSE_PAGE_SIZE: NonZeroU32 = unsafe { NonZeroU32::new_unchecked(10) };
 
 type ResolvedGroups = Vec<ResolvedPackageGroup>;
 
@@ -248,7 +251,7 @@ pub trait ClientTrait {
         &self,
         search_term: impl AsRef<str> + Send + Sync,
         system: System,
-        limit: u8,
+        limit: SearchLimit,
     ) -> Result<SearchResults, SearchError>;
 
     /// Get all versions of an attr_path
@@ -306,7 +309,7 @@ impl ClientTrait for CatalogClient {
         &self,
         search_term: impl AsRef<str> + Send + Sync,
         system: System,
-        limit: u8,
+        limit: SearchLimit,
     ) -> Result<SearchResults, SearchError> {
         tracing::debug!(
             search_term = search_term.as_ref().to_string(),
@@ -314,38 +317,45 @@ impl ClientTrait for CatalogClient {
             limit,
             "sending search request"
         );
-        let response = self
-            .client
-            .search_api_v1_catalog_search_get(
-                Some(NIXPKGS_CATALOG),
-                None,
-                Some(limit.into()),
-                &api_types::SearchTerm::from_str(search_term.as_ref())
-                    .map_err(SearchError::InvalidSearchTerm)?,
-                system
-                    .try_into()
-                    .map_err(CatalogClientError::UnsupportedSystem)?,
-            )
-            .await
-            .map_err(|e| match e {
-                APIError::ErrorResponse(e) => SearchError::Search(e),
-                _ => CatalogClientError::UnexpectedError(e).into(),
-            })?;
+        let search_term = search_term.as_ref();
+        let system = system
+            .try_into()
+            .map_err(CatalogClientError::UnsupportedSystem)?;
 
-        let api_search_result = response.into_inner();
-        let search_results = SearchResults {
-            results: api_search_result
-                .items
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<Vec<_>, _>>()?,
-            count: Some(
-                api_search_result
-                    .total_count
-                    .try_into()
-                    .map_err(|_| CatalogClientError::NegativeNumberOfResults)?,
-            ),
-        };
+        let stream = make_depaging_stream(
+            |page_number, page_size| async move {
+                let response = self
+                    .client
+                    .search_api_v1_catalog_search_get(
+                        Some(NIXPKGS_CATALOG),
+                        Some(page_number),
+                        Some(page_size),
+                        &api_types::SearchTerm::from_str(search_term)
+                            .map_err(SearchError::InvalidSearchTerm)?,
+                        system,
+                    )
+                    .await
+                    .map_err(|e| match e {
+                        APIError::ErrorResponse(e) => SearchError::Search(e),
+                        _ => CatalogClientError::UnexpectedError(e).into(),
+                    })?;
+
+                let packages = response.into_inner();
+
+                Ok::<_, SearchError>((
+                    packages.total_count,
+                    packages
+                        .items
+                        .into_iter()
+                        .map(TryInto::<SearchResult>::try_into)
+                        .collect::<Result<Vec<_>, _>>()?,
+                ))
+            },
+            RESPONSE_PAGE_SIZE,
+        );
+
+        let (count, results) = collect_search_results(stream, limit).await?;
+        let search_results = SearchResults { results, count };
 
         Self::maybe_dump_shim_response(&search_results);
 
@@ -385,13 +395,10 @@ impl ClientTrait for CatalogClient {
                         .collect::<Result<Vec<_>, _>>()?,
                 ))
             },
-            // I'm quite confident 10 can be stored as a NonZeroU32
-            unsafe { NonZeroU32::new_unchecked(10) },
+            RESPONSE_PAGE_SIZE,
         );
 
-        let results: Vec<SearchResult> = stream.try_collect().await?;
-        let count = Some(results.len() as u64);
-
+        let (count, results) = collect_search_results(stream, None).await?;
         let search_results = SearchResults { results, count };
 
         Self::maybe_dump_shim_response(&search_results);
@@ -400,26 +407,77 @@ impl ClientTrait for CatalogClient {
     }
 }
 
+/// Collects a stream of search results into a container, returning the total count as well.
+///
+/// Note: it is assumed that the first element of the stream contains the total count.
+async fn collect_search_results<T, E>(
+    stream: impl Stream<Item = Result<StreamItem<T>, E>>,
+    limit: SearchLimit,
+) -> Result<(ResultCount, Vec<T>), E> {
+    let mut count = None;
+    let actual_limit = if let Some(checked_limit) = limit {
+        checked_limit.get() as usize
+    } else {
+        // If we survive long enough that this becomes a problem, I'll fix it
+        usize::MAX
+    };
+    let results = stream
+        .try_filter_map(|item| {
+            let new_item = match item {
+                StreamItem::TotalCount(total) => {
+                    count = Some(total);
+                    None
+                },
+                StreamItem::Result(res) => Some(res),
+            };
+            ready(Ok(new_item))
+        })
+        .take(actual_limit)
+        .try_collect::<Vec<_>>()
+        .await?;
+    Ok((count, results))
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum StreamItem<T> {
+    TotalCount(u64),
+    Result(T),
+}
+
+impl<T> From<T> for StreamItem<T> {
+    fn from(value: T) -> Self {
+        Self::Result(value)
+    }
+}
+
 /// Take a function that takes a page_number and page_size and returns a
 /// total_count of results and a Vec of results on a page.
 ///
-/// Create a stream that yields all results from all pages.
+/// Create a stream that yields TotalCount as the first item and then all
+/// Results from all pages.
 fn make_depaging_stream<T, E, Fut>(
     generator: impl Fn(i64, i64) -> Fut,
     page_size: NonZeroU32,
-) -> impl Stream<Item = Result<T, E>>
+) -> impl Stream<Item = Result<StreamItem<T>, E>>
 where
     Fut: Future<Output = Result<(i64, Vec<T>), E>>,
 {
     try_stream! {
         let mut page_number = 0;
+        let mut total_count_yielded = false;
+
         loop {
             let (total_count, results) = generator(page_number, page_size.get().into()).await?;
 
             let items_on_page = results.len();
 
+            if !total_count_yielded {
+                yield StreamItem::TotalCount(total_count as u64);
+                total_count_yielded = true;
+            }
+
             for result in results {
-                yield result;
+                yield StreamItem::Result(result)
             }
 
             // If there are fewer items on this page than page_size, it should
@@ -466,7 +524,7 @@ impl ClientTrait for MockClient {
         &self,
         _search_term: impl AsRef<str> + Send + Sync,
         _system: System,
-        _limit: u8,
+        _limit: SearchLimit,
     ) -> Result<SearchResults, SearchError> {
         let mock_resp = self
             .mock_responses
@@ -550,6 +608,8 @@ pub enum SearchError {
     ShortAttributePath(String),
     #[error(transparent)]
     CatalogClientError(#[from] CatalogClientError),
+    #[error("did not provide total result count")]
+    NoTotalCount,
 }
 
 #[derive(Debug, Error)]
@@ -703,72 +763,132 @@ impl TryFrom<PackageInfoCommon> for SearchResult {
 mod tests {
 
     use std::io::Write;
+    use std::num::NonZeroU8;
     use std::path::PathBuf;
 
+    use futures::TryStreamExt;
+    use itertools::Itertools;
     use pollster::FutureExt;
+    use proptest::collection::vec;
+    use proptest::prelude::*;
     use tempfile::NamedTempFile;
 
     use super::*;
 
     /// make_depaging_stream collects items from multiple pages
     #[tokio::test]
-    async fn test_depage_multiple_pages() {
+    async fn depage_multiple_pages() {
         let results = vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]];
+        let n_pages = results.len();
+        let page_size = NonZeroU32::new(3).unwrap();
+        let expected_results = results
+            .iter()
+            .flat_map(|chunk| chunk.iter())
+            .map(|&item| StreamItem::from(item))
+            .collect::<Vec<_>>();
+        let total_results = results.iter().flat_map(|chunk| chunk.iter()).count() as i64;
         let results = &results;
         let stream = make_depaging_stream(
             |page_number, _page_size| async move {
-                if page_number >= results.len() as i64 {
-                    return Ok((9, vec![]));
+                if page_number as usize >= n_pages {
+                    return Ok((total_results, vec![]));
                 }
-                Ok::<_, VersionsError>((9, results[page_number as usize].clone()))
+                let page_data = results[page_number as usize].clone();
+                Ok::<_, VersionsError>((total_results, page_data))
             },
-            NonZeroU32::new(3).unwrap(),
+            page_size,
         );
 
-        let collected: Vec<i32> = stream.try_collect().await.unwrap();
+        // First item is the total count, skip it
+        let collected_results = stream.skip(1).try_collect::<Vec<_>>().await.unwrap();
 
-        assert_eq!(collected, (1..=9).collect::<Vec<_>>());
+        assert_eq!(collected_results, expected_results);
     }
 
     /// make_depaging_stream stops if a page has fewer than page_size items
     #[tokio::test]
-    async fn test_depage_stops_on_small_page() {
-        let results = vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]];
+    async fn depage_stops_on_small_page() {
+        let results = (1..=9)
+            .chunks(3)
+            .into_iter()
+            .map(|chunk| chunk.collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        let total_results = results.iter().flat_map(|chunk| chunk.iter()).count() as i64;
+        let page_size = NonZeroU32::new(4).unwrap();
         let results = &results;
         let stream = make_depaging_stream(
             |page_number, _page_size| async move {
                 if page_number >= results.len() as i64 {
-                    return Ok((9, vec![]));
+                    return Ok((total_results, vec![]));
                 }
                 // This is a bad response from the server since 9 should actually be 3
-                Ok::<_, VersionsError>((9, results[page_number as usize].clone()))
+                let page_data = results[page_number as usize].clone();
+                Ok::<_, VersionsError>((total_results, page_data))
             },
-            NonZeroU32::new(4).unwrap(),
+            page_size,
         );
 
-        let collected: Vec<i32> = stream.try_collect().await.unwrap();
+        // First item is the total count, skip it
+        let collected: Vec<StreamItem<i32>> = stream.skip(1).try_collect().await.unwrap();
 
-        assert_eq!(collected, (1..=3).collect::<Vec<_>>());
+        assert_eq!(collected, (1..=3).map(StreamItem::from).collect::<Vec<_>>());
     }
 
     /// make_depaging_stream stops when total_count is reached
     #[tokio::test]
-    async fn test_depage_stops_at_total_count() {
-        let results = vec![vec![1, 2, 3], vec![4, 5, 6], vec![7, 8, 9]];
+    async fn depage_stops_at_total_count() {
+        let results = (1..=9)
+            .chunks(3)
+            .into_iter()
+            .map(|chunk| chunk.collect::<Vec<_>>())
+            .collect::<Vec<_>>();
         let results = &results;
+        // note that this isn't the _real_ total_count, we just want to make sure that
+        // none of the items _after_ this number are collected
+        let total_count = 3;
+        let page_size = NonZeroU32::new(3).unwrap();
         let stream = make_depaging_stream(
             |page_number, _page_size| async move {
                 if page_number >= results.len() as i64 {
-                    return Ok((3, vec![]));
+                    return Ok((total_count, vec![]));
                 }
-                Ok::<_, VersionsError>((3, results[page_number as usize].clone()))
+                Ok::<_, VersionsError>((total_count, results[page_number as usize].clone()))
             },
-            NonZeroU32::new(3).unwrap(),
+            page_size,
         );
 
-        let collected: Vec<i32> = stream.try_collect().await.unwrap();
+        let collected: Vec<StreamItem<i32>> = stream.try_collect().await.unwrap();
 
-        assert_eq!(collected, (1..=3).collect::<Vec<_>>());
+        assert_eq!(collected, [
+            StreamItem::TotalCount(3),
+            StreamItem::Result(1),
+            StreamItem::Result(2),
+            StreamItem::Result(3)
+        ]);
+    }
+
+    proptest! {
+        #[test]
+        fn collects_correct_number_of_results(results in vec(any::<i32>(), 0..10), raw_limit in 0..10_u8) {
+            let total = results.len();
+            let results_ref = &results;
+            let stream = async_stream::stream! {
+                yield Ok::<StreamItem<i32>, String>(StreamItem::TotalCount(total as u64));
+                for item in results_ref.iter() {
+                    yield Ok(StreamItem::Result(*item));
+                }
+            };
+            let limit = NonZeroU8::new(raw_limit); // None if raw_limit == 0
+            let (found_count, collected_results) = collect_search_results(stream, limit).block_on().unwrap();
+            prop_assert_eq!(found_count, Some(total as u64));
+
+            let expected_results = if limit.is_some() {
+                results.into_iter().take(raw_limit as usize).collect::<Vec<_>>()
+            } else {
+                results
+            };
+            prop_assert_eq!(expected_results, collected_results);
+        }
     }
 
     #[test]

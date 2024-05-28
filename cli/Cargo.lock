@@ -723,6 +723,7 @@ dependencies = [
  "indent",
  "indexmap 2.2.6",
  "indoc",
+ "itertools",
  "jsonwebtoken",
  "log",
  "once_cell",
