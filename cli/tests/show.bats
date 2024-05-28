@@ -41,6 +41,8 @@ setup() {
   rm -f "$GLOBAL_MANIFEST_LOCK"
   _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
     "$FLOX_BIN" update --global
+  export FLOX_FEATURES_USE_CATALOG=true
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
 }
 
 teardown() {
@@ -54,6 +56,15 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' can be called at all" {
+  export FLOX_FEATURES_USE_CATALOG=false
+  run "$FLOX_BIN" show hello
+  assert_success
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "catalog: 'flox show' can be called at all" {
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/show/hello.json"
   run "$FLOX_BIN" show hello
   assert_success
 }
@@ -61,6 +72,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' accepts search output without separator" {
+  export FLOX_FEATURES_USE_CATALOG=false
   run "$FLOX_BIN" search hello
   assert_success
   first_result="${lines[0]%% *}"
@@ -70,7 +82,20 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
+@test "catalog: 'flox show' accepts search output without separator" {
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/search/hello.json"
+  run "$FLOX_BIN" search hello
+  assert_success
+  first_result="${lines[0]%% *}"
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/show/hello.json"
+  run "$FLOX_BIN" show "$first_result"
+  assert_success
+}
+
+# ---------------------------------------------------------------------------- #
+
 @test "'flox show' - hello" {
+  export FLOX_FEATURES_USE_CATALOG=false
   run "$FLOX_BIN" show hello
   assert_success
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
@@ -79,7 +104,31 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
+@test "catalog: 'flox show' - hello" {
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/show/hello.json"
+  run "$FLOX_BIN" show hello
+  assert_success
+  assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
+  assert_equal "${lines[1]}" "    hello@2.12.1"
+  assert_equal "${lines[2]}" "    hello@2.12"
+  assert_equal "${lines[3]}" "    hello@2.10"
+}
+
+# ---------------------------------------------------------------------------- #
+
 @test "'flox show' - hello --all" {
+  export FLOX_FEATURES_USE_CATALOG=false
+  run --separate-stderr "$FLOX_BIN" show hello --all
+  assert_success
+  assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
+  assert_equal "${lines[1]}" "    hello@2.12.1"
+  assert_regex "$stderr" "'--all' .* deprecated"
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "catalog: 'flox show' - hello --all" {
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/show/hello.json"
   run --separate-stderr "$FLOX_BIN" show hello --all
   assert_success
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
@@ -92,6 +141,7 @@ setup_file() {
 # bats test_tags=python
 
 @test "'flox show' - python27Full" {
+  export FLOX_FEATURES_USE_CATALOG=false
   run "$FLOX_BIN" show python27Full
   assert_success
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language"
@@ -103,6 +153,7 @@ setup_file() {
 # bats test_tags=python
 
 @test "'flox show' - python27Full --all" {
+  export FLOX_FEATURES_USE_CATALOG=false
   run --separate-stderr "$FLOX_BIN" show python27Full --all
   assert_success
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language"
@@ -115,6 +166,20 @@ setup_file() {
 # bats test_tags=python
 
 @test "'flox show' - python310Packages.flask" {
+  export FLOX_FEATURES_USE_CATALOG=false
+  run "$FLOX_BIN" show python310Packages.flask
+  assert_success
+  # Ensure that the package and part of the description show up
+  assert_output --partial 'python310Packages.flask - The'
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=python
+
+# Check pkg-path is handled correctly
+@test "catalog: 'flox show' - python310Packages.flask" {
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/show/python310Packages.flask.json"
   run "$FLOX_BIN" show python310Packages.flask
   assert_success
   # Ensure that the package and part of the description show up
@@ -126,6 +191,7 @@ setup_file() {
 # bats test_tags=ruby
 
 @test "'flox show' - rubyPackages.rails" {
+  export FLOX_FEATURES_USE_CATALOG=false
   run "$FLOX_BIN" show rubyPackages.rails
   assert_success
   assert_output --partial 'rubyPackages.rails - '
@@ -134,6 +200,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' works in project without manifest or lockfile" {
+  export FLOX_FEATURES_USE_CATALOG=false
   project_setup
 
   rm -f "$PROJECT_DIR/.flox/manifest.toml"
@@ -148,6 +215,7 @@ setup_file() {
 # bats test_tags=search:project, search:manifest, search:show
 
 @test "'flox show' uses '_PKGDB_GA_REGISTRY_REF_OR_REV' revision" {
+  export FLOX_FEATURES_USE_CATALOG=false
   project_setup
 
   rm -f "$GLOBAL_MANIFEST_LOCK"
@@ -180,6 +248,7 @@ setup_file() {
 # bats test_tags=search:project, search:manifest, search:lockfile, search:show
 
 @test "'flox show' uses locked revision when available" {
+  export FLOX_FEATURES_USE_CATALOG=false
   project_setup
 
   mkdir -p "$PROJECT_DIR/.flox/env"
@@ -230,6 +299,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' creates global lock" {
+  export FLOX_FEATURES_USE_CATALOG=false
   rm -f "$GLOBAL_MANIFEST_LOCK"
   run ! [ -e "$LOCKFILE_PATH" ]
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
@@ -246,6 +316,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox show' uses global lock" {
+  export FLOX_FEATURES_USE_CATALOG=false
   rm -f "$GLOBAL_MANIFEST_LOCK"
   run ! [ -e "$LOCKFILE_PATH" ]
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
@@ -260,16 +331,3 @@ setup_file() {
 }
 
 # ---------------------------------------------------------------------------- #
-
-# bats test_tags=catalog,catalog:show
-@test "mock client reads 'show' data from disk" {
-  FLOX_FEATURES_USE_CATALOG=true \
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/bash_show.json" \
-  run --separate-stderr "$FLOX_BIN" show bash -vvv
-  assert_output - <<EOF
-bash - GNU Bourne-Again Shell, the de facto standard shell on Linux
-    bash@5.2p26
-    bash@5.2-p21
-EOF
-  assert_regex "$stderr" "using catalog client for show"
-}
