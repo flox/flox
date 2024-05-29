@@ -12,11 +12,11 @@ else
     set _flox (set_color --bold)$_floxPrompt1" "$_floxPrompt2
 end
 
-if not functions -q flox_save_fish_prompt
-    functions --copy fish_prompt flox_save_fish_prompt
+if not functions -q flox_saved_fish_prompt
+    functions --copy fish_prompt flox_saved_fish_prompt
 end
 
 function fish_prompt
     echo -n $_flox ""
-    flox_save_fish_prompt
+    flox_saved_fish_prompt
 end
