@@ -1,0 +1,927 @@
+[
+  [
+    {
+      "name": "toplevel",
+      "pages": [
+        {
+          "packages": [
+            {
+              "attr_path": "hello",
+              "broken": false,
+              "derivation": "/nix/store/052y1njzgp8kkrxpk42zplvwn1b9pig3-hello-2.12.1.drv",
+              "description": "A program that produces a familiar, friendly greeting",
+              "install_id": "hello_install_id",
+              "license": "GPL-3.0-or-later",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "name": "hello-2.12.1",
+              "outputs": [
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/lm16cv8n49182v96q1lkww4lay4gk24b-hello-2.12.1"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "hello",
+              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "rev_count": 629267,
+              "rev_date": "2024-05-21T12:07:05Z",
+              "scrape_date": "2024-05-22T11:14:16Z",
+              "stabilities": [
+                "staging",
+                "unstable"
+              ],
+              "unfree": false,
+              "version": "2.12.1"
+            }
+          ],
+          "page": 629267,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 628669,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 627788,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 625274,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 624623,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 621993,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 617818,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 615148,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 614481,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 612413,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 611350,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 609462,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 608655,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 604424,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 602673,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 598982,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 596105,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 591063,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 588909,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 585741,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 580425,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 574351,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 562833,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 550515,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 537656,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 528952,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 517128,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 507322,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 497708,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 487203,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 466020,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 456418,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 446447,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 437630,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 428801,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 420742,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 410349,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 402830,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 379159,
+          "url": ""
+        }
+      ],
+      "system": "aarch64-darwin"
+    },
+    {
+      "name": "toplevel",
+      "pages": [
+        {
+          "packages": [
+            {
+              "attr_path": "hello",
+              "broken": false,
+              "derivation": "/nix/store/abxi9xk0rzmlyhzp0sjq17lghmx5w5m3-hello-2.12.1.drv",
+              "description": "A program that produces a familiar, friendly greeting",
+              "install_id": "hello_install_id",
+              "license": "GPL-3.0-or-later",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "name": "hello-2.12.1",
+              "outputs": [
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/rfxl46q6vadsszybmqri2vcykwy7mc2m-hello-2.12.1"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "hello",
+              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "rev_count": 629267,
+              "rev_date": "2024-05-21T12:07:05Z",
+              "scrape_date": "2024-05-22T11:14:16Z",
+              "stabilities": [
+                "staging",
+                "unstable"
+              ],
+              "unfree": false,
+              "version": "2.12.1"
+            }
+          ],
+          "page": 629267,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 628669,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 627788,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 625274,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 624623,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 621993,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 617818,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 615148,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 614481,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 612413,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 611350,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 609462,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 608655,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 604424,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 602673,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 598982,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 596105,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 591063,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 588909,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 585741,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 580425,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 574351,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 562833,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 550515,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 537656,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 528952,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 517128,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 507322,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 497708,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 487203,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 466020,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 456418,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 446447,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 437630,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 428801,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 420742,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 410349,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 379159,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 282432,
+          "url": ""
+        }
+      ],
+      "system": "aarch64-linux"
+    },
+    {
+      "name": "toplevel",
+      "pages": [
+        {
+          "packages": [
+            {
+              "attr_path": "hello",
+              "broken": false,
+              "derivation": "/nix/store/jikmdyfvzi82n5l2c31zzvxavm4f2hmc-hello-2.12.1.drv",
+              "description": "A program that produces a familiar, friendly greeting",
+              "install_id": "hello_install_id",
+              "license": "GPL-3.0-or-later",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "name": "hello-2.12.1",
+              "outputs": [
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/gyhq0a04ismnimc02jaa487mni90fn54-hello-2.12.1"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "hello",
+              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "rev_count": 629267,
+              "rev_date": "2024-05-21T12:07:05Z",
+              "scrape_date": "2024-05-22T11:14:16Z",
+              "stabilities": [
+                "staging",
+                "unstable"
+              ],
+              "unfree": false,
+              "version": "2.12.1"
+            }
+          ],
+          "page": 629267,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 628669,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 627788,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 625274,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 624623,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 621993,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 617818,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 615148,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 614481,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 612413,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 611350,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 609462,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 608655,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 604424,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 602673,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 598982,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 596105,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 591063,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 588909,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 585741,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 580425,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 574351,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 562833,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 550515,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 537656,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 528952,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 517128,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 507322,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 497708,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 487203,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 466020,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 456418,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 446447,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 437630,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 428801,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 420742,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 410349,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 379159,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 282432,
+          "url": ""
+        }
+      ],
+      "system": "x86_64-darwin"
+    },
+    {
+      "name": "toplevel",
+      "pages": [
+        {
+          "packages": [
+            {
+              "attr_path": "hello",
+              "broken": false,
+              "derivation": "/nix/store/w0hjp1fnvyf1z30s29fj4im8c7bxqrql-hello-2.12.1.drv",
+              "description": "A program that produces a familiar, friendly greeting",
+              "install_id": "hello_install_id",
+              "license": "GPL-3.0-or-later",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "name": "hello-2.12.1",
+              "outputs": [
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/g1n2vryg06amvcc1avb2mcq36faly0mh-hello-2.12.1"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "hello",
+              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "rev_count": 629267,
+              "rev_date": "2024-05-21T12:07:05Z",
+              "scrape_date": "2024-05-22T11:14:16Z",
+              "stabilities": [
+                "staging",
+                "unstable"
+              ],
+              "unfree": false,
+              "version": "2.12.1"
+            }
+          ],
+          "page": 629267,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 628669,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 627788,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 625274,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 624623,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 621993,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 617818,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 615148,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 614481,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 612413,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 611350,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 609462,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 608655,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 604424,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 602673,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 598982,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 596105,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 591063,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 588909,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 585741,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 574351,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 562833,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 550515,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 537656,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 528952,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 517128,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 507322,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 497708,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 487203,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 466020,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 456418,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 446447,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 437630,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 428801,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 420742,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 410349,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 379159,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 282432,
+          "url": ""
+        }
+      ],
+      "system": "x86_64-linux"
+    }
+  ]
+]
