@@ -97,6 +97,8 @@ impl Pull {
                     }
                 );
 
+                // FIXME: this could panic if the current directory is deleted between
+                //        calling `flox` and running this line
                 let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");

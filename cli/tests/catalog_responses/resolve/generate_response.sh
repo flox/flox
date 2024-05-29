@@ -22,11 +22,11 @@ fi
 # generate install command and filename
 first_pkg="$1"
 
-install_args=(-i "${first_pkg}_install_id" "$first_pkg")
+install_args=("$first_pkg")
 filename="$first_pkg"
 
 for pkg in "${@:2}"; do
-  install_args+=(-i "${pkg}_install_id" "$pkg")
+  install_args+=(" $pkg")
   filename+="_$pkg"
 done
 

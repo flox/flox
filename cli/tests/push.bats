@@ -188,7 +188,7 @@ function update_dummy_env() {
 
 # bats test_tags=push:h3
 @test "h2: push login: catalog: running flox push creates a remotely managed environment stored in the FloxHub" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/install_hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
   mkdir -p "machine_a"
   mkdir -p "machine_b"
 
@@ -217,10 +217,10 @@ function update_dummy_env() {
   # Create an environment owner/test on machine_a and push it to floxhub
   pushd "machine_a" > /dev/null || return
   "$FLOX_BIN" init --name "test"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/install_vim.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json"
   "$FLOX_BIN" install vim
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
 
+  # Also uses the `vim` resolution since it makes sure the manifest is locked before pushing
   "$FLOX_BIN" push --owner owner
   popd > /dev/null || return
 
@@ -230,10 +230,11 @@ function update_dummy_env() {
   echo "trying to push to the same upstream env" >&3
 
   "$FLOX_BIN" init --name "test"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/install_emacs.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json"
   "$FLOX_BIN" install emacs
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  # export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
 
+  # Also uses the `emacs` resolution since it makes sure the manifest is locked before pushing
   run "$FLOX_BIN" push --owner owner
   assert_failure
   assert_output --partial "An environment named owner/test already exists!"
@@ -247,25 +248,27 @@ function update_dummy_env() {
   # Create an environment owner/test on machine_a and push it to floxhub
   pushd "machine_a" > /dev/null || return
   "$FLOX_BIN" init --name "test"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/install_vim.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json"
   "$FLOX_BIN" install vim
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  # Also uses the `vim` resolution since it makes sure the manifest is locked before pushing
   "$FLOX_BIN" push --owner owner
   popd > /dev/null || return
 
   # Create an environment owner/test on machine_b and force-push it to floxhub
   pushd "machine_b" > /dev/null || return
-  "$FLOX_BIN" init --name "test"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/install_emacs.json"
-  "$FLOX_BIN" install emacs
   export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  "$FLOX_BIN" init --name "test"
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json"
+  "$FLOX_BIN" install emacs
+  # Also uses the `emacs` resolution since it makes sure the manifest is locked before pushing
   run "$FLOX_BIN" push --owner owner --force
   assert_success
   popd > /dev/null || return
 
   # Pull the environment owner/test on machine_c and check that it has the emacs package
   pushd "machine_c" > /dev/null || return
-  "$FLOX_BIN" pull --remote owner/test
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  RUST_LOG=debug "$FLOX_BIN" pull --remote owner/test &> "/Users/zmitchell/pull.log"
   run "$FLOX_BIN" list --name
   assert_success
   assert_line "emacs"
