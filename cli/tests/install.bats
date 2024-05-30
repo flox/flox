@@ -409,7 +409,7 @@ teardown() {
 }
 
 @test "catalog: 'flox install' accepts mix of inferred and supplied install IDs" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/-i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/webmention_ripgrep_rails.json"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails
