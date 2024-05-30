@@ -15,24 +15,13 @@ fi
 export FLOX_CATALOG_URL="$TESTING_FLOX_CATALOG_URL"
 
 if [ "$#" -lt 1 ]; then
-  echo "Usage: $0 <pkg1> [pkg2] ..."
+  echo "Usage: $0 <args> [for] [install]..."
   exit 1
 fi
 
-# generate install command and filename
-first_pkg="$1"
+filename="$*.json"
 
-install_args=("$first_pkg")
-filename="$first_pkg"
-
-for pkg in "${@:2}"; do
-  install_args+=(" $pkg")
-  filename+="_$pkg"
-done
-
-filename+=".json"
-
-rm -f "$filename"
+rm -f -- "$filename"
 
 # dump
 export FLOX_FEATURES_USE_CATALOG=true
@@ -46,7 +35,7 @@ flox list -c |
   tomlq --toml-output '.options.systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]' |
   flox edit -f -
 
-if flox install -v "${install_args[@]}"; then
+if flox install "$@"; then
   rc=0
 else
   rc="$?"
