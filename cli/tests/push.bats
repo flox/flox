@@ -268,7 +268,6 @@ function update_dummy_env() {
   # Pull the environment owner/test on machine_c and check that it has the emacs package
   pushd "machine_c" > /dev/null || return
   export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
-  RUST_LOG=debug "$FLOX_BIN" pull --remote owner/test &> "/Users/zmitchell/pull.log"
   run "$FLOX_BIN" list --name
   assert_success
   assert_line "emacs"
