@@ -2,7 +2,7 @@
  *
  * @file pkgdb/pkg-query.cc
  *
- * @brief Interfaces for constructing complex `Packages' queries.
+ * @brief Interfaces for constructing complex 'Packages' queries.
  *
  *
  * -------------------------------------------------------------------------- */
@@ -12,6 +12,7 @@
 #include <list>
 #include <memory>
 #include <optional>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -46,14 +47,14 @@ PkgQueryArgs::check() const
             || this->semver.has_value() ) )
     {
       throw InvalidPkgQueryArg(
-        "queries may not mix `name' parameter with any of `pname', "
-        "`version', or `semver' parameters." );
+        "queries may not mix 'name' parameter with any of 'pname', "
+        "'version', or 'semver' parameters." );
     }
 
   if ( this->version.has_value() && this->semver.has_value() )
     {
       throw InvalidPkgQueryArg(
-        "queries may not mix `version' and `semver' parameters." );
+        "queries may not mix 'version' and 'semver' parameters." );
     }
 
   /* Check licenses don't contain the ' character */
@@ -86,7 +87,7 @@ PkgQueryArgs::check() const
   /* `partialMatch' and `partialNameMatch' cannot be used together. */
   if ( this->partialMatch.has_value() && this->partialNameMatch.has_value() )
     {
-      throw InvalidPkgQueryArg( "`partialmatch' and `partialNameMatch' filters "
+      throw InvalidPkgQueryArg( "'partialmatch' and 'partialNameMatch' filters "
                                 "may not be used together." );
     }
 }
@@ -111,6 +112,8 @@ to_json( nlohmann::json & jto, const PkgQueryArgs & args )
     { "subtrees", args.subtrees },
     { "systems", args.systems },
     { "relPath", args.relPath },
+    { "limit", args.limit },
+    { "deduplicate", args.deduplicate },
   };
 }
 
@@ -196,6 +199,16 @@ addIn( std::stringstream & oss, const std::vector<std::string> & elems )
 
 
 /* -------------------------------------------------------------------------- */
+std::string
+PkgQuery::mkPatternString( const std::string & matchString )
+{
+  // SQLite allows _ and % characters in pattern matching so these need to be
+  // escaped, and patterns used for LIKE are surrounded with %
+  std::string pattern
+    = "%" + std::regex_replace( matchString, std::regex( "([_%])" ), "\\$&" )
+      + "%";
+  return pattern;
+}
 
 void
 PkgQuery::initMatch()
@@ -220,44 +233,15 @@ PkgQuery::initMatch()
   bool hasPartialNameMatch = this->partialNameMatch.has_value()
                              && ( ! this->partialNameMatch->empty() );
   /* `partialMatch' also includes matches on `description'. */
-  if ( hasPartialNameMatch
-       || ( this->partialMatch.has_value()
-            && ( ! this->partialMatch->empty() ) ) )
-    {
-      /* We have to add '%' around `:match' because they were added for
-       * use with `LIKE'. */
-      this->addSelection(
-        "( ( '%' || LOWER( pname ) || '%' ) = LOWER( :partialMatch ) ) "
-        "AS matchExactPname" );
-      this->addSelection(
-        "( ( '%' || LOWER( attrName ) || '%' ) = LOWER( :partialMatch ) ) "
-        "AS matchExactAttrName" );
-      this->addSelection( "( pname LIKE :partialMatch ) AS matchPartialPname" );
-      this->addSelection(
-        "( attrName LIKE :partialMatch ) AS matchPartialAttrName" );
-      if ( hasPartialNameMatch )
-        {
-          this->addSelection( "NULL AS matchPartialDescription" );
-          /* Add `%` before binding so `LIKE` works. */
-          binds.emplace( ":partialMatch",
-                         "%" + ( *this->partialNameMatch ) + "%" );
-          this->addWhere( "( matchExactPname OR matchExactAttrName OR"
-                          "  matchPartialPname OR matchPartialAttrName"
-                          ")" );
-        }
-      else
-        {
-          this->addSelection(
-            "( description LIKE :partialMatch ) AS matchPartialDescription" );
-          /* Add `%` before binding so `LIKE` works. */
-          binds.emplace( ":partialMatch", "%" + ( *this->partialMatch ) + "%" );
-          this->addWhere( "( matchExactPname OR matchExactAttrName OR"
-                          "  matchPartialPname OR matchPartialAttrName OR"
-                          "  matchPartialDescription "
-                          ")" );
-        }
-    }
-  else
+  bool hasPartialMatch
+    = this->partialMatch.has_value() && ( ! this->partialMatch->empty() );
+  /* `partialNameOrRelPathMatch' also includes matches on `relPath' */
+  bool hasPartialNameOrRelPathMatch
+    = this->partialNameOrRelPathMatch.has_value()
+      && ( ! this->partialNameOrRelPathMatch->empty() );
+
+  if ( ! ( hasPartialNameMatch || hasPartialMatch
+           || hasPartialNameOrRelPathMatch ) )
     {
       /* Add bogus `match*` values so that later `ORDER BY` works. */
       this->addSelection( "NULL AS matchExactPname" );
@@ -265,6 +249,78 @@ PkgQuery::initMatch()
       this->addSelection( "NULL AS matchPartialPname" );
       this->addSelection( "NULL AS matchPartialAttrName" );
       this->addSelection( "NULL AS matchPartialDescription" );
+      this->addSelection( "NULL AS matchExactRelPath" );
+      this->addSelection( "NULL AS matchPartialRelPath" );
+    }
+  else
+    {
+      /* All match fields check pname and attrName. We check for exact and
+       * partial matches to improve ordering. A match for attrName will also
+       * match relPath, but we check attrName no matter what for ordering. */
+      /* We have to add '%' around `:match' because they were added for
+       * use with `LIKE'. */
+      this->addSelection(
+        "LOWER( pname ) = LOWER( :partialMatch ) AS matchExactPname" );
+      this->addSelection(
+        "LOWER( attrName ) = LOWER( :partialMatch ) AS matchExactAttrName" );
+      this->addSelection( "( pname LIKE :partialMatchPattern ESCAPE '\\' ) AS "
+                          "matchPartialPname" );
+      this->addSelection( "( attrName LIKE :partialMatchPattern ESCAPE '\\' ) "
+                          "AS matchPartialAttrName" );
+
+      if ( hasPartialNameMatch )
+        {
+          /* Add `%` before binding so `LIKE` works. */
+          binds.emplace( ":partialMatch", *this->partialNameMatch );
+          binds.emplace( ":partialMatchPattern",
+                         mkPatternString( *this->partialNameMatch ) );
+          this->addWhere( "( matchExactPname OR matchExactAttrName OR"
+                          "  matchPartialPname OR matchPartialAttrName"
+                          ")" );
+        }
+
+      if ( hasPartialMatch )
+        {
+          this->addSelection(
+            "( description LIKE :partialMatchPattern ESCAPE '\\' ) AS "
+            "matchPartialDescription" );
+          /* Add `%` before binding so `LIKE` works. */
+          binds.emplace( ":partialMatch", *this->partialMatch );
+          binds.emplace( ":partialMatchPattern",
+                         mkPatternString( *this->partialMatch ) );
+          this->addWhere( "( matchExactPname OR matchExactAttrName OR"
+                          "  matchPartialPname OR matchPartialAttrName OR"
+                          "  matchPartialDescription "
+                          ")" );
+        }
+      else { this->addSelection( "NULL AS matchPartialDescription" ); }
+
+      if ( hasPartialNameOrRelPathMatch )
+        {
+          /* Join relPath with '.' so searches can include dots. */
+          this->addSelection( "(SELECT LOWER( group_concat(value, '.') ) "
+                              "= LOWER( :partialMatch )"
+                              "FROM json_each(v_PackagesSearch.relPath)) AS "
+                              "matchExactRelPath" );
+          this->addSelection( "(SELECT group_concat(value, '.') LIKE "
+                              ":partialMatchPattern ESCAPE '\\' "
+                              "FROM json_each(v_PackagesSearch.relPath)) AS "
+                              "matchPartialRelPath" );
+          /* Add `%` before binding so `LIKE` works. */
+          binds.emplace( ":partialMatch",
+                         ( *this->partialNameOrRelPathMatch ) );
+          binds.emplace( ":partialMatchPattern",
+                         mkPatternString( *this->partialNameOrRelPathMatch ) );
+          this->addWhere( "( matchExactPname OR matchExactAttrName OR"
+                          "  matchPartialPname OR matchPartialAttrName OR"
+                          "  matchPartialRelPath"
+                          ")" );
+        }
+      else
+        {
+          this->addSelection( "NULL AS matchExactRelPath" );
+          this->addSelection( "NULL AS matchPartialRelPath" );
+        }
     }
 }
 
@@ -275,35 +331,26 @@ void
 PkgQuery::initSubtrees()
 {
   /* Handle `subtrees' filtering. */
-  if ( this->subtrees.has_value() )
+  if ( this->subtrees.has_value() && ( ! this->subtrees->empty() ) )
     {
       size_t                   idx = 0;
       std::vector<std::string> lst;
       std::stringstream        rank;
+      rank << "CASE ";
       for ( const auto subtree : *this->subtrees )
         {
           lst.emplace_back( to_string( subtree ) );
-          rank << "iif( ( subtree = '" << lst.back() << "' ), " << idx << ", ";
+          rank << "WHEN subtree = '" << lst.back() << "' THEN " << idx << " ";
           ++idx;
         }
+      /* Wrap up rankings assignment. */
+      rank << "END AS subtreesRank";
+      this->addSelection( rank.str() );
       /* subtree IN ( ...  ) */
       std::stringstream cond;
       cond << "subtree";
       addIn( cond, lst );
       this->addWhere( cond.str() );
-      /* Wrap up rankings assignment. */
-      if ( 1 < idx )
-        {
-          rank << idx;
-          for ( size_t i = 0; i < idx; ++i ) { rank << " )"; }
-          rank << " AS subtreesRank";
-          this->addSelection( rank.str() );
-        }
-      else
-        {
-          /* Add bogus rank so `ORDER BY subtreesRank' works. */
-          this->addSelection( "0 AS subtreesRank" );
-        }
     }
   else
     {
@@ -325,18 +372,17 @@ PkgQuery::initSystems()
     addIn( cond, this->systems );
     this->addWhere( cond.str() );
   }
-  if ( 1 < this->systems.size() )
+  if ( ! this->systems.empty() )
     {
       size_t            idx = 0;
       std::stringstream rank;
+      rank << "CASE ";
       for ( const auto & system : this->systems )
         {
-          rank << "iif( ( system = '" << system << "' ), " << idx << ", ";
+          rank << "WHEN system = '" << system << "' THEN " << idx << " ";
           ++idx;
         }
-      rank << idx;
-      for ( size_t i = 0; i < idx; ++i ) { rank << " )"; }
-      rank << " AS systemsRank";
+      rank << "END AS systemsRank";
       this->addSelection( rank.str() );
     }
   else
@@ -358,9 +404,11 @@ PkgQuery::initOrderBy()
   , matchExactPname         DESC
   , exactAttrName           DESC
   , matchExactAttrName      DESC
+  , matchExactRelPath       DESC
   , depth                   ASC
   , matchPartialPname       DESC
   , matchPartialAttrName    DESC
+  , matchPartialRelPath     DESC
   , matchPartialDescription DESC
 
   , subtreesRank ASC
@@ -496,8 +544,24 @@ PkgQuery::str() const
   else { qry << this->selects.str(); }
   qry << " FROM v_PackagesSearch";
   if ( ! this->firstWhere ) { qry << " WHERE " << this->wheres.str(); }
+  /* This will cause an arbitrary row to be chosen for all values other than
+   * relPath. See "a single arbitrarily chosen row from within the group" from
+   * https://www.sqlite.org/lang_select.html. This is a bit hacky, but we know
+   * that `flox search` only uses `relPath` and `description`, and we assume
+   * that `description` is the same for all packages that share `relPath`. */
+  if ( this->deduplicate ) { qry << "\n GROUP BY relPath\n"; }
   if ( ! this->firstOrder ) { qry << " ORDER BY " << this->orders.str(); }
   qry << " )";
+  // Dump the bindings as well
+  if ( ! this->binds.empty() )
+    {
+      qry << '\n' << "-- ... with bindings:" << '\n';
+      for ( const auto & bind : this->binds )
+        {
+          qry << "-- " << bind.first << " : " << bind.second << '\n';
+        }
+    }
+
   return qry.str();
 }
 
@@ -568,8 +632,9 @@ PkgQuery::execute( sqlite3pp::database & pdb ) const
   std::vector<std::pair<row_id, std::string>> idVersions;
   for ( const auto & row : *qry )
     {
-      const auto & [_, version] = idVersions.emplace_back(
-        std::make_pair( row.get<long long>( 0 ), row.get<std::string>( 1 ) ) );
+      const auto & [_, version]
+        = idVersions.emplace_back( row.get<long long>( 0 ),
+                                   row.get<std::string>( 1 ) );
       versions.emplace( version );
     }
   versions = this->filterSemvers( versions );

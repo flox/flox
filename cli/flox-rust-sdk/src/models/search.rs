@@ -1,14 +1,20 @@
-use std::io::BufRead;
+use std::io::{BufRead, BufReader};
+use std::num::NonZeroU8;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Stdio};
+use std::sync::mpsc::SendError;
+use std::thread::ScopedJoinHandle;
 
-use log::debug;
+use log::{debug, trace};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::skip_serializing_none;
 
 use super::pkgdb::PkgDbError;
 use crate::models::pkgdb::PKGDB_BIN;
+use crate::utils::CommandExt;
+
+pub type SearchLimit = Option<NonZeroU8>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SearchError {
@@ -28,8 +34,8 @@ pub enum SearchError {
     CanonicalManifestPath(std::io::Error),
     #[error("inline manifest was malformed: {0}")]
     InlineManifestMalformed(String),
-    #[error("couldn't acquire stdout for search process")]
-    PkgDbStdout,
+    #[error("internal error: {0}")]
+    SomethingElse(String),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -54,8 +60,8 @@ pub struct SearchParams {
     pub manifest: Option<PathOrJson>,
     /// Either an absolute path to a manifest or an inline JSON manifest
     pub global_manifest: PathOrJson,
-    /// An optional exisiting lockfile
-    pub lockfile: Option<PathOrJson>,
+    /// An existing lockfile
+    pub lockfile: PathOrJson,
     /// Parameters for the actual search query
     pub query: Query,
 }
@@ -115,6 +121,15 @@ impl std::fmt::Display for PathOrJson {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, Default, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum SearchStrategy {
+    Match,
+    MatchName,
+    #[default]
+    MatchNameOrRelPath,
+}
+
 /// A set of options for defining a search query.
 ///
 /// The search options aren't mutually exclusive. For instance, the query
@@ -135,6 +150,8 @@ pub struct Query {
     pub name: Option<String>,
     /// Match against the `pname` of the package
     pub pname: Option<String>,
+    /// Match against the `relPath` of the package
+    pub rel_path: Option<Vec<String>>,
     /// Match against the explicit version number of the package
     pub version: Option<String>,
     /// Match against a semver specifier
@@ -143,16 +160,29 @@ pub struct Query {
     pub r#match: Option<String>,
     /// Match against the package name
     pub match_name: Option<String>,
+    /// Match against the package name or '.' joined relPath
+    pub match_name_or_rel_path: Option<String>,
     /// Limit search results to a specified number
-    pub limit: Option<u8>,
+    pub limit: SearchLimit,
+    /// Return a single result for each package descriptor used by `search` and
+    /// `install`.
+    pub deduplicate: bool,
 }
 
 impl Query {
     /// Construct a query from a search term and an optional search result limit.
-    pub fn from_term_and_limit(
+    ///
+    /// `deduplicate = true` will return unique results for flox search;
+    /// for example, a single result will be returned for a package even if
+    /// there are multiple versions or systems of a package.
+    /// This is a bit hacky, but since we know that `flox search` only displays
+    /// `relPath` and `description`, we assume that `description` is the same
+    /// for all packages that share `relPath`.
+    pub fn new(
         search_term: &str,
-        prefer_match_name: bool,
-        limit: Option<u8>,
+        search_strategy: SearchStrategy,
+        limit: SearchLimit,
+        deduplicate: bool,
     ) -> Result<Self, SearchError> {
         // If there's an '@' in the query, it means the user is trying to use the semver
         // search capability. This means we need to split the query into package name and
@@ -169,24 +199,30 @@ impl Query {
                 let mut q = Query {
                     semver: Some(semver.to_string()),
                     limit,
+                    deduplicate,
                     ..Query::default()
                 };
-                if prefer_match_name {
-                    q.match_name = Some(package.to_string());
-                } else {
-                    q.r#match = Some(package.to_string());
+                match search_strategy {
+                    SearchStrategy::Match => q.r#match = Some(package.to_string()),
+                    SearchStrategy::MatchName => q.match_name = Some(package.to_string()),
+                    SearchStrategy::MatchNameOrRelPath => {
+                        q.match_name_or_rel_path = Some(package.to_string())
+                    },
                 }
                 q
             },
             None => {
                 let mut q = Query {
                     limit,
+                    deduplicate,
                     ..Default::default()
                 };
-                if prefer_match_name {
-                    q.match_name = Some(search_term.to_string());
-                } else {
-                    q.r#match = Some(search_term.to_string());
+                match search_strategy {
+                    SearchStrategy::Match => q.r#match = Some(search_term.to_string()),
+                    SearchStrategy::MatchName => q.match_name = Some(search_term.to_string()),
+                    SearchStrategy::MatchNameOrRelPath => {
+                        q.match_name_or_rel_path = Some(search_term.to_string())
+                    },
                 }
                 q
             },
@@ -198,12 +234,13 @@ impl Query {
 /// Which subtree a package is under.
 ///
 /// This identifies which kind of package source a package came from (catalog, flake, or nixpkgs).
-#[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Subtree {
     /// The package came from a catalog
     Catalog,
     /// The package came from a nixpkgs checkout
+    #[default]
     LegacyPackages,
     /// The package came from an arbitrary flake
     Packages,
@@ -215,13 +252,14 @@ pub enum Subtree {
 /// without an enclosing `[]`, so the results returned by `pkgdb` can't be
 /// directly deserialized to a JSON object. To parse the results you should
 /// use the provided `TryFrom` impl.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResults {
     pub results: Vec<SearchResult>,
-    pub count: Option<u64>,
+    pub count: ResultCount,
 }
+pub type ResultCount = Option<u64>;
 
-/// The types of JSON records that `pkgdb` can emit during a search
+/// The types of JSON records that `pkgdb` can emit on stdout during a search
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(untagged)]
 pub enum Record {
@@ -233,6 +271,13 @@ pub enum Record {
     SearchResult(SearchResult),
     /// An error
     Error(PkgDbError),
+}
+
+/// The different kinds of output that can be collected from pkgdb during a search
+#[derive(Debug)]
+pub enum PkgDbOutput {
+    Stdout(Record),
+    Stderr(String),
 }
 
 impl TryFrom<&[u8]> for SearchResults {
@@ -262,64 +307,142 @@ impl TryFrom<&[u8]> for SearchResults {
 }
 
 /// Calls `pkgdb` and reads a stream of search records.
+#[allow(clippy::type_complexity)]
 pub fn do_search(search_params: &SearchParams) -> Result<(SearchResults, ExitStatus), SearchError> {
     let json = serde_json::to_string(search_params).map_err(SearchError::Serialize)?;
 
     let mut pkgdb_command = Command::new(PKGDB_BIN.as_str());
     pkgdb_command
         .arg("search")
-        .arg("--quiet")
         .arg("--ga-registry")
         .arg(json)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    debug!("running search command {:?}", pkgdb_command);
+    debug!("running search command {}", pkgdb_command.display());
     let mut pkgdb_process = pkgdb_command.spawn().map_err(SearchError::PkgDbCall)?;
-    let stdout = pkgdb_process.stdout.take();
-    if stdout.is_none() {
-        pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
-        return Err(SearchError::PkgDbStdout);
+    let stdout = pkgdb_process
+        .stdout
+        .take()
+        .expect("couldn't get stdout handle");
+    let stderr = pkgdb_process
+        .stderr
+        .take()
+        .expect("couldn't get stderr handle");
+
+    let search_outcome: std::thread::Result<Result<(Vec<SearchResult>, Option<u64>), SearchError>> =
+        std::thread::scope(|s| {
+            // Give the channel some fixed capacity to provide backpressure when
+            // overloaded.
+            let (sender_orig, receiver) = std::sync::mpsc::sync_channel(1000);
+
+            // Feed stderr lines into a channel sender
+            let sender = sender_orig.clone();
+            let stderr_thread: ScopedJoinHandle<Result<(), SendError<PkgDbOutput>>> =
+                s.spawn(move || {
+                    let sender = sender.clone();
+                    let mut reader = BufReader::new(stderr).lines();
+                    while let Some(Ok(line)) = reader.next() {
+                        if let Err(err) = sender.send(PkgDbOutput::Stderr(line)) {
+                            debug!("failed to send stderr line: {err}");
+                        }
+                    }
+                    trace!("stderr reader thread is done");
+                    Ok(())
+                });
+
+            // Feed JSON records from stdout into a channel sender
+            let sender = sender_orig;
+            let stdout_thread: ScopedJoinHandle<Result<(), SearchError>> = s.spawn(move || {
+                let sender = sender.clone();
+                let deserializer = serde_json::Deserializer::from_reader(stdout);
+                for maybe_record in deserializer.into_iter() {
+                    let record = maybe_record.map_err(SearchError::Deserialize)?;
+                    if let Err(err) = sender.send(PkgDbOutput::Stdout(record)) {
+                        debug!("failed to send stdout line: {err}");
+                    }
+                }
+                trace!("stdout reader thread is done");
+                Ok(())
+            });
+
+            // Read items from the channel in the order in which they were received
+            let mut count = None;
+            let mut results = Vec::new();
+            while let Ok(output) = receiver.recv() {
+                match output {
+                    PkgDbOutput::Stderr(line) => {
+                        debug!(target: "pkgdb", "[pkgdb] {}", line);
+                    },
+                    PkgDbOutput::Stdout(Record::Error(err)) => {
+                        debug!("error from pkgdb: {}", err);
+                        let kill = pkgdb_process.kill().map_err(SearchError::PkgDbCall);
+                        // This destructuring is necessary for type conversion
+                        if let Err(err) = kill {
+                            return Ok(Err(err));
+                        }
+                        if !stderr_thread.is_finished() {
+                            trace!("waiting for stderr thread to finish");
+                            let _ = stderr_thread.join();
+                        }
+                        if !stdout_thread.is_finished() {
+                            trace!("waiting for stdout thread to finish");
+                            let _ = stdout_thread.join();
+                        }
+                        return Ok(Err(SearchError::PkgDb(err)));
+                    },
+                    PkgDbOutput::Stdout(Record::ResultCount { result_count }) => {
+                        debug!("result count = {}", result_count);
+                        count = Some(result_count);
+                    },
+                    PkgDbOutput::Stdout(Record::SearchResult(result)) => {
+                        debug!("search result = {:?}", result);
+                        results.push(result);
+                    },
+                }
+            }
+
+            trace!("joining reader threads");
+            let stderr_thread_outcome = stderr_thread.join();
+            let stdout_thread_outcome = stdout_thread.join();
+            trace!("done joining reader threads");
+            if stderr_thread_outcome.is_ok() && stdout_thread_outcome.is_ok() {
+                Ok(Ok((results, count)))
+            } else {
+                Ok(Err(SearchError::SomethingElse(
+                    "background threads didn't exit successfully".into(),
+                )))
+            }
+        });
+
+    match search_outcome {
+        Ok(Ok((results, count))) => {
+            let exit_status = pkgdb_process.wait().map_err(SearchError::PkgDbCall)?;
+            Ok((SearchResults { results, count }, exit_status))
+        },
+        Ok(Err(err)) => Err(err),
+        // This means the thread panicked and there's not much we can do about it
+        Err(_) => Err(SearchError::SomethingElse("internal search error".into())),
     }
-    let deserializer = serde_json::Deserializer::from_reader(stdout.unwrap());
-    let mut count = None;
-    let mut results = Vec::new();
-    for maybe_record in deserializer.into_iter() {
-        let record = maybe_record.map_err(SearchError::Deserialize)?;
-        debug!("record = {:?}", record);
-        match record {
-            Record::Error(err) => {
-                pkgdb_process.kill().map_err(SearchError::PkgDbCall)?;
-                return Err(SearchError::PkgDb(err));
-            },
-            Record::ResultCount { result_count } => count = Some(result_count),
-            Record::SearchResult(result) => results.push(result),
-        }
-    }
-    let exit_status = pkgdb_process.wait().map_err(SearchError::PkgDbCall)?;
-    Ok((SearchResults { results, count }, exit_status))
 }
 
 /// A package search result
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
     /// Which input the package came from
-    pub input: String,
-    /// The full attribute path of the package inside the input.
     ///
-    /// Most attributes in the attribute path are broken out into other subfields
-    /// with the exception of the package version for a package from a catalog
-    /// (i.e. the last attribute in the path). This attribute can be extracted from
-    pub abs_path: Vec<String>,
-    /// Which subtree the package is under e.g. "catalog", "legacyPackages", etc
-    pub subtree: Subtree,
+    /// This is also abused to be the name of the catalog.
+    /// At some point we should rename this to catalog.
+    pub input: String,
     /// The system that the package can be built for
     pub system: String,
     /// The part of the attribute path after `<subtree>.<system>`.
     ///
     /// For an arbitrary flake this will simply be the name of the package, but
     /// for nixpkgs this can be something like `python310Packages.flask`
+    ///
+    /// TODO: rename this attr_path or pkg_path
     pub rel_path: Vec<String>,
     /// The package name
     pub pname: Option<String>,
@@ -327,14 +450,8 @@ pub struct SearchResult {
     pub version: Option<String>,
     /// The package description
     pub description: Option<String>,
-    /// Whether the package is marked "broken"
-    pub broken: Option<bool>,
-    /// Whether the package has an unfree license
-    pub unfree: Option<bool>,
     /// Which license the package is licensed under
     pub license: Option<String>,
-    /// The database ID of this package
-    pub id: u64,
 }
 
 #[cfg(test)]
@@ -346,10 +463,12 @@ mod test {
     const EXAMPLE_PARAMS: &str = r#"{
         "manifest": "/path/to/manifest",
         "global-manifest": "/path/to/manifest",
+        "lockfile": "/path/to/lockfile",
         "query": {
             "semver": "2.12.1",
             "match": "hello",
-            "limit": 10
+            "limit": 10,
+            "deduplicate": true
         }
     }"#;
 
@@ -385,14 +504,20 @@ mod test {
         let params = SearchParams {
             manifest: Some(PathOrJson::Path("/path/to/manifest".into())),
             global_manifest: PathOrJson::Path("/path/to/manifest".into()),
-            lockfile: None,
-            query: Query::from_term_and_limit(EXAMPLE_SEARCH_TERM, false, Some(10)).unwrap(),
+            lockfile: PathOrJson::Path("/path/to/lockfile".into()),
+            query: Query::new(
+                EXAMPLE_SEARCH_TERM,
+                SearchStrategy::Match,
+                NonZeroU8::new(10),
+                true,
+            )
+            .unwrap(),
         };
         let json = serde_json::to_string(&params).unwrap();
         // Convert both to `serde_json::Value` to test equality without worrying about whitespace
         let params_value: serde_json::Value = serde_json::from_str(&json).unwrap();
         let example_value: serde_json::Value = serde_json::from_str(EXAMPLE_PARAMS).unwrap();
-        assert_eq!(params_value, example_value);
+        pretty_assertions::assert_eq!(params_value, example_value);
     }
 
     #[test]

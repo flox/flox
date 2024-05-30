@@ -35,15 +35,16 @@ The default \`EXTRA-IWYU-ARGS' are:
 OPTIONS
   -t,--tool-opt OPT   Pass an option(s) to \`iwyu_tool.py'
   -f,--file PATH      Target specific file(s). May be used multiple times.
-  -V,--verbose        Run in verbose mode.
+  -v,--verbose        Run in verbose mode.
   -h,--help           Print help message to STDOUT.
   -u,--usage          Print usage message to STDOUT.
-  -v,--version        Print version information to STDOUT.
+  -V,--version        Print version information to STDOUT.
 
 ENVIRONMENT
   IWYU_TOOL           Command used as \`iwyu_tool.py' executable.
   FIND                Command used as \`find' executable.
   MAKE                Command used as \`make' executable.
+  GIT                 Command used as \`git' executable.
 "
 
 # ---------------------------------------------------------------------------- #
@@ -62,6 +63,7 @@ usage() {
 : "${FIND:=find}"
 : "${IWYU_TOOL:=iwyu_tool.py}"
 : "${MAKE:=make}"
+: "${GIT:=git}"
 
 # ---------------------------------------------------------------------------- #
 
@@ -123,7 +125,7 @@ while [[ "$#" -gt 0 ]]; do
 		fi
 		_SOURCES+=("$1")
 		;;
-	-V | --verbose) _VERBOSE=: ;;
+	-v | --verbose) _VERBOSE=: ;;
 	-u | --usage)
 		usage
 		exit 0
@@ -132,7 +134,7 @@ while [[ "$#" -gt 0 ]]; do
 		usage -f
 		exit 0
 		;;
-	-v | --version)
+	-V | --version)
 		echo "$_version"
 		exit 0
 		;;
@@ -162,7 +164,10 @@ done
 
 # Set fallbacks.
 
-: "${_PROJECT_ROOT:=$PWD}"
+if [[ -z "${_PROJECT_ROOT:-}" ]]; then
+  _PROJECT_ROOT="$( $GIT rev-parse --show-toplevel; )"
+fi
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -201,7 +206,7 @@ if [[ "${#_SOURCES[@]}" -gt 0 ]]; then _iwyu_args+=("${_SOURCES[@]}"); fi
 # Add `--' separator to begin args for underlying `include-what-you-use' util.
 _iwyu_args+=(
 	--
-	-Xiwyu --mapping_file="$_PROJECT_ROOT/build-aux/iwyu-mappings.json"
+	-Xiwyu --mapping_file="$_PROJECT_ROOT/pkgdb/build-aux/iwyu-mappings.json"
 )
 
 # Add \`-Xiwyu' to all \`_extra_iwyu_args'.

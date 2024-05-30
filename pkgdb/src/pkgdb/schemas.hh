@@ -15,14 +15,19 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
-/* Holds metadata information about schema versions. */
+/* Holds various schema versions and metadata about the scraped packages held
+ * such as the rules hash used. */
 static const char * sql_versions = R"SQL(
 CREATE TABLE IF NOT EXISTS DbVersions (
   name     TEXT NOT NULL PRIMARY KEY
 , version  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS DbScrapeMeta (
+  key      TEXT NOT NULL PRIMARY KEY
+, value    TEXT NOT NULL
 )
 )SQL";
-
 
 /* -------------------------------------------------------------------------- */
 
@@ -119,8 +124,7 @@ CREATE VIEW IF NOT EXISTS v_AttrPaths AS
     UNION ALL SELECT O.id, O.parent
                    , O.attrName
                    , Parent.subtree
-                   , iif( ( Parent.system IS NULL ), O.attrName, Parent.system )
-                     AS system
+                   , COALESCE( Parent.system, O.attrName ) AS system
                    , json_insert( Parent.path, '$[#]', O.attrName ) AS path
     FROM AttrSets O INNER JOIN Tree as Parent ON ( Parent.id = O.parent )
   ) SELECT * FROM Tree;
@@ -131,8 +135,8 @@ CREATE VIEW IF NOT EXISTS v_Semvers AS SELECT
   semver
 , major
 , minor
-, ( iif( ( length( mPatch ) < 1 ), rest, mPatch ) ) AS patch
-, ( iif( ( length( mPatch ) < 1 ), NULL, rest ) )   AS preTag
+, CASE WHEN ( length( mPatch ) < 1 ) THEN rest ELSE mPatch END AS patch
+, CASE WHEN ( length( mPatch ) < 1 ) THEN NULL ELSE rest END   AS preTag
 FROM (
   SELECT semver
        , major
@@ -158,24 +162,17 @@ FROM (
 -- and categorizes versions into _types_.
 CREATE VIEW IF NOT EXISTS v_PackagesVersions AS SELECT
   Packages.id
-, iif( ( Packages.version IS NULL ), NULL
-  , iif( ( Packages.semver IS NOT NULL ), NULL
-       , iif( ( ( SELECT Packages.version = date( Packages.version ) )
-                IS NOT NULL )
-            , date( Packages.version ), NULL
-            )
-       )
-  ) AS versionDate
-, iif( ( Packages.version IS NULL ), 3
-     , iif( ( Packages.semver IS NOT NULL ), 0
-       , iif( ( ( SELECT Packages.version = date( Packages.version ) )
-                IS NOT NULL )
-            , 1
-            , 3
-            )
-       )
-     )
-  AS versionType
+, CASE WHEN Packages.version IS NULL    THEN NULL
+       WHEN Packages.semver IS NOT NULL THEN NULL
+       WHEN ( SELECT Packages.version = date( Packages.version ) )
+         THEN date( Packages.version )
+       ELSE NULL
+  END AS versionDate
+, CASE WHEN Packages.version IS NULL                               THEN 3
+       WHEN Packages.semver IS NOT NULL                            THEN 0
+       WHEN ( SELECT Packages.version = date( Packages.version ) ) THEN 1
+                                                                   ELSE 2
+  END AS versionType
 FROM Packages
 LEFT OUTER JOIN v_Semvers ON ( Packages.semver = v_Semvers.semver );
 
@@ -215,9 +212,15 @@ CREATE VIEW IF NOT EXISTS v_PackagesSearch AS SELECT
 , v_PackagesVersions.versionType
 , Packages.license
 , Packages.broken
-, iif( ( broken IS NULL ), 1, iif( broken, 2, 0 ) ) AS brokenRank
+, CASE WHEN broken IS NULL THEN 1
+       WHEN broken         THEN 2
+                           ELSE 0
+  END AS brokenRank
 , Packages.unfree
-, iif( ( unfree IS NULL ), 1, iif( unfree, 2, 0 ) ) AS unfreeRank
+, CASE WHEN unfree IS NULL THEN 1
+       WHEN unfree         THEN 2
+                           ELSE 0
+  END AS unfreeRank
 , Descriptions.description
 FROM Packages
 LEFT OUTER JOIN Descriptions ON ( Packages.descriptionId = Descriptions.id )

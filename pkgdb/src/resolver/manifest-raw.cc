@@ -124,14 +124,14 @@ from_json( const nlohmann::json & jfrom, Options::Semver & semver )
 {
   assertIsJSONObject<InvalidManifestFileException>(
     jfrom,
-    "manifest field `options.semver'" );
+    "manifest field 'options.semver'" );
 
   /* Clear fields. */
   semver.preferPreReleases = std::nullopt;
 
   for ( const auto & [key, value] : jfrom.items() )
     {
-      if ( key == "prefer-pre-releases" )
+      if ( key == "prefer-pre-releases" || key == "allow-pre-releases" )
         {
           try
             {
@@ -140,7 +140,7 @@ from_json( const nlohmann::json & jfrom, Options::Semver & semver )
           catch ( const nlohmann::json::exception & )
             {
               throw InvalidManifestFileException(
-                "failed to parse manifest field `options.semver."
+                "failed to parse manifest field 'options.semver."
                 "prefer-pre-releases' with value: "
                 + value.dump() );
             }
@@ -148,7 +148,7 @@ from_json( const nlohmann::json & jfrom, Options::Semver & semver )
       else
         {
           throw InvalidManifestFileException(
-            "unrecognized manifest field `options.semver." + key + "'." );
+            "unrecognized manifest field 'options.semver." + key + "'." );
         }
     }
 }
@@ -172,7 +172,7 @@ from_json( const nlohmann::json & jfrom, Options::Allows & allow )
 {
   assertIsJSONObject<InvalidManifestFileException>(
     jfrom,
-    "manifest field `options.allow'" );
+    "manifest field 'options.allow'" );
 
   /* Clear fields. */
   allow.licenses = std::nullopt;
@@ -190,7 +190,7 @@ from_json( const nlohmann::json & jfrom, Options::Allows & allow )
           catch ( const nlohmann::json::exception & )
             {
               throw InvalidManifestFileException(
-                "failed to parse manifest field `options.allow.unfree' "
+                "failed to parse manifest field 'options.allow.unfree' "
                 "with value: "
                 + value.dump() );
             }
@@ -204,7 +204,7 @@ from_json( const nlohmann::json & jfrom, Options::Allows & allow )
           catch ( const nlohmann::json::exception & )
             {
               throw InvalidManifestFileException(
-                "failed to parse manifest field `options.allow.broken' "
+                "failed to parse manifest field 'options.allow.broken' "
                 "with value: "
                 + value.dump() );
             }
@@ -218,7 +218,7 @@ from_json( const nlohmann::json & jfrom, Options::Allows & allow )
           catch ( const nlohmann::json::exception & )
             {
               throw InvalidManifestFileException(
-                "failed to parse manifest field `options.allow.licenses' "
+                "failed to parse manifest field 'options.allow.licenses' "
                 "with value: "
                 + value.dump() );
             }
@@ -226,7 +226,7 @@ from_json( const nlohmann::json & jfrom, Options::Allows & allow )
       else
         {
           throw InvalidManifestFileException(
-            "unrecognized manifest field `options.allow." + key + "'." );
+            "unrecognized manifest field 'options.allow." + key + "'." );
         }
     }
 }
@@ -253,7 +253,7 @@ from_json( const nlohmann::json & jfrom, Options & opts )
 {
   assertIsJSONObject<InvalidManifestFileException>(
     jfrom,
-    "manifest field `options'" );
+    "manifest field 'options'" );
 
   for ( const auto & [key, value] : jfrom.items() )
     {
@@ -266,7 +266,7 @@ from_json( const nlohmann::json & jfrom, Options & opts )
           catch ( const nlohmann::json::exception & )
             {
               throw InvalidManifestFileException(
-                "failed to parse manifest field `options.systems' with value: "
+                "failed to parse manifest field 'options.systems' with value: "
                 + value.dump() );
             }
         }
@@ -292,7 +292,7 @@ from_json( const nlohmann::json & jfrom, Options & opts )
             {
               throw InvalidManifestFileException(
                 "failed to parse manifest field "
-                "`options.package-grouping-strategy' with value: "
+                "'options.package-grouping-strategy' with value: "
                 + value.dump() );
             }
         }
@@ -306,14 +306,14 @@ from_json( const nlohmann::json & jfrom, Options & opts )
             {
               throw InvalidManifestFileException(
                 "failed to parse manifest field "
-                "`options.activation-strategy' with value: "
+                "'options.activation-strategy' with value: "
                 + value.dump() );
             }
         }
       else
         {
           throw InvalidManifestFileException(
-            "unrecognized manifest field `options." + key + "'." );
+            "unrecognized manifest field 'options." + key + "'." );
         }
     }
 }
@@ -349,7 +349,7 @@ GlobalManifestRaw::operator GlobalManifestRawGA() const
        && ( ( *this->registry ) != getGARegistry() ) )
     {
       throw InvalidManifestFileException(
-        "global manifest `registry' does not match the GA registry" );
+        "global manifest 'registry' does not match the GA registry" );
     }
   return GlobalManifestRawGA( this->options );
 }
@@ -369,7 +369,7 @@ from_json( const nlohmann::json & jfrom, GlobalManifestRaw & manifest )
       else
         {
           throw InvalidManifestFileException(
-            "unrecognized global manifest field: `" + key + "'." );
+            "unrecognized global manifest field: '" + key + "'." );
         }
     }
   manifest.check();
@@ -395,7 +395,7 @@ EnvBaseRaw::check() const
   if ( this->floxhub.has_value() && this->dir.has_value() )
     {
       throw InvalidManifestFileException(
-        "manifest may only define one of `env-base.floxhub' or `env-base.dir' "
+        "manifest may only define one of 'env-base.floxhub' or 'env-base.dir' "
         "fields." );
     }
 }
@@ -408,7 +408,7 @@ from_json( const nlohmann::json & jfrom, EnvBaseRaw & env )
 {
   assertIsJSONObject<InvalidManifestFileException>(
     jfrom,
-    "manifest field `env-base'" );
+    "manifest field 'env-base'" );
 
   /* Clear fields. */
   env.dir     = std::nullopt;
@@ -425,7 +425,7 @@ from_json( const nlohmann::json & jfrom, EnvBaseRaw & env )
           catch ( const nlohmann::json::exception & )
             {
               throw InvalidManifestFileException(
-                "failed to parse manifest field `env-base.floxhub' with value: "
+                "failed to parse manifest field 'env-base.floxhub' with value: "
                 + value.dump() );
             }
         }
@@ -438,14 +438,14 @@ from_json( const nlohmann::json & jfrom, EnvBaseRaw & env )
           catch ( const nlohmann::json::exception & )
             {
               throw InvalidManifestFileException(
-                "failed to parse manifest field `env-base.dir' with value: "
+                "failed to parse manifest field 'env-base.dir' with value: "
                 + value.dump() );
             }
         }
       else
         {
           throw InvalidManifestFileException(
-            "unrecognized manifest field `env-base." + key + "'." );
+            "unrecognized manifest field 'env-base." + key + "'." );
         }
     }
   env.check();
@@ -464,15 +464,90 @@ to_json( nlohmann::json & jto, const EnvBaseRaw & env )
 
 /* -------------------------------------------------------------------------- */
 
+void
+from_json( const nlohmann::json & jfrom, ProfileScriptsRaw & profile )
+{
+  assertIsJSONObject<InvalidManifestFileException>(
+    jfrom,
+    "manifest field 'profile'" );
+
+  /* Clear fields */
+  profile.common = std::nullopt;
+  profile.bash   = std::nullopt;
+  profile.zsh    = std::nullopt;
+
+  /* Iterate over keys of the JSON object */
+  for ( const auto & [key, value] : jfrom.items() )
+    {
+      if ( key == "common" )
+        {
+          try
+            {
+              value.get_to( profile.common );
+            }
+          catch ( const nlohmann::json::exception & )
+            {
+              throw InvalidManifestFileException(
+                "failed to parse manifest field 'profile.common' with value: "
+                + value.dump() );
+            }
+        }
+      else if ( key == "bash" )
+        {
+          try
+            {
+              value.get_to( profile.bash );
+            }
+          catch ( const nlohmann::json::exception & )
+            {
+              throw InvalidManifestFileException(
+                "failed to parse manifest field 'profile.bash' with value: "
+                + value.dump() );
+            }
+        }
+      else if ( key == "zsh" )
+        {
+          try
+            {
+              value.get_to( profile.zsh );
+            }
+          catch ( const nlohmann::json::exception & )
+            {
+              throw InvalidManifestFileException(
+                "failed to parse manifest field 'profile.zsh' with value: "
+                + value.dump() );
+            }
+        }
+      else
+        {
+          throw InvalidManifestFileException(
+            "unrecognized shell specific profile in manifest 'profile." + key
+            + "'." );
+        }
+    }
+}
+
 static void
+to_json( nlohmann::json & jto, const ProfileScriptsRaw & profile )
+{
+  jto = nlohmann::json::object();
+  if ( profile.common.has_value() ) { jto["common"] = profile.common.value(); }
+  if ( profile.bash.has_value() ) { jto["bash"] = profile.bash.value(); }
+  if ( profile.zsh.has_value() ) { jto["zsh"] = profile.zsh.value(); }
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+void
 from_json( const nlohmann::json & jfrom, HookRaw & hook )
 {
   assertIsJSONObject<InvalidManifestFileException>( jfrom,
-                                                    "manifest field `hook'" );
+                                                    "manifest field 'hook'" );
 
   /* Clear fields. */
-  hook.file   = std::nullopt;
-  hook.script = std::nullopt;
+  hook.script     = std::nullopt;
+  hook.onActivate = std::nullopt;
 
   for ( const auto & [key, value] : jfrom.items() )
     {
@@ -485,27 +560,27 @@ from_json( const nlohmann::json & jfrom, HookRaw & hook )
           catch ( const nlohmann::json::exception & )
             {
               throw InvalidManifestFileException(
-                "failed to parse manifest field `hook.script' with value: "
+                "failed to parse manifest field 'hook.script' with value: "
                 + value.dump() );
             }
         }
-      else if ( key == "file" )
+      else if ( key == "on-activate" )
         {
           try
             {
-              value.get_to( hook.file );
+              value.get_to( hook.onActivate );
             }
           catch ( const nlohmann::json::exception & )
             {
               throw InvalidManifestFileException(
-                "failed to parse manifest field `hook.file' with value: "
+                "failed to parse manifest field 'hook.on-activate' with value: "
                 + value.dump() );
             }
         }
       else
         {
           throw InvalidManifestFileException(
-            "unrecognized manifest field `hook." + key + "'." );
+            "unrecognized manifest field 'hook." + key + "'." );
         }
     }
 
@@ -517,8 +592,11 @@ static void
 to_json( nlohmann::json & jto, const HookRaw & hook )
 {
   hook.check();
-  if ( hook.file.has_value() ) { jto = { { "file", *hook.file } }; }
-  else if ( hook.script.has_value() ) { jto = { { "script", *hook.script } }; }
+  if ( hook.script.has_value() ) { jto = { { "script", *hook.script } }; }
+  else if ( hook.onActivate.has_value() )
+    {
+      jto = { { "on-activate", *hook.onActivate } };
+    }
   else { jto = nlohmann::json::object(); }
 }
 
@@ -528,10 +606,11 @@ to_json( nlohmann::json & jto, const HookRaw & hook )
 void
 HookRaw::check() const
 {
-  if ( this->script.has_value() && this->file.has_value() )
+  if ( this->script.has_value() && this->onActivate.has_value() )
     {
       throw InvalidManifestFileException(
-        "hook may only define one of `hook.script' or `hook.file' fields." );
+        "hook may only define one of 'hook.script' or `hook.on-activate` "
+        "fields." );
     }
 }
 
@@ -541,7 +620,7 @@ HookRaw::check() const
 static std::unordered_map<std::string, std::optional<ManifestDescriptorRaw>>
 installFromJSON( const nlohmann::json & install )
 {
-  assertIsJSONObject( install, "manifest field `install'" );
+  assertIsJSONObject( install, "manifest field 'install'" );
   std::unordered_map<std::string, std::optional<ManifestDescriptorRaw>> result;
   for ( const auto & [name, desc] : install.items() )
     {
@@ -555,7 +634,7 @@ installFromJSON( const nlohmann::json & install )
           catch ( const nlohmann::json::exception & )
             {
               throw InvalidManifestFileException(
-                "failed to parse field `install." + name
+                "failed to parse field 'install." + name
                 + "' with value: " + desc.dump() );
             }
         }
@@ -570,7 +649,7 @@ static std::unordered_map<std::string, std::string>
 varsFromJSON( const nlohmann::json & jfrom )
 {
   assertIsJSONObject<InvalidManifestFileException>( jfrom,
-                                                    "manifest field `vars'" );
+                                                    "manifest field 'vars'" );
   std::unordered_map<std::string, std::string> vars;
   for ( const auto & [key, value] : jfrom.items() )
     {
@@ -581,7 +660,7 @@ varsFromJSON( const nlohmann::json & jfrom )
         }
       catch ( const nlohmann::json::exception & err )
         {
-          throw InvalidManifestFileException( "failed to parse field `vars."
+          throw InvalidManifestFileException( "failed to parse field 'vars."
                                               + key + "' with value: "
                                               + value.dump() );
         }
@@ -632,12 +711,13 @@ from_json( const nlohmann::json & jfrom, ManifestRaw & manifest )
             }
           manifest.vars = varsFromJSON( value );
         }
+      else if ( key == "profile" ) { value.get_to( manifest.profile ); }
       else if ( key == "hook" ) { value.get_to( manifest.hook ); }
       else if ( key == "options" ) { value.get_to( manifest.options ); }
       else if ( key == "env-base" ) { value.get_to( manifest.envBase ); }
       else
         {
-          throw InvalidManifestFileException( "unrecognized manifest field: `"
+          throw InvalidManifestFileException( "unrecognized manifest field: '"
                                               + key + "'." );
         }
     }
@@ -660,6 +740,8 @@ to_json( nlohmann::json & jto, const ManifestRaw & manifest )
   if ( manifest.registry.has_value() ) { jto["registry"] = *manifest.registry; }
 
   if ( manifest.vars.has_value() ) { jto["vars"] = *manifest.vars; }
+
+  if ( manifest.profile.has_value() ) { jto["profile"] = *manifest.profile; }
 
   if ( manifest.hook.has_value() ) { jto["hook"] = *manifest.hook; }
 }
@@ -687,7 +769,7 @@ ManifestRaw::check() const
           if ( input.getFlakeRef()->input.getType() == "indirect" )
             {
               throw InvalidManifestFileException(
-                "manifest `registry.inputs." + name
+                "manifest 'registry.inputs." + name
                 + ".from.type' may not be \"indirect\"." );
             }
         }
@@ -717,7 +799,7 @@ from_json( const nlohmann::json & jfrom, GlobalManifestRawGA & manifest )
       else
         {
           throw InvalidManifestFileException(
-            "unrecognized global manifest field: `" + key + "'." );
+            "unrecognized global manifest field: '" + key + "'." );
         }
     }
   manifest.check();
@@ -765,7 +847,7 @@ from_json( const nlohmann::json & jfrom, ManifestRawGA & manifest )
       else if ( key == "options" ) { value.get_to( manifest.options ); }
       else
         {
-          throw InvalidManifestFileException( "unrecognized manifest field: `"
+          throw InvalidManifestFileException( "unrecognized manifest field: '"
                                               + key + "'." );
         }
     }

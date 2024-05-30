@@ -1,11 +1,9 @@
 {
-  self,
   gcc,
   runCommandCC,
   stdenv,
-  darwin,
   lib,
-  bash,
+  bashInteractive,
   zsh,
   dash,
   bats,
@@ -23,9 +21,10 @@
   gnutar,
   jq,
   nix,
-  nix-serve,
+  yq,
   openssh,
   parallel,
+  podman,
   unixtools,
   which,
   writeShellScriptBin,
@@ -33,6 +32,7 @@
   PROJECT_TESTS_DIR ? ./../../cli/tests,
   NIX_BIN ? "${nix}/bin/nix",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
+  LD_FLOXLIB ? "${flox-pkgdb}/lib/ld-floxlib.so",
   FLOX_BIN ? "${flox-cli}/bin/flox",
 }: let
   batsWith = bats.withLibraries (p: [
@@ -43,7 +43,7 @@
 
   paths =
     [
-      bash
+      bashInteractive
       zsh
       dash
       batsWith
@@ -58,11 +58,11 @@
       gnused
       gnutar
       jq
-      nix-serve
       openssh
       parallel
       unixtools.util-linux
       which
+      yq
     ]
     # TODO: this hack is not going to be needed once we test against sutff on system
     ++ lib.optional stdenv.isDarwin (
@@ -79,7 +79,13 @@
         mkdir -p "$out/bin"
         echo "$source" | gcc -Wall -o "$out/bin/$name" -xc -
       ''
-    );
+    )
+    # Containerize tests need a container runtime.
+    # Since we're building and building only works on linux,
+    # we only include podman on linux.
+    ++ lib.optionals stdenv.isLinux [
+      podman
+    ];
 in
   # TODO: we should run tests against different shells
   writeShellScriptBin PROJECT_NAME ''
@@ -124,8 +130,13 @@ in
     }
     ${
       if PKGDB_BIN == null
-      then "export PKGDB_BIN='pkgdb';"
+      then ''export PKGDB_BIN="$(command -v pkgdb)";''
       else "export PKGDB_BIN='${PKGDB_BIN}';"
+    }
+    ${
+      if LD_FLOXLIB == null
+      then "export LD_FLOXLIB='ld-floxlib.so';"
+      else "export LD_FLOXLIB='${LD_FLOXLIB}';"
     }
     ${
       if FLOX_BIN == null
@@ -145,6 +156,7 @@ in
     Available options:
         -F, --flox          Path to flox binary (Default: $FLOX_BIN)
         -P, --pkgdb         Path to pkgdb binary (Default: $PKGDB_BIN)
+        -L, --ld-floxlib    Path to ld-floxlib.so (Default: $LD_FLOXLIB)
         -N, --nix           Path to nix binary (Default: $NIX_BIN)
         -T, --tests         Path to folder of tests (Default: $PROJECT_TESTS_DIR)
         -W, --watch         Run tests in a continuous watch mode
@@ -160,6 +172,7 @@ in
       case "$1" in
         -[fF]|--flox)         export FLOX_BIN="''${2?}"; shift; ;;
         -[pP]|--pkgdb)        export PKGDB_BIN="''${2?}"; shift; ;;
+        -[lL]|--ld-floxlib)   export LD_FLOXLIB="''${2?}"; shift; ;;
         -[nN]|--nix)          export NIX_BIN="''${2?}"; shift; ;;
         -[tT]|--tests)        export TESTS_DIR="''${2?}"; shift; ;;
         -[wW]|--watch)        WATCH=:; ;;
@@ -200,6 +213,7 @@ in
       echo "  FLOX_BIN:                 $FLOX_BIN";
       echo "  PKGDB_BIN:                $PKGDB_BIN";
       echo "  NIX_BIN:                  $NIX_BIN";
+      echo "  LD_FLOXLIB:               $LD_FLOXLIB";
       echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
       echo "  bats                      ${batsWith}/bin/bats";
       echo "  bats options              ''${_BATS_ARGS[*]}";
@@ -208,7 +222,7 @@ in
 
     # Run basts either via entr or just a single run
     if [[ -n "''${WATCH:-}" ]]; then
-      find "$TESTS_DIR" "$NIX_BIN" "$PKGDB_BIN" "$FLOX_BIN"                  \
+      find "$TESTS_DIR" "$NIX_BIN" "$PKGDB_BIN" "$LD_FLOXLIB" "$FLOX_BIN"    \
         |${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
     else
       exec -a "$0" ${batsWith}/bin/bats "''${_BATS_ARGS[@]}"    \

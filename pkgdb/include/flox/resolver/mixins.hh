@@ -236,6 +236,8 @@ protected:
 
 public:
 
+  virtual ~EnvironmentMixin() = default;
+
   /** @brief Get raw global manifest ( if any ). */
   [[nodiscard]] const std::optional<GlobalManifestRaw> &
   getGlobalManifestRaw()
@@ -375,6 +377,8 @@ protected:
 
 
 public:
+
+  ~GAEnvironmentMixin() override = default;
 
   /**
    * @brief Hard codes a manifest with only `github:NixOS/nixpkgs/release-23.05`

@@ -37,13 +37,13 @@ namespace flox::resolver {
 #define ENV_MIXIN_THROW_IF_SET( member )                              \
   if ( this->member.has_value() )                                     \
     {                                                                 \
-      throw EnvironmentMixinException( "`" #member                    \
+      throw EnvironmentMixinException( "'" #member                    \
                                        "' was already initialized" ); \
     }                                                                 \
   if ( this->environment.has_value() )                                \
     {                                                                 \
       throw EnvironmentMixinException(                                \
-        "`" #member "' cannot be initialized after `environment'" );  \
+        "'" #member "' cannot be initialized after 'environment'" );  \
     }
 
 
@@ -273,7 +273,7 @@ EnvironmentMixin::addGlobalManifestFileOption(
   argparse::ArgumentParser & parser )
 {
   return parser.add_argument( "--global-manifest" )
-    .help( "the path to the user's global `manifest.{toml,yaml,json}' file." )
+    .help( "the path to the user's global 'manifest.{toml,yaml,json}' file." )
     .metavar( "PATH" )
     .action( [&]( const std::string & strPath )
              { this->setGlobalManifestRaw( nix::absPath( strPath ) ); } );
@@ -286,7 +286,7 @@ argparse::Argument &
 EnvironmentMixin::addManifestFileOption( argparse::ArgumentParser & parser )
 {
   return parser.add_argument( "--manifest" )
-    .help( "the path to the `manifest.{toml,yaml,json}' file." )
+    .help( "the path to the 'manifest.{toml,yaml,json}' file." )
     .metavar( "PATH" )
     .action( [&]( const std::string & strPath )
              { this->setManifestRaw( nix::absPath( strPath ) ); } );
@@ -301,8 +301,9 @@ EnvironmentMixin::addManifestFileArg( argparse::ArgumentParser & parser,
 {
   argparse::Argument & arg
     = parser.add_argument( "--manifest" )
-        .help( "the path to the project's `manifest.{toml,yaml,json}' file." )
+        .help( "the path to the project's 'manifest.{toml,yaml,json}' file." )
         .metavar( "PATH" )
+        .nargs( 1 )
         .action( [&]( const std::string & strPath )
                  { this->setManifestRaw( nix::absPath( strPath ) ); } );
   return required ? arg.required() : arg;
@@ -315,9 +316,10 @@ argparse::Argument &
 EnvironmentMixin::addLockfileOption( argparse::ArgumentParser & parser )
 {
   return parser.add_argument( "--lockfile" )
-    .help( "the path to a lockfile, either the project's `manifest.lock` or "
+    .help( "the path to a lockfile, either the project's 'manifest.lock' or "
            "the global lock" )
     .metavar( "PATH" )
+    .nargs( 1 )
     .action( [&]( const std::string & strPath )
              { this->setLockfileRaw( nix::absPath( strPath ) ); } );
 }
@@ -328,8 +330,8 @@ argparse::Argument &
 EnvironmentMixin::addFloxDirectoryOption( argparse::ArgumentParser & parser )
 {
   return parser.add_argument( "--dir", "-d" )
-    .help( "the directory to search for `manifest.{json,yaml,toml}' and "
-           "`manifest.lock`." )
+    .help( "the directory to search for 'manifest.{json,yaml,toml}' and "
+           "'manifest.lock'." )
     .metavar( "PATH" )
     .nargs( 1 )
     .action(
@@ -359,7 +361,7 @@ EnvironmentMixin::addFloxDirectoryOption( argparse::ArgumentParser & parser )
         else
           {
             throw EnvironmentMixinException(
-              "unable to locate a `manifest.{json,yaml,toml}' file "
+              "unable to locate a 'manifest.{json,yaml,toml}' file "
               "in directory: "
               + strPath );
           }
@@ -408,7 +410,7 @@ argparse::Argument &
 GAEnvironmentMixin::addGARegistryOption( argparse::ArgumentParser & parser )
 {
   return parser.add_argument( "--ga-registry" )
-    .help( "use a hard coded manifest ( for `flox' GA )." )
+    .help( "use a hard coded manifest ( for 'flox' GA )." )
     .nargs( 0 )
     .action( [&]( const auto & ) { this->gaRegistry = true; } );
 }

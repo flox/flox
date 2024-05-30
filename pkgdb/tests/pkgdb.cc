@@ -36,7 +36,9 @@
 #include "flox/core/types.hh"
 #include "flox/flox-flake.hh"
 #include "flox/pkgdb/db-package.hh"
+#include "flox/pkgdb/input.hh"
 #include "flox/pkgdb/pkg-query.hh"
+#include "flox/pkgdb/scrape-rules.hh"
 #include "flox/pkgdb/write.hh"
 #include "test.hh"
 
@@ -54,6 +56,24 @@ static const nlohmann::json pkgDescriptorBaseRaw = R"( {
   "semver": "semver"
 } )"_json;
 
+/* -------------------------------------------------------------------------- */
+
+static const std::string_view rulesJSON = R"( {
+  "allowRecursive": [
+    ["legacyPackages", null, "darwin"],
+    ["legacyPackages", null, "swiftPackages", "darwin"]
+  ],
+  "disallowRecursive": [
+    ["legacyPackages", null, "emacsPackages"],
+    ["legacyPackages", null, "python310Packages"]
+  ],
+ "allowPackage": [
+   ["legacyPackages", null, "python310Packages", "pip"]
+ ],
+ "disallowPackage": [
+   ["legacyPackages", null, "gcc"]
+ ]
+} )";
 
 /* -------------------------------------------------------------------------- */
 
@@ -296,7 +316,7 @@ test_PkgQuery0( flox::pkgdb::PkgDb & db )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
   cmd.bind( ":descriptionId", static_cast<long long>( desc ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Package 'hello':(%d) %s",
@@ -386,7 +406,7 @@ test_PkgQuery1( flox::pkgdb::PkgDb & db )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
   cmd.bind( ":descriptionId", static_cast<long long>( desc ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -462,24 +482,29 @@ test_PkgQuery2( flox::pkgdb::PkgDb & db )
     = db.addOrGetDescriptionId( "A program with a friendly hello" );
   row_id descFarewell
     = db.addOrGetDescriptionId( "A program with a friendly farewell" );
+  row_id descSpecial = db.addOrGetDescriptionId(
+    "A program with %%too%% 'many' [special] *chars*" );
   sqlite3pp::command cmd( db.db, R"SQL(
     INSERT INTO Packages (
       parentId, attrName, name, pname, outputs, descriptionId
     ) VALUES
       ( :parentId, 'pkg0', 'hello-2.12.1', 'hello', '["out"]', :descGreetId
       )
-    , ( :parentId, 'pkg1', 'goodbye-2.12.1', 'goodbye'
+    , ( :parentId, 'pkg1', 'woofoo_2.12.1', 'woofoo_[*]', '["out"]', :descSpecialId
+      )
+    , ( :parentId, 'pkg2', 'goodbye-2.12.1', 'goodbye'
       , '["out"]', :descFarewellId
       )
-    , ( :parentId, 'pkg2', 'hola-2.12.1', 'hola', '["out"]', :descGreetId
+    , ( :parentId, 'pkg3', 'hola-2.12.1', 'hola', '["out"]', :descGreetId
       )
-    , ( :parentId, 'pkg3', 'ciao-2.12.1', 'ciao', '["out"]', :descFarewellId
+    , ( :parentId, 'pkg4', 'ciao-2.12.1', 'ciao', '["out"]', :descFarewellId
       )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
   cmd.bind( ":descGreetId", static_cast<long long>( descGreet ) );
   cmd.bind( ":descFarewellId", static_cast<long long>( descFarewell ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  cmd.bind( ":descSpecialId", static_cast<long long>( descSpecial ) );
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -487,76 +512,49 @@ test_PkgQuery2( flox::pkgdb::PkgDb & db )
   flox::pkgdb::PkgQueryArgs qargs;
   qargs.systems = std::vector<std::string> { "x86_64-linux" };
 
-  /* Run `partialMatch = "hello"' query */
+  // lambda to perform a search and check match results
+  // exMatches is a vect of bools of the expected state of
+  //    matchExactPname, matchPartialPname, matchPartialDescription respectively
+  auto matchTest = [&qargs, &db]( std::string                    matchString,
+                                  std::vector<std::vector<bool>> exMatches )
   {
-    qargs.partialMatch = "hello";
+    qargs.partialMatch = matchString;
     flox::pkgdb::PkgQuery qry(
       qargs,
       std::vector<std::string> { "matchExactPname",
+                                 "matchPartialPname",
                                  "matchPartialDescription" } );
     qargs.partialMatch = std::nullopt;
     size_t count       = 0;
     auto   bound       = qry.bind( db.db );
     for ( const auto & row : *bound )
       {
+        EXPECT( exMatches.size() > count );
+        for ( int i : { 0, 1, 2 } )
+          {
+            EXPECT_EQ( row.get<bool>( i ), exMatches[count][i] );
+          }
         ++count;
-        if ( count == 1 )
-          {
-            EXPECT( row.get<bool>( 0 ) );
-            EXPECT( row.get<bool>( 1 ) );
-          }
-        else
-          {
-            EXPECT( ! row.get<bool>( 0 ) );
-            EXPECT( row.get<bool>( 1 ) );
-          }
       }
-    EXPECT_EQ( count, std::size_t( 2 ) );
-  }
+    EXPECT_EQ( count, std::size_t( exMatches.size() ) );
+    return true;
+  };
 
-  /* Run `partialMatch = "farewell"' query */
-  {
-    qargs.partialMatch = "farewell";
-    flox::pkgdb::PkgQuery qry(
-      qargs,
-      std::vector<std::string> { "matchPartialDescription" } );
-    qargs.partialMatch = std::nullopt;
-    size_t count       = 0;
-    auto   bound       = qry.bind( db.db );
-    for ( const auto & row : *bound )
-      {
-        ++count;
-        EXPECT( row.get<bool>( 0 ) );
-      }
-    EXPECT_EQ( count, std::size_t( 2 ) );
-  }
+  EXPECT( matchTest( "farewell", { { 0, 0, 1 }, { 0, 0, 1 } } ) );
+  EXPECT( matchTest( "hel", { { 0, 1, 1 }, { 0, 0, 1 } } ) );
+  EXPECT( matchTest( "hello", { { 1, 1, 1 }, { 0, 0, 1 } } ) );
+  EXPECT( matchTest( "hell_", {} ) );
+  EXPECT( matchTest( "hell%", {} ) );
+  EXPECT( matchTest( "woofoo_[*]", { { 1, 1, 0 } } ) );
+  EXPECT( matchTest( "woofoo_[*", { { 0, 1, 0 } } ) );
+  EXPECT( matchTest( "woofoo_", { { 0, 1, 0 } } ) );
+  EXPECT( matchTest( "'many", { { 0, 0, 1 } } ) );
+  EXPECT( matchTest( "ial] *ch", { { 0, 0, 1 } } ) );
+  EXPECT( matchTest( "%%too", { { 0, 0, 1 } } ) );
 
-  /* Run `partialMatch = "hel"' query */
-  {
-    qargs.partialMatch = "hel";
-    flox::pkgdb::PkgQuery qry(
-      qargs,
-      std::vector<std::string> { "matchPartialPname",
-                                 "matchPartialDescription" } );
-    qargs.partialMatch = std::nullopt;
-    size_t count       = 0;
-    auto   bound       = qry.bind( db.db );
-    for ( const auto & row : *bound )
-      {
-        ++count;
-        if ( count == 1 )
-          {
-            EXPECT( row.get<bool>( 0 ) );
-            EXPECT( row.get<bool>( 1 ) );
-          }
-        else
-          {
-            EXPECT( ! row.get<bool>( 0 ) );
-            EXPECT( row.get<bool>( 1 ) );
-          }
-      }
-    EXPECT_EQ( count, std::size_t( 2 ) );
-  }
+  // = db.addOrGetDescriptionId( "A program with \%too\% 'many' [special]
+  // *chars*" ); ( :parentId, 'pkg0', 'woofoo-2.12.1', 'foo[*]', '["out"]',
+  // :descSpecialId
 
   /* Run `pnameOrAttrName = "hello"' query, which matches pname */
   {
@@ -639,7 +637,7 @@ test_getPackages0( flox::pkgdb::PkgDb & db )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
   cmd.bind( ":descriptionId", static_cast<long long>( desc ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -709,7 +707,7 @@ test_getPackages1( flox::pkgdb::PkgDb & db )
   cmd.bind( ":packagesLinuxId", static_cast<long long>( packagesLinux ) );
   cmd.bind( ":legacyDarwinId", static_cast<long long>( legacyDarwin ) );
   cmd.bind( ":packagesDarwinId", static_cast<long long>( packagesDarwin ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -780,7 +778,7 @@ test_getPackages2( flox::pkgdb::PkgDb & db )
       , '["out"]' )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -827,7 +825,7 @@ test_DbPackage0( flox::pkgdb::PkgDb & db )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
   cmd.bind( ":descriptionId", static_cast<long long>( desc ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -896,7 +894,7 @@ test_getPackages_semver0( flox::pkgdb::PkgDb & db )
   )SQL" );
   cmd.bind( ":parentId", static_cast<long long>( linux ) );
   cmd.bind( ":descriptionId", static_cast<long long>( desc ) );
-  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::pkgdb::isSQLError( rc ) )
+  if ( flox::pkgdb::sql_rc rc = cmd.execute(); flox::isSQLError( rc ) )
     {
       throw flox::pkgdb::PkgDbException(
         nix::fmt( "Failed to write Packages:(%d) %s", rc, db.db.error_msg() ) );
@@ -964,6 +962,225 @@ test_getPackages_semver0( flox::pkgdb::PkgDb & db )
   return true;
 }
 
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Ensure parsing @a flox::pkgdb::RulesTreeNode from JSON doesn't throw.
+ */
+bool
+test_RulesTree_parse0()
+{
+  flox::pkgdb::ScrapeRules rules( rulesJSON );
+  return true;
+}
+
+/**
+ * @brief Ensure the hash is generated for the rules and is deterministic.
+ */
+bool
+test_RulesTree_hash()
+{
+  flox::pkgdb::ScrapeRules rules( rulesJSON );
+  auto                     hashStr = rules.hashString();
+  EXPECT_EQ( hashStr, "md5:9d81a5b907db9b19cc84ba41af36150b" );
+  return true;
+}
+
+bool
+test_RulesTree_parse0_badRules()
+{
+  const nlohmann::json badRulesJSON = R"( {
+    "allowRecursive": [
+      ["legacyPackages", null, "darwin"],
+      ["legacyPackages", null, null, "darwin"]
+    ]
+  } )"_json;
+
+  try
+    {
+      flox::pkgdb::RulesTreeNode rules(
+        badRulesJSON.get<flox::pkgdb::ScrapeRulesRaw>() );
+    }
+  catch ( const flox::FloxException & err )
+    {
+      /* expect this to be thown on account of a bad rule. */
+      return true;
+    }
+  return false;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Ensure parsing @a flox::pkgdb::RulesTreeNode from JSON sets the
+ *        expected fields.
+ */
+bool
+test_RulesTree_parse1()
+{
+  flox::pkgdb::ScrapeRules     scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode   rulesRoot = scrapeRules.getRootNode();
+  flox::pkgdb::RulesTreeNode * node      = &rulesRoot;
+  flox::AttrPath path = { "legacyPackages", "x86_64-linux", "darwin" };
+  for ( const std::string & attr : path )
+    {
+      if ( node->children.find( attr ) == node->children.end() )
+        {
+          EXPECT_FAIL( "RulesTreeNode missing child `" + attr + '\'' );
+        }
+      node = &node->children.at( attr );
+    }
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/** @brief Ensure that a path without a rule uses the _default_ rule. */
+bool
+test_RulesTree_getRule_fallback0()
+{
+  flox::pkgdb::ScrapeRules   scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode rulesRoot = scrapeRules.getRootNode();
+  flox::pkgdb::ScrapeRule    rule
+    = rulesRoot.getRule( flox::AttrPath { "phony" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/** @brief Ensure `null` glob works for all systems. */
+bool
+test_RulesTree_getRule0()
+{
+  flox::pkgdb::ScrapeRules   scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode rulesRoot = scrapeRules.getRootNode();
+
+  flox::pkgdb::ScrapeRule rule
+    = rulesRoot.getRule( flox::AttrPath { "legacyPackages", "x86_64-linux" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_DEFAULT );
+
+  rule = rulesRoot.getRule(
+    flox::AttrPath { "legacyPackages", "x86_64-linux", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+
+  rule = rulesRoot.getRule(
+    flox::AttrPath { "legacyPackages", "x86_64-darwin", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+
+  rule = rulesRoot.getRule(
+    flox::AttrPath { "legacyPackages", "aarch64-linux", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+
+  rule = rulesRoot.getRule(
+    flox::AttrPath { "legacyPackages", "aarch64-darwin", "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+
+  rule = rulesRoot.getRule( flox::AttrPath { "legacyPackages",
+                                             "aarch64-darwin",
+                                             "swiftPackages",
+                                             "darwin" } );
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_RECURSIVE );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Ensure nested `allowPackage` under `disallowRecursive` is preserved.
+ */
+bool
+test_RulesTree_getRule1()
+{
+  flox::pkgdb::ScrapeRules   scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode rulesRoot = scrapeRules.getRootNode();
+
+  flox::pkgdb::ScrapeRule rule = rulesRoot.children.at( "legacyPackages" )
+                                   .children.at( "x86_64-linux" )
+                                   .children.at( "python310Packages" )
+                                   .children.at( "pip" )
+                                   .rule;
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_PACKAGE );
+
+  flox::pkgdb::ScrapeRule rule2
+    = rulesRoot.getRule( flox::AttrPath { "legacyPackages",
+                                          "x86_64-linux",
+                                          "python310Packages",
+                                          "pip" } );
+  EXPECT_EQ( rule2, flox::pkgdb::SR_ALLOW_PACKAGE );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ *  @brief Ensure @a flox::pkgdb::RulesTreeNode::getRule() does not _inherit_
+ *         parent rules.
+ *
+ * Inheritance is the responsibility of
+ * @a flox::pkgdb::RulesTreeNode::applyRules(), while `getRule()` should return
+ * the *exact* value of @a rule at an attribute path.
+ */
+bool
+test_RulesTree_getRule2()
+{
+  flox::pkgdb::ScrapeRules   scrapeRules( rulesJSON );
+  flox::pkgdb::RulesTreeNode rulesRoot = scrapeRules.getRootNode();
+
+  flox::pkgdb::ScrapeRule rule = rulesRoot.children.at( "legacyPackages" )
+                                   .children.at( "x86_64-linux" )
+                                   .children.at( "python310Packages" )
+                                   .children.at( "pip" )
+                                   .rule;
+  EXPECT_EQ( rule, flox::pkgdb::SR_ALLOW_PACKAGE );
+
+  flox::pkgdb::ScrapeRule rule2
+    = rulesRoot.getRule( flox::AttrPath { "legacyPackages",
+                                          "x86_64-linux",
+                                          "python310Packages",
+                                          "pip" } );
+  EXPECT_EQ( rule2, flox::pkgdb::SR_ALLOW_PACKAGE );
+
+  flox::pkgdb::ScrapeRule rule3
+    = rulesRoot.getRule( flox::AttrPath { "legacyPackages",
+                                          "x86_64-linux",
+                                          "swiftPackages",
+                                          "darwin" } );
+  EXPECT_EQ( rule3, flox::pkgdb::SR_ALLOW_RECURSIVE );
+  return true;
+}
+
+bool
+test_scrapeMemoryUse()
+{
+  using flox::pkgdb::PkgDbInput;
+  const char * envVar              = "FLOX_AVAILABLE_MEMORY";
+  const char * existingMemOverride = getenv( envVar );
+
+  // Using discovered 'available memory' shall be within the min and max
+  // defined.
+  size_t pageSize = PkgDbInput::getScrapingPageSize();
+  EXPECT( pageSize >= PkgDbInput::minPageSize
+          && pageSize <= PkgDbInput::maxPageSize );
+
+  // Limit to lower bound for 1GB availble memory
+  setenv( envVar, std::to_string( 1 * 1024 * 1024 ).c_str(), 1 );
+  EXPECT( PkgDbInput::getScrapingPageSize() == PkgDbInput::minPageSize );
+
+  // Limit to upper bound for 8GB available memory
+  setenv( envVar, std::to_string( 8 * 1024 * 1024 ).c_str(), 1 );
+  EXPECT( PkgDbInput::getScrapingPageSize() == PkgDbInput::maxPageSize );
+
+  // Clear this out for the remainder of the process
+  if ( existingMemOverride ) { setenv( envVar, existingMemOverride, 1 ); }
+  else { unsetenv( envVar ); }
+  return true;
+}
 
 /* -------------------------------------------------------------------------- */
 
@@ -978,7 +1195,10 @@ main( int argc, char * argv[] )
     {
       nix::verbosity = nix::lvlDebug;
     }
-
+  else if ( ( 1 < argc ) && ( std::string_view( argv[1] ) == "-vv" ) )
+    {
+      nix::verbosity = nix::lvlVomit;
+    }
   /* Initialize `nix' */
   flox::NixState nstate;
 
@@ -1020,6 +1240,17 @@ main( int argc, char * argv[] )
     RUN_TEST( DbPackage0, db );
 
     RUN_TEST( getPackages_semver0, db );
+
+    RUN_TEST( scrapeMemoryUse );
+
+    RUN_TEST( RulesTree_parse0 );
+    RUN_TEST( RulesTree_parse0_badRules );
+    RUN_TEST( RulesTree_parse1 );
+    RUN_TEST( RulesTree_getRule_fallback0 );
+    RUN_TEST( RulesTree_getRule0 );
+    RUN_TEST( RulesTree_getRule1 );
+    RUN_TEST( RulesTree_getRule2 );
+    RUN_TEST( RulesTree_hash );
   }
 
   /* XXX: You may find it useful to preserve the file and print it for some

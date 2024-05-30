@@ -1,0 +1,20 @@
+[package]
+name = "catalog-api-v1"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+futures.workspace = true
+progenitor-client.workspace = true
+reqwest = { workspace = true, features = ["json", "stream"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+chrono.workspace = true
+regress.workspace = true
+
+[build-dependencies]
+prettyplease.workspace = true
+progenitor.workspace = true
+serde_json.workspace = true
+syn.workspace = true
+openapiv3.workspace = true

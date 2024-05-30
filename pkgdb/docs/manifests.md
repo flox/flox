@@ -76,12 +76,12 @@ Hook ::= {
 Descriptor ::= {
   name               = null | <STRING>
 , optional           = null | <BOOL>
-, package-group      = null | <STRING>
+, pkg-group          = null | <STRING>
 , version            = null | <STRING>
 , semver             = null | <STRING>
 , systems            = null | [<STRING>, ...]
 , path               = null | <STRING> | [<STRING>, ...]
-, abs-path           = null | <STRING> | [<STRING>, ...]
+, abspath           = null | <STRING> | [<STRING>, ...]
 , package-repository = null | <STRING> | FlakeAttrs
 , priority           = null | <INT>
 }
@@ -107,7 +107,7 @@ Fields:
     - Maps to `flox::pkgdb::PkgQueryArgs::pnameOrAttrName`.
   - `optional`: Whether resolution of this package is allowed to fail without producing an error.
     - The default value is `false`, and is used when the attribute is missing or `null`.
-  - `package-group`: Resolve all packages within this group to a single revision of the input they are found in.
+  - `pkg-group`: Resolve all packages within this group to a single revision of the input they are found in.
   - `version`: Match the version of the package.
     - A `version` whose first character is `=` will attempt to match exactly during resolution.
     - All other `version` strings will attempt to match a semantic version range.
@@ -116,7 +116,7 @@ Fields:
   - `systems`: A list of systems on which to resolve this package.
     - When omitted or `null` only the current system is used for resolution.
   - `path`: Match a relative path within the registry input.
-  - `abs-path`: Match an exact path within the registry input.
+  - `abspath`: Match an exact path within the registry input.
   - `package-repository`: The named registry input or flake reference that this package should be resolved in.
   - `priority`: A priority used to resolve file conflicts.
     - When the attribute is missing or `null`, the package is assigned a priority of 5.

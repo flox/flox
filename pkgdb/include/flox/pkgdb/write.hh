@@ -9,8 +9,15 @@
 
 #pragma once
 
+#include <filesystem>
+#include <stack>
 #include <tuple>
 
+#include <nlohmann/json.hpp>
+
+#include <nix/hash.hh>
+
+#include "flox/core/types.hh"
 #include "flox/pkgdb/read.hh"
 
 
@@ -23,9 +30,11 @@ namespace flox::pkgdb {
 /** @brief A set of arguments used by @a flox::pkgdb::PkgDb::scrape. */
 using Target = std::tuple<flox::AttrPath, flox::Cursor, row_id>;
 
-/** @brief A queue of @a flox::pkgdb::Target to be completed. */
-using Todos = std::queue<Target, std::list<Target>>;
-
+/**
+ * @brief A stack of @a flox::pkgdb::Target to be completed.
+ * A stack is used to promote depth-first processing.
+ */
+using Todos = std::stack<Target, std::list<Target>>;
 
 /* -------------------------------------------------------------------------- */
 
@@ -36,36 +45,9 @@ using Todos = std::queue<Target, std::list<Target>>;
 class PkgDb : public PkgDbReadOnly
 {
 
-  /* --------------------------------------------------------------------------
-   */
-
   /* Internal Helpers */
 
 protected:
-
-  /** @brief Create tables in database if they do not exist. */
-  void
-  initTables();
-
-
-  /** @brief Create views in database if they do not exist. */
-  void
-  initViews();
-
-  /**
-   * @brief Update the database's `VIEW`s schemas.
-   *
-   * This deletes any existing `VIEW`s and recreates them, and updates the
-   * `DbVersions` row for `pkgdb_views_schema`.
-   */
-  void
-  updateViews();
-
-
-  /** @brief Create `DbVersions` rows if they do not exist. */
-  void
-  initVersions();
-
 
   /**
    * @brief Create/update tables/views schema in database.
@@ -75,18 +57,6 @@ protected:
    */
   void
   init();
-
-
-  /**
-   * @brief Write @a this `PkgDb` `lockedRef` and `fingerprint` fields to
-   *        database metadata.
-   */
-  void
-  writeInput();
-
-
-  /* --------------------------------------------------------------------------
-   */
 
   /* Constructors */
 
@@ -151,18 +121,7 @@ public:
    * @param flake Flake associated with the db. Used to write input metadata.
    * @param dbPath Absolute path to database file.
    */
-  PkgDb( const nix::flake::LockedFlake & flake, std::string_view dbPath )
-  {
-    this->dbPath      = dbPath;
-    this->fingerprint = flake.getFingerprint();
-    this->db.connect( this->dbPath.c_str(),
-                      SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE );
-    init();
-    this->lockedRef
-      = { flake.flake.lockedRef.to_string(),
-          nix::fetchers::attrsToJSON( flake.flake.lockedRef.toAttrs() ) };
-    writeInput();
-  }
+  PkgDb( const nix::flake::LockedFlake & flake, std::string_view dbPath );
 
   /**
    * @brief Opens a DB associated with a locked flake.
@@ -174,13 +133,16 @@ public:
     : PkgDb( flake, genPkgDbName( flake.getFingerprint() ).string() )
   {}
 
+  /* Connecting and locking */
 
-  /* --------------------------------------------------------------------------
+  /**
+   * @brief Tries to connect to the database, acquiring an exclusive lock on it.
    */
+  void
+  connect();
+
 
   /* Basic Operations */
-
-  // public:
 
   /**
    * @brief Execute a raw sqlite statement on the database.
@@ -206,13 +168,7 @@ public:
     return cmd.execute_all();
   }
 
-
-  /* --------------------------------------------------------------------------
-   */
-
   /* Insert */
-
-  // public:
 
   /**
    * @brief Get the `AttrSet.id` for a given child of the attribute set
@@ -254,22 +210,12 @@ public:
    * @param attrName The name of the attribute name to be added ( last element
    *                 of the attribute path ).
    * @param cursor An attribute cursor to scrape data from.
-   * @param replace Whether to replace/ignore existing rows.
-   * @param checkDrv Whether to check `isDerivation` for @a cursor.
-   *                 Skipping this check is a slight optimization for cases
-   *                 where the caller has already checked themselves.
    * @return The `Packages.id` value for the added package.
    */
   row_id
   addPackage( row_id               parentId,
               std::string_view     attrName,
-              const flox::Cursor & cursor,
-              bool                 replace  = false,
-              bool                 checkDrv = true );
-
-
-  /* --------------------------------------------------------------------------
-   */
+              const flox::Cursor & cursor );
 
   /* Updates */
 
@@ -291,27 +237,40 @@ public:
   void
   setPrefixDone( const flox::AttrPath & prefix, bool done );
 
-
-  /* --------------------------------------------------------------------------
-   */
-
   /**
    * @brief Scrape package definitions from an attribute set.
    *
-   * Adds any attributes marked with `recurseForDerivatsions = true` to
-   * @a todo list.
+   * Processes a subset of the attribute set rooted at @a target.
+   * The child attributes are chunked into pages of size @a pageSize, and
+   * the @a pageIdx -th page is processed in this invocation.  Attributes are
+   * processed depth first so the page is gauraunteed to be fully processed on
+   * a clean return.
+   *
    * @param syms Symbol table from @a cursor evaluator.
    * @param target A tuple containing the attribute path to scrape, a cursor,
    *               and a SQLite _row id_.
-   * @param todo Queue to add `recurseForDerivations = true` cursors to so
-   *             they may be scraped by later invocations.
+   * @param pageSize The size of chunks to process at a time.
+   * @param pageIdx The specific page to process in this invocation.
+   * @return True if the entire attribute set has been processed.
+   */
+  bool
+  scrape( nix::SymbolTable & syms,
+          const Target &     target,
+          uint               pageSize,
+          uint               pageIdx );
+
+  /**
+   * @brief Helper function for @a scrape to process a single attribute, adding
+   * child attributes to the @a todo queue when appropriate to recurse.
    */
   void
-  scrape( nix::SymbolTable & syms, const Target & target, Todos & todo );
+  processSingleAttrib( const nix::SymbolStr & sym,
+                       const flox::Cursor &   cursor,
+                       const flox::AttrPath & prefix,
+                       flox::pkgdb::row_id    parentId,
+                       flox::subtree_type     subtree,
+                       Todos &                todo );
 
-
-  /* --------------------------------------------------------------------------
-   */
 
 }; /* End class `PkgDb' */
 

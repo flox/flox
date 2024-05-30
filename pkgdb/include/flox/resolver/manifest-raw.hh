@@ -22,7 +22,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include "compat/concepts.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/core/types.hh"
 #include "flox/pkgdb/pkg-query.hh"
@@ -74,7 +73,7 @@ using InstallID = std::string;
 struct GroupingOptions {
 
   /**
-   * How to treat descriptors that do not set `packageGroup` explicitly.
+   * How to treat descriptors that do not set `pkgGroup` explicitly.
    *
    * - `singletons`: Each descriptor is its own group by default.
    * - `common`: Descriptors are added to a single _default_ group.
@@ -217,7 +216,20 @@ struct GlobalManifestRaw
 
   explicit operator GlobalManifestRawGA() const;
 
-
+  /**
+   * @brief Get the list of systems requested by the manifest.
+   *
+   * Default to the current system if systems is not specified.
+   */
+  [[nodiscard]] std::vector<System>
+  getSystems() const
+  {
+    if ( this->options.has_value() && this->options->systems.has_value() )
+      {
+        return *this->options->systems;
+      }
+    return std::vector<System> { nix::settings.thisSystem.get() };
+  }
 }; /* End struct `GlobalManifestRaw' */
 
 
@@ -275,8 +287,9 @@ struct HookRaw
   /** Define an inline script to be run at activation time. */
   std::optional<std::string> script;
 
-  /** Reads activation script from a file. */
-  std::optional<std::string> file;
+  /** Defines an inline script to be run non-interactively from a bash subshell
+   * after the user's profile scripts have been sourced.*/
+  std::optional<std::string> onActivate;
 
 
   /**
@@ -288,6 +301,28 @@ struct HookRaw
 
 
 }; /* End struct `HookRaw' */
+
+void
+from_json( const nlohmann::json & jfrom, HookRaw & hook );
+
+/* -------------------------------------------------------------------------- */
+
+/** @brief Declares scripts to be sourced by the user's interactive shell after
+ * activating the environment.*/
+struct ProfileScriptsRaw
+{
+  /** @brief A script intended to be sourced by all shells. */
+  std::optional<std::string> common;
+
+  /** @brief A script intended to be sourced only in Bash shells. */
+  std::optional<std::string> bash;
+
+  /** @brief A script intended to be sourced only in Zsh shells. */
+  std::optional<std::string> zsh;
+};
+
+void
+from_json( const nlohmann::json & jfrom, ProfileScriptsRaw & profile );
 
 
 /* -------------------------------------------------------------------------- */
@@ -311,6 +346,8 @@ struct ManifestRaw : public GlobalManifestRaw
     install;
 
   std::optional<std::unordered_map<std::string, std::string>> vars;
+
+  std::optional<ProfileScriptsRaw> profile;
 
   std::optional<HookRaw> hook;
 
@@ -374,6 +411,7 @@ struct ManifestRaw : public GlobalManifestRaw
     this->install = std::nullopt;
     this->vars    = std::nullopt;
     this->hook    = std::nullopt;
+    this->profile = std::nullopt;
   }
 
   /**
@@ -381,7 +419,7 @@ struct ManifestRaw : public GlobalManifestRaw
    *
    * The _diff_ is represented as an [JSON patch](https://jsonpatch.com) object.
    */
-  nlohmann::json
+  [[nodiscard]] nlohmann::json
   diff( const ManifestRaw & old ) const;
 
   explicit operator ManifestRawGA() const;
@@ -463,6 +501,21 @@ struct GlobalManifestRawGA
     return ManifestRaw( static_cast<GlobalManifestRaw>( *this ) );
   }
 
+  /**
+   * @brief Get the list of systems requested by the manifest.
+   *
+   * Default to the current system if systems is not specified.
+   * TODO: deduplicate this with `GlobalManifestRaw::getSystems()` or drop.
+   */
+  [[nodiscard]] std::vector<System>
+  getSystems() const
+  {
+    if ( this->options.has_value() && this->options->systems.has_value() )
+      {
+        return *this->options->systems;
+      }
+    return std::vector<System> { nix::settings.thisSystem.get() };
+  }
 
 }; /* End struct `GlobalManifestRawGA' */
 
@@ -498,6 +551,8 @@ struct ManifestRawGA : public GlobalManifestRawGA
     install;
 
   std::optional<std::unordered_map<std::string, std::string>> vars;
+
+  std::optional<ProfileScriptsRaw> profile;
 
   std::optional<HookRaw> hook;
 
@@ -556,6 +611,7 @@ struct ManifestRawGA : public GlobalManifestRawGA
     /* From `ManifestRawGA' */
     this->install = std::nullopt;
     this->vars    = std::nullopt;
+    this->profile = std::nullopt;
     this->hook    = std::nullopt;
   }
 
@@ -564,7 +620,7 @@ struct ManifestRawGA : public GlobalManifestRawGA
    *
    * The _diff_ is represented as an [JSON patch](https://jsonpatch.com) object.
    */
-  nlohmann::json
+  [[nodiscard]] nlohmann::json
   diff( const ManifestRawGA & old ) const;
 
   explicit operator ManifestRaw() const
@@ -574,6 +630,7 @@ struct ManifestRawGA : public GlobalManifestRawGA
     raw.options  = this->options;
     raw.install  = this->install;
     raw.vars     = this->vars;
+    raw.profile  = this->profile;
     raw.hook     = this->hook;
     return raw;
   }

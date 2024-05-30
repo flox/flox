@@ -27,6 +27,7 @@ pub enum BasicColor {
 
 impl BasicColor {
     /// Create crossterm compatible types
+    #[allow(dead_code)] // todo: discuss how/where to integrate colors
     pub fn to_crossterm(&self) -> crossterm::style::Color {
         match self {
             BasicColor::Black => crossterm::style::Color::Black,
@@ -84,6 +85,11 @@ pub struct FloxColor {
 }
 
 impl FloxColor {
+    pub fn to_ansi256(&self) -> u8 {
+        self.ansi256
+    }
+
+    #[allow(dead_code)] // todo: discuss how/where to integrate colors
     pub fn to_crossterm(&self) -> Option<crossterm::style::Color> {
         match supports_color::on(supports_color::Stream::Stderr) {
             Some(supports_color::ColorLevel { has_16m: true, .. }) => {
@@ -123,26 +129,14 @@ impl FloxColor {
     }
 }
 
-#[allow(unused)]
-pub const DARK_BLUE: FloxColor = FloxColor {
-    ansi256: 17,
-    rgb: (32, 20, 123),
-    basic: BasicColor::DarkBlue,
-};
-pub const LIGHT_BLUE: FloxColor = FloxColor {
-    ansi256: 61,
-    rgb: (88, 86, 156),
-    basic: BasicColor::Blue,
-};
-
-#[allow(unused)]
-pub const DARK_PEACH: FloxColor = FloxColor {
-    ansi256: 216,
-    rgb: (225, 185, 144),
+pub const INDIGO_300: FloxColor = FloxColor {
+    ansi256: 141,
+    rgb: (175, 135, 255),
     basic: BasicColor::DarkYellow,
 };
-pub const LIGHT_PEACH: FloxColor = FloxColor {
-    ansi256: 223,
-    rgb: (225, 206, 172),
-    basic: BasicColor::Yellow,
+
+pub const INDIGO_400: FloxColor = FloxColor {
+    ansi256: 99,
+    rgb: (135, 95, 255),
+    basic: BasicColor::Blue,
 };

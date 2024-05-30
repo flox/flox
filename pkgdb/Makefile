@@ -65,6 +65,7 @@ REPO_ROOT    := $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
 
 PREFIX ?= $(PKGDB_ROOT)/build
 BINDIR ?= $(PREFIX)/bin
+LIBDIR ?= $(PREFIX)/lib
 
 
 # ---------------------------------------------------------------------------- #
@@ -145,14 +146,24 @@ endif  # ifndef TOOLCHAIN
 # Read info from files
 # --------------------
 
-VERSION := $(file < $(PKGDB_ROOT)/version)
+VERSION := $(file < $(PKGDB_ROOT)/.version)
 
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
-PROFILE_D_SCRIPT_DIR ?= $(shell                            \
-  $(NIX) store add-path -n profile.d src/buildenv/assets)
-SET_PROMPT_BASH_SH ?= $(shell                                                  \
-  $(NIX) store add-path -n set-prompt-bash.sh src/buildenv/set-prompt-bash.sh)
+# WARNING: the flox-activate package is normally created from within
+# pkgs/flox-pkgdb/default.nix, but if working in a `nix develop' shell
+# then run `unset ACTIVATE_PACKAGE_DIR' to regenerate the package with
+# each build.
+ACTIVATE_PACKAGE_DIR ?= $(shell \
+  $(NIX) store add-path -n flox-activate src/buildenv/assets)
 
+# The reference to CONTAINER_BUILDER_PATH in realise.cc requires that
+# libexec/mkContainer.nix be rendered as a single-file package in the
+# Nix store.
+CONTAINER_BUILDER_PATH ?= $(shell \
+  $(NIX) store add-path -n mkContainer.nix src/libexec/mkContainer.nix)
+
+COMMON_NIXPKGS_URL ?= $(shell \
+  $(NIX) eval --raw .\#flox-pkgdb.envs.COMMON_NIXPKGS_URL)
 
 # ---------------------------------------------------------------------------- #
 
@@ -167,18 +178,23 @@ rwildcard = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2)        \
 # ---------------------------------------------------------------------------- #
 
 # Various file and target lists
-
-HEADERS        =  $(call rwildcard,include,*.hh)
-SRCS           =  $(call rwildcard,src,*.cc)
-test_SRCS      =  $(sort $(wildcard tests/*.cc))
-ALL_SRCS       =  $(SRCS) $(test_SRCS)
-BINS           =  bin/pkgdb
-TEST_UTILS     =  $(addprefix tests/,is_sqlite3 search-params)
-TESTS          =  $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
+HEADERS        = $(call rwildcard,include,*.hh)
+SRCS           = $(call rwildcard,src,*.cc)
+test_SRCS      = $(sort $(wildcard tests/*.cc))
+ALL_SRCS       = $(SRCS) $(test_SRCS)
+BINS           = bin/pkgdb
+ifeq (Linux,$(OS))
+LIBS           = lib/ld-floxlib.so
+else
+LIBS           =
+endif  # ifeq (Linux,$(OS))
+TEST_UTILS     = $(addprefix tests/,is_sqlite3 search-params)
+TESTS          = $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
 TEST_DATA      =
 ALL_BINS       = $(TESTS) $(TEST_UTILS) $(BINS)
+ALL_LIBS       = $(LIBS)
 CLEANDIRS      =
-CLEANFILES     =  $(ALL_SRCS:.cc=.o) $(ALL_BINS)
+CLEANFILES     = $(ALL_SRCS:.cc=.o) $(ALL_BINS) $(ALL_LIBS)
 FULLCLEANDIRS  =
 FULLCLEANFILES =
 
@@ -271,6 +287,14 @@ toml_CFLAGS ?=                                                                \
   $(shell $(NIX) build --no-link --print-out-paths 'nixpkgs#toml11')/include
 toml_CFLAGS := $(toml_CFLAGS)
 
+ifeq (Linux,$(OS))
+sentry_PREFIX ?=                                                        \
+	$(shell $(NIX) build --no-link --print-out-paths '.#sentry-native')
+sentry_CFLAGS  = -isystem $(sentry_PREFIX)/include
+sentry_LDFLAGS ?= $(shell $(PKG_CONFIG) --libs sentry-native)
+sentry_LDFLAGS = -L$(sentry_PREFIX)/lib -lsentry
+endif #ifeq (Linux,$(OS))
+
 sqlite3_CFLAGS ?=                                                     \
 	$(patsubst -I%,-isystem %,$(shell $(PKG_CONFIG) --cflags sqlite3))
 sqlite3_CFLAGS  := $(sqlite3_CFLAGS)
@@ -286,6 +310,11 @@ yaml_PREFIX ?=                                                          \
 yaml_PREFIX := $(yaml_PREFIX)
 yaml_CFLAGS  = -isystem $(yaml_PREFIX)/include
 yaml_LDFLAGS = -L$(yaml_PREFIX)/lib -lyaml-cpp
+
+semver_PREFIX ?=                                                        \
+	$(shell $(NIX) build --no-link --print-out-paths '.#cpp-semver')
+semver_PREFIX := $(semver_PREFIX)
+semver_CFLAGS  = -isystem $(semver_PREFIX)/include
 
 nix_INCDIR ?= $(shell $(PKG_CONFIG) --variable=includedir nix-cmd)
 nix_INCDIR := $(nix_INCDIR)
@@ -316,21 +345,17 @@ CXXFLAGS += $(nix_CFLAGS)
 CXXFLAGS += $(nljson_CFLAGS)
 CXXFLAGS += $(toml_CFLAGS)
 CXXFLAGS += $(yaml_CFLAGS)
+CXXFLAGS += $(semver_CFLAGS)
+ifeq (Linux,$(OS))
+CXXFLAGS += $(sentry_CFLAGS)
+endif # ifeq (Linux,$(OS))
 
 LDFLAGS += $(nix_LDFLAGS)
 LDFLAGS += $(sqlite3_LDFLAGS)
 LDFLAGS += $(yaml_LDFLAGS)
-
-
-# ---------------------------------------------------------------------------- #
-
-# Locate `semver'
-# ---------------
-
-SEMVER_PATH ?=                                                        \
-  $(shell $(NIX) build --no-link --print-out-paths                    \
-	                     'github:aakropotkin/floco#semver')/bin/semver
-CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
+ifeq (Linux,$(OS))
+LDFLAGS += $(sentry_LDFLAGS)
+endif # ifeq (Linux,$(OS))
 
 
 # ---------------------------------------------------------------------------- #
@@ -338,13 +363,24 @@ CXXFLAGS += '-DSEMVER_PATH="$(SEMVER_PATH)"'
 # Flags for Specific Files
 # ------------------------
 
-src/buildenv/realise.o: CXXFLAGS +=                   \
-	'-DPROFILE_D_SCRIPT_DIR="$(PROFILE_D_SCRIPT_DIR)"'
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DACTIVATE_PACKAGE_DIR="$(ACTIVATE_PACKAGE_DIR)"'
 
 src/buildenv/realise.o: CXXFLAGS +=               \
-	'-DSET_PROMPT_BASH_SH="$(SET_PROMPT_BASH_SH)"'
+	'-DCONTAINER_BUILDER_PATH="$(CONTAINER_BUILDER_PATH)"'
 
+src/buildenv/realise.o: CXXFLAGS +=               \
+	'-DCOMMON_NIXPKGS_URL="$(COMMON_NIXPKGS_URL)"'
 
+src/buildenv/realise.o: CXXFLAGS +=                 \
+	'-DFLOX_BASH_PKG="$(FLOX_BASH_PKG)"'            \
+	'-DFLOX_CACERT_PKG="$(FLOX_CACERT_PKG)"'        \
+	'-DFLOX_LOCALE_ARCHIVE="$(LOCALE_ARCHIVE)"'     \
+	'-DFLOX_PATH_LOCALE="$(PATH_LOCALE)"'           \
+	'-DFLOX_NIX_COREFOUNDATION_RPATH="$(NIX_COREFOUNDATION_RPATH)"'
+
+# Only needed for main.cc
+CXXFLAGS += '-DNIXPKGS_CACERT_BUNDLE_CRT="$(NIXPKGS_CACERT_BUNDLE_CRT)"'
 
 # ---------------------------------------------------------------------------- #
 
@@ -372,10 +408,10 @@ fullclean: clean
 # Install Targets
 # ---------------
 
-.PHONY: install install-bin
+.PHONY: install install-bin install-lib
 
 #: Install binaries, libraries, and include files
-install: install-bin
+install: install-bin install-lib
 
 $(BINDIR)/%: bin/%
 	$(MKDIR_P) $(@D);
@@ -383,6 +419,13 @@ $(BINDIR)/%: bin/%
 
 #: Install binaries
 install-bin: $(addprefix $(BINDIR)/,$(patsubst bin/%,%,$(BINS)))
+
+$(LIBDIR)/%: lib/%
+	$(MKDIR_P) $(@D);
+	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
+
+#: Install libraries
+install-lib: $(addprefix $(LIBDIR)/,$(patsubst lib/%,%,$(LIBS)))
 
 
 # ---------------------------------------------------------------------------- #
@@ -516,28 +559,8 @@ FULLCLEANFILES += iwyu.log
 
 .PHONY: lint
 #: Run `clang-tidy' across entire project
-lint: compile_commands.json $(HEADERS) $(ALL_SRCS)
-	$(TIDY) $(filter-out compile_commands.json,$^);
-
-
-# ---------------------------------------------------------------------------- #
-
-# Generated Test Data
-# -------------------
-
-# Generate test data files
-.PHONY: test-data test-lockfiles
-test-data: test-lockfiles
-
-_TEST_LOCKFILE_DIRS      := $(wildcard $(TEST_DATA_DIR)/buildenv/lockfiles/*)
-_TEST_LOCKFILE_MANIFESTS := $(addsuffix /manifest.toml,$(_TEST_LOCKFILE_DIRS))
-_TEST_LOCKFILES          := $(addsuffix /manifest.lock,$(_TEST_LOCKFILE_DIRS))
-CLEANFILES               += $(_TEST_LOCKFILES)
-test-lockfiles: $(_TEST_LOCKFILES)
-$(_TEST_LOCKFILES): %/manifest.lock: %/manifest.toml bin/pkgdb
-	$(MKDIR_P) $(@D);
-	_PKGDB_GA_REGISTRY_REF_OR_REV="e8039594435c68eb4f780f3e9bf3972a7399c4b1"  \
-	  bin/pkgdb manifest lock --ga-registry --manifest $< > $@;
+lint: ../compile_commands.json $(HEADERS) $(ALL_SRCS)
+	$(TIDY) $(filter-out ../compile_commands.json,$^);
 
 
 # ---------------------------------------------------------------------------- #
@@ -548,7 +571,7 @@ $(_TEST_LOCKFILES): %/manifest.lock: %/manifest.toml bin/pkgdb
 check: cc-check bats-check
 
 #: Run all C++ unit tests
-cc-check: $(TESTS:.cc=) test-data
+cc-check: $(TESTS:.cc=)
 	@_ec=0;                     \
 	echo '';                    \
 	for t in $(TESTS:.cc=); do  \
@@ -564,12 +587,14 @@ cc-check: $(TESTS:.cc=) test-data
 	exit "$$_ec";
 
 #: Run all bats tests
-bats-check: bin $(TEST_UTILS) test-data
+PKGDB_BATS_FILES ?= "$(PKGDB_ROOT)/tests"
+PKGDB_BATS_OPTS ?= ""
+bats-check: bin $(TEST_UTILS)
 	PKGDB_BIN="$(PKGDB_ROOT)/bin/pkgdb"                          \
 	PKGDB_IS_SQLITE3_BIN="$(PKGDB_ROOT)/tests/is_sqlite3"        \
 	PKGDB_SEARCH_PARAMS_BIN="$(PKGDB_ROOT)/tests/search-params"  \
 	  $(BATS) --print-output-on-failure --verbose-run --timing   \
-	          "$(PKGDB_ROOT)/tests";
+	          $(PKGDB_BATS_OPTS) "$(PKGDB_BATS_FILES)";
 
 
 # ---------------------------------------------------------------------------- #
@@ -587,6 +612,7 @@ bats-check: bin $(TEST_UTILS) test-data
 # SQL Schemas
 src/pkgdb/write.o: src/pkgdb/schemas.hh
 
+src/pkgdb/scrape-rules.o: src/pkgdb/rules.json.hh
 
 # ---------------------------------------------------------------------------- #
 
@@ -602,13 +628,18 @@ $(BINS): %: $(SRCS:.cc=.o)
 	$(MKDIR_P) $(@D);
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
 
+lib/ld-floxlib.so: src/ld-floxlib.c
+	$(MKDIR_P) $(@D);
+	$(CC) -shared -fPIC $< -o $@;
+	patchelf --remove-rpath $@;
+
 
 # ---------------------------------------------------------------------------- #
 
 $(test_SRCS:.cc=.o): CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
 $(TESTS) $(TEST_UTILS): tests/%: $(filter-out src/main.o,$(SRCS:.cc=.o))
-$(TESTS) $(TEST_UTILS): tests/%: tests/%.o
-	$(CXX) $^ $(LDFLAGS) -o $@;
+$(TESTS) $(TEST_UTILS): tests/%: tests/%.o tests/test.hh
+	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
 
 # ---------------------------------------------------------------------------- #
 
@@ -620,14 +651,17 @@ $(TESTS) $(TEST_UTILS): tests/%: tests/%.o
 #: Build binaries
 bin: $(BINS)
 
+#: Build libs
+lib: $(ALL_LIBS)
+
 #: Build test executables and resources
-tests: $(TESTS) $(TEST_UTILS) test-data
+tests: $(TESTS) $(TEST_UTILS)
 
-#: Build binaries, tests, and generated `.gitignore' files
-all: bin tests ignores
+#: Build binaries, tests, libs, and generated `.gitignore' files
+all: bin lib tests ignores
 
-#: Build binaries and generated `.gitignore' files
-most: bin ignores
+#: Build binaries, libs, and generated `.gitignore' files
+most: bin lib ignores
 
 
 # ---------------------------------------------------------------------------- #
@@ -663,6 +697,21 @@ tests/.gitignore: FORCE
 #: Run `clang-format' across entire project
 fmt: $(HEADERS) $(ALL_SRCS)
 	$(FMT) -i $^;
+
+
+# ---------------------------------------------------------------------------- #
+
+# Generated Files
+# ---------------
+
+src/fetchers/flake-v0.nix.in.hh: src/fetchers/flake-v0.nix.in Makefile
+	$(MKDIR_P) $(@D);
+	echo 'R"_NIX(' > $@;
+	$(CAT) $< >> $@;
+	echo ')_NIX";' >> $@;
+
+CLEANFILES += src/fetchers/flake-v0.nix.in.hh
+src/fetchers/wrapped-nixpkgs-input.o: src/fetchers/flake-v0.nix.in.hh
 
 
 # ---------------------------------------------------------------------------- #

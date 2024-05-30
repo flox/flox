@@ -38,7 +38,7 @@ FlakePackage::init( bool checkDrv )
       throw PackageInitException(
         "Package::init(): Packages must be derivations but the attrset at '"
         + this->_cursor->getAttrPathStr()
-        + "' does not set `.type = \"derivation\"'." );
+        + "' does not set '.type = \"derivation\"'." );
     }
 
   /* Subtree type */

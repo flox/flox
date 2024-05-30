@@ -1,34 +1,27 @@
 {
-  inputs,
-  lib,
-  clippy,
-  rust-analyzer,
-  rust,
-  rustc,
-  rustfmt,
-  rustPlatform,
-  hostPlatform,
-  targetPlatform,
-  openssl,
-  libssh2,
-  libgit2,
-  zlib,
-  pkg-config,
-  darwin,
-  parser-util,
-  pandoc,
   cacert,
-  glibcLocalesUtf8,
-  installShellFiles,
-  runCommand,
-  fd,
-  gnused,
-  gitMinimal,
-  nix,
-  pkgsFor,
-  pre-commit-check,
+  darwin,
+  rust-toolchain,
   flox-pkgdb,
+  gitMinimal,
+  glibcLocalesUtf8,
+  gnused,
+  hostPlatform,
+  inputs,
+  installShellFiles,
+  lib,
+  libgit2,
+  libssh2,
+  nix,
+  openssl,
+  pkg-config,
+  pkgsFor,
+  rustfmt ? rust-toolchain.rustfmt,
+  targetPlatform,
+  zlib,
 }: let
+  FLOX_VERSION = lib.fileContents ./../../VERSION;
+
   flox-src = builtins.path {
     name = "flox-src";
     path = "${./../../cli}";
@@ -47,25 +40,28 @@
   };
 
   # crane (<https://crane.dev/>) library for building rust packages
-  craneLib = inputs.crane.mkLib pkgsFor;
+  craneLib = (inputs.crane.mkLib pkgsFor).overrideToolchain rust-toolchain.toolchain;
 
   # build time environment variables
   envs = let
-    auth0BaseUrl = "https://dev-j4tiszdm1f0b70xf.us.auth0.com";
+    auth0BaseUrl = "https://auth.flox.dev";
   in
     {
       # 3rd party CLIs
       # we want to use our own binaries by absolute path
       # rather than relying on or modifying the user's `PATH` variable
-      GIT_BIN = "${gitMinimal}/bin/git";
-      NIX_BIN = "${nix}/bin/nix";
+      GIT_PKG = gitMinimal;
+      NIX_PKG = nix;
+      NIX_BIN = "${nix}/bin/nix"; # only used for nix invocations in tests
       PKGDB_BIN =
         if flox-pkgdb == null
         then "pkgdb"
         else "${flox-pkgdb}/bin/pkgdb";
-      PARSER_UTIL_BIN = "${parser-util}/bin/parser-util";
-      FLOX_ETC_DIR = ../../assets/etc;
-      FLOX_ZDOTDIR = ../../assets/flox.zdotdir;
+      LD_FLOXLIB =
+        if flox-pkgdb == null
+        then "ld-floxlib.so"
+        else "${flox-pkgdb}/lib/ld-floxlib.so";
+      FLOX_ZDOTDIR = ../../pkgdb/src/buildenv/assets/activate.d/zdotdir;
 
       # bundling of internally used nix scripts
       FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
@@ -77,7 +73,7 @@
       METRICS_EVENTS_API_KEY = "5pAQnBqz5Q7dpqVD9BEXQ4Kdc3D2fGTd3ZgP0XXK";
 
       # oauth client id
-      OAUTH_CLIENT_ID = "s4BF6zGVcYh3gZUHwp6C4cGf3ey5Bwio";
+      OAUTH_CLIENT_ID = "fGrotHBfQr9X1PHGbFoifEWaDPyWZDmc";
       OAUTH_BASE_URL = "${auth0BaseUrl}";
       OAUTH_AUTH_URL = "${auth0BaseUrl}/authorize";
       OAUTH_TOKEN_URL = "${auth0BaseUrl}/oauth/token";
@@ -93,15 +89,10 @@
         cacert.outPath + "/etc/ssl/certs/ca-bundle.crt";
 
       # The current version of flox being built
-      FLOX_VERSION = cargoToml.package.version;
+      inherit FLOX_VERSION;
 
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
-
-      # flox env template used to create new environments
-      FLOX_ENV_TEMPLATE = builtins.path {
-        path = ../../assets/templateFloxEnv;
-      };
 
       # The global manifest we generate if one does not exist
       GLOBAL_MANIFEST_TEMPLATE = builtins.path {
@@ -116,30 +107,11 @@
       LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
     };
 
-  # compiled manpages
-  manpages =
-    runCommand "flox-manpages" {
-      src = flox-src + "/flox/doc";
-      buildInputs = [pandoc fd];
-    } ''
-
-      mkdir $out
-      pushd $src
-
-      fd "flox.*.md" ./ -x \
-        pandoc -t man \
-          -L ${./pandoc-filters/include-files.lua} \
-          --standalone \
-          -o "$out/{/.}.1" \
-          {}
-    '';
-
-  cargoToml = lib.importTOML (flox-src + "/flox/Cargo.toml");
-
   # incremental build of thrid party crates
   cargoDepsArtifacts = craneLib.buildDepsOnly {
-    pname = cargoToml.package.name;
-    version = cargoToml.package.version;
+    pname = "flox-cli";
+    version = FLOX_VERSION;
+
     src = craneLib.cleanCargoSource (craneLib.path flox-src);
 
     # runtime dependencies of the dependent crates
@@ -159,18 +131,15 @@
       pkg-config # for openssl
     ];
 
-    inherit (envs) LIBSSH2_SYS_USE_PKG_CONFIG PARSER_UTIL_BIN;
+    inherit (envs) LIBSSH2_SYS_USE_PKG_CONFIG;
   };
 in
   craneLib.buildPackage ({
-      pname = cargoToml.package.name;
+      pname = "flox-cli";
       version = envs.FLOX_VERSION;
       src = flox-src;
 
       cargoArtifacts = cargoDepsArtifacts;
-
-      outputs = ["out" "man"];
-      outputsToInstall = ["out" "man"];
 
       # runtime dependencies
       buildInputs = cargoDepsArtifacts.buildInputs ++ [];
@@ -193,8 +162,6 @@ in
 
       # bundle manpages and completion scripts
       postInstall = ''
-        ln -s "${envs.FLOX_ETC_DIR}" "$out/etc"
-        installManPage ${manpages}/*;
         installShellCompletion --cmd flox                         \
           --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
           --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
@@ -214,29 +181,23 @@ in
       passthru = {
         inherit
           envs
-          manpages
-          rustPlatform
+          rust-toolchain
           cargoDepsArtifacts
           pkgsFor
           nix
           flox-pkgdb
           ;
 
-        ciPackages = [
-        ];
+        ciPackages = [];
 
         devPackages = [
           rustfmt
-          clippy
-          rust-analyzer
-          rust.packages.stable.rustPlatform.rustLibSrc
-          rustc
         ];
 
         devEnvs =
           envs
           // {
-            RUST_SRC_PATH = rustPlatform.rustLibSrc.outPath;
+            RUST_SRC_PATH = "${rust-toolchain.rust-src}/lib/rustlib/src/rust/library";
             RUSTFMT = "${rustfmt}/bin/rustfmt";
           };
 

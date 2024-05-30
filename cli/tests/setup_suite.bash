@@ -80,14 +80,14 @@ floxtest_gitforge_setup() {
   # gitforge. This obviously won't be recognised as a valid token by the
   # GitHub API, but that's OK because we've hard-coded this identity both
   # in flox-gh and on our gitforge proxy.
-  mkdir -p $FLOX_CONFIG_HOME/gh
-  cat > $FLOX_CONFIG_HOME/gh/hosts.yml << EOF
+  mkdir -p $FLOX_CONFIG_DIR/gh
+  cat > $FLOX_CONFIG_DIR/gh/hosts.yml << EOF
 github.com:
     oauth_token: flox_testOAuthToken
     user: floxtest
     git_protocol: https
 EOF
-  chmod 600 $FLOX_CONFIG_HOME/gh/hosts.yml
+  chmod 600 $FLOX_CONFIG_DIR/gh/hosts.yml
   export __FT_RAN_FLOXTEST_GITFORGE_SETUP=:
 }
 
@@ -177,7 +177,7 @@ misc_vars_setup() {
 
 # Scrub vars recognized by `flox' CLI and set a few configurables.
 flox_cli_vars_setup() {
-  unset FLOX_PROMPT_ENVIRONMENTS FLOX_ACTIVE_ENVIRONMENTS
+  unset FLOX_PROMPT_ENVIRONMENTS _FLOX_ACTIVE_ENVIRONMENTS
   export FLOX_DISABLE_METRICS='true'
 }
 
@@ -195,16 +195,12 @@ ssh_key_setup() {
       -C 'floxuser@example.invalid'
     chmod 600 "$FLOX_TEST_SSH_KEY"
   fi
-  export SSH_AUTH_SOCK="$BATS_SUITE_TMPDIR/ssh/ssh_agent.sock"
-  if ! [[ -d ${SSH_AUTH_SOCK%/*} ]]; then mkdir -p "${SSH_AUTH_SOCK%/*}"; fi
-  # If our socket isn't open ( it probably ain't ) we open one.
-  if ! [[ -e $SSH_AUTH_SOCK ]]; then
-    # You can't find work in this town without a good agent. Lets get one.
-    eval "$(ssh-agent -s)"
-    ln -sf "$SSH_AUTH_SOCK" "$BATS_SUITE_TMPDIR/ssh/ssh_agent.sock"
-    export SSH_AUTH_SOCK="$BATS_SUITE_TMPDIR/ssh/ssh_agent.sock"
-    ssh-add "$FLOX_TEST_SSH_KEY"
-  fi
+  # Don't poison any existing agent and allow `ssh-add` to fail if we can't
+  # start a new one.
+  unset SSH_AUTH_SOCK SSH_AGENT_PID
+  # You can't find work in this town without a good agent. Lets get one.
+  eval "$(ssh-agent -s)"
+  ssh-add "$FLOX_TEST_SSH_KEY"
   unset SSH_ASKPASS
   export __FT_RAN_SSH_KEY_SETUP=:
 }
@@ -304,17 +300,10 @@ xdg_tmp_setup() {
 
   mkdir -p "${XDG_CONFIG_HOME:?}"
   chmod u+w "$XDG_CONFIG_HOME"
-
-  if [[ -e "${REAL_XDG_CONFIG_HOME:?}/nix" ]]; then
-    rm -rf "$XDG_CONFIG_HOME/nix"
-    cp -Tr -- "$REAL_XDG_CONFIG_HOME/nix" "$XDG_CONFIG_HOME/nix"
-    chmod -R u+w "$XDG_CONFIG_HOME/nix"
-  fi
-  if [[ -e "$REAL_XDG_CONFIG_HOME/flox" ]]; then
-    rm -rf "$XDG_CONFIG_HOME/flox"
-    cp -Tr -- "$REAL_XDG_CONFIG_HOME/flox" "$XDG_CONFIG_HOME/flox"
-    chmod -R u+w "$XDG_CONFIG_HOME/flox"
-  fi
+  mkdir -p "$XDG_DATA_HOME/nix"
+  chmod u+w "$XDG_DATA_HOME/nix"
+  mkdir -p "$XDG_DATA_HOME/flox"
+  chmod u+w "$XDG_DATA_HOME/flox"
 
   # Data Dirs
 
@@ -347,23 +336,40 @@ pkgdb_vars_setup() {
   # Notably its default `nodejs' version is `18.16.0' which is referenced in
   # some test cases.
   PKGDB_NIXPKGS_REV_OLD='e8039594435c68eb4f780f3e9bf3972a7399c4b1'
-  # This revision is a bit newer, and was also created from `release-23.05'.
-  # Notably its default `nodejs' version is `18.17.1' which is referenced in
-  # some test cases.
-  PKGDB_NIXPKGS_REV_NEW='9faf91e6d0b7743d41cce3b63a8e5c733dc696a3'
+  NODEJS_VERSION_OLD="18.16.0"
+  export NODEJS_VERSION_OLD
+
+  # A revision of release-23.11
+  PKGDB_NIXPKGS_REV_NEW='ab5fd150146dcfe41fda501134e6503932cc8dfd'
+  NODEJS_VERSION_NEW="18.18.2"
+  export NODEJS_VERSION_NEW
+  # This revision is even older than OLD, selected for the purpose of serving up
+  # a different and incompatible version of glibc (2.34) than the latest (2.37).
+  # This could probably replace the PKGDB_NIXPKGS_REV_OLD revision with a
+  # refactoring of other test data but we'll tackle that in a separate effort.
+  PKGDB_NIXPKGS_REV_OLDER='bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3'
 
   PKGDB_NIXPKGS_REF_OLD="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_OLD"
   PKGDB_NIXPKGS_REF_NEW="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_NEW"
+
+  PKGDB_NIXPKGS_NAR_HASH_OLD="sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8="
+  PKGDB_NIXPKGS_NAR_HASH_NEW="sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4="
 
   # This causes `pkgdb' to use this revision for `nixpkgs' anywhere the
   # `--ga-registry' flag is used.
   # This is useful for testing `pkgdb' against a specific revision of `nixpkgs'
   # so that we get consistent packages and improved caching.
-  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD"
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_NEW"
 
-  export PKGDB_NIXPKGS_REV_OLD PKGDB_NIXPKGS_REV_NEW \
-    PKGDB_NIXPKGS_REF_OLD PKGDB_NIXPKGS_REF_NEW \
-    _PKGDB_GA_REGISTRY_REF_OR_REV
+  export \
+    PKGDB_NIXPKGS_REV_OLD \
+    PKGDB_NIXPKGS_REV_NEW \
+    PKGDB_NIXPKGS_REV_OLDER \
+    PKGDB_NIXPKGS_REF_OLD \
+    PKGDB_NIXPKGS_REF_NEW \
+    _PKGDB_GA_REGISTRY_REF_OR_REV \
+    PKGDB_NIXPKGS_NAR_HASH_OLD \
+    PKGDB_NIXPKGS_NAR_HASH_NEW
 
   export __FT_RAN_PKGDB_VARS_SETUP=:
 }
@@ -374,13 +380,14 @@ pkgdb_vars_setup() {
 flox_vars_setup() {
   xdg_vars_setup
   export FLOX_CACHE_HOME="$XDG_CACHE_HOME/flox"
-  export FLOX_CONFIG_HOME="$XDG_CONFIG_HOME/flox"
+  export FLOX_CONFIG_DIR="$XDG_CONFIG_HOME/flox"
   export FLOX_DATA_HOME="$XDG_DATA_HOME/flox"
   export FLOX_STATE_HOME="$XDG_STATE_HOME/flox"
   export FLOX_META="$FLOX_CACHE_HOME/meta"
   export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments"
   export USER="flox-test"
   export HOME="${FLOX_TEST_HOME:-$HOME}"
+  export GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_DIR/global-manifest.lock"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -391,18 +398,22 @@ flox_vars_setup() {
 # Homedirs can be created "globally" for the entire test suite ( default ), or
 # for individual files or single tests by passing an optional argument.
 home_setup() {
-  case "${1:-suite}" in
-    suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home" ;;
-    file) export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home" ;;
-    test) export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home" ;;
-    *)
-      echo "home_setup: Invalid homedir category '${1?}'" >&2
-      return 1
-      ;;
-  esac
-  #if [[ "${__FT_RAN_HOME_SETUP:-}" = "$FLOX_TEST_HOME" ]]; then return 0; fi
-  # Force recreation on `home' on every invocation.
-  unset __FT_RAN_HOME_SETUP
+  if [[ "${__FT_RAN_HOME_SETUP:-}" = "real" ]]; then
+    export FLOX_TEST_HOME="$REAL_HOME"
+    export HOME="$REAL_HOME"
+  else
+    case "${1:-suite}" in
+      suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home" ;;
+      file) export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home" ;;
+      test) export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home" ;;
+      *)
+        echo "home_setup: Invalid homedir category '${1?}'" >&2
+        return 1
+        ;;
+    esac
+    # Force recreation on `home' on every invocation.
+    unset __FT_RAN_HOME_SETUP
+  fi
   xdg_tmp_setup
   flox_vars_setup
   export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME"
@@ -429,22 +440,24 @@ common_suite_setup() {
   nix_system_setup
   misc_vars_setup
   flox_cli_vars_setup
-  pkgdb_vars_setup
   # Generate configs and auth.
   ssh_key_setup
   floxtest_gitforge_setup
   # TODO: fix gpg setup and re-enable along with `gpgsign.bats' tests.
   #gpg_key_setup;
   gitconfig_setup
+  # setup pkgdb and populate cache
+  pkgdb_vars_setup
   {
     print_var FLOX_TEST_HOME
     print_var HOME
+    print_var PATH
     print_var XDG_CACHE_HOME
     print_var XDG_CONFIG_HOME
     print_var XDG_DATA_HOME
     print_var XDG_STATE_HOME
     print_var FLOX_CACHE_HOME
-    print_var FLOX_CONFIG_HOME
+    print_var FLOX_CONFIG_DIR
     print_var FLOX_DATA_HOME
     print_var FLOX_STATE_HOME
     print_var FLOX_META

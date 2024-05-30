@@ -31,7 +31,7 @@ GetCommand::GetCommand()
 {
   this->parser.add_description( "Get metadata from Package DB" );
 
-  this->pId.add_description( "Lookup an attribute set or package row `id`" );
+  this->pId.add_description( "Lookup an attribute set or package row 'id'" );
   this->pId.add_argument( "-p", "--pkg" )
     .help( "lookup package path" )
     .nargs( 0 )
@@ -49,12 +49,12 @@ GetCommand::GetCommand()
   this->pPath.add_description(
     "Lookup an (AttrSets|Packages).id attribute path" );
   this->pPath.add_argument( "-p", "--pkg" )
-    .help( "lookup `Packages.id'" )
+    .help( "lookup 'Packages.id'" )
     .nargs( 0 )
     .action( [&]( const auto & ) { this->isPkg = true; } );
   this->addTargetArg( this->pPath );
   this->pPath.add_argument( "id" )
-    .help( "row `id' to lookup" )
+    .help( "row 'id' to lookup" )
     .nargs( 1 )
     .action( [&]( const std::string & rowId )
              { this->id = std::stoull( rowId ); } );
@@ -73,7 +73,7 @@ GetCommand::GetCommand()
   /* In `runPkg' we check for a singleton and if it's an integer it
    * is interpreted as a row id. */
   this->pPkg.add_argument( "id-or-path" )
-    .help( "attribute path to package, or `Packages.id`" )
+    .help( "attribute path to package, or 'Packages.id'" )
     .metavar( "<ID|ATTRS...>" )
     .remaining()
     .action( [&]( const std::string & idOrPath )
@@ -198,7 +198,7 @@ GetCommand::run()
   if ( this->parser.is_subcommand_used( "done" ) ) { return this->runDone(); }
   if ( this->parser.is_subcommand_used( "pkg" ) ) { return this->runPkg(); }
   std::cerr << this->parser << std::endl;
-  throw flox::FloxException( "You must provide a valid `get' subcommand" );
+  throw flox::FloxException( "You must provide a valid 'get' subcommand" );
   return EXIT_FAILURE;
 }
 

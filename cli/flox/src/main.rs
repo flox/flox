@@ -6,9 +6,15 @@ use anyhow::{Context, Result};
 use bpaf::{Args, Parser};
 use commands::{FloxArgs, FloxCli, Prefix, Version};
 use flox_rust_sdk::flox::FLOX_VERSION;
-use flox_rust_sdk::models::environment::init_global_manifest;
-use log::{error, warn};
-use utils::init::init_logger;
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
+use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
+use flox_rust_sdk::models::environment::{init_global_manifest, EnvironmentError};
+use log::{debug, warn};
+use utils::init::{init_logger, init_sentry};
+use utils::{message, populate_default_nix_env_vars};
+
+use crate::utils::errors::{format_error, format_managed_error, format_remote_error};
+use crate::utils::metrics::Hub;
 
 mod build;
 mod commands;
@@ -16,20 +22,29 @@ mod config;
 mod utils;
 
 async fn run(args: FloxArgs) -> Result<()> {
-    init_logger(Some(args.verbosity.clone()), Some(args.debug));
+    init_logger(Some(args.verbosity));
     set_user()?;
     set_parent_process_id();
+    populate_default_nix_env_vars();
     let config = config::Config::parse()?;
+    let uuid = utils::metrics::read_metrics_uuid(&config)
+        .map(|u| Some(u.to_string()))
+        .unwrap_or(None);
+    sentry::configure_scope(|scope| {
+        scope.set_user(Some(sentry::User {
+            id: uuid,
+            ..Default::default()
+        }));
+    });
     init_global_manifest(&config.flox.config_dir.join("global-manifest.toml"))?;
     args.handle(config).await?;
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
+fn main() -> ExitCode {
     // initialize logger with "best guess" defaults
     // updating the logger conf is cheap, so we reinitialize whenever we get more information
-    init_logger(None, None);
+    init_logger(None);
 
     // Quit early if `--prefix` is present
     if Prefix::check() {
@@ -39,23 +54,36 @@ async fn main() -> ExitCode {
 
     // Quit early if `--version` is present
     if Version::check() {
-        println!("Version: {}", *FLOX_VERSION);
+        println!("{}", *FLOX_VERSION);
         return ExitCode::from(0);
     }
 
     // Parse verbosity flags to affect help message/parse errors
-    let (verbosity, debug) = {
+    let verbosity = {
         let verbosity_parser = commands::verbosity();
-        let debug_parser = bpaf::long("debug").switch();
-        let other_parser = bpaf::any("ANY", Some::<String>).many();
+        let other_parser = bpaf::any("_", Some::<String>).many();
 
-        bpaf::construct!(verbosity_parser, debug_parser, other_parser)
-            .map(|(v, d, _)| (v, d))
+        bpaf::construct!(verbosity_parser, other_parser)
+            .map(|(v, _)| v)
             .to_options()
             .run_inner(Args::current_args())
             .unwrap_or_default()
     };
-    init_logger(Some(verbosity), Some(debug));
+
+    let _sentry_guard = init_sentry();
+    init_logger(Some(verbosity));
+
+    let _metrics_guard = Hub::global().try_guard().ok();
+
+    // Pass down the verbosity level to all pkgdb calls
+    std::env::set_var(
+        "_FLOX_PKGDB_VERBOSITY",
+        format!("{}", verbosity.to_pkgdb_verbosity_level()),
+    );
+    debug!(
+        "set _FLOX_PKGDB_VERBOSITY={}",
+        verbosity.to_pkgdb_verbosity_level()
+    );
 
     // Run the argument parser
     //
@@ -63,16 +91,17 @@ async fn main() -> ExitCode {
     // to work with the shell completion frontends
     //
     // Pass through Stdout failure; This represents `--help`
+    // todo: just `run()` the parser? Unless we still need to control which std{err/out} to use
     let args = commands::flox_cli().run_inner(Args::current_args());
 
     if let Some(parse_err) = args.as_ref().err() {
         match parse_err {
             bpaf::ParseFailure::Stdout(m, _) => {
-                print!("{m}");
+                print!("{m:80}");
                 return ExitCode::from(0);
             },
             bpaf::ParseFailure::Stderr(m) => {
-                error!("{m}");
+                message::error(format!("{m:80}"));
                 return ExitCode::from(1);
             },
             bpaf::ParseFailure::Completion(c) => {
@@ -85,13 +114,34 @@ async fn main() -> ExitCode {
     // Errors handled above
     let FloxCli(args) = args.unwrap();
 
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+
     // Run flox. Print errors and exit with status 1 on failure
-    let exit_code = match run(args).await {
+    let exit_code = match runtime.block_on(run(args)) {
         Ok(()) => ExitCode::from(0),
+
         Err(e) => {
+            // todo: figure out how to deal with context, properly
+            debug!("{:#}", e);
+
             // Do not print any error if caused by wrapped flox (sh)
             if e.is::<FloxShellErrorCode>() {
                 return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;
+            }
+
+            if let Some(e) = e.downcast_ref::<EnvironmentError>() {
+                message::error(format_error(e));
+                return ExitCode::from(1);
+            }
+
+            if let Some(e) = e.downcast_ref::<ManagedEnvironmentError>() {
+                message::error(format_managed_error(e));
+                return ExitCode::from(1);
+            }
+
+            if let Some(e) = e.downcast_ref::<RemoteEnvironmentError>() {
+                message::error(format_remote_error(e));
+                return ExitCode::from(1);
             }
 
             let err_str = e
@@ -99,12 +149,12 @@ async fn main() -> ExitCode {
                 .skip(1)
                 .fold(e.to_string(), |acc, cause| format!("{}: {}", acc, cause));
 
-            error!("{err_str}");
+            message::error(err_str);
 
             ExitCode::from(1)
         },
     };
-    utils::init::flush_logger();
+
     exit_code
 }
 

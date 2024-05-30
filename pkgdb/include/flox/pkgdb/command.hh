@@ -252,6 +252,7 @@ public:
  */
 class GCCommand
 {
+  static constexpr int DEF_STALE_AGE_IN_DAYS = 30;
 
 private:
 
@@ -263,7 +264,7 @@ private:
   bool dryRun = false;
 
   /** minimum age of files not being accessed. */
-  int gcStaleAgeDays = 30;
+  int gcStaleAgeDays = DEF_STALE_AGE_IN_DAYS;
 
   /** Cache dir to collect garbage in */
   std::optional<std::filesystem::path> cacheDir;

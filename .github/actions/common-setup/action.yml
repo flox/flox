@@ -1,0 +1,76 @@
+name: "Common Setup"
+
+inputs:
+  GITHUB_ACCESS_TOKEN:
+    required: true
+  SUBSTITUTER:
+    required: true
+  SUBSTITUTER_KEY:
+    required: true
+  AWS_ACCESS_KEY_ID:
+    required: true
+  AWS_SECRET_ACCESS_KEY:
+    required: true
+  SSH_KEY:
+    required: true
+  TAILSCALE_URL:
+    required: false
+    default: ""
+  TAILSCALE_AUTH_KEY:
+    required: false
+    default: ""
+  REMOTE_BUILDERS:
+    required: false
+    default: ""
+  SYSTEM:
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Setup Tailscale"
+      uses: "tailscale/github-action@v2"
+      if: ${{ inputs.TAILSCALE_URL && inputs.TAILSCALE_AUTH_KEY }}
+      with:
+        args: "--timeout 30s --login-server ${{ inputs.TAILSCALE_URL }}"
+        tags: "tag:ci"
+        authkey: "${{ inputs.TAILSCALE_AUTH_KEY }}"
+
+    - name: "Install newer Nix"
+      uses: "cachix/install-nix-action@v24"
+
+    - name: "Install flox"
+      uses: "flox/install-flox-action@main"
+      with:
+        github-access-token:    "${{ inputs.GITHUB_ACCESS_TOKEN }}"
+        substituter:            "${{ inputs.SUBSTITUTER }}"
+        substituter-key:        "${{ inputs.SUBSTITUTER_KEY }}"
+        aws-access-key-id:      "${{ inputs.AWS_ACCESS_KEY_ID }}"
+        aws-secret-access-key:  "${{ inputs.AWS_SECRET_ACCESS_KEY }}"
+        ssh-key:                "${{ inputs.SSH_KEY }}"
+        remote-builders:        "${{ inputs.REMOTE_BUILDERS }}"
+
+    - name: "Configure Nix"
+      shell: "bash"
+      run: |
+        sudo echo 
+        {
+          echo "experimental-features = nix-command flakes";
+          echo "accept-flake-config = true";
+        } | sudo tee -a /etc/nix/nix.conf >/dev/null
+
+    - name: "Find remote server to run tests on"
+      if: ${{ inputs.SYSTEM }}
+      shell: "bash"
+      run: |
+        set -eo pipefail
+        export REMOTE_SERVER=$(cat /etc/nix/machines | grep ${{ inputs.SYSTEM }} | cut -f1 -d' ' | cut -f3 -d'/' | head -1 | sed 's/nixbld@//' ; )
+        export REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$(mktemp)
+        export REMOTE_PUBLIC_HOST_KEY=$(cat /etc/nix/machines | grep ${{ inputs.SYSTEM }} | tr -s ' ' | cut -f8 -d' ' | base64 -d ; )
+        printf "%s %s\n" "$REMOTE_SERVER" "$REMOTE_PUBLIC_HOST_KEY" > "$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE"
+        echo "REMOTE_SERVER: $REMOTE_SERVER"
+        echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE: $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE"
+        cat $REMOTE_SERVER_USER_KNOWN_HOSTS_FILE
+        echo "REMOTE_SERVER=$REMOTE_SERVER" >> $GITHUB_ENV
+        echo "REMOTE_SERVER_USER_KNOWN_HOSTS_FILE=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE" >> $GITHUB_ENV

@@ -9,8 +9,9 @@ expect_after {
   timeout { exit 1 }
   eof { exit 2 }
   "*\n" { exp_continue }
+  "*\r" { exp_continue }
 }
-expect "Building environment"
+expect "Preparing environment"
 
 send "exit\n"
 expect eof

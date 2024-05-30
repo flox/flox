@@ -69,7 +69,7 @@ test_parseManifestDescriptor0()
     "name": "foo"
   , "version": "4.2.0"
   , "optional": true
-  , "package-group": "blue"
+  , "pkg-group": "blue"
   } )"_json;
 
   flox::resolver::ManifestDescriptor descriptor( raw );
@@ -226,8 +226,8 @@ test_parseManifestDescriptor_path0()
   EXPECT( descriptor.subtree.has_value() );
   EXPECT_EQ( *descriptor.subtree, flox::ST_LEGACY );
   EXPECT( ! descriptor.systems.has_value() );
-  EXPECT( descriptor.path.has_value() );
-  EXPECT( ( *descriptor.path ) == ( flox::AttrPath { "hello" } ) );
+  EXPECT( descriptor.pkgPath.has_value() );
+  EXPECT( ( *descriptor.pkgPath ) == ( flox::AttrPath { "hello" } ) );
 
   return true;
 }
@@ -249,8 +249,8 @@ test_parseManifestDescriptor_path1()
   EXPECT( descriptor.subtree.has_value() );
   EXPECT_EQ( *descriptor.subtree, flox::ST_LEGACY );
   EXPECT( ! descriptor.systems.has_value() );
-  EXPECT( descriptor.path.has_value() );
-  EXPECT( ( *descriptor.path ) == ( flox::AttrPath { "hello" } ) );
+  EXPECT( descriptor.pkgPath.has_value() );
+  EXPECT( ( *descriptor.pkgPath ) == ( flox::AttrPath { "hello" } ) );
 
   return true;
 }
@@ -272,8 +272,8 @@ test_parseManifestDescriptor_path2()
   EXPECT( descriptor.subtree.has_value() );
   EXPECT_EQ( *descriptor.subtree, flox::ST_LEGACY );
   EXPECT( ! descriptor.systems.has_value() );
-  EXPECT( descriptor.path.has_value() );
-  EXPECT( ( *descriptor.path ) == ( flox::AttrPath { "hello" } ) );
+  EXPECT( descriptor.pkgPath.has_value() );
+  EXPECT( ( *descriptor.pkgPath ) == ( flox::AttrPath { "hello" } ) );
 
   return true;
 }
@@ -295,8 +295,8 @@ test_parseManifestDescriptor_path3()
   EXPECT( descriptor.subtree.has_value() );
   EXPECT_EQ( *descriptor.subtree, flox::ST_LEGACY );
   EXPECT( ! descriptor.systems.has_value() );
-  EXPECT( descriptor.path.has_value() );
-  EXPECT( ( *descriptor.path ) == ( flox::AttrPath { "hello" } ) );
+  EXPECT( descriptor.pkgPath.has_value() );
+  EXPECT( ( *descriptor.pkgPath ) == ( flox::AttrPath { "hello" } ) );
 
   return true;
 }
@@ -320,8 +320,8 @@ test_parseManifestDescriptor_path4()
   EXPECT( descriptor.systems.has_value() );
   EXPECT( ( *descriptor.systems )
           == ( std::vector<std::string> { "x86_64-linux" } ) );
-  EXPECT( descriptor.path.has_value() );
-  EXPECT( ( *descriptor.path ) == ( flox::AttrPath { "hello" } ) );
+  EXPECT( descriptor.pkgPath.has_value() );
+  EXPECT( ( *descriptor.pkgPath ) == ( flox::AttrPath { "hello" } ) );
 
   return true;
 }
@@ -353,7 +353,7 @@ test_serialize_manifest0()
     "version": "4.2.0",
     "abspath": ["legacyPackages", "x86_64-linux", "hello"],
     "optional": true,
-    "package-group": "blue",
+    "pkg-group": "blue",
     "package-repository": {
       "type": "github",
       "owner": "NixOS",
@@ -402,6 +402,41 @@ test_EnvironmentManifestGA_getRegistryRaw0()
 
 /* -------------------------------------------------------------------------- */
 
+bool
+test_hookAllowsAtMostOneActivationHook()
+{
+  flox::resolver::HookRaw hook;
+  hook.script     = "foo";
+  hook.onActivate = "foo";
+  try
+    {
+      hook.check();
+    }
+  catch ( const flox::resolver::InvalidManifestFileException & e )
+    {
+      return true;
+    }
+  return false;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+bool
+test_parseManifestRawWithOnActivateScript()
+{
+  std::ifstream ifs( TEST_DATA_DIR "/manifest/on-activate.toml" );
+
+  std::string toml( ( std::istreambuf_iterator<char>( ifs ) ),
+                    ( std::istreambuf_iterator<char>() ) );
+
+  flox::resolver::ManifestRaw manifest = flox::tomlToJSON( toml );
+  return true;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
 int
 main()
 {
@@ -433,11 +468,15 @@ main()
   RUN_TEST( GlobalManifestGA_getRegistryRaw0 );
   RUN_TEST( EnvironmentManifestGA_getRegistryRaw0 );
 
+  RUN_TEST( hookAllowsAtMostOneActivationHook );
+  RUN_TEST( parseManifestRawWithOnActivateScript );
+
   return exitCode;
 }
 
 
-/* -------------------------------------------------------------------------- *
+/* --------------------------------------------------------------------------
+ * *
  *
  *
  *

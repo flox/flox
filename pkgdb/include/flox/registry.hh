@@ -19,7 +19,6 @@
 #include <nix/flake/flakeref.hh>
 #include <nlohmann/json.hpp>
 
-#include "compat/concepts.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/core/types.hh"
 #include "flox/core/util.hh"
@@ -163,8 +162,8 @@ struct RegistryInput : public InputPreferences
   [[nodiscard]] bool
   operator==( const RegistryInput & other ) const
   {
-    if ( static_cast<InputPreferences>( *this )
-         != static_cast<InputPreferences>( other ) )
+    if ( *dynamic_cast<InputPreferences const *>( this )
+         != dynamic_cast<const InputPreferences &>( other ) )
       {
         return false;
       }
@@ -655,6 +654,9 @@ public:
   [[nodiscard]] nix::ref<FloxFlake>
   getFlake();
 
+  /** @brief Release @a flox::FloxFlakeInput::flake member. */
+  void
+  freeFlake();
 
   /**
    * @brief Get a list of enabled subtrees.
@@ -746,7 +748,7 @@ lockRegistry( const RegistryRaw &          unlocked,
  * @brief Get a hard coded registry for use with `flox`'s GA release.
  *
  * This registry contains on `nixpkgs` input, which is set
- * to `github:NixOS/nixpkgs/release-23.05`.
+ * to `github:NixOS/nixpkgs/release-23.11`.
  */
 RegistryRaw
 getGARegistry();

@@ -6,48 +6,46 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flox-types.workspace = true
-tokio.workspace = true
-tokio-test.workspace = true
-rnix.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-async-trait.workspace = true
-log.workspace = true
+async-stream.workspace = true
+blake3.workspace = true
+catalog-api-v1.workspace = true
+chrono.workspace = true
 derive_more.workspace = true
-runix.workspace = true
-url.workspace = true
-serde_with.workspace = true
-thiserror.workspace = true
-anyhow.workspace = true
-nixpkgs-fmt.workspace = true
-tempfile.workspace = true
-fs_extra.workspace = true
+enum_dispatch.workspace = true
+fslock.workspace = true
 futures.workspace = true
-regex.workspace = true
-once_cell.workspace = true
-uuid.workspace = true
-walkdir.workspace = true
+indent.workspace = true
+indexmap.workspace = true
 indoc.workspace = true
 itertools.workspace = true
-chrono.workspace = true
-git-url-parse.workspace = true
-rowan.workspace = true
-sha2.workspace = true
-blake3.workspace = true
-toml_edit.workspace = true
-tracing.workspace = true
+jsonwebtoken.workspace = true
+log.workspace = true
+once_cell.workspace = true
+pollster.workspace = true
 reqwest.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+serde.workspace = true
+shell-escape.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml_edit.workspace = true
 toml.workspace = true
+tracing.workspace = true
+url.workspace = true
+uuid.workspace = true
+walkdir.workspace = true
 
 [dev-dependencies]
-anyhow = "1.0.65"
-dotenv = "0.15.0"
-env_logger = "0.10"
+anyhow.workspace = true
 pretty_assertions.workspace = true
-mockito.workspace = true
-serial_test = "2.0.0"
+proptest.workspace = true
+proptest-derive.workspace = true
+serial_test.workspace = true
 
 [features]
+# allow exporting test helpers in dev mode only
+tests = []
 extra-tests = ["impure-unit-tests"]
 impure-unit-tests = []

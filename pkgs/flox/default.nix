@@ -6,30 +6,34 @@
   makeBinaryWrapper,
   flox-pkgdb,
   flox-cli,
+  flox-manpages,
+  SENTRY_DSN ? null,
+  SENTRY_ENV ? null,
+  FLOX_VERSION ? null,
 }: let
-  # Inherit version from Cargo.toml, aligning with the CLI version.
-  # We also inject some indication about the `git' revision of the repository.
-  cargoToml = lib.importTOML (
-    if builtins.pathExists "${inputs.flox-latest}/cli/flox/Cargo.toml"
-    then "${inputs.flox-latest}/cli/flox/Cargo.toml"
-    else "${inputs.flox-latest}/crates/flox/Cargo.toml"
-  );
-  revCountDiff = self.revCount - inputs.flox-latest.revCount;
-  suffix =
-    if self ? revCount && self ? shortRev
-    then "${builtins.toString revCountDiff}-g${self.shortRev}"
-    else "dirty";
-  version = "${cargoToml.package.version}-${suffix}";
+  fileVersion = lib.fileContents "${inputs.self}/VERSION";
+  version =
+    if (FLOX_VERSION != null)
+    then FLOX_VERSION
+    else if !(self ? revCount || self ? shortRev)
+    then "${fileVersion}-dirty"
+    else if !(self ? revCount)
+    then "${fileVersion}-g${self.shortRev}"
+    else fileVersion;
 in
   symlinkJoin {
-    name = "${flox-cli.pname}-${version}";
+    name = "flox-${version}";
+    inherit version;
 
-    paths = [flox-cli];
+    paths = [flox-cli flox-manpages];
     nativeBuildInputs = [makeBinaryWrapper];
 
     postBuild = ''
       wrapProgram $out/bin/flox \
+        ${lib.optionalString (SENTRY_DSN != null) "--set FLOX_SENTRY_DSN \"${SENTRY_DSN}\" "} \
+        ${lib.optionalString (SENTRY_ENV != null) "--set FLOX_SENTRY_ENV \"${SENTRY_ENV}\" "} \
         --set PKGDB_BIN       "${flox-pkgdb}/bin/pkgdb" \
+        --set LD_FLOXLIB      "${flox-pkgdb}/lib/ld-floxlib.so" \
         --set FLOX_BIN        "${flox-cli}/bin/flox" \
         --set FLOX_VERSION    "${version}"
     '';

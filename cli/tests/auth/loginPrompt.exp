@@ -1,0 +1,9 @@
+set flox $env(FLOX_BIN)
+
+
+spawn $flox auth login
+
+set timeout 3
+expect {
+   timeout { exit 0 }
+}

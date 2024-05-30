@@ -22,15 +22,22 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
-use flox_types::version::Version;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;
-use super::{copy_dir_recursive, PathPointer, ENV_DIR_NAME};
+use super::{copy_dir_recursive, ENV_DIR_NAME};
+use crate::data::Version;
+use crate::flox::EnvironmentName;
 use crate::models::environment::MANIFEST_FILENAME;
-use crate::providers::git::{GitCommandError, GitCommandOptions, GitCommandProvider, GitProvider};
+use crate::providers::git::{
+    GitCommandError,
+    GitCommandOptions,
+    GitCommandProvider,
+    GitProvider,
+    GitRemoteCommandError,
+};
 
 const GENERATIONS_METADATA_FILE: &str = "metadata.json";
 
@@ -138,7 +145,7 @@ impl Generations<ReadOnly> {
         checkedout_tempdir: impl AsRef<Path>,
         bare_tempdir: impl AsRef<Path>,
         branch: String,
-        pointer: &PathPointer,
+        name: &EnvironmentName,
     ) -> Result<Self, GenerationsError> {
         let repo = GitCommandProvider::init_with(options.clone(), &checkedout_tempdir, false)
             .map_err(GenerationsError::InitRepo)?;
@@ -152,7 +159,7 @@ impl Generations<ReadOnly> {
             .map_err(GenerationsError::StageChanges)?;
         repo.commit(&format!(
             "Initialize generations branch for environment '{}'",
-            pointer.name
+            name
         ))
         .map_err(GenerationsError::CommitChanges)?;
 
@@ -353,7 +360,7 @@ pub enum GenerationsError {
     #[error("could not create generations branch")]
     CreateBranch(#[source] GitCommandError),
     #[error("could not make bare clone of generations branch")]
-    MakeBareClone(#[source] GitCommandError),
+    MakeBareClone(#[source] GitRemoteCommandError),
 
     // endregion
 
@@ -378,13 +385,13 @@ pub enum GenerationsError {
 
     // region: repo/transaction
     #[error("could not clone generations branch")]
-    CloneToFS(#[source] GitCommandError),
+    CloneToFS(#[source] GitRemoteCommandError),
     #[error("could not stage changes")]
     StageChanges(#[source] GitCommandError),
     #[error("could not commit changes")]
     CommitChanges(#[source] GitCommandError),
     #[error("could not complete transaction")]
-    CompleteTransaction(#[source] GitCommandError),
+    CompleteTransaction(#[source] GitRemoteCommandError),
     // endregion
 
     // region: manifest errors

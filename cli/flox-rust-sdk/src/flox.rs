@@ -1,40 +1,20 @@
-use std::collections::{BTreeSet, HashMap};
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 
-use derive_more::Constructor;
-use indoc::indoc;
-use log::{debug, info, warn};
+use jsonwebtoken::{DecodingKey, Validation};
 use once_cell::sync::Lazy;
-use reqwest;
-use reqwest::header::USER_AGENT;
-use runix::arguments::common::NixCommonArgs;
-use runix::arguments::config::NixConfigArgs;
-use runix::arguments::flake::{FlakeArgs, OverrideInput};
-use runix::arguments::{EvalArgs, NixArgs};
-use runix::command::{Eval, FlakeMetadata};
-use runix::command_line::{DefaultArgs, NixCommandLine};
-use runix::flake_ref::path::PathRef;
-use runix::installable::{AttrPath, FlakeAttribute};
-use runix::{NixBackend, RunJson};
 use serde::{Deserialize, Serialize};
+use serde_with::DeserializeFromStr;
 use thiserror::Error;
+use url::Url;
 
-use crate::environment::{self, default_nix_subprocess_env};
-use crate::models::channels::ChannelRegistry;
 pub use crate::models::environment_ref::{self, *};
-use crate::models::flake_ref::FlakeRef;
-pub use crate::models::flox_installable::*;
-use crate::models::floxmeta::{Floxmeta, GetFloxmetaError};
-use crate::models::root::transaction::ReadOnly;
-use crate::models::root::{self, Root};
-use crate::providers::git::GitProvider;
-
-static INPUT_CHARS: Lazy<Vec<char>> = Lazy::new(|| ('a'..='t').collect());
+use crate::providers::catalog;
 
 pub static FLOX_VERSION: Lazy<String> =
     Lazy::new(|| std::env::var("FLOX_VERSION").unwrap_or(env!("FLOX_VERSION").to_string()));
+pub static FLOX_SENTRY_ENV: Lazy<Option<String>> =
+    Lazy::new(|| std::env::var("FLOX_SENTRY_ENV").ok());
 
 /// The main API struct for our flox implementation
 ///
@@ -46,7 +26,7 @@ pub static FLOX_VERSION: Lazy<String> =
 /// [Flox] will provide a preconfigured instance of the Nix API.
 /// By default this nix API uses the nix CLI.
 /// Preconfiguration includes environment variables and flox specific arguments.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Flox {
     /// The directory pointing to the users flox configuration
     ///
@@ -62,552 +42,238 @@ pub struct Flox {
     pub access_tokens: Vec<(String, String)>,
     pub netrc_file: PathBuf,
 
-    pub channels: ChannelRegistry,
-
     pub system: String,
 
     pub uuid: uuid::Uuid,
 
-    /// Token to authenticate with floxhub.
-    /// It's populated from config during [Flox] initialization.
+    pub floxhub: Floxhub,
+
+    /// Token to authenticate with FloxHub.
+    /// It's usually populated from the config during [Flox] initialization.
     /// Checking for [None] can be used to check if the use is logged in.
-    pub floxhub_token: Option<String>,
-    pub floxhub_host: String,
+    pub floxhub_token: Option<FloxhubToken>,
+
+    pub catalog_client: Option<catalog::Client>,
 }
 
-pub trait FloxNixApi: NixBackend {
-    fn new(flox: &Flox, default_nix_args: DefaultArgs) -> Self;
+impl Flox {}
+
+pub static DEFAULT_FLOXHUB_URL: Lazy<Url> =
+    Lazy::new(|| Url::parse("https://hub.flox.dev").unwrap());
+
+#[derive(Debug, Clone, Deserialize)]
+struct FloxTokenClaims {
+    #[serde(rename = "https://flox.dev/handle")]
+    handle: String,
 }
 
-impl FloxNixApi for NixCommandLine {
-    fn new(_: &Flox, default_nix_args: DefaultArgs) -> NixCommandLine {
-        NixCommandLine {
-            nix_bin: Some(environment::NIX_BIN.to_string()),
-            defaults: default_nix_args,
-        }
+#[derive(Debug, Clone, DeserializeFromStr)]
+pub struct FloxhubToken {
+    token: String,
+    token_data: FloxTokenClaims,
+}
+
+impl FloxhubToken {
+    /// Create a new floxhub token from a string
+    pub fn new(token: String) -> Result<Self, FloxhubTokenError> {
+        token.parse()
+    }
+
+    /// Return the token as a string
+    pub fn secret(&self) -> &str {
+        &self.token
+    }
+
+    /// Return the handle of the user the token belongs to
+    pub fn handle(&self) -> &str {
+        &self.token_data.handle
     }
 }
 
-/// Typed matching installable outputted by our Nix evaluation
-#[derive(Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
-#[serde(rename_all = "camelCase")]
-struct InstallableEvalQueryEntry {
-    system: Option<String>,
-    explicit_system: bool,
-    prefix: String,
-    key: Vec<String>,
-    input: String,
-    description: Option<String>,
+impl Serialize for FloxhubToken {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.token.serialize(serializer)
+    }
+}
+
+impl FromStr for FloxhubToken {
+    type Err = FloxhubTokenError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut validation = Validation::default();
+        // we're neither creating or verifying the token on the client side
+        validation.insecure_disable_signature_validation();
+        validation.validate_aud = false;
+        let token =
+            jsonwebtoken::decode::<FloxTokenClaims>(s, &DecodingKey::from_secret(&[]), &validation)
+                .map_err(|e| match e.kind() {
+                    jsonwebtoken::errors::ErrorKind::ExpiredSignature => FloxhubTokenError::Expired,
+                    _ => FloxhubTokenError::InvalidToken(e),
+                })?;
+
+        Ok(FloxhubToken {
+            token: s.to_string(),
+            token_data: token.claims,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Error, Eq, PartialEq)]
+pub enum FloxhubTokenError {
+    #[error("token expired")]
+    Expired,
+
+    #[error("invalid token")]
+    InvalidToken(#[source] jsonwebtoken::errors::Error),
+}
+
+#[derive(Debug, Clone)]
+pub struct Floxhub {
+    base_url: Url,
+    git_url: Url,
+    git_url_overridden: bool,
+}
+
+impl Floxhub {
+    pub fn new(base_url: Url, git_url_override: Option<Url>) -> Result<Self, FloxhubError> {
+        let git_url_overridden = git_url_override.is_some();
+        let git_url = match git_url_override {
+            Some(git_url_override) => git_url_override,
+            None => Self::derive_git_url(&base_url)?,
+        };
+        Ok(Floxhub {
+            base_url,
+            git_url,
+            git_url_overridden,
+        })
+    }
+
+    /// Return the base url of the FloxHub instance
+    /// might change to a more specific url in the future
+    pub fn base_url(&self) -> &Url {
+        &self.base_url
+    }
+
+    pub fn git_url_override(&self) -> Option<&Url> {
+        self.git_url_overridden.then_some(&self.git_url)
+    }
+
+    /// Return the url of the FloxHub git interface
+    ///
+    /// If the environment variable `_FLOX_FLOXHUB_GIT_URL` is set,
+    /// it will be used instead of the derived FloxHub host.
+    /// This is useful for testing FloxHub locally.
+    pub fn git_url(&self) -> &Url {
+        &self.git_url
+    }
+
+    fn derive_git_url(base_url: &Url) -> Result<Url, FloxhubError> {
+        let mut git_url = base_url.clone();
+        let host = git_url
+            .host_str()
+            .ok_or(FloxhubError::NoHost(base_url.to_string()))?;
+        let without_hub = host
+            .strip_prefix("hub.")
+            .ok_or(FloxhubError::NoHubPrefix(base_url.to_string()))?;
+        let with_api_prefix = format!("api.{}", without_hub);
+        git_url
+            .set_host(Some(&with_api_prefix))
+            .map_err(|e| FloxhubError::InvalidFloxhubBaseUrl(with_api_prefix, e))?;
+        git_url.set_path("git");
+        Ok(git_url)
+    }
 }
 
 #[derive(Error, Debug)]
-pub enum ResolveFloxInstallableError<Nix: FloxNixApi>
-where
-    Eval: RunJson<Nix>,
-{
-    #[error("Error checking for installable matches: {0}")]
-    Eval(<Eval as RunJson<Nix>>::JsonError),
-    #[error("Error parsing installable eval output: {0}")]
-    Parse(#[from] serde_json::Error),
+pub enum FloxhubError {
+    #[error("Invalid FloxHub URL: '{0}'. URL must contain a host.")]
+    NoHost(String),
+    #[error("Invalid FloxHub URL: '{0}'. URL must begin with 'hub.'")]
+    NoHubPrefix(String),
+    #[error("Couldn't set git URL host to '{0}'")]
+    InvalidFloxhubBaseUrl(String, #[source] url::ParseError),
 }
 
-/// Typed output of our Nix evaluation to find matching installables
-type InstallableEvalQueryOut = BTreeSet<InstallableEvalQueryEntry>;
+pub mod test_helpers {
+    use std::fs;
 
-#[derive(Debug, Constructor)]
-pub struct ResolvedInstallableMatch {
-    pub flakeref: String,
-    pub prefix: String,
-    pub system: Option<String>,
-    pub explicit_system: bool,
-    pub key: Vec<String>,
-    pub description: Option<String>,
-}
+    use tempfile::{tempdir_in, TempDir};
 
-impl ResolvedInstallableMatch {
-    pub fn flake_attribute(self) -> FlakeAttribute {
-        // Join the prefix and key into a safe attrpath, adding the associated system if present
-        let attr_path = {
-            let mut builder = AttrPath::default();
-            // enforce exact attr path (<flakeref>#.<attrpath>)
-            builder.push_attr("").unwrap();
-            builder.push_attr(&self.prefix).unwrap();
-            if let Some(ref system) = self.system {
-                builder.push_attr(system).unwrap();
-            }
-
-            // Build the multi-part key into a Nix-safe single string
-            for key in self.key {
-                builder.push_attr(&key).unwrap();
-            }
-            builder
-        };
-
-        FlakeAttribute {
-            flakeref: self.flakeref.parse().unwrap(),
-            attr_path,
-            outputs: Default::default(),
-        }
-    }
-}
-
-impl Flox {
-    pub fn resource<X>(&self, x: X) -> Root<root::Closed<X>> {
-        Root::closed(self, x)
-    }
-
-    // TODO: revisit this when we discussed floxmeta's role to contribute to config/channels
-    //       flox.floxmeta is referring to the legacy floxmeta implementation
-    //       and is currently only used by the CLI to read the channels from the users floxmain.
-    //
-    //       N.B.: Decide whether we want to keep the `Flox.<model>` API
-    //       to create instances of subsystem models
-    // region: revisit reg. channels
-    pub fn floxmeta(&self, owner: &str) -> Result<Floxmeta<ReadOnly>, GetFloxmetaError> {
-        Floxmeta::get_floxmeta(self, owner)
-    }
-
-    // endregion: revisit reg. channels
-
-    // TODO: deprecate, with building commands that used installables
-    // region: installables
-    /// Invoke Nix to convert a list of [FloxInstallable] into a list of guaranteed matches
-    ///
-    /// Tries to find a concrete nix installable from possibly ambiguous flox installables.
-    /// flox installables are ambiguous if they do not specify a flakeref or complete attribute path.
-    ///
-    /// We employ a resolver flake (<flox>/resolver/flake.nix)
-    /// to list all attribute paths available through the flakeref specified or default flakerefs.
-    /// We then filter the results by the attribute path and prefix specified in the flox installable.
-    ///
-    /// The result of this function is a list of matches that cant be disambiguated automatically.
-    /// In that case an error or interactive selection can be used by the caller to resolve the ambiguity.
-    pub async fn resolve_matches<Nix: FloxNixApi, Git: GitProvider>(
-        &self,
-        flox_installables: &[FloxInstallable],
-        default_flakerefs: &[&str],
-        default_attr_prefixes: &[(&str, bool)],
-        must_exist: bool,
-        processor: Option<&str>,
-    ) -> Result<Vec<ResolvedInstallableMatch>, ResolveFloxInstallableError<Nix>>
-    where
-        Eval: RunJson<Nix>,
-        FlakeMetadata: RunJson<Nix>,
-    {
-        // Ignore default flake_refs are not flakes.
-        // Default flake_refs can not be changed by the user.
-        // If nix produces errors due to a flake not found,
-        // this can produce misleading error messages.
-        //
-        // Additionally, `./` is used as a default flakeref for multiple installables.
-        // To prevent copying large locations that are not a flake,
-        // we try to ensure a flake can be reached using `nix flake metadata`
-        let default_flakerefs = default_flakerefs
-            .iter()
-            .copied()
-            .filter(|flakeref| {
-                let parsed_flake_ref = FlakeRef::from_str(flakeref);
-                // if we can't parse the flake_ref we warn but keep it
-                // this is until we can be sure enought that our flake_ref parser is robust
-                if let Err(e) = parsed_flake_ref {
-                    debug!(
-                        indoc! {"
-                        Could not parse default flake_ref {flakeref}
-                        {e}
-                   "},
-                        flakeref = flakeref,
-                        e = e
-                    );
-                    return true;
-                };
-                let parsed_flake_ref = parsed_flake_ref.unwrap();
-
-                futures::executor::block_on(async {
-                    let command = FlakeMetadata {
-                        flake_ref: Some(parsed_flake_ref.into()),
-                        ..Default::default()
-                    };
-
-                    command
-                        .run_json(&self.nix::<Nix>(vec![]), &NixArgs::default())
-                        .await
-                        .is_ok()
-                })
-            })
-            .collect::<Vec<_>>();
-
-        // Optimize for installable resolutions that do not require an eval
-        // Match against exactly 1 flakeref and 1 prefix
-        let mut optimized = vec![];
-        for flox_installable in flox_installables {
-            if let (false, [d_flakeref], [(d_prefix, d_systemized)], [key]) = (
-                must_exist,
-                &default_flakerefs[..],
-                default_attr_prefixes,
-                flox_installable.attr_path.as_slice(),
-            ) {
-                optimized.push(ResolvedInstallableMatch::new(
-                    flox_installable
-                        .source
-                        .as_ref()
-                        .map(String::from)
-                        .unwrap_or_else(|| d_flakeref.to_string()),
-                    d_prefix.to_string(),
-                    d_systemized.then(|| self.system.to_string()),
-                    false,
-                    vec![key.to_string()],
-                    None,
-                ));
-            } else {
-                break;
-            }
-        }
-        if optimized.len() == flox_installables.len() {
-            return Ok(optimized);
-        }
-
-        let numbered_flox_installables: Vec<(usize, FloxInstallable)> = flox_installables
-            .iter()
-            .enumerate()
-            .map(|(i, f)| (i, f.clone()))
-            .collect();
-
-        let mut flakeref_inputs: HashMap<char, String> = HashMap::new();
-        let mut inputs_assoc: HashMap<Option<usize>, Vec<char>> = HashMap::new();
-
-        let has_sourceless = numbered_flox_installables
-            .iter()
-            .any(|(_, f)| f.source.is_none());
-
-        let mut occupied = 0;
-
-        if has_sourceless {
-            for flakeref in default_flakerefs {
-                flakeref_inputs.insert(*INPUT_CHARS.get(occupied).unwrap(), flakeref.to_string());
-                inputs_assoc
-                    .entry(None)
-                    .or_insert_with(Vec::new)
-                    .push(*INPUT_CHARS.get(occupied).unwrap());
-                occupied += 1;
-            }
-        }
-
-        for (installable_id, flox_installable) in &numbered_flox_installables {
-            if let Some(ref source) = flox_installable.source {
-                let assoc = inputs_assoc
-                    .entry(Some(*installable_id))
-                    .or_insert_with(Vec::new);
-
-                if let Some((c, _)) = flakeref_inputs.iter().find(|(_, s)| *s == source) {
-                    let c = *c;
-                    flakeref_inputs.insert(c, source.to_string());
-                    assoc.push(c);
-                } else {
-                    flakeref_inputs.insert(*INPUT_CHARS.get(occupied).unwrap(), source.to_string());
-                    assoc.push(*INPUT_CHARS.get(occupied).unwrap());
-                    occupied += 1;
-                }
-            }
-        }
-
-        // Strip the systemization off of the default attr prefixes (only used in optimization)
-        let default_attr_prefixes: Vec<&str> = default_attr_prefixes
-            .iter()
-            .map(|(prefix, _)| *prefix)
-            .collect();
-
-        let installable_resolve_strs: Vec<String> = numbered_flox_installables
-            .into_iter()
-            .map(|(installable_id, flox_installable)| {
-                format!(
-                    // Template the Nix expression and our arguments in
-                    r#"(x {{
-                        system = "{system}";
-                        defaultPrefixes = [{default_prefixes}];
-                        inputs = [{inputs}];
-                        key = [{key}];
-                        processor = {processor};
-                    }})"#,
-                    system = self.system,
-                    default_prefixes = default_attr_prefixes
-                        .iter()
-                        .map(|p| format!("{p:?}"))
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                    inputs = inputs_assoc
-                        .get(&None)
-                        .iter()
-                        .chain(inputs_assoc.get(&Some(installable_id)).iter())
-                        .flat_map(|x| x
-                            .iter()
-                            .map(|x| format!("{:?}", x.to_string()))
-                            .collect::<Vec<String>>())
-                        .collect::<Vec<String>>()
-                        .join(" "),
-                    key = flox_installable
-                        .attr_path
-                        .iter()
-                        .map(|p| format!("{p:?}"))
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                    processor = processor
-                        .map(|x| format!("(prefix: key: item: {x})"))
-                        .unwrap_or_else(|| "null".to_string()),
-                )
-                .replace("                    ", " ")
-                .replace('\n', "")
-            })
-            .collect();
-
-        // Construct the `apply` argument for the nix eval call to find what installables match
-        let eval_apply = format!(r#"(x: ({}))"#, installable_resolve_strs.join(" ++ "));
-
-        // The super resolver we're currently using to evaluate multiple whole flakerefs at once
-        let resolve_flake_attribute = FlakeAttribute {
-            flakeref: FlakeRef::Path(PathRef {
-                path: Path::new(env!("FLOX_RESOLVER_SRC")).to_path_buf(),
-                attributes: Default::default(),
-            }),
-            attr_path: ["", "resolve"].try_into().unwrap(),
-            outputs: Default::default(),
-        };
-
-        let command = Eval {
-            flake: FlakeArgs {
-                no_write_lock_file: true.into(),
-                // Use the flakeref map from earlier as input overrides so all the inputs point to the correct flakerefs
-                override_inputs: flakeref_inputs
-                    .iter()
-                    .filter_map(|(c, flakeref)| {
-                        let parsed_flakeref = flakeref.parse();
-                        match parsed_flakeref {
-                            Ok(to) => Some(OverrideInput {
-                                from: c.to_string(),
-                                to,
-                            }),
-                            Err(e) => {
-                                warn!(
-                                    indoc! {"
-                                    Could not parse flake_ref {flakeref}
-                                    {e}
-                                "},
-                                    flakeref = flakeref,
-                                    e = e
-                                );
-                                None
-                            },
-                        }
-                    })
-                    .collect(),
-            },
-            // Use the super resolver as the installable (which we use as this only takes one)
-            eval_args: EvalArgs {
-                installable: Some(resolve_flake_attribute.into()),
-                apply: Some(eval_apply.into()),
-            },
-            ..Default::default()
-        };
-
-        // Run our eval command with a typed output
-        let json_out = command
-            .run_json(&self.nix::<Nix>(vec![]), &NixArgs::default())
-            .await
-            .map_err(ResolveFloxInstallableError::Eval)?;
-        let out: InstallableEvalQueryOut = serde_json::from_value(json_out)?;
-
-        debug!("Output of installables eval query {:?}", out);
-
-        // Map over the eval query output, including the inputs' flakerefs correlated from the flakeref mapping
-        Ok(out
-            .into_iter()
-            .map(|e| {
-                ResolvedInstallableMatch::new(
-                    flakeref_inputs
-                        .get(&e.input.chars().next().unwrap())
-                        .expect("Match came from input that was not specified")
-                        .to_string(),
-                    e.prefix,
-                    e.system,
-                    e.explicit_system,
-                    e.key,
-                    e.description,
-                )
-            })
-            .collect())
-    }
-
-    // endregion: installables
-
-    /// Produce a new Nix Backend
-    ///
-    /// This method performs backend independent configuration of nix
-    /// and passes itself and the default config to the constructor of the Nix Backend
-    ///
-    /// The constructor will perform backend specific configuration measures
-    /// and return a fresh initialized backend.
-    pub fn nix<Nix: FloxNixApi>(&self, mut caller_extra_args: Vec<String>) -> Nix {
-        use std::io::Write;
-        use std::os::unix::prelude::OpenOptionsExt;
-
-        let environment = {
-            // Write registry file if it does not exist or has changed
-            let global_registry_file = self.config_dir.join("floxFlakeRegistry.json");
-            let registry_content = serde_json::to_string_pretty(&self.channels).unwrap();
-            if !global_registry_file.exists() || {
-                let contents: ChannelRegistry =
-                    serde_json::from_reader(std::fs::File::open(&global_registry_file).unwrap())
-                        .expect("Invalid registry file");
-
-                contents != self.channels
-            } {
-                let temp_registry_file = self.temp_dir.join("registry.json");
-
-                std::fs::File::options()
-                    .mode(0o600)
-                    .create_new(true)
-                    .write(true)
-                    .open(&temp_registry_file)
-                    .unwrap()
-                    .write_all(registry_content.as_bytes())
-                    .unwrap();
-
-                debug!("Updating flake registry: {global_registry_file:?}");
-                std::fs::rename(temp_registry_file, &global_registry_file).unwrap();
-            }
-
-            let config = NixConfigArgs {
-                accept_flake_config: true.into(),
-                warn_dirty: false.into(),
-                extra_experimental_features: ["nix-command", "flakes"]
-                    .map(String::from)
-                    .to_vec()
-                    .into(),
-                extra_substituters: ["https://cache.floxdev.com"]
-                    .map(String::from)
-                    .to_vec()
-                    .into(),
-                extra_trusted_public_keys: [
-                    "flox-store-public-0:8c/B+kjIaQ+BloCmNkRUKwaVPFWkriSAd0JJvuDu4F0=",
-                ]
-                .map(String::from)
-                .to_vec()
-                .into(),
-                extra_access_tokens: self.access_tokens.clone().into(),
-                flake_registry: Some(global_registry_file.into()),
-                netrc_file: Some(self.netrc_file.clone().into()),
-                connect_timeout: 5.into(),
-                ..Default::default()
-            };
-
-            let nix_config = format!(
-                "# Automatically generated - do not edit.\n{}\n",
-                config.to_config_string()
-            );
-
-            // Write nix.conf file if it does not exist or has changed
-            let global_config_file_path = self.config_dir.join("nix.conf");
-            if !global_config_file_path.exists() || {
-                let mut contents = String::new();
-                std::fs::File::open(&global_config_file_path)
-                    .unwrap()
-                    .read_to_string(&mut contents)
-                    .unwrap();
-
-                contents != nix_config
-            } {
-                let temp_config_file_path = self.temp_dir.join("nix.conf");
-
-                std::fs::File::options()
-                    .mode(0o600)
-                    .create_new(true)
-                    .write(true)
-                    .open(&temp_config_file_path)
-                    .unwrap()
-                    .write_all(nix_config.as_bytes())
-                    .unwrap();
-
-                info!("Updating nix.conf: {global_config_file_path:?}");
-                std::fs::rename(temp_config_file_path, &global_config_file_path).unwrap()
-            }
-
-            let mut env = default_nix_subprocess_env();
-            let _ = env.insert(
-                "NIX_USER_CONF_FILES".to_string(),
-                global_config_file_path.to_string_lossy().to_string(),
-            );
-            env
-        };
-
-        #[allow(clippy::needless_update)]
-        let common_args = NixCommonArgs {
-            ..Default::default()
-        };
-
-        let mut extra_args = vec!["--quiet".to_string(), "--quiet".to_string()];
-        extra_args.append(&mut caller_extra_args);
-
-        let default_nix_args = DefaultArgs {
-            environment,
-            common_args,
-            extra_args,
-            ..Default::default()
-        };
-
-        Nix::new(self, default_nix_args)
-    }
-}
-
-/// Requires login with auth0 with "openid" and "profile" scopes
-/// https://auth0.com/docs/scopes/current/oidc-scopes
-/// See also: `authenticate` in `flox/src/commands/auth.rs` where we set the scopes
-#[derive(Debug, Serialize, Deserialize)]
-struct Auth0User {
-    /// full name of the user
-    name: String,
-    /// nickname of the user (e.g. github username)
-    nickname: String,
-}
-
-pub struct Auth0Client {
-    base_url: String,
-    oauth_token: String,
-}
-
-impl Auth0Client {
-    pub fn new(base_url: String, oauth_token: String) -> Self {
-        Auth0Client {
-            base_url,
-            oauth_token,
-        }
-    }
-
-    pub async fn get_username(&self) -> Result<String, reqwest::Error> {
-        let url = format!("{}/userinfo", self.base_url);
-        let client = reqwest::Client::new();
-        let request = client
-            .get(url)
-            .header(USER_AGENT, "flox cli")
-            .bearer_auth(&self.oauth_token);
-
-        let response = request.send().await?;
-
-        if response.status().is_success() {
-            let user: Auth0User = response.json().await?;
-            Ok(user.nickname)
-        } else {
-            Err(response.error_for_status().unwrap_err())
-        }
-    }
-}
-
-#[cfg(test)]
-pub mod tests {
-    use reqwest::header::AUTHORIZATION;
-    use tempfile::TempDir;
-
+    use self::catalog::MockClient;
     use super::*;
+    use crate::models::environment::{
+        global_manifest_lockfile_path,
+        global_manifest_path,
+        init_global_manifest,
+    };
+    use crate::models::lockfile::LockedManifestPkgdb;
+    use crate::providers::git::{GitCommandProvider, GitProvider};
+
+    /// Get an instance of Flox that has both a locked global manifest and a git
+    /// repo mocking FloxHub.
+    ///
+    /// Having a locked global manifest means any operations that use pkgdb
+    /// should use the same nixpkgs revision.
+    ///
+    /// The mock version of FloxHub allows testing push/pull operations for the provided owner.
+    /// No other owners will work.
+    pub fn flox_instance_with_global_lock_and_floxhub(owner: &EnvironmentOwner) -> (Flox, TempDir) {
+        flox_instance_with_global_lock_with_optional_floxhub(Some(owner))
+    }
+
+    /// Get an instance of Flox that has a locked global manifest.
+    ///
+    /// This means any operations that use pkgdb should use the same nixpkgs
+    /// revision.
+    pub fn flox_instance_with_global_lock() -> (Flox, TempDir) {
+        flox_instance_with_global_lock_with_optional_floxhub(None)
+    }
+
+    /// If owner is None, no mock FloxHub is setup.
+    /// If it is Some, a mock FloxHub with a repo for that owner will be setup,
+    /// but no other owners will work.
+    fn flox_instance_with_global_lock_with_optional_floxhub(
+        owner: Option<&EnvironmentOwner>,
+    ) -> (Flox, TempDir) {
+        // Scrape nixpkgs once and then store the resulting global lockfile in memory
+        static GLOBAL_LOCKFILE: Lazy<LockedManifestPkgdb> = Lazy::new(|| {
+            let (flox, _temp_dir_handle) = flox_instance();
+            let pkgdb_nixpkgs_rev_new = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
+            std::env::set_var("_PKGDB_GA_REGISTRY_REF_OR_REV", pkgdb_nixpkgs_rev_new);
+            LockedManifestPkgdb::update_global_manifest(&flox, vec![])
+                .unwrap()
+                .new_lockfile
+        });
+
+        let (flox, tempdir_handle) = flox_instance_with_optional_floxhub_and_client(owner, false);
+
+        // All Flox instances created by flox_instance() have the same global
+        // manifest,
+        // so we can use the same lockfile.
+        let lockfile_path = global_manifest_lockfile_path(&flox);
+        std::fs::write(
+            lockfile_path,
+            serde_json::to_string_pretty(&*GLOBAL_LOCKFILE).unwrap(),
+        )
+        .unwrap();
+
+        (flox, tempdir_handle)
+    }
 
     pub fn flox_instance() -> (Flox, TempDir) {
+        flox_instance_with_optional_floxhub_and_client(None, false)
+    }
+
+    /// If owner is None, no mock FloxHub is setup.
+    /// If it is Some, a mock FloxHub with a repo for that owner will be setup,
+    /// but no other owners will work.
+    pub fn flox_instance_with_optional_floxhub_and_client(
+        owner: Option<&EnvironmentOwner>,
+        use_client: bool,
+    ) -> (Flox, TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
         let cache_dir = tempdir_handle.path().join("caches");
@@ -616,67 +282,109 @@ pub mod tests {
         let config_dir = tempdir_handle.path().join("config");
 
         std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::create_dir_all(&data_dir).unwrap();
         std::fs::create_dir_all(&temp_dir).unwrap();
         std::fs::create_dir_all(&config_dir).unwrap();
 
-        let mut channels = ChannelRegistry::default();
-        channels.register_channel("flox", "github:flox/floxpkgs/master".parse().unwrap());
+        let git_url_override = owner.map(|owner| {
+            let mock_floxhub_git_dir = tempdir_in(&temp_dir).unwrap().into_path();
+            let floxmeta_dir = mock_floxhub_git_dir.join(owner.as_str()).join("floxmeta");
+            fs::create_dir_all(&floxmeta_dir).unwrap();
+            GitCommandProvider::init(floxmeta_dir, true).unwrap();
+            Url::from_directory_path(mock_floxhub_git_dir).unwrap()
+        });
 
         let flox = Flox {
-            system: "aarch64-darwin".to_string(),
+            system: env!("NIX_TARGET_SYSTEM").to_string(),
             cache_dir,
             data_dir,
             temp_dir,
             config_dir,
-            channels,
-            ..Default::default()
+            access_tokens: Default::default(),
+            netrc_file: Default::default(),
+            uuid: Default::default(),
+            floxhub: Floxhub::new(
+                Url::from_str("https://hub.flox.dev").unwrap(),
+                git_url_override,
+            )
+            .unwrap(),
+            floxhub_token: None,
+            catalog_client: if use_client {
+                Some(MockClient::default().into())
+            } else {
+                None
+            },
         };
+
+        init_global_manifest(&global_manifest_path(&flox)).unwrap();
 
         (flox, tempdir_handle)
     }
+}
 
-    #[test]
-    fn test_resolved_installable_match_to_installable() {
-        let resolved = ResolvedInstallableMatch::new(
-            "github:flox/flox".to_string(),
-            "packages".to_string(),
-            Some("aarch64-darwin".to_string()),
-            false,
-            vec!["flox".to_string()],
-            None,
-        );
-        assert_eq!(
-            FlakeAttribute::from_str("github:flox/flox#.packages.aarch64-darwin.flox").unwrap(),
-            resolved.flake_attribute(),
-        );
-    }
+#[cfg(test)]
+pub mod tests {
+    use std::str::FromStr;
 
-    use mockito;
+    use super::*;
 
-    use crate::flox::Auth0Client;
+    /// A fake FloxHub token
+    ///
+    /// {
+    ///  "typ": "JWT",
+    ///  "alg": "HS256"
+    /// }
+    /// .
+    /// {
+    ///   "https://flox.dev/handle": "test"
+    ///   "exp": 9999999999,                // 2286-11-20T17:46:39+00:00
+    /// }
+    /// .
+    /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    const FAKE_TOKEN: &str= "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjk5OTk5OTk5OTl9.6-nbzFzQEjEX7dfWZFLE-I_qW2N_-9W2HFzzfsquI74";
+
+    /// A fake floxhub token, that is expired
+    ///
+    /// {
+    ///  "typ": "JWT",
+    ///  "alg": "HS256"
+    /// }
+    /// .
+    /// {
+    ///   "https://flox.dev/handle": "test"
+    ///   "exp": 1704063600,                // 2024-01-01T00:00:00+00:00
+    /// }
+    /// .
+    /// AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+    const FAKE_EXPIRED_TOKEN: &str= "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJodHRwczovL2Zsb3guZGV2L2hhbmRsZSI6InRlc3QiLCJleHAiOjE3MDQwNjM2MDB9.-5VCofPtmYQuvh21EV1nEJhTFV_URkRP0WFu4QDPFxY";
 
     #[tokio::test]
     async fn test_get_username() {
-        let mock_response = serde_json::json!({
-            "nickname": "exampleuser",
-            "name": "Example User",
-        });
-        let mut server = mockito::Server::new();
-        let mock_server_url = server.url();
-        let mock_server = server
-            .mock("GET", "/userinfo")
-            .match_header(AUTHORIZATION.as_str(), "Bearer your_oauth_token")
-            .match_header(USER_AGENT.as_str(), "flox cli")
-            .with_status(200)
-            .with_header("content-type", "application/json")
-            .with_body(mock_response.to_string())
-            .create();
+        let token = FloxhubToken::new(FAKE_TOKEN.to_string()).unwrap();
+        assert_eq!(token.handle(), "test");
+    }
 
-        let github_client = Auth0Client::new(mock_server_url, "your_oauth_token".to_string());
+    #[tokio::test]
+    async fn test_detect_expired() {
+        let token_error =
+            FloxhubToken::new(FAKE_EXPIRED_TOKEN.to_string()).expect_err("Token should be expired");
+        assert_eq!(token_error, FloxhubTokenError::Expired);
+    }
 
-        let username = github_client.get_username().await.unwrap();
-        assert_eq!(username, "exampleuser".to_string());
+    #[test]
+    fn test_derive_git_url() {
+        assert_eq!(
+            Floxhub::derive_git_url(&Url::from_str("https://hub.flox.dev").unwrap()).unwrap(),
+            Url::from_str("https://api.flox.dev/git").unwrap()
+        );
+    }
 
-        mock_server.assert();
+    #[test]
+    fn test_derive_git_url_dev() {
+        assert_eq!(
+            Floxhub::derive_git_url(&Url::from_str("https://hub.preview.flox.dev").unwrap())
+                .unwrap(),
+            Url::from_str("https://api.preview.flox.dev/git").unwrap()
+        );
     }
 }

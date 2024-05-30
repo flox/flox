@@ -4,7 +4,7 @@ A _registry_ in `pkgdb` is a structure used to organize a set of `nix` _flakes_,
 called _inputs_ throughout this document, which have been assigned short-names
 and additional metadata.
 
-While the _registry_ structure in `pkgdb` is similar to that used by `nix`, it 
+While the _registry_ structure in `pkgdb` is similar to that used by `nix`, it
 has been extended to record additional information for each _input_ related to
 package resolution/search.
 
@@ -28,7 +28,7 @@ Here we use JSON, but any trivial format could be used.
         "type": "github"
       , "owner": "NixOS"
       , "repo": "nixpkgs"
-      , "rev":  "e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+      , "rev":  "ab5fd150146dcfe41fda501134e6503932cc8dfd"
       }
     , "subtrees": ["legacyPackages"]
     }

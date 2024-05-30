@@ -2,7 +2,9 @@
 # -*- mode: bats; -*-
 # ============================================================================ #
 #
-# Test rust impl of `flox install`
+# Test the managed environment feature of flox.
+# * Tests whether flox commands work as expected in a managed environment
+# * Tests conversion of a local environments to managed environments
 #
 # ---------------------------------------------------------------------------- #
 
@@ -13,8 +15,8 @@ load test_support.bash
 # Helpers for project based tests.
 
 project_setup() {
-  export PROJECT_NAME="test"
-  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/$PROJECT_NAME"
+  export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-managed-${BATS_TEST_NUMBER?}"
+  export PROJECT_NAME="${PROJECT_DIR##*/}"
   export OWNER="owner"
 
   rm -rf "$PROJECT_DIR"
@@ -36,8 +38,8 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  setup_isolated_flox
   project_setup
-  home_setup test
   floxhub_setup "$OWNER"
 }
 
@@ -69,15 +71,15 @@ dot_flox_exists() {
 @test "m1: install a package to a managed environment" {
   make_empty_remote_env
 
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
   assert_success
   assert_output ""
 
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output --partial "environment $OWNER/test" # managed env output
+  assert_output --partial "environment '$OWNER/project-managed-${BATS_TEST_NUMBER}'" # managed env output
 
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
   assert_success
   assert_output "hello"
 }
@@ -90,7 +92,7 @@ dot_flox_exists() {
   run "$FLOX_BIN" uninstall hello
   assert_success
 
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
   assert_success
   assert_output ""
 }
@@ -108,7 +110,7 @@ EOF
 
   run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output --partial "✅ environment successfully edited"
+  assert_output --partial "✅ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -131,7 +133,7 @@ EOF
   export FLOX_DATA_DIR="$(pwd)/b_data"
   pushd b > /dev/null || return
   "$FLOX_BIN" pull --remote "$OWNER/a"
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
 
   # assert that the environment contains the installed package
   assert_output "hello"
@@ -170,7 +172,7 @@ EOF
   assert_success
 
   # assert that the environment contains the installed package
-  run --separate-stderr "$FLOX_BIN" list
+  run --separate-stderr "$FLOX_BIN" list --name
   assert_output "hello"
   popd > /dev/null || return
 }
@@ -271,8 +273,8 @@ EOF
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  SHELL=bash USER="$REAL_USER" run -0 expect -d "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR"
-  assert_output --regexp "$FLOX_CACHE_HOME/run/owner/.+\..+\..+/bin/hello"
+  FLOX_SHELL=bash USER="$REAL_USER" run -0 expect "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR"
+  assert_output --regexp "$FLOX_CACHE_DIR/run/owner/.+\..+\..+/bin/hello"
   refute_output "not found"
 }
 
@@ -280,19 +282,29 @@ EOF
 
 # bats test_tags=managed,delete,managed:delete
 @test "m10: deletes existing environment" {
+  # This test asserts before and after state of the home directory.
+  # Remaining state from other tests may cause this test misbehave.
+  # Hence, use a clean home directory, for this test rather than the shared one.
+  home_setup test
+
+  # Note: this creates two envs in one entry in the registry:
+  # 1. The initial env created by `flox init`
+  # 2. The managed environment created by pushing the path environment
   make_empty_remote_env
 
   run dot_flox_exists
   assert_success
 
+  # After this we're still left with the path environment
   run "$FLOX_BIN" delete
   assert_success
 
   run dot_flox_exists
   assert_failure
 
-  run ls -lA "$FLOX_DATA_HOME/links"
-  assert_output "total 0"
+  # We should only see the path environnment
+  run jq '.entries[0].envs | length' "$FLOX_DATA_DIR/env-registry.json"
+  assert_output "1"
 }
 
 # test that non-pushed environments can be deleted
@@ -309,17 +321,18 @@ EOF
   assert_failure
 
   # when recreating an environment, a new branch should be used
-  run "$FLOX_BIN" pull --remote "$OWNER/test"
+  run "$FLOX_BIN" pull --remote "$OWNER/project-managed-${BATS_TEST_NUMBER}"
   assert_success
 
   "$FLOX_BIN" install emacs
-  run "$FLOX_BIN" list
+  run "$FLOX_BIN" list --name
   assert_output --partial "emacs"
   refute_output "vim"
 }
 
 @test "sanity check upgrade works for managed environments" {
-  make_empty_remote_env
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    make_empty_remote_env
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" install hello

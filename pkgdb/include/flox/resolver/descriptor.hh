@@ -27,6 +27,10 @@ namespace flox::resolver {
 
 /* -------------------------------------------------------------------------- */
 
+const unsigned DEFAULT_PRIORITY = 5;
+
+/* -------------------------------------------------------------------------- */
+
 /** @brief A named group which a descriptor/package can be a member of. */
 using GroupName = std::string;
 
@@ -72,8 +76,8 @@ public:
 
   /** @brief A dot separated attribut path, or list representation. */
   using Path = std::variant<std::string, flox::AttrPath>;
-  /** Match a relative path. */
-  std::optional<Path> path;
+  /** Match a relative pkgPath. */
+  std::optional<Path> pkgPath;
 
   /**
    * @brief A dot separated attribut path, or list representation.
@@ -96,7 +100,7 @@ public:
 
   // TODO: Not implemented.
   /** Named _group_ that the package is a member of. */
-  std::optional<GroupName> packageGroup;
+  std::optional<GroupName> pkgGroup;
 
   // TODO: Not implemented.
   /** Force resolution is the named input or _flake reference_. */
@@ -118,10 +122,10 @@ public:
    *        throws an exception if the descriptor is invalid.
    *
    * This requires that the `abspath` field is valid, and consistent with
-   * `path` and/or `systems` fields if they are set.
+   * `pkgPath` and/or `systems` fields if they are set.
    */
   void
-  check( const std::string iid = "*" ) const;
+  check( const std::string & iid = "*" ) const;
 
   /** @brief Reset to default/empty state. */
   void
@@ -243,7 +247,7 @@ public:
   std::optional<std::vector<System>> systems;
 
   /** Match a relative attribute path. */
-  std::optional<flox::AttrPath> path;
+  std::optional<flox::AttrPath> pkgPath;
 
   /** Force resolution in a given input, _flake reference_. */
   std::optional<nix::FlakeRef> input;
@@ -255,7 +259,7 @@ public:
    * Packages with higher @a priority values will take precendence over those
    * with lower @a priority values.
    */
-  unsigned priority = 5;
+  unsigned priority = DEFAULT_PRIORITY;
 
 
   ManifestDescriptor() = default;
@@ -269,9 +273,9 @@ public:
                                const ManifestDescriptorRaw & raw )
     : ManifestDescriptor( raw )
   {
-    if ( ( ! this->name.has_value() ) && ( ! this->path.has_value() ) )
+    if ( ( ! this->name.has_value() ) && ( ! this->pkgPath.has_value() ) )
       {
-        this->path = AttrPath { std::string( installID ) };
+        this->pkgPath = AttrPath { std::string( installID ) };
       }
   }
 

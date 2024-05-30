@@ -1,0 +1,16 @@
+[hook]
+on-activate = """
+    export HOOK_VAR="hookie"
+"""
+
+[profile]
+common = """
+    mkdir "$HOOK_VAR-common"
+    export COMMON_VAR="common"
+"""
+bash = """
+    mkdir "$COMMON_VAR-bash"
+"""
+zsh = """
+    mkdir "$COMMON_VAR-zsh"
+"""

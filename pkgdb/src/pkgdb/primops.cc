@@ -25,6 +25,9 @@ namespace flox::pkgdb {
 
 /* -------------------------------------------------------------------------- */
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+// Upstream nix code is using this pattern extensively,
+// lets not break the convention
 void
 prim_getFingerprint( nix::EvalState &  state,
                      const nix::PosIdx pos,
@@ -48,22 +51,26 @@ prim_getFingerprint( nix::EvalState &  state,
     flake.getFlake()->lockedFlake.getFingerprint().to_string( nix::Base16,
                                                               false ) );
 }
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
 
 
 /* -------------------------------------------------------------------------- */
 
-static nix::RegisterPrimOp primop_getFingerprint( { .name  = "__getFingerprint",
-                                                    .args  = { "flakeRef" },
-                                                    .arity = 0,
-                                                    .doc   = R"(
+// NOLINTBEGIN(cert-err58-cpp)
+// This can throw an exception that cannot be caught.
+static const nix::RegisterPrimOp
+  primop_getFingerprint( { .name                = "__getFingerprint",
+                           .args                = { "flakeRef" },
+                           .arity               = 0,
+                           .doc                 = R"(
     This hash uniquely identifies a revision of a locked flake.
     Takes a single argument:
 
     - `flakeRef`: Either an attribute set or string flake-ref.
     )",
-                                                    .fun = prim_getFingerprint,
-                                                    .experimentalFeature
-                                                    = nix::Xp::Flakes } );
+                           .fun                 = prim_getFingerprint,
+                           .experimentalFeature = nix::Xp::Flakes } );
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
 
 
 /* -------------------------------------------------------------------------- */

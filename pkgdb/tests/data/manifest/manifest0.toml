@@ -1,29 +1,29 @@
 [registry]
-priority = [ "nixpkgs", "floco" ]
+priority = ["nixpkgs", "floco"]
 
 [registry.inputs.nixpkgs]
-subtrees = [ "legacyPackages" ]
+subtrees = ["legacyPackages"]
 
-  [registry.inputs.nixpkgs.from]
-  type = "github"
-  owner = "NixOS"
-  repo = "nixpkgs"
-  rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+[registry.inputs.nixpkgs.from]
+type = "github"
+owner = "NixOS"
+repo = "nixpkgs"
+rev = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
 [registry.inputs.floco]
-subtrees = [ "packages" ]
+subtrees = ["packages"]
 
-  [registry.inputs.floco.from]
-  type = "github"
-  owner = "aakropotkin"
-  repo = "floco"
-  rev = "1e84b4b16bba5746e1195fa3a4d8addaaf2d9ef4"
+[registry.inputs.floco.from]
+type = "github"
+owner = "aakropotkin"
+repo = "floco"
+rev = "1e84b4b16bba5746e1195fa3a4d8addaaf2d9ef4"
 
 [env-base]
 floxhub = "https://hub.flox.dev/owner/env"
 
 [options]
-systems = [ "x86_64-linux" ]
+systems = ["x86_64-linux"]
 activation-strategy = "etc-profiles"
 package-grouping-strategy = "auto"
 
@@ -32,13 +32,13 @@ package-grouping-strategy = "auto"
 type = "github"
 owner = "NixOS"
 repo = "nixpkgs"
-rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1"
+rev = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
-  [install.charasay]
-  version = "^2"
+[install.charasay]
+version = "^2"
 
-  [install.pip]
-  path = "python310Packages.pip"
+[install.pip]
+pkg-path = "python310Packages.pip"
 
 [vars]
 message = "Howdy"

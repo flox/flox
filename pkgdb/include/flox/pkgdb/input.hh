@@ -56,6 +56,14 @@ class PkgDbInput : public FloxFlakeInput
 
 private:
 
+  /* Exit code used during multi-process scraping to indicate successful
+   * processing but additinal pages of attributes are yet to be processed. */
+  static const int EXIT_CHILD_INCOMPLETE = EXIT_SUCCESS + 1;
+  /* Exit code used during multi-process scraping to indicate an unrecoverable
+   * error occured in the nix evalutaion. Chosen arbitrarily, but with the
+   * intent to avoid posix overlap. */
+  static const int EXIT_FAILURE_NIX_EVAL = 150;
+
   /* Provided by `FloxFlakeInput':
    *   nix::ref<nix::FlakeRef>             flakeRef
    *   nix::ref<nix::Store>                store
@@ -81,7 +89,6 @@ private:
   /** The name of the input, used to emit output with shortnames. */
   std::optional<std::string> name;
 
-
   /**
    * @brief Prepare database handles for use.
    *
@@ -97,6 +104,8 @@ private:
    */
   void
   init();
+  bool
+  initDbRO();
 
 
 public:
@@ -108,6 +117,11 @@ public:
   struct db_path_tag
   {};
 
+  /** Heuristically determined limits for page size for scraping.  This affects
+   * memory usage.  See @a getScrapingPageSize()
+   */
+  static constexpr size_t maxPageSize = 100 * 1000L;
+  static constexpr size_t minPageSize = 1 * 1000L;
 
   /**
    * @brief Construct a @a PkgDbInput from a @a RegistryInput and a path to
@@ -171,10 +185,7 @@ public:
 
   /** @brief Close the read/write database connection if it is open. */
   void
-  closeDbReadWrite()
-  {
-    this->dbRW = nullptr;
-  }
+  closeDbReadWrite();
 
   /** @return Filesystem path to the flake's package database. */
   [[nodiscard]] std::filesystem::path
@@ -182,6 +193,14 @@ public:
   {
     return this->dbPath;
   }
+
+  /**
+   * @brief Scrape all prefixes indicated by @a InputPreferences for
+   *        @a systems.
+   * @param systems Systems to be scraped.
+   */
+  void
+  scrapeSystems( const std::vector<System> & systems );
 
   /**
    * @brief Ensure that an attribute path prefix has been scraped.
@@ -198,12 +217,22 @@ public:
   scrapePrefix( const flox::AttrPath & prefix );
 
   /**
-   * @brief Scrape all prefixes indicated by @a InputPreferences for
-   *        @a systems.
-   * @param systems Systems to be scraped.
+   * @brief Scrapes one page of attributes directly beneath @a prefix.  Used
+   * specifically as a child process in @a scrapePrefix. Attributes N to N + @a
+   * pageSize where N is @a pageSize * @a pageIdx will be scraped, depth first.
+   *
+   * @param input The PkgDbInput to scrape from.  This is passed to this static
+   * helper rather than relying on a method and using *this* to encourage
+   * encapsulation.
+   * @param prefix The prefix to process attributes beneath.
+   * @param pageIdx The page of attributes to process
+   * @param pageSize The number of attributes per page.
    */
-  void
-  scrapeSystems( const std::vector<System> & systems );
+  static int
+  scrapePrefixWorker( PkgDbInput *     input,
+                      const AttrPath & prefix,
+                      size_t           pageIdx,
+                      size_t           pageSize );
 
   /** @brief Add/set a shortname for this input. */
   void
@@ -233,6 +262,14 @@ public:
   {
     return this->name;
   }
+
+  /**
+   * @brief Helper to identify the pageSize to use for scraping.
+   * @return pageSize in items
+   */
+  static int
+  getScrapingPageSize();
+
 }; /* End struct `PkgDbInput' */
 
 

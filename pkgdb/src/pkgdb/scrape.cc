@@ -76,7 +76,11 @@ ScrapeCommand::run()
   this->input->scrapePrefix( this->attrPath );
 
   /* Print path to database. */
-  std::cout << ( static_cast<std::string>( *this->dbPath ) ) << std::endl;
+  std::cout << nlohmann::json(
+                 { { "database-path",
+                     static_cast<std::string>( this->input->getDbPath() ) } } )
+                 .dump()
+            << std::endl;
   return EXIT_SUCCESS; /* GG, GG */
 }
 

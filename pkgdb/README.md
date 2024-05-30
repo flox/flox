@@ -13,15 +13,15 @@ Links to additional documentation may be found at the bottom of this file.
 
 ## Purpose
 
-Evaluating nix expressions for an entire flake is expensive but necessary for 
-features like package search. 
-This tool provides a way to scrape the data from a flake once and store it in a 
+Evaluating nix expressions for an entire flake is expensive but necessary for
+features like package search.
+This tool provides a way to scrape the data from a flake once and store it in a
 database for later usage.
 
-The current responsibility of the `pkgdb` tool extends only as far as scraping 
-a flake and generating a database. 
-The database should be queried using standard sqlite tools and libraries and all 
-decisions about how and when to generate and update the database are left up to 
+The current responsibility of the `pkgdb` tool extends only as far as scraping
+a flake and generating a database.
+The database should be queried using standard sqlite tools and libraries and all
+decisions about how and when to generate and update the database are left up to
 the consumer.
 
 
@@ -47,16 +47,16 @@ fetching flake 'github:NixOS/nixpkgs'...
 /Users/me/.cache/flox/pkgdb-v0/93a89abd052c90a33e8787a7740f2459cdb496980848011ae708b0de1bbfac82.sqlite
 ```
 
-By default, packages will be scraped from packages.[system arch] and stored in 
-`~/.cache` in a database named after the flake fingerprint. 
+By default, packages will be scraped from packages.[system arch] and stored in
+`~/.cache` in a database named after the flake fingerprint.
 These can be overridden as desired:
 
 ```bash
 $ pkgdb scrape github:NixOS/nixpkgs --database flakedb.sqlite legacyPackages aarch64-darwin
 ```
 
-If the database for a given flake already exists and is asked to re-process an 
-existing package set, it will be skipped. Use `--force` to force 
+If the database for a given flake already exists and is asked to re-process an
+existing package set, it will be skipped. Use `--force` to force
 an update/regeneration.
 
 Once generated, the database can be opened and queried using `sqlite3`.
@@ -90,7 +90,7 @@ A given client application that did want to scrape a flake completely would run
 something along the lines of:
 
 ```shell
-$ lockedRef="github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1";
+$ lockedRef="github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd";
 $ dbPath=;
 $ for subtree in packages legacyPackages; do
     for system in x86_64-linux x86_64-darwin aarch64-darwin aarch64-linux; do
@@ -104,14 +104,14 @@ In the example above we the caller would passes in a locked ref, this was
 technically optional, but is strongly recommended.
 What's important is that invocations that intend to append to an existing
 database ABSOLUTELY SHOULD be using locked flake references.
-In the event that you want to use an unlocked reference on the first call, you 
+In the event that you want to use an unlocked reference on the first call, you
 can extract a locked flake reference from a database for later runs, but
 official recommendation is to lock flakes before looping.
 
 If the caller _really_ wants to they could pass an unlocked ref on the first
 invocation, and yank the locked reference from the resulting database.
-This is potentially useful for working with local flakes in the event that you 
-don't want to use a utility like `nix flake prefetch` or `parser-util` to lock 
+This is potentially useful for working with local flakes in the event that you
+don't want to use a utility like `nix flake prefetch` or `parser-util` to lock
 your references for you:
 
 ```shell
@@ -282,3 +282,4 @@ This is implemented on [flox::pkgdb::PkgDb::scrape()](./src/pkgdb/write.cc).
 - [Manifests](./docs/manifests.md)
 - [Lockfiles](./docs/lockfile.md)
 - [Garbage Collection](./docs/garbage-collection.md)
+- [Memory Profiling with Valgrind](./docs/valgrind.md)

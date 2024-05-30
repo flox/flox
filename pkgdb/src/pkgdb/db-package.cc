@@ -29,8 +29,12 @@ DbPackage::initRawPackage( PkgDbReadOnly & pkgdb )
       , 'license',          license
       , 'outputs',          json( outputs )
       , 'outputsToInstall', json( outputsToInstall )
-      , 'broken',           iif( broken, json( 'true' ), json( 'false' ) )
-      , 'unfree',           iif( broken, json( 'true' ), json( 'false' ) )
+      , 'broken',           CASE WHEN broken THEN json( 'true' )
+                                             ELSE json( 'false' )
+                            END
+      , 'unfree',           CASE WHEN unfree THEN json( 'true' )
+                                             ELSE json( 'false' )
+                            END
       , 'description',      description
       ) AS json
       FROM Packages

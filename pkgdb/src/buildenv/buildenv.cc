@@ -8,7 +8,6 @@
  * -------------------------------------------------------------------------- */
 
 #include <algorithm>
-#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -25,7 +24,7 @@ namespace flox::buildenv {
 
 struct BuildEnvState
 {
-  std::map<std::string, Priority> priorities;
+  std::map<std::string, Priority> priorities {};
   unsigned long                   symlinks = 0;
 };
 
@@ -34,6 +33,8 @@ struct BuildEnvState
 
 
 /* For each activated package, create symlinks */
+// todo: break this function up to reduce complexity
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 static void
 createLinks( BuildEnvState &     state,
              const std::string & srcDir,
@@ -69,7 +70,8 @@ createLinks( BuildEnvState &     state,
       auto srcFile = srcDir + "/" + ent.name;
       auto dstFile = dstDir + "/" + ent.name;
 
-      struct stat srcSt;
+      struct stat srcSt
+      {};
       try
         {
           if ( stat( srcFile.c_str(), &srcSt ) == -1 )
@@ -109,10 +111,11 @@ createLinks( BuildEnvState &     state,
       // if the directory already exists, create a directory
       // and recursively link the contents.
       // Handle file type mismatches and conflicts with priority.
-      else if ( S_ISDIR( srcSt.st_mode ) )
+      if ( S_ISDIR( srcSt.st_mode ) )
         {
-          struct stat dstSt;
-          auto        res = lstat( dstFile.c_str(), &dstSt );
+          struct stat dstSt
+          {};
+          auto res = lstat( dstFile.c_str(), &dstSt );
           if ( res == 0 )
             {
               if ( S_ISDIR( dstSt.st_mode ) )
@@ -120,10 +123,12 @@ createLinks( BuildEnvState &     state,
                   createLinks( state, srcFile, dstFile, priority );
                   continue;
                 }
-              else if ( S_ISLNK( dstSt.st_mode ) )
+
+              if ( S_ISLNK( dstSt.st_mode ) )
                 {
                   auto        target = nix::canonPath( dstFile, true );
-                  struct stat canonSt;
+                  struct stat canonSt
+                  {};
                   if ( lstat( target.c_str(), &canonSt ) != 0 )
                     {
                       throw nix::SysError( "getting status of '%1%'", target );
@@ -139,7 +144,9 @@ createLinks( BuildEnvState &     state,
                     {
                       throw nix::SysError( "unlinking '%1%'", dstFile );
                     }
-                  if ( mkdir( dstFile.c_str(), 0755 ) == -1 )
+
+                  const auto dirPermissions = 0755;
+                  if ( mkdir( dstFile.c_str(), dirPermissions ) == -1 )
                     {
                       throw nix::SysError( "creating directory '%1%'",
                                            dstFile );
@@ -159,8 +166,9 @@ createLinks( BuildEnvState &     state,
         }
       else
         {
-          struct stat dstSt;
-          auto        res = lstat( dstFile.c_str(), &dstSt );
+          struct stat dstSt
+          {};
+          auto res = lstat( dstFile.c_str(), &dstSt );
           if ( res == 0 )
             {
               if ( S_ISLNK( dstSt.st_mode ) )
@@ -178,10 +186,9 @@ createLinks( BuildEnvState &     state,
                       // ... and have different parents -> conflict
                       if ( prevPriority.parentPath != priority.parentPath )
                         {
-                          throw BuildEnvFileConflictError(
-                            nix::readLink( dstFile ),
-                            srcFile,
-                            priority.priority );
+                          throw FileConflict( nix::readLink( dstFile ),
+                                              srcFile,
+                                              priority.priority );
                         }
 
                       // ... and dest has a higher (numerically lower)
@@ -218,17 +225,20 @@ createLinks( BuildEnvState &     state,
       state.symlinks++;
     }
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 
 /* -------------------------------------------------------------------------- */
 
+// todo: break this function up to reduce complexity
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 void
-buildEnvironment( const std::string &             out,
-                  std::vector<RealisedPackage> && pkgs )
+buildEnvironment( const std::string & out, std::vector<RealisedPackage> & pkgs )
 {
   BuildEnvState state;
 
-  std::set<std::string> done, postponed;
+  std::set<std::string> done;
+  std::set<std::string> postponed;
 
   auto addPkg = [&]( const std::string & pkgDir, const Priority & priority )
   {
@@ -237,12 +247,12 @@ buildEnvironment( const std::string &             out,
 
     try
       {
-        for ( const auto & p : nix::tokenizeString<std::vector<std::string>>(
+        for ( const auto & path : nix::tokenizeString<std::vector<std::string>>(
                 nix::readFile( pkgDir
                                + "/nix-support/propagated-user-env-packages" ),
                 " \n" ) )
           {
-            if ( ! done.count( p ) ) { postponed.insert( p ); }
+            if ( ! done.contains( path ) ) { postponed.insert( path ); }
           }
       }
     catch ( nix::SysError & e )
@@ -252,12 +262,12 @@ buildEnvironment( const std::string &             out,
 
     try
       {
-        for ( const auto & p : nix::tokenizeString<std::vector<std::string>>(
+        for ( const auto & path : nix::tokenizeString<std::vector<std::string>>(
                 nix::readFile( pkgDir
                                + "/nix-support/propagated-build-inputs" ),
                 " \n" ) )
           {
-            if ( ! done.count( p ) ) { postponed.insert( p ); }
+            if ( ! done.contains( path ) ) { postponed.insert( path ); }
           }
       }
     catch ( nix::SysError & e )
@@ -277,24 +287,27 @@ buildEnvironment( const std::string &             out,
    * is performed in `buildenv::createLinks'. */
   std::sort( pkgs.begin(),
              pkgs.end(),
-             []( const RealisedPackage & a, const RealisedPackage & b )
+             []( const RealisedPackage & first, const RealisedPackage & second )
              {
-               auto aP = a.priority;
-               auto bP = b.priority;
+               auto firstP  = first.priority;
+               auto secondP = second.priority;
 
                // order by priority
-               if ( aP.priority < bP.priority ) { return true; }
-               if ( aP.priority > bP.priority ) { return false; }
+               if ( firstP.priority < secondP.priority ) { return true; }
+               if ( firstP.priority > secondP.priority ) { return false; }
 
                // ... then internal priority
-               if ( aP.internalPriority < bP.internalPriority ) { return true; }
-               if ( aP.internalPriority > bP.internalPriority )
+               if ( firstP.internalPriority < secondP.internalPriority )
+                 {
+                   return true;
+                 }
+               if ( firstP.internalPriority > secondP.internalPriority )
                  {
                    return false;
                  }
 
                // ... then (arbitrarily) by path
-               return a.path < b.path;
+               return first.path < second.path;
              } );
 
   for ( const auto & pkg : pkgs )
@@ -309,7 +322,8 @@ buildEnvironment( const std::string &             out,
    */
   // TODO: consider making this optional?
   // TODO: include paths recursively?
-  auto priorityCounter = 1000u;
+  // NOLINTNEXTLINE(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+  auto priorityCounter = 1000U;
   while ( ! postponed.empty() )
     {
       std::set<std::string> pkgDirs;
@@ -327,6 +341,7 @@ buildEnvironment( const std::string &             out,
         nix::fmt( "created %d symlinks in user environment", state.symlinks ) );
     }
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 /* -------------------------------------------------------------------------- */
 

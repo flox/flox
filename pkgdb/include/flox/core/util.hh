@@ -20,6 +20,7 @@
 #include <nix/attrs.hh>
 #include <nix/error.hh>
 #include <nix/flake/flakeref.hh>
+#include <nix/util.hh>
 #include <nlohmann/json.hpp>
 
 #include "flox/core/exceptions.hh"
@@ -44,6 +45,30 @@ struct overloaded : Ts...
 
 template<class... Ts>
 overloaded( Ts... ) -> overloaded<Ts...>;
+
+
+/* -------------------------------------------------------------------------- */
+
+/** @brief Detect if two vectors are equal. */
+template<typename T>
+[[nodiscard]] bool
+operator==( const std::vector<T> & lhs, const std::vector<T> & rhs )
+{
+  if ( lhs.size() != rhs.size() ) { return false; }
+  for ( size_t idx = 0; idx < lhs.size(); ++idx )
+    {
+      if ( lhs[idx] != rhs[idx] ) { return false; }
+    }
+  return true;
+}
+
+/** @brief Detect if two vectors are not equal. */
+template<typename T>
+[[nodiscard]] bool
+operator!=( const std::vector<T> & lhs, const std::vector<T> & rhs )
+{
+  return ! ( lhs == rhs );
+}
 
 
 /* -------------------------------------------------------------------------- */
@@ -179,7 +204,7 @@ struct adl_serializer<nix::FlakeRef>
   }
 
   /** @brief _Move-only_ conversion of a JSON object to a @a nix::FlakeRef. */
-  static nix::FlakeRef
+  [[nodiscard]] static nix::FlakeRef
   from_json( const json & jfrom )
   {
     if ( jfrom.is_object() )
@@ -197,6 +222,13 @@ struct adl_serializer<nix::FlakeRef>
 
 }  // namespace nlohmann
 
+/* -------------------------------------------------------------------------- */
+
+/** @brief Detect if two vectors of strings are equal. */
+[[nodiscard]] bool
+operator==( const std::vector<std::string> & lhs,
+            const std::vector<std::string> & rhs );
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -205,7 +237,7 @@ namespace flox {
 /* -------------------------------------------------------------------------- */
 
 /** @brief Systems to resolve/search in. */
-inline static const std::vector<std::string> &
+[[nodiscard]] inline static const std::vector<std::string> &
 getDefaultSystems()
 {
   static const std::vector<std::string> defaultSystems
@@ -215,7 +247,7 @@ getDefaultSystems()
 
 
 /** @brief `flake' subtrees to resolve/search in. */
-inline static const std::vector<std::string> &
+[[nodiscard]] inline static const std::vector<std::string> &
 getDefaultSubtrees()
 {
   static const std::vector<std::string> defaultSubtrees
@@ -231,8 +263,19 @@ getDefaultSubtrees()
  * @param dbPath Absolute path.
  * @return `true` iff @a path is a SQLite3 database file.
  */
-bool
+[[nodiscard]] bool
 isSQLiteDb( const std::string & dbPath );
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Predicate to detect failing SQLite3 return codes.
+ * @param rcode A SQLite3 _return code_.
+ * @return `true` iff @a rcode is a SQLite3 error.
+ */
+bool
+isSQLError( int rcode );
 
 
 /* -------------------------------------------------------------------------- */
@@ -242,7 +285,7 @@ isSQLiteDb( const std::string & dbPath );
  * @param flakeRef JSON or URI string representing a `nix` flake reference.
  * @return Parsed flake reference object.
  */
-nix::FlakeRef
+[[nodiscard]] nix::FlakeRef
 parseFlakeRef( const std::string & flakeRef );
 
 
@@ -253,21 +296,21 @@ parseFlakeRef( const std::string & flakeRef );
  * @param jsonOrPath A JSON string or a path to a JSON file.
  * @return A parsed JSON object.
  */
-nlohmann::json
+[[nodiscard]] nlohmann::json
 parseOrReadJSONObject( const std::string & jsonOrPath );
 
 
 /* -------------------------------------------------------------------------- */
 
 /** @brief Convert a TOML string to JSON. */
-nlohmann::json
+[[nodiscard]] nlohmann::json
 tomlToJSON( std::string_view toml );
 
 
 /* -------------------------------------------------------------------------- */
 
 /** @brief Convert a YAML string to JSON. */
-nlohmann::json
+[[nodiscard]] nlohmann::json
 yamlToJSON( std::string_view yaml );
 
 
@@ -280,7 +323,7 @@ yamlToJSON( std::string_view yaml );
  * Files with the extension `.yaml` or `.yml` are converted to JSON from YAML.
  * Files with the extension `.toml` are converted to JSON from TOML.
  */
-nlohmann::json
+[[nodiscard]] nlohmann::json
 readAndCoerceJSON( const std::filesystem::path & path );
 
 
@@ -291,7 +334,7 @@ readAndCoerceJSON( const std::filesystem::path & path );
  *
  * Handles quoted strings and escapes.
  */
-std::vector<std::string>
+[[nodiscard]] std::vector<std::string>
 splitAttrPath( std::string_view path );
 
 
@@ -302,20 +345,33 @@ splitAttrPath( std::string_view path );
  * @param str String to test.
  * @return `true` iff @a str is a stringized unsigned integer.
  */
-bool
+[[nodiscard]] bool
 isUInt( std::string_view str );
 
 
 /* -------------------------------------------------------------------------- */
 
 /**
- * @brief Does the string @str have the prefix @a prefix?
+ * @brief Does the string @a str have the prefix @a prefix?
  * @param prefix The prefix to check for.
  * @param str String to test.
  * @return `true` iff @a str has the prefix @a prefix.
  */
-bool
+[[nodiscard]] bool
 hasPrefix( std::string_view prefix, std::string_view str );
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief Does the vector of strings @a lst begin with the elements
+ *        of @a prefix?
+ * @param prefix The prefix to check for.
+ * @param lst Vector of strings to test.
+ * @return `true` iff @a lst has the prefix @a prefix.
+ */
+[[nodiscard]] bool
+hasPrefix( const std::vector<std::string> & prefix,
+           const std::vector<std::string> & lst );
 
 
 /* -------------------------------------------------------------------------- */
@@ -351,7 +407,7 @@ trim_copy( std::string_view str );
 /**
  * @brief Extract the user-friendly portion of a @a nlohmann::json::exception.
  */
-std::string
+[[nodiscard]] std::string
 extract_json_errmsg( nlohmann::json::exception & err );
 
 /* -------------------------------------------------------------------------- */
@@ -388,7 +444,7 @@ assertIsJSONObject( const nlohmann::json & value,
  * @return The merged @a std::vector.
  */
 template<typename T>
-std::vector<T>
+[[nodiscard]] std::vector<T>
 merge_vectors( const std::vector<T> & lower, const std::vector<T> & higher )
 {
   std::vector<T> merged = higher;
@@ -405,75 +461,81 @@ merge_vectors( const std::vector<T> & lower, const std::vector<T> & higher )
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Convert a @a AttrPathGlob to a string for display. */
+[[nodiscard]] std::string
+displayableGlobbedPath( const AttrPathGlob & attrs );
+
+/** @brief Get available system memory in kb */
+[[nodiscard]] long
+getAvailableSystemMemory();
+
+/** @brief Get the main flox cache dir */
+std::filesystem::path
+getFloxCachedir();
+
+
+/* -------------------------------------------------------------------------- */
+
 /**
- * @brief Constructs a @a std::vector<std::optional<T>> from a
- * @a std::vector<T>.
+ * @brief Concatenate the given strings with a separator between
+ *        the elements.
  */
-template<typename T>
-[[nodiscard]] std::vector<std::optional<T>>
-vectorMapOptional( const std::vector<T> & orig )
+template<class Container>
+[[nodiscard]] std::string
+concatStringsSep( const std::string_view sep, const Container & strings )
 {
-  std::vector<std::optional<T>> rsl;
-  for ( const T & val : orig )
+  size_t size = 0;
+  /* Needs a cast to string_view since this is also called
+   * with `nix::Symbols'. */
+  for ( const auto & str : strings )
     {
-      rsl.emplace_back( std::make_optional<T>( val ) );
+      size += sep.size() + std::string_view( str ).size();
+    }
+  std::string rsl;
+  rsl.reserve( size );
+  for ( auto & idx : strings )
+    {
+      if ( ! rsl.empty() ) { rsl += sep; }
+      rsl += idx;
     }
   return rsl;
 }
 
-/* -------------------------------------------------------------------------- */
-
-/**
- * @brief Convert a @a AttrPathGlob to a string for display.
- */
-std::string
-displayableGlobbedPath( const AttrPathGlob & attrs );
 
 /* -------------------------------------------------------------------------- */
 
-/**
- * @brief Join a vector of strings with a delimiter between elements.
+/** @brief Print a log message with the provided log level.
+ *
+ * This is a macro so that any allocations needed for msg can be optimized out.
  */
-std::string
-joinWithDelim( const std::vector<std::string> & strings,
-               const std::string &              delim );
+#define printLog( lvl, msg )                                                                               \
+  /* See                                                                                                   \
+   * https://github.com/NixOS/nix/blob/09a6e8e7030170611a833612b9f40b9a10778c18/src/libutil/logging.cc#L64 \
+   * for lvl to verbosity comparison                                                                       \
+   */                                                                                                      \
+  if ( ! ( ( lvl ) > nix::verbosity ) ) { nix::logger->log( lvl, msg ); }
 
-/* -------------------------------------------------------------------------- */
-
-/** @brief Print a log message with the provided log level. */
-void
-printLog( const nix::Verbosity & lvl, const std::string & msg );
-
-/**
- * @brief Prints a log message to `stderr` when called with `-vvvv`.
- */
-void
-traceLog( const std::string & msg );
+/** @brief Prints a log message to `stderr` when called with `-vvvv`. */
+#define traceLog( msg ) printLog( nix::Verbosity::lvlVomit, msg )
 
 /**
  * @brief Prints a log message to `stderr` when called with `--debug` or `-vvv`.
  */
-void
-debugLog( const std::string & msg );
+#define debugLog( msg ) printLog( nix::Verbosity::lvlDebug, msg )
 
 /**
- * @brief Prints a log message to `stderr` at default verbosity.
+ * @brief Prints a log message to `stderr` when called with `--verbose` or `-v`.
  */
-void
-infoLog( const std::string & msg );
+#define verboseLog( msg ) printLog( nix::Verbosity::lvlTalkative, msg )
 
-/**
- * @brief Prints a log message to `stderr` when verbosity is at least `-q`.
- */
-void
-warningLog( const std::string & msg );
+/** @brief Prints a log message to `stderr` at default verbosity. */
+#define infoLog( msg ) printLog( nix::Verbosity::lvlInfo, msg )
 
-/**
- * @brief Prints a log message to `stderr` when verbosity is at least `-qq`.
- */
-void
-errorLog( const std::string & msg );
+/** @brief Prints a log message to `stderr` when verbosity is at least `-q`. */
+#define warningLog( msg ) printLog( nix::Verbosity::lvlWarn, msg )
 
+/** @brief Prints a log message to `stderr` when verbosity is at least `-qq`. */
+#define errorLog( msg ) printLog( nix::Verbosity::lvlError, msg )
 
 /* -------------------------------------------------------------------------- */
 

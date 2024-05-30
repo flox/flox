@@ -26,6 +26,7 @@
 #include "flox/eval.hh"
 #include "flox/parse/command.hh"
 #include "flox/pkgdb/command.hh"
+#include "flox/pkgdb/metrics.hh"
 #include "flox/repl.hh"
 #include "flox/resolver/command.hh"
 #include "flox/search/command.hh"
@@ -34,6 +35,10 @@
 /* -------------------------------------------------------------------------- */
 
 namespace flox {
+
+#ifndef NIXPKGS_CACERT_BUNDLE_CRT
+#  error "NIXPKGS_CACERT_BUNDLE_CRT must be set"
+#endif
 
 /* -------------------------------------------------------------------------- */
 
@@ -64,6 +69,24 @@ FLOX_DEFINE_EXCEPTION( NixException, EC_NIX, "caught a nix exception" )
 /* -------------------------------------------------------------------------- */
 
 }  // namespace flox
+
+/* -------------------------------------------------------------------------- */
+
+void
+setVerbosityFromEnv()
+{
+  auto * valueChars = std::getenv( "_FLOX_PKGDB_VERBOSITY" );
+  if ( valueChars == nullptr ) { return; }
+  std::string value( valueChars );
+  if ( value == std::string( "0" ) ) { nix::verbosity = nix::lvlError; }
+  else if ( value == std::string( "1" ) ) { nix::verbosity = nix::lvlInfo; }
+  else if ( value == std::string( "2" ) ) { nix::verbosity = nix::lvlDebug; }
+  else if ( value == std::string( "3" ) ) { nix::verbosity = nix::lvlChatty; }
+  else if ( value == std::string( "4" ) ) { nix::verbosity = nix::lvlVomit; }
+  // Put this at the end so that if we *want* logging it will show up
+  traceLog( "found _FLOX_PKGDB_VERBOSITY=" + value );
+}
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -116,6 +139,12 @@ run( int argc, char * argv[] )
       throw flox::command::InvalidArgException( err.what() );
     }
 
+  /* Set the verbosity level requested by flox */
+  setVerbosityFromEnv();
+
+  // We wait to init here so we have verbosity.
+  flox::sentryReporting.init( nix::verbosity >= nix::lvlDebug );
+
   /* Run subcommand */
   if ( prog.is_subcommand_used( "scrape" ) ) { return cmdScrape.run(); }
   if ( prog.is_subcommand_used( "get" ) ) { return cmdGet.run(); }
@@ -137,11 +166,11 @@ run( int argc, char * argv[] )
 int
 printAndReturnException( const flox::FloxException & err )
 {
-  if ( ! isatty( STDOUT_FILENO ) )
+  if ( isatty( STDOUT_FILENO ) == 0 )
     {
-      std::cout << nlohmann::json( err ).dump() << std::endl;
+      std::cout << nlohmann::json( err ).dump() << '\n';
     }
-  else { std::cerr << err.what() << std::endl; }
+  else { std::cerr << err.what() << '\n'; }
 
   return err.getErrorCode();
 }
@@ -151,28 +180,50 @@ printAndReturnException( const flox::FloxException & err )
 int
 main( int argc, char * argv[] )
 {
+  /* Allows you to run without catching which is useful for
+   * `gdb'/`lldb' backtraces. */
+  auto * maybeNC = std::getenv( "PKGDB_NO_CATCH" );
+  if ( maybeNC != nullptr )
+    {
+      std::string noCatch = std::string( maybeNC );
+      if ( ( maybeNC != std::string( "" ) )
+           && ( maybeNC != std::string( "0" ) ) )
+        {
+          return run( argc, argv );
+        }
+    }
+
+  // Required to download flakes, but don't override if already set.
+  setenv( "NIX_SSL_CERT_FILE", NIXPKGS_CACERT_BUNDLE_CRT, 0 );
+
+  /* Wrap all execution in an error handler that pretty prints exceptions. */
+  int exit_code = 0;
   try
     {
-      return run( argc, argv );
+      exit_code = run( argc, argv );
     }
   catch ( const flox::FloxException & err )
     {
-      return printAndReturnException( err );
+      exit_code = printAndReturnException( err );
     }
   // TODO: we may want to catch these closer to where they are
   //       originally thrown.
   // TODO: handle IFD build errors.
   catch ( const nix::Error & err )
     {
-      return printAndReturnException(
+      exit_code = printAndReturnException(
         flox::NixException( "running pkgdb subcommand",
                             nix::filterANSIEscapes( err.what(), true ) ) );
     }
   catch ( const std::exception & err )
     {
-      return printAndReturnException(
+      exit_code = printAndReturnException(
         flox::CaughtException( "running pkgdb subcommand", err.what() ) );
     }
+
+  flox::sentryReporting.shutdown();
+
+  return exit_code;
 }
 
 

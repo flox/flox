@@ -20,7 +20,6 @@
 #include <nix/globals.hh>
 #include <nix/ref.hh>
 
-#include "compat/concepts.hh"
 #include "flox/core/nix-state.hh"
 #include "flox/core/types.hh"
 #include "flox/pkgdb/pkg-query.hh"
@@ -47,7 +46,7 @@ namespace flox::resolver {
 
 /* -------------------------------------------------------------------------- */
 
-static const GroupName TOPLEVEL_GROUP_NAME = "toplevel";
+static constexpr std::string_view TOPLEVEL_GROUP_NAME = "toplevel";
 
 /** @brief Read a flox::resolver::ManifestBase from a file. */
 template<manifest_raw_type RawType>
@@ -90,9 +89,10 @@ protected:
   // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 
   /** @brief Initialize @a registryRaw from @a manifestRaw. */
-  template<manifest_raw_type _RawType = RawType>
-  typename std::enable_if<std::derived_from<_RawType, GlobalManifestRaw>,
-                          void>::type
+  template<manifest_raw_type _RawManifestType = RawType>
+  typename std::enable_if<
+    std::derived_from<_RawManifestType, GlobalManifestRaw>,
+    void>::type
   initRegistry()
   {
     if ( this->manifestRaw.registry.has_value() )
@@ -102,9 +102,10 @@ protected:
   }
 
   /** @brief Initialize @a registryRaw from @a manifestRaw. */
-  template<manifest_raw_type _RawType = RawType>
-  typename std::enable_if<std::derived_from<_RawType, GlobalManifestRawGA>,
-                          void>::type
+  template<manifest_raw_type _RawManifestType = RawType>
+  typename std::enable_if<
+    std::derived_from<_RawManifestType, GlobalManifestRawGA>,
+    void>::type
   initRegistry()
   {
     this->registryRaw = getGARegistry();
@@ -159,7 +160,9 @@ public:
   }
 
   /* Ignore linter warning about copying params because `nix::ref` is just
-   * a pointer ( `std::shared_pointer' with a `nullptr` check ). */
+   * a pointer ( `std::shared_pointer' with a `nullptr` check ).
+   * Note: don't call this function if a lock for the registry can be found
+   * elsewhere. Re-locking will download flakes. */
   [[nodiscard]] RegistryRaw
   getLockedRegistry( const nix::ref<nix::Store> & store
                      = NixStoreMixin().getStore() ) const
@@ -171,12 +174,7 @@ public:
   [[nodiscard]] std::vector<System>
   getSystems() const
   {
-    const auto & manifest = this->getManifestRaw();
-    if ( manifest.options.has_value() && manifest.options->systems.has_value() )
-      {
-        return *manifest.options->systems;
-      }
-    return std::vector<System> { nix::settings.thisSystem.get() };
+    return this->getManifestRaw().getSystems();
   }
 
   [[nodiscard]] pkgdb::PkgQueryArgs
@@ -224,17 +222,17 @@ class GlobalManifestBase : public ManifestBase<RawType>
 
 public:
 
-  ~GlobalManifestBase() override                   = default;
-  GlobalManifestBase()                             = default;
-  GlobalManifestBase( const GlobalManifestBase & ) = default;
-  GlobalManifestBase( GlobalManifestBase && )      = default;
+  ~GlobalManifestBase() override                       = default;
+  GlobalManifestBase()                                 = default;
+  GlobalManifestBase( const GlobalManifestBase & )     = default;
+  GlobalManifestBase( GlobalManifestBase && ) noexcept = default;
 
   GlobalManifestBase &
   operator=( const GlobalManifestBase & )
     = default;
 
   GlobalManifestBase &
-  operator=( GlobalManifestBase && )
+  operator=( GlobalManifestBase && ) noexcept
     = default;
 
   explicit GlobalManifestBase( RawType raw )
@@ -359,10 +357,10 @@ private:
 
 public:
 
-  ~EnvironmentManifestBase() override                        = default;
-  EnvironmentManifestBase()                                  = default;
-  EnvironmentManifestBase( const EnvironmentManifestBase & ) = default;
-  EnvironmentManifestBase( EnvironmentManifestBase && )      = default;
+  ~EnvironmentManifestBase() override                            = default;
+  EnvironmentManifestBase()                                      = default;
+  EnvironmentManifestBase( const EnvironmentManifestBase & )     = default;
+  EnvironmentManifestBase( EnvironmentManifestBase && ) noexcept = default;
 
   explicit EnvironmentManifestBase( RawType raw )
     : ManifestBase<RawType>( std::move( raw ) )
@@ -381,7 +379,7 @@ public:
     = default;
 
   EnvironmentManifestBase &
-  operator=( EnvironmentManifestBase && )
+  operator=( EnvironmentManifestBase && ) noexcept
     = default;
 
   /** @brief Get _descriptors_ from the manifest's `install' field. */

@@ -16,13 +16,36 @@
 
 /* -------------------------------------------------------------------------- */
 
+static void
+writeOutLink( const nix::ref<nix::Store> & store,
+              const nix::StorePath &       storePath,
+              const nix::Path &            path )
+{
+  auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
+  if ( localStore == nullptr )
+    {
+      throw flox::FloxException( "store is not a LocalFSStore" );
+    }
+
+  auto outLinkPath = localStore->addPermRoot( storePath, nix::absPath( path ) );
+
+  if ( nix::lvlDebug <= nix::verbosity )
+    {
+      nix::logger->log( nix::Verbosity::lvlDebug,
+                        "outLinkPath: " + outLinkPath );
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+
 namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
 BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
 {
-  this->parser.add_description( "Evaluate and build a locked environment" );
+  this->parser.add_description( "Evaluate and build a locked environment, "
+                                "optionally produce a container build script" );
   this->parser.add_argument( "lockfile" )
     .help( "inline JSON or path to lockfile" )
     .required()
@@ -31,15 +54,25 @@ BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
              { this->lockfileContent = parseOrReadJSONObject( str ); } );
 
   this->parser.add_argument( "--out-link", "-o" )
-    .help( "path to link resulting environment" )
+    .help( "path to link resulting environment or builder to" )
     .metavar( "OUT-LINK" )
     .action( [&]( const std::string & str ) { this->outLink = str; } );
+
+  this->parser.add_argument( "--store-path" )
+    .help( "the store path to create the link to" )
+    .metavar( "STORE-PATH" )
+    .action( [&]( const std::string & str ) { this->storePath = str; } );
 
   this->parser.add_argument( "--system", "-s" )
     .help( "system to build for" )
     .metavar( "SYSTEM" )
     .nargs( 1 )
     .action( [&]( const std::string & str ) { this->system = str; } );
+
+  this->parser.add_argument( "--container", "-c" )
+    .help( "build a container builder script" )
+    .nargs( 0 )
+    .action( [&]( const auto & ) { this->buildContainer = true; } );
 }
 
 
@@ -49,52 +82,73 @@ int
 BuildEnvCommand::run()
 {
 
-  if ( nix::lvlDebug <= nix::verbosity )
+  debugLog( "lockfile: " + this->lockfileContent.dump( 2 ) );
+
+
+  auto system = this->system.value_or( nix::settings.thisSystem.get() );
+
+  auto store = this->getStore();
+  auto state = this->getState();
+
+  if ( this->storePath.has_value() && ! this->outLink.has_value() )
     {
-      nix::logger->log( nix::Verbosity::lvlDebug,
-                        "lockfile: " + this->lockfileContent.dump( 2 ) );
+      throw command::InvalidArgException(
+        "'--store-path' requires the '--out-link' flag" );
+    }
+  else if ( this->storePath.has_value() && this->outLink.has_value() )
+    {
+      std::filesystem::path path( this->storePath.value() );
+      nix::StorePath        storePath( std::string( path.filename() ) );
+      debugLog( nix::fmt(
+        "store path was provided, skipping build: store_path=%s, out_link=%s",
+        store->printStorePath( storePath ),
+        this->outLink.value() ) );
+      writeOutLink( store, storePath, this->outLink.value() );
+      /* Print the resulting store path */
+      nlohmann::json result
+        = { { "store_path", store->printStorePath( storePath ) } };
+      std::cout << result.dump() << '\n';
+      return EXIT_SUCCESS;
     }
 
-  resolver::LockfileRaw lockfileRaw = this->lockfileContent;
-  auto lockfile = resolver::Lockfile( std::move( lockfileRaw ) );
-  auto store    = this->getStore();
-  auto state    = this->getState();
+  debugLog( "building environment" );
 
-  auto system    = this->system.value_or( nix::settings.thisSystem.get() );
-  auto storePath = createFloxEnv( *state, lockfile, system );
+  auto storePath = createFloxEnv( state, this->lockfileContent, system );
 
-  auto localStore = store.dynamic_pointer_cast<nix::LocalFSStore>();
+  debugLog( "built environment: " + store->printStorePath( storePath ) );
 
-  // TODO: Make a read error
-  if ( localStore == nullptr )
+  if ( buildContainer )
     {
-      throw FloxException( "store is not a LocalFSStore" );
-      return EXIT_FAILURE;
-    }
+      debugLog( "container requested, building container build script" );
+
+      auto containerBuilderStorePath
+        = createContainerBuilder( *state, storePath, system );
+
+      debugLog( "built container builder: "
+                + store->printStorePath( containerBuilderStorePath ) );
+
+      storePath = containerBuilderStorePath;
+    };
 
   if ( outLink.has_value() )
     {
-      auto outLinkPath
-        = localStore->addPermRoot( storePath, nix::absPath( outLink.value() ) );
-      if ( nix::lvlDebug <= nix::verbosity )
-        {
-          nix::logger->log( nix::Verbosity::lvlDebug,
-                            "outLinkPath: " + outLinkPath );
-        }
+      debugLog( "writing out-link" );
+      writeOutLink( store, storePath, outLink.value() );
     }
 
   /* Print the resulting store path */
   nlohmann::json result
     = { { "store_path", store->printStorePath( storePath ) } };
-  std::cout << result.dump() << std::endl;
+  std::cout << result.dump() << '\n';
 
   return EXIT_SUCCESS;
 }
 
-
 /* -------------------------------------------------------------------------- */
 
 }  // namespace flox::buildenv
+
+/* -------------------------------------------------------------------------- */
 
 
 /* -------------------------------------------------------------------------- *

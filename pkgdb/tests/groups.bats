@@ -20,16 +20,10 @@ setup_file() {
   # the future.
   export BATS_NO_PARALLELIZE_WITHIN_FILE=true
 
-  # Extract revisions from the manifest.
-  STABLE_REV="$(
-    yj -t < "$PROJ2/manifest.toml" | jq -r '.registry.inputs.stable.from.rev'
-  )"
-  STAGING_REV="$(
-    yj -t < "$PROJ2/manifest.toml" | jq -r '.registry.inputs.staging.from.rev'
-  )"
-  UNSTABLE_REV="$(
-    yj -t < "$PROJ2/manifest.toml" | jq -r '.registry.inputs.unstable.from.rev'
-  )"
+  STABLE_REV="$NIXPKGS_REV_OLDER"
+  STAGING_REV="$NIXPKGS_REV_OLD"
+  UNSTABLE_REV="$NIXPKGS_REV"
+
   export STABLE_REV STAGING_REV UNSTABLE_REV
 }
 
@@ -95,8 +89,8 @@ jq_edit() {
 @test "'pkgdb manifest lock' impossible group" {
   setup_project
 
-  jq_edit manifest.json '.install.nodejsOld|=del( .["package-group"] )
-                         |.install.nodejsNew|=del( .["package-group"] )'
+  jq_edit manifest.json '.install.nodejsOld|=del( .["pkg-group"] )
+                         |.install.nodejsNew|=del( .["pkg-group"] )'
 
   run sh -c '$PKGDB_BIN manifest lock --manifest manifest.json > manifest.lock;'
   assert_failure
@@ -110,7 +104,7 @@ jq_edit() {
 @test "'pkgdb manifest lock' groups with no previous lock" {
   setup_project
 
-  jq_edit manifest.json '.install.nodejsNew|=del( .["package-group"] )'
+  jq_edit manifest.json '.install.nodejsNew|=del( .["pkg-group"] )'
 
   run sh -c '$PKGDB_BIN manifest lock --manifest manifest.json > manifest.lock;'
   assert_success
@@ -159,7 +153,7 @@ jq_edit() {
   assert_output "$STAGING_REV"
 
   jq_edit manifest.json '.install.nodejsNew={
-    "name": "nodejs", "version": "^18.17"
+    "name": "nodejs", "version": "^'"$NODEJS_VERSION"'"
   }'
 
   # Making the package optional fixes makes it possible to resolve without
@@ -179,7 +173,7 @@ jq_edit() {
   run sh -c '$PKGDB_BIN manifest lock --lockfile manifest.lock --manifest manifest.json  \
                |tee manifest.lock3;'
   assert_success
-  assert_output --partial "upgrading group \`default'"
+  assert_output --partial "upgrading group 'default'"
   # Ensure we didn't produce an error.
   run jq -r '.category_message' manifest.lock3
   assert_output "null"
@@ -194,7 +188,7 @@ jq_edit() {
   setup_project
 
   jq_edit manifest.json '.install|=del( .nodejs )
-                         |.install.nodejsNew|=del( .["package-group"] )'
+                         |.install.nodejsNew|=del( .["pkg-group"] )'
 
   run sh -c '$PKGDB_BIN manifest lock --manifest manifest.json|tee manifest.lock;'
   assert_success
@@ -208,7 +202,7 @@ jq_edit() {
   assert_output "$UNSTABLE_REV"
 
   jq_edit manifest.json '.install.nodejs={
-    "name": "nodejs", "version": ">=18.15.0 <19.0.0"
+    "name": "nodejs", "version": ">'"$NODEJS_VERSION_OLDEST"' <='"$NODEJS_VERSION"'"
   }'
 
   # This doesn't have `pipefail' so we will always get a `manifest.lock2'

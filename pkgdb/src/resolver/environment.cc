@@ -8,11 +8,11 @@
  * -------------------------------------------------------------------------- */
 
 #include <algorithm>
-#include <assert.h>
 #include <memory>
 #include <optional>
 #include <ostream>
 #include <string>
+#include <sys/wait.h>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -59,18 +59,17 @@ Environment::getCombinedRegistryRaw()
       if ( auto maybeGlobal = this->getGlobalManifest();
            maybeGlobal.has_value() )
         {
-          this->combinedRegistryRaw = maybeGlobal->getLockedRegistry();
+          this->combinedRegistryRaw = maybeGlobal->getRegistryRaw();
           this->combinedRegistryRaw->merge(
-            this->getManifest().getLockedRegistry() );
+            this->getManifest().getRegistryRaw() );
         }
-      else
-        {
-          this->combinedRegistryRaw = this->getManifest().getLockedRegistry();
-        }
+      else { this->combinedRegistryRaw = this->getManifest().getRegistryRaw(); }
 
       /* If there's a lockfile, use pinned inputs.
        * However, do not preserve any inputs that were removed from
        * the manifest. */
+      std::optional<nix::ref<nix::Store>>  store;
+      std::optional<FloxFlakeInputFactory> factory;
       if ( auto maybeLock = this->getOldLockfile(); maybeLock.has_value() )
         {
           auto lockedRegistry = maybeLock->getRegistryRaw();
@@ -82,7 +81,34 @@ Environment::getCombinedRegistryRaw()
                 {
                   input = locked->second;
                 }
+              /* Lock the input if it's not in the lock. */
+              else
+                {
+                  if ( ! store.has_value() )
+                    {
+                      store = NixStoreMixin().getStore();
+                    }
+                  if ( ! factory.has_value() )
+                    {
+                      factory = FloxFlakeInputFactory( *store );
+                    }
+                  auto flakeInput = factory->mkInput( name, input );
+                  input           = flakeInput->getLockedInput();
+                }
             }
+        }
+      /* Lock all inputs since we don't have a lock. */
+      else
+        {
+          store   = NixStoreMixin().getStore();
+          factory = FloxFlakeInputFactory( *store );
+          {
+            for ( auto & [name, input] : this->combinedRegistryRaw->inputs )
+              {
+                auto flakeInput = factory->mkInput( name, input );
+                input           = flakeInput->getLockedInput();
+              }
+          }
         }
     }
   return *this->combinedRegistryRaw;
@@ -129,7 +155,7 @@ Environment::getOldManifestRaw() const
 bool
 Environment::upgradingGroup( const GroupName & name ) const
 {
-  bool upgrading;
+  bool upgrading = false;
   std::visit( overloaded { [&]( bool upgradeEverything )
                            { upgrading = upgradeEverything; },
 
@@ -182,40 +208,38 @@ Environment::groupIsLocked( const GroupName &          name,
   InstallDescriptors oldDescriptors = oldLockfile.getDescriptors();
 
   /* Check for upgrades. */
-  for ( auto & [iid, descriptor] : group )
+  for ( const auto & [iid, descriptor] : group )
     {
       /* If the descriptor has changed compared to the one in the lockfile
        * manifest, it needs to be locked again. */
-      if ( auto oldDescriptorPair = oldDescriptors.find( iid );
-           oldDescriptorPair == oldDescriptors.end() )
+      auto oldDescriptorPair = oldDescriptors.find( iid );
+      if ( oldDescriptorPair == oldDescriptors.end() )
         {
           /* If the descriptor doesn't even exist in the lockfile manifest, it
            * needs to be locked again. */
           return false;
         }
-      else
+
+      auto & [_, oldDescriptor] = *oldDescriptorPair;
+
+      /* We ignore `priority' and handle `systems' below. */
+      if ( ( descriptor.name != oldDescriptor.name )
+           || ( descriptor.pkgPath != oldDescriptor.pkgPath )
+           || ( descriptor.version != oldDescriptor.version )
+           || ( descriptor.semver != oldDescriptor.semver )
+           || ( descriptor.subtree != oldDescriptor.subtree )
+           || ( descriptor.input != oldDescriptor.input )
+           || ( descriptor.group != oldDescriptor.group )
+           || ( descriptor.optional != oldDescriptor.optional ) )
         {
-          auto & [_, oldDescriptor] = *oldDescriptorPair;
+          return false;
+        }
 
-          /* We ignore `priority' and handle `systems' below. */
-          if ( ( descriptor.name != oldDescriptor.name )
-               || ( descriptor.path != oldDescriptor.path )
-               || ( descriptor.version != oldDescriptor.version )
-               || ( descriptor.semver != oldDescriptor.semver )
-               || ( descriptor.subtree != oldDescriptor.subtree )
-               || ( descriptor.input != oldDescriptor.input )
-               || ( descriptor.group != oldDescriptor.group )
-               || ( descriptor.optional != oldDescriptor.optional ) )
-            {
-              return false;
-            }
-
-          /* Ignore changes to systems other than the one we're locking. */
-          if ( systemSkipped( system, descriptor.systems )
-               != systemSkipped( system, oldDescriptor.systems ) )
-            {
-              return false;
-            }
+      /* Ignore changes to systems other than the one we're locking. */
+      if ( systemSkipped( system, descriptor.systems )
+           != systemSkipped( system, oldDescriptor.systems ) )
+        {
+          return false;
         }
 
       /* Check if the descriptor exists in the lockfile lock */
@@ -345,9 +369,9 @@ Environment::tryResolveDescriptorIn( const ManifestDescriptor & descriptor,
                                      const System &             system )
 {
   std::string dPath;
-  if ( descriptor.path.has_value() )
+  if ( descriptor.pkgPath.has_value() )
     {
-      dPath = joinWithDelim( *descriptor.path, "." );
+      dPath = concatStringsSep( ".", *descriptor.pkgPath );
     }
   std::string dName;
   if ( descriptor.name.has_value() ) { dName = *descriptor.name; }
@@ -368,6 +392,19 @@ Environment::tryResolveDescriptorIn( const ManifestDescriptor & descriptor,
   descriptor.fillPkgQueryArgs( args );
   /* Limit results to the target system. */
   args.systems = std::vector<System> { system };
+
+  /**
+   * Always resolve unfree and broken packages.
+   * Lockfiles are checked separately for violations with `options.allow.*`
+   * settings.
+   *
+   * `pkgdb search` results currently respect `options.allow.*` settings
+   * directly, e.g. unfree packages are omitted if
+   * `options.allow.unfree = false` in the global, or project manifest.
+   */
+  args.allowUnfree = true;
+  args.allowBroken = true;
+
   pkgdb::PkgQuery query( args );
   auto            rows = query.execute( input.getDbReadOnly()->db );
   if ( rows.empty() )
@@ -391,12 +428,11 @@ Environment::lockPackage( const LockedInputRaw & input,
   LockedPackageRaw pkg;
   pkg.input = input;
   info.at( "absPath" ).get_to( pkg.attrPath );
-  info.erase( "id" );
-  info.erase( "description" );
   info.erase( "absPath" );
-  info.erase( "subtree" );
-  info.erase( "system" );
   info.erase( "relPath" );
+  info.erase( "subtree" );
+  info.erase( "id" );
+  info.erase( "system" );
   pkg.priority = priority;
   pkg.info     = std::move( info );
   return pkg;
@@ -421,10 +457,10 @@ Environment::getGroupInput( const InstallDescriptors & group,
    * just use _iid_. */
   for ( const auto & [iid, descriptor] : group )
     {
-      if ( auto it = oldSystemPackages.find( iid );
-           it != oldSystemPackages.end() )
+      if ( auto itPackage = oldSystemPackages.find( iid );
+           itPackage != oldSystemPackages.end() )
         {
-          auto & [_, maybeLockedPackage] = *it;
+          auto & [_, maybeLockedPackage] = *itPackage;
           if ( maybeLockedPackage.has_value() )
             {
               if ( auto oldDescriptorPair = oldDescriptors.find( iid );
@@ -443,7 +479,7 @@ Environment::getGroupInput( const InstallDescriptors & group,
                    *   without effecting resolution.
                    * - `group' is handled below. */
                   if ( ( descriptor.name == oldDescriptor.name )
-                       && ( descriptor.path == oldDescriptor.path )
+                       && ( descriptor.pkgPath == oldDescriptor.pkgPath )
                        && ( descriptor.version == oldDescriptor.version )
                        && ( descriptor.semver == oldDescriptor.semver )
                        && ( descriptor.subtree == oldDescriptor.subtree )
@@ -545,7 +581,7 @@ Environment::tryResolveGroupIn( const InstallDescriptors & group,
 
 /**
  * @brief Extract the name of a group from a set of descriptors, or "default"
- *        if no descriptors declare a `packageGroup`.
+ *        if no descriptors declare a `pkgGroup`.
  */
 [[nodiscard]] static inline const std::string &
 getGroupName( const InstallDescriptors & group )
@@ -573,11 +609,11 @@ Environment::tryResolveGroup( const GroupName &          name,
 
   std::vector<std::string> ids;
   for ( const auto & [id, _] : group ) { ids.emplace_back( id ); }
-  std::string groupStr = joinWithDelim( ids, " " );
+  std::string groupStr = concatStringsSep( " ", ids );
   debugLog( "starting resolution for group: " + groupStr );
 
   /* When there is an existing lock with this group pinned to an existing
-  input+rev try to use it to resolve the group.
+   * input+rev try to use it to resolve the group.
    * If we fail collect a list of failed descriptors; presumably these are
    * new group members.
    * Skip this step if a group is being upgraded. */
@@ -616,7 +652,7 @@ Environment::tryResolveGroup( const GroupName &          name,
               if ( const InstallID * iid
                    = std::get_if<InstallID>( &maybeResolved ) )
                 {
-                  failure.push_back( std::pair<InstallID, std::string> {
+                  failure.emplace_back( std::pair<InstallID, std::string> {
                     *iid,
                     oldGroupInput->getDbReadOnly()->lockedRef.string } );
                 }
@@ -644,14 +680,15 @@ Environment::tryResolveGroup( const GroupName &          name,
                = std::get_if<SystemPackages>( &maybeResolved ) )
             {
               nix::logger->log( nix::lvlInfo,
-                                nix::fmt( "upgrading group `%s' to avoid "
+                                nix::fmt( "upgrading group '%s' to avoid "
                                           "resolution failure",
                                           getGroupName( group ) ) );
 
               return *resolved;
             }
-          else if ( const InstallID * iid
-                    = std::get_if<InstallID>( &maybeResolved ) )
+
+          if ( const InstallID * iid
+               = std::get_if<InstallID>( &maybeResolved ) )
             {
               failure.push_back( std::pair<InstallID, std::string> {
                 *iid,
@@ -676,10 +713,10 @@ describeResolutionFailure( std::stringstream &       msg,
                            const GroupName &         name,
                            const ResolutionFailure & failure )
 {
-  msg << "  in `" << name << "': '" << std::endl;
+  msg << "  in '" << name << "': '" << std::endl;
   for ( const auto & [iid, url] : failure )
     {
-      msg << "    failed to resolve `" << iid << "' in input `" << url << '\'';
+      msg << "    failed to resolve '" << iid << "' in input '" << url << '\'';
     }
   return msg;
 }
@@ -784,6 +821,8 @@ Environment::createLockfile()
         }
     }
   Lockfile lockfile( *this->lockfileRaw );
+
+  lockfile.checkPackages();
   lockfile.removeUnusedInputs();
   return lockfile;
 }

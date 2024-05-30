@@ -59,6 +59,8 @@ private:
 
 public:
 
+  ~SearchCommand() override = default;
+
   SearchCommand();
 
   [[nodiscard]] command::VerboseParser &

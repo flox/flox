@@ -39,6 +39,16 @@ FLOX_DEFINE_EXCEPTION( InvalidLockfileException,
                        "invalid lockfile" )
 /** @} */
 
+/**
+ * @class flox::resolver::PackageCheckFailure
+ * @brief An exception thrown when a lockfile is invalid.
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( PackageCheckFailure,
+                       EC_PACKAGE_CHECK_FAILURE,
+                       "bad package" )
+/** @} */
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -120,6 +130,19 @@ operator<<( std::ostream & oss, const LockedInputRaw & raw );
 
 /* -------------------------------------------------------------------------- */
 
+
+struct CheckPackageWarning
+{
+  std::string packageId;
+  std::string message;
+};
+
+void
+to_json( nlohmann::json & jto, const CheckPackageWarning & result );
+
+
+/* -------------------------------------------------------------------------- */
+
 /** @brief A locked package's _installable URI_. */
 struct LockedPackageRaw
 {
@@ -145,6 +168,8 @@ struct LockedPackageRaw
   }
 
 
+  [[nodiscard]] std::vector<CheckPackageWarning>
+  check( const std::string & packageId, const Options::Allows & allows ) const;
 }; /* End struct `LockedPackageRaw' */
 
 
@@ -189,7 +214,8 @@ struct LockfileRaw
   ~LockfileRaw()                     = default;
   LockfileRaw()                      = default;
   LockfileRaw( const LockfileRaw & ) = default;
-  LockfileRaw( LockfileRaw && )      = default;
+  // NOLINTNEXTLINE(bugprone-exception-escape)
+  LockfileRaw( LockfileRaw && ) = default;
   LockfileRaw &
   operator=( const LockfileRaw & )
     = default;
@@ -210,6 +236,26 @@ struct LockfileRaw
   /** @brief Reset to default/empty state. */
   void
   clear();
+
+  /** @brief Loads a JSON object to @a flox::resolver::LockfileRaw
+   * dispatching by the `lockfile-version` field.
+   *
+   * V0 lockfile schema was owned by `pkgdb` and thus had the entire schema
+   * implemented and strongly typed, allowing it to be fully loaded using
+   * `from_json` helpers.  V1 lockfile schema is owned by the Rust side as
+   * we transistion to the catalog service.  Therefore much less needs to be
+   * be known in `pkgdb` and for the transistion it was easiest to extract
+   * the parts needed and move them into the existing data structures, allowing
+   * everything else to remain the same.
+   * */
+  void
+  load_from_content( const nlohmann::json & jfrom );
+
+  /** @brief Helper to convert a JSON object to a @a flox::resolver::LockfileRaw
+   * assuming the content is a V1 lockfile, coercing fields as needed.
+   * */
+  void
+  from_v1_content( const nlohmann::json & jfrom );
 
 
 }; /* End struct `LockfileRaw' */
@@ -253,7 +299,7 @@ private:
 
   /**
    * @brief Check the lockfile's `packages.**` locked inputs align with the
-   *        requested groups in `manifest.install.<INSTALL-ID>.packageGroup`,
+   *        requested groups in `manifest.install.<INSTALL-ID>.pkgGroup`,
    *        Throws an exception if two packages in the same group use
    *        different inputs.
    */
@@ -295,7 +341,7 @@ public:
     this->init();
   }
 
-  explicit Lockfile( std::filesystem::path lockfilePath );
+  explicit Lockfile( const std::filesystem::path & lockfilePath );
 
   Lockfile &
   operator=( const Lockfile & )
@@ -362,6 +408,17 @@ public:
   std::size_t
   removeUnusedInputs();
 
+
+  /**
+   * @brief Check the lockfile's `packages.**` members for consistency with the
+   * `options.allow.*` policies
+   *
+   * @return A list of warnings of non-fatal issues.
+   * @throws PackageCheckFailure if a package is not consistent with a policy.
+   */
+  std::vector<CheckPackageWarning>
+  checkPackages( const std::optional<flox::System> & system
+                 = std::nullopt ) const;
 
 }; /* End class `Lockfile' */
 

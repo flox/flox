@@ -7,6 +7,8 @@
  *
  * -------------------------------------------------------------------------- */
 
+#include <sys/wait.h>
+
 #include <nix/flake/flakeref.hh>
 
 #include "flox/core/util.hh"
@@ -104,7 +106,7 @@ from_json( const nlohmann::json & jfrom, RegistryInput & rip )
           catch ( nlohmann::json::exception & err )
             {
               throw InvalidRegistryException(
-                "couldn't interpret registry input field `subtrees'",
+                "couldn't interpret registry input field 'subtrees'",
                 flox::extract_json_errmsg( err ) );
             }
         }
@@ -118,11 +120,11 @@ from_json( const nlohmann::json & jfrom, RegistryInput & rip )
           catch ( nlohmann::json::exception & err )
             {
               throw InvalidRegistryException(
-                "couldn't interpret registry input field `from'",
+                "couldn't interpret registry input field 'from'",
                 flox::extract_json_errmsg( err ) );
             }
         }
-      else { throw InvalidRegistryException( "unknown field `" + key + "'" ); }
+      else { throw InvalidRegistryException( "unknown field '" + key + "'" ); }
     }
 }
 
@@ -164,7 +166,7 @@ from_json( const nlohmann::json & jfrom, RegistryRaw & reg )
               catch ( nlohmann::json::exception & err )
                 {
                   throw InvalidRegistryException(
-                    "couldn't extract input `" + ikey + "'",
+                    "couldn't extract input '" + ikey + "'",
                     flox::extract_json_errmsg( err ) );
                 }
               inputs.insert( { ikey, input } );
@@ -203,7 +205,7 @@ from_json( const nlohmann::json & jfrom, RegistryRaw & reg )
         }
       else
         {
-          throw InvalidRegistryException( "unrecognized registry field `" + key
+          throw InvalidRegistryException( "unrecognized registry field '" + key
                                           + "'" );
         }
     }
@@ -268,6 +270,11 @@ FloxFlakeInput::getFlake()
   return static_cast<nix::ref<FloxFlake>>( this->flake );
 }
 
+void
+FloxFlakeInput::freeFlake()
+{
+  this->flake = nullptr;
+}
 
 /* -------------------------------------------------------------------------- */
 
@@ -307,7 +314,6 @@ FloxFlakeInput::getSubtrees()
 
 
 /* -------------------------------------------------------------------------- */
-
 RegistryInput
 FloxFlakeInput::getLockedInput()
 {
@@ -343,11 +349,11 @@ from_json( const nlohmann::json & jfrom, InputPreferences & prefs )
           catch ( nlohmann::json::exception & err )
             {
               throw InvalidRegistryException(
-                "couldn't interpret field `subtrees'",
+                "couldn't interpret field 'subtrees'",
                 flox::extract_json_errmsg( err ) );
             }
         }
-      else { throw InvalidRegistryException( "unknown field `" + key + "'" ); }
+      else { throw InvalidRegistryException( "unknown field '" + key + "'" ); }
     }
 }
 
@@ -378,13 +384,13 @@ getGARegistry()
 {
   static const std::string refOrRev
     = nix::getEnv( "_PKGDB_GA_REGISTRY_REF_OR_REV" )
-        .value_or( "release-23.05" );
+        .value_or( "release-23.11" );
   static const nix::FlakeRef nixpkgsRef
     = nix::parseFlakeRef( "github:NixOS/nixpkgs/" + refOrRev );
   if ( nix::lvlTalkative < nix::verbosity )
     {
       nix::logger->log( nix::lvlTalkative,
-                        "GA Registry is using `nixpkgs' as `"
+                        "GA Registry is using 'nixpkgs' as '"
                           + nixpkgsRef.to_string() + "'." );
     }
   return RegistryRaw(
@@ -402,6 +408,7 @@ RegistryRaw::operator==( const RegistryRaw & other ) const
 {
   if ( this->priority != other.priority ) { return false; }
   if ( this->defaults != other.defaults ) { return false; }
+  // NOLINTNEXTLINE(readability-use-anyofallof)
   for ( const auto & [key, value] : this->inputs )
     {
       try

@@ -1,0 +1,89 @@
+{
+  "lockfile-version": 0,
+  "manifest": {
+    "install": {
+      "nodejs": null
+    },
+    "options": {
+      "systems": [
+        "x86_64-linux"
+      ]
+    },
+    "registry": {
+      "defaults": {
+        "subtrees": null
+      },
+      "inputs": {
+        "nixpkgs": {
+          "from": {
+            "owner": "NixOS",
+            "repo": "nixpkgs",
+            "rev": "bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3",
+            "type": "github"
+          },
+          "subtrees": [
+            "legacyPackages"
+          ]
+        }
+      },
+      "priority": [
+        "nixpkgs"
+      ]
+    }
+  },
+  "packages": {
+    "x86_64-linux": {
+      "nodejs": {
+        "attr-path": [
+          "legacyPackages",
+          "x86_64-linux",
+          "nodejs"
+        ],
+        "info": {
+          "broken": false,
+          "description": "Event-driven I/O framework for the V8 JavaScript engine",
+          "license": "MIT",
+          "pname": "nodejs",
+          "unfree": false,
+          "version": "16.16.0"
+        },
+        "input": {
+          "attrs": {
+            "lastModified": 1658528871,
+            "narHash": "sha256-QlD1KEZ4XhjjXAAv8Vi1n+Q7ZqnXBjdjNwikHPN0Tkw=",
+            "owner": "NixOS",
+            "repo": "nixpkgs",
+            "rev": "bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3",
+            "type": "github"
+          },
+          "fingerprint": "ff2ba38c55510b7489e81156c88245fdee5a071acff9715dbd67a297a2804118",
+          "url": "github:NixOS/nixpkgs/bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3"
+        },
+        "priority": 5
+      }
+    }
+  },
+  "registry": {
+    "defaults": {
+      "subtrees": null
+    },
+    "inputs": {
+      "nixpkgs": {
+        "from": {
+          "lastModified": 1658528871,
+          "narHash": "sha256-QlD1KEZ4XhjjXAAv8Vi1n+Q7ZqnXBjdjNwikHPN0Tkw=",
+          "owner": "NixOS",
+          "repo": "nixpkgs",
+          "rev": "bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3",
+          "type": "github"
+        },
+        "subtrees": [
+          "legacyPackages"
+        ]
+      }
+    },
+    "priority": [
+      "nixpkgs"
+    ]
+  }
+}

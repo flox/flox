@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <nix/eval-cache.hh>
@@ -77,11 +78,11 @@ private:
 
 public:
 
-  virtual ~FlakePackage() = default;
+  ~FlakePackage() override = default;
 
-  FlakePackage( Cursor cursor, const AttrPath & path, bool checkDrv = true )
+  FlakePackage( const Cursor & cursor, AttrPath path, bool checkDrv = true )
     : _cursor( cursor )
-    , _pathS( path )
+    , _pathS( std::move( path ) )
     , _fullName( cursor->getAttr( "name" )->getString() )
   {
     {
@@ -93,7 +94,9 @@ public:
   }
 
 
-  FlakePackage( Cursor cursor, nix::SymbolTable * symtab, bool checkDrv = true )
+  FlakePackage( const Cursor &     cursor,
+                nix::SymbolTable * symtab,
+                bool               checkDrv = true )
     : _cursor( cursor ), _fullName( cursor->getAttr( "name" )->getString() )
   {
     {
@@ -101,9 +104,9 @@ public:
       this->_pname   = dname.name;
       this->_version = dname.version;
     }
-    for ( auto & p : symtab->resolve( cursor->getAttrPath() ) )
+    for ( auto & path : symtab->resolve( cursor->getAttrPath() ) )
       {
-        this->_pathS.push_back( p );
+        this->_pathS.push_back( path );
       }
     this->init( checkDrv );
   }
@@ -111,84 +114,89 @@ public:
 
   /* --------------------------------------------------------------------------
    */
-
-  std::vector<std::string>
+  [[nodiscard]] std::vector<std::string>
   getOutputsToInstall() const override;
-  std::optional<bool>
+
+  [[nodiscard]] std::optional<bool>
   isBroken() const override;
-  std::optional<bool>
+
+  [[nodiscard]] std::optional<bool>
   isUnfree() const override;
 
-  AttrPath
+  [[nodiscard]] AttrPath
   getPathStrs() const override
   {
     return this->_pathS;
   }
-  std::string
+
+  [[nodiscard]] std::string
   getFullName() const override
   {
     return this->_fullName;
   }
-  std::string
+
+  [[nodiscard]] std::string
   getPname() const override
   {
     return this->_pname;
   }
-  Cursor
+
+  [[nodiscard]] Cursor
   getCursor() const
   {
     return this->_cursor;
   }
-  Subtree
+  [[nodiscard]] Subtree
+
   getSubtreeType() const override
   {
     return this->_subtree;
   }
 
-  nix::DrvName
+  [[nodiscard]] nix::DrvName
   getParsedDrvName() const override
   {
-    return nix::DrvName( this->_fullName );
+    return { this->_fullName };
   }
 
-  std::optional<std::string>
+  [[nodiscard]] std::optional<std::string>
   getVersion() const override
   {
     if ( this->_version.empty() ) { return std::nullopt; }
-    else { return this->_version; }
+    return this->_version;
   }
 
-  std::optional<std::string>
+  [[nodiscard]] std::optional<std::string>
   getSemver() const override
   {
     return this->_semver;
   }
 
-  std::optional<std::string>
+  [[nodiscard]] std::optional<std::string>
   getLicense() const override
   {
     if ( this->_license.has_value() ) { return this->_license; }
-    else { return std::nullopt; }
+    return std::nullopt;
   }
 
-  std::vector<std::string>
+  [[nodiscard]] std::vector<std::string>
   getOutputs() const override
   {
-    MaybeCursor o = this->_cursor->maybeGetAttr( "outputs" );
-    if ( o == nullptr ) { return { "out" }; }
-    else { return o->getListOfStrings(); }
+    MaybeCursor output = this->_cursor->maybeGetAttr( "outputs" );
+    if ( output == nullptr ) { return { "out" }; }
+    return output->getListOfStrings();
   }
 
-  std::optional<std::string>
+  [[nodiscard]] std::optional<std::string>
   getDescription() const override
   {
     if ( ! this->_hasMetaAttr ) { return std::nullopt; }
-    MaybeCursor l
+    MaybeCursor description
       = this->_cursor->getAttr( "meta" )->maybeGetAttr( "description" );
-    if ( l == nullptr ) { return std::nullopt; }
+    if ( description == nullptr ) { return std::nullopt; }
     try
       {
-        return l->getString();
+        return description->getString();
       }
     catch ( ... )
       {

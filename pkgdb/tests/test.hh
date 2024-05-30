@@ -23,13 +23,16 @@
 /* -------------------------------------------------------------------------- */
 
 static const std::string nixpkgsRev
-  = "e8039594435c68eb4f780f3e9bf3972a7399c4b1";
+  = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
 
 static const std::string nixpkgsRef
-  = "github:NixOS/nixpkgs/e8039594435c68eb4f780f3e9bf3972a7399c4b1";
+  = "github:NixOS/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd";
 
 static const std::string nixpkgsFingerprintStr
-  = "5fde12e3424840cc2752dae09751b09b03f5a33c3ec4de672fc89d236720bdc7";
+  = "9bb3d4c033fbad8efb5e28ffcd1d70383e0c5bbcb7cc5c526b824524467b19b9";
+
+/* The version of curl in nixpkgsRev */
+static const std::string curlVersion = "8.4.0";
 
 
 /**
@@ -94,16 +97,26 @@ runTest( std::string_view name, F f, Args &&... args )
 /**
  * @brief For use inside of a function which returns a boolean.
  *
+ * Report a failure with a message and return `false'.
+ */
+#define EXPECT_FAIL( MSG )               \
+  {                                      \
+    std::cerr << "Expectation failed: "; \
+    std::cerr << ( MSG );                \
+    std::cerr << std::endl;              \
+    return false;                        \
+  }
+
+
+/* -------------------------------------------------------------------------- */
+
+/**
+ * @brief For use inside of a function which returns a boolean.
+ *
  * Assert that and expression is `true', otherwise print it and return `false'.
  */
-#define EXPECT( EXPR )                     \
-  if ( ! ( EXPR ) )                        \
-    {                                      \
-      std::cerr << "Expectation failed: "; \
-      std::cerr << ( #EXPR );              \
-      std::cerr << std::endl;              \
-      return false;                        \
-    }
+#define EXPECT( EXPR ) \
+  if ( ! ( EXPR ) ) { EXPECT_FAIL( #EXPR ) }
 
 
 /**

@@ -3,10 +3,12 @@
   commitizen,
   hivemind,
   just,
+  yq,
   lib,
   mkShell,
   pre-commit-check,
   shfmt,
+  mitmproxy,
   flox-cli,
   flox-cli-tests,
   flox-pkgdb,
@@ -18,7 +20,20 @@
     flox-pkgdb.ciPackages
     ++ flox-pkgdb.ciPackages
     ++ flox-cli.ciPackages
-    ++ [flox-cli-tests flox-tests];
+    ++ [
+      (flox-cli-tests.override {
+        PROJECT_TESTS_DIR = "/cli/tests";
+        PKGDB_BIN = null;
+        FLOX_BIN = null;
+        LD_FLOXLIB = null;
+      })
+      (flox-tests.override {
+        PROJECT_TESTS_DIR = "/tests";
+        PKGDB_BIN = null;
+        FLOX_BIN = null;
+        LD_FLOXLIB = null;
+      })
+    ];
 
   devPackages =
     flox-pkgdb.devPackages
@@ -29,6 +44,8 @@
       commitizen
       alejandra
       shfmt
+      mitmproxy
+      yq
     ];
 in
   mkShell (
@@ -37,7 +54,9 @@ in
 
       inputsFrom = [
         flox-pkgdb
-        flox-cli
+        (flox-cli.override {
+          flox-pkgdb = null;
+        })
       ];
 
       packages = ciPackages ++ lib.optionals (!ci) devPackages;

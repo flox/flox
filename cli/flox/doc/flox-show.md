@@ -1,7 +1,7 @@
 ---
 title: FLOX-SHOW
 section: 1
-header: "flox User Manuals"
+header: "Flox User Manuals"
 ...
 
 
@@ -11,19 +11,21 @@ flox-show - show detailed information about a single package
 
 # SYNOPSIS
 
-flox [ `<general-options>` ] show `<name>` [ \--all ]
+```
+flox [<general-options>] show <pkg-path>
+```
 
 # DESCRIPTION
 
 Show detailed information about a single package.
 
-The provided name must be an exact match for a package name i.e. it
-must be something you would have copied from the output of the
-`flox search` command.
+The default output includes the package description,
+name,
+and version.
 
-The default output includes the package description, name, latest version,
-and license. The `--all` flag will show all versions of the package
-that were found in the inputs listed in the manifest.
+```{.include}
+./include/package-names.md
+```
 
 # OPTIONS
 
@@ -31,10 +33,22 @@ that were found in the inputs listed in the manifest.
 ./include/general-options.md
 ```
 
-## Search Options
+## Show Options
 
-[ `<name>` ]
-:   Package name to search for
+`<pkg-path>`
+:   Package name to show details for.
 
-[ \--all ]
-:   List all package versions
+# EXAMPLES:
+
+Display detailed information about the `ripgrep` package:
+```
+$ flox show ripgrep
+ripgrep - A utility that combines the usability of The Silver Searcher with the raw speed of grep
+    ripgrep@13.0.0
+    ripgrep@14.1.0
+```
+
+# SEE ALSO
+[`flox-search(1)`](./flox-search.md),
+[`flox-install(1)`](./flox-install.md),
+[`flox-update(1)`](./flox-update.md)

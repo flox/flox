@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+export _coreutils="@coreutils@"
 # ============================================================================ #
 #
 # Setup Python3
@@ -5,10 +7,10 @@
 # ---------------------------------------------------------------------------- #
 
 # Only run if `python3' is in `PATH'
-if python3 --version > /dev/null 2> /dev/null; then
+if [[ -x "$FLOX_ENV/bin/python3" ]]; then
   # Get the major/minor version from `python3' to determine the correct path.
   _env_pypath="$FLOX_ENV/lib/python$(
-    python3 -c 'import sys
+    "$FLOX_ENV/bin/python3" -c 'import sys
 print( "{}.{}".format( sys.version_info[0], sys.version_info[1] ) )'
   )/site-packages"
   # Only add the path if its missing
@@ -20,9 +22,10 @@ print( "{}.{}".format( sys.version_info[0], sys.version_info[1] ) )'
 fi
 
 # Only run if `pip' is in `PATH'
-if pip --version > /dev/null 2> /dev/null; then
-  export PIP_CONFIG_FILE=$(realpath --no-symlinks $FLOX_ENV/../../pip.ini)
-  cat > $PIP_CONFIG_FILE << EOF
+if [[ -x "$FLOX_ENV/bin/pip3" ]]; then
+  PIP_CONFIG_FILE="$("$_coreutils/bin/realpath" --no-symlinks "$FLOX_ENV/../../pip.ini")"
+  export PIP_CONFIG_FILE
+  "$_coreutils/bin/cat" > "$PIP_CONFIG_FILE" << EOF
 [global]
 require-virtualenv = true
 EOF

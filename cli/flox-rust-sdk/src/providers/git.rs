@@ -1,11 +1,21 @@
 use std::collections::BTreeMap;
+use std::env;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use log::{debug, error, warn};
+use once_cell::sync::Lazy;
 use thiserror::Error;
+
+use crate::utils::CommandExt;
+
+// This is the full /path/to/bin/git that we actually use.
+// This is set once and prefers to use the `GIT_PKG` env variable if set,
+// and falls back to the value observed at build time if it is unset.
+pub static GIT_BIN: Lazy<String> =
+    Lazy::new(|| env::var("GIT_PKG").unwrap_or(env!("GIT_PKG").to_string()) + "/bin/git");
 
 #[derive(Error, Debug)]
 pub enum EmptyError {}
@@ -113,7 +123,7 @@ impl Default for GitCommandOptions {
     /// By default, use the git binary bundled with flox
     fn default() -> Self {
         Self {
-            exe: String::from(env!("GIT_BIN")),
+            exe: GIT_BIN.to_string(),
             config: Default::default(),
             envs: Default::default(),
         }
@@ -186,7 +196,7 @@ impl GitCommandProvider {
     }
 
     fn run_command(command: &mut Command) -> Result<OsString, GitCommandError> {
-        debug!("{:?}", command);
+        debug!("running git command: {}", command.display());
         let out = command.output()?;
 
         if !out.status.success() {
@@ -250,9 +260,11 @@ impl GitCommandProvider {
         options: GitCommandOptions,
         path: P,
     ) -> Result<Self, GitCommandOpenError> {
+        debug!("attempting to open repo: path={}", path.as_ref().display());
         let bare = Self::is_bare_repo(&path)?;
 
         // resolved and canonicalized path to the git repo
+        debug!("determining path to git repo");
         let resolved_path = {
             let toplevel_or_git_dir = if bare {
                 let mut command = options.new_command();
@@ -280,6 +292,7 @@ impl GitCommandProvider {
                 .canonicalize()
                 .map_err(GitCommandOpenError::Canonicalize)?
         };
+        debug!("got non-canonical path: path={}", resolved_path.display());
 
         let path = path
             .as_ref()
@@ -289,6 +302,7 @@ impl GitCommandProvider {
         if resolved_path != path {
             return Err(GitCommandOpenError::Subdirectory);
         }
+        debug!("canonicalized path: path={}", path.display());
 
         Ok(GitCommandProvider {
             options,
@@ -408,7 +422,7 @@ impl GitCommandProvider {
         path: impl AsRef<Path>,
         branch: impl AsRef<OsStr>,
         bare: bool,
-    ) -> Result<GitCommandProvider, GitCommandError> {
+    ) -> Result<GitCommandProvider, GitRemoteCommandError> {
         let mut command = options.new_command();
 
         command
@@ -438,22 +452,23 @@ impl GitCommandProvider {
         path: impl AsRef<Path>,
         branch: &str,
         bare: bool,
-    ) -> Result<GitCommandProvider, GitCommandError> {
+    ) -> Result<GitCommandProvider, GitRemoteCommandError> {
         Self::clone_branch_with(GitCommandOptions::default(), origin, path, branch, bare)
     }
 
     /// Fetch branch and update the corresponding local ref
-    pub fn fetch_branch(&self, repository: &str, branch: &str) -> Result<(), GitCommandError> {
-        GitCommandProvider::run_command(
-            self.new_command()
-                .arg("fetch")
-                .arg(repository)
-                .arg(format!("refs/heads/{branch}:refs/heads/{branch}")),
-        )?;
-        Ok(())
+    pub fn fetch_branch(
+        &self,
+        repository: &str,
+        branch: &str,
+    ) -> Result<(), GitRemoteCommandError> {
+        self.fetch_ref(
+            repository,
+            &format!("refs/heads/{branch}:refs/heads/{branch}"),
+        )
     }
 
-    pub fn fetch_ref(&self, repository: &str, r#ref: &str) -> Result<(), GitCommandError> {
+    pub fn fetch_ref(&self, repository: &str, r#ref: &str) -> Result<(), GitRemoteCommandError> {
         GitCommandProvider::run_command(
             self.new_command().arg("fetch").arg(repository).arg(r#ref),
         )?;
@@ -481,7 +496,7 @@ impl GitCommandProvider {
         match GitCommandProvider::run_command(&mut command) {
             Ok(_) => Ok(()),
             Err(ref err @ GitCommandError::BadExit(_, _, ref stderr))
-                if stderr.contains("DENIED") =>
+                if stderr.contains("DENIED") || stderr.contains("Authentication failed") =>
             {
                 debug!("Access denied: {err}");
                 Err(GitRemoteCommandError::AccessDenied)
@@ -591,11 +606,41 @@ impl GitDiscoverError for GitCommandDiscoverError {
 #[derive(Error, Debug)]
 pub enum GitRemoteCommandError {
     #[error(transparent)]
-    Command(#[from] GitCommandError),
+    Command(GitCommandError),
     #[error("access denied")]
     AccessDenied,
     #[error("branches diverged")]
     Diverged,
+    #[error("ref not found")]
+    RefNotFound(String),
+}
+
+const REF_NOT_FOUND_ERR_PREFIX: &str = "fatal: couldn't find remote ref ";
+impl From<GitCommandError> for GitRemoteCommandError {
+    fn from(err: GitCommandError) -> Self {
+        match err {
+            GitCommandError::BadExit(_, _, ref stderr)
+                if stderr.contains("DENIED") || stderr.contains("Authentication failed") =>
+            {
+                debug!("Access denied: {err}");
+                GitRemoteCommandError::AccessDenied
+            },
+            GitCommandError::BadExit(_, ref stdout, _)
+                if stdout.contains("[rejected] (fetch first)") =>
+            {
+                debug!("Branches diverged: {err}");
+                GitRemoteCommandError::Diverged
+            },
+            GitCommandError::BadExit(_, _, ref stderr)
+                if stderr.starts_with(REF_NOT_FOUND_ERR_PREFIX) =>
+            {
+                let ref_name = stderr.strip_prefix(REF_NOT_FOUND_ERR_PREFIX).unwrap();
+                debug!("Ref not found: {ref_name}");
+                GitRemoteCommandError::RefNotFound(ref_name.to_string())
+            },
+            e => GitRemoteCommandError::Command(e),
+        }
+    }
 }
 
 /// A simple Git Provider that uses the git
@@ -604,15 +649,15 @@ impl GitProvider for GitCommandProvider {
     type AddError = GitCommandError;
     type AddRemoteError = GitCommandError;
     type CheckoutError = GitCommandError;
-    type CloneError = GitCommandError;
+    type CloneError = GitRemoteCommandError;
     type CommitError = GitCommandError;
     type DiscoverError = GitCommandDiscoverError;
-    type FetchError = GitCommandError;
+    type FetchError = GitRemoteCommandError;
     type GetOriginError = GitCommandGetOriginError;
     type InitError = GitCommandError;
     type ListBranchesError = GitCommandError;
     type MvError = GitCommandError;
-    type PushError = GitCommandError;
+    type PushError = GitRemoteCommandError;
     type RenameError = GitCommandError;
     type RmError = GitCommandError;
     type SetOriginError = GitCommandError;
@@ -939,12 +984,7 @@ impl GitProvider for GitCommandProvider {
     }
 }
 
-#[cfg(test)]
-pub mod tests {
-
-    use std::fs;
-
-    use pretty_assertions::assert_eq;
+pub mod test_helpers {
 
     use super::*;
 
@@ -956,6 +996,16 @@ pub mod tests {
             path: PathBuf::from("/does-not-exist"),
         }
     }
+}
+
+#[cfg(test)]
+pub mod tests {
+
+    use std::fs;
+
+    use pretty_assertions::assert_eq;
+
+    use super::*;
 
     fn init_temp_repo(bare: bool) -> (GitCommandProvider, tempfile::TempDir) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
@@ -1274,7 +1324,7 @@ pub mod tests {
 
         assert!(matches!(
             repo_2.fetch_ref("origin", "does-not-exist"),
-            Err(GitCommandError::BadExit(128, _, _))
+            Err(GitRemoteCommandError::RefNotFound(_))
         ));
     }
 
@@ -1309,5 +1359,76 @@ pub mod tests {
         // reset branch_1 to branch_2
         repo.reset_branch("branch_3", &hash_branch_2).unwrap();
         assert_eq!(repo.branch_hash("branch_3").unwrap(), hash_branch_2)
+    }
+
+    /// Test that we pushing to a read only repo fails with [GitRemoteCommandError::AccessDenied]
+    #[test]
+    fn test_push_access_denied() {
+        let (mut repo, _tempdir_handle) = init_temp_repo(false);
+        repo.add_remote("origin", "https://github.com/torvalds/linux")
+            .unwrap();
+
+        {
+            let options = repo.get_options_mut();
+            options.add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
+            options.add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
+            options.add_config_flag(
+                "credential.helper",
+                r#"!f(){ echo "username="; echo "password="; }; f"#,
+            );
+            options.add_config_flag("user.name", "testuser");
+            options.add_config_flag("user.email", "testuser@localhost");
+        }
+
+        repo.checkout("branch_1", true).unwrap();
+        commit_file(&repo, "dummy");
+        let err = repo.push("origin", false).unwrap_err();
+        assert!(matches!(dbg!(err), GitRemoteCommandError::AccessDenied));
+    }
+
+    /// Test that we pushing to a read only repo fails with [GitRemoteCommandError::AccessDenied]
+    #[test]
+    fn test_fetch_access_denied() {
+        let (mut repo, _tempdir_handle) = init_temp_repo(false);
+        repo.add_remote("origin", "https://github.com/flox/flox-private")
+            .unwrap();
+
+        repo.get_options_mut()
+            .add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
+        repo.get_options_mut()
+            .add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
+        repo.get_options_mut().add_config_flag(
+            "credential.helper",
+            r#"!f(){ echo "username="; echo "password="; }; f"#,
+        );
+
+        let err = repo.fetch().unwrap_err();
+
+        assert!(matches!(dbg!(err), GitRemoteCommandError::AccessDenied));
+    }
+
+    /// Test that we pushing to a read only repo fails with [GitRemoteCommandError::AccessDenied]
+    #[test]
+    fn test_clone_access_denied() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let mut options = GitCommandOptions::default();
+
+        options.add_env_var("GIT_CONFIG_SYSTEM", "/dev/null");
+        options.add_env_var("GIT_CONFIG_GLOBAL", "/dev/null");
+        options.add_config_flag(
+            "credential.helper",
+            r#"!f(){ echo "username="; echo "password="; }; f"#,
+        );
+
+        let err: GitRemoteCommandError = GitCommandProvider::clone_branch_with(
+            options,
+            "https://github.com/flox/flox-private",
+            tempdir,
+            "main",
+            false,
+        )
+        .unwrap_err();
+
+        assert!(matches!(dbg!(err), GitRemoteCommandError::AccessDenied));
     }
 }

@@ -24,7 +24,6 @@
 #include <nix/globals.hh>
 #include <nlohmann/json.hpp>
 
-#include "compat/concepts.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/core/types.hh"
 
@@ -78,13 +77,31 @@ struct PkgQueryArgs
   std::optional<std::string> pname;   /**< Filter results by exact `pname`. */
   std::optional<std::string> version; /**< Filter results by exact version. */
   std::optional<std::string> semver;  /**< Filter results by version range. */
-  std::optional<uint8_t>     limit;   /**< Limit the number of results */
+  /**
+   * Limit the number of results
+   * TODO: limit is unused except in the search command. */
+  std::optional<uint8_t> limit;
+  /**
+   * Return a single result for each package descriptor used by `search` and
+   * `install`. This is a bit hacky as pkgdb shouldn't really have knowledge of
+   * that format. But it's nicer to perform deduplication in SQL.
+   */
+  bool deduplicate = false;
+
+  // TODO: would it be better to expose matchPname, matchAttrName,
+  // matchDescription, and matchRelPath fields that we join with OR rather than
+  // exposing fields that match against multiple columns?
 
   /** Filter results by partial match on pname, attrName, or description. */
   std::optional<std::string> partialMatch;
 
   /** Filter results by partial match on pname or attrName. */
   std::optional<std::string> partialNameMatch;
+
+  /**
+   * Filter results by partial match on pname or '.' joined relPath.
+   */
+  std::optional<std::string> partialNameOrRelPathMatch;
 
   /** Filter results by an exact match on either `pname` or `attrName`. */
   std::optional<std::string> pnameOrAttrName;
@@ -152,7 +169,7 @@ struct PkgQueryArgs
  *              JSON object.
  */
 void
-to_json( nlohmann::json & jto, const PkgQueryArgs & descriptor );
+to_json( nlohmann::json & jto, const PkgQueryArgs & args );
 
 
 /* -------------------------------------------------------------------------- */
@@ -271,6 +288,9 @@ private:
   void
   init();
 
+  /** @brief A helper to format and escape a string for use in a LIKE clause */
+  static std::string
+  mkPatternString( const std::string & matchString );
 
 public:
 

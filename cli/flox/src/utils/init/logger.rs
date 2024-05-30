@@ -1,12 +1,12 @@
-use std::io::Write;
-
 use log::{debug, error};
 use once_cell::sync::OnceCell;
 use tracing_subscriber::prelude::*;
+use tracing_subscriber::reload::Handle;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Registry};
 
 use crate::commands::Verbosity;
-use crate::utils::logger::{self, LogFormatter};
-use crate::utils::metrics::PosthogLayer;
+use crate::utils::metrics::MetricsLayer;
 use crate::utils::TERMINAL_STDERR;
 
 struct LockingTerminalStderr;
@@ -35,93 +35,82 @@ impl std::io::Write for LockingTerminalStderr {
     }
 }
 
-type LayerType = tracing_subscriber::layer::Layered<PosthogLayer, tracing_subscriber::Registry>;
-type ReloadHandle<T> = tracing_subscriber::reload::Handle<T, LayerType>;
+static LOGGER_HANDLE: OnceCell<Handle<EnvFilter, Registry>> = OnceCell::new();
 
-#[allow(clippy::type_complexity)]
-static LOGGER_HANDLE: OnceCell<(
-    ReloadHandle<tracing_subscriber::EnvFilter>,
-    ReloadHandle<
-        tracing_subscriber::fmt::Layer<
-            LayerType,
-            tracing_subscriber::fmt::format::DefaultFields,
-            LogFormatter,
-            LockingTerminalStderr,
-        >,
-    >,
-)> = OnceCell::new();
-
-pub fn init_logger(verbosity: Option<Verbosity>, debug: Option<bool>) {
+pub(crate) fn init_logger(verbosity: Option<Verbosity>) {
     let verbosity = verbosity.unwrap_or_default();
-    let debug = debug.unwrap_or(false);
 
-    let log_filter = match (debug, verbosity) {
+    let log_filter = match verbosity {
         // Show only errors
-        (false, Verbosity::Quiet) => "off,flox=error",
+        Verbosity::Quiet => "off,flox=error",
+        // Only show warnings
+        Verbosity::Verbose(0) => "off,flox=warn",
         // Show our own info logs
-        (false, Verbosity::Verbose(0)) => "off,flox=info",
-        // Also show POSIX info
-        (false, Verbosity::Verbose(1)) => "off,flox=info,posix=info",
-        // Also show info from our libraries and POSIX debug
-        (false, Verbosity::Verbose(2)) => {
-            "off,flox=debug,flox-rust-sdk=info,runix=info,posix=debug"
-        },
+        Verbosity::Verbose(1) => "off,flox=info",
         // Also show debug from our libraries
-        (true, Verbosity::Quiet) | (false, Verbosity::Verbose(3)) => {
-            "off,flox=debug,flox-rust-sdk=debug,runix=debug,posix=debug"
-        },
-        // Also show debug from everything
-        (true, Verbosity::Verbose(0)) | (false, Verbosity::Verbose(4)) => "debug",
-        // Also show trace from everything
-        (true, Verbosity::Verbose(_)) | (false, Verbosity::Verbose(_)) => "trace",
+        Verbosity::Verbose(2) => "off,flox=debug,flox-rust-sdk=debug",
+        // Also show trace from our libraries and POSIX
+        Verbosity::Verbose(3) => "off,flox=trace,flox-rust-sdk=trace",
+        // Also show trace from our libraries and POSIX
+        Verbosity::Verbose(4) => "debug,flox=trace,flox-rust-sdk=trace",
+        Verbosity::Verbose(_) => "trace",
     };
 
-    let (filter_handle, fmt_handle) = LOGGER_HANDLE.get_or_init(|| {
-        debug!("Initializing logger (how are you seeing this?)");
-
-        let filter = tracing_subscriber::filter::EnvFilter::try_from_default_env()
-            .or_else(|_| tracing_subscriber::filter::EnvFilter::try_new(log_filter))
-            .unwrap();
-        let (filter_reloadable, filter_reload_handle) =
-            tracing_subscriber::reload::Layer::new(filter);
-
-        let fmt = tracing_subscriber::fmt::layer()
-            .with_writer(LockingTerminalStderr)
-            .event_format(logger::LogFormatter { debug });
-
-        let (fmt_reloadable, fmt_reload_handle) = tracing_subscriber::reload::Layer::new(fmt);
-
-        let fmt_filtered = fmt_reloadable.with_filter(filter_reloadable);
-
-        tracing_subscriber::registry()
-            .with(PosthogLayer::new())
-            .with(fmt_filtered)
-            .init();
-
-        (filter_reload_handle, fmt_reload_handle)
+    let filter_handle = LOGGER_HANDLE.get_or_init(|| {
+        let (subscriber, reload_handle) = create_registry_and_filter_reload_handle();
+        subscriber.init();
+        reload_handle
     });
 
-    if let Err(err) = filter_handle.modify(|layer| {
-        *layer = tracing_subscriber::filter::EnvFilter::try_from_default_env()
-            .or_else(|_| tracing_subscriber::filter::EnvFilter::try_new(log_filter))
-            .unwrap();
-    }) {
-        error!("Updating logger filter failed: {}", err);
-    }
+    update_filters(filter_handle, log_filter);
+}
 
-    if let Err(err) = fmt_handle.modify(|layer| {
-        *layer = tracing_subscriber::fmt::layer()
-            .with_writer(LockingTerminalStderr)
-            .event_format(logger::LogFormatter { debug });
-    }) {
+pub fn update_filters(filter_handle: &Handle<EnvFilter, Registry>, log_filter: &str) {
+    let result = filter_handle.modify(|layer| {
+        match EnvFilter::try_from_default_env().or_else(|_| EnvFilter::try_new(log_filter)) {
+            Ok(new_filter) => *layer = new_filter,
+            Err(err) => {
+                error!("Updating logger filter failed: {}", err);
+            },
+        };
+    });
+    if let Err(err) = result {
         error!("Updating logger filter failed: {}", err);
     }
 }
 
-pub fn flush_logger() {
-    if let Some((_, fmt_handle)) = LOGGER_HANDLE.get() {
-        let _ = fmt_handle.modify(|l| {
-            let _ = l.writer_mut().flush();
-        });
-    }
+pub fn create_registry_and_filter_reload_handle() -> (
+    impl tracing_subscriber::layer::SubscriberExt,
+    Handle<EnvFilter, Registry>,
+) {
+    debug!("Initializing logger (how are you seeing this?)");
+    // The first time this layer is set it establishes an upper boundary for `log` verbosity.
+    // If you try to `modify` this layer later, `log` will not accept any higher verbosity events.
+    //
+    // Before we used to replace both the fmt layer _and_ this layer.
+    // That purged enough internal state to reset the `log` verbosity filter.
+    // For simplicity, we'll now just set the filter to `trace`,
+    // and then modify it later to the actual level below.
+    // Logs are being passed through by the `log` crate and correctly filtered by `tracing`.
+    let filter = tracing_subscriber::filter::EnvFilter::try_new("trace").unwrap();
+    let (filter, filter_reload_handle) = tracing_subscriber::reload::Layer::new(filter);
+    let use_colors = supports_color::on(supports_color::Stream::Stderr).is_some();
+    let log_layer = tracing_subscriber::fmt::layer()
+        .with_writer(LockingTerminalStderr)
+        .with_ansi(use_colors)
+        .event_format(tracing_subscriber::fmt::format())
+        .with_filter(filter);
+    let metrics_layer = MetricsLayer::new();
+    let sentry_layer = sentry::integrations::tracing::layer();
+    // Filtered layer must come first.
+    // This appears to be the only way to avoid logs of the `flox_command` trace
+    // which is processed by the `log_layer` irrepective of the filter applied to it.
+    // My current understanding is, that it because the `metrics_layer` (at least) is
+    // registering `Interest` for the event and that somehow bypasses the filter?!
+    let registry = tracing_subscriber::registry()
+        .with(log_layer)
+        .with(metrics_layer)
+        .with(sentry_layer);
+
+    (registry, filter_reload_handle)
 }

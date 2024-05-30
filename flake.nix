@@ -7,22 +7,19 @@
   description = "flox - Harness the power of Nix";
 
   nixConfig.extra-substituters = [
-    "https://cache.floxdev.com"
+    "https://cache.flox.dev"
   ];
   nixConfig.extra-trusted-public-keys = [
-    "flox-store-public-0:8c/B+kjIaQ+BloCmNkRUKwaVPFWkriSAd0JJvuDu4F0="
+    "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
   ];
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.05";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.11";
 
-  inputs.floco.url = "github:aakropotkin/floco";
-  inputs.floco.inputs.nixpkgs.follows = "nixpkgs";
+  # drop once bear is no longer broken in a newer release
+  inputs.nixpkgs-bear.url = "github:NixOS/nixpkgs/release-23.05";
 
   inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
   inputs.sqlite3pp.inputs.nixpkgs.follows = "nixpkgs";
-
-  inputs.parser-util.url = "github:flox/parser-util";
-  inputs.parser-util.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   inputs.pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
@@ -30,21 +27,18 @@
   inputs.crane.url = "github:ipetkov/crane";
   inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
 
-  # This is needed to be able to calculate `git describe` format version of flox
-  # without running `git describe`
-  inputs.flox-latest.url = "git+ssh://git@github.com/flox/flox?ref=latest";
+  inputs.fenix.url = "github:nix-community/fenix";
+  inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
 
   # -------------------------------------------------------------------------- #
 
   outputs = {
     self,
     nixpkgs,
-    floco,
     sqlite3pp,
-    parser-util,
     pre-commit-hooks,
     crane,
-    flox-latest,
+    fenix,
     ...
   } @ inputs: let
     # Given a function `fn' which takes system names as an argument, produce an
@@ -81,33 +75,30 @@
 
     # Use nix@2.17
     overlays.nix = final: prev: {
+      # Uncomment to compile Nix with debug symbols on Linux
+      # nix = final.enableDebugging (final.callPackage ./pkgs/nix {});
       nix = final.callPackage ./pkgs/nix {};
     };
 
-    # Cherry pick `semver' recipe from `floco'.
+    # Use cpp-semver
     overlays.semver = final: prev: {
-      semver = let
-        base = final.callPackage "${floco}/fpkgs/semver" {
-          nixpkgs = throw (
-            "`nixpkgs' should not be references when `pkgsFor' "
-            + "is provided"
-          );
-          inherit (final) lib;
-          pkgsFor = final;
-          nodePackage = final.nodejs;
-        };
-      in
-        base.overrideAttrs (prevAttrs: {preferLocalBuild = false;});
+      cpp-semver = final.callPackage ./pkgs/cpp-semver {};
+    };
+
+    # bear is broken in release 23.11 on darwin
+    overlays.bear = final: prev: {
+      inherit (inputs.nixpkgs-bear.legacyPackages.${prev.system}) bear;
     };
 
     # Aggregates all external dependency overlays before adding any of the
     # packages defined by this flake.
     overlays.deps = nixpkgs.lib.composeManyExtensions [
-      parser-util.overlays.default # for `parser-util'
       overlays.nlohmann
       overlays.semver
       overlays.nix
+      overlays.bear
       sqlite3pp.overlays.default
+      fenix.overlays.default
     ];
 
     # Packages defined in this repository.
@@ -117,10 +108,17 @@
           inherit inputs self;
           pkgsFor = final;
         });
-    in {
-      # Use bleeding edge `rustfmt'.
-      rustfmt = prev.rustfmt.override {asNightly = true;};
 
+      # We depend on several nightly features of rustfmt,
+      # so pick the current nightly version.
+      # We're using `default.withComponents`
+      # which _should_ only pull the nightly rustfmt component.
+      # Alternatively, we could use nixpkgs.rustfmt,
+      # and rebuild with a (stable) fenix toolchain and `asNightly = true`,
+      # which would avoid the need to pull another channel altogether.
+      rustfmt-nightly = final.fenix.default.withComponents ["rustfmt"];
+      rust-toolchain = final.fenix.stable;
+    in {
       # Generates a `.git/hooks/pre-commit' script.
       pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
         src = builtins.path {path = ./.;};
@@ -137,10 +135,11 @@
           rustfmt = let
             wrapper = final.symlinkJoin {
               name = "rustfmt-wrapped";
-              paths = [final.rustfmt];
+              paths = [rustfmt-nightly];
               nativeBuildInputs = [final.makeWrapper];
               postBuild = let
-                PATH = final.lib.makeBinPath [final.cargo final.rustfmt];
+                # Use nightly rustfmt
+                PATH = final.lib.makeBinPath [final.fenix.stable.cargo rustfmt-nightly];
               in ''
                 wrapProgram $out/bin/cargo-fmt --prefix PATH : ${PATH};
               '';
@@ -155,10 +154,13 @@
           # shellcheck.enable = true; # disabled until we have time to fix all the warnings
         };
         settings = {
+          clippy.denyWarnings = true;
           alejandra.verbosity = "quiet";
           rust.cargoManifestPath = "cli/Cargo.toml";
         };
         tools = {
+          # use fenix provided clippy
+          clippy = rust-toolchain.clippy;
           clang-tools = final.clang-tools_16;
         };
       };
@@ -170,13 +172,20 @@
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
 
       # Flox Command Line Interface ( development build ).
-      flox-cli = callPackage ./pkgs/flox-cli {};
+      flox-cli = callPackage ./pkgs/flox-cli {
+        rust-toolchain = rust-toolchain;
+        rustfmt = rustfmt-nightly;
+      };
+
+      # Flox Command Line Interface Manpages
+      flox-manpages = callPackage ./pkgs/flox-manpages {};
 
       # Flox Command Line Interface ( production build ).
       flox = callPackage ./pkgs/flox {};
 
       # Wrapper scripts for running test suites.
       flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
+
       # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};
       flox-tests-pure = callPackage ./pkgs/flox-tests-pure {inputs = inputs;};
@@ -217,10 +226,10 @@
         flox-pkgdb
         flox-cli
         flox-cli-tests
+        flox-manpages
         flox
         pre-commit-check
         flox-tests-pure
-        flox-dev
         ;
       default = pkgs.flox;
     });
@@ -253,10 +262,3 @@
 
   # -------------------------------------------------------------------------- #
 }
-# End flake
-# ---------------------------------------------------------------------------- #
-#
-#
-#
-# ============================================================================ #
-

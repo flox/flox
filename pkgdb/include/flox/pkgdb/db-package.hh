@@ -46,7 +46,9 @@ protected:
    *   std::optional<std::string>  description;
    */
 
-  row_id                pkgId;  /**< `Packages.id' in the database. */
+  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
+  row_id pkgId; /**< `Packages.id' in the database. */
+  // NOLINTNEXTLINE(cppcoreguidelines-non-private-member-variables-in-classes)
   std::filesystem::path dbPath; /**< Path to the database. */
 
 private:
@@ -73,21 +75,21 @@ public:
   }
 
   /** @return The `Packages.id` of the package. */
-  row_id
+  [[nodiscard]] row_id
   getPackageId() const
   {
     return this->pkgId;
   }
 
   /** @return The path to the database. */
-  std::filesystem::path
+  [[nodiscard]] std::filesystem::path
   getDbPath() const
   {
     return this->dbPath;
   }
 
   /** @return The locked _flake reference_ where the package is defined. */
-  nix::FlakeRef
+  [[nodiscard]] nix::FlakeRef
   getLockedFlakeRef() const
   {
     return PkgDbReadOnly( this->dbPath.string() ).getLockedFlakeRef();

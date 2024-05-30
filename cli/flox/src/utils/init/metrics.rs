@@ -1,13 +1,14 @@
+use std::fs;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use fslock::LockFile;
 use indoc::formatdoc;
-use log::{debug, info};
-use time::OffsetDateTime;
+use log::debug;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::utils::metrics::{MetricEntry, METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
+use crate::utils::message;
+use crate::utils::metrics::{METRICS_LOCK_FILE_NAME, METRICS_UUID_FILE_NAME};
 
 /// Determine whether the user has previously opted-out of metrics
 /// through the legacy consent dialog.
@@ -47,12 +48,15 @@ pub async fn telemetry_opt_out_needs_migration(
 ///
 /// If a metrics-uuid file is present, assume telemetry is already set up.
 /// Any migration concerning user opt-out should be handled before using [telemetry_denial_need_migration].
-pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Path>) -> Result<()> {
-    tokio::fs::create_dir_all(&data_dir).await?;
-    tokio::fs::create_dir_all(&cache_dir).await?;
+pub fn init_telemetry_uuid(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Path>) -> Result<()> {
+    fs::create_dir_all(&data_dir)?;
+    fs::create_dir_all(&cache_dir)?;
 
+    // set a lock to avoid initializing telemetry multiple times from concurrent processes
+    // the lock is released when the `metrics_lock` is dropped.
     let mut metrics_lock = LockFile::open(&cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME))?;
-    tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
+    metrics_lock.lock()?;
+
     let uuid_path = data_dir.as_ref().join(METRICS_UUID_FILE_NAME);
 
     // we already have a uuid, so lets use that
@@ -65,24 +69,7 @@ pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pa
     // Create new user uuid
     let telemetry_uuid = uuid::Uuid::new_v4();
 
-    // Generate a real metric to use as an example so they can see the field contents are non-threatening
-    let now = OffsetDateTime::now_utc();
-    let example_metric_entry = MetricEntry::new(Some("[subcommand]".to_string()), now);
-
-    // Convert it to JSON so we can inject extra bits for the purpose of demonstration,
-    // and can print it without `Some()` noising up the output
-    let mut example_json = serde_json::to_value(example_metric_entry)
-        .context("Failed to JSON-ify example metric entry")?;
-
-    // This isn't actually in the struct (gets added later),
-    // so we put a placeholder in there to be more fair.
-    example_json["uuid"] = telemetry_uuid.to_string().into();
-    // The default encoding is disturbing
-    example_json["timestamp"] = now.to_string().into();
-
-    // Turn it into a pretty string, if this is too noisy we can make it the normal string
-    let example = serde_json::to_string_pretty(&example_json)
-        .context("Failed to stringify example metric entry")?;
+    debug!("Created new telemetry UUID: {}", telemetry_uuid);
 
     let notice = formatdoc! {"
         flox collects basic usage metrics in order to improve the user experience.
@@ -90,23 +77,19 @@ pub async fn init_telemetry(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pa
         flox includes a record of the subcommand invoked along with a unique token.
         It does not collect any personal information.
 
-        Example metric for this invocation:
-
-        {example}
-
         The collection of metrics can be disabled in the following ways:
 
           environment: FLOX_DISABLE_METRICS=true
             user-wide: flox config --set-bool disable_metrics true
           system-wide: update /etc/flox.toml as described in flox(1)
 
-        "};
-    info!("{notice}");
+        This is a one-time notice.
 
-    let mut file = tokio::fs::File::create(&uuid_path).await?;
-    file.write_all(telemetry_uuid.to_string().as_bytes())
-        .await?;
-    file.flush().await?;
+        "};
+
+    message::plain(notice);
+
+    fs::write(uuid_path, telemetry_uuid.to_string())?;
     Ok(())
 }
 
@@ -197,13 +180,11 @@ mod tests {
         assert_eq!(need_migration, false);
     }
 
-    #[tokio::test]
-    async fn test_init_telemetry() {
+    #[test]
+    fn test_init_telemetry() {
         let tempdir = TempDir::new().unwrap();
         let uuid_file_path = tempdir.path().join("data").join(METRICS_UUID_FILE_NAME);
-        init_telemetry(tempdir.path().join("data"), tempdir.path().join("cache"))
-            .await
-            .unwrap();
+        init_telemetry_uuid(tempdir.path().join("data"), tempdir.path().join("cache")).unwrap();
         assert!(uuid_file_path.exists());
 
         let uuid_str = std::fs::read_to_string(uuid_file_path).unwrap();

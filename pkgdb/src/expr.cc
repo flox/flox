@@ -50,19 +50,18 @@ valueToFlakeRef( nix::EvalState &    state,
       return nix::FlakeRef::fromAttrs( nix::fetchers::jsonToAttrs(
         nix::printValueAsJSON( state, true, value, pos, context, false ) ) );
     }
-  else if ( type == nix::nString )
+
+  if ( type == nix::nString )
     {
       state.forceStringNoCtx( value, pos, errorMsg );
       return nix::parseFlakeRef( std::string( value.str() ) );
     }
-  else
-    {
-      state
-        .error( "flake reference was expected to be a set or a string, but "
-                "got '%s'",
-                nix::showType( type ) )
-        .debugThrow<nix::EvalError>();
-    }
+
+  state
+    .error( "flake reference was expected to be a set or a string, but "
+            "got '%s'",
+            nix::showType( type ) )
+    .debugThrow<nix::EvalError>();
 }
 
 

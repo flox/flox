@@ -35,6 +35,8 @@ initNix()
   // NOLINTNEXTLINE
   nix::setStackSize( ( std::size_t( 64 ) * 1024 ) * 1024 );
   nix::initNix();
+  /* Set the BoehmGC ( used by `nix` ) to handle forking properly. */
+  GC_set_handle_fork( 1 );
   nix::initGC();
   /* Suppress benign warnings about `nix.conf'. */
   nix::Verbosity oldVerbosity = nix::verbosity;
@@ -49,12 +51,9 @@ initNix()
   nix::experimentalFeatureSettings.experimentalFeatures.assign(
     std::set( { nix::Xp::Flakes } ) );
 
-  /* Only refresh the global registry once per 24 hours. */
-  nix::settings.tarballTtl = 60 * 60 * 24;
-
   /* Use custom logger */
   bool printBuildLogs = nix::logger->isVerbose();
-  if ( nix::logger != nullptr ) { delete nix::logger; }
+  delete nix::logger;
   nix::logger = makeFilteredLogger( printBuildLogs );
 
   didNixInit = true;

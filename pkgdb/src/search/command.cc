@@ -61,21 +61,28 @@ void
 SearchCommand::addSearchQueryOptions( argparse::ArgumentParser & parser )
 {
   parser.add_argument( "--name" )
-    .help( "search for packages by exact `name' match." )
+    .help( "search for packages by exact 'name' match." )
     .metavar( "NAME" )
     .nargs( 1 )
     .action( [&]( const std::string & arg )
              { this->params.query.name = arg; } );
 
   parser.add_argument( "--pname" )
-    .help( "search for packages by exact `pname' match." )
+    .help( "search for packages by exact 'pname' match." )
     .metavar( "PNAME" )
     .nargs( 1 )
     .action( [&]( const std::string & arg )
              { this->params.query.pname = arg; } );
 
+  parser.add_argument( "--rel-path" )
+    .help( "search for packages by exact 'relPath'." )
+    .metavar( "DOT.SEPARATED.REL.PATH" )
+    .nargs( 1 )
+    .action( [&]( const std::string & arg )
+             { this->params.query.relPath = splitAttrPath( arg ); } );
+
   parser.add_argument( "--version" )
-    .help( "search for packages by exact `version' match." )
+    .help( "search for packages by exact 'version' match." )
     .metavar( "VERSION" )
     .nargs( 1 )
     .action( [&]( const std::string & arg )
@@ -89,25 +96,39 @@ SearchCommand::addSearchQueryOptions( argparse::ArgumentParser & parser )
              { this->params.query.semver = arg; } );
 
   parser.add_argument( "--match" )
-    .help( "search for packages by partially matching `pname', "
-           "`description', or `attrName'." )
+    .help( "search for packages by partially matching 'pname', "
+           "'description', or 'attrName'." )
     .metavar( "MATCH" )
     .nargs( 1 )
     .action( [&]( const std::string & arg )
              { this->params.query.partialMatch = arg; } );
 
   parser.add_argument( "--match-name" )
-    .help( "search for packages by partially matching `pname' or `attrName'." )
+    .help( "search for packages by partially matching 'pname' or 'attrName'." )
     .metavar( "MATCH" )
     .nargs( 1 )
     .action( [&]( const std::string & arg )
              { this->params.query.partialNameMatch = arg; } );
+
+  parser.add_argument( "--match-name-or-rel-path" )
+    .help( "search for packages by partially matching 'pname' or '.' joined "
+           "'relPath'." )
+    .metavar( "MATCH" )
+    .nargs( 1 )
+    .action( [&]( const std::string & arg )
+             { this->params.query.partialNameOrRelPathMatch = arg; } );
 
   parser.add_argument( "--dump-query" )
     .help( "print the generated SQL query and exit." )
     .nargs( 0 )
     .implicit_value( true )
     .action( [&]( const auto & ) { this->dumpQuery = true; } );
+
+  parser.add_argument( "--query-limit" )
+    .help( "set the query-limit for results" )
+    .nargs( 1 )
+    .action( [&]( const std::string & arg )
+             { this->params.query.limit = std::atoi( arg.c_str() ); } );
 }
 
 
@@ -179,43 +200,49 @@ SearchCommand::run()
   to_json( queryJson, args );
   debugLog( "performing search with query: " + queryJson.dump() );
   auto query = pkgdb::PkgQuery( args );
-  if ( this->dumpQuery )
-    {
-      std::cout << query.str() << std::endl;
-      return EXIT_SUCCESS;
-    }
-  auto                                            resultCount = 0;
-  std::vector<std::vector<pkgdb::row_id>>         ids;
+  if ( this->dumpQuery ) { std::cout << query.str() << std::endl; }
+
+  /* Collect results from each input */
+  auto                                            globalResultCount = 0;
+  std::vector<std::vector<pkgdb::row_id>>         globallyFoundIds;
   std::vector<std::shared_ptr<pkgdb::PkgDbInput>> inputs;
   for ( const auto & [name, input] :
         *this->getEnvironment().getPkgDbRegistry() )
     {
-      debugLog( "querying input: " + name );
       auto                       dbRO = input->getDbReadOnly();
-      std::vector<pkgdb::row_id> inputIds;
+      std::vector<pkgdb::row_id> thisInputIds;
+
+      debugLog( "querying input=" + name );
       for ( const auto & id : query.execute( dbRO->db ) )
         {
-          inputIds.emplace_back( id );
-          resultCount += 1;
+          thisInputIds.emplace_back( id );
         }
       inputs.emplace_back( input );
-      debugLog( "found " + std::to_string( inputIds.size() ) + " results" );
-      ids.emplace_back( std::move( inputIds ) );
+
+      globalResultCount += thisInputIds.size();
+      debugLog( "found " + std::to_string( thisInputIds.size() )
+                + " results, input=" + name );
+      globallyFoundIds.emplace_back( std::move( thisInputIds ) );
     }
-  debugLog( "found " + std::to_string( ids.size() ) + " total results" );
+
+  /* Return results as a single flat list by iterating over each input with
+   * results */
+  debugLog( "found " + std::to_string( globalResultCount )
+            + " total results across all inputs" );
   if ( query.limit.has_value() )
     {
       debugLog( "returning the first " + std::to_string( *query.limit )
                 + " results" );
       // Emit the number of results as the first line
-      nlohmann::json resultCountRecord = { { "result-count", resultCount } };
+      nlohmann::json resultCountRecord
+        = { { "result-count", globalResultCount } };
       std::cout << resultCountRecord << std::endl;
       // Only print the first `limit` results
       for ( size_t i = 0; i < inputs.size(); i++ )
         {
           if ( *query.limit == 0 ) { break; }
           auto input    = inputs[i];
-          auto inputIds = ids[i];
+          auto inputIds = globallyFoundIds[i];
           for ( auto & id : inputIds )
             {
               if ( *query.limit == 0 ) { break; }
@@ -231,7 +258,7 @@ SearchCommand::run()
       for ( size_t i = 0; i < inputs.size(); i++ )
         {
           auto input    = inputs[i];
-          auto inputIds = ids[i];
+          auto inputIds = globallyFoundIds[i];
           for ( auto & id : inputIds )
             {
               std::cout << input->getRowJSON( id ).dump() << std::endl;

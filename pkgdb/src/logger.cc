@@ -30,7 +30,7 @@ namespace flox {
 static bool
 shouldANSI()
 {
-  return isatty( STDERR_FILENO )
+  return ( isatty( STDERR_FILENO ) != 0 )
          && ( nix::getEnv( "TERM" ).value_or( "dumb" ) != "dumb" )
          && ( ! ( nix::getEnv( "NO_COLOR" ).has_value()
                   || nix::getEnv( "NOCOLOR" ).has_value() ) );
@@ -57,8 +57,8 @@ protected:
    * verbosity setting conditionals exist in external libs, we have to
    * handle them here.
    */
-  bool
-  shouldIgnoreWarning( const std::string & str )
+  [[nodiscard]] bool
+  shouldIgnoreWarning( const std::string & str ) const
   {
     /* Ignore warnings about overrides for missing indirect inputs.
      * These can come up when an indirect input drops a dependendency
@@ -76,7 +76,7 @@ protected:
 
 
   /** @brief Detect ignored messages. */
-  bool
+  static bool
   shouldIgnoreMsg( std::string_view str )
   {
     (void) str;
@@ -91,9 +91,9 @@ public:
   bool color;          /**< Whether we should emit colors in logs. */
   bool printBuildLogs; /**< Whether we should emit build logs. */
 
-  FilteredLogger( bool printBuildLogs )
+  explicit FilteredLogger( bool printBuildLogs )
     : systemd( nix::getEnv( "IN_SYSTEMD" ) == "1" )
-    , tty( isatty( STDERR_FILENO ) )
+    , tty( isatty( STDERR_FILENO ) != 0 )
     , color( shouldANSI() )
     , printBuildLogs( printBuildLogs )
   {}
@@ -135,13 +135,17 @@ public:
   void
   log( nix::Verbosity lvl, std::string_view str ) override
   {
-    if ( ( nix::verbosity < lvl ) || this->shouldIgnoreMsg( str ) ) { return; }
+    if ( ( nix::verbosity < lvl )
+         || flox::FilteredLogger::shouldIgnoreMsg( str ) )
+      {
+        return;
+      }
 
     /* Handle `systemd' style log level prefixes. */
     std::string prefix;
     if ( systemd )
       {
-        char levelChar;
+        char levelChar = 0;
         switch ( lvl )
           {
             case nix::lvlError: levelChar = '3'; break;
@@ -159,7 +163,7 @@ public:
 
             /* Should not happen, and missing enum case is reported
              * by `-Werror=switch-enum' */
-            default: levelChar = '7'; break;
+            default: break;
           }
         prefix = std::string( "<" ) + levelChar + ">";
       }

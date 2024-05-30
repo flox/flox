@@ -1,0 +1,9 @@
+[install]
+boost.pkg-path = "boost"
+curl.pkg-path = "curl"
+gcc.pkg-path = "gcc"
+gcc-unwrapped = { pkg-path = "gcc-unwrapped", priority = 4 }
+glibc.pkg-path = "glibc"
+libarchive.pkg-path = "libarchive"
+nix = { pkg-path = "nix", priority = 4 }
+patchelf.pkg-path = "patchelf"

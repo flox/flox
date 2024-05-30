@@ -13,6 +13,8 @@
 #include <memory>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
+#include <nix/flake/flakeref.hh>
+#include <sys/wait.h>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -20,6 +22,7 @@
 #include "flox/core/exceptions.hh"
 #include "flox/core/nix-state.hh"
 #include "flox/core/types.hh"
+#include "flox/core/util.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -82,8 +85,10 @@ private:
 
 public:
 
-  nix::ref<nix::EvalState>      state;
-  const nix::flake::LockedFlake lockedFlake;
+  nix::ref<nix::EvalState>
+    state;  // NOLINT(cppcoreguidelines-non-private-member-variables-in-classes)
+  nix::flake::LockedFlake
+    lockedFlake;  // NOLINT(cppcoreguidelines-non-private-member-variables-in-classes)
 
   FloxFlake( const nix::ref<nix::EvalState> & state,
              const nix::FlakeRef &            ref );
@@ -129,7 +134,6 @@ FLOX_DEFINE_EXCEPTION( LockFlakeException,
                        EC_NIX_LOCK_FLAKE,
                        "error locking flake" )
 /** @} */
-
 
 /* -------------------------------------------------------------------------- */
 

@@ -26,14 +26,11 @@ project_teardown() {
   unset PROJECT_DIR
 }
 
-OLD_NAR_HASH="sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8="
-NEW_NAR_HASH="sha256-5uA6jKckTf+DCbVBNKsmT5pUT/7Apt5tNdpcbLnPzFI="
-GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_HOME/global-manifest.lock"
-
 # ---------------------------------------------------------------------------- #
 
 setup() {
   common_test_setup
+  setup_isolated_flox
   project_setup
 }
 teardown() {
@@ -41,24 +38,40 @@ teardown() {
   common_test_teardown
 }
 
+@test "update scrapes input" {
+  database_path=$("$PKGDB_BIN" get db "$PKGDB_NIXPKGS_REF_OLD")
+  # As far as I can tell, scraping isn't too expensive since we have an eval
+  # cache.
+  rm -f "$database_path"
+
+  "$FLOX_BIN" init
+
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    run "$FLOX_BIN" update
+  run jq -r '.registry.inputs.nixpkgs.from.narHash' .flox/env/manifest.lock
+  assert_success
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
+
+  [[ -f "$database_path" ]]
+}
+
 @test "update bumps nixpkgs" {
   "$FLOX_BIN" init
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     run "$FLOX_BIN" update
-  assert_output --partial "Locked all inputs"
+  assert_output --partial "Locked input"
   run jq -r '.registry.inputs.nixpkgs.from.narHash' .flox/env/manifest.lock
   assert_success
-  assert_output "$OLD_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
     run "$FLOX_BIN" update
   assert_success
-  assert_output --partial "Updated:"
-  assert_output --partial "nixpkgs"
+  assert_output --partial "Updated input 'nixpkgs'"
   run jq -r '.registry.inputs.nixpkgs.from.narHash' .flox/env/manifest.lock
   assert_success
-  assert_output "$NEW_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_NEW"
 }
 
 @test "update doesn't update an already updated environment" {
@@ -68,29 +81,31 @@ teardown() {
     run "$FLOX_BIN" update
   run jq -r '.registry.inputs.nixpkgs.from.narHash' .flox/env/manifest.lock
   assert_success
-  assert_output "$OLD_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     run "$FLOX_BIN" update
   assert_success
-  assert_output "All inputs are up to date."
+  assert_output --partial "All inputs are up-to-date"
   run jq -r '.registry.inputs.nixpkgs.from.narHash' .flox/env/manifest.lock
   assert_success
-  assert_output "$OLD_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
 }
 
 @test "update bumps an input but not an already installed package" {
-  "$FLOX_BIN" init
+  rm -f "$GLOBAL_MANIFEST_LOCK"
+
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" install hello
+    "$FLOX_BIN" init
+  "$FLOX_BIN" install hello
 
   # nixpkgs and hello are both locked to the old nixpkgs
   run jq -r '.registry.inputs.nixpkgs.from.narHash' .flox/env/manifest.lock
   assert_success
-  assert_output "$OLD_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
   run jq -r ".packages.\"$NIX_SYSTEM\".hello.input.attrs.narHash" .flox/env/manifest.lock
   assert_success
-  assert_output "$OLD_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
 
   # After an update, nixpkgs is the new nixpkgs, but hello is still from the
   # old one.
@@ -98,10 +113,10 @@ teardown() {
     "$FLOX_BIN" update
   run jq -r '.registry.inputs.nixpkgs.from.narHash' .flox/env/manifest.lock
   assert_success
-  assert_output "$NEW_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_NEW"
   run jq -r ".packages.\"$NIX_SYSTEM\".hello.input.attrs.narHash" .flox/env/manifest.lock
   assert_success
-  assert_output "$OLD_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
 }
 
 @test "update --global bumps nixpkgs" {
@@ -111,10 +126,10 @@ teardown() {
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     run "$FLOX_BIN" update --global
-  assert_output --partial "Locked all global inputs"
+  assert_output --partial "Locked global input 'nixpkgs'"
   run jq -r '.registry.inputs.nixpkgs.from.narHash' "$GLOBAL_MANIFEST_LOCK"
   assert_success
-  assert_output "$OLD_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
     run "$FLOX_BIN" update --global
@@ -123,7 +138,7 @@ teardown() {
   assert_output --partial "nixpkgs"
   run jq -r '.registry.inputs.nixpkgs.from.narHash' "$GLOBAL_MANIFEST_LOCK"
   assert_success
-  assert_output "$NEW_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_NEW"
 
   if [ -f "$GLOBAL_MANIFEST_LOCK.bak" ]; then
     mv "$GLOBAL_MANIFEST_LOCK.bak" "$GLOBAL_MANIFEST_LOCK"
@@ -135,13 +150,13 @@ teardown() {
     run "$FLOX_BIN" update --global
   run jq -r '.registry.inputs.nixpkgs.from.narHash' "$GLOBAL_MANIFEST_LOCK"
   assert_success
-  assert_output "$OLD_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     run "$FLOX_BIN" update --global
   assert_success
-  assert_output "All inputs are up to date."
+  assert_output --partial "All global inputs are up-to-date."
   run jq -r '.registry.inputs.nixpkgs.from.narHash' "$GLOBAL_MANIFEST_LOCK"
   assert_success
-  assert_output "$OLD_NAR_HASH"
+  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
 }

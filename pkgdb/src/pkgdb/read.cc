@@ -15,6 +15,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "flox/core/util.hh"
 #include "flox/flake-package.hh"
 #include "flox/pkgdb/read.hh"
 
@@ -22,21 +23,6 @@
 /* -------------------------------------------------------------------------- */
 
 namespace flox::pkgdb {
-
-/* -------------------------------------------------------------------------- */
-
-bool
-isSQLError( int rcode )
-{
-  switch ( rcode )
-    {
-      case SQLITE_OK:
-      case SQLITE_ROW:
-      case SQLITE_DONE: return false; break;
-      default: return true; break;
-    }
-}
-
 
 /* -------------------------------------------------------------------------- */
 
@@ -57,7 +43,7 @@ getPkgDbCachedir()
   static std::stringstream dirname;
   if ( ! known )
     {
-      dirname << nix::getCacheDir() << "/flox/pkgdb-v" << sqlVersions.tables;
+      dirname << getFloxCachedir().c_str() << "/pkgdb-v" << sqlVersions.tables;
       known = true;
     }
   static const std::filesystem::path cacheDir = dirname.str();
@@ -90,8 +76,18 @@ PkgDbReadOnly::init()
     {
       throw NoSuchDatabase( *this );
     }
-  this->db.connect( this->dbPath.string().c_str(), SQLITE_OPEN_READONLY );
+  this->connect();
   this->loadLockedFlake();
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+void
+PkgDbReadOnly::connect()
+{
+  this->db.connect( this->dbPath.string().c_str(), SQLITE_OPEN_READONLY );
+  this->db.set_busy_timeout( DB_BUSY_TIMEOUT );
 }
 
 
@@ -103,12 +99,28 @@ PkgDbReadOnly::loadLockedFlake()
   sqlite3pp::query qry(
     this->db,
     "SELECT fingerprint, string, attrs FROM LockedFlake LIMIT 1" );
-  auto      rsl            = *qry.begin();
-  auto      fingerprintStr = rsl.get<std::string>( 0 );
+  auto rsl = qry.begin();
+  if ( rsl == qry.end() )
+    {
+      /**
+       * It is apparently possible for one process to read the scrape db
+       * in just the timeframe between creation and insertion of the
+       * `LockedFlake` row.
+       * In that case, `qry` will return no results and we can _not_ expect to
+       * be able safely dereference `rsl`.
+       */
+      throw PkgDbException( "No LockedFlake row." );
+    }
+
+  auto fingerprintStr = ( *rsl ).get<std::string>( 0 );
+
   nix::Hash fingerprint
     = nix::Hash::parseNonSRIUnprefixed( fingerprintStr, nix::htSHA256 );
-  this->lockedRef.string = rsl.get<std::string>( 1 );
-  this->lockedRef.attrs  = nlohmann::json::parse( rsl.get<std::string>( 2 ) );
+
+  this->lockedRef.string = ( *rsl ).get<std::string>( 1 );
+  this->lockedRef.attrs
+    = nlohmann::json::parse( ( *rsl ).get<std::string>( 2 ) );
+
   /* Check to see if our fingerprint is already known.
    * If it isn't load it, otherwise assert it matches. */
   if ( this->fingerprint == nix::Hash( nix::htSHA256 ) )
@@ -147,6 +159,18 @@ PkgDbReadOnly::getDbVersion()
     = static_cast<unsigned>( std::strtoul( tables.c_str(), &end, base ) ),
     .views = static_cast<unsigned>( std::strtoul( views.c_str(), &end, base ) )
   };
+}
+
+ScrapeMeta
+PkgDbReadOnly::getDbScrapeMeta()
+{
+  sqlite3pp::query qry( this->db,
+                        "SELECT value FROM DbScrapeMeta "
+                        "WHERE key IN ( 'scrape_rules_hash' ) LIMIT 1" );
+  auto             itr       = qry.begin();
+  auto             rulesHash = ( *itr ).get<std::string>( 0 );
+
+  return ScrapeMeta { .rulesHash = rulesHash };
 }
 
 
@@ -272,9 +296,8 @@ PkgDbReadOnly::getAttrSetId( const flox::AttrPath & path )
       /* Handle no such path. */
       if ( itr == qryId.end() )
         {
-          throw PkgDbException(
-            nix::fmt( "No such AttrSet '%s'.",
-                      nix::concatStringsSep( ".", path ) ) );
+          throw PkgDbException( nix::fmt( "No such AttrSet '%s'.",
+                                          concatStringsSep( ".", path ) ) );
         }
       row = ( *itr ).get<long long>( 0 );
     }
@@ -300,7 +323,7 @@ PkgDbReadOnly::getAttrSetPath( row_id row )
       /* Handle no such path. */
       if ( itr == qry.end() )
         {
-          throw PkgDbException( nix::fmt( "No such `AttrSet.id' %llu.", row ) );
+          throw PkgDbException( nix::fmt( "No such 'AttrSet.id' %llu.", row ) );
         }
       row = ( *itr ).get<long long>( 0 );
       path.push_front( ( *itr ).get<std::string>( 1 ) );
@@ -331,7 +354,7 @@ PkgDbReadOnly::getPackageId( const flox::AttrPath & path )
   if ( itr == qry.end() )
     {
       throw PkgDbException(
-        nix::fmt( "No such package %s.", nix::concatStringsSep( ".", path ) ) );
+        nix::fmt( "No such package %s.", concatStringsSep( ".", path ) ) );
     }
   return ( *itr ).get<long long>( 0 );
 }
@@ -351,7 +374,7 @@ PkgDbReadOnly::getPackagePath( row_id row )
   /* Handle no such path. */
   if ( itr == qry.end() )
     {
-      throw PkgDbException( nix::fmt( "No such `Packages.id' %llu.", row ) );
+      throw PkgDbException( nix::fmt( "No such 'Packages.id' %llu.", row ) );
     }
   flox::AttrPath path = this->getAttrSetPath( ( *itr ).get<long long>( 0 ) );
   path.emplace_back( ( *itr ).get<std::string>( 1 ) );
@@ -380,14 +403,14 @@ PkgDbReadOnly::getPackage( row_id row )
       , 'version',     version
       , 'description', Descriptions.description
       , 'license',     license
-      , 'broken',      iif( ( broken IS NULL )
-                          , json( 'null' )
-                          , iif( broken, json( 'true' ), json( 'false' ) )
-                          )
-      , 'unfree',      iif( ( unfree IS NULL )
-                          , json( 'null' )
-                          , iif( unfree, json( 'true' ), json( 'false' ) )
-                          )
+      , 'broken',      CASE WHEN broken IS NULL THEN json( 'null' )
+                            WHEN broken         THEN json( 'true' )
+                                                ELSE json( 'false' )
+                       END
+      , 'unfree',      CASE WHEN unfree IS NULL THEN json( 'null' )
+                            WHEN unfree         THEN json( 'true' )
+                                                ELSE json( 'false' )
+                       END
       ) AS json
       FROM Packages
            LEFT JOIN Descriptions ON ( descriptionId = Descriptions.id )

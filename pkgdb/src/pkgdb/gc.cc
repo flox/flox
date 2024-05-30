@@ -11,10 +11,10 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <optional>
-#include <stdlib.h>
 #include <string>
 #include <sys/stat.h>
 #include <utime.h>
@@ -53,7 +53,8 @@ findStaleDatabases( const std::filesystem::path & cacheDir, int minAgeDays )
   for ( const auto & entry : std::filesystem::directory_iterator( cacheDir ) )
     {
 
-      struct stat result;
+      struct stat result
+      {};
 
       if ( stat( entry.path().c_str(), &result ) == 0 )
         {
@@ -80,7 +81,8 @@ findStaleDatabases( const std::filesystem::path & cacheDir, int minAgeDays )
               toDelete.push_back( entry.path() );
             }
 
-          struct utimbuf newTimes;
+          struct utimbuf newTimes
+          {};
           newTimes.actime = std::chrono::system_clock::to_time_t( accessTime );
           utime( entry.path().c_str(), &newTimes );
         }
@@ -106,7 +108,7 @@ GCCommand::GCCommand() : parser( "gc" )
     .help( "minimum age in days" )
     .metavar( "AGE" )
     .nargs( 1 )
-    .default_value( 30 )
+    .default_value( GCCommand::DEF_STALE_AGE_IN_DAYS )
     .action( [&]( const std::string & minAgeStr )
              { this->gcStaleAgeDays = stoi( minAgeStr ); } );
 
@@ -132,7 +134,7 @@ GCCommand::run()
       /* If the user explicitly gave a directory, throw an error. */
       if ( this->cacheDir.has_value() )
         {
-          throw FloxException( "no such cachedir: `" + cacheDir.string()
+          throw FloxException( "no such cachedir: '" + cacheDir.string()
                                + "'" );
           return EXIT_FAILURE;
         }
@@ -142,14 +144,14 @@ GCCommand::run()
 
   auto toDelete = findStaleDatabases( cacheDir, this->gcStaleAgeDays );
 
-  std::cout << "Found " << toDelete.size() << " stale databases." << std::endl;
+  std::cout << "Found " << toDelete.size() << " stale databases." << '\n';
   for ( const auto & path : toDelete )
     {
       std::cout << "deleting " << path;
-      if ( this->dryRun ) { std::cout << " (dry run)" << std::endl; }
+      if ( this->dryRun ) { std::cout << " (dry run)" << '\n'; }
       else
         {
-          std::cout << std::endl;
+          std::cout << '\n';
           std::filesystem::remove( path );
         }
     }

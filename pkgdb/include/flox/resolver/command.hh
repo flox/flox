@@ -34,6 +34,8 @@ private:
 
 public:
 
+  ~LockCommand() override = default;
+
   LockCommand();
 
   [[nodiscard]] command::VerboseParser &
@@ -113,6 +115,8 @@ private:
 
 public:
 
+  ~UpdateCommand() override = default;
+
   UpdateCommand();
 
   [[nodiscard]] command::VerboseParser &
@@ -147,6 +151,8 @@ private:
 
 public:
 
+  ~UpgradeCommand() override = default;
+
   UpgradeCommand();
 
   [[nodiscard]] command::VerboseParser &
@@ -179,6 +185,8 @@ private:
 
 public:
 
+  ~RegistryCommand() override = default;
+
   RegistryCommand();
 
   [[nodiscard]] command::VerboseParser &
@@ -200,6 +208,70 @@ public:
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Check a locked manifest. */
+class CheckCommand
+{
+
+private:
+
+  command::VerboseParser parser;
+
+  /** Raw contents of project's lockfile ( if any ). */
+  std::optional<LockfileRaw> lockfileRaw;
+
+  /** The project's lockfile ( if any ). */
+  std::optional<Lockfile> lockfile;
+
+  /** The system to check the lockfile for. */
+  std::optional<flox::System> system;
+
+protected:
+
+  /**
+   * @brief Set the @a lockfilePath member variable by loading a lockfile from
+   * `path`.
+   *
+   * @throws @a EnvironmentMixinException if called after @a lockfile is
+   * initialized, as it is no longer allowed to change the lockfile.
+   * @throws @a InvalidLockfileException if the lockfile at `path` is invalid.
+   */
+  void
+  setLockfileRaw( const std::filesystem::path & path );
+
+
+public:
+
+
+  /**
+   * @brief Lazily initialize and return the @a lockfile.
+   *
+   * If @a lockfile is set simply return it.
+   * If @a lockfile is unset, try to initialize it
+   */
+  [[nodiscard]] virtual Lockfile
+  getLockfile();
+
+  CheckCommand();
+  virtual ~CheckCommand() {};
+
+  [[nodiscard]] command::VerboseParser &
+  getParser()
+  {
+    return this->parser;
+  }
+
+  /**
+   * @brief Execute the `registry` routine.
+   * @return `EXIT_SUCCESS` or `EXIT_FAILURE`.
+   */
+  int
+  run();
+
+}; /* End class `CheckCommand' */
+
+
+/* -------------------------------------------------------------------------- */
+
 class ManifestCommand
 {
 
@@ -211,6 +283,7 @@ private:
   UpdateCommand          cmdUpdate;   /**< `manifest update`   command */
   UpgradeCommand         cmdUpgrade;  /**< `manifest upgrade`  command */
   RegistryCommand        cmdRegistry; /**< `manifest registry` command */
+  CheckCommand           cmdCheck;    /**< `manifest check`    command */
 
 
 public:

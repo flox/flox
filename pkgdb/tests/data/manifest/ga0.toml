@@ -3,9 +3,9 @@
 systems = ["x86_64-linux", "aarch64-darwin"]
 
 [install.charasay]
-version = "^2"
+version = "^3"
 [install.pip]
-path = "python310Packages.pip"
+pkg-path = "python310Packages.pip"
 # Expect failure
 [install.bad]
 optional = true

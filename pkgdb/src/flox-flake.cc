@@ -8,7 +8,7 @@
  *
  * -------------------------------------------------------------------------- */
 
-#include <assert.h>
+#include <cassert>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -45,14 +45,12 @@ try : state( state ),
   {}
 catch ( const std::exception & err )
   {
-
     throw LockFlakeException( "failed to lock flake \"" + ref.to_string()
                                 + "\"",
                               nix::filterANSIEscapes( err.what(), true ) );
   }
 catch ( ... )
   {
-
     throw LockFlakeException( "failed to lock flake \"" + ref.to_string()
                               + "\"" );
   }

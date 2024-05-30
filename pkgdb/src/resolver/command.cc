@@ -40,7 +40,7 @@ LockCommand::run()
   nlohmann::json lockfile
     = this->getEnvironment().createLockfile().getLockfileRaw();
   /* Print that bad boii */
-  std::cout << lockfile.dump() << std::endl;
+  std::cout << lockfile.dump() << '\n';
   return EXIT_SUCCESS;
 }
 
@@ -79,7 +79,7 @@ DiffCommand::getManifestRaw()
         }
       if ( ! std::filesystem::exists( *this->manifestPath ) )
         {
-          throw InvalidManifestFileException( "manifest file `"
+          throw InvalidManifestFileException( "manifest file '"
                                               + this->manifestPath->string()
                                               + "'does not exist." );
         }
@@ -103,7 +103,7 @@ DiffCommand::getOldManifestRaw()
         }
       if ( ! std::filesystem::exists( *this->oldManifestPath ) )
         {
-          throw InvalidManifestFileException( "old manifest file `"
+          throw InvalidManifestFileException( "old manifest file '"
                                               + this->oldManifestPath->string()
                                               + "'does not exist." );
         }
@@ -119,7 +119,7 @@ int
 DiffCommand::run()
 {
   auto diff = this->getOldManifestRaw().diff( this->getManifestRaw() );
-  std::cout << diff.dump() << std::endl;
+  std::cout << diff.dump() << '\n';
   return EXIT_SUCCESS;
 }
 
@@ -159,15 +159,11 @@ UpdateCommand::run()
   /* If the manifest doesn't have a value, assume we're updating the global
    * manifest, and set a dummy empty manifest.
    * TODO: be less hacky. */
-  bool global = false;
   if ( ! this->getManifestRaw().has_value() )
     {
       this->setManifestRaw( ManifestRaw {} );
-      global = true;
     }
-  nlohmann::json    lockfile;
-  std::stringstream message;
-  bool              changes = false;
+  nlohmann::json lockfile;
   if ( auto maybeLockfile = this->getLockfile(); maybeLockfile.has_value() )
     {
       auto lockedRaw         = maybeLockfile->getLockfileRaw();
@@ -195,33 +191,13 @@ UpdateCommand::run()
                   }
                 else
                   {
-                    throw FloxException( "input `" + inputName
+                    throw FloxException( "input '" + inputName
                                          + "' does not exist in manifest." );
                   }
               }
             }
           lockedRaw.registry.defaults = manifestRegistry.defaults;
           lockedRaw.registry.priority = manifestRegistry.priority;
-        }
-      /* Generate message with updated inputs. */
-      if ( global ) { message << "Updated global input(s):"; }
-      else { message << "Updated:"; }
-      for ( const auto & [inputName, input] : oldLockedRegistry.inputs )
-        {
-          if ( const auto & maybeUpdatedInput
-               = lockedRaw.registry.inputs.find( inputName );
-               maybeUpdatedInput != lockedRaw.registry.inputs.end() )
-            {
-              auto & [_, updatedInput] = *maybeUpdatedInput;
-              if ( input != updatedInput )
-                {
-                  changes = true;
-                  message << std::endl
-                          << "'" << inputName << "'"
-                          << " from '" << *input.from << "' to '"
-                          << *updatedInput.from << "'";
-                }
-            }
         }
       lockfile = lockedRaw;
     }
@@ -232,18 +208,9 @@ UpdateCommand::run()
     {
       // TODO: `RegistryRaw' should drop empty fields.
       lockfile = this->getEnvironment().createLockfile().getLockfileRaw();
-      changes  = true;
-      if ( global ) { message << "Locked all global inputs."; }
-      else
-        {
-          message << "Locked all inputs for previously unlocked environment.";
-        }
     }
   /* Print that bad boii */
-  nlohmann::json result
-    = { { "lockfile", lockfile },
-        { "message", changes ? message.str() : "All inputs are up to date." } };
-  std::cout << result.dump() << std::endl;
+  std::cout << lockfile.dump() << '\n';
 
   return EXIT_SUCCESS;
 }
@@ -279,6 +246,7 @@ UpgradeCommand::UpgradeCommand() : parser( "upgrade" )
 
 /* -------------------------------------------------------------------------- */
 
+// NOLINTBEGIN(readability-function-cognitive-complexity)
 int
 UpgradeCommand::run()
 {
@@ -315,14 +283,15 @@ UpgradeCommand::run()
               else
                 {
                   throw FloxException(
-                    "'" + groupOrIID
-                    + "' is a package in a group with multiple packages.\n"
-                      "To upgrade the group, specify the group name:\n"
-                      "     $ flox upgrade "
-                    + groupName
-                    + "\n"
-                      "To upgrade all packages, run:\n"
-                      "     $ flox upgrade" );
+                    nix::fmt( "'%s' is a package in the group '%s' with "
+                              "multiple packages.\n"
+                              "To upgrade the group, specify the group name:\n"
+                              "     $ flox upgrade %s\n"
+                              "To upgrade all packages, run:\n"
+                              "     $ flox upgrade",
+                              groupOrIID,
+                              groupName,
+                              groupName ) );
                 }
             }
           else
@@ -377,11 +346,11 @@ UpgradeCommand::run()
   /* Print that bad boii */
   nlohmann::json result
     = { { "lockfile", newLockfile }, { "result", upgraded } };
-  std::cout << result.dump() << std::endl;
+  std::cout << result.dump() << '\n';
 
   return EXIT_SUCCESS;
 }
-
+// NOLINTEND(readability-function-cognitive-complexity)
 
 /* -------------------------------------------------------------------------- */
 
@@ -433,14 +402,78 @@ RegistryCommand::run()
       registries["lockfile-packages"] = nullptr;
     }
 
-  std::cout << registries.dump() << std::endl;
+  std::cout << registries.dump() << '\n';
   return EXIT_SUCCESS;
 }
 
 
 /* -------------------------------------------------------------------------- */
 
-ManifestCommand::ManifestCommand() : parser( "manifest" ), cmdLock(), cmdDiff()
+CheckCommand::CheckCommand() : parser( "check" )
+{
+  this->parser.add_description(
+    "Lint a manifest and return warnings as newline delimited json objects" );
+  this->parser.add_argument( "--lockfile" )
+    .help( "the path to the project's 'manifest.lock'" )
+    .metavar( "PATH" )
+    .nargs( 1 )
+    .action( [&]( const std::string & strPath )
+             { this->setLockfileRaw( nix::absPath( strPath ) ); } );
+
+  this->parser.add_argument( "--system" )
+    .help( "The system to check packages for" )
+    .metavar( "SYSTEM" )
+    .nargs( 1 )
+    .action( [&]( const std::string & system ) { this->system = system; } );
+}
+
+void
+CheckCommand::setLockfileRaw( const std::filesystem::path & path )
+{
+  if ( this->lockfile.has_value() )
+    {
+      throw EnvironmentMixinException(
+        "lockfile already initialized, cannot change." );
+    }
+
+  if ( ! std::filesystem::exists( path ) )
+    {
+      throw InvalidLockfileException( "lockfile '" + path.string()
+                                      + "' does not exist." );
+    }
+
+  this->lockfileRaw = readAndCoerceJSON( path );
+}
+
+Lockfile
+CheckCommand::getLockfile()
+{
+  if ( this->lockfile.has_value() ) { return *this->lockfile; }
+
+  if ( ! this->lockfileRaw.has_value() )
+    {
+      throw EnvironmentMixinException(
+        "lockfile not initialized, cannot get." );
+    }
+
+  this->lockfile = Lockfile( *this->lockfileRaw );
+  return *this->lockfile;
+}
+
+int
+CheckCommand::run()
+{
+  auto warnings = this->getLockfile().checkPackages(
+    this->system.value_or( nix::nativeSystem ) );
+
+  std::cout << nlohmann::json( warnings ).dump() << std::endl;
+
+  return EXIT_SUCCESS;
+}
+
+/* -------------------------------------------------------------------------- */
+
+ManifestCommand::ManifestCommand() : parser( "manifest" )
 {
   this->parser.add_description( "Manifest subcommands" );
   this->parser.add_subparser( this->cmdLock.getParser() );
@@ -448,6 +481,7 @@ ManifestCommand::ManifestCommand() : parser( "manifest" ), cmdLock(), cmdDiff()
   this->parser.add_subparser( this->cmdRegistry.getParser() );
   this->parser.add_subparser( this->cmdUpdate.getParser() );
   this->parser.add_subparser( this->cmdUpgrade.getParser() );
+  this->parser.add_subparser( this->cmdCheck.getParser() );
 }
 
 
@@ -476,8 +510,12 @@ ManifestCommand::run()
     {
       return this->cmdRegistry.run();
     }
-  std::cerr << this->parser << std::endl;
-  throw flox::FloxException( "You must provide a valid `manifest' subcommand" );
+  if ( this->parser.is_subcommand_used( "check" ) )
+    {
+      return this->cmdCheck.run();
+    }
+  std::cerr << this->parser << '\n';
+  throw flox::FloxException( "You must provide a valid 'manifest' subcommand" );
   return EXIT_FAILURE;
 }
 

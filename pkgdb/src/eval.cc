@@ -24,7 +24,7 @@ namespace flox {
 EvalCommand::EvalCommand() : parser( "eval" )
 {
   this->parser.add_description(
-    "Evaluate a `nix` expression with `flox` extensions" );
+    "Evaluate a 'nix' expression with 'flox' extensions" );
 
   this->parser.add_argument( "--json", "-j" )
     .help( "emit JSON values" )
@@ -35,7 +35,7 @@ EvalCommand::EvalCommand() : parser( "eval" )
         if ( this->style == STYLE_RAW )
           {
             throw FloxException(
-              "the options `--json' and `--raw' may not be used together" );
+              "the options '--json' and '--raw' may not be used together" );
           }
         this->style = STYLE_JSON;
       } );
@@ -49,14 +49,14 @@ EvalCommand::EvalCommand() : parser( "eval" )
         if ( this->style == STYLE_JSON )
           {
             throw FloxException(
-              "the options `--json' and `--raw' may not be used together" );
+              "the options '--json' and '--raw' may not be used together" );
           }
         this->style = STYLE_RAW;
       } );
 
   this->parser.add_argument( "--file", "-f" )
     .help( "read expression from a file. "
-           "Use `-' as filename to read `STDIN'" )
+           "Use '-' as filename to read 'STDIN'" )
     .nargs( 1 )
     .metavar( "FILE" )
     .action(
@@ -65,7 +65,7 @@ EvalCommand::EvalCommand() : parser( "eval" )
         if ( this->expr.has_value() )
           {
             throw FloxException(
-              "the option `--file' may not be used with an inline expression" );
+              "the option '--file' may not be used with an inline expression" );
           }
         this->file = file;
       } );
@@ -85,7 +85,7 @@ EvalCommand::EvalCommand() : parser( "eval" )
         if ( this->file.has_value() )
           {
             throw FloxException(
-              "the option `--file' may not be used with an inline expression" );
+              "the option '--file' may not be used with an inline expression" );
           }
         this->expr = expr;
       } );
@@ -97,13 +97,13 @@ EvalCommand::EvalCommand() : parser( "eval" )
 int
 EvalCommand::run()
 {
-  auto state = this->getState();
-  auto value = state->allocValue();
+  auto   state = this->getState();
+  auto * value = state->allocValue();
   if ( this->file.has_value() )
     {
       if ( ( *this->file ) == "-" )
         {
-          auto expr = state->parseStdin();
+          auto * expr = state->parseStdin();
           state->eval( expr, *value );
         }
       else
@@ -120,7 +120,7 @@ EvalCommand::run()
           throw FloxException(
             "you must provide a file or expression to evaluate" );
         }
-      auto expr = state->parseExprFromString(
+      auto * expr = state->parseExprFromString(
         *this->expr,
         state->rootPath( nix::CanonPath::fromCwd() ) );
       state->eval( expr, *value );

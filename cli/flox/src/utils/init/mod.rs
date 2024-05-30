@@ -6,18 +6,18 @@ use indoc::indoc;
 use log::debug;
 use serde::Deserialize;
 
+mod catalog_client;
 mod logger;
 mod metrics;
+mod sentry;
 
+pub use catalog_client::*;
 pub use logger::*;
 pub use metrics::*;
-
-mod channels;
-
-pub use channels::{init_channels, DEFAULT_CHANNELS, HIDDEN_CHANNELS};
+pub use sentry::*;
 
 pub fn init_access_tokens(
-    config_tokens: &HashMap<String, String>,
+    config_tokens: Option<&HashMap<String, String>>,
 ) -> Result<Vec<(String, String)>> {
     use std::io::{BufRead, BufReader};
 
@@ -73,7 +73,7 @@ pub fn init_access_tokens(
         }
         tokens
     } else {
-        debug!("no default user nix.conf found - weird");
+        debug!("no default user nix.conf found");
         Default::default()
     };
 
@@ -81,7 +81,9 @@ pub fn init_access_tokens(
 
     tokens.extend(nix_tokens);
     tokens.extend(gh_tokens);
-    tokens.extend(config_tokens.clone());
+    if let Some(config_tokens) = config_tokens {
+        tokens.extend(config_tokens.clone());
+    }
     tokens.dedup();
 
     Ok(tokens)

@@ -80,7 +80,7 @@ argparse::Argument &
 InlineInputMixin::addSubtreeArg( argparse::ArgumentParser & parser )
 {
   return parser.add_argument( "--subtree" )
-    .help( "a subtree name, being one of `packages` or `legacyPackages`, "
+    .help( "a subtree name, being one of 'packages' or 'legacyPackages', "
            "that should be processed. May be used multiple times." )
     .required()
     .metavar( "SUBTREE" )
@@ -126,7 +126,7 @@ AttrPathMixin::addAttrPathArgs( argparse::ArgumentParser & parser )
 void
 AttrPathMixin::fixupAttrPath()
 {
-  if ( this->attrPath.empty() ) { this->attrPath.push_back( "packages" ); }
+  if ( this->attrPath.empty() ) { this->attrPath.emplace_back( "packages" ); }
   if ( this->attrPath.size() < 2 )
     {
       this->attrPath.push_back( nix::settings.thisSystem.get() );

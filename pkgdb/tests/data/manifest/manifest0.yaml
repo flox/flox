@@ -6,7 +6,7 @@ registry:
         type: github
         owner: NixOS
         repo: nixpkgs
-        rev: e8039594435c68eb4f780f3e9bf3972a7399c4b1
+        rev: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
       subtrees: ["legacyPackages"]
 
     floco:
@@ -33,13 +33,13 @@ install:
       type: github
       owner: NixOS
       repo: nixpkgs
-      rev: e8039594435c68eb4f780f3e9bf3972a7399c4b1
+      rev: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 
   charasay:
     version: ^2
 
   pip:
-    path: python310Packages.pip
+    pkg-path: python310Packages.pip
 
 vars:
   message: Howdy

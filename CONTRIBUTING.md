@@ -14,6 +14,95 @@ $ ./cli/target/debug/flox --help;
 $ just test-all;
 ```
 
+## PR Guidelines
+
+### CLA
+
+- [ ] All commits in a Pull Request are
+      [signed](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits)
+      and Verified by Github or via GPG.
+- [ ] As an outside contributor you need to accept the flox
+      [Contributor License Agreement](.github/CLA.md) by adding your Git/Github
+      details in a row at the end of the
+      [`CONTRIBUTORS.csv`](.github/CONTRIBUTORS.csv) file by way of the same
+      pull request or one done previously.
+
+### CI
+
+CI can only be run against the flox/flox repository - it can't be run on forks.
+To run CI on external contributions, a maintainer will have to fetch the branch
+for a PR and push it to a branch in the flox/flox repo.
+The maintainer reviewing a PR will run CI after approving the PR.
+If you ever need a run triggered, feel free to ping your reviewer!
+
+### Commits
+
+This project follows (tries to),
+[conventional commits](https://www.conventionalcommits.org/en/v1.0.0/).
+
+We employ [commitizen](https://commitizen-tools.github.io/commitizen/)
+to help enforcing those rules.
+
+**Commit messages that explain the content of the commit are appreciated**
+
+-----
+
+For starters: commit messages should follow the pattern:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+The commit contains the following structural elements,
+to communicate the intent of the change:
+
+1. **fix**: a commit of the type `fix` patches a bug in the codebase
+   (this correlates with PATCH in Semantic Versioning).
+2. **feat**: a commit of the type feat introduces a new feature to the codebase
+   (this correlates with MINOR in Semantic Versioning).
+3. **BREAKING CHANGE**: a commit that has a footer BREAKING CHANGE:,
+   or appends a ! after the type/scope, introduces a breaking API change
+   (correlating with MAJOR in Semantic Versioning).
+   A BREAKING CHANGE can be part of commits of any type.
+4. types other than fix: and feat: are allowed,
+   for example @commitlint/config-conventional (based on the Angular convention)
+   recommends `build`, `chore`, `ci`, `docs`, `style`, `refactor`, `perf`,
+   `test`, and others.
+5. footers other than BREAKING CHANGE: <description> may be provided
+   and follow a convention similar to git trailer format.
+
+Additional types are not mandated by the Conventional Commits specification,
+and have no implicit effect in Semantic Versioning
+(unless they include a BREAKING CHANGE).
+
+A scope may be provided to a commit’s type,
+to provide additional contextual information
+and is contained within parenthesis, e.g., feat(parser): add ability to parse
+arrays.
+
+-----
+
+A pre-commit hook will ensure only correctly formatted commit messages are
+committed.
+
+You can also run
+
+```console
+$ cz c
+```
+
+or
+
+```console
+$ cz commit
+```
+
+to make conforming commits interactively.
+
 ## Contents of the Repo
 
 Currently this repo houses three rust crates:
@@ -21,7 +110,6 @@ Currently this repo houses three rust crates:
 - `flox`: the flox binary and reimplementation of the `bash` based flox.
 - `flox-rust-sdk`: A library layer implementing flox's capabilities independent
   of the frontend.
-- `floxd`: a potential flox daemon
 
 ## Development
 
@@ -93,6 +181,19 @@ Flox must be buildable using `flox` or `nix`.
   $ pre-commit run -a
   ```
 
+### Setting up C/C++ IDE support
+
+For VSCode, it's suggested to use the *C/C++* plugin from *Microsoft*.  This
+section refers to settings from that plugin.
+
+- Set your environment to use `c17` and `c++20` standards.
+  - For VSCode, this is available under *C++ Configuration*
+- *Compile commands* are built with `just build-cdb` and will be placed in the
+  root folder as `compile_commands.json`.
+  - For VSCode, this is available under the *Advanced* drop down under
+  *C++ Configuration* and can be set to `${workspaceFolder}/compile_commands.json`.
+
+
 ### Setting up rust IDE support
 
 - Install the `rust-analyzer` plugin for your editor
@@ -121,129 +222,80 @@ Flox must be buildable using `flox` or `nix`.
    "shellformat.useEditorConfig": true,
   ```
 
-## Git
-
-### CLA
-
-- [ ] All commits in a Pull Request are
-      [signed](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits)
-      and Verified by Github or via GPG.
-- [ ] As an outside contributor you need to accept the flox
-      [Contributor License Agreement](.github/CLA.md) by adding your Git/Github
-      details in a row at the end of the
-      [`CONTRIBUTORS.csv`](.github/CONTRIBUTORS.csv) file by way of the same
-      pull request or one done previously.
-
-### Commits
-
-This project follows (tries to),
-[conventional commits](https://www.conventionalcommits.org/en/v1.0.0/).
-
-We employ [commitizen](https://commitizen-tools.github.io/commitizen/)
-to help enforcing those rules.
-
-**Commit messages that explain the content of the commit are appreciated**
-
------
-
-For starters: commit messages shold have to follow the pattern:
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-```
-
-The commit contains the following structural elements,
-to communicate intent to the consumers of your library:
-
-1. **fix**: a commit of the type `fix` patches a bug in your codebase
-   (this correlates with PATCH in Semantic Versioning).
-2. **feat**: a commit of the type feat introduces a new feature to the codebase
-   (this correlates with MINOR in Semantic Versioning).
-3. **BREAKING CHANGE**: a commit that has a footer BREAKING CHANGE:,
-   or appends a ! after the type/scope, introduces a breaking API change
-   (correlating with MAJOR in Semantic Versioning).
-   A BREAKING CHANGE can be part of commits of any type.
-4. types other than fix: and feat: are allowed,
-   for example @commitlint/config-conventional (based on the Angular convention)
-   recommends `build`, `chore`, `ci`, `docs`, `style`, `refactor`, `perf`,
-   `test`, and others.
-5. footers other than BREAKING CHANGE: <description> may be provided
-   and follow a convention similar to git trailer format.
-
-Additional types are not mandated by the Conventional Commits specification,
-and have no implicit effect in Semantic Versioning
-(unless they include a BREAKING CHANGE).
-
-A scope may be provided to a commit’s type,
-to provide additional contextual information
-and is contained within parenthesis, e.g., feat(parser): add ability to parse
-arrays.
-
------
-
-A pre-commit hook will ensure only correctly formatted commit messages are
-committed.
-
-You can also run
-
-```console
-$ cz c
-```
-
-or
-
-```console
-$ cz commit
-```
-
-to make conforming commits interactively.
-
-### Merges
-
-This repo follows a variant of [git-flow](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow).
-
-Features are branched off the `develop` branch and committed back to it,
-upon completion, using GitHub PRs.
-Features should be **squashed and merged** into `develop`,
-or if they represent multiple bigger changes,
-squashed into multiple distinct change sets.
-
-### Releases
-
-**TODO**
-
-
-
 ## Testing
 
 ### Unit tests
 
-Unit test are ran with `cargo`.
-These cover code authored in Rust, but does not explicitly cover code authored
-in `<flox>/flox-bash/`.
+Most changes should be unit tested.
+If it's possible to test logic with a unit test, a unit test is preferred to any
+other kind of test.
+Unit tests should be added throughout the Rust code in `./cli`.
+
+Unit tests can be run with `just`:
 
 ```console
-$ nix develop --command 'just test-all';
+$ nix develop
+$ just impure-tests
+$ just impure-tests models::environment::test
 ```
 
 ### Integration tests
 
-Integration tests are written with `bats` and `expect`.
-They are located in the `<flox>/tests` folder.
-To run them:
+Integration tests are written with `bats`.
+`expect` can be used for `activate` tests that require testing an interactive
+shell,
+but in general `expect` should be avoided.
+Integration tests are located in the `./cli/tests` folder.
+
+Integration tests currently test:
+- CLI flags
+- A lot of things that should be unit tests
+- Integration (no way!?) with:
+  - The nix-daemon
+  - The shell
+  - github:NixOS/nixpkgs
+  - cache.nixos.org
+
+We're trying to move towards more cleanly separating unit/integration/functional
+tests,
+but for now, tests should be added as integration tests if they should be run on
+every commit but they can't be made unit tests.
+
+Integration tests can be run with `just`:
 
 ```console
-$ nix develop --command 'just build';
-$ nix develop --command 'just integ-tests';
+$ nix develop
+$ just integ-tests
 ```
 
-**Important** the `flox-tests` option `--tests` must point to the
-`<flox>/tests/` directory root which is used to locate various resources within
-test environments.
+### Functional tests
+
+Functional tests are written with `bats`.
+They are located in the `./tests` folder.
+
+Functional tests should be used for testing:
+- Integration with external Flox services like FloxHub
+- Integration with language ecosystems
+
+Functional tests are not run on every commit on PRs.
+They are run in the merge queue or if a CI workflow is triggered manually on a
+branch from
+[Actions](https://github.com/flox/flox/actions).
+
+Functional tests can be run with `just`:
+
+```console
+$ nix develop
+$ just functional-tests
+```
+
+#### Mock catalog responses
+
+Mock catalog responses for use with integration and functional tests can be generated with:
+
+```console
+_FLOX_CATALOG_DUMP_RESPONSE_FILE=<file.json> flox <command>
+```
 
 #### Continuous testing
 When working on the test you would probably want to run them continuously on
@@ -350,3 +402,14 @@ You can use boolean logic and specify the flag multiple times to run specific
 subsets of tests.
 See the [bats usage documentation](https://bats-core.readthedocs.io/en/stable/usage.html)
 for details.
+
+## Merges
+
+Changes should be **squashed and merged** into `main`.
+
+Development is done on branches and merged back to `main`.  Keep your branch
+updated by rebasing and resolving conflicts regularly to avoid messy merges.
+Merges to `main` should be squashed and *ff-only* back to `main` using GitHub
+PRs.  Or, if they represent multiple bigger changes, squashed into multiple
+distinct change sets.  Also be sure to run all tests before creating a mergable
+PR (See [above](#testing)).

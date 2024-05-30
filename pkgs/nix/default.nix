@@ -10,8 +10,14 @@
 #
 #
 # ---------------------------------------------------------------------------- #
-{nixVersions}:
+{
+  nixVersions,
+  stdenv,
+}:
 nixVersions.nix_2_17.overrideAttrs (prev: {
+  # Necessary for compiling with debug symbols
+  inherit stdenv;
+
   # Apply patch files.
   patches =
     prev.patches

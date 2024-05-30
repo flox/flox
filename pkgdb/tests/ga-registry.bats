@@ -14,11 +14,6 @@ setup_file() {
   export TDATA="$TESTS_DIR/data/manifest"
   export PROJ1="$TESTS_DIR/harnesses/proj1"
 
-  OTHER_REV="$(
-    jq -r '.registry.inputs.nixpkgs.from.rev' "$PROJ1/manifest2.lock"
-  )"
-  export OTHER_REV
-
   # We don't parallelize these to avoid DB sync headaches and to recycle the
   # cache between tests.
   # Nonetheless this file makes an effort to avoid depending on past state in
@@ -191,11 +186,11 @@ setup_file() {
 @test "Combined registry prefers lockfile inputs" {
   run --separate-stderr \
     sh -c "$PKGDB_BIN manifest registry --ga-registry                  \
-                                   --lockfile '$PROJ1/manifest2.lock'  \
+                                   --lockfile '$PROJ1/manifest_old.lock'  \
                                    --manifest '$PROJ1/manifest.toml'   \
             |jq -r '.combined.inputs.nixpkgs.from.rev';"
   assert_success
-  assert_output "$OTHER_REV"
+  assert_output "$NIXPKGS_REV_OLDER"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -208,9 +203,9 @@ setup_file() {
 @test "'pkgdb manifest update --ga-registry' updates lockfile rev" {
   run --separate-stderr \
     sh -c "$PKGDB_BIN manifest update --ga-registry                   \
-                                  --lockfile '$PROJ1/manifest2.lock'  \
+                                  --lockfile '$PROJ1/manifest_old.lock'  \
                                   --manifest '$PROJ1/manifest.toml'   \
-            |jq -r '.lockfile.registry.inputs.nixpkgs.from.rev';"
+            |jq -r '.registry.inputs.nixpkgs.from.rev';"
   assert_success
   assert_output "$NIXPKGS_REV"
 }
@@ -227,16 +222,16 @@ setup_file() {
       \"query\": { \"match-name\": \"nodejs\" }
     }'|head -n1|jq -r '.version';"
   assert_success
-  assert_output '18.16.0'
+  assert_output "$NODEJS_VERSION"
 
   # `$OTHER_REV'
   run --separate-stderr sh -c "$PKGDB_BIN search --ga-registry '{
       \"manifest\": \"$PROJ1/manifest.toml\",
-      \"lockfile\": \"$PROJ1/manifest2.lock\",
+      \"lockfile\": \"$PROJ1/manifest_old.lock\",
       \"query\": { \"match-name\": \"nodejs\" }
     }'|head -n1|jq -r '.version';"
   assert_success
-  assert_output '18.17.1'
+  assert_output "$NODEJS_VERSION_OLDEST"
 }
 
 # ---------------------------------------------------------------------------- #

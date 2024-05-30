@@ -13,6 +13,7 @@
 #include <functional>
 #include <queue>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <nix/eval-cache.hh>
@@ -39,6 +40,20 @@
 
 /** @brief Interfaces for caching package metadata in SQLite3 databases. */
 namespace flox::pkgdb {
+
+/* -------------------------------------------------------------------------- */
+
+/** SQLite3 busy timeout in milliseconds. */
+constexpr int DB_BUSY_TIMEOUT = 250 * 1000;
+
+
+/* -------------------------------------------------------------------------- */
+
+/** A unique hash associated with a locked flake. */
+using Fingerprint = nix::flake::Fingerprint;
+using SQLiteDb    = sqlite3pp::database; /** < SQLite3 database handle. */
+using sql_rc      = int;                 /**< `SQLITE_*` result code. */
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -78,21 +93,24 @@ struct SqlVersions
 
 }; /* End struct `SqlVersions' */
 
+/** @brief SQLite3 schema fields for DbScrapeMeta table. */
+struct ScrapeMeta
+{
+  /**
+   * The hash representing the Scraping rules used to generate the database.
+   * This is checked upon opening and if they differ than the rules expected in
+   * the running version of pkgdb, the datbase is invalidated and recreated.
+   */
+  std::string rulesHash;
+};
+
 /** @brief Emit version information to an output stream. */
 std::ostream &
 operator<<( std::ostream & oss, const SqlVersions & versions );
 
 
 /** The current SQLite3 schema versions. */
-constexpr SqlVersions sqlVersions = { .tables = 2, .views = 3 };
-
-
-/* -------------------------------------------------------------------------- */
-
-/** A unique hash associated with a locked flake. */
-using Fingerprint = nix::flake::Fingerprint;
-using SQLiteDb    = sqlite3pp::database; /** < SQLite3 database handle. */
-using sql_rc      = int;                 /**< `SQLITE_*` result code. */
+constexpr SqlVersions sqlVersions = { .tables = 3, .views = 4 };
 
 
 /* -------------------------------------------------------------------------- */
@@ -237,6 +255,18 @@ public:
     : PkgDbReadOnly( fingerprint, genPkgDbName( fingerprint ).string() )
   {}
 
+  /* Connecting and locking */
+
+  /**
+   * @brief Tries to connect to the database.
+   *
+   * The database may be locked by another process that is currently scraping
+   * it. This function will block until that lock is released. Will not acquire
+   * an exclusive lock on the database so that other process can concurrently
+   * read the database.
+   */
+  void
+  connect();
 
   /* Queries */
 
@@ -245,6 +275,10 @@ public:
   /** @return The Package Database schema version. */
   SqlVersions
   getDbVersion();
+
+  /** @return The Package Database scrape meta fields. */
+  ScrapeMeta
+  getDbScrapeMeta();
 
   /**
    * @brief Get the `AttrSet.id` for a given path.
@@ -324,7 +358,6 @@ public:
   bool
   hasPackage( const flox::AttrPath & path );
 
-
   /**
    * @brief Get the `Description.description` for a given `Description.id`.
    * @param descriptionId The row id to lookup.
@@ -332,7 +365,6 @@ public:
    */
   std::string
   getDescription( row_id descriptionId );
-
 
   /**
    * @brief Return a list of `Packages.id`s for packages which satisfy a given
@@ -343,7 +375,6 @@ public:
    */
   std::vector<row_id>
   getPackages( const PkgQueryArgs & params );
-
 
   /**
    * @brief Get metadata about a single package.
@@ -356,7 +387,6 @@ public:
   nlohmann::json
   getPackage( row_id row );
 
-
   /**
    * @brief Get metadata about a single package.
    *
@@ -368,8 +398,7 @@ public:
   nlohmann::json
   getPackage( const flox::AttrPath & path );
 
-
-  nix::FlakeRef
+  [[nodiscard]] nix::FlakeRef
   getLockedFlakeRef() const
   {
     return nix::FlakeRef::fromAttrs(
@@ -388,17 +417,6 @@ public:
  */
 template<typename T>
 concept pkgdb_typename = std::is_base_of<PkgDbReadOnly, T>::value;
-
-
-/* -------------------------------------------------------------------------- */
-
-/**
- * @brief Predicate to detect failing SQLite3 return codes.
- * @param rcode A SQLite3 _return code_.
- * @return `true` iff @a rc is a SQLite3 error.
- */
-bool
-isSQLError( int rcode );
 
 
 /* -------------------------------------------------------------------------- */
