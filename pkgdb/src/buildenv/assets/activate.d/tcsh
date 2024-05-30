@@ -10,16 +10,6 @@ if ( ! $?_add_env || ! $?_del_env ) then
   exit 1
 endif
 
-# We invoke tcsh with -f to prevent the user and system-wide
-# config files from coming back and overriding the environment
-# that we're trying to set up here, so we start by sourcing
-# these files ourselves prior to setting up the environment.
-foreach f ( /etc/csh.login /etc/csh.cshrc ~/.cshrc ~/.tcshrc )
-  if ( -f $f ) then
-    source $f
-  endif
-end
-
 # Restore environment variables set in the previous bash initialization.
 eval `$_gnused/bin/sed -e 's/^/unsetenv /' -e 's/$/;/' $_del_env`
 eval `$_gnused/bin/sed -e 's/^/setenv /' -e 's/=/ /' -e 's/$/;/' $_add_env`

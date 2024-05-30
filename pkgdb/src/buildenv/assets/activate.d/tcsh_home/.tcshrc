@@ -7,13 +7,37 @@
 # Start by reinstating the user's original $HOME.
 setenv HOME "$FLOX_ORIG_HOME"
 
-# By this point we will have already sourced the "system" /etc/*cshrc files,
-# so we can continue with sourcing the user's .login and .{,t}cshrc files.
-foreach f ( .login .cshrc .tcshrc )
-    if ( -f "$HOME/$f" ) then
-	source "$HOME/$f"
-    endif
-end
+# We invoke tcsh with -f to prevent the user and system-wide
+# config files from coming back and overriding the environment
+# that we're trying to set up here, so we start by replicating
+# the startup that tcsh would normally do. Unfortunately that
+# startup is quite sophisticated (or convoluted?), involving
+# tcsh compilation options that can reverse the loading order,
+# files that load conditionally based on the existence of other
+# files, and so on. We _could_ replicate that all here, but
+# until we see a demand for it we'll just cover the default,
+# expected case. See the "Startup and shutdown" section of
+# tcsh(1) for the full details.
+if ( -f /etc/csh.cshrc ) then
+  source /etc/csh.cshrc
+endif
+if ( $?loginsh ) then
+  if ( -f /etc/csh.login ) then
+    source /etc/csh.login
+  endif
+endif
+if ( -f ~/.tcshrc ) then
+  source ~/.tcshrc
+else if ( -f ~/.cshrc ) then
+  source ~/.cshrc
+endif
+# TODO: handle sourcing of $histfile (.history), as per tcsh(1).
+if ( $?loginsh ) then
+  if ( -f ~/.login ) then
+    source ~/.login
+  endif
+endif
+# TODO: handle sourcing of $dirsfile (.cshdirs), as per tcsh(1).
 
 # Bring in the Nix and Flox environment customizations.
 if ( $?FLOX_TCSH_INIT_SCRIPT ) then

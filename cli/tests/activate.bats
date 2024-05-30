@@ -25,20 +25,50 @@ user_dotfiles_setup() {
   # so none of these should exist, and we abort if we find otherwise.
   if [ -f "$HOME/.bashrc" -o -f "$HOME/.zshrc" -o -f "$HOME/.zshenv" -o
        -f "$HOME/.zlogin" -o -f "$HOME/.zlogout" -o -f "$HOME/.zprofile" -o
+       -f "$HOME/.profile" -o -f "$HOME/.login" -o -f "$HOME/.logout" -o
        -f "$HOME/.config/fish/config.fish" -o
        -f "$HOME/.cshrc" -o -f "$HOME/.tcshrc" ]; then
         echo "user_dotfiles_setup: found preexisting dotfile(s) in $HOME" >&2
         return 1
   fi
   BADPATH="/usr/local/bin:/usr/bin:/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin"
-  for i in "profile" "login" "logout" "bashrc" \
+
+  # Posix-compliant shells
+  for i in "profile" "bashrc" \
            "zshrc" "zshenv" "zlogin" "zlogout" "zprofile"; do
-    echo "echo Setting PATH from .$i >&2; export PATH=\"$BADPATH\"" > "$HOME/.$i"
+    cat > "$HOME/.$i" <<EOF
+echo "Sourcing .$i" >&2
+echo "Setting PATH from .$i" >&2
+export PATH="$BADPATH"
+if [ -f "$HOME/.$i.extra" ]; then
+  source "$HOME/.$i.extra";
+fi
+EOF
   done
+
+  # Fish
   mkdir -p "$HOME/.config/fish"
-  echo "set -gx PATH $BADPATH" > "$HOME/.config/fish/config.fish"
-  echo "setenv PATH $BADPATH" > "$HOME/.cshrc"
-  echo "setenv PATH $BADPATH" > "$HOME/.tcshrc"
+  cat > "$HOME/.config/fish/config.fish" <<EOF
+echo "Sourcing config.fish" >&2
+echo "Setting PATH from config.fish" >&2
+set -gx PATH "$BADPATH"
+if test -e "$HOME/.config/fish/config.fish.extra"
+  source "$HOME/.config/fish/config.fish.extra"
+end
+EOF
+
+  # Csh-based shells
+  for i in "cshrc" "tcshrc" "login" "logout"; do
+    cat > "$HOME/.$i" <<EOF
+sh -c "echo 'Sourcing .$i' >&2"
+sh -c "echo 'Setting PATH from .$i' >&2"
+setenv PATH "$BADPATH"
+if ( -e "$HOME/.$i.extra" ) then
+  source "$HOME/.$i.extra"
+endif
+EOF
+  done
+
   export __FT_RAN_USER_DOTFILES_SETUP=:
 }
 
@@ -85,6 +115,15 @@ EOF
   )
 
   export VARS_HOOK_SCRIPT=$(
+    cat << EOF
+[hook]
+on-activate = """
+  echo "sourcing hook.on-activate";
+"""
+EOF
+  )
+
+  export VARS_HOOK_SCRIPT_ECHO_FOO=$(
     cat << EOF
 [hook]
 on-activate = """
@@ -348,6 +387,7 @@ env_is_activated() {
   assert_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
+  cat $HOME/.logout
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
@@ -680,17 +720,18 @@ EOF
 
 # bats test_tags=activate,activate:rc:bash
 @test "bash: activate respects ~/.bashrc" {
-  echo "alias test_alias='echo testing'" > "$HOME/.bashrc"
+  echo "alias test_alias='echo testing'" > "$HOME/.bashrc.extra"
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is aliased to \`echo testing'"
+  rm -f "$HOME/.bashrc.extra"
 }
 
 # bats test_tags=activate,activate:fish,activate:rc:fish
 @test "fish: activate respects ~/.config/fish/config.fish" {
-  echo "alias test_alias='echo testing'" > "$HOME/.config/fish/config.fish"
+  echo "alias test_alias='echo testing'" > "$HOME/.config/fish/config.fish.extra"
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
@@ -704,26 +745,29 @@ EOF
   # TODO: come up with a way to invoke fish with the "No colors" theme.
   assert_output --regexp \
     'function.*test_alias.*--wraps=.*echo testing.*--description.*alias test_alias=echo testing'
+  rm -f "$HOME/.config/fish/config.fish.extra"
 }
 
 # bats test_tags=activate,activate:rc:tcsh
 @test "tcsh: activate respects ~/.tcshrc" {
-  echo 'alias test_alias "echo testing"' > "$HOME/.tcshrc"
+  echo 'alias test_alias "echo testing"' > "$HOME/.tcshrc.extra"
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/rc-tcsh.exp" "$PROJECT_DIR"
   assert_line --partial "echo testing"
+  rm -f "$HOME/.tcshrc.extra"
 }
 
 # bats test_tags=activate,activate:rc:zsh
 @test "zsh: activate respects ~/.zshrc" {
-  echo "alias test_alias='echo testing'" > "$HOME/.zshrc"
+  echo "alias test_alias='echo testing'" > "$HOME/.zshrc.extra"
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is an alias for echo testing"
+  rm -f "$HOME/.zshrc.extra"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -784,7 +828,7 @@ EOF
 # bats test_tags=activate,activate:envVar-before-hook
 @test "{bash,fish,tcsh,zsh}: activate sets env var before hook" {
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
@@ -1542,7 +1586,7 @@ EOF
   "$FLOX_BIN" init
   # The bash -ic invocation sources .bashrc, and then the activate sources it a
   # second time and disables further sourcing.
-  cat << 'EOF' >> "$HOME/.bashrc"
+  cat << 'EOF' >> "$HOME/.bashrc.extra"
 if [ -z "$ALREADY_SOURCED" ]; then
   export ALREADY_SOURCED=1
 elif [ "$ALREADY_SOURCED" == 1 ]; then
@@ -1554,13 +1598,14 @@ fi
 eval "$("$FLOX_BIN" activate -d "$PWD")"
 EOF
   bash -ic true
+  rm -f "$HOME/.bashrc.extra"
 }
 
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:fish
 @test "fish: test for infinite source loop" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
-  cat << 'EOF' >> "$HOME/.config/fish/config.fish"
+  cat << 'EOF' >> "$HOME/.config/fish/config.fish.extra"
 if set -q ALREADY_SOURCED
   exit 2
 end
@@ -1569,13 +1614,14 @@ set -gx ALREADY_SOURCED 1
 eval "$("$FLOX_BIN" activate -d "$PWD")"
 EOF
   fish -ic true
+  rm -f "$HOME/.config/fish/config.fish.extra"
 }
 
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:tcsh
 @test "tcsh: test for infinite source loop" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
-  cat << 'EOF' >> "$HOME/.tcshrc"
+  cat << 'EOF' >> "$HOME/.tcshrc.extra"
 if ( $?ALREADY_SOURCED ) then
   exit 2
 endif
@@ -1584,19 +1630,21 @@ setenv ALREADY_SOURCED 1
 eval `"$FLOX_BIN" activate -d "$PWD"`
 EOF
   tcsh -ic true
+  rm -f "$HOME/.tcshrc.extra"
 }
 
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:zsh
 @test "zsh: test for infinite source loop" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
-  cat << 'EOF' >> "$HOME/.zshrc"
+  cat << 'EOF' >> "$HOME/.zshrc.extra"
 [ "$ALREADY_SOURCED" == 1 ] && exit 2
 export ALREADY_SOURCED=1
 
 eval "$("$FLOX_BIN" activate -d "$PWD")"
 EOF
   zsh -ic true
+  rm -f "$HOME/.zshrc.extra"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -1641,51 +1689,43 @@ EOF
 
 # bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshenv
 @test "zdotdir: test zshenv activation" {
-  echo "echo sourcing .zshenv" > "$HOME/.zshenv"
-  echo "echo sourcing .zshrc" > "$HOME/.zshrc"
-  echo "echo sourcing .zlogin" > "$HOME/.zlogin"
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
   run zsh -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
-  assert_line "sourcing .zshenv"
-  refute_line "sourcing .zshrc"
-  refute_line "sourcing .zlogin"
+  assert_line "Sourcing .zshenv"
+  refute_line "Sourcing .zshrc"
+  refute_line "Sourcing .zlogin"
   assert_line "sourcing hook.on-activate for first time"
   assert_line "sourcing profile.zsh for first time"
 }
 
 # bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshrc
 @test "zdotdir: test zshrc activation" {
-  echo "echo sourcing .zshenv" > "$HOME/.zshenv"
-  echo "echo sourcing .zshrc" > "$HOME/.zshrc"
-  echo "echo sourcing .zlogin" > "$HOME/.zlogin"
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+  cat $HOME/.zshrc
   run zsh -i -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
-  assert_line "sourcing .zshenv"
-  assert_line "sourcing .zshrc"
-  refute_line "sourcing .zlogin"
+  assert_line "Sourcing .zshenv"
+  assert_line "Sourcing .zshrc"
+  refute_line "Sourcing .zlogin"
   assert_line "sourcing hook.on-activate for first time"
   assert_line "sourcing profile.zsh for first time"
 }
 
 # bats test_tags=activate,activate:zdotdir,activate:zdotdir:zlogin
 @test "zdotdir: test zlogin activation" {
-  echo "echo sourcing .zshenv" > "$HOME/.zshenv"
-  echo "echo sourcing .zshrc" > "$HOME/.zshrc"
-  echo "echo sourcing .zlogin" > "$HOME/.zlogin"
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
   run zsh -i -l -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
-  assert_line "sourcing .zshenv"
-  assert_line "sourcing .zshrc"
-  assert_line "sourcing .zlogin"
+  assert_line "Sourcing .zshenv"
+  assert_line "Sourcing .zshrc"
+  assert_line "Sourcing .zlogin"
   assert_line "sourcing hook.on-activate for first time"
   assert_line "sourcing profile.zsh for first time"
 }
@@ -1698,6 +1738,75 @@ EOF
   assert_success
   refute_output "FLOX_SHELL="
   refute_output "_flox_shell="
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:validate_hook_and_dotfile_sourcing
+@test "{bash,fish,tcsh,zsh}: confirm hooks and dotfiles sourced correctly" {
+  "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
+  # This test doesn't just confirm that the right things are sourced,
+  # but that they are sourced in the correct order and exactly once,
+  # for all supported shells.
+
+  echo "Testing bash"
+  run bash -i -l -c 'eval "$("$FLOX_BIN" activate)"'
+  assert_success
+  assert_equal "${#lines[@]}" 7
+  assert_equal "${lines[0]}" "Sourcing .profile"
+  assert_equal "${lines[1]}" "Setting PATH from .profile"
+  assert_equal "${lines[2]}" "sourcing hook.on-activate"
+  assert_equal "${lines[3]}" "Sourcing .bashrc"
+  assert_equal "${lines[4]}" "Setting PATH from .bashrc"
+  assert_equal "${lines[5]}" "sourcing profile.common"
+  assert_equal "${lines[6]}" "sourcing profile.bash"
+  echo # leave a line between test outputs
+
+  echo "Testing fish"
+  run fish -i -l -c 'eval "$("$FLOX_BIN" activate)"'
+  assert_success
+  assert_equal "${#lines[@]}" 5
+  assert_equal "${lines[0]}" "Sourcing config.fish"
+  assert_equal "${lines[1]}" "Setting PATH from config.fish"
+  assert_equal "${lines[2]}" "sourcing hook.on-activate"
+  assert_equal "${lines[3]}" "sourcing profile.common"
+  assert_equal "${lines[4]}" "sourcing profile.fish"
+  echo # leave a line between test outputs
+
+  echo "Testing tcsh"
+  run tcsh -i -c 'eval "`$FLOX_BIN activate`"'
+  assert_success
+  assert_equal "${#lines[@]}" 5
+  assert_equal "${lines[0]}" "Sourcing .tcshrc"
+  assert_equal "${lines[1]}" "Setting PATH from .tcshrc"
+  assert_equal "${lines[2]}" "sourcing hook.on-activate"
+  assert_equal "${lines[3]}" "sourcing profile.common"
+  assert_equal "${lines[4]}" "sourcing profile.tcsh"
+  echo # leave a line between test outputs
+
+  echo "Testing zsh"
+  run zsh -i -l -c 'eval "$("$FLOX_BIN" activate)"'
+  assert_success
+  assert_equal "${#lines[@]}" 13
+  assert_equal "${lines[0]}" "Sourcing .zshenv"
+  assert_equal "${lines[1]}" "Setting PATH from .zshenv"
+  assert_equal "${lines[2]}" "Sourcing .zprofile"
+  assert_equal "${lines[3]}" "Setting PATH from .zprofile"
+  assert_equal "${lines[4]}" "Sourcing .zshrc"
+  assert_equal "${lines[5]}" "Setting PATH from .zshrc"
+  assert_equal "${lines[6]}" "Sourcing .zlogin"
+  assert_equal "${lines[7]}" "Setting PATH from .zlogin"
+  assert_equal "${lines[8]}" "sourcing hook.on-activate"
+  assert_equal "${lines[9]}" "sourcing profile.common"
+  assert_equal "${lines[10]}" "sourcing profile.zsh"
+  assert_equal "${lines[11]}" "Sourcing .zlogout"
+  assert_equal "${lines[12]}" "Setting PATH from .zlogout"
+  echo # leave a line between test outputs
+
 }
 
 # ---------------------------------------------------------------------------- #
