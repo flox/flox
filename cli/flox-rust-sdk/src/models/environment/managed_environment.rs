@@ -1094,7 +1094,7 @@ impl ManagedEnvironment {
                 _ => ManagedEnvironmentError::Push(err),
             })?;
 
-        // update local envorinment branch, should be fast-forward and a noop if the branches didn't diverge
+        // update local environment branch, should be fast-forward and a noop if the branches didn't diverge
         self.pull(force)?;
 
         Ok(())

@@ -6,24 +6,29 @@
         {
           "packages": [
             {
-              "attr_path": "hello",
+              "attr_path": "vim",
               "broken": false,
-              "derivation": "/nix/store/z0d34q6m2nkczasllg4v8byapdgkhfcy-hello-2.12.1.drv",
-              "description": "A program that produces a familiar, friendly greeting",
-              "install_id": "hello",
-              "license": "GPL-3.0-or-later",
+              "derivation": "/nix/store/kz5c2fdvlaz0xzsyb0q3qy2lbv88l1cm-vim-9.1.0377.drv",
+              "description": "The most popular clone of the VI editor",
+              "install_id": "vim",
+              "license": "Vim",
               "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "hello-2.12.1",
+              "name": "vim-9.1.0377",
               "outputs": [
                 {
                   "name": "out",
-                  "store_path": "/nix/store/g9r8k42vkx4sh4689rig1mwcnnic6z7d-hello-2.12.1"
+                  "store_path": "/nix/store/lmx8m6kzyvipfb0s0jfpmwvrfaakvr16-vim-9.1.0377"
+                },
+                {
+                  "name": "xxd",
+                  "store_path": "/nix/store/plkqnw8bx49w9kapywwcqlvid3f24lpy-vim-9.1.0377-xxd"
                 }
               ],
               "outputs_to_install": [
-                "out"
+                "out",
+                "xxd"
               ],
-              "pname": "hello",
+              "pname": "vim",
               "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
               "rev_count": 630835,
               "rev_date": "2024-05-24T00:06:08Z",
@@ -32,7 +37,7 @@
                 "unstable"
               ],
               "unfree": false,
-              "version": "2.12.1"
+              "version": "9.1.0377"
             }
           ],
           "page": 630835,
@@ -242,24 +247,29 @@
         {
           "packages": [
             {
-              "attr_path": "hello",
+              "attr_path": "vim",
               "broken": false,
-              "derivation": "/nix/store/fbv1rws168bxaabffyknshciw3g6i27r-hello-2.12.1.drv",
-              "description": "A program that produces a familiar, friendly greeting",
-              "install_id": "hello",
-              "license": "GPL-3.0-or-later",
+              "derivation": "/nix/store/454hb1x90jaqvhxdvqbfvxg94qhns4j8-vim-9.1.0377.drv",
+              "description": "The most popular clone of the VI editor",
+              "install_id": "vim",
+              "license": "Vim",
               "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "hello-2.12.1",
+              "name": "vim-9.1.0377",
               "outputs": [
                 {
                   "name": "out",
-                  "store_path": "/nix/store/h8j29rxrqk4s9nb2issyybrbfjcbfdmc-hello-2.12.1"
+                  "store_path": "/nix/store/dgi2x0gadhr1h2vzfhab3kj5jbr74g6x-vim-9.1.0377"
+                },
+                {
+                  "name": "xxd",
+                  "store_path": "/nix/store/zk521mqyrx0i3nxiwmhpdsz93ia8rb6s-vim-9.1.0377-xxd"
                 }
               ],
               "outputs_to_install": [
-                "out"
+                "out",
+                "xxd"
               ],
-              "pname": "hello",
+              "pname": "vim",
               "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
               "rev_count": 630835,
               "rev_date": "2024-05-24T00:06:08Z",
@@ -268,7 +278,7 @@
                 "unstable"
               ],
               "unfree": false,
-              "version": "2.12.1"
+              "version": "9.1.0377"
             }
           ],
           "page": 630835,
@@ -478,24 +488,29 @@
         {
           "packages": [
             {
-              "attr_path": "hello",
+              "attr_path": "vim",
               "broken": false,
-              "derivation": "/nix/store/cq1m7q06rcvmh2c003x7j06lsdpm381m-hello-2.12.1.drv",
-              "description": "A program that produces a familiar, friendly greeting",
-              "install_id": "hello",
-              "license": "GPL-3.0-or-later",
+              "derivation": "/nix/store/9y89b4s8h7k2l5qk0jn66n7fnnr7h2v3-vim-9.1.0377.drv",
+              "description": "The most popular clone of the VI editor",
+              "install_id": "vim",
+              "license": "Vim",
               "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "hello-2.12.1",
+              "name": "vim-9.1.0377",
               "outputs": [
                 {
                   "name": "out",
-                  "store_path": "/nix/store/8vz43mcvm46zxm5mvfbhk42bm27cm7qg-hello-2.12.1"
+                  "store_path": "/nix/store/l3j2ypqx0mq6kk2s3pgxiybmkawpc7ii-vim-9.1.0377"
+                },
+                {
+                  "name": "xxd",
+                  "store_path": "/nix/store/qgd4kpvdj8cx8cqfwh09hysh1yrvmfvj-vim-9.1.0377-xxd"
                 }
               ],
               "outputs_to_install": [
-                "out"
+                "out",
+                "xxd"
               ],
-              "pname": "hello",
+              "pname": "vim",
               "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
               "rev_count": 630835,
               "rev_date": "2024-05-24T00:06:08Z",
@@ -504,7 +519,7 @@
                 "unstable"
               ],
               "unfree": false,
-              "version": "2.12.1"
+              "version": "9.1.0377"
             }
           ],
           "page": 630835,
@@ -714,24 +729,29 @@
         {
           "packages": [
             {
-              "attr_path": "hello",
+              "attr_path": "vim",
               "broken": false,
-              "derivation": "/nix/store/5ky58jj345acq0y72dbg1hf5jxs7xz82-hello-2.12.1.drv",
-              "description": "A program that produces a familiar, friendly greeting",
-              "install_id": "hello",
-              "license": "GPL-3.0-or-later",
+              "derivation": "/nix/store/inz12966svzsjm0fhivij1ybl81rdq22-vim-9.1.0377.drv",
+              "description": "The most popular clone of the VI editor",
+              "install_id": "vim",
+              "license": "Vim",
               "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "hello-2.12.1",
+              "name": "vim-9.1.0377",
               "outputs": [
                 {
                   "name": "out",
-                  "store_path": "/nix/store/yh6x9ia5kxxw3w90vkb09vqgfvhb416k-hello-2.12.1"
+                  "store_path": "/nix/store/2126qjwg5cx9aw47bj9b427hazh96sh7-vim-9.1.0377"
+                },
+                {
+                  "name": "xxd",
+                  "store_path": "/nix/store/3g9nvidfl7phh7zh03ixymy5nfscianb-vim-9.1.0377-xxd"
                 }
               ],
               "outputs_to_install": [
-                "out"
+                "out",
+                "xxd"
               ],
-              "pname": "hello",
+              "pname": "vim",
               "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
               "rev_count": 630835,
               "rev_date": "2024-05-24T00:06:08Z",
@@ -740,7 +760,7 @@
                 "unstable"
               ],
               "unfree": false,
-              "version": "2.12.1"
+              "version": "9.1.0377"
             }
           ],
           "page": 630835,
