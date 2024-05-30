@@ -1586,16 +1586,16 @@ EOF
   "$FLOX_BIN" init
   # The bash -ic invocation sources .bashrc, and then the activate sources it a
   # second time and disables further sourcing.
-  cat << 'EOF' >> "$HOME/.bashrc.extra"
-if [ -z "$ALREADY_SOURCED" ]; then
+  cat > "$HOME/.bashrc.extra" <<EOF
+if [ -z "\$ALREADY_SOURCED" ]; then
   export ALREADY_SOURCED=1
-elif [ "$ALREADY_SOURCED" == 1 ]; then
+elif [ "\$ALREADY_SOURCED" == 1 ]; then
   export ALREADY_SOURCED=2
 else
   exit 2
 fi
 
-eval "$("$FLOX_BIN" activate -d "$PWD")"
+eval "\$("$FLOX_BIN" activate -d "$PWD")"
 EOF
   bash -ic true
   rm -f "$HOME/.bashrc.extra"
@@ -1605,13 +1605,13 @@ EOF
 @test "fish: test for infinite source loop" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
-  cat << 'EOF' >> "$HOME/.config/fish/config.fish.extra"
+  cat > "$HOME/.config/fish/config.fish.extra" <<EOF
 if set -q ALREADY_SOURCED
   exit 2
 end
 set -gx ALREADY_SOURCED 1
 
-eval "$("$FLOX_BIN" activate -d "$PWD")"
+eval "\$("$FLOX_BIN" activate -d "$PWD")"
 EOF
   fish -ic true
   rm -f "$HOME/.config/fish/config.fish.extra"
@@ -1621,13 +1621,13 @@ EOF
 @test "tcsh: test for infinite source loop" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
-  cat << 'EOF' >> "$HOME/.tcshrc.extra"
-if ( $?ALREADY_SOURCED ) then
+  cat > "$HOME/.tcshrc.extra" <<EOF
+if ( \$?ALREADY_SOURCED ) then
   exit 2
 endif
 setenv ALREADY_SOURCED 1
 
-eval `"$FLOX_BIN" activate -d "$PWD"`
+eval "\`$FLOX_BIN activate -d $PWD\`"
 EOF
   tcsh -ic true
   rm -f "$HOME/.tcshrc.extra"
@@ -1637,11 +1637,14 @@ EOF
 @test "zsh: test for infinite source loop" {
   "$FLOX_BIN" delete -f
   "$FLOX_BIN" init
-  cat << 'EOF' >> "$HOME/.zshrc.extra"
-[ "$ALREADY_SOURCED" == 1 ] && exit 2
-export ALREADY_SOURCED=1
+  cat > "$HOME/.zshrc.extra" <<EOF
+if [ -n "\$ALREADY_SOURCED" ]; then
+  exit 2
+else
+  export ALREADY_SOURCED=1
+fi
 
-eval "$("$FLOX_BIN" activate -d "$PWD")"
+eval "\$("$FLOX_BIN" activate -d "$PWD")"
 EOF
   zsh -ic true
   rm -f "$HOME/.zshrc.extra"
