@@ -50,38 +50,6 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-${BATS_TEST_NUMBER?}"
   export PROJECT_NAME="${PROJECT_DIR##*/}"
 
-  export VARS=$(
-    cat << EOF
-[vars]
-foo = "baz"
-EOF
-  )
-
-  export HELLO_PROFILE_SCRIPT=$(
-    cat <<- EOF
-[profile]
-common = """
-  echo "sourcing profile.common";
-"""
-bash = """
-  echo "sourcing profile.bash";
-"""
-zsh = """
-  echo "sourcing profile.zsh";
-"""
-EOF
-  )
-
-  export VARS_HOOK_SCRIPT=$(
-    cat << EOF
-[hook]
-on-activate = """
-  echo "sourcing hook.on-activate";
-  echo \$foo;
-"""
-EOF
-  )
-
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
@@ -95,9 +63,6 @@ project_teardown() {
   unset PROJECT_NAME
 }
 
-activate_local_env() {
-  run "$FLOX_BIN" activate -d "$PROJECT_DIR"
-}
 
 # ---------------------------------------------------------------------------- #
 
@@ -111,26 +76,43 @@ teardown() {
   common_test_teardown
 }
 
+
 # ---------------------------------------------------------------------------- #
 
-activated_envs() {
-  # Note that this variable is unset at the start of the test suite,
-  # so it will only exist after activating an environment
-  activated_envs=($(echo "$FLOX_PROMPT_ENVIRONMENTS"))
-  echo "${activated_envs[*]}"
-}
+# Some constants
 
-env_is_activated() {
-  local is_activated
-  is_activated=0
-  for ae in $(activated_envs); do
-    echo "activated_env = $ae, query = $1"
-    if [[ $ae =~ $1 ]]; then
-      is_activated=1
-    fi
-  done
-  echo "$is_activated"
-}
+export VARS=$(
+  cat << EOF
+[vars]
+foo = "baz"
+EOF
+  )
+
+export HELLO_PROFILE_SCRIPT=$(
+  cat <<- EOF
+[profile]
+common = """
+  echo "sourcing profile.common";
+"""
+bash = """
+  echo "sourcing profile.bash";
+"""
+zsh = """
+  echo "sourcing profile.zsh";
+"""
+EOF
+  )
+
+export VARS_HOOK_SCRIPT=$(
+  cat << EOF
+[hook]
+on-activate = """
+  echo "sourcing hook.on-activate";
+  echo \$foo;
+"""
+EOF
+  )
+
 
 # ---------------------------------------------------------------------------- #
 
@@ -275,8 +257,6 @@ env_is_activated() {
 
 # bats test_tags=activate,activate:hook,activate:hook:bash
 @test "bash: activate runs hook only once in nested activation" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
 
   MANIFEST_CONTENT="$(cat << "EOF"
     [hook]
@@ -299,8 +279,6 @@ EOF
 
 # bats test_tags=activate,activate:hook,activate:hook:zsh
 @test "zsh: activate runs hook only once in nested activations" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
 
   MANIFEST_CONTENT="$(cat << "EOF"
     [hook]
@@ -324,8 +302,6 @@ EOF
 
 # bats test_tags=activate,activate:hook,activate:hook:bash
 @test "bash: activate runs profile twice in nested activation" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
 
   MANIFEST_CONTENT="$(cat << "EOF"
     [profile]
@@ -348,8 +324,6 @@ EOF
 
 # bats test_tags=activate,activate:hook,activate:hook:zsh
 @test "zsh: activate runs profile twice in nested activation" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
 
   MANIFEST_CONTENT="$(cat << "EOF"
     [profile]
@@ -375,8 +349,6 @@ EOF
 
 # bats test_tags=activate,activate:once
 @test "activate runs hook and profile scripts only once" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
 
   echo '# Testing non-interactive bash' >&2
@@ -681,8 +653,6 @@ EOF
 
 # bats test_tags=activate:scripts:on-activate
 @test "'hook.on-activate' runs" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
   # Run a command that causes the activation scripts to run without putting us
   # in the interactive shell
@@ -696,8 +666,6 @@ EOF
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:bash
 @test "'hook.on-activate' modifies environment variables (bash)" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
   # Run a command that causes the activation scripts to run without entering
   # an interactive shell
@@ -712,8 +680,6 @@ EOF
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:zsh
 @test "'hook.on-activate' modifies environment variables (zsh)" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
   # Run a command that causes the activation scripts to run without entering
   # an interactive shell
@@ -727,8 +693,6 @@ EOF
 }
 
 @test "'hook.on-activate' modifies environment variables in nested activation (bash)" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
   {
@@ -742,8 +706,6 @@ EOF
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:zsh
 @test "'hook.on-activate' modifies environment variables in nested activation (zsh)" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
   # TODO: this gives unhelpful failures
@@ -757,8 +719,6 @@ EOF
 }
 
 @test "'hook.on-activate' unsets environment variables in nested activation (bash)" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
 
   MANIFEST_CONTENT="$(cat << "EOF"
     [hook]
@@ -782,8 +742,6 @@ EOF
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:zsh
 @test "'hook.on-activate' unsets environment variables in nested activation (zsh)" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
 
   MANIFEST_CONTENT="$(cat << "EOF"
     [hook]
@@ -810,8 +768,6 @@ EOF
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:bash
 @test "bash: 'hook.on-activate' is sourced before 'profile.common'" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/profile-order.toml"
   run bash -c 'eval "$("$FLOX_BIN" activate)"'
   # 'hook.on-activate' sets a var containing "hookie",
@@ -822,8 +778,6 @@ EOF
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:zsh
 @test "zsh: 'hook.on-activate' is sourced before 'profile.common'" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/profile-order.toml"
   run zsh -c 'eval "$("$FLOX_BIN" activate)"'
   # 'hook.on-activate' sets a var containing "hookie",
@@ -836,8 +790,6 @@ EOF
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:bash
 @test "bash: 'profile.common' is sourced before 'profile.bash'" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/profile-order.toml"
   # N.B. we need the eval here because `bash -c` will otherwise
   # exec() flox and defeat the parent process detection.
@@ -850,8 +802,6 @@ EOF
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:zsh
 @test "zsh: 'profile.common' is sourced before 'profile.zsh'" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/profile-order.toml"
   # N.B. we need the eval here because `zsh -c` will otherwise
   # exec() flox and defeat the parent process detection.
@@ -892,8 +842,6 @@ EOF
 
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:bash
 @test "bash: test for infinite source loop" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   # The bash -ic invocation sources .bashrc, and then the activate sources it a
   # second time and disables further sourcing.
   cat << 'EOF' >> "$HOME/.bashrc"
@@ -912,8 +860,6 @@ EOF
 
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:zsh
 @test "zsh: test for infinite source loop" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   cat << 'EOF' >> "$HOME/.zshrc"
 [ "$ALREADY_SOURCED" == 1 ] && exit 2
 export ALREADY_SOURCED=1
@@ -927,8 +873,6 @@ EOF
 
 # bats test_tags=activate,activate:custom_zdotdir,activate:custom_zdotdir:bash
 @test "bash: preserve custom ZDOTDIR" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   FLOX_SHELL=bash ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -- echo '$ZDOTDIR'
   assert_success
   assert_line "/custom/zdotdir"
@@ -936,8 +880,6 @@ EOF
 
 # bats test_tags=activate,activate:custom_zdotdir,activate:custom_zdotdir:zsh
 @test "zsh: preserve custom ZDOTDIR" {
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   FLOX_SHELL=zsh ZDOTDIR=/custom/zdotdir run "$FLOX_BIN" activate -- echo '$ZDOTDIR'
   assert_success
   assert_line "/custom/zdotdir"
@@ -950,8 +892,6 @@ EOF
   echo "echo sourcing .zshenv" > "$HOME/.zshenv"
   echo "echo sourcing .zshrc" > "$HOME/.zshrc"
   echo "echo sourcing .zlogin" > "$HOME/.zlogin"
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
   run zsh -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
@@ -967,8 +907,6 @@ EOF
   echo "echo sourcing .zshenv" > "$HOME/.zshenv"
   echo "echo sourcing .zshrc" > "$HOME/.zshrc"
   echo "echo sourcing .zlogin" > "$HOME/.zlogin"
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
   run zsh -i -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
@@ -984,8 +922,6 @@ EOF
   echo "echo sourcing .zshenv" > "$HOME/.zshenv"
   echo "echo sourcing .zshrc" > "$HOME/.zshrc"
   echo "echo sourcing .zlogin" > "$HOME/.zlogin"
-  "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
   run zsh -i -l -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
