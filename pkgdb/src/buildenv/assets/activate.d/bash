@@ -27,7 +27,7 @@ fi
 eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' "$_del_env")"
 eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_add_env")"
 
-if [ -t 1 ]; then
+if [ -z "$FLOX_PROMPT_DISABLE" ] && [ -t 1 ]; then
   source "$FLOX_ENV/activate.d/set-prompt.bash"
 fi
 
