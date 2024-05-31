@@ -387,8 +387,10 @@ impl PathEnvironment {
             &System::from("x86_64-linux"),
         ];
         let manifest = if flox.catalog_client.is_some() {
+            tracing::debug!("creating raw catalog manifest");
             RawManifest::new_documented(all_systems.as_slice(), customization, true)
         } else {
+            tracing::debug!("creating raw pkgdb manifest");
             RawManifest::new_documented(&[&system.to_string()], customization, false)
         };
 

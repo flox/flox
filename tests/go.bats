@@ -26,6 +26,8 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
+  export FLOX_FEATURES_USE_CATALOG=true
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
 }
 
 project_teardown() {
@@ -49,6 +51,7 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox init' sets up a local working Go module environment" {
+  export FLOX_FEATURES_USE_CATALOG=false
   cp -r "$TESTS_DIR"/go/module-systems/common/* "$PROJECT_DIR/"
   cp -r "$TESTS_DIR"/go/module-systems/module/* "$PROJECT_DIR/"
 
@@ -67,11 +70,56 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "'flox init' sets up a local working Go workspace environment" {
+  export FLOX_FEATURES_USE_CATALOG=false
   cp -r "$TESTS_DIR"/go/module-systems/common/* "$PROJECT_DIR/"
   cp -r "$TESTS_DIR"/go/module-systems/module/* "$PROJECT_DIR/"
   cp -r "$TESTS_DIR"/go/module-systems/workspace/* "$PROJECT_DIR/"
 
   run "$FLOX_BIN" init --auto-setup
+  assert_success
+  assert_line --partial "'go' installed"
+
+  run "$FLOX_BIN" activate -- go version
+  assert_success
+  assert_line --partial "go version go1."
+
+  run "$FLOX_BIN" activate -- go build
+  assert_success
+}
+
+# ---------------------------------------------------------------------------- #
+# catalog tests
+
+# bats test_tags=catalog
+@test "catalog: 'flox init' sets up a local working Go module environment" {
+  cp -r "$TESTS_DIR"/go/module-systems/common/* "$PROJECT_DIR/"
+  cp -r "$TESTS_DIR"/go/module-systems/module/* "$PROJECT_DIR/"
+
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/go_mod.json"
+  run "$FLOX_BIN" init --auto-setup
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+
+  assert_success
+  assert_line --partial "'go' installed"
+
+  run "$FLOX_BIN" activate -- go version
+  assert_success
+  assert_line --partial "go version go1."
+
+  run "$FLOX_BIN" activate -- go build
+  assert_success
+}
+
+# bats test_tags=catalog
+@test "catalog: 'flox init' sets up a local working Go workspace environment" {
+  cp -r "$TESTS_DIR"/go/module-systems/common/* "$PROJECT_DIR/"
+  cp -r "$TESTS_DIR"/go/module-systems/module/* "$PROJECT_DIR/"
+  cp -r "$TESTS_DIR"/go/module-systems/workspace/* "$PROJECT_DIR/"
+
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/go_workspace.json"
+  run "$FLOX_BIN" init --auto-setup
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+
   assert_success
   assert_line --partial "'go' installed"
 

@@ -19,6 +19,8 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
+  export FLOX_FEATURES_USE_CATALOG=true
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
 }
 
 project_teardown() {
@@ -176,10 +178,9 @@ EOF
   assert_equal "$init_system" "$NIX_SYSTEM"
 }
 
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=init:python:requirements
 @test "'flox init' sets up a working Python environment that works across all methods of activate" {
+  export FLOX_FEATURES_USE_CATALOG=false
   OWNER="owner"
   NAME="name"
 
@@ -214,6 +215,37 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=init:python:requirements
+@test "catalog: 'flox init' sets up a working Python environment that works across all methods of activate" {
+  OWNER="owner"
+  NAME="name"
+
+  echo "requests" > requirements.txt
+
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python.json"
+  "$FLOX_BIN" init --auto-setup --name "$NAME"
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
+
+  floxhub_setup "$OWNER"
+
+  "$FLOX_BIN" push --owner "$OWNER"
+
+  "$FLOX_BIN" delete -f
+
+  "$FLOX_BIN" pull "$OWNER/$NAME"
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
+
+  "$FLOX_BIN" delete -f
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
+  FLOX_SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
+}
 
 # bats test_tags=init:catalog
 @test "catalog: init creates manifest with all 4 systems" {

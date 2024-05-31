@@ -1,0 +1,340 @@
+[
+  [
+    {
+      "name": "toplevel",
+      "pages": [
+        {
+          "packages": [
+            {
+              "attr_path": "python3",
+              "broken": false,
+              "derivation": "/nix/store/w3kcq9np5ndk99bjmgjl25h8x35wfc67-python3-3.11.9.drv",
+              "description": "A high-level dynamically-typed programming language",
+              "install_id": "python3",
+              "license": "Python-2.0",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+              "name": "python3-3.11.9",
+              "outputs": [
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/0hhzvkw889bsybhqxy12ky4jx6a95p2d-python3-3.11.9"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "python3",
+              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+              "rev_count": 630835,
+              "rev_date": "2024-05-24T00:06:08Z",
+              "scrape_date": "2024-05-27T14:10:22Z",
+              "stabilities": null,
+              "unfree": false,
+              "version": "3.11.9"
+            },
+            {
+              "attr_path": "zlib",
+              "broken": false,
+              "derivation": "/nix/store/qxd76wjiwjb4d47vc03b0rg7z49lvmv2-zlib-1.3.1.drv",
+              "description": "Lossless data-compression library",
+              "install_id": "zlib",
+              "license": "Zlib",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+              "name": "zlib-1.3.1",
+              "outputs": [
+                {
+                  "name": "dev",
+                  "store_path": "/nix/store/qa2qxc51agr5wp53cpwjmdxs573kh39q-zlib-1.3.1-dev"
+                },
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/5g9k8zyjv029pw87xf95pci414r8pw8j-zlib-1.3.1"
+                },
+                {
+                  "name": "static",
+                  "store_path": "/nix/store/5ksrvmhvi7m6v3pciykm6gj3g50zkl4m-zlib-1.3.1-static"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "zlib",
+              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+              "rev_count": 630835,
+              "rev_date": "2024-05-24T00:06:08Z",
+              "scrape_date": "2024-05-27T14:10:22Z",
+              "stabilities": null,
+              "unfree": false,
+              "version": "1.3.1"
+            }
+          ],
+          "page": 630835,
+          "url": ""
+        }
+      ],
+      "system": "aarch64-darwin"
+    },
+    {
+      "name": "toplevel",
+      "pages": [
+        {
+          "packages": [
+            {
+              "attr_path": "python3",
+              "broken": false,
+              "derivation": "/nix/store/8sjcdz05150zjvkh5mbys9cx2fkycd9q-python3-3.11.9.drv",
+              "description": "A high-level dynamically-typed programming language",
+              "install_id": "python3",
+              "license": "Python-2.0",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+              "name": "python3-3.11.9",
+              "outputs": [
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/czlizmr5dmpxi7ysqknxys82776hldgk-python3-3.11.9"
+                },
+                {
+                  "name": "debug",
+                  "store_path": "/nix/store/2idn7bihgcmagk370mpjxjahqg3zza8k-python3-3.11.9-debug"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "python3",
+              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+              "rev_count": 630835,
+              "rev_date": "2024-05-24T00:06:08Z",
+              "scrape_date": "2024-05-27T14:10:22Z",
+              "stabilities": null,
+              "unfree": false,
+              "version": "3.11.9"
+            },
+            {
+              "attr_path": "zlib",
+              "broken": false,
+              "derivation": "/nix/store/2d3dwjcrpk3ypwqi5axb050sxcrbndwz-zlib-1.3.1.drv",
+              "description": "Lossless data-compression library",
+              "install_id": "zlib",
+              "license": "Zlib",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+              "name": "zlib-1.3.1",
+              "outputs": [
+                {
+                  "name": "dev",
+                  "store_path": "/nix/store/vbjpvh4ksxrbi396gk7hfghnh73mmpan-zlib-1.3.1-dev"
+                },
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/67zz1fxgn27y2726blaghi26vl6gd1ry-zlib-1.3.1"
+                },
+                {
+                  "name": "static",
+                  "store_path": "/nix/store/5ym072y7ggcblvk08h9b72sm4pcz3wlv-zlib-1.3.1-static"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "zlib",
+              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+              "rev_count": 630835,
+              "rev_date": "2024-05-24T00:06:08Z",
+              "scrape_date": "2024-05-27T14:10:22Z",
+              "stabilities": null,
+              "unfree": false,
+              "version": "1.3.1"
+            }
+          ],
+          "page": 630835,
+          "url": ""
+        }
+      ],
+      "system": "aarch64-linux"
+    },
+    {
+      "name": "toplevel",
+      "pages": [
+        {
+          "packages": [
+            {
+              "attr_path": "python3",
+              "broken": false,
+              "derivation": "/nix/store/g7lbxixxg0h4wx0fxf9nnz7025d6icxi-python3-3.11.9.drv",
+              "description": "A high-level dynamically-typed programming language",
+              "install_id": "python3",
+              "license": "Python-2.0",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "name": "python3-3.11.9",
+              "outputs": [
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/nl5nxkans56iir3s1vg1rpp71h8b6703-python3-3.11.9"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "python3",
+              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "rev_count": 629267,
+              "rev_date": "2024-05-21T12:07:05Z",
+              "scrape_date": "2024-05-22T20:43:04Z",
+              "stabilities": [
+                "staging",
+                "unstable"
+              ],
+              "unfree": false,
+              "version": "3.11.9"
+            },
+            {
+              "attr_path": "zlib",
+              "broken": false,
+              "derivation": "/nix/store/v15bfj19rjwqlyfdp0ywlf16vyf8r69q-zlib-1.3.1.drv",
+              "description": "Lossless data-compression library",
+              "install_id": "zlib",
+              "license": "Zlib",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "name": "zlib-1.3.1",
+              "outputs": [
+                {
+                  "name": "dev",
+                  "store_path": "/nix/store/bx2h3n6r5ffwkg39qrb84205pyjnpvzg-zlib-1.3.1-dev"
+                },
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/ia232whpz6rcd7kcz6mc0l1qsk6845g5-zlib-1.3.1"
+                },
+                {
+                  "name": "static",
+                  "store_path": "/nix/store/brz6imv9gibdn6dsabbh2g0fz8qj3h78-zlib-1.3.1-static"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "zlib",
+              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "rev_count": 629267,
+              "rev_date": "2024-05-21T12:07:05Z",
+              "scrape_date": "2024-05-22T20:43:04Z",
+              "stabilities": [
+                "staging",
+                "unstable"
+              ],
+              "unfree": false,
+              "version": "1.3.1"
+            }
+          ],
+          "page": 629267,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 628669,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 627788,
+          "url": ""
+        }
+      ],
+      "system": "x86_64-darwin"
+    },
+    {
+      "name": "toplevel",
+      "pages": [
+        {
+          "packages": [
+            {
+              "attr_path": "python3",
+              "broken": false,
+              "derivation": "/nix/store/mpir7vw5czk0n2z7mfvjq743nwds6gd2-python3-3.11.9.drv",
+              "description": "A high-level dynamically-typed programming language",
+              "install_id": "python3",
+              "license": "Python-2.0",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "name": "python3-3.11.9",
+              "outputs": [
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/k3701zl6gmx3la7y4dnflcvf3xfy88kh-python3-3.11.9"
+                },
+                {
+                  "name": "debug",
+                  "store_path": "/nix/store/6wrqkmplhvca233clvg6zgm7k0lj5cmp-python3-3.11.9-debug"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "python3",
+              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "rev_count": 629267,
+              "rev_date": "2024-05-21T12:07:05Z",
+              "scrape_date": "2024-05-22T20:43:04Z",
+              "stabilities": [
+                "staging",
+                "unstable"
+              ],
+              "unfree": false,
+              "version": "3.11.9"
+            },
+            {
+              "attr_path": "zlib",
+              "broken": false,
+              "derivation": "/nix/store/lakvpk3ihq811aidq0pca2ynj4wmvs9h-zlib-1.3.1.drv",
+              "description": "Lossless data-compression library",
+              "install_id": "zlib",
+              "license": "Zlib",
+              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "name": "zlib-1.3.1",
+              "outputs": [
+                {
+                  "name": "dev",
+                  "store_path": "/nix/store/wz1lmhhmvjxj2ipp2z5mvkydchhljggm-zlib-1.3.1-dev"
+                },
+                {
+                  "name": "out",
+                  "store_path": "/nix/store/nw1bnjadmzk9hnd4nbvxmqlh074vr16j-zlib-1.3.1"
+                },
+                {
+                  "name": "static",
+                  "store_path": "/nix/store/dffgx31r8a7hkhqs1jm3ysdzy2rzya3n-zlib-1.3.1-static"
+                }
+              ],
+              "outputs_to_install": [
+                "out"
+              ],
+              "pname": "zlib",
+              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
+              "rev_count": 629267,
+              "rev_date": "2024-05-21T12:07:05Z",
+              "scrape_date": "2024-05-22T20:43:04Z",
+              "stabilities": [
+                "staging",
+                "unstable"
+              ],
+              "unfree": false,
+              "version": "1.3.1"
+            }
+          ],
+          "page": 629267,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 628669,
+          "url": ""
+        },
+        {
+          "packages": null,
+          "page": 627788,
+          "url": ""
+        }
+      ],
+      "system": "x86_64-linux"
+    }
+  ]
+]
