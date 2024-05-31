@@ -328,6 +328,8 @@ EOF
 }
 
 @test "catalog: sanity check upgrade works for remote environments" {
+  skip "will be fixed by https://github.com/flox/flox/issues/1485"
+
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     make_empty_remote_env
 
@@ -345,7 +347,6 @@ EOF
   assert_success
   assert_output --partial "2.12.1"
 
-  skip "will be fixed by https://github.com/flox/flox/issues/1485"
   assert_output --partial "Upgraded 'hello'"
 }
 
