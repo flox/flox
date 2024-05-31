@@ -366,10 +366,10 @@ impl Activate {
                     .arg(activation_path.join("activate").join("bash"));
             },
             Shell::Fish(_) => {
-                return Err(anyhow!("Unsupported shell: fish"));
+                return Err(anyhow!("fish not supported with environments rendered before version 1.0.5; please update environment and try again"));
             },
             Shell::Tcsh(_) => {
-                return Err(anyhow!("Unsupported shell: tcsh"));
+                return Err(anyhow!("tcsh not supported with environments rendered before version 1.0.5; please update environment and try again"));
             },
             Shell::Zsh(_) => {
                 // From man zsh:
