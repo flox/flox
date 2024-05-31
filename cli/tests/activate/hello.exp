@@ -8,7 +8,7 @@ set flox $env(FLOX_BIN)
 
 set timeout 20
 
-spawn $flox activate --dir $dir
+spawn $flox -v activate --dir $dir
 expect_after {
   timeout { exit 1 }
   eof { exit 2 }

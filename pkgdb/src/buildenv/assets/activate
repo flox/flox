@@ -215,19 +215,19 @@ if [ $# -gt 0 ]; then
       ;;
     *fish)
       if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$FLOX_SHELL" "$@"
+        exec "$_flox_shell" "$@"
       else
-        exec "$FLOX_SHELL" --init-command "source $FLOX_ENV/activate.d/fish" "$@"
+        exec "$_flox_shell" --init-command "source $FLOX_ENV/activate.d/fish" "$@"
       fi
       ;;
     *tcsh)
       if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$FLOX_SHELL" "$@"
+        exec "$_flox_shell" "$@"
       else
         export FLOX_ORIG_HOME="$HOME"
         export HOME="$_tcsh_home"
         export FLOX_TCSH_INIT_SCRIPT="$FLOX_ENV/activate.d/tcsh"
-        exec "$FLOX_SHELL" "$@"
+        exec "$_flox_shell" "$@"
       fi
       ;;
     *zsh)
@@ -273,19 +273,19 @@ if [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
       ;;
     *fish)
       if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$FLOX_SHELL"
+        exec "$_flox_shell"
       else
-        exec "$FLOX_SHELL" --init-command "source $FLOX_ENV/activate.d/fish"
+        exec "$_flox_shell" --init-command "source $FLOX_ENV/activate.d/fish"
       fi
       ;;
     *tcsh)
       if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$FLOX_SHELL" -f
+        exec "$_flox_shell" -f
       else
         export FLOX_ORIG_HOME="$HOME"
         export HOME="$_tcsh_home"
         export FLOX_TCSH_INIT_SCRIPT="$FLOX_ENV/activate.d/tcsh"
-        exec "$FLOX_SHELL" -v
+        exec "$_flox_shell" -v
       fi
       ;;
     *zsh)
