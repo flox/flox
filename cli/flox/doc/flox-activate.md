@@ -136,6 +136,10 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
    Flox will produce a script suitable for `$SHELL` if it is set
    and `$FLOX_SHELL` is not set and Flox can't detect the parent shell.
 
+`$FLOX_PROMPT_DISABLE`
+:  If defined, the `$FLOX_PROMPT_DISABLE` variable prevents
+   flox from performing all prompt customization for interactive shells.
+
 `$FLOX_PROMPT_COLOR_{1,2}`
 :   Flox adds text to the beginning of the shell prompt to indicate which
     environments are active.
