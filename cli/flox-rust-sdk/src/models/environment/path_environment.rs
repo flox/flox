@@ -378,11 +378,17 @@ impl PathEnvironment {
         }
 
         // Create manifest
-        let manifest = RawManifest::new_documented(
-            &[&system.to_string()],
-            customization,
-            flox.catalog_client.is_some(),
-        );
+        let all_systems = [
+            &System::from("aarch64-darwin"),
+            &System::from("aarch64-linux"),
+            &System::from("x86_64-darwin"),
+            &System::from("x86_64-linux"),
+        ];
+        let manifest = if flox.catalog_client.is_some() {
+            RawManifest::new_documented(all_systems.as_slice(), customization, true)
+        } else {
+            RawManifest::new_documented(&[&system.to_string()], customization, false)
+        };
 
         let mut environment = Self::write_new_unchecked(
             flox,
