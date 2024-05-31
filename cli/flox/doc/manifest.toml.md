@@ -334,11 +334,6 @@ fish = """
     alias foo="echo bar"
     fish_vi_key_bindings
 """
-tcsh = """
-    source $venv_dir/bin/activate.tcsh
-    alias foo "echo bar"
-    bindkey -v
-"""
 zsh = """
     source $venv_dir/bin/activate
     alias foo="echo bar"
