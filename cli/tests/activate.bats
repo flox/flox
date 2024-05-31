@@ -1757,7 +1757,7 @@ EOF
   # for all supported shells.
 
   echo "Testing bash"
-  run bash -i -l -c 'eval "$("$FLOX_BIN" activate)"'
+  run bash -l -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
   assert_equal "${#lines[@]}" 7
   assert_equal "${lines[0]}" "Sourcing .profile"
@@ -1770,7 +1770,7 @@ EOF
   echo # leave a line between test outputs
 
   echo "Testing fish"
-  run fish -i -l -c 'eval "$("$FLOX_BIN" activate)"'
+  run fish -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
   assert_equal "${#lines[@]}" 5
   assert_equal "${lines[0]}" "Sourcing config.fish"
@@ -1781,7 +1781,7 @@ EOF
   echo # leave a line between test outputs
 
   echo "Testing tcsh"
-  run tcsh -i -c 'eval "`$FLOX_BIN activate`"'
+  run tcsh -c 'eval "`$FLOX_BIN activate`"'
   assert_success
   assert_equal "${#lines[@]}" 5
   assert_equal "${lines[0]}" "Sourcing .tcshrc"
