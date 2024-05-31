@@ -139,8 +139,8 @@ impl RawManifest {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
         "#});
 
         match customization {
@@ -921,8 +921,8 @@ pub(super) mod test {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
             # common = """
             #   echo "it's gettin' flox in here"
@@ -990,8 +990,8 @@ pub(super) mod test {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
             # common = """
             #   echo "it's gettin' flox in here"
@@ -1062,8 +1062,8 @@ pub(super) mod test {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
             # common = """
             #   echo "it's gettin' flox in here"
@@ -1138,8 +1138,8 @@ pub(super) mod test {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
             # common = """
             #   echo "it's gettin' flox in here"
@@ -1211,8 +1211,8 @@ pub(super) mod test {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
             common = """
               echo \"Hello from Flox\"
