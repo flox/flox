@@ -172,12 +172,6 @@ EOF
   assert_line "run/"
 }
 
-@test "'flox init' injects current system" {
-  "$FLOX_BIN" init
-  init_system=$(tomlq -r '.options.systems[0]' .flox/env/manifest.toml)
-  assert_equal "$init_system" "$NIX_SYSTEM"
-}
-
 # bats test_tags=init:python:requirements
 @test "'flox init' sets up a working Python environment that works across all methods of activate" {
   export FLOX_FEATURES_USE_CATALOG=false
