@@ -26,7 +26,7 @@ making them portable across the full software lifecycle.
 
 ## Command Line Completions
 
-Flox ships with command line completions for `bash`, `zsh` and `fish`.
+Flox ships with command line completions for `bash`, `fish` and `zsh`.
 These completions are installed alongside Flox.
 
 # OPTIONS

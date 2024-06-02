@@ -139,14 +139,16 @@ impl RawManifest {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
         "#});
 
         match customization {
             InitCustomization {
                 profile_common: None,
                 profile_bash: None,
+                profile_fish: None,
+                profile_tcsh: None,
                 profile_zsh: None,
                 ..
             } => {
@@ -168,6 +170,18 @@ impl RawManifest {
                     profile_table.insert(
                         "bash",
                         toml_edit::value(indent::indent_all_by(2, profile_bash)),
+                    );
+                }
+                if let Some(profile_fish) = &customization.profile_fish {
+                    profile_table.insert(
+                        "fish",
+                        toml_edit::value(indent::indent_all_by(2, profile_fish)),
+                    );
+                }
+                if let Some(profile_tcsh) = &customization.profile_tcsh {
+                    profile_table.insert(
+                        "tcsh",
+                        toml_edit::value(indent::indent_all_by(2, profile_tcsh)),
                     );
                 }
                 if let Some(profile_zsh) = &customization.profile_zsh {
@@ -863,6 +877,8 @@ pub(super) mod test {
             hook_on_activate: None,
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: None,
         };
@@ -905,8 +921,8 @@ pub(super) mod test {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
             # common = """
             #   echo "it's gettin' flox in here"
@@ -929,6 +945,8 @@ pub(super) mod test {
             hook_on_activate: None,
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: Some(vec![]),
         };
@@ -972,8 +990,8 @@ pub(super) mod test {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
             # common = """
             #   echo "it's gettin' flox in here"
@@ -996,6 +1014,8 @@ pub(super) mod test {
             hook_on_activate: None,
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: Some(vec![PackageToInstall {
                 id: "python3".to_string(),
@@ -1042,8 +1062,8 @@ pub(super) mod test {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
             # common = """
             #   echo "it's gettin' flox in here"
@@ -1075,6 +1095,8 @@ pub(super) mod test {
             ),
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: None,
         };
@@ -1116,8 +1138,8 @@ pub(super) mod test {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
             # common = """
             #   echo "it's gettin' flox in here"
@@ -1145,6 +1167,8 @@ pub(super) mod test {
                 .to_string(),
             ),
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: None,
         };
@@ -1187,8 +1211,8 @@ pub(super) mod test {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
             common = """
               echo \"Hello from Flox\"

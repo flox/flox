@@ -3,6 +3,7 @@
 export _coreutils="@coreutils@"
 export _gnused="@gnused@"
 export _zdotdir="@out@/activate.d/zdotdir"
+export _tcsh_home="@out@/activate.d/tcsh_home"
 
 # Top-level Flox environment activation script.
 
@@ -212,6 +213,23 @@ if [ $# -gt 0 ]; then
         fi
       fi
       ;;
+    *fish)
+      if [ -n "$FLOX_NO_PROFILES" ]; then
+        exec "$_flox_shell" "$@"
+      else
+        exec "$_flox_shell" --init-command "source $FLOX_ENV/activate.d/fish" "$@"
+      fi
+      ;;
+    *tcsh)
+      if [ -n "$FLOX_NO_PROFILES" ]; then
+        exec "$_flox_shell" "$@"
+      else
+        export FLOX_ORIG_HOME="$HOME"
+        export HOME="$_tcsh_home"
+        export FLOX_TCSH_INIT_SCRIPT="$FLOX_ENV/activate.d/tcsh"
+        exec "$_flox_shell" "$@"
+      fi
+      ;;
     *zsh)
       if [ -n "$FLOX_NO_PROFILES" ]; then
         exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS "$@"
@@ -253,6 +271,23 @@ if [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
         fi
       fi
       ;;
+    *fish)
+      if [ -n "$FLOX_NO_PROFILES" ]; then
+        exec "$_flox_shell"
+      else
+        exec "$_flox_shell" --init-command "source $FLOX_ENV/activate.d/fish"
+      fi
+      ;;
+    *tcsh)
+      if [ -n "$FLOX_NO_PROFILES" ]; then
+        exec "$_flox_shell" -f
+      else
+        export FLOX_ORIG_HOME="$HOME"
+        export HOME="$_tcsh_home"
+        export FLOX_TCSH_INIT_SCRIPT="$FLOX_ENV/activate.d/tcsh"
+        exec "$_flox_shell" -v
+      fi
+      ;;
     *zsh)
       if [ -n "$FLOX_NO_PROFILES" ]; then
         exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS
@@ -286,6 +321,20 @@ case "$_flox_shell" in
     echo "export _add_env=\"$_add_env\";"
     echo "export _del_env=\"$_del_env\";"
     echo "source '$FLOX_ENV/activate.d/bash';"
+    ;;
+  *fish)
+    echo "set -gx _flox_activate_tracelevel \"$_flox_activate_tracelevel\";"
+    echo "set -gx FLOX_ENV \"$FLOX_ENV\";"
+    echo "set -gx _add_env \"$_add_env\";"
+    echo "set -gx _del_env \"$_del_env\";"
+    echo "source '$FLOX_ENV/activate.d/fish';"
+    ;;
+  *tcsh)
+    echo "setenv _flox_activate_tracelevel \"$_flox_activate_tracelevel\";"
+    echo "setenv FLOX_ENV \"$FLOX_ENV\";"
+    echo "setenv _add_env \"$_add_env\";"
+    echo "setenv _del_env \"$_del_env\";"
+    echo "source '$FLOX_ENV/activate.d/tcsh';"
     ;;
   *zsh)
     echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
