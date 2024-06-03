@@ -45,7 +45,6 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "c2: flox init without a name should create an environment named the same as the directory the user is in" {
-
   run "$FLOX_BIN" init
   assert_success
 

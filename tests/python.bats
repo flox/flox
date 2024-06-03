@@ -262,7 +262,7 @@ teardown() {
   assert_line --partial "deactivate is a shell function"
 }
 
-# bats test_tags=init:python:auto-setup,init:python:auto-setup:fish,bats:focus
+# bats test_tags=init:python:auto-setup,init:python:auto-setup:fish,catalog
 @test "catalog: verify auto-setup Python venv activation: fish" {
   OWNER="owner"
   NAME="name"
@@ -275,7 +275,7 @@ teardown() {
   assert_line --partial "deactivate is a function with definition"
 }
 
-# bats test_tags=init:python:auto-setup,init:python:auto-setup:tcsh
+# bats test_tags=init:python:auto-setup,init:python:auto-setup:tcsh,catalog
 @test "catalog: verify auto-setup Python venv activation: tcsh" {
   OWNER="owner"
   NAME="name"
