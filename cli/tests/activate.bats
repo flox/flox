@@ -1081,11 +1081,12 @@ EOF
 
 # bats test_tags=activate,activate:inplace-reactivate,activate:inplace-reactivate:tcsh
 @test "tcsh: 'flox activate' patches PATH correctly when already activated" {
-  # TODO: figure out why backticks mess up the quoting in the following example,
-  #       going with this in the meantime because it works ...
+  # TODO: figure out why bats doesn't tolerate backticks in the following
+  #       example, reports unmatched quotes. Going with this in the meantime
+  #       because it works ...
   FLOX_SHELL="tcsh" run -- \
     "$FLOX_BIN" activate -- \
-      tcsh -c "eval \`$FLOX_BIN activate\`; bash $TESTS_DIR/activate/verify_PATH.bash"
+      tcsh -c "$FLOX_BIN activate | source /dev/stdin; bash $TESTS_DIR/activate/verify_PATH.bash"
   assert_success
 }
 
