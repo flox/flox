@@ -141,9 +141,8 @@ EOF
 @test "catalog: flox activate works with npm" {
   cp -r "$TESTS_DIR/node/single-dependency/common/." .
   cp -r "$TESTS_DIR/node/single-dependency/npm/." .
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/node_npm.json"
-  run "$FLOX_BIN" init --auto-setup
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/node_npm.json" \
+    run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'nodejs' installed"
   run "$FLOX_BIN" activate -- npm run start
   assert_output --partial "86400000"
@@ -153,9 +152,8 @@ EOF
 @test "catalog: flox activate works with yarn" {
   cp -r "$TESTS_DIR/node/single-dependency/common/." .
   cp -r "$TESTS_DIR/node/single-dependency/yarn/." .
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/node_yarn.json"
-  run "$FLOX_BIN" init --auto-setup
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/node_yarn.json" \
+    run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'yarn' installed"
   refute_output "nodejs"
   run "$FLOX_BIN" activate -- yarn run start
@@ -164,7 +162,6 @@ EOF
 
 # bats test_tags=catalog
 @test "catalog: install krb5 with node" {
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
   "$FLOX_BIN" init
 
   MANIFEST_CONTENT="$(cat << "EOF"
@@ -193,7 +190,7 @@ EOF
   )"
   export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/node_krb5_prereqs.json"
   echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/node_krb5_krb5.json"
 
   # With dependencies installed, we can now install krb5 and run system-specific
   # checks.
@@ -203,9 +200,8 @@ EOF
       # installation fails
       run ! "$FLOX_BIN" activate -- bash "$TESTS_DIR/node/krb5.sh"
 
-      export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/node_krb5_krb5.json"
-      "$FLOX_BIN" install krb5
-      export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+      _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/node_krb5_krb5.json" \
+        "$FLOX_BIN" install krb5
 
       "$FLOX_BIN" activate -- bash "$TESTS_DIR/node/krb5.sh"
       ;;
@@ -214,9 +210,8 @@ EOF
       # installation fails
       run ! "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/node/krb5.sh"'
 
-      export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/node_krb5_krb5.json"
-      "$FLOX_BIN" install krb5
-      export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+      _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/node_krb5_krb5.json" \
+          "$FLOX_BIN" install krb5
 
       # TODO: fix CPATH in activate
       "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/node/krb5.sh"'

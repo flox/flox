@@ -95,9 +95,8 @@ teardown() {
   cp -r "$TESTS_DIR"/go/module-systems/common/* "$PROJECT_DIR/"
   cp -r "$TESTS_DIR"/go/module-systems/module/* "$PROJECT_DIR/"
 
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/go_mod.json"
-  run "$FLOX_BIN" init --auto-setup
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/go.json" \
+    run "$FLOX_BIN" init --auto-setup
 
   assert_success
   assert_line --partial "'go' installed"
@@ -116,9 +115,8 @@ teardown() {
   cp -r "$TESTS_DIR"/go/module-systems/module/* "$PROJECT_DIR/"
   cp -r "$TESTS_DIR"/go/module-systems/workspace/* "$PROJECT_DIR/"
 
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/go_workspace.json"
-  run "$FLOX_BIN" init --auto-setup
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/go.json" \
+    run "$FLOX_BIN" init --auto-setup
 
   assert_success
   assert_line --partial "'go' installed"

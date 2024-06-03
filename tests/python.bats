@@ -172,9 +172,8 @@ teardown() {
 @test "catalog: install requests with pip" {
   "$FLOX_BIN" init
 
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/python3_pip.json"
-  run "$FLOX_BIN" install -i pip python310Packages.pip python3
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/python3_pip.json" \
+      run "$FLOX_BIN" install -i pip python310Packages.pip python3
 
   assert_success
   assert_output --partial "✅ 'pip' installed to environment"
@@ -188,14 +187,13 @@ teardown() {
   cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
   cp -r "$TESTS_DIR"/python/single-dependency/poetry/* "$PROJECT_DIR/"
 
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_poetry.json"
-  run "$FLOX_BIN" init --auto-setup
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_poetry.json" \
+    run "$FLOX_BIN" init --auto-setup
   assert_success
   assert_output --partial "'poetry' installed"
 
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_poetry_zlib.json"
-  "$FLOX_BIN" install zlib
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_poetry_zlib.json" \
+    "$FLOX_BIN" install zlib
 
   run "$FLOX_BIN" activate -- python -m project
   assert_success
@@ -207,13 +205,12 @@ teardown() {
   cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
   cp -r "$TESTS_DIR"/python/single-dependency/pyproject-pip/* "$PROJECT_DIR/"
 
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_pyproject_pip.json"
-  run "$FLOX_BIN" init --auto-setup
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_pyproject_pip.json" \
+    run "$FLOX_BIN" init --auto-setup
   assert_success
 
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_pyproject_pip_zlib.json"
-  "$FLOX_BIN" install zlib
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_pyproject_pip_zlib.json" \
+    "$FLOX_BIN" install zlib
 
   run "$FLOX_BIN" activate -- python -m project
   assert_success
@@ -225,13 +222,12 @@ teardown() {
   cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
   cp -r "$TESTS_DIR"/python/single-dependency/requirements/* "$PROJECT_DIR/"
 
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requirements.json"
-  run "$FLOX_BIN" init --auto-setup
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requirements.json" \
+    run "$FLOX_BIN" init --auto-setup
   assert_success
 
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requirements_zlib.json"
-  "$FLOX_BIN" install zlib
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requirements_zlib.json" \
+    "$FLOX_BIN" install zlib
 
   run "$FLOX_BIN" activate -- python -m project
   assert_success
@@ -244,9 +240,8 @@ teardown() {
   NAME="name"
   echo "requests" > requirements.txt
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requests.json"
-  "$FLOX_BIN" init --auto-setup --name "$NAME"
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requests.json" \
+    "$FLOX_BIN" init --auto-setup --name "$NAME"
   FLOX_SHELL="bash" run "$FLOX_BIN" activate -- type deactivate
   assert_success
   assert_line --partial "deactivate is a function"
@@ -258,9 +253,8 @@ teardown() {
   NAME="name"
   echo "requests" > requirements.txt
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requests.json"
-  "$FLOX_BIN" init --auto-setup --name "$NAME"
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requests.json" \
+    "$FLOX_BIN" init --auto-setup --name "$NAME"
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- type deactivate
   assert_success
   assert_line --partial "deactivate is a shell function"
