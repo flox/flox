@@ -1409,6 +1409,8 @@ EOF
 
 # bats test_tags=activate:flox-uses-default-env
 @test "'flox *' uses local environment over 'default' environment" {
+  project_setup # TODO: we need PROJECT_DIR, but not flox init
+  "$FLOX_BIN" delete -f
   export FLOX_FEATURES_USE_CATALOG=false
 
   mkdir default
@@ -1434,6 +1436,8 @@ EOF
 
 # bats test_tags=activate:flox-uses-default-env
 @test "catalog: 'flox *' uses local environment over 'default' environment" {
+  project_setup # TODO: we need PROJECT_DIR, but not flox init
+  "$FLOX_BIN" delete -f
   mkdir default
   pushd default > /dev/null || return
   "$FLOX_BIN" init
@@ -1807,6 +1811,7 @@ EOF
 
 # bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:bash
 @test "bash: tolerates paths containing spaces" {
+  project_setup # TODO: we need PROJECT_DIR, but not flox init
   bad_dir="contains space/project"
   mkdir -p "$PWD/$bad_dir"
   cd "$PWD/$bad_dir"
@@ -1818,6 +1823,7 @@ EOF
 
 # bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:fish
 @test "fish: tolerates paths containing spaces" {
+  project_setup # TODO: we need PROJECT_DIR, but not flox init
   bad_dir="contains space/project"
   mkdir -p "$PWD/$bad_dir"
   cd "$PWD/$bad_dir"
@@ -1829,6 +1835,7 @@ EOF
 
 # bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:tcsh
 @test "tcsh: tolerates paths containing spaces" {
+  project_setup # TODO: we need PROJECT_DIR, but not flox init
   bad_dir="contains space/project"
   mkdir -p "$PWD/$bad_dir"
   cd "$PWD/$bad_dir"
@@ -1840,6 +1847,7 @@ EOF
 
 # bats test_tags=activate,activate:paths_spaces,activate:paths_spaces:zsh
 @test "zsh: tolerates paths containing spaces" {
+  project_setup # TODO: we need PROJECT_DIR, but not flox init
   bad_dir="contains space/project"
   mkdir -p "$PWD/$bad_dir"
   cd "$PWD/$bad_dir"
@@ -1955,6 +1963,7 @@ EOF
 
 # bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshenv
 @test "zdotdir: test zshenv activation" {
+  project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
   run zsh -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
