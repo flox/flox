@@ -4,6 +4,8 @@
   stdenv,
   lib,
   bashInteractive,
+  fish,
+  tcsh,
   zsh,
   dash,
   bats,
@@ -44,6 +46,8 @@
   paths =
     [
       bashInteractive
+      fish
+      tcsh
       zsh
       dash
       batsWith

@@ -121,6 +121,32 @@ teardown() {
   assert_line --partial "deactivate is a function"
 }
 
+# bats test_tags=init:python:auto-setup,init:python:auto-setup:fish
+@test "verify auto-setup Python venv activation: fish" {
+  OWNER="owner"
+  NAME="name"
+  echo "requests" > requirements.txt
+  [ ! -e .flox ] || "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init --auto-setup --name "$NAME"
+  FLOX_SHELL="fish" run "$FLOX_BIN" activate -- type deactivate
+  assert_success
+  assert_line --partial "deactivate is a function with definition"
+}
+
+# bats test_tags=init:python:auto-setup,init:python:auto-setup:tcsh
+@test "verify auto-setup Python venv activation: tcsh" {
+  OWNER="owner"
+  NAME="name"
+  echo "requests" > requirements.txt
+  [ ! -e .flox ] || "$FLOX_BIN" delete -f
+  "$FLOX_BIN" init --auto-setup --name "$NAME"
+  FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- which deactivate
+  assert_success
+  assert_line --partial "aliased to test \$?_OLD_VIRTUAL_PATH != 0 && setenv PATH "
+  # ... and a bunch of other stuff ending with:
+  assert_line --partial " && unalias deactivate"
+}
+
 # bats test_tags=init:python:auto-setup,init:python:auto-setup:zsh
 @test "verify auto-setup Python venv activation: zsh" {
   OWNER="owner"

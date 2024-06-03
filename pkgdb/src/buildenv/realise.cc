@@ -705,6 +705,16 @@ makeActivationScripts( nix::EvalState &              state,
           debugLog( "adding 'profile.bash' to activation scripts" );
           addScriptToScriptsDir( *profile->bash, tempDir, "profile-bash" );
         }
+      if ( profile->fish.has_value() )
+        {
+          debugLog( "adding 'profile.fish' to activation scripts" );
+          addScriptToScriptsDir( *profile->fish, tempDir, "profile-fish" );
+        }
+      if ( profile->tcsh.has_value() )
+        {
+          debugLog( "adding 'profile.tcsh' to activation scripts" );
+          addScriptToScriptsDir( *profile->tcsh, tempDir, "profile-tcsh" );
+        }
       if ( profile->zsh.has_value() )
         {
           debugLog( "adding 'profile.zsh' to activation scripts" );

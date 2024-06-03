@@ -412,7 +412,6 @@ impl Provider for PoetryPyProject {
 
         InitCustomization {
             hook_on_activate: Some(
-                // TODO: when we support fish, we'll need to source activate.fish
                 indoc! {r#"
                 # Setup a Python virtual environment
 
@@ -436,6 +435,18 @@ impl Provider for PoetryPyProject {
                 indoc! {r#"
                 echo "Activating poetry virtual environment" >&2
                 source "$(poetry env info --path)/bin/activate""#}
+                .to_string(),
+            ),
+            profile_fish: Some(
+                indoc! {r#"
+                echo "Activating poetry virtual environment" >&2
+                source "$(poetry env info --path)/bin/activate.fish""#}
+                .to_string(),
+            ),
+            profile_tcsh: Some(
+                indoc! {r#"
+                echo "Activating poetry virtual environment" >&2
+                source "$(poetry env info --path)/bin/activate.csh""#}
                 .to_string(),
             ),
             profile_zsh: Some(
@@ -603,7 +614,6 @@ impl Provider for PyProject {
 
         InitCustomization {
             hook_on_activate: Some(
-                // TODO: when we support fish, we'll need to source activate.fish
                 indoc! {r#"
                 # Setup a Python virtual environment
 
@@ -628,6 +638,18 @@ impl Provider for PyProject {
                 indoc! {r#"
                 echo "Activating python virtual environment" >&2
                 source "$PYTHON_DIR/bin/activate""#}
+                .to_string(),
+            ),
+            profile_fish: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate.fish""#}
+                .to_string(),
+            ),
+            profile_tcsh: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate.csh""#}
                 .to_string(),
             ),
             profile_zsh: Some(
@@ -746,7 +768,6 @@ impl Provider for Requirements {
             .join("\n");
         InitCustomization {
             hook_on_activate: Some(
-                // TODO: when we support fish, we'll need to source activate.fish
                 formatdoc! {r#"
                 # Setup a Python virtual environment
 
@@ -769,6 +790,18 @@ impl Provider for Requirements {
                 indoc! {r#"
                 echo "Activating python virtual environment" >&2
                 source "$PYTHON_DIR/bin/activate""#}
+                .to_string(),
+            ),
+            profile_fish: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate.fish""#}
+                .to_string(),
+            ),
+            profile_tcsh: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate.csh""#}
                 .to_string(),
             ),
             profile_zsh: Some(

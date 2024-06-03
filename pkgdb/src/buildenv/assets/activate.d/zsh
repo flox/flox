@@ -69,7 +69,8 @@ eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
 export HISTFILE=$HOME/.zsh_history
 export SHELL_SESSION_DIR=$HOME/.zsh_sessions
 
-if [ -t 1 ]; then
+# Set the prompt if we're in an interactive shell.
+if [[ -o interactive ]]; then
   source "$FLOX_ENV/activate.d/set-prompt.zsh"
 fi
 

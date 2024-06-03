@@ -312,8 +312,8 @@ Scripts defined in the `[profile]` section are sourced by *your shell* and
 inherit environment variables set in the `[vars]` section and by the `[hook]`
 scripts.
 The `profile.common` script is sourced for every shell,
-and special care should be taken to ensure compatibility with all shells.
-The `profile.<shell>` scripts are then sourced *after* `profile.common` by the
+and special care should be taken to ensure compatibility with all shells,
+after which exactly one of `profile.{bash,fish,tcsh,zsh}` is sourced by the
 corresponding shell.
 
 These scripts are useful for performing shell-specific customizations such as
@@ -328,6 +328,11 @@ bash = """
     source $venv_dir/bin/activate
     alias foo="echo bar"
     set -o vi
+"""
+fish = """
+    source $venv_dir/bin/activate.fish
+    alias foo="echo bar"
+    fish_vi_key_bindings
 """
 zsh = """
     source $venv_dir/bin/activate

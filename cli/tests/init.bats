@@ -188,6 +188,8 @@ EOF
   "$FLOX_BIN" init --auto-setup --name "$NAME"
 
   FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=fish "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=tcsh "$FLOX_BIN" activate -- python -c "import requests"
   FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
 
   floxhub_setup "$OWNER"
@@ -199,11 +201,15 @@ EOF
   "$FLOX_BIN" pull "$OWNER/$NAME"
 
   FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=fish "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=tcsh "$FLOX_BIN" activate -- python -c "import requests"
   FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
 
   "$FLOX_BIN" delete -f
 
   FLOX_SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
+  FLOX_SHELL=fish "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
+  FLOX_SHELL=tcsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
   FLOX_SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
 }
 

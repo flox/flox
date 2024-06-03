@@ -74,6 +74,8 @@ impl Browser {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Shell {
     Bash(PathBuf),
+    Fish(PathBuf),
+    Tcsh(PathBuf),
     Zsh(PathBuf),
 }
 
@@ -83,6 +85,8 @@ impl TryFrom<&Path> for Shell {
     fn try_from(value: &Path) -> std::prelude::v1::Result<Self, Self::Error> {
         match value.file_name() {
             Some(name) if name == "bash" => Ok(Shell::Bash(value.to_owned())),
+            Some(name) if name == "fish" => Ok(Shell::Fish(value.to_owned())),
+            Some(name) if name == "tcsh" => Ok(Shell::Tcsh(value.to_owned())),
             Some(name) if name == "zsh" => Ok(Shell::Zsh(value.to_owned())),
             _ => Err(anyhow!("Unsupported shell {value:?}")),
         }
@@ -93,6 +97,8 @@ impl Display for Shell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Shell::Bash(_) => write!(f, "bash"),
+            Shell::Fish(_) => write!(f, "fish"),
+            Shell::Tcsh(_) => write!(f, "tcsh"),
             Shell::Zsh(_) => write!(f, "zsh"),
         }
     }
@@ -126,6 +132,8 @@ impl Shell {
     pub fn exe_path(&self) -> &Path {
         match self {
             Shell::Bash(path) => path,
+            Shell::Fish(path) => path,
+            Shell::Tcsh(path) => path,
             Shell::Zsh(path) => path,
         }
     }
@@ -228,9 +236,13 @@ mod tests {
     #[test]
     fn parse_shell() {
         let bash = PathBuf::from("/bin/bash");
+        let fish = PathBuf::from("/bin/fish");
+        let tcsh = PathBuf::from("/bin/tcsh");
         let zsh = PathBuf::from("/bin/zsh");
 
         assert_eq!(Shell::try_from(bash.as_path()).unwrap(), Shell::Bash(bash));
+        assert_eq!(Shell::try_from(fish.as_path()).unwrap(), Shell::Fish(fish));
+        assert_eq!(Shell::try_from(tcsh.as_path()).unwrap(), Shell::Tcsh(tcsh));
         assert_eq!(Shell::try_from(zsh.as_path()).unwrap(), Shell::Zsh(zsh));
         assert!(Shell::try_from(PathBuf::from("/bin/not_a_shell").as_path()).is_err())
     }

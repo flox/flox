@@ -675,6 +675,8 @@ impl InitHook for Node {
             hook_on_activate,
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: Some(packages),
         }
@@ -778,6 +780,8 @@ mod tests {
                 hook_on_activate: Some(YARN_HOOK.to_string()),
                 profile_common: None,
                 profile_bash: None,
+                profile_fish: None,
+                profile_tcsh: None,
                 profile_zsh: None,
             }
         );
@@ -828,6 +832,8 @@ mod tests {
                 hook_on_activate: Some(NPM_HOOK.to_string()),
                 profile_common: None,
                 profile_bash: None,
+                profile_fish: None,
+                profile_tcsh: None,
                 profile_zsh: None,
             }
         );
@@ -860,6 +866,8 @@ mod tests {
                 hook_on_activate: None,
                 profile_common: None,
                 profile_bash: None,
+                profile_fish: None,
+                profile_tcsh: None,
                 profile_zsh: None,
             }
         );
