@@ -40,7 +40,7 @@ runs:
     - name: "Install newer Nix"
       uses: "cachix/install-nix-action@v24"
 
-    - name: "Install flox"
+    - name: "Configure Nix"
       uses: "flox/configure-nix-action@main"
       with:
         github-access-token:    "${{ inputs.GITHUB_ACCESS_TOKEN }}"
