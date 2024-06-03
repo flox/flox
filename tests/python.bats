@@ -128,6 +128,7 @@ teardown() {
 
 # bats test_tags=init:python:auto-setup,init:python:auto-setup:fish
 @test "verify auto-setup Python venv activation: fish" {
+  export FLOX_FEATURES_USE_CATALOG=false
   OWNER="owner"
   NAME="name"
   echo "requests" > requirements.txt
@@ -140,6 +141,7 @@ teardown() {
 
 # bats test_tags=init:python:auto-setup,init:python:auto-setup:tcsh
 @test "verify auto-setup Python venv activation: tcsh" {
+  export FLOX_FEATURES_USE_CATALOG=false
   OWNER="owner"
   NAME="name"
   echo "requests" > requirements.txt
@@ -258,4 +260,32 @@ teardown() {
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- type deactivate
   assert_success
   assert_line --partial "deactivate is a shell function"
+}
+
+# bats test_tags=init:python:auto-setup,init:python:auto-setup:fish,bats:focus
+@test "catalog: verify auto-setup Python venv activation: fish" {
+  OWNER="owner"
+  NAME="name"
+  echo "requests" > requirements.txt
+  [ ! -e .flox ] || "$FLOX_BIN" delete -f
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requests.json" \
+    "$FLOX_BIN" init --auto-setup --name "$NAME"
+  FLOX_SHELL="fish" run "$FLOX_BIN" activate -- type deactivate
+  assert_success
+  assert_line --partial "deactivate is a function with definition"
+}
+
+# bats test_tags=init:python:auto-setup,init:python:auto-setup:tcsh
+@test "catalog: verify auto-setup Python venv activation: tcsh" {
+  OWNER="owner"
+  NAME="name"
+  echo "requests" > requirements.txt
+  [ ! -e .flox ] || "$FLOX_BIN" delete -f
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requests.json" \
+    "$FLOX_BIN" init --auto-setup --name "$NAME"
+  FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- which deactivate
+  assert_success
+  assert_line --partial "aliased to test \$?_OLD_VIRTUAL_PATH != 0 && setenv PATH "
+  # ... and a bunch of other stuff ending with:
+  assert_line --partial " && unalias deactivate"
 }

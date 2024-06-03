@@ -349,7 +349,7 @@ case "$_flox_shell" in
     echo "source '$FLOX_ENV/activate.d/zsh';"
     ;;
   *)
-    echo "unsupported shell: $_flox_shell" >&2
+    echo "Unsupported shell: $_flox_shell" >&2
     exit 1
     ;;
 esac
