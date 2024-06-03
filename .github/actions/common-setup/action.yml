@@ -41,7 +41,7 @@ runs:
       uses: "cachix/install-nix-action@v24"
 
     - name: "Install flox"
-      uses: "flox/configure-flox-action@main"
+      uses: "flox/configure-nix-action@main"
       with:
         github-access-token:    "${{ inputs.GITHUB_ACCESS_TOKEN }}"
         substituter:            "${{ inputs.SUBSTITUTER }}"
