@@ -161,11 +161,18 @@ in
       doCheck = false;
 
       # bundle manpages and completion scripts
+      #
+      # sed: Removes rust-toolchain from binary. Likely due to toolchain overriding.
+      #   unclear about the root cause, so this is a hotfix.
       postInstall = ''
         installShellCompletion --cmd flox                         \
           --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
           --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
           --zsh <( "$out/bin/flox" --bpaf-complete-style-zsh; );
+
+        for target in "$(basename ${rust-toolchain.rust.outPath} | cut -f1 -d- )" ; do
+          sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/flox
+        done
       '';
 
       doInstallCheck = false;
