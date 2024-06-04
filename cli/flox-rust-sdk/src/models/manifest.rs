@@ -422,6 +422,10 @@ pub struct ManifestProfile {
     bash: Option<String>,
     /// When defined, this hook is run upon activation in a zsh shell
     zsh: Option<String>,
+    /// When defined, this hook is run upon activation in a fish shell
+    fish: Option<String>,
+    /// When defined, this hook is run upon activation in a tcsh shell
+    tcsh: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]

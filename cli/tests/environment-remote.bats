@@ -43,6 +43,8 @@ setup() {
   setup_isolated_flox
   project_setup
   floxhub_setup owner
+  export FLOX_FEATURES_USE_CATALOG=true
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
 }
 
 teardown() {
@@ -78,9 +80,20 @@ function make_empty_remote_env() {
   assert_output "total 0"
 }
 
-# todo waiting for 620
 # bats test_tags=hermetic,remote,remote:outlink
 @test "r0: building a remote environment creates outlink" {
+  export FLOX_FEATURES_USE_CATALOG=false
+  make_empty_remote_env
+
+  run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
+  assert_success
+
+  assert [ -h "$FLOX_CACHE_DIR/run/$OWNER/test" ]
+}
+
+# bats test_tags=hermetic,remote,remote:outlink
+@test "catalog: r0: building a remote environment creates outlink" {
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
   make_empty_remote_env
 
   run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
@@ -91,6 +104,21 @@ function make_empty_remote_env() {
 
 # bats test_tags=install,remote,remote:install
 @test "m1: install a package to a remote environment" {
+  export FLOX_FEATURES_USE_CATALOG=false
+  make_empty_remote_env
+
+  run "$FLOX_BIN" install hello --remote "$OWNER/test"
+  assert_success
+  assert_output --partial "environment '$OWNER/test' (remote)" # managed env output
+
+  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
+  assert_success
+  assert_output "hello"
+}
+
+# bats test_tags=install,remote,remote:install
+@test "catalog: m1: install a package to a remote environment" {
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
   make_empty_remote_env
 
   run "$FLOX_BIN" install hello --remote "$OWNER/test"
@@ -103,7 +131,23 @@ function make_empty_remote_env() {
 }
 
 # bats test_tags=uninstall,remote,remote:uninstall
-@test "m2: uninstall a package from a managed environment" {
+@test "m2: uninstall a package from a remote environment" {
+  export FLOX_FEATURES_USE_CATALOG=false
+  make_empty_remote_env
+
+  "$FLOX_BIN" install emacs vim --remote "$OWNER/test"
+
+  run "$FLOX_BIN" uninstall vim --remote "$OWNER/test"
+  assert_success
+
+  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
+  assert_success
+  assert_output "emacs"
+}
+
+# bats test_tags=uninstall,remote,remote:uninstall
+@test "catalog: m2: uninstall a package from a remote environment" {
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs_vim.json"
   make_empty_remote_env
 
   "$FLOX_BIN" install emacs vim --remote "$OWNER/test"
@@ -118,6 +162,7 @@ function make_empty_remote_env() {
 
 # bats test_tags=edit,remote,remote:edit
 @test "m3: edit a package from a managed environment" {
+  export FLOX_FEATURES_USE_CATALOG=false
   make_empty_remote_env
 
   TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
@@ -136,11 +181,48 @@ EOF
   assert_output "hello"
 }
 
+# bats test_tags=edit,remote,remote:edit
+@test "catalog: m3: edit a package from a managed environment" {
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  make_empty_remote_env
+
+  TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
+
+  cat << "EOF" >> "$TMP_MANIFEST_PATH"
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+EOF
+
+  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH" --remote "$OWNER/test"
+  assert_success
+  assert_output --partial "✅ Environment successfully updated."
+
+  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
+  assert_success
+  assert_output "hello"
+}
+
 # ---------------------------------------------------------------------------- #
 
-# Make sure we haven't activate
 # bats test_tags=remote,activate,remote:activate
 @test "m9: activate works in remote environment" {
+  export FLOX_FEATURES_USE_CATALOG=false
+  make_empty_remote_env
+  "$FLOX_BIN" install hello --remote "$OWNER/test"
+
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  FLOX_SHELL=bash USER="$REAL_USER" run -0 expect "$TESTS_DIR/activate/remote-hello.exp" "$OWNER/test"
+  assert_output --partial "$FLOX_CACHE_DIR/remote/owner/test/.flox/run/bin/hello"
+  refute_output "not found"
+}
+
+# bats test_tags=remote,activate,remote:activate
+@test "catalog: m9: activate works in remote environment" {
+  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
   make_empty_remote_env
   "$FLOX_BIN" install hello --remote "$OWNER/test"
 
@@ -156,7 +238,6 @@ EOF
 # bats test_tags=remote,activate,trust,remote:activate:trust-required
 @test "m10.0: 'activate --remote' fails if remote environment is not trusted" {
   make_empty_remote_env
-  "$FLOX_BIN" install hello --remote "$OWNER/test"
 
   run "$FLOX_BIN" activate --remote "$OWNER/test"
   assert_failure
@@ -167,7 +248,6 @@ EOF
 # bats test_tags=remote,activate,trust,remote:activate:trust-option
 @test "m10.1: 'activate --remote --trust' succeeds" {
   make_empty_remote_env
-  "$FLOX_BIN" install hello --remote "$OWNER/test"
 
   run "$FLOX_BIN" activate --remote "$OWNER/test" --trust -- true
   assert_success
@@ -178,7 +258,6 @@ EOF
 # bats test_tags=remote,activate,trust,remote:activate:trust-config
 @test "m10.2: 'activate --remote' succeeds if trusted by config" {
   make_empty_remote_env
-  "$FLOX_BIN" install hello --remote "$OWNER/test"
 
   run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/test'" "trust"
   run "$FLOX_BIN" activate --remote "$OWNER/test" -- true
@@ -190,7 +269,6 @@ EOF
 # bats test_tags=remote,activate,trust,remote:activate:deny-config
 @test "m10.3: 'activate --remote' fails if denied by config, --trust overrides" {
   make_empty_remote_env
-  "$FLOX_BIN" install hello --remote "$OWNER/test"
 
   run "$FLOX_BIN" config --set "trusted_environments.'$OWNER/test'" "deny"
 
@@ -235,6 +313,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "sanity check upgrade works for remote environments" {
+  export FLOX_FEATURES_USE_CATALOG=false
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     make_empty_remote_env
 
@@ -245,6 +324,29 @@ EOF
     "$FLOX_BIN" update --remote "$OWNER/test"
 
   run "$FLOX_BIN" upgrade --remote "$OWNER/test"
+  assert_output --partial "Upgraded 'hello'"
+}
+
+@test "catalog: sanity check upgrade works for remote environments" {
+  skip "will be fixed by https://github.com/flox/flox/issues/1485"
+
+  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
+    make_empty_remote_env
+
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/install_old_hello.json" \
+    "$FLOX_BIN" install hello --remote "$OWNER/test"
+
+  run "$FLOX_BIN" list --remote "$OWNER/test"
+  assert_success
+  assert_output --partial "2.0"
+
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/install_hello.json" \
+    run "$FLOX_BIN" upgrade --remote "$OWNER/test"
+
+  run "$FLOX_BIN" list --remote "$OWNER/test"
+  assert_success
+  assert_output --partial "2.12.1"
+
   assert_output --partial "Upgraded 'hello'"
 }
 

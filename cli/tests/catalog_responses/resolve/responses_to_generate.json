@@ -1,6 +1,8 @@
 {
     "emacs": "emacs",
+    "emacs_vim": "emacs vim",
     "hello": "hello",
+    "python311Packages.pip": "python311Packages.pip",
     "rubyPackages_3_2.rails": "rubyPackages_3_2.rails",
     "webmention_ripgrep_rails": "-i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails",
     "vim": "vim"
