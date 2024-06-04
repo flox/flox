@@ -356,7 +356,7 @@ jobs:
               --no-update-lock-file \
               --print-out-paths \
               '.#packages.${{ matrix.system }}.flox-cli-tests'
-          nix copy --from ./result --to "$FLOX_SUBSTITUTER"
+          echo "$(realpath ./result)" | xargs nix copy --extra-experimental-features nix-command --to "$FLOX_SUBSTITUTER"
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         run: |
