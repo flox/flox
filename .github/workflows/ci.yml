@@ -356,7 +356,7 @@ jobs:
               --no-update-lock-file \
               --print-out-paths \
               '.#packages.${{ matrix.system }}.flox-cli-tests'
-          nix copy --to "$FLOX_SUBSTITUTER" ./result
+          nix copy --from ./result --to "$FLOX_SUBSTITUTER"
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         run: |
