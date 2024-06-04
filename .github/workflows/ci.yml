@@ -212,7 +212,7 @@ jobs:
             echo "Building $package ..."
             git clean -xfd .
             if nix path-info                 \
-                --store "$FLOX_SUBSTITUTER"  \
+                --store "$CONFIGURE_NIX_SUBSTITUTER"  \
                 --eval-store auto            \
                 --builders ''                \
                 -j0                          \
@@ -356,7 +356,7 @@ jobs:
               --no-update-lock-file \
               --print-out-paths \
               '.#packages.${{ matrix.system }}.flox-cli-tests'
-          nix copy --to "$FLOX_SUBSTITUTER" ./result
+          nix copy --extra-experimental-features 'nix-command' --to "$CONFIGURE_NIX_SUBSTITUTER" ./result
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         run: |
