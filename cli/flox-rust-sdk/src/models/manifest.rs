@@ -436,7 +436,7 @@ pub struct ManifestOptions {
     pub(super) systems: Option<Vec<System>>,
     /// Options that control what types of packages are allowed.
     #[serde(default)]
-    allow: Allows,
+    pub allow: Allows,
     /// Options that control how semver versions are resolved.
     #[serde(default)]
     pub semver: SemverOptions,
@@ -446,12 +446,12 @@ pub struct ManifestOptions {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Allows {
     /// Whether to allow packages that are marked as `unfree`
-    unfree: Option<bool>,
+    pub unfree: Option<bool>,
     /// Whether to allow packages that are marked as `broken`
-    broken: Option<bool>,
+    pub broken: Option<bool>,
     /// A list of license descriptors that are allowed
     #[serde(default)]
-    licenses: Vec<String>,
+    pub licenses: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]

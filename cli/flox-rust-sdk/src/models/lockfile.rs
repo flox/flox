@@ -1,3 +1,4 @@
+use catalog_api_v1::types::SystemEnum;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -7,6 +8,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::str::FromStr;
 
 use log::debug;
 use thiserror::Error;
@@ -159,7 +161,7 @@ pub struct LockedPackageCatalog {
     // region: original fields from the service
     // These fields are copied from the generated struct.
     pub attr_path: String,
-    pub broken: bool,
+    pub broken: Option<bool>,
     pub derivation: String,
     pub description: Option<String>,
     pub install_id: String,
@@ -180,11 +182,11 @@ pub struct LockedPackageCatalog {
     // endregion
 
     // region: converted fields
-    pub outputs: Option<BTreeMap<String, String>>,
+    pub outputs: BTreeMap<String, String>,
     // endregion
 
     // region: added fields
-    pub system: System,
+    pub system: System, // FIXME: this is an enum in the generated code, can't derive Arbitrary there
     pub group: String,
     pub priority: usize,
     pub optional: bool,
@@ -221,14 +223,13 @@ impl LockedPackageCatalog {
             stabilities,
             unfree,
             version,
+            system,
         } = package;
 
-        let outputs = outputs.map(|outputs| {
-            outputs
-                .into_iter()
-                .map(|output| (output.name, output.store_path))
-                .collect()
-        });
+        let outputs = outputs
+            .into_iter()
+            .map(|output| (output.name, output.store_path))
+            .collect::<BTreeMap<_, _>>();
 
         let priority = descriptor.priority.unwrap_or(DEFAULT_PRIORITY);
         let group = descriptor
@@ -257,7 +258,7 @@ impl LockedPackageCatalog {
             stabilities,
             unfree,
             version,
-            system,
+            system: system.to_string(),
             priority,
             group,
             optional,
@@ -313,7 +314,7 @@ impl LockedManifestCatalog {
         seed_lockfile: Option<&LockedManifestCatalog>,
         client: &impl catalog::ClientTrait,
     ) -> Result<LockedManifestCatalog, LockedManifestError> {
-        let groups = Self::collect_package_groups(manifest, seed_lockfile);
+        let groups = Self::collect_package_groups(manifest, seed_lockfile)?;
         let (already_locked_packages, groups_to_lock) =
             Self::split_fully_locked_groups(groups, seed_lockfile);
 
@@ -374,7 +375,7 @@ impl LockedManifestCatalog {
     fn collect_package_groups(
         manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
-    ) -> impl Iterator<Item = PackageGroup> {
+    ) -> Result<impl Iterator<Item = PackageGroup>, LockedManifestError> {
         let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
 
         // Using a btree map to ensure consistent ordering
@@ -391,6 +392,11 @@ impl LockedManifestCatalog {
             .systems
             .as_ref()
             .unwrap_or(&default_systems);
+        let maybe_licenses = if manifest.options.allow.licenses.is_empty() {
+            None
+        } else {
+            Some(manifest.options.allow.licenses.clone())
+        };
 
         for (install_id, manifest_descriptor) in manifest.install.iter() {
             let resolved_descriptor = PackageDescriptor {
@@ -399,6 +405,19 @@ impl LockedManifestCatalog {
                 derivation: None,
                 version: manifest_descriptor.version.clone(),
                 allow_pre_releases: manifest.options.semver.allow_pre_releases,
+                allow_broken: manifest.options.allow.broken,
+                allow_unfree: manifest.options.allow.unfree,
+                allowed_licenses: maybe_licenses.clone(),
+                systems: manifest_descriptor
+                    .systems
+                    .clone()
+                    .unwrap_or(manifest_systems.clone())
+                    .into_iter()
+                    .map(|s| {
+                        SystemEnum::from_str(s.as_ref())
+                            .map_err(|_| LockedManifestError::UnrecognizedSystem(s.clone()))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
             };
 
             let group = manifest_descriptor
@@ -440,7 +459,7 @@ impl LockedManifestCatalog {
             }
         }
 
-        map.into_values()
+        Ok(map.into_values())
     }
 
     /// Eliminate groups that are already fully locked
@@ -490,44 +509,46 @@ impl LockedManifestCatalog {
         manifest: &'manifest TypedManifestCatalog,
         groups: impl IntoIterator<Item = ResolvedPackageGroup> + 'manifest,
     ) -> Result<impl Iterator<Item = LockedPackageCatalog> + 'manifest, LockedManifestError> {
-        // For each group, extract the first page and its system.
-        // Error if the first page doesn't contain any packages.
-        let first_pages: Vec<(Vec<PackageResolutionInfo>, String)> = groups
+        Ok(groups
             .into_iter()
-            .map(|mut group| {
-                group
-                    .pages
-                    .first_mut()
-                    .and_then(|page| {
-                        std::mem::take(&mut page.packages)
-                            .map(|packages| (packages, group.system.clone()))
-                    })
-                    .ok_or_else(|| {
-                        LockedManifestError::NoPackagesOnFirstPage(group.name, group.system)
-                    })
+            .map(|group| {
+                if let Some(page) = group.page {
+                    if !page.complete {
+                        return Err(LockedManifestError::ResolutionFailed(
+                            "page wasn't complete".into(),
+                        ));
+                    }
+                    if let Some(pkgs) = page.packages {
+                        Ok(pkgs)
+                    } else {
+                        Err(LockedManifestError::EmptyPage)
+                    }
+                } else {
+                    Err(LockedManifestError::ResolutionFailed(
+                        "package group had no page".into(),
+                    ))
+                }
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flat_map(|p| p.into_iter())
+            .filter_map(|resolved_pkg| {
+                let Some(descriptor) = manifest.install.get(&resolved_pkg.install_id).cloned()
+                else {
+                    debug!(
+                        "Package {} is not in the manifest, skipping",
+                        resolved_pkg.install_id
+                    );
+                    return None;
+                };
 
-        // Flatten packages from all the groups into a single iterator
-        let infos = first_pages.into_iter().flat_map(|(packages, system)| {
-            packages
-                .into_iter()
-                .map(move |package| (package, system.clone()))
-        });
-
-        Ok(infos.filter_map(|(package, system)| {
-            let Some(descriptor) = manifest.install.get(&package.install_id).cloned() else {
-                debug!(
-                    "Package {} is not in the manifest, skipping",
-                    package.install_id
-                );
-                return None;
-            };
-
-            Some(LockedPackageCatalog::from_parts(
-                package, descriptor, system,
-            ))
-        }))
+                let system = resolved_pkg.system.to_string();
+                Some(LockedPackageCatalog::from_parts(
+                    resolved_pkg,
+                    descriptor,
+                    system,
+                ))
+            }))
     }
 
     /// Filter out packages from the locked manifest by install_id or group
@@ -760,7 +781,7 @@ impl LockedPackagePkgdb {
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct PackageInfo {
     pub description: Option<String>,
-    pub broken: bool,
+    pub broken: Option<bool>,
     pub license: Option<String>,
     pub pname: String,
     pub unfree: Option<bool>,
@@ -850,6 +871,12 @@ pub enum LockedManifestError {
     SerializeGlobalLockfile(#[source] serde_json::Error),
     #[error("could not write global lockfile")]
     WriteGlobalLockfile(#[source] std::io::Error),
+    #[error("unrecognized system type: {0}")]
+    UnrecognizedSystem(String),
+    #[error("resolution failed: {0}")]
+    ResolutionFailed(String),
+    #[error("catalog page was empty")]
+    EmptyPage,
 
     #[error("Catalog lockfile does not support update")]
     UnsupportedLockfileForUpdate,
@@ -996,6 +1023,15 @@ pub(crate) mod tests {
                 derivation: None,
                 version: None,
                 allow_pre_releases: None,
+                allow_broken: None,
+                allow_unfree: None,
+                allowed_licenses: None,
+                systems: vec![
+                    SystemEnum::Aarch64Darwin,
+                    SystemEnum::Aarch64Linux,
+                    SystemEnum::X8664Darwin,
+                    SystemEnum::X8664Linux,
+                ],
             }],
         }]
     });
