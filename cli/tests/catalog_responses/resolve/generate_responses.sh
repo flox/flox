@@ -33,7 +33,7 @@ while read -r filename; read -a args; do
   fi
 
   export _FLOX_CATALOG_DUMP_RESPONSE_FILE="$PWD/$filename"
-  rm -f -- "$filename"
+  rm -f -- "$PWD/$filename"
 
   mkdir tmp
   pushd tmp
@@ -42,9 +42,9 @@ while read -r filename; read -a args; do
   # TODO: should be able to drop this once we default to all systems
   flox list -c |
     tomlq --toml-output '.options.systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]' |
-    flox edit -f -
+    flox edit  -f -
 
-  if flox install "${args[@]}"; then
+  if flox install -vvv "${args[@]}"; then
     rc=0
   else
     rc="$?"

@@ -169,8 +169,9 @@ impl CatalogClient {
     }
 
     fn write_dump_file(json: Value, file: File, path: impl AsRef<Path>) {
-        let contents =
-            serde_json::to_string_pretty(&json).expect("couldn't serialize responses to json");
+        let contents = serde_json::to_string_pretty(&json)
+            .expect("couldn't serialize responses to json")
+            + "\n";
         tracing::debug!(
             path = traceable_path(&path),
             "writing response to dumped response file"
