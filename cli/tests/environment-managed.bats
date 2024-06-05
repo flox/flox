@@ -157,6 +157,8 @@ EOF
   TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
 
   cat << "EOF" >> "$TMP_MANIFEST_PATH"
+version = 1
+
 [install]
 hello = {}
 EOF
