@@ -95,7 +95,8 @@ dot_flox_exists() {
   assert_success
   assert_output ""
 
-  run "$FLOX_BIN" install hello
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+    run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "environment '$OWNER/project-managed-${BATS_TEST_NUMBER}'" # managed env output
 
@@ -121,7 +122,8 @@ dot_flox_exists() {
 # bats test_tags=uninstall,managed
 @test "catalog: m2: uninstall a package from a managed environment" {
   make_empty_remote_env
-  "$FLOX_BIN" install hello
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+    "$FLOX_BIN" install hello
 
   run "$FLOX_BIN" uninstall hello
   assert_success
@@ -159,7 +161,8 @@ EOF
 hello = {}
 EOF
 
-  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+    run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
   assert_output --partial "✅ Environment successfully updated."
 }
@@ -201,7 +204,8 @@ EOF
   export FLOX_DATA_DIR="$(pwd)/a_data"
   pushd a > /dev/null || return
   "$FLOX_BIN" init
-  "$FLOX_BIN" install hello
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+    "$FLOX_BIN" install hello
   "$FLOX_BIN" push --owner "$OWNER"
   popd > /dev/null || return
 
@@ -273,7 +277,8 @@ EOF
   export FLOX_DATA_DIR="$(pwd)/b_data"
   pushd b > /dev/null || return
   "$FLOX_BIN" pull --remote "$OWNER/a"
-  "$FLOX_BIN" install hello
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+    "$FLOX_BIN" install hello
   "$FLOX_BIN" push --owner "$OWNER"
   popd > /dev/null || return
 
@@ -352,7 +357,8 @@ EOF
   export FLOX_DATA_DIR="$(pwd)/b_data"
   pushd b > /dev/null || return
   "$FLOX_BIN" pull --remote "$OWNER/a"
-  "$FLOX_BIN" install vim
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json" \
+    "$FLOX_BIN" install vim
   "$FLOX_BIN" push --owner "$OWNER"
   popd > /dev/null || return
 
@@ -360,7 +366,8 @@ EOF
   # and check that the package is installed
   export FLOX_DATA_DIR="$(pwd)/a_data"
   pushd a > /dev/null || return
-  run "$FLOX_BIN" install emacs
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json" \
+    run "$FLOX_BIN" install emacs
   # assert that pulling fails
   run "$FLOX_BIN" pull
   assert_failure
@@ -421,11 +428,13 @@ EOF
 
   pushd b > /dev/null || return
   FLOX_DATA_DIR="$(pwd)/b_data" "$FLOX_BIN" pull --remote "$OWNER/a"
-  FLOX_DATA_DIR="$(pwd)/b_data" "$FLOX_BIN" install vim
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json" \
+    FLOX_DATA_DIR="$(pwd)/b_data" "$FLOX_BIN" install vim
   popd > /dev/null || return
 
   pushd a > /dev/null || return
-  FLOX_DATA_DIR="$(pwd)/a_data" "$FLOX_BIN" install emacs
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json" \
+    FLOX_DATA_DIR="$(pwd)/a_data" "$FLOX_BIN" install emacs
   FLOX_DATA_DIR="$(pwd)/a_data" "$FLOX_BIN" push
   popd > /dev/null || return
 
@@ -457,7 +466,8 @@ EOF
 @test "catalog: m8: search works in managed environment" {
   make_empty_remote_env
 
-  run "$FLOX_BIN" search hello
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/search/hello.json" \
+    run "$FLOX_BIN" search hello
   assert_success
 }
 
@@ -481,7 +491,8 @@ EOF
 # bats test_tags=managed,activate,managed:activate
 @test "catalog: m9: activate works in managed environment" {
   make_empty_remote_env
-  "$FLOX_BIN" install hello
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+    "$FLOX_BIN" install hello
 
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
@@ -547,7 +558,8 @@ EOF
 # bats test_tags=managed,delete,managed:fresh-deleted
 @test "catalog: m11: uses fresh branch after delete" {
   make_empty_remote_env
-  "$FLOX_BIN" install vim
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json" \
+    "$FLOX_BIN" install vim
 
   run "$FLOX_BIN" delete
   assert_success
@@ -559,7 +571,8 @@ EOF
   run "$FLOX_BIN" pull --remote "$OWNER/project-managed-${BATS_TEST_NUMBER}"
   assert_success
 
-  "$FLOX_BIN" install emacs
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json" \
+    "$FLOX_BIN" install emacs
   run "$FLOX_BIN" list --name
   assert_output --partial "emacs"
   refute_output "vim"
