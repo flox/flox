@@ -68,7 +68,8 @@ teardown_file() {
   assert_success
   assert_line "hello_install_id: hello (old_version)"
 
-  run "$FLOX_BIN" upgrade -vvv
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello.json" \
+    run "$FLOX_BIN" upgrade -vvv
   assert_success
   assert_output --partial "using catalog client to upgrade"
   assert_output --partial "Upgraded 'hello_install_id'"
