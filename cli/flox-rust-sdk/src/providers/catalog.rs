@@ -1,5 +1,4 @@
 use std::collections::{HashMap, VecDeque};
-use std::convert::Infallible;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::future::ready;
@@ -583,9 +582,8 @@ pub type ApiErrorResponseValue = ResponseValue<ApiErrorResponse>;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct PackageGroup {
-    pub descriptors: Vec<PackageDescriptor>,
     pub name: String,
-    pub system: System,
+    pub descriptors: Vec<PackageDescriptor>,
 }
 
 #[derive(Debug, Error)]

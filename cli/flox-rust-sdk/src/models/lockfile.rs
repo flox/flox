@@ -31,7 +31,6 @@ use crate::providers::catalog::{
     CatalogPage,
     PackageDescriptor,
     PackageGroup,
-    PackageResolutionInfo,
     ResolvedPackageGroup,
 };
 use crate::utils::CommandExt;
@@ -201,7 +200,6 @@ impl LockedPackageCatalog {
     pub fn from_parts(
         package: catalog::PackageResolutionInfo,
         descriptor: ManifestPackageDescriptor,
-        system: System,
     ) -> Self {
         // unpack package to avoid missing new fields
         let catalog::PackageResolutionInfo {
@@ -381,17 +379,14 @@ impl LockedManifestCatalog {
         // Using a btree map to ensure consistent ordering
         let mut map = BTreeMap::new();
 
-        let default_systems = vec![
+        let default_systems = [
             "aarch64-darwin".to_string(),
             "aarch64-linux".to_string(),
             "x86_64-darwin".to_string(),
             "x86_64-linux".to_string(),
         ];
-        let manifest_systems = manifest
-            .options
-            .systems
-            .as_ref()
-            .unwrap_or(&default_systems);
+        let manifest_systems = manifest.options.systems.as_deref();
+
         let maybe_licenses = if manifest.options.allow.licenses.is_empty() {
             None
         } else {
@@ -399,7 +394,7 @@ impl LockedManifestCatalog {
         };
 
         for (install_id, manifest_descriptor) in manifest.install.iter() {
-            let resolved_descriptor = PackageDescriptor {
+            let resolved_descriptor_base = PackageDescriptor {
                 install_id: install_id.clone(),
                 attr_path: manifest_descriptor.pkg_path.clone(),
                 derivation: None,
@@ -408,39 +403,34 @@ impl LockedManifestCatalog {
                 allow_broken: manifest.options.allow.broken,
                 allow_unfree: manifest.options.allow.unfree,
                 allowed_licenses: maybe_licenses.clone(),
-                systems: manifest_descriptor
-                    .systems
-                    .clone()
-                    .unwrap_or(manifest_systems.clone())
-                    .into_iter()
-                    .map(|s| {
-                        SystemEnum::from_str(s.as_ref())
-                            .map_err(|_| LockedManifestError::UnrecognizedSystem(s.clone()))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?,
+                systems: vec![],
             };
 
-            let group = manifest_descriptor
+            let group_name = manifest_descriptor
                 .pkg_group
                 .as_deref()
                 .unwrap_or(DEFAULT_GROUP_NAME);
 
-            let descriptor_systems = manifest_descriptor
-                .systems
-                .as_ref()
-                .unwrap_or(manifest_systems);
-
-            for system in descriptor_systems {
-                let resolved_group = map
-                    .entry((group.to_string(), system.clone()))
+            let resolved_group =
+                map.entry(group_name.to_string())
                     .or_insert_with(|| PackageGroup {
                         descriptors: Vec::new(),
-                        name: group.to_string(),
-                        system: system.clone(),
+                        name: group_name.to_string(),
                     });
 
-                let mut resolved_descriptor = resolved_descriptor.clone();
+            let systems = manifest_descriptor
+                .systems
+                .as_deref()
+                .or(manifest_systems)
+                .unwrap_or(&default_systems)
+                .iter()
+                .map(|s| {
+                    SystemEnum::from_str(s)
+                        .map_err(|_| LockedManifestError::UnrecognizedSystem(s.clone()))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
 
+            for system in systems {
                 // If the package was just added to the manifest, it will be missing in the seed,
                 // which is derived from the _previous_ lockfile.
                 // In this case, the derivation will be None, and the package will be unconstrained.
@@ -453,12 +443,14 @@ impl LockedManifestCatalog {
                     })
                     .map(|(_, locked_package)| locked_package.derivation.clone());
 
+                let mut resolved_descriptor = resolved_descriptor_base.clone();
+
+                resolved_descriptor.systems = vec![system];
                 resolved_descriptor.derivation = locked_derivation;
 
                 resolved_group.descriptors.push(resolved_descriptor);
             }
         }
-
         Ok(map.into_values())
     }
 
@@ -483,12 +475,14 @@ impl LockedManifestCatalog {
         // convert already locked groups back to locked packages
         let already_locked_packages = already_locked_groups
             .iter()
-            .flat_map(|group| {
-                group.descriptors.iter().flat_map(|d| {
-                    seed_locked_packages
-                        .get(&(&d.install_id, &group.system))
-                        .map(|(_, locked)| LockedPackageCatalog::clone(locked))
-                })
+            .flat_map(|group| &group.descriptors)
+            .flat_map(|descriptor| {
+                std::iter::repeat(&descriptor.install_id).zip(&descriptor.systems)
+            })
+            .filter_map(|(install_id, system)| {
+                seed_locked_packages
+                    .get(&(&install_id, &system.to_string()))
+                    .map(|(_, locked_package)| (*locked_package).to_owned())
             })
             .collect::<Vec<_>>();
 
@@ -542,12 +536,7 @@ impl LockedManifestCatalog {
                     return None;
                 };
 
-                let system = resolved_pkg.system.to_string();
-                Some(LockedPackageCatalog::from_parts(
-                    resolved_pkg,
-                    descriptor,
-                    system,
-                ))
+                Some(LockedPackageCatalog::from_parts(resolved_pkg, descriptor))
             }))
     }
 
@@ -999,7 +988,7 @@ pub(crate) mod tests {
           hello_install_id.pkg-group = "group"
 
           [options]
-          systems = ["system"]
+          systems = ["aarch64-darwin"]
         "#}
         .parse()
         .unwrap()
@@ -1016,7 +1005,6 @@ pub(crate) mod tests {
     static TEST_RESOLUTION_PARAMS: Lazy<Vec<PackageGroup>> = Lazy::new(|| {
         vec![PackageGroup {
             name: "group".to_string(),
-            system: "system".to_string(),
             descriptors: vec![PackageDescriptor {
                 install_id: "hello_install_id".to_string(),
                 attr_path: "hello".to_string(),
@@ -1026,35 +1014,30 @@ pub(crate) mod tests {
                 allow_broken: None,
                 allow_unfree: None,
                 allowed_licenses: None,
-                systems: vec![
-                    SystemEnum::Aarch64Darwin,
-                    SystemEnum::Aarch64Linux,
-                    SystemEnum::X8664Darwin,
-                    SystemEnum::X8664Linux,
-                ],
+                systems: vec![SystemEnum::Aarch64Darwin],
             }],
         }]
     });
 
     static TEST_RESOLUTION_RESPONSE: Lazy<Vec<ResolvedPackageGroup>> = Lazy::new(|| {
         vec![ResolvedPackageGroup {
-            system: "system".to_string(),
-            pages: vec![CatalogPage {
+            page: Some(CatalogPage {
+                complete: true,
                 page: 1,
                 url: "url".to_string(),
                 packages: Some(vec![PackageResolutionInfo {
                     attr_path: "hello".to_string(),
-                    broken: false,
+                    broken: Some(false),
                     derivation: "derivation".to_string(),
                     description: Some("description".to_string()),
                     install_id: "hello_install_id".to_string(),
                     license: Some("license".to_string()),
                     locked_url: "locked_url".to_string(),
                     name: "hello".to_string(),
-                    outputs: Some(vec![Output {
+                    outputs: vec![Output {
                         name: "name".to_string(),
                         store_path: "store_path".to_string(),
-                    }]),
+                    }],
                     outputs_to_install: Some(vec!["name".to_string()]),
                     pname: "pname".to_string(),
                     rev: "rev".to_string(),
@@ -1065,11 +1048,12 @@ pub(crate) mod tests {
                     scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
                         .unwrap()
                         .with_timezone(&chrono::offset::Utc),
+                    system: SystemEnum::Aarch64Darwin,
                     stabilities: Some(vec!["stability".to_string()]),
                     unfree: Some(false),
                     version: "version".to_string(),
                 }]),
-            }],
+            }),
             name: "group".to_string(),
         }]
     });
@@ -1080,18 +1064,17 @@ pub(crate) mod tests {
             manifest: TEST_TYPED_MANIFEST.clone(),
             packages: vec![LockedPackageCatalog {
                 attr_path: "hello".to_string(),
-                broken: false,
+                broken: Some(false),
                 derivation: "derivation".to_string(),
                 description: Some("description".to_string()),
                 install_id: "hello_install_id".to_string(),
                 license: Some("license".to_string()),
                 locked_url: "locked_url".to_string(),
                 name: "hello".to_string(),
-                outputs: Some(
-                    vec![("name".to_string(), "store_path".to_string())]
-                        .into_iter()
-                        .collect(),
-                ),
+                outputs: [("name".to_string(), "store_path".to_string())]
+                    .into_iter()
+                    .collect(),
+
                 outputs_to_install: Some(vec!["name".to_string()]),
                 pname: "pname".to_string(),
                 rev: "rev".to_string(),
@@ -1105,7 +1088,7 @@ pub(crate) mod tests {
                 stabilities: Some(vec!["stability".to_string()]),
                 unfree: Some(false),
                 version: "version".to_string(),
-                system: "system".to_string(),
+                system: SystemEnum::Aarch64Darwin.to_string(),
                 group: "group".to_string(),
                 priority: 5,
                 optional: false,
@@ -1122,7 +1105,7 @@ pub(crate) mod tests {
         let descriptor = ManifestPackageDescriptor {
             pkg_path: name.to_string(),
             pkg_group: group.map(|s| s.to_string()),
-            systems: Some(vec!["system".to_string()]),
+            systems: Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
             version: None,
             priority: None,
             optional: false,
@@ -1130,14 +1113,14 @@ pub(crate) mod tests {
 
         let locked = LockedPackageCatalog {
             attr_path: name.to_string(),
-            broken: false,
+            broken: None,
             derivation: "derivation".to_string(),
             description: None,
             install_id: install_id.clone(),
             license: None,
             locked_url: "".to_string(),
             name: name.to_string(),
-            outputs: None,
+            outputs: Default::default(),
             outputs_to_install: None,
             pname: name.to_string(),
             rev: "".to_string(),
@@ -1151,7 +1134,7 @@ pub(crate) mod tests {
             stabilities: None,
             unfree: None,
             version: "".to_string(),
-            system: "system".to_string(),
+            system: SystemEnum::Aarch64Darwin.to_string(),
             group: group.unwrap_or(DEFAULT_GROUP_NAME).to_string(),
             priority: 5,
             optional: false,
@@ -1163,8 +1146,9 @@ pub(crate) mod tests {
     fn make_params_smoke() {
         let manifest = &*TEST_TYPED_MANIFEST;
 
-        let params =
-            LockedManifestCatalog::collect_package_groups(manifest, None).collect::<Vec<_>>();
+        let params = LockedManifestCatalog::collect_package_groups(manifest, None)
+            .unwrap()
+            .collect::<Vec<_>>();
         assert_eq!(&params, &*TEST_RESOLUTION_PARAMS);
     }
 
@@ -1180,55 +1164,63 @@ pub(crate) mod tests {
             emacs.pkg-path = "emacs"
 
             [options]
-            systems = ["system1", "system2"]
+            systems = ["aarch64-darwin", "x86_64-linux"]
         "#};
         let manifest = toml::from_str(manifest_str).unwrap();
 
-        let expected_params = vec![
-            PackageGroup {
-                name: DEFAULT_GROUP_NAME.to_string(),
-                system: "system1".to_string(),
-                descriptors: vec![
-                    PackageDescriptor {
-                        allow_pre_releases: None,
-                        attr_path: "emacs".to_string(),
-                        derivation: None,
-                        install_id: "emacs".to_string(),
-                        version: None,
-                    },
-                    PackageDescriptor {
-                        allow_pre_releases: None,
-                        attr_path: "vim".to_string(),
-                        derivation: None,
-                        install_id: "vim".to_string(),
-                        version: None,
-                    },
-                ],
-            },
-            PackageGroup {
-                name: DEFAULT_GROUP_NAME.to_string(),
-                system: "system2".to_string(),
-                descriptors: vec![
-                    PackageDescriptor {
-                        allow_pre_releases: None,
-                        attr_path: "emacs".to_string(),
-                        derivation: None,
-                        install_id: "emacs".to_string(),
-                        version: None,
-                    },
-                    PackageDescriptor {
-                        allow_pre_releases: None,
-                        attr_path: "vim".to_string(),
-                        derivation: None,
-                        install_id: "vim".to_string(),
-                        version: None,
-                    },
-                ],
-            },
-        ];
+        let expected_params = vec![PackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            descriptors: vec![
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "emacs".to_string(),
+                    derivation: None,
+                    install_id: "emacs".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::Aarch64Darwin],
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "emacs".to_string(),
+                    derivation: None,
+                    install_id: "emacs".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::X8664Linux],
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "vim".to_string(),
+                    derivation: None,
+                    install_id: "vim".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::Aarch64Darwin],
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "vim".to_string(),
+                    derivation: None,
+                    install_id: "vim".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::X8664Linux],
+                },
+            ],
+        }];
 
-        let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
+        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, None)
+            .unwrap()
+            .collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1244,49 +1236,55 @@ pub(crate) mod tests {
             [install]
             vim.pkg-path = "vim"
             emacs.pkg-path = "emacs"
-            emacs.systems = ["system1"]
+            emacs.systems = ["aarch64-darwin" ]
 
             [options]
-            systems = ["system1", "system2"]
+            systems = ["aarch64-darwin", "x86_64-linux"]
         "#};
         let manifest = toml::from_str(manifest_str).unwrap();
 
-        let expected_params = vec![
-            PackageGroup {
-                name: DEFAULT_GROUP_NAME.to_string(),
-                system: "system1".to_string(),
-                descriptors: vec![
-                    PackageDescriptor {
-                        allow_pre_releases: None,
-                        attr_path: "emacs".to_string(),
-                        install_id: "emacs".to_string(),
-                        derivation: None,
-                        version: None,
-                    },
-                    PackageDescriptor {
-                        allow_pre_releases: None,
-                        attr_path: "vim".to_string(),
-                        derivation: None,
-                        install_id: "vim".to_string(),
-                        version: None,
-                    },
-                ],
-            },
-            PackageGroup {
-                name: DEFAULT_GROUP_NAME.to_string(),
-                system: "system2".to_string(),
-                descriptors: vec![PackageDescriptor {
+        let expected_params = vec![PackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            descriptors: vec![
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "emacs".to_string(),
+                    install_id: "emacs".to_string(),
+                    derivation: None,
+                    version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::Aarch64Darwin],
+                },
+                PackageDescriptor {
                     allow_pre_releases: None,
                     attr_path: "vim".to_string(),
                     derivation: None,
                     install_id: "vim".to_string(),
                     version: None,
-                }],
-            },
-        ];
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::Aarch64Darwin],
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "vim".to_string(),
+                    derivation: None,
+                    install_id: "vim".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::X8664Linux],
+                },
+            ],
+        }];
 
-        let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
+        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, None)
+            .unwrap()
+            .collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1301,40 +1299,44 @@ pub(crate) mod tests {
             [install]
             vim.pkg-path = "vim"
             emacs.pkg-path = "emacs"
-            emacs.systems = ["system2"]
+            emacs.systems = ["aarch64-darwin" ]
 
             [options]
-            systems = ["system1",]
+            systems = ["x86_64-linux"]
         "#};
         let manifest = toml::from_str(manifest_str).unwrap();
 
-        let expected_params = vec![
-            PackageGroup {
-                name: DEFAULT_GROUP_NAME.to_string(),
-                system: "system1".to_string(),
-                descriptors: vec![PackageDescriptor {
-                    allow_pre_releases: None,
-                    attr_path: "vim".to_string(),
-                    derivation: None,
-                    install_id: "vim".to_string(),
-                    version: None,
-                }],
-            },
-            PackageGroup {
-                name: DEFAULT_GROUP_NAME.to_string(),
-                system: "system2".to_string(),
-                descriptors: vec![PackageDescriptor {
+        let expected_params = vec![PackageGroup {
+            name: DEFAULT_GROUP_NAME.to_string(),
+            descriptors: vec![
+                PackageDescriptor {
                     allow_pre_releases: None,
                     attr_path: "emacs".to_string(),
                     derivation: None,
                     install_id: "emacs".to_string(),
                     version: None,
-                }],
-            },
-        ];
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::Aarch64Darwin],
+                },
+                PackageDescriptor {
+                    allow_pre_releases: None,
+                    attr_path: "vim".to_string(),
+                    derivation: None,
+                    install_id: "vim".to_string(),
+                    version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::X8664Linux],
+                },
+            ],
+        }];
 
-        let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
+        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, None)
+            .unwrap()
+            .collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1354,7 +1356,7 @@ pub(crate) mod tests {
             emacs.pkg-group = "group2"
 
             [options]
-            systems = ["system"]
+            systems = ["aarch64-darwin"]
         "#};
 
         let manifest = toml::from_str(manifest_str).unwrap();
@@ -1362,30 +1364,37 @@ pub(crate) mod tests {
         let expected_params = vec![
             PackageGroup {
                 name: "group1".to_string(),
-                system: "system".to_string(),
                 descriptors: vec![PackageDescriptor {
                     allow_pre_releases: None,
                     attr_path: "vim".to_string(),
                     derivation: None,
                     install_id: "vim".to_string(),
                     version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::Aarch64Darwin],
                 }],
             },
             PackageGroup {
                 name: "group2".to_string(),
-                system: "system".to_string(),
                 descriptors: vec![PackageDescriptor {
                     allow_pre_releases: None,
                     attr_path: "emacs".to_string(),
                     derivation: None,
                     install_id: "emacs".to_string(),
                     version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::Aarch64Darwin],
                 }],
             },
         ];
 
-        let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, None).collect::<Vec<_>>();
+        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, None)
+            .unwrap()
+            .collect::<Vec<_>>();
 
         assert_eq!(actual_params, expected_params);
     }
@@ -1412,11 +1421,11 @@ pub(crate) mod tests {
         };
 
         let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, Some(seed))
+            .unwrap()
             .collect::<Vec<_>>();
 
         let expected_params = vec![PackageGroup {
             name: "group".to_string(),
-            system: "system".to_string(),
             descriptors: vec![
                 // 'hello' was already locked, so it should have a derivation
                 PackageDescriptor {
@@ -1425,6 +1434,10 @@ pub(crate) mod tests {
                     derivation: Some("derivation".to_string()),
                     install_id: "hello_install_id".to_string(),
                     version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::Aarch64Darwin],
                 },
                 // The unlocked package should not have a derivation
                 PackageDescriptor {
@@ -1433,6 +1446,10 @@ pub(crate) mod tests {
                     derivation: None,
                     install_id: "unlocked".to_string(),
                     version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::Aarch64Darwin],
                 },
             ],
         }];
@@ -1460,6 +1477,7 @@ pub(crate) mod tests {
 
         let actual_params =
             LockedManifestCatalog::collect_package_groups(&manifest_before, Some(&seed))
+                .unwrap()
                 .collect::<Vec<_>>();
 
         // the original derivation should be present and unchanged
@@ -1499,6 +1517,7 @@ pub(crate) mod tests {
 
         let actual_params =
             LockedManifestCatalog::collect_package_groups(&manifest_after, Some(&seed))
+                .unwrap()
                 .collect::<Vec<_>>();
 
         // if the package changed, it should be re-resolved
@@ -1537,6 +1556,7 @@ pub(crate) mod tests {
 
         let actual_params =
             LockedManifestCatalog::collect_package_groups(&manifest_after, Some(&seed))
+                .unwrap()
                 .collect::<Vec<_>>();
 
         assert_eq!(
@@ -1548,23 +1568,23 @@ pub(crate) mod tests {
     #[test]
     fn ungroup_response() {
         let groups = vec![ResolvedPackageGroup {
-            system: "system".to_string(),
-            pages: vec![CatalogPage {
+            page: Some(CatalogPage {
                 page: 1,
+                complete: true,
                 url: "url".to_string(),
                 packages: Some(vec![PackageResolutionInfo {
                     attr_path: "hello".to_string(),
-                    broken: false,
+                    broken: Some(false),
                     derivation: "derivation".to_string(),
                     description: Some("description".to_string()),
                     install_id: "hello_install_id".to_string(),
                     license: Some("license".to_string()),
                     locked_url: "locked_url".to_string(),
                     name: "hello".to_string(),
-                    outputs: Some(vec![Output {
+                    outputs: vec![Output {
                         name: "name".to_string(),
                         store_path: "store_path".to_string(),
-                    }]),
+                    }],
                     outputs_to_install: Some(vec!["name".to_string()]),
                     pname: "pname".to_string(),
                     rev: "rev".to_string(),
@@ -1578,8 +1598,9 @@ pub(crate) mod tests {
                     stabilities: Some(vec!["stability".to_string()]),
                     unfree: Some(false),
                     version: "version".to_string(),
+                    system: SystemEnum::Aarch64Darwin,
                 }]),
-            }],
+            }),
             name: "group".to_string(),
         }];
 
@@ -1594,13 +1615,12 @@ pub(crate) mod tests {
         assert_eq!(
             &locked_packages[0],
             &LockedPackageCatalog::from_parts(
-                groups[0].pages[0].packages.as_ref().unwrap()[0].clone(),
+                groups[0].page.as_ref().unwrap().packages.as_ref().unwrap()[0].clone(),
                 manifest
                     .install
-                    .get(&groups[0].pages[0].packages.as_ref().unwrap()[0].install_id)
+                    .get(&groups[0].page.as_ref().unwrap().packages.as_ref().unwrap()[0].install_id)
                     .unwrap()
                     .clone(),
-                groups[0].system.clone()
             )
         );
     }
@@ -1704,20 +1724,27 @@ pub(crate) mod tests {
             hello_install_id.pkg-path = "hello"
         "#};
         let manifest: TypedManifestCatalog = toml::from_str(manifest_str).unwrap();
-        let package_groups: Vec<_> =
-            LockedManifestCatalog::collect_package_groups(&manifest, None).collect();
+        let package_groups: Vec<_> = LockedManifestCatalog::collect_package_groups(&manifest, None)
+            .unwrap()
+            .collect();
 
-        assert_eq!(package_groups.len(), 4);
+        assert_eq!(package_groups.len(), 1);
+
+        // each system is represented by a separate package descriptor
+        let systems = package_groups[0]
+            .descriptors
+            .iter()
+            .flat_map(|d| d.systems.clone())
+            .collect::<Vec<_>>();
+
         let expected_systems = [
-            "aarch64-darwin".to_string(),
-            "aarch64-linux".to_string(),
-            "x86_64-darwin".to_string(),
-            "x86_64-linux".to_string(),
+            SystemEnum::Aarch64Darwin,
+            SystemEnum::Aarch64Linux,
+            SystemEnum::X8664Darwin,
+            SystemEnum::X8664Linux,
         ];
 
-        for group in package_groups {
-            assert!(expected_systems.contains(&group.system))
-        }
+        assert_eq!(&*systems, expected_systems.as_slice());
     }
 
     #[test]
@@ -1743,7 +1770,8 @@ pub(crate) mod tests {
             packages: vec![foo_locked.clone(), bar_locked.clone(), baz_locked.clone()],
         };
 
-        let groups = LockedManifestCatalog::collect_package_groups(&manifest, Some(&locked));
+        let groups =
+            LockedManifestCatalog::collect_package_groups(&manifest, Some(&locked)).unwrap();
 
         let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
             LockedManifestCatalog::split_fully_locked_groups(groups, Some(&locked));
@@ -1754,7 +1782,6 @@ pub(crate) mod tests {
         // Only one package of group2 is locked, so it should be in to_resolve as a group
         assert_eq!(to_resolve, vec![PackageGroup {
             name: "group2".to_string(),
-            system: "system".to_string(),
             descriptors: vec![
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -1762,6 +1789,10 @@ pub(crate) mod tests {
                     derivation: Some(baz_locked.derivation.clone()),
                     install_id: baz_iid,
                     version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::Aarch64Darwin,],
                 },
                 PackageDescriptor {
                     allow_pre_releases: None,
@@ -1769,6 +1800,10 @@ pub(crate) mod tests {
                     derivation: None,
                     install_id: yeet_iid,
                     version: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![SystemEnum::Aarch64Darwin,],
                 }
             ],
         }]);
