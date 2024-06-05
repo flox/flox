@@ -160,7 +160,7 @@ EOF
 version = 1
 
 [install]
-hello = {}
+hello.pkg-path = "hello"
 EOF
 
   _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
