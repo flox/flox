@@ -163,7 +163,7 @@
           "ParallelLoops"
         ],
         "system": "aarch64-darwin",
-        "version": "perl5.38.2-Parallel-Loops-0.10"
+        "version": "perl5.38.2-Parallel-Loops-0.12"
       },
       {
         "description": "Maven Hello World",
@@ -211,7 +211,7 @@
           "ParallelLoops"
         ],
         "system": "aarch64-darwin",
-        "version": "perl5.38.2-Parallel-Loops-0.12"
+        "version": "perl5.38.2-Parallel-Loops-0.10"
       },
       {
         "description": "Execute loops using parallel forked subprocesses",

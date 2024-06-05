@@ -10,7 +10,7 @@
         "relPath": [
           "hello"
         ],
-        "system": "x86_64-linux",
+        "system": "aarch64-linux",
         "version": "2.12.1"
       },
       {
