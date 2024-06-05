@@ -15,6 +15,7 @@ expect_after {
   "*\n" { exp_continue }
   "*\r" { exp_continue }
 }
+# this is only output for interactive activations
 expect "Preparing environment"
 
 # check for hello

@@ -207,7 +207,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:path,activate:path:bash
-@test "bash: activate puts package in path" {
+@test "bash: interactive activate puts package in path" {
   export FLOX_FEATURES_USE_CATALOG=false
   project_setup
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -219,7 +219,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:bash
-@test "catalog: bash: activate puts package in path" {
+@test "catalog: bash: interactive activate puts package in path" {
   project_setup
   export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -231,7 +231,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:fish
-@test "fish: activate puts package in path" {
+@test "fish: interactive activate puts package in path" {
   export FLOX_FEATURES_USE_CATALOG=false
   project_setup
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -243,7 +243,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:fish
-@test "catalog: fish: activate puts package in path" {
+@test "catalog: fish: interactive activate puts package in path" {
   project_setup
   export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -255,7 +255,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:tcsh
-@test "tcsh: activate puts package in path" {
+@test "tcsh: interactive activate puts package in path" {
   export FLOX_FEATURES_USE_CATALOG=false
   project_setup
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -267,7 +267,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:tcsh
-@test "catalog: tcsh: activate puts package in path" {
+@test "catalog: tcsh: interactive activate puts package in path" {
   project_setup
   export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -279,7 +279,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:zsh
-@test "zsh: activate puts package in path" {
+@test "zsh: interactive activate puts package in path" {
   export FLOX_FEATURES_USE_CATALOG=false
   project_setup
   export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
@@ -295,7 +295,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:zsh
-@test "catalog: zsh: activate puts package in path" {
+@test "catalog: zsh: interactive activate puts package in path" {
   project_setup
   export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
