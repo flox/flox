@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::future::ready;
@@ -14,7 +14,6 @@ use catalog_api_v1::types::{
     self as api_types,
     error as api_error,
     ErrorResponse,
-    MessageLevel,
     PackageInfoApi,
     PackageInfoCommon,
 };
