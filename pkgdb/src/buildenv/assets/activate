@@ -227,7 +227,7 @@ if [ $# -gt 0 ]; then
         export FLOX_ORIG_HOME="$HOME"
         export HOME="$_tcsh_home"
         export FLOX_TCSH_INIT_SCRIPT="$FLOX_ENV/activate.d/tcsh"
-        exec "$_flox_shell" "$@"
+        exec "$_flox_shell" -m "$@"
       fi
       ;;
     *zsh)
@@ -285,7 +285,9 @@ if [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
         export FLOX_ORIG_HOME="$HOME"
         export HOME="$_tcsh_home"
         export FLOX_TCSH_INIT_SCRIPT="$FLOX_ENV/activate.d/tcsh"
-        exec "$_flox_shell" -v
+        # The -m option is required for tcsh to source a .tcshrc file that
+        # the effective user does not own.
+        exec "$_flox_shell" -m
       fi
       ;;
     *zsh)
