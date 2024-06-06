@@ -5,6 +5,7 @@ use anyhow::{anyhow, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::PackageToInstall;
+use flox_rust_sdk::utils::traceable_path;
 use indoc::{formatdoc, indoc};
 use semver::VersionReq;
 
@@ -153,13 +154,19 @@ impl Node {
         // satisfies all constraints,
         // but that seems unlikely to be as commonly needed.
         let versions = Self::get_package_json_versions(path)?;
-        let yarn_lock_exists = path.join("yarn.lock").exists();
+        let yarn_lock_path = path.join("yarn.lock");
+        let yarn_lock_exists = yarn_lock_path.exists();
         let yarn_install = match versions {
             None => None,
             Some(ref versions) => {
                 if yarn_lock_exists {
+                    tracing::debug!(path = traceable_path(&yarn_lock_path), "found yarn.lock");
                     Self::try_find_compatible_yarn(flox, versions).await?
                 } else {
+                    tracing::debug!(
+                        path = traceable_path(&yarn_lock_path),
+                        "did not find a yarn.lock at this location"
+                    );
                     None
                 }
             },
@@ -250,8 +257,13 @@ impl Node {
     fn get_package_json_versions(path: &Path) -> Result<Option<PackageJSONVersions>> {
         let package_json = path.join("package.json");
         if !package_json.exists() {
+            tracing::debug!(
+                path = traceable_path(&package_json),
+                "did not find a package.json at this location"
+            );
             return Ok(None);
         }
+        tracing::debug!(path = traceable_path(&package_json), "found a package.json");
         let package_json_contents = fs::read_to_string(package_json)?;
         match serde_json::from_str::<serde_json::Value>(&package_json_contents) {
             // Treat a package.json that can't be parsed as JSON the same as it not existing

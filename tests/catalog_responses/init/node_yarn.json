@@ -2,951 +2,221 @@
   [
     {
       "name": "default",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "nodejs",
-              "broken": false,
-              "derivation": "/nix/store/vhgzvmkg23hfhryqfgxfx9i6wz4ygry8-nodejs-20.12.2.drv",
-              "description": "Event-driven I/O framework for the V8 JavaScript engine",
-              "install_id": "default",
-              "license": "MIT",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "nodejs-20.12.2",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/bzzs4kvjyvjjhs3rj08vqpvvzmfggvbv-nodejs-20.12.2"
-                },
-                {
-                  "name": "libv8",
-                  "store_path": "/nix/store/c56874bxzncqwy58kif6wfnzy017v1sl-nodejs-20.12.2-libv8"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "nodejs",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": null,
-              "unfree": false,
-              "version": "20.12.2"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 537656,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 528952,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 517128,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 507322,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 497708,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 487203,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 466020,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 456418,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 446447,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 437630,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 428801,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 420742,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 410349,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 402830,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 379159,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-darwin"
+      "page": {
+        "complete": true,
+        "packages": [
+          {
+            "attr_path": "nodejs",
+            "broken": false,
+            "derivation": "/nix/store/m27wddw88jlm2lnf5lipsk81wz66zm64-nodejs-20.12.2.drv",
+            "description": "Event-driven I/O framework for the V8 JavaScript engine",
+            "install_id": "default",
+            "license": "MIT",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "nodejs-20.12.2",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/bzzs4kvjyvjjhs3rj08vqpvvzmfggvbv-nodejs-20.12.2"
+              },
+              {
+                "name": "libv8",
+                "store_path": "/nix/store/c56874bxzncqwy58kif6wfnzy017v1sl-nodejs-20.12.2-libv8"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "nodejs",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "20.12.2"
+          }
+        ],
+        "page": 633517,
+        "url": ""
+      }
     }
   ],
   [
     {
       "name": "yarn",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "yarn",
-              "broken": false,
-              "derivation": "/nix/store/q6li8a2yqapkw9lcsvddlcqgjap2fxnj-yarn-1.22.22.drv",
-              "description": "Fast, reliable, and secure dependency management for javascript",
-              "install_id": "yarn",
-              "license": "BSD-2-Clause",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "yarn-1.22.22",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/m2fiyh0393635g5vm804ady3rq0j24l4-yarn-1.22.22"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "yarn",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": null,
-              "unfree": false,
-              "version": "1.22.22"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 583447,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 580425,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 537656,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 528952,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 517128,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 507322,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 497708,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 487203,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 466020,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 456418,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 446447,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 437630,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 428801,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 420742,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 410349,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 402830,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 379159,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-darwin"
+      "page": {
+        "complete": true,
+        "packages": [
+          {
+            "attr_path": "yarn",
+            "broken": false,
+            "derivation": "/nix/store/dlg0dj5q1hq3m7x1p9v6jn92ip5m2ddx-yarn-1.22.22.drv",
+            "description": "Fast, reliable, and secure dependency management for javascript",
+            "install_id": "yarn",
+            "license": "BSD-2-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "yarn-1.22.22",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/m2fiyh0393635g5vm804ady3rq0j24l4-yarn-1.22.22"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "yarn",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "1.22.22"
+          }
+        ],
+        "page": 633517,
+        "url": ""
+      }
     }
   ],
   [
     {
       "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "yarn",
-              "broken": false,
-              "derivation": "/nix/store/q6li8a2yqapkw9lcsvddlcqgjap2fxnj-yarn-1.22.22.drv",
-              "description": "Fast, reliable, and secure dependency management for javascript",
-              "install_id": "yarn",
-              "license": "BSD-2-Clause",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "yarn-1.22.22",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/m2fiyh0393635g5vm804ady3rq0j24l4-yarn-1.22.22"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "yarn",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": null,
-              "unfree": false,
-              "version": "1.22.22"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-darwin"
-    },
-    {
-      "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "yarn",
-              "broken": false,
-              "derivation": "/nix/store/n8pqrvq4f8ddyknxfv06r3w75zd21yxx-yarn-1.22.22.drv",
-              "description": "Fast, reliable, and secure dependency management for javascript",
-              "install_id": "yarn",
-              "license": "BSD-2-Clause",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "yarn-1.22.22",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/n2a5fvvhmh3gm6rljrcm8s9cpr64h0jx-yarn-1.22.22"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "yarn",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": null,
-              "unfree": false,
-              "version": "1.22.22"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-linux"
-    },
-    {
-      "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "yarn",
-              "broken": false,
-              "derivation": "/nix/store/djmdmspnqfna6x4qig6jy3c7rz9bii6q-yarn-1.22.22.drv",
-              "description": "Fast, reliable, and secure dependency management for javascript",
-              "install_id": "yarn",
-              "license": "BSD-2-Clause",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
-              "name": "yarn-1.22.22",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/wsq0sxvj6lcc9d2ias1zc5i5sh7dnsk0-yarn-1.22.22"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "yarn",
-              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
-              "rev_count": 629267,
-              "rev_date": "2024-05-21T12:07:05Z",
-              "scrape_date": "2024-05-22T20:43:04Z",
-              "stabilities": [
-                "staging",
-                "unstable"
-              ],
-              "unfree": false,
-              "version": "1.22.22"
-            }
-          ],
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        }
-      ],
-      "system": "x86_64-darwin"
-    },
-    {
-      "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "yarn",
-              "broken": false,
-              "derivation": "/nix/store/g73n66rgpf76q2c07vsz2im59f66rm7l-yarn-1.22.22.drv",
-              "description": "Fast, reliable, and secure dependency management for javascript",
-              "install_id": "yarn",
-              "license": "BSD-2-Clause",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
-              "name": "yarn-1.22.22",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/zymyy63y8s15rzd138w76qkd2v1m9nf7-yarn-1.22.22"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "yarn",
-              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
-              "rev_count": 629267,
-              "rev_date": "2024-05-21T12:07:05Z",
-              "scrape_date": "2024-05-22T20:43:04Z",
-              "stabilities": [
-                "staging",
-                "unstable"
-              ],
-              "unfree": false,
-              "version": "1.22.22"
-            }
-          ],
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        }
-      ],
-      "system": "x86_64-linux"
+      "page": {
+        "complete": true,
+        "packages": [
+          {
+            "attr_path": "yarn",
+            "broken": false,
+            "derivation": "/nix/store/dlg0dj5q1hq3m7x1p9v6jn92ip5m2ddx-yarn-1.22.22.drv",
+            "description": "Fast, reliable, and secure dependency management for javascript",
+            "install_id": "yarn",
+            "license": "BSD-2-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "yarn-1.22.22",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/m2fiyh0393635g5vm804ady3rq0j24l4-yarn-1.22.22"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "yarn",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "1.22.22"
+          },
+          {
+            "attr_path": "yarn",
+            "broken": false,
+            "derivation": "/nix/store/q4k6wj4h1bw07gvwmx4yvi9p4x5z3x8f-yarn-1.22.22.drv",
+            "description": "Fast, reliable, and secure dependency management for javascript",
+            "install_id": "yarn",
+            "license": "BSD-2-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "yarn-1.22.22",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/n2a5fvvhmh3gm6rljrcm8s9cpr64h0jx-yarn-1.22.22"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "yarn",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "1.22.22"
+          },
+          {
+            "attr_path": "yarn",
+            "broken": false,
+            "derivation": "/nix/store/v8l6763495zxb5dcydfxkd1jd09pydzy-yarn-1.22.22.drv",
+            "description": "Fast, reliable, and secure dependency management for javascript",
+            "install_id": "yarn",
+            "license": "BSD-2-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "yarn-1.22.22",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/dv71jl3sall5a47ak8gksnvcyd4xzry9-yarn-1.22.22"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "yarn",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "1.22.22"
+          },
+          {
+            "attr_path": "yarn",
+            "broken": false,
+            "derivation": "/nix/store/lvwj2ncyhbabfj1092k9vvji44hqk0rp-yarn-1.22.22.drv",
+            "description": "Fast, reliable, and secure dependency management for javascript",
+            "install_id": "yarn",
+            "license": "BSD-2-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "yarn-1.22.22",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/k0d34jsjxzr7mg1c02vvbr616rb1m8nq-yarn-1.22.22"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "yarn",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "1.22.22"
+          }
+        ],
+        "page": 633517,
+        "url": ""
+      }
     }
   ]
 ]

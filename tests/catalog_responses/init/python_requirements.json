@@ -2,1385 +2,183 @@
   [
     {
       "name": "default",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "python3",
-              "broken": false,
-              "derivation": "/nix/store/w3kcq9np5ndk99bjmgjl25h8x35wfc67-python3-3.11.9.drv",
-              "description": "A high-level dynamically-typed programming language",
-              "install_id": "default",
-              "license": "Python-2.0",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "python3-3.11.9",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/0hhzvkw889bsybhqxy12ky4jx6a95p2d-python3-3.11.9"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "python3",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": null,
-              "unfree": false,
-              "version": "3.11.9"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 580425,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 537656,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 528952,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 517128,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 507322,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 497708,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 487203,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 466020,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 456418,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 446447,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 437630,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 428801,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 420742,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 410349,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 379159,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-darwin"
-    }
-  ],
-  [
-    {
-      "name": "default",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "python3",
-              "broken": false,
-              "derivation": "/nix/store/w3kcq9np5ndk99bjmgjl25h8x35wfc67-python3-3.11.9.drv",
-              "description": "A high-level dynamically-typed programming language",
-              "install_id": "default",
-              "license": "Python-2.0",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "python3-3.11.9",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/0hhzvkw889bsybhqxy12ky4jx6a95p2d-python3-3.11.9"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "python3",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": null,
-              "unfree": false,
-              "version": "3.11.9"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 580425,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 537656,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 528952,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 517128,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 507322,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 497708,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 487203,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 466020,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 456418,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 446447,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 437630,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 428801,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 420742,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 410349,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 379159,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-darwin"
+      "page": {
+        "complete": true,
+        "packages": [
+          {
+            "attr_path": "python3",
+            "broken": false,
+            "derivation": "/nix/store/35h4g197khz9nbw9mhg2rgff7x7bpqzr-python3-3.11.9.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "install_id": "default",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "python3-3.11.9",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/0hhzvkw889bsybhqxy12ky4jx6a95p2d-python3-3.11.9"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python3",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "3.11.9"
+          }
+        ],
+        "page": 633517,
+        "url": ""
+      }
     }
   ],
   [
     {
       "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "python3",
-              "broken": false,
-              "derivation": "/nix/store/w3kcq9np5ndk99bjmgjl25h8x35wfc67-python3-3.11.9.drv",
-              "description": "A high-level dynamically-typed programming language",
-              "install_id": "python3",
-              "license": "Python-2.0",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "python3-3.11.9",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/0hhzvkw889bsybhqxy12ky4jx6a95p2d-python3-3.11.9"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "python3",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": null,
-              "unfree": false,
-              "version": "3.11.9"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 580425,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 537656,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 528952,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 517128,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 507322,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 497708,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 487203,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 466020,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 456418,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 446447,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 437630,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 428801,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 420742,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 410349,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 379159,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-darwin"
-    },
-    {
-      "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "python3",
-              "broken": false,
-              "derivation": "/nix/store/8sjcdz05150zjvkh5mbys9cx2fkycd9q-python3-3.11.9.drv",
-              "description": "A high-level dynamically-typed programming language",
-              "install_id": "python3",
-              "license": "Python-2.0",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "python3-3.11.9",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/czlizmr5dmpxi7ysqknxys82776hldgk-python3-3.11.9"
-                },
-                {
-                  "name": "debug",
-                  "store_path": "/nix/store/2idn7bihgcmagk370mpjxjahqg3zza8k-python3-3.11.9-debug"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "python3",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": null,
-              "unfree": false,
-              "version": "3.11.9"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 537656,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 528952,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 517128,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 507322,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 497708,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 487203,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 466020,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 456418,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 446447,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 437630,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 428801,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 420742,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 410349,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 379159,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 282432,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-linux"
-    },
-    {
-      "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "python3",
-              "broken": false,
-              "derivation": "/nix/store/g7lbxixxg0h4wx0fxf9nnz7025d6icxi-python3-3.11.9.drv",
-              "description": "A high-level dynamically-typed programming language",
-              "install_id": "python3",
-              "license": "Python-2.0",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
-              "name": "python3-3.11.9",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/nl5nxkans56iir3s1vg1rpp71h8b6703-python3-3.11.9"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "python3",
-              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
-              "rev_count": 629267,
-              "rev_date": "2024-05-21T12:07:05Z",
-              "scrape_date": "2024-05-22T20:43:04Z",
-              "stabilities": [
-                "staging",
-                "unstable"
-              ],
-              "unfree": false,
-              "version": "3.11.9"
-            }
-          ],
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 537656,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 528952,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 517128,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 507322,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 497708,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 487203,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 466020,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 456418,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 446447,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 437630,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 428801,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 420742,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 410349,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 379159,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 282432,
-          "url": ""
-        }
-      ],
-      "system": "x86_64-darwin"
-    },
-    {
-      "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "python3",
-              "broken": false,
-              "derivation": "/nix/store/mpir7vw5czk0n2z7mfvjq743nwds6gd2-python3-3.11.9.drv",
-              "description": "A high-level dynamically-typed programming language",
-              "install_id": "python3",
-              "license": "Python-2.0",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
-              "name": "python3-3.11.9",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/k3701zl6gmx3la7y4dnflcvf3xfy88kh-python3-3.11.9"
-                },
-                {
-                  "name": "debug",
-                  "store_path": "/nix/store/6wrqkmplhvca233clvg6zgm7k0lj5cmp-python3-3.11.9-debug"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "python3",
-              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
-              "rev_count": 629267,
-              "rev_date": "2024-05-21T12:07:05Z",
-              "scrape_date": "2024-05-22T20:43:04Z",
-              "stabilities": [
-                "staging",
-                "unstable"
-              ],
-              "unfree": false,
-              "version": "3.11.9"
-            }
-          ],
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 537656,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 528952,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 517128,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 507322,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 497708,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 487203,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 466020,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 456418,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 446447,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 437630,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 428801,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 420742,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 410349,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 379159,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 282432,
-          "url": ""
-        }
-      ],
-      "system": "x86_64-linux"
+      "page": {
+        "complete": true,
+        "packages": [
+          {
+            "attr_path": "python3",
+            "broken": false,
+            "derivation": "/nix/store/35h4g197khz9nbw9mhg2rgff7x7bpqzr-python3-3.11.9.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "install_id": "python3",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "python3-3.11.9",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/0hhzvkw889bsybhqxy12ky4jx6a95p2d-python3-3.11.9"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python3",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "3.11.9"
+          },
+          {
+            "attr_path": "python3",
+            "broken": false,
+            "derivation": "/nix/store/gfzzgw8ajzvxk991vs4ks0fxwdhb0r9q-python3-3.11.9.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "install_id": "python3",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "python3-3.11.9",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/czlizmr5dmpxi7ysqknxys82776hldgk-python3-3.11.9"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/2idn7bihgcmagk370mpjxjahqg3zza8k-python3-3.11.9-debug"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python3",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "3.11.9"
+          },
+          {
+            "attr_path": "python3",
+            "broken": false,
+            "derivation": "/nix/store/wmknfzh49h401w95gmcs61zizfyyq6l0-python3-3.11.9.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "install_id": "python3",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "python3-3.11.9",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/6jy28lfjr42adzi10p158aq6m1q9qgs0-python3-3.11.9"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python3",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "3.11.9"
+          },
+          {
+            "attr_path": "python3",
+            "broken": false,
+            "derivation": "/nix/store/xprkyi70sjkbijl5ypmq4i74qv7vmp3g-python3-3.11.9.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "install_id": "python3",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "python3-3.11.9",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/7hnr99nxrd2aw6lghybqdmkckq60j6l9-python3-3.11.9"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/cgkq1k9jzimkd9amyxk2achhf770xj0n-python3-3.11.9-debug"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python3",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "3.11.9"
+          }
+        ],
+        "page": 633517,
+        "url": ""
+      }
     }
   ]
 ]

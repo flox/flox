@@ -2,781 +2,175 @@
   [
     {
       "name": "go",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "go",
-              "broken": false,
-              "derivation": "/nix/store/w5f760zj2pdp4pfg184yp6m0fyyv6sv9-go-1.22.3.drv",
-              "description": "The Go Programming language",
-              "install_id": "go",
-              "license": "BSD-3-Clause",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "go-1.22.3",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/i04a1a6qgxhjw6c0ld2b3x1v815sbxjc-go-1.22.3"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "go",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": null,
-              "unfree": false,
-              "version": "1.22.3"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 580425,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-darwin"
+      "page": {
+        "complete": true,
+        "packages": [
+          {
+            "attr_path": "go",
+            "broken": false,
+            "derivation": "/nix/store/4mci68kiqns6dxsdw24yhzbsfqpqy8y9-go-1.22.3.drv",
+            "description": "The Go Programming language",
+            "install_id": "go",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "go-1.22.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/i04a1a6qgxhjw6c0ld2b3x1v815sbxjc-go-1.22.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "go",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "1.22.3"
+          }
+        ],
+        "page": 633517,
+        "url": ""
+      }
     }
   ],
   [
     {
       "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "go",
-              "broken": false,
-              "derivation": "/nix/store/w5f760zj2pdp4pfg184yp6m0fyyv6sv9-go-1.22.3.drv",
-              "description": "The Go Programming language",
-              "install_id": "go",
-              "license": "BSD-3-Clause",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "go-1.22.3",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/i04a1a6qgxhjw6c0ld2b3x1v815sbxjc-go-1.22.3"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "go",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": null,
-              "unfree": false,
-              "version": "1.22.3"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 580425,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-darwin"
-    },
-    {
-      "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "go",
-              "broken": false,
-              "derivation": "/nix/store/k66yq443kqn43y6jki3aygqshhl3lgvf-go-1.22.3.drv",
-              "description": "The Go Programming language",
-              "install_id": "go",
-              "license": "BSD-3-Clause",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "go-1.22.3",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/d68f2iblysnl0r4qcfdacmdpmvvy86kf-go-1.22.3"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "go",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": null,
-              "unfree": false,
-              "version": "1.22.3"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-linux"
-    },
-    {
-      "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "go",
-              "broken": false,
-              "derivation": "/nix/store/iq7pnr3zrnqzy09ppq95jm0piky9y4iv-go-1.22.2.drv",
-              "description": "The Go Programming language",
-              "install_id": "go",
-              "license": "BSD-3-Clause",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
-              "name": "go-1.22.2",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/9cim6f30wrzdbiaw8wa45kvffns73dgz-go-1.22.2"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "go",
-              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
-              "rev_count": 629267,
-              "rev_date": "2024-05-21T12:07:05Z",
-              "scrape_date": "2024-05-22T20:43:04Z",
-              "stabilities": [
-                "staging",
-                "unstable"
-              ],
-              "unfree": false,
-              "version": "1.22.2"
-            }
-          ],
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        }
-      ],
-      "system": "x86_64-darwin"
-    },
-    {
-      "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "go",
-              "broken": false,
-              "derivation": "/nix/store/icl5s5cv5fvilffimqgbaz828wpv7zcg-go-1.22.2.drv",
-              "description": "The Go Programming language",
-              "install_id": "go",
-              "license": "BSD-3-Clause",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=3eaeaeb6b1e08a016380c279f8846e0bd8808916",
-              "name": "go-1.22.2",
-              "outputs": [
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/6bvndddvxaypc42x6x4ari20gv3vfdgd-go-1.22.2"
-                }
-              ],
-              "outputs_to_install": [
-                "out"
-              ],
-              "pname": "go",
-              "rev": "3eaeaeb6b1e08a016380c279f8846e0bd8808916",
-              "rev_count": 629267,
-              "rev_date": "2024-05-21T12:07:05Z",
-              "scrape_date": "2024-05-22T20:43:04Z",
-              "stabilities": [
-                "staging",
-                "unstable"
-              ],
-              "unfree": false,
-              "version": "1.22.2"
-            }
-          ],
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        }
-      ],
-      "system": "x86_64-linux"
+      "page": {
+        "complete": true,
+        "packages": [
+          {
+            "attr_path": "go",
+            "broken": false,
+            "derivation": "/nix/store/4mci68kiqns6dxsdw24yhzbsfqpqy8y9-go-1.22.3.drv",
+            "description": "The Go Programming language",
+            "install_id": "go",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "go-1.22.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/i04a1a6qgxhjw6c0ld2b3x1v815sbxjc-go-1.22.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "go",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "1.22.3"
+          },
+          {
+            "attr_path": "go",
+            "broken": false,
+            "derivation": "/nix/store/rm64l4l799prb9064mzgi2i52cqdq6pc-go-1.22.3.drv",
+            "description": "The Go Programming language",
+            "install_id": "go",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "go-1.22.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/d68f2iblysnl0r4qcfdacmdpmvvy86kf-go-1.22.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "go",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "1.22.3"
+          },
+          {
+            "attr_path": "go",
+            "broken": false,
+            "derivation": "/nix/store/9yqk7h4gd66kbh18m0kaixfivlznigsp-go-1.22.3.drv",
+            "description": "The Go Programming language",
+            "install_id": "go",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "go-1.22.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/1p6vr83cgyfwm8517jhfmf6lypzhy3q2-go-1.22.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "go",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "1.22.3"
+          },
+          {
+            "attr_path": "go",
+            "broken": false,
+            "derivation": "/nix/store/ysq9wqn66igdfah4jvqhqmj04520glz4-go-1.22.3.drv",
+            "description": "The Go Programming language",
+            "install_id": "go",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "go-1.22.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/00mg4vlhzmm7gi9bd5v5ydjlgrywpc3n-go-1.22.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "go",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "1.22.3"
+          }
+        ],
+        "page": 633517,
+        "url": ""
+      }
     }
   ]
 ]
