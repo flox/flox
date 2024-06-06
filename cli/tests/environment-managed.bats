@@ -273,7 +273,7 @@ EOF
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
-  FLOX_SHELL=bash USER="$REAL_USER" run -0 expect "$TESTS_DIR/activate/hello.exp" "$PROJECT_DIR"
+  FLOX_SHELL=bash USER="$REAL_USER" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "$FLOX_CACHE_DIR/run/owner/.+\..+\..+/bin/hello"
   refute_output "not found"
 }
