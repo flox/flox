@@ -42,7 +42,7 @@ while read -r filename; read -a args; do
   # TODO: should be able to drop this once we default to all systems
   flox list -c |
     tomlq --toml-output '.options.systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]' |
-    flox edit  -f -
+    flox edit -f -
 
   if flox install -vvv "${args[@]}"; then
     rc=0

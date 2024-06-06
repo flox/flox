@@ -525,7 +525,7 @@ impl LockedManifestCatalog {
             })
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
-            .flat_map(|p| p.into_iter())
+            .flatten()
             .filter_map(|resolved_pkg| {
                 let Some(descriptor) = manifest.install.get(&resolved_pkg.install_id).cloned()
                 else {
