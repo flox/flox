@@ -1,6 +1,6 @@
 # Activate a project environment using --dir and check
 # - hello is installed
-# - prompt is set ### XXX how exactly? I don't see it doing this.
+# - prompt is set
 # Assume throughout that the project is named project-\d+
 
 set dir [lindex $argv 0]
@@ -16,8 +16,9 @@ expect_after {
   "*\n" { exp_continue }
   "*\r" { exp_continue }
 }
-# this is only output for interactive activations
-expect "Preparing environment"
+
+# check that prompt is set for interactive shell
+expect {flox \[project-*\]}
 
 # check for hello
 send "command -v hello||which hello||type -P hello || echo not found\n"
