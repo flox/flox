@@ -1008,7 +1008,7 @@ pub mod test_helpers {
 mod tests {
     use std::os::unix::fs::PermissionsExt;
 
-    use catalog_api_v1::types::ResolvedPackageDescriptor;
+    use catalog_api_v1::types::{ResolvedPackageDescriptor, SystemEnum};
     use chrono::{DateTime, Utc};
     use indoc::{formatdoc, indoc};
     use serial_test::serial;
@@ -1263,17 +1263,17 @@ mod tests {
         let mut mock_client = MockClient::new(None::<&str>).unwrap();
         mock_client.push_resolve_response(vec![ResolvedPackageGroup {
             name: DEFAULT_GROUP_NAME.to_string(),
-            pages: vec![CatalogPage {
+            page: Some(CatalogPage {
                 packages: Some(vec![ResolvedPackageDescriptor {
                     attr_path: "foo".to_string(),
-                    broken: false,
+                    broken: Some(false),
                     derivation: "new derivation".to_string(),
                     description: Some("description".to_string()),
                     install_id: foo_iid.clone(),
                     license: None,
                     locked_url: "locked-url".to_string(),
                     name: "foo".to_string(),
-                    outputs: None,
+                    outputs: vec![],
                     outputs_to_install: None,
                     pname: "foo".to_string(),
                     rev: "rev".to_string(),
@@ -1283,11 +1283,12 @@ mod tests {
                     stabilities: None,
                     unfree: None,
                     version: "1.0".to_string(),
+                    system: SystemEnum::Aarch64Darwin,
                 }]),
                 page: 1,
                 url: "url".to_string(),
-            }],
-            system: "system".to_string(),
+                complete: true,
+            }),
         }]);
 
         let (_, upgraded_packages) = env_view

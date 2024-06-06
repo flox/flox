@@ -1,6 +1,6 @@
 [
   {
-    "count": 29228,
+    "count": 29283,
     "results": [
       {
         "description": "A high-level dynamically-typed programming language",
@@ -33,7 +33,7 @@
           "python2"
         ],
         "system": "aarch64-darwin",
-        "version": "python-2.7.18"
+        "version": "python-2.7.18.5"
       },
       {
         "description": "A Python interpreter written in Go",
@@ -66,7 +66,7 @@
           "python38"
         ],
         "system": "aarch64-darwin",
-        "version": "python3-3.8.13"
+        "version": "python3-3.8.18"
       },
       {
         "description": "A high-level dynamically-typed programming language",
@@ -77,7 +77,7 @@
           "python37"
         ],
         "system": "aarch64-darwin",
-        "version": "python3-3.7.15"
+        "version": "python3-3.7.13"
       },
       {
         "description": "A high-level dynamically-typed programming language",
@@ -110,7 +110,7 @@
           "python313"
         ],
         "system": "aarch64-darwin",
-        "version": "python3-3.13.0a5"
+        "version": "python3-3.13.0a6"
       }
     ]
   }

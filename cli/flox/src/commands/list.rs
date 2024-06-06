@@ -156,6 +156,7 @@ impl List {
                 version = version.as_deref().unwrap_or("N/A"),
                 license = license.as_deref().unwrap_or("N/A"),
                 unfree = unfree.map(|u|u.to_string()).as_deref().unwrap_or("N/A"),
+                broken = broken.map(|b|b.to_string()).as_deref().unwrap_or("N/A"),
             };
 
             println!("{message}");

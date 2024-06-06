@@ -2,858 +2,169 @@
   [
     {
       "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "python311Packages.pip",
-              "broken": false,
-              "derivation": "/nix/store/50ws2nza0bcpxll2vcwzrgd74rzqpsdr-python3.11-pip-24.0.drv",
-              "description": "The PyPA recommended tool for installing Python packages",
-              "install_id": "pip",
-              "license": "[ MIT ]",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "python3.11-pip-24.0",
-              "outputs": [
-                {
-                  "name": "man",
-                  "store_path": "/nix/store/9bi6zislfrb49q0h3zafvnfzc8s63ldl-python3.11-pip-24.0-man"
-                },
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/g0cai6fsalwqzgy9l9pjigzql793mblf-python3.11-pip-24.0"
-                },
-                {
-                  "name": "dist",
-                  "store_path": "/nix/store/dchfcj1829kjfbyg65mngcpijrb66nhz-python3.11-pip-24.0-dist"
-                }
-              ],
-              "outputs_to_install": [
-                "out",
-                "man"
-              ],
-              "pname": "pip",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": [
-                "unstable"
-              ],
-              "unfree": false,
-              "version": "python3.11-pip-24.0"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 580425,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 537656,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 528952,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 517128,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 507322,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 497708,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 487203,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 466020,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 456418,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 446447,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-darwin"
-    },
-    {
-      "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "python311Packages.pip",
-              "broken": false,
-              "derivation": "/nix/store/9azmyk1gz84pv1cbll7l246ana084iji-python3.11-pip-24.0.drv",
-              "description": "The PyPA recommended tool for installing Python packages",
-              "install_id": "pip",
-              "license": "[ MIT ]",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "python3.11-pip-24.0",
-              "outputs": [
-                {
-                  "name": "man",
-                  "store_path": "/nix/store/86h9halrn3lyxfcd2cjhfvdwmhnf23ya-python3.11-pip-24.0-man"
-                },
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/hcc1gpq35jag0ywhhmj9iz3xds2invaz-python3.11-pip-24.0"
-                },
-                {
-                  "name": "dist",
-                  "store_path": "/nix/store/wfy2smh06if4fbi0g82szsm9n3bapjc4-python3.11-pip-24.0-dist"
-                }
-              ],
-              "outputs_to_install": [
-                "out",
-                "man"
-              ],
-              "pname": "pip",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": [
-                "unstable"
-              ],
-              "unfree": false,
-              "version": "python3.11-pip-24.0"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 580425,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 537656,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 528952,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 517128,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 507322,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 497708,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 487203,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 466020,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 456418,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 446447,
-          "url": ""
-        }
-      ],
-      "system": "aarch64-linux"
-    },
-    {
-      "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "python311Packages.pip",
-              "broken": false,
-              "derivation": "/nix/store/ja8bg01pfj0vs85n4q892ar9b9n643fw-python3.11-pip-24.0.drv",
-              "description": "The PyPA recommended tool for installing Python packages",
-              "install_id": "pip",
-              "license": "[ MIT ]",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "python3.11-pip-24.0",
-              "outputs": [
-                {
-                  "name": "man",
-                  "store_path": "/nix/store/3hc870dd8d9d6f9f4qpd6f412bh9l29s-python3.11-pip-24.0-man"
-                },
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/5qmy00anjahlh2s2wd0lgs9k46b8dq7r-python3.11-pip-24.0"
-                },
-                {
-                  "name": "dist",
-                  "store_path": "/nix/store/6kqqajbjxfmsps7p28gbnwccab0msws2-python3.11-pip-24.0-dist"
-                }
-              ],
-              "outputs_to_install": [
-                "out",
-                "man"
-              ],
-              "pname": "pip",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": [
-                "unstable"
-              ],
-              "unfree": false,
-              "version": "python3.11-pip-24.0"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 580425,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 537656,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 528952,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 517128,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 507322,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 497708,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 487203,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 466020,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 456418,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 446447,
-          "url": ""
-        }
-      ],
-      "system": "x86_64-darwin"
-    },
-    {
-      "name": "toplevel",
-      "pages": [
-        {
-          "packages": [
-            {
-              "attr_path": "python311Packages.pip",
-              "broken": false,
-              "derivation": "/nix/store/hx9v31iif7xvl4k3ajj75mygc1s9s2y9-python3.11-pip-24.0.drv",
-              "description": "The PyPA recommended tool for installing Python packages",
-              "install_id": "pip",
-              "license": "[ MIT ]",
-              "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
-              "name": "python3.11-pip-24.0",
-              "outputs": [
-                {
-                  "name": "man",
-                  "store_path": "/nix/store/r5ryf9iik910j44y560yfxn7v3fhlymz-python3.11-pip-24.0-man"
-                },
-                {
-                  "name": "out",
-                  "store_path": "/nix/store/xhldz66b9bl8hwyhamx46wyyaklqr235-python3.11-pip-24.0"
-                },
-                {
-                  "name": "dist",
-                  "store_path": "/nix/store/89n30hxg6nbhym0xdgp871rm1kidpmsc-python3.11-pip-24.0-dist"
-                }
-              ],
-              "outputs_to_install": [
-                "out",
-                "man"
-              ],
-              "pname": "pip",
-              "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
-              "rev_count": 630835,
-              "rev_date": "2024-05-24T00:06:08Z",
-              "scrape_date": "2024-05-27T14:10:22Z",
-              "stabilities": [
-                "unstable"
-              ],
-              "unfree": false,
-              "version": "python3.11-pip-24.0"
-            }
-          ],
-          "page": 630835,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 629267,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 628669,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 627788,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 625274,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 624623,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 621993,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 617818,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 615148,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 614481,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 612413,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 611350,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 609462,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 608655,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 604424,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 602673,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 598982,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 596105,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 591063,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 588909,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 585741,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 574351,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 562833,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 550515,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 537656,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 528952,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 517128,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 507322,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 497708,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 487203,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 466020,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 456418,
-          "url": ""
-        },
-        {
-          "packages": null,
-          "page": 446447,
-          "url": ""
-        }
-      ],
-      "system": "x86_64-linux"
+      "page": {
+        "complete": true,
+        "packages": [
+          {
+            "attr_path": "python311Packages.pip",
+            "broken": false,
+            "derivation": "/nix/store/p014l254l7b0va0jklzs8xl7hhcvl4rv-python3.11-pip-24.0.drv",
+            "description": "The PyPA recommended tool for installing Python packages",
+            "install_id": "pip",
+            "license": "[ MIT ]",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "python3.11-pip-24.0",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/9bi6zislfrb49q0h3zafvnfzc8s63ldl-python3.11-pip-24.0-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/g0cai6fsalwqzgy9l9pjigzql793mblf-python3.11-pip-24.0"
+              },
+              {
+                "name": "dist",
+                "store_path": "/nix/store/dchfcj1829kjfbyg65mngcpijrb66nhz-python3.11-pip-24.0-dist"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "pip",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "python3.11-pip-24.0"
+          },
+          {
+            "attr_path": "python311Packages.pip",
+            "broken": false,
+            "derivation": "/nix/store/kzs1rkdv02c8zy8n03r9kya29f2id8kv-python3.11-pip-24.0.drv",
+            "description": "The PyPA recommended tool for installing Python packages",
+            "install_id": "pip",
+            "license": "[ MIT ]",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "python3.11-pip-24.0",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/3hc870dd8d9d6f9f4qpd6f412bh9l29s-python3.11-pip-24.0-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/5qmy00anjahlh2s2wd0lgs9k46b8dq7r-python3.11-pip-24.0"
+              },
+              {
+                "name": "dist",
+                "store_path": "/nix/store/6kqqajbjxfmsps7p28gbnwccab0msws2-python3.11-pip-24.0-dist"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "pip",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "python3.11-pip-24.0"
+          },
+          {
+            "attr_path": "python311Packages.pip",
+            "broken": false,
+            "derivation": "/nix/store/kwvhnp9vk3b7b4czgbr1v70w7g1ax3mx-python3.11-pip-24.0.drv",
+            "description": "The PyPA recommended tool for installing Python packages",
+            "install_id": "pip",
+            "license": "[ MIT ]",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "python3.11-pip-24.0",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/86h9halrn3lyxfcd2cjhfvdwmhnf23ya-python3.11-pip-24.0-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/hcc1gpq35jag0ywhhmj9iz3xds2invaz-python3.11-pip-24.0"
+              },
+              {
+                "name": "dist",
+                "store_path": "/nix/store/wfy2smh06if4fbi0g82szsm9n3bapjc4-python3.11-pip-24.0-dist"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "pip",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "python3.11-pip-24.0"
+          },
+          {
+            "attr_path": "python311Packages.pip",
+            "broken": false,
+            "derivation": "/nix/store/vyis1g8jwz81b5i9d89z6k9ra5iapg80-python3.11-pip-24.0.drv",
+            "description": "The PyPA recommended tool for installing Python packages",
+            "install_id": "pip",
+            "license": "[ MIT ]",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "python3.11-pip-24.0",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/r5ryf9iik910j44y560yfxn7v3fhlymz-python3.11-pip-24.0-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/xhldz66b9bl8hwyhamx46wyyaklqr235-python3.11-pip-24.0"
+              },
+              {
+                "name": "dist",
+                "store_path": "/nix/store/89n30hxg6nbhym0xdgp871rm1kidpmsc-python3.11-pip-24.0-dist"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "pip",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "python3.11-pip-24.0"
+          }
+        ],
+        "page": 633517,
+        "url": ""
+      }
     }
   ]
 ]

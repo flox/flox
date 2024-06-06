@@ -11,7 +11,7 @@
           "python310Packages",
           "flask"
         ],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "python3.10-flask-2.3.3"
       },
       {
@@ -23,7 +23,7 @@
           "python310Packages",
           "flask"
         ],
-        "system": "aarch64-darwin",
+        "system": "aarch64-linux",
         "version": "python3.10-flask-2.2.5"
       },
       {
@@ -35,7 +35,7 @@
           "python310Packages",
           "flask"
         ],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "python3.10-flask-2.2.3"
       },
       {
@@ -47,7 +47,7 @@
           "python310Packages",
           "flask"
         ],
-        "system": "x86_64-darwin",
+        "system": "aarch64-darwin",
         "version": "python3.10-flask-2.2.2"
       },
       {
@@ -71,7 +71,7 @@
           "python310Packages",
           "flask"
         ],
-        "system": "x86_64-linux",
+        "system": "aarch64-darwin",
         "version": "python3.10-Flask-2.1.2"
       }
     ]

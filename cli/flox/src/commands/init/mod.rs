@@ -557,14 +557,17 @@ async fn get_default_package_if_compatible(
                     version,
                     allow_pre_releases: None,
                     derivation: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![flox.system.parse()?],
                 }],
                 name: "default".to_string(),
-                system: flox.system.clone(),
             }])
             .await?;
         let pkg: Option<ProvidedPackage> = resolved_groups
             .first()
-            .and_then(|pkg_group| pkg_group.pages.first())
+            .and_then(|pkg_group| pkg_group.page.as_ref())
             .and_then(|page| page.packages.as_ref())
             .and_then(|pkgs| pkgs.first().cloned())
             .map(|pkg| {
@@ -622,14 +625,17 @@ async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<Provided
                     version: None,
                     allow_pre_releases: None,
                     derivation: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![flox.system.parse()?],
                 }],
                 name: package.to_string(),
-                system: flox.system.clone(),
             }])
             .await?;
         let pkg: Option<ProvidedPackage> = resolved_groups
             .first()
-            .and_then(|pkg_group| pkg_group.pages.first())
+            .and_then(|pkg_group| pkg_group.page.as_ref())
             .and_then(|page| page.packages.as_ref())
             .and_then(|pkgs| pkgs.first().cloned())
             .map(|pkg| {
@@ -695,14 +701,17 @@ async fn try_find_compatible_version(
                     version: Some(version.to_string()),
                     allow_pre_releases: None,
                     derivation: None,
+                    allow_broken: None,
+                    allow_unfree: None,
+                    allowed_licenses: None,
+                    systems: vec![flox.system.parse()?],
                 }],
                 name: pname.to_string(),
-                system: flox.system.clone(),
             }])
             .await?;
         let pkg: Option<ProvidedPackage> = resolved_groups
             .first()
-            .and_then(|pkg_group| pkg_group.pages.first())
+            .and_then(|pkg_group| pkg_group.page.as_ref())
             .and_then(|page| page.packages.as_ref())
             .and_then(|pkgs| pkgs.first().cloned())
             .map(|pkg| {
@@ -791,14 +800,14 @@ mod tests {
     ) -> ResolvedPackageGroup {
         let pkg = PackageResolutionInfo {
             attr_path: pkg_path.to_string(),
-            broken: false,
+            broken: Some(false),
             derivation: String::new(),
             description: None,
             install_id: install_id.to_string(),
             license: None,
             locked_url: String::new(),
             name: String::new(),
-            outputs: None,
+            outputs: vec![],
             outputs_to_install: None,
             pname: String::new(),
             rev: String::new(),
@@ -808,59 +817,17 @@ mod tests {
             stabilities: None,
             unfree: None,
             version: version.to_string(),
+            system: system.parse().unwrap(),
         };
         let page = CatalogPage {
             packages: Some(vec![pkg]),
             page: 0,
             url: String::new(),
+            complete: true,
         };
         ResolvedPackageGroup {
             name: group_name.to_string(),
-            pages: vec![page],
-            system: system.to_string(),
-        }
-    }
-
-    // This function should really be a #[cfg(test)] method on ResolvedPackageGroup,
-    // but you can't import test features across crates
-    #[allow(dead_code)]
-    pub fn push_dummy_package_to_first_page_of_pkg_group(
-        resolved_group: &mut ResolvedPackageGroup,
-        install_id: &str,
-        pkg_path: &str,
-        version: &str,
-    ) {
-        let pkg = PackageResolutionInfo {
-            attr_path: pkg_path.to_string(),
-            broken: false,
-            derivation: String::new(),
-            description: None,
-            install_id: install_id.to_string(),
-            license: None,
-            locked_url: String::new(),
-            name: String::new(),
-            outputs: None,
-            outputs_to_install: None,
-            pname: String::new(),
-            rev: String::new(),
-            rev_count: 0,
-            rev_date: chrono::offset::Utc::now(),
-            scrape_date: chrono::offset::Utc::now(),
-            stabilities: None,
-            unfree: None,
-            version: version.to_string(),
-        };
-        if let Some(page) = resolved_group.pages.first_mut() {
-            let mut pkgs = page.packages.take().unwrap();
-            pkgs.push(pkg);
-            page.packages = Some(pkgs);
-        } else {
-            let page = CatalogPage {
-                packages: Some(vec![pkg]),
-                page: 0,
-                url: String::new(),
-            };
-            resolved_group.pages = vec![page];
+            page: Some(page),
         }
     }
 
