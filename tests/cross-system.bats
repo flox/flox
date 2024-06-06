@@ -127,9 +127,9 @@ teardown() {
   name="created-on-$pull_system"
 
   "$FLOX_BIN" pull "$OWNER/$name" --force
-  # Close fd 3 because of
-  # https://bats-core.readthedocs.io/en/stable/writing-tests.html#file-descriptor-3-read-this-if-bats-hangs
-  run "$FLOX_BIN" activate -- hello 3>&-
+
+  run "$FLOX_BIN" activate -- hello
+
   assert_success
   assert_output --partial "Hello"
 }
@@ -158,9 +158,9 @@ teardown() {
   # With --force, pull will add the current system and try to lock
   export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello.json"
   "$FLOX_BIN" pull "$OWNER/$name" --force
-  # Close fd 3 because of
-  # https://bats-core.readthedocs.io/en/stable/writing-tests.html#file-descriptor-3-read-this-if-bats-hangs
-  run "$FLOX_BIN" activate -- hello 3>&-
+
+  run "$FLOX_BIN" activate -- hello
+
   assert_success
   assert_output --partial "Hello"
 }
