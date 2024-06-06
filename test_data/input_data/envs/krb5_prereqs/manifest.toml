@@ -1,0 +1,26 @@
+version = 1
+
+[install]
+nodejs.pkg-path = "nodejs"
+python3.pkg-path = "python3"
+make.pkg-path = "gnumake"
+
+# darwin only
+clang = { pkg-path = "clang", systems = ["aarch64-darwin", "x86_64-darwin"] }
+cctools = { pkg-path = "darwin.cctools", systems = [
+    "aarch64-darwin",
+], priority = 6 }
+
+# TODO: these are only necessary because of how we handle CPATH in
+# activate
+libcxx = { pkg-path = "libcxx", systems = ["aarch64-darwin", "x86_64-darwin"] }
+libcxxabi = { pkg-path = "libcxxabi", systems = [
+    "aarch64-darwin",
+    "x86_64-darwin",
+] }
+
+# linux only
+gcc = { pkg-path = "gcc", systems = ["aarch64-linux", "x86_64-linux"] }
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]

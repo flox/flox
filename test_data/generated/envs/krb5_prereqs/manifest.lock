@@ -1,0 +1,799 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "cctools": {
+        "pkg-path": "darwin.cctools",
+        "pkg-group": null,
+        "priority": 6,
+        "version": null,
+        "systems": [
+          "aarch64-darwin"
+        ],
+        "optional": false
+      },
+      "clang": {
+        "pkg-path": "clang",
+        "pkg-group": null,
+        "priority": null,
+        "version": null,
+        "systems": [
+          "aarch64-darwin",
+          "x86_64-darwin"
+        ],
+        "optional": false
+      },
+      "gcc": {
+        "pkg-path": "gcc",
+        "pkg-group": null,
+        "priority": null,
+        "version": null,
+        "systems": [
+          "aarch64-linux",
+          "x86_64-linux"
+        ],
+        "optional": false
+      },
+      "libcxx": {
+        "pkg-path": "libcxx",
+        "pkg-group": null,
+        "priority": null,
+        "version": null,
+        "systems": [
+          "aarch64-darwin",
+          "x86_64-darwin"
+        ],
+        "optional": false
+      },
+      "libcxxabi": {
+        "pkg-path": "libcxxabi",
+        "pkg-group": null,
+        "priority": null,
+        "version": null,
+        "systems": [
+          "aarch64-darwin",
+          "x86_64-darwin"
+        ],
+        "optional": false
+      },
+      "make": {
+        "pkg-path": "gnumake",
+        "pkg-group": null,
+        "priority": null,
+        "version": null,
+        "systems": null,
+        "optional": false
+      },
+      "nodejs": {
+        "pkg-path": "nodejs",
+        "pkg-group": null,
+        "priority": null,
+        "version": null,
+        "systems": null,
+        "optional": false
+      },
+      "python3": {
+        "pkg-path": "python3",
+        "pkg-group": null,
+        "priority": null,
+        "version": null,
+        "systems": null,
+        "optional": false
+      }
+    },
+    "vars": {},
+    "hook": {
+      "on-activate": null
+    },
+    "profile": {
+      "common": null,
+      "bash": null,
+      "zsh": null,
+      "fish": null,
+      "tcsh": null
+    },
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-darwin",
+        "x86_64-linux"
+      ],
+      "allow": {
+        "unfree": null,
+        "broken": null,
+        "licenses": []
+      },
+      "semver": {
+        "allow-pre-releases": null
+      }
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "darwin.cctools",
+      "broken": false,
+      "derivation": "/nix/store/kmjs6bxys5b8m9rh1mprb3ms5sai6cai-cctools-llvm-16.0.6-973.0.1.drv",
+      "description": null,
+      "install_id": "cctools",
+      "license": null,
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "cctools-llvm-16.0.6-973.0.1",
+      "pname": "cctools",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "llvm-16.0.6-973.0.1",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "dev": "/nix/store/jhsflylyjbdzissvyq21qxl3yfmja0b3-cctools-llvm-16.0.6-973.0.1-dev",
+        "man": "/nix/store/d5l6h24q68af5kn9s45sawirlwplgm3m-cctools-llvm-16.0.6-973.0.1-man",
+        "out": "/nix/store/5lnqiy12g44klcqlkdgj2dwsfp4sglrl-cctools-llvm-16.0.6-973.0.1"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 6,
+      "optional": false
+    },
+    {
+      "attr_path": "clang",
+      "broken": false,
+      "derivation": "/nix/store/rgnhr1lqsdc3795b9dgizcsvqgjbda75-clang-wrapper-16.0.6.drv",
+      "description": "A C language family frontend for LLVM (wrapper script)",
+      "install_id": "clang",
+      "license": "NCSA",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "clang-wrapper-16.0.6",
+      "pname": "clang",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "wrapper-16.0.6",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/0m04cmy32vs1686pzjqajsh50arbv8m4-clang-wrapper-16.0.6"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "clang",
+      "broken": false,
+      "derivation": "/nix/store/3vvncxcsd3dfhd8j5vw9rd1ksvz98vsi-clang-wrapper-16.0.6.drv",
+      "description": "A C language family frontend for LLVM (wrapper script)",
+      "install_id": "clang",
+      "license": "NCSA",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "clang-wrapper-16.0.6",
+      "pname": "clang",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "wrapper-16.0.6",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/npn1p4f9lcmbwrcgbn4w86i0ann5r8bs-clang-wrapper-16.0.6"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "gcc",
+      "broken": false,
+      "derivation": "/nix/store/71hxpcnlwrrkyr4w8xcbk3ms4hl0yq07-gcc-wrapper-13.2.0.drv",
+      "description": "GNU Compiler Collection, version 13.2.0 (wrapper script)",
+      "install_id": "gcc",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "gcc-wrapper-13.2.0",
+      "pname": "gcc",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "wrapper-13.2.0",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "info": "/nix/store/6rwlwmbfimzzfpqx7k22w5adfrwkm57c-gcc-wrapper-13.2.0-info",
+        "man": "/nix/store/nkww0m25cfjmj9pgyz7k8mr4jkd3zdgg-gcc-wrapper-13.2.0-man",
+        "out": "/nix/store/44di4gvw6lydf0hm9105palmlsdyvq5w-gcc-wrapper-13.2.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "gcc",
+      "broken": false,
+      "derivation": "/nix/store/i29mvflviqa97ac1imcrk1jr88z3a62i-gcc-wrapper-13.2.0.drv",
+      "description": "GNU Compiler Collection, version 13.2.0 (wrapper script)",
+      "install_id": "gcc",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "gcc-wrapper-13.2.0",
+      "pname": "gcc",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "wrapper-13.2.0",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "info": "/nix/store/905bz4yl3r7h71dx9j8cgj8d8cy0qrsh-gcc-wrapper-13.2.0-info",
+        "man": "/nix/store/rbivsp805ajigcka9wjvr9xqaak80i1h-gcc-wrapper-13.2.0-man",
+        "out": "/nix/store/qhpw32pz39y6i30b3vrbw5fw6zv5549f-gcc-wrapper-13.2.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "libcxx",
+      "broken": false,
+      "derivation": "/nix/store/5ix525c54yxpp8ligms4qvdahr56xgxq-libcxx-16.0.6.drv",
+      "description": "C++ standard library",
+      "install_id": "libcxx",
+      "license": "[ MIT, NCSA ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "libcxx-16.0.6",
+      "pname": "libcxx",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "16.0.6",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/rjgv94p1nnj02v0f9r2jpann9x02b4vw-libcxx-16.0.6-dev",
+        "out": "/nix/store/j3yw5w8pbdv4argnmx7i4i0lvglnh7ll-libcxx-16.0.6"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "libcxx",
+      "broken": false,
+      "derivation": "/nix/store/dyxy59n1lymr6jnsnci6srp9c84xf0pr-libcxx-16.0.6.drv",
+      "description": "C++ standard library",
+      "install_id": "libcxx",
+      "license": "[ MIT, NCSA ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "libcxx-16.0.6",
+      "pname": "libcxx",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "16.0.6",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/x00khr8pk9w1qxa629b2crwqiw51p3m5-libcxx-16.0.6-dev",
+        "out": "/nix/store/qa0c9xgq071jh6yldf5rvfx6zmd8ayxf-libcxx-16.0.6"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "libcxxabi",
+      "broken": false,
+      "derivation": "/nix/store/x73qgazqb1zjrgfvsq1745jkfbm2sgab-libcxxabi-16.0.6.drv",
+      "description": "Provides C++ standard library support",
+      "install_id": "libcxxabi",
+      "license": "[ MIT, NCSA ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "libcxxabi-16.0.6",
+      "pname": "libcxxabi",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "16.0.6",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/s6hsrbxn6wfws552x9jbn4agjz71ps3x-libcxxabi-16.0.6-dev",
+        "out": "/nix/store/g9x4r8l8hjk3vfj26k90p3rjc6g8j3i6-libcxxabi-16.0.6"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "libcxxabi",
+      "broken": false,
+      "derivation": "/nix/store/i6bgbgm6qf5jxz9qq9vx23g1j83bcwws-libcxxabi-16.0.6.drv",
+      "description": "Provides C++ standard library support",
+      "install_id": "libcxxabi",
+      "license": "[ MIT, NCSA ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "libcxxabi-16.0.6",
+      "pname": "libcxxabi",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "16.0.6",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/l02nf0095bc5k630lpdxmziqx9szkq28-libcxxabi-16.0.6-dev",
+        "out": "/nix/store/mlkdhgmvzs3fdgvd7m30c9qj5wn5cpzz-libcxxabi-16.0.6"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "gnumake",
+      "broken": false,
+      "derivation": "/nix/store/16cbmxdjn8582fwiria1qva3819lsc0h-gnumake-4.4.1.drv",
+      "description": "A tool to control the generation of non-source files from sources",
+      "install_id": "make",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "gnumake-4.4.1",
+      "pname": "gnumake",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.4.1",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "info": "/nix/store/rp5gi5y0dd2hzww57x7gkya7g2qg6rrq-gnumake-4.4.1-info",
+        "man": "/nix/store/maj11ssnlx9lqd3vfmpfh45l6p5bxvv4-gnumake-4.4.1-man",
+        "out": "/nix/store/b4jbbx01f3n4r97g49jnxw3clf4p1szv-gnumake-4.4.1"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "gnumake",
+      "broken": false,
+      "derivation": "/nix/store/b04ya8zmxb7gcscqx19wp7sdk4rrdyk2-gnumake-4.4.1.drv",
+      "description": "A tool to control the generation of non-source files from sources",
+      "install_id": "make",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "gnumake-4.4.1",
+      "pname": "gnumake",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.4.1",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "debug": "/nix/store/m8zg8w7m00hxjwxwcj1apcra1lh58j50-gnumake-4.4.1-debug",
+        "info": "/nix/store/sk9zc9r371pcpj5hhjck79h8a2i726qv-gnumake-4.4.1-info",
+        "man": "/nix/store/z20ifgpnah4nnls4ylkij1gmrhg6bv10-gnumake-4.4.1-man",
+        "out": "/nix/store/hfyyfn6h7cw2fvdc0jmpfigwi3rp7d2x-gnumake-4.4.1"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "gnumake",
+      "broken": false,
+      "derivation": "/nix/store/rmddxn7mirdr1zdb1mpm1lp5rhsvwd1v-gnumake-4.4.1.drv",
+      "description": "A tool to control the generation of non-source files from sources",
+      "install_id": "make",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "gnumake-4.4.1",
+      "pname": "gnumake",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.4.1",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "info": "/nix/store/4yi8y2v3h62jz3jia5zi60nrxgfbn05w-gnumake-4.4.1-info",
+        "man": "/nix/store/dbd3dygcpky1s2yls12wzy8rsh0dzjbr-gnumake-4.4.1-man",
+        "out": "/nix/store/ry772inn49ra4vmns2vg67bjpqv29j0k-gnumake-4.4.1"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "gnumake",
+      "broken": false,
+      "derivation": "/nix/store/vprcprfykdy1qsn8cj0z2xhrszz37bd3-gnumake-4.4.1.drv",
+      "description": "A tool to control the generation of non-source files from sources",
+      "install_id": "make",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "gnumake-4.4.1",
+      "pname": "gnumake",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "4.4.1",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "debug": "/nix/store/l8523cnr1cn189yzchcq30iml87dr5a4-gnumake-4.4.1-debug",
+        "info": "/nix/store/bnjzmbm99sgviynsqxhz831cc9gvidnl-gnumake-4.4.1-info",
+        "man": "/nix/store/h420v4pzqavirmna1fz0r5cz3nbq65xq-gnumake-4.4.1-man",
+        "out": "/nix/store/0pkbh7939p7npr02ayama32pa389m5p7-gnumake-4.4.1"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "nodejs",
+      "broken": false,
+      "derivation": "/nix/store/3lhxdvwl4cncxznlxd1ydn4hcfrin0hb-nodejs-20.11.1.drv",
+      "description": "Event-driven I/O framework for the V8 JavaScript engine",
+      "install_id": "nodejs",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "nodejs-20.11.1",
+      "pname": "nodejs",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "20.11.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "libv8": "/nix/store/pwmpfpszjs6mdkdkv41kaa54cahzbrrz-nodejs-20.11.1-libv8",
+        "out": "/nix/store/5c0nzhy641v5hqnpb056vvdgg3pl9hgc-nodejs-20.11.1"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "nodejs",
+      "broken": false,
+      "derivation": "/nix/store/whw8n4v21syjc2ks3ymg4rjcmv7j3v6w-nodejs-20.11.1.drv",
+      "description": "Event-driven I/O framework for the V8 JavaScript engine",
+      "install_id": "nodejs",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "nodejs-20.11.1",
+      "pname": "nodejs",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "20.11.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "libv8": "/nix/store/81zv5sg4jj3nygi1x2ls5imbqgdv8s26-nodejs-20.11.1-libv8",
+        "out": "/nix/store/mx6ji5alyrzm731x3nxpah9ag66dak0h-nodejs-20.11.1"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "nodejs",
+      "broken": false,
+      "derivation": "/nix/store/0hza9wf175b9gdxi4m3vxqwa8ajvczqk-nodejs-20.11.1.drv",
+      "description": "Event-driven I/O framework for the V8 JavaScript engine",
+      "install_id": "nodejs",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "nodejs-20.11.1",
+      "pname": "nodejs",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "20.11.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "libv8": "/nix/store/7bvxsgy7sngxsri3njswiv147sm2b5j9-nodejs-20.11.1-libv8",
+        "out": "/nix/store/sx7h48g69jlq5dhxmi3bwyw5qpd9lp9h-nodejs-20.11.1"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "nodejs",
+      "broken": false,
+      "derivation": "/nix/store/bvlnrajf0r9msvyk9ikd5j3cqbxvabnc-nodejs-20.11.1.drv",
+      "description": "Event-driven I/O framework for the V8 JavaScript engine",
+      "install_id": "nodejs",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "nodejs-20.11.1",
+      "pname": "nodejs",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "20.11.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "libv8": "/nix/store/962138s9lrsp96miaqcrl92lzksy638f-nodejs-20.11.1-libv8",
+        "out": "/nix/store/rxpjn1vzbpv0a2i5lx887wka8054gpwj-nodejs-20.11.1"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "python3",
+      "broken": false,
+      "derivation": "/nix/store/z3sz20bn0r3a60h5whxxlbrwm17n9pl6-python3-3.11.8.drv",
+      "description": "A high-level dynamically-typed programming language",
+      "install_id": "python3",
+      "license": "Python-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "python3-3.11.8",
+      "pname": "python3",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.11.8",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/83q23q0drz3xjc0dks7k7hci923kd7s1-python3-3.11.8"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "python3",
+      "broken": false,
+      "derivation": "/nix/store/ifw78hgj1jlmwgbnhkn0p4x2yfjxyayb-python3-3.11.8.drv",
+      "description": "A high-level dynamically-typed programming language",
+      "install_id": "python3",
+      "license": "Python-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "python3-3.11.8",
+      "pname": "python3",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.11.8",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/hvjgqny7q17iszbv9warx8r3mxljj8p7-python3-3.11.8-debug",
+        "out": "/nix/store/xyzvnwgbzxin3ks0qnb8w6c3xqsifalh-python3-3.11.8"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "python3",
+      "broken": false,
+      "derivation": "/nix/store/y5vr6hxd96ii7b3rxnlrlcifpfnwb19v-python3-3.11.8.drv",
+      "description": "A high-level dynamically-typed programming language",
+      "install_id": "python3",
+      "license": "Python-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "python3-3.11.8",
+      "pname": "python3",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.11.8",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/3d6vir7gpf5k179fqdq2ji6lhgpfhxg4-python3-3.11.8"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    },
+    {
+      "attr_path": "python3",
+      "broken": false,
+      "derivation": "/nix/store/kqbwi7q7b4nq8m4xh7m5d08yiijfdvsj-python3-3.11.8.drv",
+      "description": "A high-level dynamically-typed programming language",
+      "install_id": "python3",
+      "license": "Python-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "name": "python3-3.11.8",
+      "pname": "python3",
+      "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+      "rev_count": 598982,
+      "rev_date": "2024-03-19T00:06:43Z",
+      "scrape_date": "2024-04-25T23:28:47Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "3.11.8",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/s85c1c7wzdp7yvlwhkqf28kfbzzq4a18-python3-3.11.8-debug",
+        "out": "/nix/store/3v2ch16fkl50i85n05h5ckss8pxx6836-python3-3.11.8"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5,
+      "optional": false
+    }
+  ]
+}
