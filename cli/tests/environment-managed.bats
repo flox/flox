@@ -482,12 +482,9 @@ EOF
   make_empty_remote_env
   "$FLOX_BIN" install hello
 
-  # TODO: flox will set HOME if it doesn't match the home of the user with
-  # current euid. I'm not sure if we should change that, but for now just set
-  # USER to REAL_USER.
-  FLOX_SHELL=bash USER="$REAL_USER" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
-  assert_output --regexp "$FLOX_CACHE_DIR/run/owner/.+\..+\..+/bin/hello"
-  refute_output "not found"
+  run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- command -v hello
+  assert_success
+  assert_output --regexp "${FLOX_CACHE_DIR}/run/owner/${PROJECT_NAME}\..+/bin/hello"
 }
 
 # bats test_tags=managed,activate,managed:activate
@@ -496,12 +493,9 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
     "$FLOX_BIN" install hello
 
-  # TODO: flox will set HOME if it doesn't match the home of the user with
-  # current euid. I'm not sure if we should change that, but for now just set
-  # USER to REAL_USER.
-  FLOX_SHELL=bash USER="$REAL_USER" run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
-  assert_output --regexp "$FLOX_CACHE_DIR/run/owner/.+\..+\..+/bin/hello"
-  refute_output "not found"
+  run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- command -v hello
+  assert_success
+  assert_output --regexp "${FLOX_CACHE_DIR}/run/owner/${PROJECT_NAME}\..+/bin/hello"
 }
 
 # ---------------------------------------------------------------------------- #
