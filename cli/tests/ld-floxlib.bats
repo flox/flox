@@ -41,14 +41,16 @@ setup_file() {
 
 # Helpers for project based tests.
 
-project_setup() {
+project_setup_common() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-${BATS_TEST_NUMBER?}"
   export PROJECT_NAME="${PROJECT_DIR##*/}"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   cp ./ld-floxlib/* "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
+}
 
+project_setup_pkgdb() {
   # Create environment (verbosely for the logs), specifying a pinned
   # nixpkgs revision, although it has no effect (see below).
   sh -xc "_PKGDB_GA_REGISTRY_REF_OR_REV=${PKGDB_NIXPKGS_REV_OLDER?} \
@@ -65,7 +67,25 @@ project_setup() {
   # so that we can bump the priority of the nix package to avoid a path
   # clash with boost.
   sh -xc "_PKGDB_GA_REGISTRY_REF_OR_REV=${PKGDB_NIXPKGS_REV_OLDER?} \
-    $FLOX_BIN edit -f ./manifest.toml"
+    $FLOX_BIN edit -f ./manifest-pkgdb.toml"
+}
+
+project_setup_catalog() {
+  $FLOX_BIN init
+
+  # Install packages, including boost, curl and libarchive that are
+  # compilation and runtime dependencies of libnixmain.so. Use `flox edit`
+  # so that we can bump the priority of the nix package to avoid a path
+  # clash with boost.
+  #
+  # Mock generated with:
+  #
+  #   FLOX_FEATURES_USE_CATALOG=true \
+  #     _FLOX_CATALOG_DUMP_RESPONSE_FILE=cli/tests/catalog_responses/resolve/ld-floxlib.json \
+  #     flox edit -f cli/tests/ld-floxlib/manifest-catalog.toml
+  #
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/ld-floxlib.json" \
+    $FLOX_BIN edit -f ./manifest-catalog.toml
 }
 
 project_teardown() {
@@ -83,7 +103,7 @@ setup() {
   fi
 
   common_test_setup
-  project_setup
+  project_setup_common
 }
 teardown() {
   project_teardown
@@ -94,6 +114,7 @@ teardown() {
 #
 @test "test ld-floxlib.so on Linux only" {
   export FLOX_FEATURES_USE_CATALOG=false
+  project_setup_pkgdb
 
   # Revision PKGDB_NIXPKGS_REV_OLDER is expected to provide glibc 2.34.
   # Assert that here before going any further.
@@ -129,6 +150,8 @@ teardown() {
 }
 
 @test "catalog: test ld-floxlib.so on Linux only" {
+  project_setup_catalog
+
   # Revision PKGDB_NIXPKGS_REV_OLDER is expected to provide glibc 2.34.
   # Assert that here before going any further.
   run "$FLOX_BIN" list
@@ -151,7 +174,7 @@ teardown() {
     patchelf --remove-rpath ./get-nix-version && \
     LD_FLOXLIB_AUDIT=1 ./get-nix-version'
   assert_success
-  assert_output --partial "testing (Nix) 2.10.3"
+  assert_output --partial "testing (Nix) 2.8.1"
 
   ### Test 3: confirm binary cannot find missing libraries without LD_AUDIT
   # Note run with "run -127" to silence the 127 "Command not found" error code
