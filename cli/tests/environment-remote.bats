@@ -212,7 +212,7 @@ EOF
   make_empty_remote_env
   "$FLOX_BIN" install hello --remote "$OWNER/test"
 
-  run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- bash -c "command -v hello || which hello || type -P hello"
+  run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- command -v hello
   assert_success
   assert_output --partial "$FLOX_CACHE_DIR/remote/owner/test/.flox/run/bin/hello"
 }
@@ -223,7 +223,7 @@ EOF
   make_empty_remote_env
   "$FLOX_BIN" install hello --remote "$OWNER/test"
 
-  run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- bash -c "command -v hello || which hello || type -P hello"
+  run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- command -v hello
   assert_success
   assert_output --partial "$FLOX_CACHE_DIR/remote/owner/test/.flox/run/bin/hello"
 }

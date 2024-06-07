@@ -482,7 +482,7 @@ EOF
   make_empty_remote_env
   "$FLOX_BIN" install hello
 
-  run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- bash -c "command -v hello || which hello || type -P hello"
+  run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- command -v hello
   assert_success
   assert_output --regexp "${FLOX_CACHE_DIR}/run/owner/${PROJECT_NAME}\..+/bin/hello"
 }
@@ -493,7 +493,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
     "$FLOX_BIN" install hello
 
-  run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- bash -c "command -v hello || which hello || type -P hello"
+  run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- command -v hello
   assert_success
   assert_output --regexp "${FLOX_CACHE_DIR}/run/owner/${PROJECT_NAME}\..+/bin/hello"
 }
