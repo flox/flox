@@ -428,6 +428,19 @@ function add_insecure_package() {
   assert_failure
 }
 
+# bats test_tags=pull:l2,pull:l2:c
+@test "catalog: l2.c: flox pull with --remote and --dir pulls into the specified directory" {
+  # dummy environment has no packages to resolve
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+
+  run "$FLOX_BIN" pull --remote owner/name --dir ./inner
+  assert_success
+  assert [ -e "inner/.flox/env.json" ]
+  assert [ -e "inner/.flox/env.lock" ]
+  assert [ $(cat inner/.flox/env.json | jq -r '.name') == "name" ]
+  assert [ $(cat inner/.flox/env.json | jq -r '.owner') == "owner" ]
+}
+
 # ---------------------------------------------------------------------------- #
 
 # ---------------------------------------------------------------------------- #
