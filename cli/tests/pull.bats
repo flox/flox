@@ -107,6 +107,32 @@ function make_incompatible() {
   rm -rf "$PROJECT_DIR/floxmeta"
 }
 
+# catalog manifests by default support all systems.
+# remove additional systems to check handling of missing systems.
+# should be run on an empty environment.
+function remove_extra_systems() {
+  OWNER="$1"
+  shift
+  ENV_NAME="$1"
+  shift
+
+  git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
+  pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
+  git checkout "$ENV_NAME"
+
+  tomlq --in-place --toml-output ".options.systems = [\"$NIX_SYSTEM\"]" 1/env/manifest.toml
+
+  git add .
+  git \
+    -c "user.name=test" \
+    -c "user.email=test@email.address" \
+    commit \
+    -m "remove extra systems"
+  git push
+  popd >/dev/null || return
+  rm -rf "$PROJECT_DIR/floxmeta"
+}
+
 # make the environment with specified owner and name incompatible with the current system
 # by adding a package that fails nix evaluation due to being on an unsupported system.
 function add_incompatible_package() {
@@ -539,6 +565,30 @@ function add_insecure_package() {
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=pull:unsupported:warning
+# An environment that is not compatible with the current ssystem
+# due to the current system missing <system> in `option.systems`
+# AND a package that is indeed not able to be built for the current system
+# should show a warning, but otherwise succeed to pull
+@test "catalog: pull unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
+
+  remove_extra_systems "owner" "name"
+  update_dummy_env "owner" "name"
+  make_incompatible "owner" "name"
+  add_incompatible_package "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name
+  assert_failure
+  assert_line --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
+
+  run "$FLOX_BIN" pull --remote owner/name --force
+  assert_success
+  assert_line --partial "Modified the manifest to include your system but could not build."
+
+  run "$FLOX_BIN" list
+  assert_success
+}
 
 # ---------------------------------------------------------------------------- #
 
