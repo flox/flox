@@ -1760,15 +1760,16 @@ pub(crate) mod tests {
         manifest
             .install
             .insert(baz_iid.clone(), baz_descriptor.clone());
-        manifest
-            .install
-            .insert(yeet_iid.clone(), yeet_descriptor.clone());
 
         let locked = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.clone(), bar_locked.clone(), baz_locked.clone()],
         };
+
+        manifest
+            .install
+            .insert(yeet_iid.clone(), yeet_descriptor.clone());
 
         let groups =
             LockedManifestCatalog::collect_package_groups(&manifest, Some(&locked)).unwrap();
@@ -1807,5 +1808,57 @@ pub(crate) mod tests {
                 }
             ],
         }]);
+    }
+
+    /// When packages are locked for multiple systems,
+    /// locking the same package for fewer packages should drop the extra systems
+    #[test]
+    fn drop_packages_for_removed_systems() {
+        let (foo_iid, foo_descriptor_one_system, foo_locked) = fake_package("foo", Some("group1"));
+
+        // `fake_package` sets the system to [`Aarch64Darwin`]
+        let mut foo_descriptor_two_systems = foo_descriptor_one_system.clone();
+        foo_descriptor_two_systems
+            .systems
+            .as_mut()
+            .unwrap()
+            .push(SystemEnum::Aarch64Linux.to_string());
+        let foo_locked_second_system = LockedPackageCatalog {
+            system: SystemEnum::Aarch64Linux.to_string(),
+            ..foo_locked.clone()
+        };
+
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        manifest
+            .install
+            .insert(foo_iid.clone(), foo_descriptor_two_systems.clone());
+
+        let locked = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone(), foo_locked_second_system.clone()],
+        };
+
+        manifest
+            .install
+            .insert(foo_iid, foo_descriptor_one_system.clone());
+
+        let groups = LockedManifestCatalog::collect_package_groups(&manifest, Some(&locked))
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].descriptors.len(), 1, "Expected only 1 descriptor");
+        assert_eq!(
+            groups[0].descriptors[0].systems,
+            vec![SystemEnum::Aarch64Darwin,],
+            "Expected only the Darwin system to be present, second locked system dropped"
+        );
+
+        let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
+            LockedManifestCatalog::split_fully_locked_groups(groups, Some(&locked));
+
+        assert_eq!(fully_locked, vec![foo_locked]);
+        assert_eq!(to_resolve, vec![]);
     }
 }
