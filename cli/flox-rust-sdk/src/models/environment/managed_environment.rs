@@ -381,7 +381,7 @@ impl Environment for ManagedEnvironment {
             out_link_modified_at: {out_link_modified_at:?}"
         );
 
-        if pointer_lock_modified_at >= out_link_modified_at {
+        if pointer_lock_modified_at >= out_link_modified_at || !self.out_link.exists() {
             self.build(flox)?;
         }
 
