@@ -607,4 +607,30 @@ function add_insecure_package() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=pull:unsupported-package
+# pulling an environment with a package that is not available for the current platform
+# should fail with an error
+@test "catalog: pull environment with package not available for the current platform fails" {
+  update_dummy_env "owner" "name"
+  add_incompatible_package "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name
+
+  assert_failure
+  assert_line --partial "package 'extra' is not available for this system ('$NIX_SYSTEM')"
+}
+
+# bats test_tags=pull:eval-failure
+# pulling an environment with a package that fails to evaluate
+# should fail with an error
+@test "catalog: pull environment with insecure package fails to evaluate" {
+  update_dummy_env "owner" "name"
+  add_insecure_package "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name
+
+  assert_failure
+  assert_line --partial "package 'extra' failed to evaluate:"
+}
+
 # ---------------------------------------------------------------------------- #
