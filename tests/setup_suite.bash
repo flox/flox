@@ -175,7 +175,6 @@ misc_vars_setup() {
 flox_cli_vars_setup() {
   unset FLOX_PROMPT_ENVIRONMENTS _FLOX_ACTIVE_ENVIRONMENTS
   export FLOX_DISABLE_METRICS='true'
-  unset FLOX_FEATURES_USE_CATALOG
   # Unset catalog feature flags
   unset FLOX_FEATURES_USE_CATALOG
   unset _FLOX_USE_CATALOG_MOCK
