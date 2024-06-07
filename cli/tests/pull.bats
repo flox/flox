@@ -462,6 +462,26 @@ function add_insecure_package() {
   assert [ "$LOCKED_BEFORE" != "$LOCKED_AFTER" ]
 }
 
+# bats test_tags=pull:l3,pull:l3:b
+@test "catalog: l3.b: pulling without namespace/environment respects --dir" {
+
+  # dummy environment has no packages to resolve
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+
+  "$FLOX_BIN" pull --remote owner/name --dir ./inner # dummy remote as we are not actually pulling anything
+  LOCKED_BEFORE=$(cat ./inner/.flox/env.lock | jq -r '.rev')
+
+  update_dummy_env "owner" "name"
+
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+    run "$FLOX_BIN" pull --dir ./inner
+  assert_success
+
+  LOCKED_AFTER=$(cat ./inner/.flox/env.lock | jq -r '.rev')
+
+  assert [ "$LOCKED_BEFORE" != "$LOCKED_AFTER" ]
+}
+
 # ---------------------------------------------------------------------------- #
 
 # ---------------------------------------------------------------------------- #
