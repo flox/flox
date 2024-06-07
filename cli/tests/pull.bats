@@ -17,11 +17,11 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-push-${BATS_TEST_NUMBER?}"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" > /dev/null || return
+  pushd "$PROJECT_DIR" >/dev/null || return
 }
 
 project_teardown() {
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -35,9 +35,13 @@ setup() {
   floxhub_setup "owner"
   make_dummy_env "owner" "name"
 
+  export FLOX_FEATURES_USE_CATALOG=true
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+
   export UNSUPPORTED_SYSTEM_PROMPT="The environment you are trying to pull is not yet compatible with your system ($NIX_SYSTEM)."
   export UNSUPPORTED_PACKAGE_PROMPT="The environment you are trying to pull could not be built locally."
 }
+
 teardown() {
   unset _FLOX_FLOXHUB_GIT_URL
   project_teardown
@@ -50,11 +54,11 @@ function make_dummy_env() {
   ENV_NAME="$1"
   shift
 
-  pushd "$(mktemp -d)" > /dev/null || return
+  pushd "$(mktemp -d)" >/dev/null || return
   "$FLOX_BIN" init --name "$ENV_NAME"
   "$FLOX_BIN" push --owner "$OWNER"
   "$FLOX_BIN" delete --force
-  popd > /dev/null || return
+  popd >/dev/null || return
 }
 
 # push an update to floxhub from another peer
@@ -64,7 +68,8 @@ function update_dummy_env() {
   ENV_NAME="$1"
   shift
 
-  "$FLOX_BIN" install gzip --remote "$OWNER/$ENV_NAME"
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+    "$FLOX_BIN" install gzip --remote "$OWNER/$ENV_NAME"
 }
 
 # make the environment with specified owner and name incompatible with the current system
@@ -87,7 +92,7 @@ function make_incompatible() {
   fi
 
   git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
-  pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
+  pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
   git checkout "$ENV_NAME"
   sed -i "s|$NIX_SYSTEM|$init_system|g" 2/env/manifest.toml 2/env/manifest.lock
 
@@ -98,7 +103,7 @@ function make_incompatible() {
     commit \
     -m "make unsupported system"
   git push
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "$PROJECT_DIR/floxmeta"
 }
 
@@ -122,7 +127,7 @@ function add_incompatible_package() {
   fi
 
   git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
-  pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
+  pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
   git checkout "$ENV_NAME"
   tomlq --in-place --toml-output ".install.extra.\"pkg-path\" = $package" 2/env/manifest.toml
   git add .
@@ -132,7 +137,7 @@ function add_incompatible_package() {
     commit \
     -m "make unsupported system"
   git push
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "$PROJECT_DIR/floxmeta"
 }
 
@@ -145,7 +150,7 @@ function add_insecure_package() {
   shift
 
   git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
-  pushd "$PROJECT_DIR/floxmeta" > /dev/null || return
+  pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
   git checkout "$ENV_NAME"
   tomlq --in-place --toml-output '.install.extra."pkg-path" = ["python2"]' 2/env/manifest.toml
   git add .
@@ -155,7 +160,7 @@ function add_insecure_package() {
     commit \
     -m "add failing package"
   git push
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "$PROJECT_DIR/floxmeta"
 }
 
@@ -170,6 +175,8 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l2,pull:l2:a,pull:l4
 @test "l2.a/l4: flox pull accepts a floxhub namespace/environment, creates .flox if it does not exist" {
+  export FLOX_FEATURES_USE_CATALOG=false
+
   run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   assert_success
   assert [ -e ".flox/env.json" ]
@@ -180,6 +187,7 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l2,pull:l2:b
 @test "l2.b: flox pull with --remote fails if an env is already present" {
+  export FLOX_FEATURES_USE_CATALOG=false
 
   "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
 
@@ -192,6 +200,7 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l2,pull:l2:c
 @test "l2.c: flox pull with --remote and --dir pulls into the specified directory" {
+  export FLOX_FEATURES_USE_CATALOG=false
 
   run "$FLOX_BIN" pull --remote owner/name --dir ./inner
   assert_success
@@ -203,6 +212,7 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l3,pull:l3:a
 @test "l3.a: pulling without namespace/environment" {
+  export FLOX_FEATURES_USE_CATALOG=false
 
   "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   LOCKED_BEFORE=$(cat .flox/env.lock | jq -r '.rev')
@@ -219,6 +229,7 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l3,pull:l3:b
 @test "l3.b: pulling without namespace/environment respects --dir" {
+  export FLOX_FEATURES_USE_CATALOG=false
 
   "$FLOX_BIN" pull --remote owner/name --dir ./inner # dummy remote as we are not actually pulling anything
   LOCKED_BEFORE=$(cat ./inner/.flox/env.lock | jq -r '.rev')
@@ -239,6 +250,8 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l6,pull:l6:a
 @test "l6.a: pulling the same remote environment in multiple directories creates unique copies of the environment" {
+
+  export FLOX_FEATURES_USE_CATALOG=false
 
   mkdir first second
 
@@ -278,6 +291,8 @@ function add_insecure_package() {
 # pulling an environment without packages for the current platform
 #should fail with an error
 @test "pull environment inside the same environment without the '--force' flag" {
+  export FLOX_FEATURES_USE_CATALOG=false
+
   update_dummy_env "owner" "name"
 
   run "$FLOX_BIN" pull --remote owner/name
@@ -289,6 +304,8 @@ function add_insecure_package() {
 # bats test_tags=pull:add-system-flag
 # pulling an environment without packages for the current platform
 @test "pull environment inside the same environment with '--force' flag" {
+  export FLOX_FEATURES_USE_CATALOG=false
+
   update_dummy_env "owner" "name"
 
   run "$FLOX_BIN" pull --remote owner/name
@@ -303,6 +320,8 @@ function add_insecure_package() {
 # AND a package that is indeed not able to be built for the current system
 # should show a warning, but otherwise succeed to pull
 @test "pull unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
+  export FLOX_FEATURES_USE_CATALOG=false
+
   update_dummy_env "owner" "name"
 
   make_incompatible "owner" "name"
@@ -321,6 +340,8 @@ function add_insecure_package() {
 # bats test_tags=activate:remote:incompatible
 # activating an incompatible environment should fail gracefully
 @test "activate incompatible environment fails gracefully" {
+  export FLOX_FEATURES_USE_CATALOG=false
+
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
 
@@ -335,6 +356,8 @@ function add_insecure_package() {
 # pulling an environment with a package that is not available for the current platform
 # should fail with an error
 @test "pull environment with package not available for the current platform fails" {
+  export FLOX_FEATURES_USE_CATALOG=false
+
   update_dummy_env "owner" "name"
   add_incompatible_package "owner" "name"
 
@@ -350,6 +373,8 @@ function add_insecure_package() {
 # pulling an environment with a package that fails to evaluate
 # should fail with an error
 @test "pull environment with insecure package fails to evaluate" {
+  export FLOX_FEATURES_USE_CATALOG=false
+
   update_dummy_env "owner" "name"
   add_insecure_package "owner" "name"
 
@@ -364,6 +389,8 @@ function add_insecure_package() {
 # bats test_tags=pull:up-to-date
 # updating an up-to-date environment should return with an info message
 @test "pull up-to-date env returns info message" {
+  export FLOX_FEATURES_USE_CATALOG=false
+
   # pull a fresh environment
   "$FLOX_BIN" pull --remote owner/name
   # pull it again, and expect an info message
@@ -371,3 +398,16 @@ function add_insecure_package() {
   assert_success
   assert_line --partial "already up to date."
 }
+
+# ----------------------------- Catalog Tests -------------------------------- #
+# ---------------------------------------------------------------------------- #
+
+# ---------------------------------------------------------------------------- #
+
+# ---------------------------------------------------------------------------- #
+
+# ---------------------------------------------------------------------------- #
+
+# ---------------------------------------------------------------------------- #
+
+# ---------------------------------------------------------------------------- #
