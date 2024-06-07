@@ -592,6 +592,19 @@ function add_insecure_package() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=activate:remote:incompatible
+# activating an incompatible environment should fail gracefully
+@test "catalog: activate incompatible environment fails gracefully" {
+
+  remove_extra_systems "owner" "name"
+  update_dummy_env "owner" "name"
+  make_incompatible "owner" "name"
+
+  run "$FLOX_BIN" activate --remote owner/name --trust
+  assert_failure
+  assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
+}
+
 # ---------------------------------------------------------------------------- #
 
 # ---------------------------------------------------------------------------- #
