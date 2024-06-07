@@ -1861,4 +1861,62 @@ pub(crate) mod tests {
         assert_eq!(fully_locked, vec![foo_locked]);
         assert_eq!(to_resolve, vec![]);
     }
+
+    /// Adding another system to a package should invalidate the entire group
+    /// such that new systems are resolved with the derivation constraints
+    /// of already installed systems
+    #[test]
+    fn invalidate_group_if_system_added() {
+        let (foo_iid, foo_descriptor_one_system, foo_locked) = fake_package("foo", Some("group1"));
+
+        // `fake_package` sets the system to [`Aarch64Darwin`]
+        let mut foo_descriptor_two_systems = foo_descriptor_one_system.clone();
+        foo_descriptor_two_systems
+            .systems
+            .as_mut()
+            .unwrap()
+            .push(SystemEnum::Aarch64Linux.to_string());
+
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        manifest
+            .install
+            .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
+
+        let locked = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone()],
+        };
+
+        manifest
+            .install
+            .insert(foo_iid, foo_descriptor_two_systems.clone());
+
+        let groups = LockedManifestCatalog::collect_package_groups(&manifest, Some(&locked))
+            .unwrap()
+            .collect::<Vec<_>>();
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(
+            groups[0].descriptors.len(),
+            2,
+            "Expected descriptors for two systems"
+        );
+        assert_eq!(
+            groups[0].descriptors[0].systems,
+            vec![SystemEnum::Aarch64Darwin,],
+            "Expected only the Darwin system to be present, second locked system dropped"
+        );
+        assert_eq!(
+            groups[0].descriptors[1].systems,
+            vec![SystemEnum::Aarch64Linux,],
+            "Expected only the Darwin system to be present, second locked system dropped"
+        );
+
+        let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
+            LockedManifestCatalog::split_fully_locked_groups(groups, Some(&locked));
+
+        assert_eq!(fully_locked, vec![]);
+        assert_eq!(to_resolve.len(), 1);
+    }
 }
