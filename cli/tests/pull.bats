@@ -417,6 +417,17 @@ function add_insecure_package() {
   assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
 }
 
+# bats test_tags=pull:l2,pull:l2:b
+@test "catalog: l2.b: flox pull with --remote fails if an env is already present" {
+  # dummy environment has no packages to resolve
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+
+  "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
+
+  run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
+  assert_failure
+}
+
 # ---------------------------------------------------------------------------- #
 
 # ---------------------------------------------------------------------------- #
