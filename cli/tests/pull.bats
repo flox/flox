@@ -512,6 +512,32 @@ function add_insecure_package() {
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=pull:twice:no-force
+@test "catalog: pull environment inside the same environment without the '--force' flag" {
+  update_dummy_env "owner" "name"
+
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+    run "$FLOX_BIN" pull --remote owner/name
+  assert_success
+
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+    run "$FLOX_BIN" pull --remote owner/name
+  assert_failure
+}
+
+# bats test_tags=pull:twice:force
+@test "catalog: pull environment inside the same environment with '--force' flag" {
+  update_dummy_env "owner" "name"
+
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+    run "$FLOX_BIN" pull --remote owner/name
+  assert_success
+
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+    run "$FLOX_BIN" pull --remote owner/name --force
+  assert_success
+}
+
 # ---------------------------------------------------------------------------- #
 
 # ---------------------------------------------------------------------------- #
