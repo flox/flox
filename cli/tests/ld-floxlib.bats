@@ -90,7 +90,7 @@ project_setup_catalog() {
 
 project_teardown() {
   popd > /dev/null || return
-  # rm -rf "${PROJECT_DIR?}"
+  rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
   unset PROJECT_NAME
 }
