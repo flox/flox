@@ -212,12 +212,9 @@ EOF
   make_empty_remote_env
   "$FLOX_BIN" install hello --remote "$OWNER/test"
 
-  # TODO: flox will set HOME if it doesn't match the home of the user with
-  # current euid. I'm not sure if we should change that, but for now just set
-  # USER to REAL_USER.
-  FLOX_SHELL=bash USER="$REAL_USER" run -0 expect "$TESTS_DIR/activate/remote-hello.exp" "$OWNER/test"
+  run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- bash -c "command -v hello || which hello || type -P hello"
+  assert_success
   assert_output --partial "$FLOX_CACHE_DIR/remote/owner/test/.flox/run/bin/hello"
-  refute_output "not found"
 }
 
 # bats test_tags=remote,activate,remote:activate
@@ -226,12 +223,9 @@ EOF
   make_empty_remote_env
   "$FLOX_BIN" install hello --remote "$OWNER/test"
 
-  # TODO: flox will set HOME if it doesn't match the home of the user with
-  # current euid. I'm not sure if we should change that, but for now just set
-  # USER to REAL_USER.
-  FLOX_SHELL=bash USER="$REAL_USER" run -0 expect "$TESTS_DIR/activate/remote-hello.exp" "$OWNER/test"
+  run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- bash -c "command -v hello || which hello || type -P hello"
+  assert_success
   assert_output --partial "$FLOX_CACHE_DIR/remote/owner/test/.flox/run/bin/hello"
-  refute_output "not found"
 }
 
 # We need to trust the remote environment before we can activate it.
