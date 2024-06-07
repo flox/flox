@@ -482,6 +482,34 @@ function add_insecure_package() {
   assert [ "$LOCKED_BEFORE" != "$LOCKED_AFTER" ]
 }
 
+# bats test_tags=pull:l6,pull:l6:a
+@test "catalog: l6.a: pulling the same remote environment in multiple directories creates unique copies of the environment" {
+  mkdir first second
+
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json" \
+    "$FLOX_BIN" pull --remote owner/name --dir first
+  LOCKED_FIRST_BEFORE=$(cat ./first/.flox/env.lock | jq -r '.rev')
+
+  update_dummy_env "owner" "name"
+  LOCKED_FIRST_AFTER=$(cat ./first/.flox/env.lock | jq -r '.rev')
+
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json" \
+    "$FLOX_BIN" pull --remote owner/name --dir second
+  LOCKED_SECOND=$(cat ./second/.flox/env.lock | jq -r '.rev')
+
+  assert [ "$LOCKED_FIRST_BEFORE" == "$LOCKED_FIRST_AFTER" ]
+  assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_SECOND" ]
+
+  # after pulling first env, its at the rame rev as the second that was pulled after the update
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+    "$FLOX_BIN" pull --dir first
+
+  LOCKED_FIRST_AFTER_PULL=$(cat ./first/.flox/env.lock | jq -r '.rev')
+
+  assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_FIRST_AFTER_PULL" ]
+  assert [ "$LOCKED_FIRST_AFTER_PULL" == "$LOCKED_SECOND" ]
+}
+
 # ---------------------------------------------------------------------------- #
 
 # ---------------------------------------------------------------------------- #
