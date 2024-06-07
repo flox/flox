@@ -156,7 +156,7 @@ teardown() {
   # Assert that here before going any further.
   run "$FLOX_BIN" list
   assert_success
-  assert_output --partial "glibc: glibc (2.34)"
+  assert_output --partial "glibc: glibc (2.34-210)"
   # Also assert the environment's loader points to the expected package.
   run "$FLOX_BIN" activate -- bash -exc 'realpath $FLOX_ENV/lib/ld-linux-*.so.*'
   assert_success
