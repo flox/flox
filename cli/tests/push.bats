@@ -17,13 +17,13 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-push-${BATS_TEST_NUMBER?}"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" > /dev/null || return
+  pushd "$PROJECT_DIR" >/dev/null || return
   export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
 }
 
 project_teardown() {
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -50,13 +50,13 @@ function update_dummy_env() {
 
   FLOXHUB_FLOXMETA_DIR="$BATS_TEST_TMPDIR/floxhub/$OWNER/floxmeta"
 
-  pushd "$FLOXHUB_FLOXMETA_DIR" > /dev/null || return
+  pushd "$FLOXHUB_FLOXMETA_DIR" >/dev/null || return
 
   touch new_file
   git add .
   git commit -m "update"
 
-  popd > /dev/null || return
+  popd >/dev/null || return
 }
 
 # ---------------------------------------------------------------------------- #
@@ -110,13 +110,13 @@ function update_dummy_env() {
   mkdir -p "machine_a"
   mkdir -p "machine_b"
 
-  pushd "machine_a" > /dev/null || return
+  pushd "machine_a" >/dev/null || return
   "$FLOX_BIN" init --name "test"
   "$FLOX_BIN" install hello
   "$FLOX_BIN" push --owner owner
-  popd > /dev/null || return
+  popd >/dev/null || return
 
-  pushd "machine_b" > /dev/null || return
+  pushd "machine_b" >/dev/null || return
   run "$FLOX_BIN" pull --remote owner/test
   assert_success
 
@@ -124,7 +124,7 @@ function update_dummy_env() {
   assert_success
   assert_line "hello"
 
-  popd > /dev/null || return
+  popd >/dev/null || return
 }
 
 # bats test_tags=push:h5
@@ -134,15 +134,15 @@ function update_dummy_env() {
   mkdir -p "machine_b"
 
   # Create an environment owner/test on machine_a and push it to floxhub
-  pushd "machine_a" > /dev/null || return
+  pushd "machine_a" >/dev/null || return
   "$FLOX_BIN" init --name "test"
   "$FLOX_BIN" install vim
   "$FLOX_BIN" push --owner owner
-  popd > /dev/null || return
+  popd >/dev/null || return
 
   # Create an environment owner/test on machine_b and try to push it to floxhub
   # this should fail as an envrioment with the same name but different provenance already exists on floxhub
-  pushd "machine_b" > /dev/null || return
+  pushd "machine_b" >/dev/null || return
   echo "trying to push to the same upstream env" >&3
 
   "$FLOX_BIN" init --name "test"
@@ -151,7 +151,7 @@ function update_dummy_env() {
   run "$FLOX_BIN" push --owner owner
   assert_failure
   assert_output --partial "An environment named owner/test already exists!"
-  popd > /dev/null || return
+  popd >/dev/null || return
 }
 
 # bats test_tags=push:h6
@@ -160,27 +160,27 @@ function update_dummy_env() {
   mkdir -p "machine_a" "machine_b" "machine_c"
 
   # Create an environment owner/test on machine_a and push it to floxhub
-  pushd "machine_a" > /dev/null || return
+  pushd "machine_a" >/dev/null || return
   "$FLOX_BIN" init --name "test"
   "$FLOX_BIN" install vim
   "$FLOX_BIN" push --owner owner
-  popd > /dev/null || return
+  popd >/dev/null || return
 
   # Create an environment owner/test on machine_b and force-push it to floxhub
-  pushd "machine_b" > /dev/null || return
+  pushd "machine_b" >/dev/null || return
   "$FLOX_BIN" init --name "test"
   "$FLOX_BIN" install emacs
   run "$FLOX_BIN" push --owner owner --force
   assert_success
-  popd > /dev/null || return
+  popd >/dev/null || return
 
   # Pull the environment owner/test on machine_c and check that it has the emacs package
-  pushd "machine_c" > /dev/null || return
+  pushd "machine_c" >/dev/null || return
   "$FLOX_BIN" pull --remote owner/test
   run "$FLOX_BIN" list --name
   assert_success
   assert_line "emacs"
-  popd > /dev/null || return
+  popd >/dev/null || return
 }
 
 # ---------------------------------------------------------------------------- #
@@ -188,17 +188,17 @@ function update_dummy_env() {
 
 # bats test_tags=push:h3
 @test "h2: push login: catalog: running flox push creates a remotely managed environment stored in the FloxHub" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
   mkdir -p "machine_a"
   mkdir -p "machine_b"
 
-  pushd "machine_a" > /dev/null || return
+  pushd "machine_a" >/dev/null || return
   "$FLOX_BIN" init --name "test"
   "$FLOX_BIN" install hello
   "$FLOX_BIN" push --owner owner
-  popd > /dev/null || return
+  popd >/dev/null || return
 
-  pushd "machine_b" > /dev/null || return
+  pushd "machine_b" >/dev/null || return
   run "$FLOX_BIN" pull --remote owner/test
   assert_success
 
@@ -206,7 +206,7 @@ function update_dummy_env() {
   assert_success
   assert_line "hello"
 
-  popd > /dev/null || return
+  popd >/dev/null || return
 }
 
 # bats test_tags=push:h5
@@ -215,22 +215,22 @@ function update_dummy_env() {
   mkdir -p "machine_b"
 
   # Create an environment owner/test on machine_a and push it to floxhub
-  pushd "machine_a" > /dev/null || return
+  pushd "machine_a" >/dev/null || return
   "$FLOX_BIN" init --name "test"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json"
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json"
   "$FLOX_BIN" install vim
 
   # Also uses the `vim` resolution since it makes sure the manifest is locked before pushing
   "$FLOX_BIN" push --owner owner
-  popd > /dev/null || return
+  popd >/dev/null || return
 
   # Create an environment owner/test on machine_b and try to push it to floxhub
   # this should fail as an envrioment with the same name but different provenance already exists on floxhub
-  pushd "machine_b" > /dev/null || return
+  pushd "machine_b" >/dev/null || return
   echo "trying to push to the same upstream env" >&3
 
   "$FLOX_BIN" init --name "test"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json"
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json"
   "$FLOX_BIN" install emacs
   # export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
 
@@ -238,7 +238,7 @@ function update_dummy_env() {
   run "$FLOX_BIN" push --owner owner
   assert_failure
   assert_output --partial "An environment named owner/test already exists!"
-  popd > /dev/null || return
+  popd >/dev/null || return
 }
 
 # bats test_tags=push:h6
@@ -246,31 +246,31 @@ function update_dummy_env() {
   mkdir -p "machine_a" "machine_b" "machine_c"
 
   # Create an environment owner/test on machine_a and push it to floxhub
-  pushd "machine_a" > /dev/null || return
+  pushd "machine_a" >/dev/null || return
   "$FLOX_BIN" init --name "test"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json"
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json"
   "$FLOX_BIN" install vim
   # Also uses the `vim` resolution since it makes sure the manifest is locked before pushing
   "$FLOX_BIN" push --owner owner
-  popd > /dev/null || return
+  popd >/dev/null || return
 
   # Create an environment owner/test on machine_b and force-push it to floxhub
-  pushd "machine_b" > /dev/null || return
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  pushd "machine_b" >/dev/null || return
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
   "$FLOX_BIN" init --name "test"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json"
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json"
   "$FLOX_BIN" install emacs
   # Also uses the `emacs` resolution since it makes sure the manifest is locked before pushing
   run "$FLOX_BIN" push --owner owner --force
   assert_success
-  popd > /dev/null || return
+  popd >/dev/null || return
 
   # Pull the environment owner/test on machine_c and check that it has the emacs package
-  pushd "machine_c" > /dev/null || return
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  pushd "machine_c" >/dev/null || return
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
   "$FLOX_BIN" pull --remote owner/test
   run "$FLOX_BIN" list --name
   assert_success
   assert_line "emacs"
-  popd > /dev/null || return
+  popd >/dev/null || return
 }
