@@ -402,6 +402,21 @@ function add_insecure_package() {
 # ----------------------------- Catalog Tests -------------------------------- #
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=pull:l2,pull:l2:a,pull:l4
+@test "catalog: l2.a/l4: flox pull accepts a floxhub namespace/environment, creates .flox if it does not exist" {
+
+  # dummy environment has no packages to resolve
+  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+
+  # dummy remote as we are not actually pulling anything
+  run "$FLOX_BIN" pull --remote owner/name
+  assert_success
+  assert [ -e ".flox/env.json" ]
+  assert [ -e ".flox/env.lock" ]
+  assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
+  assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
+}
+
 # ---------------------------------------------------------------------------- #
 
 # ---------------------------------------------------------------------------- #
