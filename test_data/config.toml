@@ -24,6 +24,10 @@ cmd = "flox install emacs"
 pre_cmd = "flox init"
 cmd = "flox install emacs vim"
 
+[resolve.gzip]
+pre_cmd = "flox init"
+cmd = "flox install gzip"
+
 [resolve.hello]
 pre_cmd = "flox init"
 cmd = "flox install hello"
@@ -79,6 +83,13 @@ cmd = "flox search surely_doesnt_exist || true"
 
 [search.ello_all]
 cmd = "flox search ello --all"
+
+[search.exactly_ten]
+cmd = "flox search python"
+post_cmd = '''
+    cat "$RESPONSE_FILE" | jq '[{"count": 10, "results": .[0].results[:10]}]' > tmp.json
+    mv tmp.json "$RESPONSE_FILE"
+'''
 
 [show.hello]
 cmd = "flox show hello"

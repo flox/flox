@@ -36,7 +36,7 @@ setup() {
   make_dummy_env "owner" "name"
 
   export FLOX_FEATURES_USE_CATALOG=true
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json"
 
   export UNSUPPORTED_SYSTEM_PROMPT="The environment you are trying to pull is not yet compatible with your system ($NIX_SYSTEM)."
   export UNSUPPORTED_PACKAGE_PROMPT="The environment you are trying to pull could not be built locally."
@@ -68,7 +68,7 @@ function update_dummy_env() {
   ENV_NAME="$1"
   shift
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/gzip.json" \
     "$FLOX_BIN" install gzip --remote "$OWNER/$ENV_NAME"
 }
 
@@ -432,7 +432,7 @@ function add_insecure_package() {
 @test "catalog: l2.a/l4: flox pull accepts a floxhub namespace/environment, creates .flox if it does not exist" {
 
   # dummy environment has no packages to resolve
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json"
 
   # dummy remote as we are not actually pulling anything
   run "$FLOX_BIN" pull --remote owner/name
@@ -446,7 +446,7 @@ function add_insecure_package() {
 # bats test_tags=pull:l2,pull:l2:b
 @test "catalog: l2.b: flox pull with --remote fails if an env is already present" {
   # dummy environment has no packages to resolve
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json"
 
   "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
 
@@ -457,7 +457,7 @@ function add_insecure_package() {
 # bats test_tags=pull:l2,pull:l2:c
 @test "catalog: l2.c: flox pull with --remote and --dir pulls into the specified directory" {
   # dummy environment has no packages to resolve
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json"
 
   run "$FLOX_BIN" pull --remote owner/name --dir ./inner
   assert_success
@@ -471,14 +471,14 @@ function add_insecure_package() {
 @test "catalog: l3.a: pulling without namespace/environment" {
 
   # dummy environment has no packages to resolve
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json"
 
   "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   LOCKED_BEFORE=$(cat .flox/env.lock | jq -r '.rev')
 
   update_dummy_env "owner" "name"
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/gzip.json" \
     run "$FLOX_BIN" pull
 
   assert_success
@@ -492,14 +492,14 @@ function add_insecure_package() {
 @test "catalog: l3.b: pulling without namespace/environment respects --dir" {
 
   # dummy environment has no packages to resolve
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json"
 
   "$FLOX_BIN" pull --remote owner/name --dir ./inner # dummy remote as we are not actually pulling anything
   LOCKED_BEFORE=$(cat ./inner/.flox/env.lock | jq -r '.rev')
 
   update_dummy_env "owner" "name"
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/gzip.json" \
     run "$FLOX_BIN" pull --dir ./inner
   assert_success
 
@@ -512,14 +512,14 @@ function add_insecure_package() {
 @test "catalog: l6.a: pulling the same remote environment in multiple directories creates unique copies of the environment" {
   mkdir first second
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json" \
     "$FLOX_BIN" pull --remote owner/name --dir first
   LOCKED_FIRST_BEFORE=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
   update_dummy_env "owner" "name"
   LOCKED_FIRST_AFTER=$(cat ./first/.flox/env.lock | jq -r '.rev')
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json" \
     "$FLOX_BIN" pull --remote owner/name --dir second
   LOCKED_SECOND=$(cat ./second/.flox/env.lock | jq -r '.rev')
 
@@ -527,7 +527,7 @@ function add_insecure_package() {
   assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_SECOND" ]
 
   # after pulling first env, its at the rame rev as the second that was pulled after the update
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/gzip.json" \
     "$FLOX_BIN" pull --dir first
 
   LOCKED_FIRST_AFTER_PULL=$(cat ./first/.flox/env.lock | jq -r '.rev')
@@ -542,11 +542,11 @@ function add_insecure_package() {
 @test "catalog: pull environment inside the same environment without the '--force' flag" {
   update_dummy_env "owner" "name"
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/gzip.json" \
     run "$FLOX_BIN" pull --remote owner/name
   assert_success
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/gzip.json" \
     run "$FLOX_BIN" pull --remote owner/name
   assert_failure
 }
@@ -555,11 +555,11 @@ function add_insecure_package() {
 @test "catalog: pull environment inside the same environment with '--force' flag" {
   update_dummy_env "owner" "name"
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/gzip.json" \
     run "$FLOX_BIN" pull --remote owner/name
   assert_success
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/gzip.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/gzip.json" \
     run "$FLOX_BIN" pull --remote owner/name --force
   assert_success
 }

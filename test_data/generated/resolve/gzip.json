@@ -36,50 +36,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T19:02:00Z",
-            "stabilities": [
-              "unstable"
-            ],
+            "scrape_date": "2024-06-04T09:46:16Z",
+            "stabilities": null,
             "system": "aarch64-darwin",
-            "unfree": false,
-            "version": "1.13"
-          },
-          {
-            "attr_path": "gzip",
-            "broken": false,
-            "derivation": "/nix/store/rba5c5xri65rxgbqpny8vdw7i6v3siry-gzip-1.13.drv",
-            "description": "GNU zip compression program",
-            "install_id": "gzip",
-            "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
-            "name": "gzip-1.13",
-            "outputs": [
-              {
-                "name": "man",
-                "store_path": "/nix/store/p6nakv379irzabv50alajkkzbh4gkmhi-gzip-1.13-man"
-              },
-              {
-                "name": "out",
-                "store_path": "/nix/store/9xwv4djni67rnfxz9ml205djjshxfmhh-gzip-1.13"
-              },
-              {
-                "name": "info",
-                "store_path": "/nix/store/1zn8hvzb1v97icdq2fh5ck6ji6z8jhk0-gzip-1.13-info"
-              }
-            ],
-            "outputs_to_install": [
-              "out",
-              "man"
-            ],
-            "pname": "gzip",
-            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
-            "rev_count": 633517,
-            "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T19:02:00Z",
-            "stabilities": [
-              "unstable"
-            ],
-            "system": "x86_64-darwin",
             "unfree": false,
             "version": "1.13"
           },
@@ -114,11 +73,46 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T19:02:00Z",
-            "stabilities": [
-              "unstable"
-            ],
+            "scrape_date": "2024-06-04T09:46:16Z",
+            "stabilities": null,
             "system": "aarch64-linux",
+            "unfree": false,
+            "version": "1.13"
+          },
+          {
+            "attr_path": "gzip",
+            "broken": false,
+            "derivation": "/nix/store/rba5c5xri65rxgbqpny8vdw7i6v3siry-gzip-1.13.drv",
+            "description": "GNU zip compression program",
+            "install_id": "gzip",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "gzip-1.13",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/p6nakv379irzabv50alajkkzbh4gkmhi-gzip-1.13-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/9xwv4djni67rnfxz9ml205djjshxfmhh-gzip-1.13"
+              },
+              {
+                "name": "info",
+                "store_path": "/nix/store/1zn8hvzb1v97icdq2fh5ck6ji6z8jhk0-gzip-1.13-info"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "gzip",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
+            "stabilities": null,
+            "system": "x86_64-darwin",
             "unfree": false,
             "version": "1.13"
           },
@@ -153,10 +147,8 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T19:02:00Z",
-            "stabilities": [
-              "unstable"
-            ],
+            "scrape_date": "2024-06-04T09:46:16Z",
+            "stabilities": null,
             "system": "x86_64-linux",
             "unfree": false,
             "version": "1.13"

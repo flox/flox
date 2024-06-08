@@ -30,6 +30,7 @@
   unixtools,
   which,
   writeShellScriptBin,
+  TEST_DATA_DIR ? ./../../test_data/generated,
   PROJECT_NAME ? "flox-cli-tests",
   PROJECT_TESTS_DIR ? ./../../cli/tests,
   NIX_BIN ? "${nix}/bin/nix",
@@ -95,6 +96,9 @@ in
   writeShellScriptBin PROJECT_NAME ''
     set -eu;
     set -o pipefail;
+
+    # Set the test data location
+    export TEST_DATA_DIR='${TEST_DATA_DIR}'
 
     # Find root of the subproject if not specified
     PROJECT_TESTS_DIR='${PROJECT_TESTS_DIR}';
@@ -219,6 +223,7 @@ in
       echo "  NIX_BIN:                  $NIX_BIN";
       echo "  LD_FLOXLIB:               $LD_FLOXLIB";
       echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
+      echo "  TEST_DATA_DIR:            $TEST_DATA_DIR";
       echo "  bats                      ${batsWith}/bin/bats";
       echo "  bats options              ''${_BATS_ARGS[*]}";
       echo "  bats tests                ''${_FLOX_TESTS[*]}";

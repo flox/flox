@@ -66,7 +66,7 @@
           "python38"
         ],
         "system": "aarch64-darwin",
-        "version": "python3-3.8.13"
+        "version": "python3-3.8.15"
       },
       {
         "description": "A high-level dynamically-typed programming language",
@@ -110,7 +110,7 @@
           "python313"
         ],
         "system": "aarch64-darwin",
-        "version": "python3-3.13.0a5"
+        "version": "python3-3.13.0a3"
       }
     ]
   }

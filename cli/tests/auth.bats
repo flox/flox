@@ -16,7 +16,7 @@ load test_support.bash
 setup_file() {
   common_file_setup
   export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json"
 }
 
 teardown_file() {

@@ -42,7 +42,7 @@ setup() {
   project_setup
   floxhub_setup "$OWNER"
   export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json"
 }
 
 teardown() {
@@ -95,7 +95,7 @@ dot_flox_exists() {
   assert_success
   assert_output ""
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json" \
     run "$FLOX_BIN" install hello
   assert_success
   assert_output --partial "environment '$OWNER/project-managed-${BATS_TEST_NUMBER}'" # managed env output
@@ -122,7 +122,7 @@ dot_flox_exists() {
 # bats test_tags=uninstall,managed
 @test "catalog: m2: uninstall a package from a managed environment" {
   make_empty_remote_env
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json" \
     "$FLOX_BIN" install hello
 
   run "$FLOX_BIN" uninstall hello
@@ -163,7 +163,7 @@ version = 1
 hello.pkg-path = "hello"
 EOF
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json" \
     run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
   assert_output --partial "✅ Environment successfully updated."
@@ -206,7 +206,7 @@ EOF
   export FLOX_DATA_DIR="$(pwd)/a_data"
   pushd a > /dev/null || return
   "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json" \
     "$FLOX_BIN" install hello
   "$FLOX_BIN" push --owner "$OWNER"
   popd > /dev/null || return
@@ -279,7 +279,7 @@ EOF
   export FLOX_DATA_DIR="$(pwd)/b_data"
   pushd b > /dev/null || return
   "$FLOX_BIN" pull --remote "$OWNER/a"
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json" \
     "$FLOX_BIN" install hello
   "$FLOX_BIN" push --owner "$OWNER"
   popd > /dev/null || return
@@ -359,7 +359,7 @@ EOF
   export FLOX_DATA_DIR="$(pwd)/b_data"
   pushd b > /dev/null || return
   "$FLOX_BIN" pull --remote "$OWNER/a"
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/vim.json" \
     "$FLOX_BIN" install vim
   "$FLOX_BIN" push --owner "$OWNER"
   popd > /dev/null || return
@@ -368,7 +368,7 @@ EOF
   # and check that the package is installed
   export FLOX_DATA_DIR="$(pwd)/a_data"
   pushd a > /dev/null || return
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/emacs.json" \
     run "$FLOX_BIN" install emacs
   # assert that pulling fails
   run "$FLOX_BIN" pull
@@ -430,12 +430,12 @@ EOF
 
   pushd b > /dev/null || return
   FLOX_DATA_DIR="$(pwd)/b_data" "$FLOX_BIN" pull --remote "$OWNER/a"
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/vim.json" \
     FLOX_DATA_DIR="$(pwd)/b_data" "$FLOX_BIN" install vim
   popd > /dev/null || return
 
   pushd a > /dev/null || return
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/emacs.json" \
     FLOX_DATA_DIR="$(pwd)/a_data" "$FLOX_BIN" install emacs
   FLOX_DATA_DIR="$(pwd)/a_data" "$FLOX_BIN" push
   popd > /dev/null || return
@@ -468,7 +468,7 @@ EOF
 @test "catalog: m8: search works in managed environment" {
   make_empty_remote_env
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/search/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/search/hello.json" \
     run "$FLOX_BIN" search hello
   assert_success
 }
@@ -490,7 +490,7 @@ EOF
 # bats test_tags=managed,activate,managed:activate
 @test "catalog: m9: activate works in managed environment" {
   make_empty_remote_env
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json" \
     "$FLOX_BIN" install hello
 
   run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- command -v hello
@@ -554,7 +554,7 @@ EOF
 # bats test_tags=managed,delete,managed:fresh-deleted
 @test "catalog: m11: uses fresh branch after delete" {
   make_empty_remote_env
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/vim.json" \
     "$FLOX_BIN" install vim
 
   run "$FLOX_BIN" delete
@@ -567,7 +567,7 @@ EOF
   run "$FLOX_BIN" pull --remote "$OWNER/project-managed-${BATS_TEST_NUMBER}"
   assert_success
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json" \
+  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/emacs.json" \
     "$FLOX_BIN" install emacs
   run "$FLOX_BIN" list --name
   assert_output --partial "emacs"

@@ -106,7 +106,7 @@ setup() {
   common_test_setup
   setup_isolated_flox # concurrent pkgdb database creation
   export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json"
 }
 teardown() {
   project_teardown
@@ -221,7 +221,7 @@ EOF
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "catalog: bash: interactive activate puts package in path" {
   project_setup
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
@@ -245,7 +245,7 @@ EOF
 # bats test_tags=activate,activate:path,activate:path:fish
 @test "catalog: fish: interactive activate puts package in path" {
   project_setup
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
@@ -269,7 +269,7 @@ EOF
 # bats test_tags=activate,activate:path,activate:path:tcsh
 @test "catalog: tcsh: interactive activate puts package in path" {
   project_setup
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
@@ -282,7 +282,7 @@ EOF
 @test "zsh: interactive activate puts package in path" {
   export FLOX_FEATURES_USE_CATALOG=false
   project_setup
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
@@ -297,7 +297,7 @@ EOF
 # bats test_tags=activate,activate:path,activate:path:zsh
 @test "catalog: zsh: interactive activate puts package in path" {
   project_setup
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
@@ -931,7 +931,7 @@ EOF
   # hello is not on the path
   run -1 type hello
 
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   run "$FLOX_BIN" install hello
   assert_success
 
@@ -971,7 +971,7 @@ EOF
   # hello is not on the path
   run -1 type hello
 
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   run "$FLOX_BIN" install hello
   assert_success
 
@@ -1011,7 +1011,7 @@ EOF
   # hello is not on the path
   run -1 type hello
 
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   run "$FLOX_BIN" install hello
   assert_success
 
@@ -1051,7 +1051,7 @@ EOF
   # hello is not on the path
   run -1 type hello
 
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   run "$FLOX_BIN" install hello
   assert_success
 
@@ -1141,7 +1141,7 @@ EOF
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set vars
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   "$FLOX_BIN" install hello
 
   run bash -c 'eval "$($FLOX_BIN activate)"; type hello; echo $foo'
@@ -1187,7 +1187,7 @@ EOF
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set vars
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   "$FLOX_BIN" install hello
 
   run fish -c 'eval "$($FLOX_BIN activate)"; type hello; echo $foo'
@@ -1235,7 +1235,7 @@ EOF
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set vars
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   "$FLOX_BIN" install hello
 
   run tcsh -c 'eval "`$FLOX_BIN activate`"; echo hello is `which hello`; echo $foo'
@@ -1281,7 +1281,7 @@ EOF
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set vars
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   "$FLOX_BIN" install hello
 
   run zsh -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
@@ -1375,7 +1375,7 @@ EOF
   unset PIP_CONFIG_FILE
 
   # install python and pip
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/python311Packages.pip.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/python311Packages.pip.json"
   "$FLOX_BIN" install python311Packages.pip
 
   run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
@@ -1441,12 +1441,12 @@ EOF
   mkdir default
   pushd default > /dev/null || return
   "$FLOX_BIN" init
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/vim.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/vim.json"
   "$FLOX_BIN" install vim
   popd > /dev/null || return
 
   "$FLOX_BIN" init
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/emacs.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/emacs.json"
   "$FLOX_BIN" install emacs
 
   # sanity check that flox list lists the local environment

@@ -28,7 +28,7 @@ project_teardown() {
 }
 
 env_setup_catalog() {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
   env_setup
 }
 
@@ -138,7 +138,7 @@ function skip_if_linux() {
 
 # bats test_tags=containerize:piped-to-stdout
 @test "container is written to stdout when '-o -' is passed" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/show/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/show/hello.json"
   skip_if_not_linux
 
   env_setup

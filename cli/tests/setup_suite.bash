@@ -115,6 +115,7 @@ reals_setup() {
     print_var REAL_XDG_DATA_HOME
     print_var REAL_XDG_STATE_HOME
     print_var TESTS_DIR
+    print_var TEST_DATA_DIR
   } >&3
 }
 
