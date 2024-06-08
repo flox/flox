@@ -491,7 +491,7 @@ impl PathEnvironment {
              out_link_modified_at: {out_link_modified_at:?}"
         );
 
-        Ok(manifest_modified_at >= out_link_modified_at)
+        Ok(manifest_modified_at >= out_link_modified_at || !self.out_link(&flox.system)?.exists())
     }
 }
 
