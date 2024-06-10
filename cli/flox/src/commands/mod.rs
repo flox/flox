@@ -480,7 +480,7 @@ impl UpdateNotification {
     /// passed, check for an update.
     async fn check_for_update_inner(
         notification_file: PathBuf,
-        get_latest_version_future: impl Future<Output = Result<String, UpdateNotificationError>>,
+        _get_latest_version_future: impl Future<Output = Result<String, UpdateNotificationError>>,
         _expiry: Duration,
     ) -> Result<Option<Self>, UpdateNotificationError> {
         // Return early if we find a notification_file with a last_notification
