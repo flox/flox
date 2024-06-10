@@ -722,6 +722,9 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
 
             Supported systems are: aarch64-linux, x86_64-linux, aarch64-darwin, x86_64-darwin
         "},
+
+        LockedManifestError::SystemUnavailableInManifest { .. } => display_chain(err),
+
         LockedManifestError::ResolutionFailed(_) => display_chain(err),
         LockedManifestError::EmptyPage => display_chain(err),
     }
