@@ -36,12 +36,52 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "llvm-16.0.6-973.0.1"
+          },
+          {
+            "attr_path": "darwin.cctools",
+            "broken": false,
+            "derivation": "/nix/store/yvdfrzn2gpwq7xwklvmzjj8sikml8s8z-cctools-llvm-16.0.6-973.0.1.drv",
+            "description": null,
+            "install_id": "cctools",
+            "license": null,
+            "locked_url": "https://github.com/flox/nixpkgs?rev=b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+            "name": "cctools-llvm-16.0.6-973.0.1",
+            "outputs": [
+              {
+                "name": "dev",
+                "store_path": "/nix/store/wry11vybgrc2h43y8npm0j0a5hc0sd6a-cctools-llvm-16.0.6-973.0.1-dev"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/r5nj8r17579xw9jvjq5x9xxadz660gav-cctools-llvm-16.0.6-973.0.1-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/zi9rpl794n17l9ahp9rc1ryixwayg05m-cctools-llvm-16.0.6-973.0.1"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "cctools",
+            "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
+            "rev_count": 598982,
+            "rev_date": "2024-03-19T00:06:43Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
+            "stabilities": [
+              "staging",
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
             "unfree": false,
             "version": "llvm-16.0.6-973.0.1"
           },
@@ -67,7 +107,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -98,7 +138,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -138,7 +178,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -178,7 +218,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -213,7 +253,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -248,7 +288,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -283,7 +323,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -318,7 +358,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -353,7 +393,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -388,7 +428,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -423,7 +463,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -458,7 +498,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -498,7 +538,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -542,7 +582,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -582,7 +622,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -626,7 +666,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -661,7 +701,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -696,7 +736,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -731,7 +771,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -766,7 +806,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -797,7 +837,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -832,7 +872,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -863,7 +903,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"
@@ -898,7 +938,7 @@
             "rev": "b06025f1533a1e07b6db3e75151caa155d1c7eb3",
             "rev_count": 598982,
             "rev_date": "2024-03-19T00:06:43Z",
-            "scrape_date": "2024-04-25T04:42:34Z",
+            "scrape_date": "2024-04-25T23:28:47Z",
             "stabilities": [
               "staging",
               "unstable"

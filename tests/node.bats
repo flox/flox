@@ -174,7 +174,7 @@ EOF
 
     # darwin only
     clang = { pkg-path = "clang", systems = ["aarch64-darwin", "x86_64-darwin"]}
-    cctools = { pkg-path = "darwin.cctools", systems = ["aarch64-darwin"], priority = 6 }
+    cctools = { pkg-path = "darwin.cctools", systems = ["aarch64-darwin", "x86_64-darwin"], priority = 6 }
 
     # TODO: these are only necessary because of how we handle CPATH in
     # activate
