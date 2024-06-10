@@ -1,0 +1,142 @@
+[
+  [
+    {
+      "name": "toplevel",
+      "page": {
+        "complete": true,
+        "packages": [
+          {
+            "attr_path": "python3",
+            "broken": false,
+            "derivation": "/nix/store/w3kcq9np5ndk99bjmgjl25h8x35wfc67-python3-3.11.9.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "install_id": "python3",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+            "name": "python3-3.11.9",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/0hhzvkw889bsybhqxy12ky4jx6a95p2d-python3-3.11.9"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python3",
+            "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+            "rev_count": 630835,
+            "rev_date": "2024-05-24T00:06:08Z",
+            "scrape_date": "2024-05-27T14:10:22Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "3.11.9"
+          },
+          {
+            "attr_path": "python3",
+            "broken": false,
+            "derivation": "/nix/store/59yh6zma0csin4v4f1y8skmlibnm5fb9-python3-3.11.9.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "install_id": "python3",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+            "name": "python3-3.11.9",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/6jy28lfjr42adzi10p158aq6m1q9qgs0-python3-3.11.9"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python3",
+            "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+            "rev_count": 630835,
+            "rev_date": "2024-05-24T00:06:08Z",
+            "scrape_date": "2024-05-27T14:10:22Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "3.11.9"
+          },
+          {
+            "attr_path": "python3",
+            "broken": false,
+            "derivation": "/nix/store/8sjcdz05150zjvkh5mbys9cx2fkycd9q-python3-3.11.9.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "install_id": "python3",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+            "name": "python3-3.11.9",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/czlizmr5dmpxi7ysqknxys82776hldgk-python3-3.11.9"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/2idn7bihgcmagk370mpjxjahqg3zza8k-python3-3.11.9-debug"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python3",
+            "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+            "rev_count": 630835,
+            "rev_date": "2024-05-24T00:06:08Z",
+            "scrape_date": "2024-05-27T14:10:22Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "3.11.9"
+          },
+          {
+            "attr_path": "python3",
+            "broken": false,
+            "derivation": "/nix/store/1amrlf0hrkgfh789yrnxw4sginwm5qrg-python3-3.11.9.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "install_id": "python3",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+            "name": "python3-3.11.9",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/7hnr99nxrd2aw6lghybqdmkckq60j6l9-python3-3.11.9"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/cgkq1k9jzimkd9amyxk2achhf770xj0n-python3-3.11.9-debug"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python3",
+            "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+            "rev_count": 630835,
+            "rev_date": "2024-05-24T00:06:08Z",
+            "scrape_date": "2024-05-27T14:10:22Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "3.11.9"
+          }
+        ],
+        "page": 630835,
+        "url": ""
+      }
+    }
+  ]
+]

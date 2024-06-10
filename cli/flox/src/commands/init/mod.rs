@@ -548,7 +548,11 @@ async fn get_default_package_if_compatible(
     version: Option<String>,
 ) -> Result<Option<ProvidedPackage>> {
     let pkg = if let Some(client) = flox.catalog_client.as_ref() {
-        tracing::debug!("using catalog client to find default compatible package");
+        tracing::debug!(
+            pkg = rel_path.join("."),
+            version = version.as_ref().unwrap_or(&"null".to_string()),
+            "using catalog client to find default compatible package"
+        );
         let resolved_groups = client
             .resolve(vec![PackageGroup {
                 descriptors: vec![PackageDescriptor {
