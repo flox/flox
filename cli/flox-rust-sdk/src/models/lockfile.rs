@@ -1856,7 +1856,7 @@ pub(crate) mod tests {
         assert_eq!(
             groups[0].descriptors[0].systems,
             vec![SystemEnum::Aarch64Darwin,],
-            "Expected only the Darwin system to be present, second locked system dropped"
+            "Expected only the Darwin system to be present"
         );
 
         let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
@@ -1906,16 +1906,12 @@ pub(crate) mod tests {
             2,
             "Expected descriptors for two systems"
         );
-        assert_eq!(
-            groups[0].descriptors[0].systems,
-            vec![SystemEnum::Aarch64Darwin,],
-            "Expected only the Darwin system to be present, second locked system dropped"
-        );
-        assert_eq!(
-            groups[0].descriptors[1].systems,
-            vec![SystemEnum::Aarch64Linux,],
-            "Expected only the Darwin system to be present, second locked system dropped"
-        );
+        assert_eq!(groups[0].descriptors[0].systems, vec![
+            SystemEnum::Aarch64Darwin
+        ]);
+        assert_eq!(groups[0].descriptors[1].systems, vec![
+            SystemEnum::Aarch64Linux
+        ]);
 
         let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
             LockedManifestCatalog::split_fully_locked_groups(groups, Some(&locked));
