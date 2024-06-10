@@ -1816,7 +1816,11 @@ pub(crate) mod tests {
     fn drop_packages_for_removed_systems() {
         let (foo_iid, foo_descriptor_one_system, foo_locked) = fake_package("foo", Some("group1"));
 
-        // `fake_package` sets the system to [`Aarch64Darwin`]
+        assert_eq!(
+            foo_descriptor_one_system.systems,
+            Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
+            "`fake_package` should set the system to [`Aarch64Darwin`]"
+        );
         let mut foo_descriptor_two_systems = foo_descriptor_one_system.clone();
         foo_descriptor_two_systems
             .systems
