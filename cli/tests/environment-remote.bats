@@ -44,7 +44,7 @@ setup() {
   project_setup
   floxhub_setup owner
   export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 teardown() {
@@ -93,7 +93,7 @@ function make_empty_remote_env() {
 
 # bats test_tags=hermetic,remote,remote:outlink
 @test "catalog: r0: building a remote environment creates outlink" {
-  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
 
   run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
@@ -118,7 +118,7 @@ function make_empty_remote_env() {
 
 # bats test_tags=install,remote,remote:install
 @test "catalog: m1: install a package to a remote environment" {
-  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
 
   run "$FLOX_BIN" install hello --remote "$OWNER/test"
@@ -147,7 +147,7 @@ function make_empty_remote_env() {
 
 # bats test_tags=uninstall,remote,remote:uninstall
 @test "catalog: m2: uninstall a package from a remote environment" {
-  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/emacs_vim.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs_vim.json"
   make_empty_remote_env
 
   "$FLOX_BIN" install emacs vim --remote "$OWNER/test"
@@ -183,7 +183,7 @@ EOF
 
 # bats test_tags=edit,remote,remote:edit
 @test "catalog: m3: edit a package from a managed environment" {
-  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
 
   TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
@@ -219,7 +219,7 @@ EOF
 
 # bats test_tags=remote,activate,remote:activate
 @test "catalog: m9: activate works in remote environment" {
-  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
   "$FLOX_BIN" install hello --remote "$OWNER/test"
 
@@ -327,14 +327,14 @@ EOF
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     make_empty_remote_env
 
-  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/old_hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" \
     "$FLOX_BIN" install hello --remote "$OWNER/test"
 
   run "$FLOX_BIN" list --remote "$OWNER/test"
   assert_success
   assert_output --partial "2.0"
 
-  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade --remote "$OWNER/test"
 
   run "$FLOX_BIN" list --remote "$OWNER/test"

@@ -42,7 +42,7 @@ setup() {
   _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
     "$FLOX_BIN" update --global
   export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/empty.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 teardown() {
@@ -64,7 +64,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "catalog: 'flox show' can be called at all" {
-  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/show/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
   run "$FLOX_BIN" show hello
   assert_success
 }
@@ -83,11 +83,11 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "catalog: 'flox show' accepts search output without separator" {
-  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR//search/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA//search/hello.json"
   run "$FLOX_BIN" search hello
   assert_success
   first_result="${lines[0]%% *}"
-  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/show/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
   run "$FLOX_BIN" show "$first_result"
   assert_success
 }
@@ -105,7 +105,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "catalog: 'flox show' - hello" {
-  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/show/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
   run "$FLOX_BIN" show hello
   assert_success
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
@@ -128,7 +128,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "catalog: 'flox show' - hello --all" {
-  export  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/show/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
   run --separate-stderr "$FLOX_BIN" show hello --all
   assert_success
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
@@ -179,7 +179,7 @@ setup_file() {
 
 # Check pkg-path is handled correctly
 @test "catalog: 'flox show' - python310Packages.flask" {
-  _FLOX_USE_CATALOG_MOCK="$TEST_DATA_DIR/show/flask.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/flask.json" \
     run "$FLOX_BIN" show python310Packages.flask
   assert_success
   # Ensure that the package and part of the description show up

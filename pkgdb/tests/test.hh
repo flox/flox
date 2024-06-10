@@ -15,9 +15,9 @@
 
 /* This shouldn't happen, but it's a sane fallback for running from the
  * project root. */
-#ifndef TEST_DATA_DIR
-#  define TEST_DATA_DIR "./tests/data"
-#endif /* End `ifndef TEST_DATA_DIR' */
+#ifndef GENERATED_DATA
+#  define GENERATED_DATA "./tests/data"
+#endif /* End `ifndef GENERATED_DATA' */
 
 
 /* -------------------------------------------------------------------------- */

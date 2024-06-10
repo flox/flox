@@ -27,7 +27,7 @@ project_setup() {
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
   export FLOX_FEATURES_USE_CATALOG=true
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 project_teardown() {
@@ -52,8 +52,10 @@ teardown() {
 
 @test "'flox init' sets up a local working Go module environment" {
   export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$TESTS_DIR"/go/module-systems/common/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/go/module-systems/module/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/go/common/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/go/module/* "$PROJECT_DIR/"
+  # Files copied from the store are read-only
+  chmod -R +w .
 
   run "$FLOX_BIN" init --auto-setup
   assert_success
@@ -71,9 +73,11 @@ teardown() {
 
 @test "'flox init' sets up a local working Go workspace environment" {
   export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$TESTS_DIR"/go/module-systems/common/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/go/module-systems/module/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/go/module-systems/workspace/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/go/common/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/go/module/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/go/workspace/* "$PROJECT_DIR/"
+  # Files copied from the store are read-only
+  chmod -R +w .
 
   run "$FLOX_BIN" init --auto-setup
   assert_success
@@ -92,10 +96,12 @@ teardown() {
 
 # bats test_tags=catalog
 @test "catalog: 'flox init' sets up a local working Go module environment" {
-  cp -r "$TESTS_DIR"/go/module-systems/common/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/go/module-systems/module/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/go/common/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/go/module/* "$PROJECT_DIR/"
+  # Files copied from the store are read-only
+  chmod -R +w .
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/go.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/go.json" \
     run "$FLOX_BIN" init --auto-setup
 
   assert_success
@@ -111,11 +117,13 @@ teardown() {
 
 # bats test_tags=catalog
 @test "catalog: 'flox init' sets up a local working Go workspace environment" {
-  cp -r "$TESTS_DIR"/go/module-systems/common/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/go/module-systems/module/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/go/module-systems/workspace/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/go/common/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/go/module/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/go/workspace/* "$PROJECT_DIR/"
+  # Files copied from the store are read-only
+  chmod -R +w .
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/go.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/go.json" \
     run "$FLOX_BIN" init --auto-setup
 
   assert_success

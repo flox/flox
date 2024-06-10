@@ -61,14 +61,14 @@ teardown_file() {
 @test "'flox upgrade' works with catalog server" {
   "$FLOX_BIN" init
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello_resolution_old.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" \
     "$FLOX_BIN" install hello
 
   run "$FLOX_BIN" list
   assert_success
   assert_line "hello: hello (old_version)"
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade -vvv
   assert_success
   assert_output --partial "using catalog client to upgrade"
