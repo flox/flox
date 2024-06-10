@@ -418,17 +418,34 @@ impl LockedManifestCatalog {
                         name: group_name.to_string(),
                     });
 
-            let systems = manifest_descriptor
-                .systems
-                .as_deref()
-                .or(manifest_systems)
-                .unwrap_or(&default_systems)
-                .iter()
-                .map(|s| {
-                    SystemEnum::from_str(s)
-                        .map_err(|_| LockedManifestError::UnrecognizedSystem(s.clone()))
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+            let systems = {
+                let available_systems = manifest_systems.unwrap_or(&default_systems);
+
+                let package_systems = manifest_descriptor.systems.as_deref();
+
+                for system in package_systems.into_iter().flatten() {
+                    if !available_systems.contains(system) {
+                        return Err(LockedManifestError::SystemUnavailableInManifest {
+                            install_id: install_id.clone(),
+                            system: system.to_string(),
+                            enabled_systems: available_systems
+                                .iter()
+                                .map(|s| s.to_string())
+                                .collect(),
+                        });
+                    }
+                }
+
+                package_systems
+                    .or(manifest_systems)
+                    .unwrap_or(&default_systems)
+                    .iter()
+                    .map(|s| {
+                        SystemEnum::from_str(s)
+                            .map_err(|_| LockedManifestError::UnrecognizedSystem(s.clone()))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?
+            };
 
             for system in systems {
                 // If the package was just added to the manifest, it will be missing in the seed,
@@ -860,12 +877,28 @@ pub enum LockedManifestError {
     SerializeGlobalLockfile(#[source] serde_json::Error),
     #[error("could not write global lockfile")]
     WriteGlobalLockfile(#[source] std::io::Error),
+
+    // todo: this should probably part of some validation logic of the manifest file
+    //       rather than occurring during the locking process creation
     #[error("unrecognized system type: {0}")]
     UnrecognizedSystem(String),
+
     #[error("resolution failed: {0}")]
     ResolutionFailed(String),
     #[error("catalog page was empty")]
     EmptyPage,
+
+    // todo: this should probably part of some validation logic of the manifest file
+    //       rather than occurring during the locking process creation
+    #[error(
+        "'{install_id}' specifies disabled or unknown system '{system}' (enabled systems: {enabled_systems})",
+        enabled_systems=enabled_systems.join(", ")
+    )]
+    SystemUnavailableInManifest {
+        install_id: String,
+        system: String,
+        enabled_systems: Vec<String>,
+    },
 
     #[error("Catalog lockfile does not support update")]
     UnsupportedLockfileForUpdate,
@@ -1290,9 +1323,9 @@ pub(crate) mod tests {
     }
 
     /// If a package specifies a system not in `options.systems`,
-    /// use those instead.
+    /// return an error.
     #[test]
-    fn make_params_override_systems() {
+    fn descriptor_system_required_in_options() {
         let manifest_str = indoc! {r#"
             version = 1
 
@@ -1304,41 +1337,19 @@ pub(crate) mod tests {
             [options]
             systems = ["x86_64-linux"]
         "#};
+
+        // todo: ideally the manifest would not even parse if it has an unavailable system
         let manifest = toml::from_str(manifest_str).unwrap();
 
-        let expected_params = vec![PackageGroup {
-            name: DEFAULT_GROUP_NAME.to_string(),
-            descriptors: vec![
-                PackageDescriptor {
-                    allow_pre_releases: None,
-                    attr_path: "emacs".to_string(),
-                    derivation: None,
-                    install_id: "emacs".to_string(),
-                    version: None,
-                    allow_broken: None,
-                    allow_unfree: None,
-                    allowed_licenses: None,
-                    systems: vec![SystemEnum::Aarch64Darwin],
-                },
-                PackageDescriptor {
-                    allow_pre_releases: None,
-                    attr_path: "vim".to_string(),
-                    derivation: None,
-                    install_id: "vim".to_string(),
-                    version: None,
-                    allow_broken: None,
-                    allow_unfree: None,
-                    allowed_licenses: None,
-                    systems: vec![SystemEnum::X8664Linux],
-                },
-            ],
-        }];
+        let actual_result = LockedManifestCatalog::collect_package_groups(&manifest, None);
 
-        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, None)
-            .unwrap()
-            .collect::<Vec<_>>();
-
-        assert_eq!(actual_params, expected_params);
+        assert!(
+            matches!(actual_result, Err(LockedManifestError::SystemUnavailableInManifest {
+                install_id,
+                system,
+                enabled_systems
+            }) if install_id == "emacs" && system == "aarch64-darwin" && enabled_systems == vec!["x86_64-linux"])
+        );
     }
 
     /// If packages specify different groups,
