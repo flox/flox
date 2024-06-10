@@ -548,12 +548,16 @@ impl UpdateNotification {
     // and is created by an installer
     fn update_instructions(&self) -> String {
         let default_update_instructions = "Get the latest at https://flox.dev/docs/install-flox/#upgrade-existing-flox-installation";
-        env::current_exe()
-            .map_or(default_update_instructions.to_string(),
-                |exe| fs::read_to_string(exe.parent().expect("SSS").join(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH))
-                    .map_or(default_update_instructions.to_string(),
-                        |docs| format!("Get the latest with:\n{}", indent::indent_all_by(2, docs))
-                    ))
+        env::current_exe().map_or(default_update_instructions.to_string(), |exe| {
+            fs::read_to_string(
+                exe.parent()
+                    .expect("SSS")
+                    .join(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH),
+            )
+            .map_or(default_update_instructions.to_string(), |docs| {
+                format!("Get the latest with:\n{}", indent::indent_all_by(2, docs))
+            })
+        })
     }
 
     /// If a new version is available, print a message to the user.
