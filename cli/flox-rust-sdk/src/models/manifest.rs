@@ -395,7 +395,17 @@ pub(crate) fn pkg_descriptors_in_toplevel_group(
 ) -> Vec<(String, ManifestPackageDescriptor)> {
     descriptors
         .iter()
-        .filter(|(_, desc)| desc.pkg_group.is_none())
+        .filter(|(_, desc)| {
+            let ManifestPackageDescriptor::Catalog(ManifestPackageDescriptorCatalog {
+                pkg_group,
+                ..
+            }) = desc
+            else {
+                return false;
+            };
+
+            pkg_group.is_none()
+        })
         .map(|(id, desc)| (id.clone(), desc.clone()))
         .collect::<Vec<_>>()
 }
@@ -407,7 +417,15 @@ pub(crate) fn pkg_descriptors_in_named_group(
     descriptors
         .iter()
         .filter(|(_, desc)| {
-            desc.pkg_group
+            let ManifestPackageDescriptor::Catalog(ManifestPackageDescriptorCatalog {
+                pkg_group,
+                ..
+            }) = desc
+            else {
+                return false;
+            };
+
+            pkg_group
                 .as_ref()
                 .is_some_and(|n| n.as_str() == name.as_ref())
         })
@@ -423,8 +441,16 @@ fn pkg_or_group_found_in_manifest(
     descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
 ) -> bool {
     descriptors.iter().any(|(id, desc)| {
+        let ManifestPackageDescriptor::Catalog(ManifestPackageDescriptorCatalog {
+            pkg_group, ..
+        }) = desc
+        else {
+            return false;
+        };
+
         let search_term = search_term.as_ref();
-        (search_term == id.as_str()) || (Some(search_term) == desc.pkg_group.as_deref())
+
+        (search_term == id.as_str()) || (Some(search_term) == pkg_group.as_deref())
     })
 }
 
@@ -436,7 +462,14 @@ fn pkg_belongs_to_non_empty_named_group(
     let descriptor = descriptors
         .get(pkg)
         .ok_or(ManifestError::PkgOrGroupNotFound(pkg.to_string()))?;
-    let Some(ref group) = descriptor.pkg_group else {
+
+    let ManifestPackageDescriptor::Catalog(ManifestPackageDescriptorCatalog { pkg_group, .. }) =
+        descriptor
+    else {
+        return Ok(None);
+    };
+
+    let Some(ref group) = pkg_group else {
         return Ok(None);
     };
     let pkgs = pkg_descriptors_in_named_group(group, descriptors);
@@ -475,15 +508,28 @@ fn pkg_belongs_to_non_empty_toplevel_group(
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 
+impl ManifestInstall {
+    pub fn catalog_descriptors_ref(
+        &self,
+    ) -> impl Iterator<Item = (&String, &ManifestPackageDescriptorCatalog)> {
+        self.iter().filter_map(|(id, desc)| match desc {
+            ManifestPackageDescriptor::Catalog(desc) => Some((id, desc)),
+            _ => {
+                debug!("skipping non-catalog descriptor for '{}'", id);
+                None
+            },
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[serde(rename_all = "kebab-case")]
-pub struct ManifestPackageDescriptor {
-    pub(crate) pkg_path: String,
-    pub(crate) pkg_group: Option<String>,
-    pub(crate) priority: Option<usize>,
-    pub(crate) version: Option<String>,
-    pub(crate) systems: Option<Vec<System>>,
+// todo: this can make the error messages less clear and might call for a custom (de)serialize impl
+#[serde(untagged)]
+pub enum ManifestPackageDescriptor {
+    Catalog(ManifestPackageDescriptorCatalog),
+    FlakeRef,  // todo
+    StorePath, // todo
 }
 
 impl ManifestPackageDescriptor {
@@ -495,8 +541,50 @@ impl ManifestPackageDescriptor {
     ///   changing the supported systems does not invalidate _existing_ resolutions.
     /// * Priority is not used in resolution, so it is ignored.
     pub(super) fn invalidates_existing_resolution(&self, other: &Self) -> bool {
+        use ManifestPackageDescriptor::*;
+        match (self, other) {
+            (Catalog(this), Catalog(other)) => this.invalidates_existing_resolution(other),
+            (StorePath, StorePath) => todo!(),
+            // different types of descriptors are always different
+            _ => true,
+        }
+    }
+}
+
+impl From<&ManifestPackageDescriptorCatalog> for ManifestPackageDescriptor {
+    fn from(val: &ManifestPackageDescriptorCatalog) -> Self {
+        ManifestPackageDescriptor::Catalog(val.clone())
+    }
+}
+
+impl From<ManifestPackageDescriptorCatalog> for ManifestPackageDescriptor {
+    fn from(val: ManifestPackageDescriptorCatalog) -> Self {
+        ManifestPackageDescriptor::Catalog(val)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+pub struct ManifestPackageDescriptorCatalog {
+    pub(crate) pkg_path: String,
+    pub(crate) pkg_group: Option<String>,
+    pub(crate) priority: Option<usize>,
+    pub(crate) version: Option<String>,
+    pub(crate) systems: Option<Vec<System>>,
+}
+
+impl ManifestPackageDescriptorCatalog {
+    /// Check if two package descriptors should have the same resolution.
+    /// This is used to determine if a package needs to be re-resolved
+    /// in the presence of an existing lock.
+    ///
+    /// * Descriptors are resolved per system,
+    ///   changing the supported systems does not invalidate _existing_ resolutions.
+    /// * Priority is not used in resolution, so it is ignored.
+    pub(super) fn invalidates_existing_resolution(&self, other: &Self) -> bool {
         // unpack to avoid forgetting to update this method when new fields are added
-        let ManifestPackageDescriptor {
+        let ManifestPackageDescriptorCatalog {
             pkg_path,
             pkg_group,
             version,

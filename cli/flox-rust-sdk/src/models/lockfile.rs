@@ -18,6 +18,7 @@ use super::environment::UpdateResult;
 use super::manifest::{
     Allows,
     ManifestPackageDescriptor,
+    ManifestPackageDescriptorCatalog,
     TypedManifestCatalog,
     DEFAULT_GROUP_NAME,
     DEFAULT_PRIORITY,
@@ -199,7 +200,7 @@ impl LockedPackageCatalog {
     /// There may be more validation/parsing we could do here in the future.
     pub fn from_parts(
         package: catalog::PackageResolutionInfo,
-        descriptor: ManifestPackageDescriptor,
+        descriptor: ManifestPackageDescriptorCatalog,
     ) -> Self {
         // unpack package to avoid missing new fields
         let catalog::PackageResolutionInfo {
@@ -445,7 +446,7 @@ impl LockedManifestCatalog {
             Some(manifest.options.allow.licenses.clone())
         };
 
-        for (install_id, manifest_descriptor) in manifest.install.iter() {
+        for (install_id, manifest_descriptor) in manifest.install.catalog_descriptors_ref() {
             let resolved_descriptor_base = PackageDescriptor {
                 install_id: install_id.clone(),
                 attr_path: manifest_descriptor.pkg_path.clone(),
@@ -494,7 +495,7 @@ impl LockedManifestCatalog {
                     .iter()
                     .map(|s| {
                         SystemEnum::from_str(s)
-                            .map_err(|_| LockedManifestError::UnrecognizedSystem(s.clone()))
+                            .map_err(|_| LockedManifestError::UnrecognizedSystem(s.to_string()))
                     })
                     .collect::<Result<Vec<_>, _>>()?
             };
@@ -508,7 +509,7 @@ impl LockedManifestCatalog {
                 let locked_derivation = seed_locked_packages
                     .get(&(install_id, &system.to_string()))
                     .filter(|(descriptor, _)| {
-                        !descriptor.invalidates_existing_resolution(manifest_descriptor)
+                        !descriptor.invalidates_existing_resolution(&manifest_descriptor.into())
                     })
                     .map(|(_, locked_package)| locked_package.derivation.clone());
 
@@ -600,7 +601,10 @@ impl LockedManifestCatalog {
             .into_iter()
             .flatten()
             .filter_map(|resolved_pkg| {
-                let Some(descriptor) = manifest.install.get(&resolved_pkg.install_id).cloned()
+                let Some((_, descriptor)) = manifest
+                    .install
+                    .catalog_descriptors_ref()
+                    .find(|(id, _)| id == &&resolved_pkg.install_id)
                 else {
                     debug!(
                         "Package {} is not in the manifest, skipping",
@@ -609,7 +613,10 @@ impl LockedManifestCatalog {
                     return None;
                 };
 
-                Some(LockedPackageCatalog::from_parts(resolved_pkg, descriptor))
+                Some(LockedPackageCatalog::from_parts(
+                    resolved_pkg,
+                    descriptor.clone(),
+                ))
             }))
     }
 
@@ -984,13 +991,14 @@ pub mod test_helpers {
     ) -> (String, ManifestPackageDescriptor, LockedPackageCatalog) {
         let install_id = format!("{}_install_id", name);
 
-        let descriptor = ManifestPackageDescriptor {
+        let descriptor = ManifestPackageDescriptorCatalog {
             pkg_path: name.to_string(),
             pkg_group: group.map(|s| s.to_string()),
             systems: Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
             version: None,
             priority: None,
-        };
+        }
+        .into();
 
         let locked = LockedPackageCatalog {
             attr_path: name.to_string(),
@@ -1486,15 +1494,17 @@ pub(crate) mod tests {
         let mut manifest = TEST_TYPED_MANIFEST.clone();
 
         // Add a package to the manifest that is not already locked
-        manifest
-            .install
-            .insert("unlocked".to_string(), ManifestPackageDescriptor {
+        manifest.install.insert(
+            "unlocked".to_string(),
+            ManifestPackageDescriptorCatalog {
                 pkg_path: "unlocked".to_string(),
                 pkg_group: Some("group".to_string()),
                 systems: None,
                 version: None,
                 priority: None,
-            });
+            }
+            .into(),
+        );
 
         let LockedManifest::Catalog(seed) = &*TEST_LOCKED_MANIFEST else {
             panic!("Expected a catalog lockfile");
@@ -1587,7 +1597,13 @@ pub(crate) mod tests {
         // ---------------------------------------------------------------------
 
         let (foo_after_iid, mut foo_after_descriptor, _) = fake_package("foo", None);
-        foo_after_descriptor.pkg_path = "bar".to_string();
+
+        if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = foo_after_descriptor {
+            descriptor.pkg_path = "bar".to_string();
+        } else {
+            panic!("Expected a catalog descriptor");
+        };
+
         assert!(foo_after_descriptor.invalidates_existing_resolution(&foo_before_descriptor));
 
         let mut manifest_after = manifest::test::empty_catalog_manifest();
@@ -1626,7 +1642,12 @@ pub(crate) mod tests {
         // ---------------------------------------------------------------------
 
         let (foo_after_iid, mut foo_after_descriptor, _) = fake_package("foo", None);
-        foo_after_descriptor.priority = Some(10);
+        if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = foo_after_descriptor {
+            descriptor.priority = Some(10);
+        } else {
+            panic!("Expected a catalog descriptor");
+        };
+
         assert!(!foo_after_descriptor.invalidates_existing_resolution(&foo_before_descriptor));
 
         let mut manifest_after = manifest::test::empty_catalog_manifest();
@@ -1693,16 +1714,21 @@ pub(crate) mod tests {
                 .unwrap()
                 .collect::<Vec<_>>();
 
+        let ManifestPackageDescriptor::Catalog(descriptor) = manifest
+            .install
+            .get(&groups[0].page.as_ref().unwrap().packages.as_ref().unwrap()[0].install_id)
+            .unwrap()
+            .clone()
+        else {
+            panic!("Expected a catalog descriptor");
+        };
+
         assert_eq!(locked_packages.len(), 1);
         assert_eq!(
             &locked_packages[0],
             &LockedPackageCatalog::from_parts(
                 groups[0].page.as_ref().unwrap().packages.as_ref().unwrap()[0].clone(),
-                manifest
-                    .install
-                    .get(&groups[0].page.as_ref().unwrap().packages.as_ref().unwrap()[0].install_id)
-                    .unwrap()
-                    .clone(),
+                descriptor,
             )
         );
     }
@@ -1898,17 +1924,31 @@ pub(crate) mod tests {
     fn drop_packages_for_removed_systems() {
         let (foo_iid, foo_descriptor_one_system, foo_locked) = fake_package("foo", Some("group1"));
 
+        let systems =
+            if let ManifestPackageDescriptor::Catalog(descriptor) = &foo_descriptor_one_system {
+                &descriptor.systems
+            } else {
+                panic!("Expected a catalog descriptor");
+            };
+
         assert_eq!(
-            foo_descriptor_one_system.systems,
-            Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
+            systems,
+            &Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
             "`fake_package` should set the system to [`Aarch64Darwin`]"
         );
+
         let mut foo_descriptor_two_systems = foo_descriptor_one_system.clone();
-        foo_descriptor_two_systems
-            .systems
-            .as_mut()
-            .unwrap()
-            .push(SystemEnum::Aarch64Linux.to_string());
+
+        if let ManifestPackageDescriptor::Catalog(descriptor) = &mut foo_descriptor_two_systems {
+            descriptor
+                .systems
+                .as_mut()
+                .unwrap()
+                .push(SystemEnum::Aarch64Linux.to_string());
+        } else {
+            panic!("Expected a catalog descriptor");
+        };
+
         let foo_locked_second_system = LockedPackageCatalog {
             system: SystemEnum::Aarch64Linux.to_string(),
             ..foo_locked.clone()
@@ -1957,11 +1997,15 @@ pub(crate) mod tests {
 
         // `fake_package` sets the system to [`Aarch64Darwin`]
         let mut foo_descriptor_two_systems = foo_descriptor_one_system.clone();
-        foo_descriptor_two_systems
-            .systems
-            .as_mut()
-            .unwrap()
-            .push(SystemEnum::Aarch64Linux.to_string());
+        if let ManifestPackageDescriptor::Catalog(descriptor) = &mut foo_descriptor_two_systems {
+            descriptor
+                .systems
+                .as_mut()
+                .unwrap()
+                .push(SystemEnum::Aarch64Linux.to_string());
+        } else {
+            panic!("Expected a catalog descriptor");
+        };
 
         let mut manifest = manifest::test::empty_catalog_manifest();
         manifest
@@ -2214,7 +2258,11 @@ pub(crate) mod tests {
         let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", Some("group1"));
         let (baz_iid, mut baz_descriptor, mut baz_locked) = fake_package("baz", Some("group2"));
 
-        baz_descriptor.systems = Some(vec![SystemEnum::Aarch64Linux.to_string()]);
+        if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = baz_descriptor {
+            descriptor.systems = Some(vec![SystemEnum::Aarch64Linux.to_string()]);
+        } else {
+            panic!("Expected a catalog descriptor");
+        };
         baz_locked.system = SystemEnum::Aarch64Linux.to_string();
 
         let mut manifest = manifest::test::empty_catalog_manifest();
@@ -2234,11 +2282,23 @@ pub(crate) mod tests {
             packages: vec![foo_locked.clone(), bar_locked.clone(), baz_locked.clone()],
         };
 
+        let foo_pkg_path = if let ManifestPackageDescriptor::Catalog(descriptor) = foo_descriptor {
+            descriptor.pkg_path
+        } else {
+            panic!("Expected a catalog descriptor");
+        };
+
+        let bar_pkg_path = if let ManifestPackageDescriptor::Catalog(descriptor) = bar_descriptor {
+            descriptor.pkg_path
+        } else {
+            panic!("Expected a catalog descriptor");
+        };
+
         let actual = locked.list_packages(&SystemEnum::Aarch64Darwin.to_string());
         let expected = [
             InstalledPackage {
                 install_id: foo_iid,
-                rel_path: foo_descriptor.pkg_path,
+                rel_path: foo_pkg_path,
                 info: PackageInfo {
                     description: foo_locked.description,
                     broken: foo_locked.broken,
@@ -2251,7 +2311,7 @@ pub(crate) mod tests {
             },
             InstalledPackage {
                 install_id: bar_iid,
-                rel_path: bar_descriptor.pkg_path,
+                rel_path: bar_pkg_path,
                 info: PackageInfo {
                     description: bar_locked.description,
                     broken: bar_locked.broken,
