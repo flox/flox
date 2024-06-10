@@ -79,6 +79,9 @@ use crate::utils::init::{
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FILE_NAME};
 use crate::utils::{message, TRAILING_NETWORK_CALL_TIMEOUT};
 
+// Relative to flox executable
+//const UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH: &str = "../share/flox/files/update-instructions.txt";
+const UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH: &str = "../../update-instructions.txt";
 const UPDATE_NOTIFICATION_FILE_NAME: &str = "update-notification.json";
 const UPDATE_NOTIFICATION_EXPIRY: Duration = Duration::days(1);
 
@@ -478,39 +481,40 @@ impl UpdateNotification {
     async fn check_for_update_inner(
         notification_file: PathBuf,
         get_latest_version_future: impl Future<Output = Result<String, UpdateNotificationError>>,
-        expiry: Duration,
+        _expiry: Duration,
     ) -> Result<Option<Self>, UpdateNotificationError> {
         // Return early if we find a notification_file with a last_notification
         // that hasn't expired
-        match fs::read_to_string(&notification_file) {
-            // If the file doesn't it exist, it means we haven't shown the notification recently
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {},
-            Ok(contents) => {
-                let update_notification: LastUpdateNotification =
-                    serde_json::from_str(&contents)
-                        .map_err(|e| UpdateNotificationError::WeMayHaveMessedUp(anyhow!(e)))?;
+        //match fs::read_to_string(&notification_file) {
+        //    // If the file doesn't it exist, it means we haven't shown the notification recently
+        //    Err(e) if e.kind() == io::ErrorKind::NotFound => {},
+        //    Ok(contents) => {
+        //        let update_notification: LastUpdateNotification =
+        //            serde_json::from_str(&contents)
+        //                .map_err(|e| UpdateNotificationError::WeMayHaveMessedUp(anyhow!(e)))?;
 
-                let now = OffsetDateTime::now_utc();
-                if now - update_notification.last_notification < expiry {
-                    return Ok(None);
-                }
-            },
-            Err(e) => Err(UpdateNotificationError::Io(e))?,
-        };
+        //        let now = OffsetDateTime::now_utc();
+        //        if now - update_notification.last_notification < expiry {
+        //            return Ok(None);
+        //        }
+        //    },
+        //    Err(e) => Err(UpdateNotificationError::Io(e))?,
+        //};
 
-        let new_version = get_latest_version_future.await?;
+        //let new_version = get_latest_version_future.await?;
 
         // Sanity check we got a version back
-        if let Err(e) = semver::Version::parse(&new_version) {
-            return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
-                "version is invalid: {e}"
-            )));
-        }
+        //if let Err(e) = semver::Version::parse(&new_version) {
+        //    return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
+        //        "version is invalid: {e}"
+        //    )));
+        //}
 
-        if *FLOX_VERSION == new_version {
-            return Ok(None);
-        };
+        //if *FLOX_VERSION == new_version {
+        //    return Ok(None);
+        //};
 
+        let new_version = "1.1.0".to_string();
         Ok(Some(UpdateNotification {
             new_version,
             notification_file,
@@ -540,15 +544,28 @@ impl UpdateNotification {
         }
     }
 
+    // Check for update instructions file which is located relative to the current executable
+    // and is created by an installer
+    fn update_instructions(&self) -> String {
+        let default_update_instructions = "Get the latest at https://flox.dev/docs/install-flox/#upgrade-existing-flox-installation";
+        env::current_exe()
+            .map_or(default_update_instructions.to_string(),
+                |exe| fs::read_to_string(exe.parent().expect("SSS").join(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH))
+                    .map_or(default_update_instructions.to_string(),
+                        |docs| format!("Get the latest with:\n{}", indent::indent_all_by(2, docs))
+                    ))
+    }
+
     /// If a new version is available, print a message to the user.
     ///
     /// Write the notification_file with the current time.
     fn print_new_version_available(self) {
         message::plain(formatdoc! {"
+
             🚀  Flox has a new version available. {} -> {}
 
-            Get the latest at https://flox.dev/docs/install-flox/
-        ", *FLOX_VERSION, self.new_version});
+            {}
+        ", *FLOX_VERSION, self.new_version, self.update_instructions()});
 
         if let Err(e) = serde_json::to_string_pretty(&LastUpdateNotification {
             last_notification: OffsetDateTime::now_utc(),
