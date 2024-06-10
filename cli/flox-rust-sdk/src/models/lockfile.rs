@@ -1811,7 +1811,7 @@ pub(crate) mod tests {
     }
 
     /// When packages are locked for multiple systems,
-    /// locking the same package for fewer packages should drop the extra systems
+    /// locking the same package for fewer systems should drop the extra systems
     #[test]
     fn drop_packages_for_removed_systems() {
         let (foo_iid, foo_descriptor_one_system, foo_locked) = fake_package("foo", Some("group1"));
