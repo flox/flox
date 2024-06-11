@@ -3,7 +3,7 @@
   "info": {
     "title": "Flox Catalog Service",
     "description": "\n# Flox Catalog Service API\n\nTBD\n\n*Markdown is available here*\n",
-    "version": "v0.1.dev156+gcff8beb.d19800101",
+    "version": "v0.1.dev162+geac55ad.d19800101",
     "x-logo": {
       "url": "https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png"
     }
@@ -442,7 +442,6 @@
           "rev": "xyz",
           "rev_count": 4,
           "rev_date": 0,
-          "search_string": "curl^curl^my description",
           "stabilities": [
             "stable",
             "unstable"
@@ -511,7 +510,6 @@
           "rev": "xyz",
           "rev_count": 4,
           "rev_date": 0,
-          "search_string": "curl^curl^my description",
           "stabilities": [
             "stable",
             "unstable"
@@ -800,7 +798,7 @@
           ]
         }
       },
-      "PackageInfoAPI": {
+      "PackageInfoSearch": {
         "properties": {
           "attr_path": {
             "type": "string",
@@ -814,50 +812,10 @@
             "type": "string",
             "title": "Pname"
           },
-          "version": {
-            "type": "string",
-            "title": "Version"
-          },
-          "outputs": {
-            "items": {
-              "$ref": "#/components/schemas/Output"
-            },
-            "type": "array",
-            "title": "Outputs"
-          },
-          "outputs_to_install": {
-            "title": "Outputs To Install",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "description": {
             "title": "Description",
             "nullable": true,
             "type": "string"
-          },
-          "license": {
-            "title": "License",
-            "nullable": true,
-            "type": "string"
-          },
-          "rev": {
-            "type": "string",
-            "title": "Rev"
-          },
-          "rev_count": {
-            "type": "integer",
-            "title": "Rev Count"
-          },
-          "rev_date": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Rev Date"
-          },
-          "system": {
-            "$ref": "#/components/schemas/SystemEnum"
           },
           "stabilities": {
             "items": {
@@ -866,9 +824,8 @@
             "type": "array",
             "title": "Stabilities"
           },
-          "locked_url": {
-            "type": "string",
-            "title": "Locked Url"
+          "system": {
+            "$ref": "#/components/schemas/SystemEnum"
           }
         },
         "type": "object",
@@ -876,45 +833,32 @@
           "attr_path",
           "name",
           "pname",
-          "version",
-          "outputs",
-          "outputs_to_install",
           "description",
-          "license",
-          "rev",
-          "rev_count",
-          "rev_date",
-          "system",
           "stabilities",
-          "locked_url"
+          "system"
         ],
-        "title": "PackageInfoAPI",
+        "title": "PackageInfoSearch",
         "example": {
           "attr_path": "foo.bar.curl",
           "description": "A very nice Item",
-          "license": "foo",
-          "locked_url": "git:git?rev=xyz",
           "name": "curl",
-          "outputs": "{}",
-          "outputs_to_install": "{}",
           "pname": "curl",
-          "rev": "xyz",
-          "rev_count": 4,
-          "rev_date": 0,
-          "search_string": "curl^curl^my description",
           "stabilities": [
             "stable",
             "unstable"
           ],
-          "system": "x86_64-linux",
-          "version": "1.0"
+          "system": "x86_64-linux"
         }
       },
-      "PackageInfoCommon": {
+      "PackageResolutionInfo": {
         "properties": {
           "attr_path": {
             "type": "string",
             "title": "Attr Path"
+          },
+          "derivation": {
+            "type": "string",
+            "title": "Derivation"
           },
           "name": {
             "type": "string",
@@ -927,6 +871,9 @@
           "version": {
             "type": "string",
             "title": "Version"
+          },
+          "system": {
+            "$ref": "#/components/schemas/SystemEnum"
           },
           "outputs": {
             "items": {
@@ -953,6 +900,10 @@
             "nullable": true,
             "type": "string"
           },
+          "locked_url": {
+            "type": "string",
+            "title": "Locked Url"
+          },
           "rev": {
             "type": "string",
             "title": "Rev"
@@ -966,32 +917,58 @@
             "format": "date-time",
             "title": "Rev Date"
           },
-          "system": {
-            "$ref": "#/components/schemas/SystemEnum"
+          "broken": {
+            "title": "Broken",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "unfree": {
+            "title": "Unfree",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "stabilities": {
+            "title": "Stabilities",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scrape_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Scrape Date"
           }
         },
         "type": "object",
         "required": [
           "attr_path",
+          "derivation",
           "name",
           "pname",
           "version",
+          "system",
           "outputs",
           "outputs_to_install",
           "description",
           "license",
+          "locked_url",
           "rev",
           "rev_count",
           "rev_date",
-          "system"
+          "broken",
+          "unfree",
+          "stabilities",
+          "scrape_date"
         ],
-        "title": "PackageInfoCommon"
+        "title": "PackageResolutionInfo"
       },
       "PackageSearchResult-Input": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/PackageInfoAPI"
+              "$ref": "#/components/schemas/PackageInfoSearch"
             },
             "type": "array",
             "title": "Items"
@@ -1011,22 +988,13 @@
           {
             "attr_path": "foo.bar.curl",
             "description": "A very nice Item",
-            "license": "foo",
-            "locked_url": "git:git?rev=xyz",
             "name": "curl",
-            "outputs": "{}",
-            "outputs_to_install": "{}",
             "pname": "curl",
-            "rev": "xyz",
-            "rev_count": 4,
-            "rev_date": 0,
-            "search_string": "curl^curl^my description",
             "stabilities": [
               "stable",
               "unstable"
             ],
-            "system": "x86_64-linux",
-            "version": "1.0"
+            "system": "x86_64-linux"
           }
         ]
       },
@@ -1034,7 +1002,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/PackageInfoAPI"
+              "$ref": "#/components/schemas/PackageInfoSearch"
             },
             "type": "array",
             "title": "Items"
@@ -1054,22 +1022,13 @@
           {
             "attr_path": "foo.bar.curl",
             "description": "A very nice Item",
-            "license": "foo",
-            "locked_url": "git:git?rev=xyz",
             "name": "curl",
-            "outputs": "{}",
-            "outputs_to_install": "{}",
             "pname": "curl",
-            "rev": "xyz",
-            "rev_count": 4,
-            "rev_date": 0,
-            "search_string": "curl^curl^my description",
             "stabilities": [
               "stable",
               "unstable"
             ],
-            "system": "x86_64-linux",
-            "version": "1.0"
+            "system": "x86_64-linux"
           }
         ]
       },
@@ -1077,7 +1036,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/PackageInfoCommon"
+              "$ref": "#/components/schemas/PackageResolutionInfo"
             },
             "type": "array",
             "title": "Items"
@@ -1098,7 +1057,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/PackageInfoCommon"
+              "$ref": "#/components/schemas/PackageResolutionInfo"
             },
             "type": "array",
             "title": "Items"
@@ -1486,7 +1445,6 @@
           "rev": "xyz",
           "rev_count": 4,
           "rev_date": 0,
-          "search_string": "curl^curl^my description",
           "stabilities": [
             "stable",
             "unstable"
@@ -1541,7 +1499,6 @@
           "rev": "xyz",
           "rev_count": 4,
           "rev_date": 0,
-          "search_string": "curl^curl^my description",
           "stabilities": [
             "stable",
             "unstable"

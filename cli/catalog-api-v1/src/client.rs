@@ -62,7 +62,6 @@ pub mod types {
     ///      "rev": "xyz",
     ///      "rev_count": 4,
     ///      "rev_date": 0,
-    ///      "search_string": "curl^curl^my description",
     ///      "stabilities": [
     ///        "stable",
     ///        "unstable"
@@ -156,7 +155,6 @@ pub mod types {
     ///      "rev": "xyz",
     ///      "rev_count": 4,
     ///      "rev_date": 0,
-    ///      "search_string": "curl^curl^my description",
     ///      "stabilities": [
     ///        "stable",
     ///        "unstable"
@@ -761,38 +759,95 @@ pub mod types {
             value.clone()
         }
     }
-    ///PackageInfoApi
+    ///PackageInfoSearch
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
-    ///  "title": "PackageInfoAPI",
+    ///  "title": "PackageInfoSearch",
     ///  "examples": [
     ///    {
     ///      "attr_path": "foo.bar.curl",
     ///      "description": "A very nice Item",
-    ///      "license": "foo",
-    ///      "locked_url": "git:git?rev=xyz",
     ///      "name": "curl",
-    ///      "outputs": "{}",
-    ///      "outputs_to_install": "{}",
     ///      "pname": "curl",
-    ///      "rev": "xyz",
-    ///      "rev_count": 4,
-    ///      "rev_date": 0,
-    ///      "search_string": "curl^curl^my description",
     ///      "stabilities": [
     ///        "stable",
     ///        "unstable"
     ///      ],
-    ///      "system": "x86_64-linux",
-    ///      "version": "1.0"
+    ///      "system": "x86_64-linux"
     ///    }
     ///  ],
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
+    ///    "description",
+    ///    "name",
+    ///    "pname",
+    ///    "stabilities",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "pname": {
+    ///      "title": "Pname",
+    ///      "type": "string"
+    ///    },
+    ///    "stabilities": {
+    ///      "title": "Stabilities",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct PackageInfoSearch {
+        pub attr_path: String,
+        pub description: Option<String>,
+        pub name: String,
+        pub pname: String,
+        pub stabilities: Vec<String>,
+        pub system: SystemEnum,
+    }
+    impl From<&PackageInfoSearch> for PackageInfoSearch {
+        fn from(value: &PackageInfoSearch) -> Self {
+            value.clone()
+        }
+    }
+    ///PackageResolutionInfo
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageResolutionInfo",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "broken",
+    ///    "derivation",
     ///    "description",
     ///    "license",
     ///    "locked_url",
@@ -803,13 +858,26 @@ pub mod types {
     ///    "rev",
     ///    "rev_count",
     ///    "rev_date",
+    ///    "scrape_date",
     ///    "stabilities",
     ///    "system",
+    ///    "unfree",
     ///    "version"
     ///  ],
     ///  "properties": {
     ///    "attr_path": {
     ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "broken": {
+    ///      "title": "Broken",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "derivation": {
+    ///      "title": "Derivation",
     ///      "type": "string"
     ///    },
     ///    "description": {
@@ -868,15 +936,30 @@ pub mod types {
     ///      "type": "string",
     ///      "format": "date-time"
     ///    },
+    ///    "scrape_date": {
+    ///      "title": "Scrape Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
     ///    "stabilities": {
     ///      "title": "Stabilities",
-    ///      "type": "array",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
     ///      "items": {
     ///        "type": "string"
     ///      }
     ///    },
     ///    "system": {
     ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    },
+    ///    "unfree": {
+    ///      "title": "Unfree",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
     ///    },
     ///    "version": {
     ///      "title": "Version",
@@ -887,8 +970,10 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PackageInfoApi {
+    pub struct PackageResolutionInfo {
         pub attr_path: String,
+        pub broken: Option<bool>,
+        pub derivation: String,
         pub description: Option<String>,
         pub license: Option<String>,
         pub locked_url: String,
@@ -899,122 +984,14 @@ pub mod types {
         pub rev: String,
         pub rev_count: i64,
         pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-        pub stabilities: Vec<String>,
+        pub scrape_date: chrono::DateTime<chrono::offset::Utc>,
+        pub stabilities: Option<Vec<String>>,
         pub system: SystemEnum,
+        pub unfree: Option<bool>,
         pub version: String,
     }
-    impl From<&PackageInfoApi> for PackageInfoApi {
-        fn from(value: &PackageInfoApi) -> Self {
-            value.clone()
-        }
-    }
-    ///PackageInfoCommon
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackageInfoCommon",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "attr_path",
-    ///    "description",
-    ///    "license",
-    ///    "name",
-    ///    "outputs",
-    ///    "outputs_to_install",
-    ///    "pname",
-    ///    "rev",
-    ///    "rev_count",
-    ///    "rev_date",
-    ///    "system",
-    ///    "version"
-    ///  ],
-    ///  "properties": {
-    ///    "attr_path": {
-    ///      "title": "Attr Path",
-    ///      "type": "string"
-    ///    },
-    ///    "description": {
-    ///      "title": "Description",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "license": {
-    ///      "title": "License",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "name": {
-    ///      "title": "Name",
-    ///      "type": "string"
-    ///    },
-    ///    "outputs": {
-    ///      "title": "Outputs",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/Output"
-    ///      }
-    ///    },
-    ///    "outputs_to_install": {
-    ///      "title": "Outputs To Install",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "pname": {
-    ///      "title": "Pname",
-    ///      "type": "string"
-    ///    },
-    ///    "rev": {
-    ///      "title": "Rev",
-    ///      "type": "string"
-    ///    },
-    ///    "rev_count": {
-    ///      "title": "Rev Count",
-    ///      "type": "integer"
-    ///    },
-    ///    "rev_date": {
-    ///      "title": "Rev Date",
-    ///      "type": "string",
-    ///      "format": "date-time"
-    ///    },
-    ///    "system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
-    ///    },
-    ///    "version": {
-    ///      "title": "Version",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PackageInfoCommon {
-        pub attr_path: String,
-        pub description: Option<String>,
-        pub license: Option<String>,
-        pub name: String,
-        pub outputs: Vec<Output>,
-        pub outputs_to_install: Option<Vec<String>>,
-        pub pname: String,
-        pub rev: String,
-        pub rev_count: i64,
-        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-        pub system: SystemEnum,
-        pub version: String,
-    }
-    impl From<&PackageInfoCommon> for PackageInfoCommon {
-        fn from(value: &PackageInfoCommon) -> Self {
+    impl From<&PackageResolutionInfo> for PackageResolutionInfo {
+        fn from(value: &PackageResolutionInfo) -> Self {
             value.clone()
         }
     }
@@ -1030,22 +1007,13 @@ pub mod types {
     ///      {
     ///        "attr_path": "foo.bar.curl",
     ///        "description": "A very nice Item",
-    ///        "license": "foo",
-    ///        "locked_url": "git:git?rev=xyz",
     ///        "name": "curl",
-    ///        "outputs": "{}",
-    ///        "outputs_to_install": "{}",
     ///        "pname": "curl",
-    ///        "rev": "xyz",
-    ///        "rev_count": 4,
-    ///        "rev_date": 0,
-    ///        "search_string": "curl^curl^my description",
     ///        "stabilities": [
     ///          "stable",
     ///          "unstable"
     ///        ],
-    ///        "system": "x86_64-linux",
-    ///        "version": "1.0"
+    ///        "system": "x86_64-linux"
     ///      }
     ///    ]
     ///  ],
@@ -1059,7 +1027,7 @@ pub mod types {
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoAPI"
+    ///        "$ref": "#/components/schemas/PackageInfoSearch"
     ///      }
     ///    },
     ///    "total_count": {
@@ -1072,7 +1040,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageSearchResultInput {
-        pub items: Vec<PackageInfoApi>,
+        pub items: Vec<PackageInfoSearch>,
         pub total_count: i64,
     }
     impl From<&PackageSearchResultInput> for PackageSearchResultInput {
@@ -1092,22 +1060,13 @@ pub mod types {
     ///      {
     ///        "attr_path": "foo.bar.curl",
     ///        "description": "A very nice Item",
-    ///        "license": "foo",
-    ///        "locked_url": "git:git?rev=xyz",
     ///        "name": "curl",
-    ///        "outputs": "{}",
-    ///        "outputs_to_install": "{}",
     ///        "pname": "curl",
-    ///        "rev": "xyz",
-    ///        "rev_count": 4,
-    ///        "rev_date": 0,
-    ///        "search_string": "curl^curl^my description",
     ///        "stabilities": [
     ///          "stable",
     ///          "unstable"
     ///        ],
-    ///        "system": "x86_64-linux",
-    ///        "version": "1.0"
+    ///        "system": "x86_64-linux"
     ///      }
     ///    ]
     ///  ],
@@ -1121,7 +1080,7 @@ pub mod types {
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoAPI"
+    ///        "$ref": "#/components/schemas/PackageInfoSearch"
     ///      }
     ///    },
     ///    "total_count": {
@@ -1134,7 +1093,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageSearchResultOutput {
-        pub items: Vec<PackageInfoApi>,
+        pub items: Vec<PackageInfoSearch>,
         pub total_count: i64,
     }
     impl From<&PackageSearchResultOutput> for PackageSearchResultOutput {
@@ -1159,7 +1118,7 @@ pub mod types {
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoCommon"
+    ///        "$ref": "#/components/schemas/PackageResolutionInfo"
     ///      }
     ///    },
     ///    "total_count": {
@@ -1172,7 +1131,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackagesResultInput {
-        pub items: Vec<PackageInfoCommon>,
+        pub items: Vec<PackageResolutionInfo>,
         pub total_count: i64,
     }
     impl From<&PackagesResultInput> for PackagesResultInput {
@@ -1197,7 +1156,7 @@ pub mod types {
     ///      "title": "Items",
     ///      "type": "array",
     ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoCommon"
+    ///        "$ref": "#/components/schemas/PackageResolutionInfo"
     ///      }
     ///    },
     ///    "total_count": {
@@ -1210,7 +1169,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackagesResultOutput {
-        pub items: Vec<PackageInfoCommon>,
+        pub items: Vec<PackageResolutionInfo>,
         pub total_count: i64,
     }
     impl From<&PackagesResultOutput> for PackagesResultOutput {
@@ -1752,7 +1711,6 @@ pub mod types {
     ///      "rev": "xyz",
     ///      "rev_count": 4,
     ///      "rev_date": 0,
-    ///      "search_string": "curl^curl^my description",
     ///      "stabilities": [
     ///        "stable",
     ///        "unstable"
@@ -1827,7 +1785,6 @@ pub mod types {
     ///      "rev": "xyz",
     ///      "rev_count": 4,
     ///      "rev_date": 0,
-    ///      "search_string": "curl^curl^my description",
     ///      "stabilities": [
     ///        "stable",
     ///        "unstable"
@@ -2247,7 +2204,7 @@ TBD
 *Markdown is available here*
 
 
-Version: v0.1.dev156+gcff8beb.d19800101*/
+Version: v0.1.dev162+geac55ad.d19800101*/
 pub struct Client {
     pub(crate) baseurl: String,
     pub(crate) client: reqwest::Client,
@@ -2293,7 +2250,7 @@ impl Client {
     /// This string is pulled directly from the source OpenAPI
     /// document and may be in any format the API selects.
     pub fn api_version(&self) -> &'static str {
-        "v0.1.dev156+gcff8beb.d19800101"
+        "v0.1.dev162+geac55ad.d19800101"
     }
 }
 #[allow(clippy::all)]
