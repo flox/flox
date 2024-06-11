@@ -34,7 +34,7 @@ load test_support.bash
 setup_file() {
   common_file_setup
   export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -84,7 +84,7 @@ project_setup_catalog() {
   #     _FLOX_CATALOG_DUMP_RESPONSE_FILE=cli/tests/catalog_responses/resolve/ld-floxlib.json \
   #     flox edit -f cli/tests/ld-floxlib/manifest-catalog.toml
   #
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/ld-floxlib.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ld-floxlib.json" \
     $FLOX_BIN edit -f ./manifest-catalog.toml
 }
 
