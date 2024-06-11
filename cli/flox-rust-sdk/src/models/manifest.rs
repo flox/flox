@@ -558,7 +558,14 @@ impl FromStr for PackageToInstall {
     type Err = ManifestError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        temporary_parse_descriptor(s)
+        let (id, pkg_path, version) = parse_descriptor(s)?;
+
+        Ok(PackageToInstall {
+            id,
+            pkg_path,
+            version,
+            input: None,
+        })
     }
 }
 
