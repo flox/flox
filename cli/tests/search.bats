@@ -97,11 +97,11 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "catalog: 'flox search' helpful error with unquoted redirect: hello@>1 -> hello@" {
-  skip "semver search not yet supported by catalog"
-  run "$FLOX_BIN" search hello@
-  assert_failure
-  assert_output --partial "try quoting"
+@test "catalog: 'flox search' warns about and strips version specifiers" {
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/hello.json"
+  run --separate-stderr "$FLOX_BIN" search hello@2.12.1
+  assert_success
+  assert_regex "$stderr" "'flox search' ignores version specifiers."
 }
 
 # ---------------------------------------------------------------------------- #
@@ -127,15 +127,6 @@ setup_file() {
 
 @test "'flox search' semver search: hello@2.12.1" {
   unset FLOX_FEATURES_USE_CATALOG
-  run --separate-stderr "$FLOX_BIN" search hello@2.12.1
-  assert_equal "${#lines[@]}" 1 # 1 result
-  assert_equal "${stderr_lines[0]}" "$SHOW_HINT"
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "catalog: 'flox search' semver search: hello@2.12.1" {
-  skip "semver search not yet supported by catalog"
   run --separate-stderr "$FLOX_BIN" search hello@2.12.1
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${stderr_lines[0]}" "$SHOW_HINT"
@@ -177,33 +168,8 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "catalog: 'flox search' semver search: 'hello@>=1'" {
-  skip "semver search not yet supported by catalog"
-  run "$FLOX_BIN" search 'hello@>=1' --json
-  versions="$(echo "$output" | jq -c 'map(.version)')"
-  case "$THIS_SYSTEM" in
-    *-darwin)
-      assert_equal "$versions" '["2.12.1","2.12","2.10"]'
-      ;;
-    *-linux)
-      assert_equal "$versions" '[]'
-      ;;
-  esac
-}
-
-# ---------------------------------------------------------------------------- #
-
 @test "'flox search' semver search: hello@2.x" {
   unset FLOX_FEATURES_USE_CATALOG
-  run "$FLOX_BIN" search hello@2.x --json
-  versions="$(echo "$output" | jq -c 'map(.version)')"
-  assert_equal "$versions" '["2.12.1"]'
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "catalog: 'flox search' semver search: hello@2.x" {
-  skip "semver search not yet supported by catalog"
   run "$FLOX_BIN" search hello@2.x --json
   versions="$(echo "$output" | jq -c 'map(.version)')"
   assert_equal "$versions" '["2.12.1"]'
@@ -220,26 +186,8 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "catalog: 'flox search' semver search: hello@=2.10" {
-  skip "semver search not yet supported by catalog"
-  run --separate-stderr "$FLOX_BIN" search hello@=2.12 --all
-  assert_equal "${#lines[@]}" 1 # 1 result
-  assert_equal "${stderr_lines[0]}" "$SHOW_HINT"
-}
-
-# ---------------------------------------------------------------------------- #
-
 @test "'flox search' semver search: hello@v2" {
   unset FLOX_FEATURES_USE_CATALOG
-  run "$FLOX_BIN" search hello@v2 --json
-  versions="$(echo "$output" | jq -c 'map(.version)')"
-  assert_equal "$versions" '["2.12.1"]'
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "catalog: 'flox search' semver search: hello@v2" {
-  skip "semver search not yet supported by catalog"
   run "$FLOX_BIN" search hello@v2 --json
   versions="$(echo "$output" | jq -c 'map(.version)')"
   assert_equal "$versions" '["2.12.1"]'
@@ -256,26 +204,8 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "catalog: 'flox search' semver search: 'hello@>1 <3'" {
-  skip "semver search not yet supported by catalog"
-  run "$FLOX_BIN" search 'hello@>1 <3' --json
-  versions="$(echo "$output" | jq -c 'map(.version)')"
-  assert_equal "$versions" '["2.12.1"]'
-}
-
-# ---------------------------------------------------------------------------- #
-
 @test "'flox search' exact semver match listed first" {
   unset FLOX_FEATURES_USE_CATALOG
-  run "$FLOX_BIN" search hello@2.12.1 --json
-  first_line="$(echo "$output" | head -n 1 | grep 2.12.1)"
-  assert [ -n first_line ]
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "catalog: 'flox search' exact semver match listed first" {
-  skip "semver search not yet supported by catalog"
   run "$FLOX_BIN" search hello@2.12.1 --json
   first_line="$(echo "$output" | head -n 1 | grep 2.12.1)"
   assert [ -n first_line ]

@@ -7,7 +7,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::global_manifest_path;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, SearchResults};
-use flox_rust_sdk::providers::catalog::ClientTrait;
+use flox_rust_sdk::providers::catalog::{ClientTrait, SearchTerm};
 use indoc::formatdoc;
 use log::debug;
 use tracing::instrument;
@@ -36,11 +36,9 @@ pub struct Search {
     #[bpaf(short, long)]
     pub all: bool,
 
-    /// The package to search for in the format '<pkg-path>[@<semver-range>]' using 'node-semver' syntax.
+    /// The package to search for in the format '<pkg-path>'.
     ///
     /// ex. python310Packages.pip
-    ///
-    /// ex. 'node@>=16' # quotes needed to prevent '>' redirection
     #[bpaf(positional("search-term"))]
     pub search_term: String,
 }
@@ -75,12 +73,22 @@ impl Search {
 
         let results = if let Some(client) = flox.catalog_client {
             tracing::debug!("using catalog client for search");
+            let parsed_search = match SearchTerm::from_arg(&self.search_term) {
+                SearchTerm::Clean(term) => term,
+                SearchTerm::VersionStripped(term) => {
+                    message::warning(indoc::indoc! {"
+                        'flox search' ignores version specifiers.
+                        To see available versions of a package, use 'flox show'
+                    "});
+                    term
+                },
+            };
             Dialog {
                 message: "Searching for packages...",
                 help_message: None,
                 typed: Spinner::new(|| {
                     tokio::runtime::Handle::current().block_on(client.search(
-                        &self.search_term,
+                        parsed_search,
                         flox.system.clone(),
                         limit,
                     ))
