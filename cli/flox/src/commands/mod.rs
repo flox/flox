@@ -80,7 +80,8 @@ use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FIL
 use crate::utils::{message, TRAILING_NETWORK_CALL_TIMEOUT};
 
 // Relative to flox executable
-const UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH: &str = "../../share/flox/files/update-instructions.txt";
+const UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH: &str =
+    "../../share/flox/files/update-instructions.txt";
 const UPDATE_NOTIFICATION_FILE_NAME: &str = "update-notification.json";
 const UPDATE_NOTIFICATION_EXPIRY: Duration = Duration::days(1);
 
@@ -547,8 +548,14 @@ impl UpdateNotification {
     fn update_instructions(&self) -> String {
         let default_update_instructions = "Get the latest at https://flox.dev/docs/install-flox/#upgrade-existing-flox-installation";
         if let Ok(exe) = env::current_exe() {
-            if let Ok(update_instructions_file) = exe.join(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH).canonicalize() {
-                debug!("Looking for update instructions file at: {}", update_instructions_file.display());
+            if let Ok(update_instructions_file) = exe
+                .join(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH)
+                .canonicalize()
+            {
+                debug!(
+                    "Looking for update instructions file at: {}",
+                    update_instructions_file.display()
+                );
                 fs::read_to_string(update_instructions_file)
                     .map(|docs| format!("Get the latest with:\n{}", indent::indent_all_by(2, docs)))
                     .unwrap_or(default_update_instructions.to_string())
