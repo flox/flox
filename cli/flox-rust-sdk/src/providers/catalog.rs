@@ -811,6 +811,52 @@ impl TryFrom<PackageInfoCommon> for SearchResult {
     }
 }
 
+pub mod test_helpers {
+    use super::*;
+    use crate::data::System;
+
+    // This function should really be a #[cfg(test)] method on ResolvedPackageGroup,
+    // but you can't import test features across crates
+    pub fn resolved_pkg_group_with_dummy_package(
+        group_name: &str,
+        system: &System,
+        install_id: &str,
+        pkg_path: &str,
+        version: &str,
+    ) -> ResolvedPackageGroup {
+        let pkg = PackageResolutionInfo {
+            attr_path: pkg_path.to_string(),
+            broken: Some(false),
+            derivation: String::new(),
+            description: None,
+            install_id: install_id.to_string(),
+            license: None,
+            locked_url: String::new(),
+            name: String::new(),
+            outputs: vec![],
+            outputs_to_install: None,
+            pname: String::new(),
+            rev: String::new(),
+            rev_count: 0,
+            rev_date: chrono::offset::Utc::now(),
+            scrape_date: chrono::offset::Utc::now(),
+            stabilities: None,
+            unfree: None,
+            version: version.to_string(),
+            system: system.parse().unwrap(),
+        };
+        let page = CatalogPage {
+            packages: Some(vec![pkg]),
+            page: 0,
+            url: String::new(),
+            complete: true,
+        };
+        ResolvedPackageGroup {
+            name: group_name.to_string(),
+            page: Some(page),
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
 
