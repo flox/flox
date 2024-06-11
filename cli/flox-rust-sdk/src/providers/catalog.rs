@@ -580,6 +580,9 @@ pub type PackageDescriptor = api_types::PackageDescriptor;
 pub type ApiErrorResponse = api_types::ErrorResponse;
 pub type ApiErrorResponseValue = ResponseValue<ApiErrorResponse>;
 
+/// An alias so the flox crate doesn't have to depend on the catalog-api crate
+pub type SystemEnum = api_types::SystemEnum;
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct PackageGroup {
     pub name: String,

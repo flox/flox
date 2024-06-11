@@ -32,6 +32,10 @@ cmd = "flox install gzip"
 pre_cmd = "flox init"
 cmd = "flox install hello"
 
+[resolve.hello-unfree]
+pre_cmd = "flox init"
+cmd = "flox install hello-unfree"
+
 [resolve.krb5_after_prereqs_installed]
 files = ["envs/krb5_prereqs/manifest.toml"]
 pre_cmd = '''
