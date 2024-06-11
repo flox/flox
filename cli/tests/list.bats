@@ -157,4 +157,15 @@ EOF
 # ------------------------------ Catalog Tests ------------------------------- #
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=list,list:catalog
+@test "catalog: 'flox list' lists packages of environment in the current dir; One package from nixpkgs" {
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+    "$FLOX_BIN" install hello
+
+  run "$FLOX_BIN" list
+  assert_success
+  assert_output --regexp 'hello: hello \([0-9]+\.[0-9]+(\.[0-9]+)?\)'
+}
+
 # ---------------------------------------------------------------------------- #
