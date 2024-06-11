@@ -50,6 +50,12 @@ pub struct RawSpec {
     /// These are specified relative to the `input` directory. You may also specify directories
     /// here, in which case the entire directory will be copied.
     pub files: Option<Vec<PathBuf>>,
+    /// Doesn't fail the job if there is an error running `pre_cmd`
+    pub ignore_pre_cmd_errors: Option<bool>,
+    /// Doesn't fail the job if there is an error running `cmd`
+    pub ignore_cmd_errors: Option<bool>,
+    /// Doesn't fail the job if there is an error running `post_cmd`
+    pub ignore_post_cmd_errors: Option<bool>,
 }
 
 /// A spec for a single generated response file.
@@ -68,6 +74,12 @@ pub struct Spec {
     /// These are specified relative to the `input` directory. You may also specify directories
     /// here, in which case the entire directory will be copied.
     pub files: Option<Vec<PathBuf>>,
+    /// Doesn't fail the job if there is an error running `pre_cmd`
+    pub ignore_pre_cmd_errors: Option<bool>,
+    /// Doesn't fail the job if there is an error running `cmd`
+    pub ignore_cmd_errors: Option<bool>,
+    /// Doesn't fail the job if there is an error running `post_cmd`
+    pub ignore_post_cmd_errors: Option<bool>,
 }
 
 impl Spec {
@@ -78,6 +90,9 @@ impl Spec {
             cmd: raw_spec.cmd.clone(),
             post_cmd: raw_spec.post_cmd.clone(),
             files: raw_spec.files.clone(),
+            ignore_pre_cmd_errors: raw_spec.ignore_pre_cmd_errors,
+            ignore_cmd_errors: raw_spec.ignore_cmd_errors,
+            ignore_post_cmd_errors: raw_spec.ignore_post_cmd_errors,
         }
     }
 }
@@ -257,29 +272,46 @@ pub fn execute_job(
         copy_files(files, input_dir, job.tmp_dir.path()).context("copying files failed")?;
     }
     if let Some(pre_cmd) = job.spec.pre_cmd.as_ref() {
+        let ignore_errors = job.spec.ignore_pre_cmd_errors.unwrap_or(false);
         debug!(
             category = job.category,
             name = job.spec.name,
+            ignore_errors,
             "running pre_cmd"
         );
-        run_pre_cmd(pre_cmd, vars, job.tmp_dir.path()).context("pre_cmd failed")?;
+        run_pre_cmd(pre_cmd, vars, job.tmp_dir.path(), ignore_errors).context("pre_cmd failed")?;
     }
-    debug!(category = job.category, name = job.spec.name, "running cmd");
+    let ignore_errors = job.spec.ignore_cmd_errors.unwrap_or(false);
+    debug!(
+        category = job.category,
+        name = job.spec.name,
+        ignore_errors,
+        "running cmd"
+    );
     run_cmd(
         job.spec.cmd.as_ref(),
         vars,
         job.tmp_dir.path(),
         &job.output_file,
+        ignore_errors,
     )
     .context("cmd failed")?;
     if let Some(post_cmd) = job.spec.post_cmd.as_ref() {
+        let ignore_errors = job.spec.ignore_post_cmd_errors.unwrap_or(false);
         debug!(
             category = job.category,
             name = job.spec.name,
+            ignore_errors,
             "running post_cmd"
         );
-        run_post_cmd(post_cmd, vars, job.tmp_dir.path(), &job.output_file)
-            .context("post_cmd failed")?;
+        run_post_cmd(
+            post_cmd,
+            vars,
+            job.tmp_dir.path(),
+            &job.output_file,
+            ignore_errors,
+        )
+        .context("post_cmd failed")?;
     }
     Ok(())
 }
@@ -289,6 +321,7 @@ fn run_pre_cmd(
     pre_cmd: &str,
     vars: &Option<HashMap<String, String>>,
     dir: &Path,
+    ignore_errors: bool,
 ) -> Result<(), Error> {
     let mut cmd = Command::new("bash");
     cmd.arg("-c").arg(pre_cmd);
@@ -300,7 +333,7 @@ fn run_pre_cmd(
     }
     debug!("pre_cmd: {:?}", cmd);
     let output = cmd.output().context("couldn't call command")?;
-    if !output.status.success() {
+    if !output.status.success() && !ignore_errors {
         let stderr = String::from_utf8_lossy(output.stderr.as_slice());
         anyhow::bail!("{}", stderr);
     }
@@ -356,6 +389,7 @@ pub fn run_cmd(
     vars: &Option<HashMap<String, String>>,
     dir: &Path,
     output_file: &Path,
+    ignore_errors: bool,
 ) -> Result<(), Error> {
     let mut cmd = Command::new("bash");
     cmd.arg("-c");
@@ -369,7 +403,7 @@ pub fn run_cmd(
     cmd.env("_FLOX_CATALOG_DUMP_RESPONSE_FILE", output_file);
     debug!("cmd: {:?}", cmd);
     let output = cmd.output().context("couldn't call command")?;
-    if !output.status.success() {
+    if !output.status.success() && !ignore_errors {
         let stderr = String::from_utf8_lossy(output.stderr.as_slice());
         anyhow::bail!("{}", stderr);
     }
@@ -382,6 +416,7 @@ pub fn run_post_cmd(
     vars: &Option<HashMap<String, String>>,
     dir: &Path,
     output_file: &Path,
+    ignore_errors: bool,
 ) -> Result<(), Error> {
     let mut cmd = Command::new("bash");
     cmd.arg("-c");
@@ -395,7 +430,7 @@ pub fn run_post_cmd(
     cmd.env("RESPONSE_FILE", output_file);
     debug!("post_cmd: {:?}", cmd);
     let output = cmd.output().context("couldn't call command")?;
-    if !output.status.success() {
+    if !output.status.success() && !ignore_errors {
         let stderr = String::from_utf8_lossy(output.stderr.as_slice());
         anyhow::bail!("{}", stderr);
     }

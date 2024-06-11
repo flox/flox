@@ -84,7 +84,7 @@ project_setup_catalog() {
   #     _FLOX_CATALOG_DUMP_RESPONSE_FILE=cli/tests/catalog_responses/resolve/ld-floxlib.json \
   #     flox edit -f cli/tests/ld-floxlib/manifest-catalog.toml
   #
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ld-floxlib.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/ld_floxlib.json" \
     $FLOX_BIN edit -f ./manifest-catalog.toml
 }
 
