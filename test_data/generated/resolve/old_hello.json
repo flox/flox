@@ -8,7 +8,7 @@
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/7db0fz4nh3bj3xcxmbyp9hajv2lkji2q-hello-2.12.1.drv",
+            "derivation": "/nix/store/AAA-hello-2.12.1.drv",
             "description": "A program that produces a familiar, friendly greeting",
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
@@ -28,15 +28,17 @@
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
             "scrape_date": "2024-06-04T09:46:16Z",
-            "stabilities": null,
+            "stabilities": [
+              "unstable"
+            ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "old_version"
+            "version": "2.12.1"
           },
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/pb7w5qbpwyvy5979ps9qdpyjgfwhpvgn-hello-2.12.1.drv",
+            "derivation": "/nix/store/AAA-hello-2.12.1.drv",
             "description": "A program that produces a familiar, friendly greeting",
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
@@ -56,15 +58,17 @@
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
             "scrape_date": "2024-06-04T09:46:16Z",
-            "stabilities": null,
+            "stabilities": [
+              "unstable"
+            ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "old_version"
+            "version": "2.12.1"
           },
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/vpw7qifbwiy18fj5qrppz91jlsskf1if-hello-2.12.1.drv",
+            "derivation": "/nix/store/AAA-hello-2.12.1.drv",
             "description": "A program that produces a familiar, friendly greeting",
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
@@ -84,15 +88,17 @@
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
             "scrape_date": "2024-06-04T09:46:16Z",
-            "stabilities": null,
+            "stabilities": [
+              "unstable"
+            ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "old_version"
+            "version": "2.12.1"
           },
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/rn30zy2bj4zka8axq0ipknfp1pbgnnd1-hello-2.12.1.drv",
+            "derivation": "/nix/store/AAA-hello-2.12.1.drv",
             "description": "A program that produces a familiar, friendly greeting",
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
@@ -112,10 +118,12 @@
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
             "scrape_date": "2024-06-04T09:46:16Z",
-            "stabilities": null,
+            "stabilities": [
+              "unstable"
+            ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "old_version"
+            "version": "2.12.1"
           }
         ],
         "page": 633517,
