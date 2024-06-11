@@ -836,6 +836,81 @@ pub fn temporary_parse_descriptor(descriptor: &str) -> Result<PackageToInstall, 
     }
 }
 
+/// Parse a shorthand descriptor into `install_id`, `attribute_path` and `version`.
+///
+/// A shorthand descriptor consists of a package name and an optional version.
+/// The attribute path is a dot-separated path to a package in the catalog.
+/// The last component of the attribute path is the `install_id`.
+///
+/// The descriptor is parsed as follows:
+/// ```text
+///     descriptor ::= <attribute_path>[@<version>]
+///
+///     attribute_path ::= <install_id> | <attribute_path_rest>.<install_id>
+///     attribute_path_rest ::= <identifier> | <attribute_path_rest>.<identifier>
+///     install_id ::= <identifier>
+///
+///     version ::= <string> # interpreted as semver or plain version by the resolver
+/// ```
+/// Todo: this does currently _not_ handle any more pathological cases like
+///  - `@` in the version string (the last `@` is the delimiter)
+pub fn parse_descriptor(
+    descriptor: &str,
+) -> Result<(String, String, Option<String>), ManifestError> {
+    let (attr_path, version) = match descriptor.rsplit_once('@') {
+        Some((attr_path, version)) if !version.is_empty() => {
+            (attr_path.to_string(), Some(version.to_string()))
+        },
+        Some(_) => {
+            return Err(ManifestError::MalformedStringDescriptor {
+                msg: "don quoxote".to_string(),
+                desc: descriptor.to_string(),
+            })
+        },
+        None => (descriptor.to_string(), None),
+    };
+
+    let install_id = {
+        let mut install_id = None;
+        let mut cur = String::new();
+
+        let mut start_quote = None;
+
+        for (n, c) in attr_path.chars().enumerate() {
+            match c {
+                '.' if start_quote.is_none() => {
+                    let _ = install_id.insert(std::mem::take(&mut cur));
+                },
+                '"' if start_quote.is_some() => start_quote = None,
+                '"' if start_quote.is_none() => start_quote = Some(n),
+                other => cur.push(other),
+            }
+        }
+
+        if start_quote.is_some() {
+            return Err(ManifestError::MalformedStringDescriptor {
+                msg: "unclosed quote".to_string(),
+                desc: descriptor.to_string(),
+            });
+        }
+
+        if !cur.is_empty() {
+            let _ = install_id.insert(cur);
+        }
+
+        if install_id.is_none() {
+            return Err(ManifestError::MalformedStringDescriptor {
+                msg: "attribute path is empty".to_string(),
+                desc: descriptor.to_string(),
+            });
+        }
+
+        install_id.unwrap()
+    };
+
+    Ok((install_id, attr_path, version))
+}
+
 #[cfg(test)]
 pub(super) mod test {
     use pretty_assertions::assert_eq;
@@ -1375,7 +1450,7 @@ pub(super) mod test {
     }
 
     #[test]
-    fn parses_string_descriptor() {
+    fn parses_string_descriptor_pkgdb() {
         // FIXME: remove or update this test when `flox` can parse descriptors on its own
         let parsed = temporary_parse_descriptor("hello").unwrap();
         assert_eq!(parsed, PackageToInstall {
@@ -1405,5 +1480,38 @@ pub(super) mod test {
             version: None,
             input: Some("nixpkgs".to_string())
         });
+    }
+
+    #[test]
+    fn parses_string_descriptor() {
+        let parsed = parse_descriptor("hello").unwrap();
+        assert_eq!(parsed, ("hello".to_string(), "hello".to_string(), None));
+        let parsed = parse_descriptor("foo.bar@=1.2.3").unwrap();
+        assert_eq!(
+            parsed,
+            (
+                "bar".to_string(),
+                "foo.bar".to_string(),
+                Some("=1.2.3".to_string())
+            )
+        );
+        let parsed = parse_descriptor("foo.bar@23.11").unwrap();
+        assert_eq!(
+            parsed,
+            (
+                "bar".to_string(),
+                "foo.bar".to_string(),
+                Some("23.11".to_string())
+            )
+        );
+        let parsed = parse_descriptor("rubyPackages.\"http_parser.rb\"").unwrap();
+        assert_eq!(
+            parsed,
+            (
+                "http_parser.rb".to_string(),
+                "rubyPackages.\"http_parser.rb\"".to_string(),
+                None
+            )
+        );
     }
 }
