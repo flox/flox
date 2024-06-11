@@ -558,12 +558,12 @@ impl FromStr for PackageToInstall {
     type Err = ManifestError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (id, pkg_path, version) = parse_descriptor(s)?;
+        let descriptor = ShorthandDescriptor::from_str(s)?;
 
         Ok(PackageToInstall {
-            id,
-            pkg_path,
-            version,
+            id: descriptor.install_id,
+            pkg_path: descriptor.attr_path,
+            version: descriptor.version,
             input: None,
         })
     }
@@ -861,61 +861,74 @@ pub fn temporary_parse_descriptor(descriptor: &str) -> Result<PackageToInstall, 
 /// ```
 /// Todo: this does currently _not_ handle any more pathological cases like
 ///  - `@` in the version string (the last `@` is the delimiter)
-pub fn parse_descriptor(
-    descriptor: &str,
-) -> Result<(String, String, Option<String>), ManifestError> {
-    let (attr_path, version) = match descriptor.rsplit_once('@') {
-        Some((attr_path, version)) if !version.is_empty() => {
-            (attr_path.to_string(), Some(version.to_string()))
-        },
-        Some(_) => {
-            return Err(ManifestError::MalformedStringDescriptor {
-                msg: "don quoxote".to_string(),
-                desc: descriptor.to_string(),
-            })
-        },
-        None => (descriptor.to_string(), None),
-    };
+#[derive(Debug, Clone, PartialEq)]
+struct ShorthandDescriptor {
+    install_id: String,
+    attr_path: String,
+    version: Option<String>,
+}
 
-    let install_id = {
-        let mut install_id = None;
-        let mut cur = String::new();
+impl FromStr for ShorthandDescriptor {
+    type Err = ManifestError;
 
-        let mut start_quote = None;
+    fn from_str(descriptor: &str) -> Result<ShorthandDescriptor, ManifestError> {
+        let (attr_path, version) = match descriptor.rsplit_once('@') {
+            Some((attr_path, version)) if !version.is_empty() => {
+                (attr_path.to_string(), Some(version.to_string()))
+            },
+            Some(_) => {
+                return Err(ManifestError::MalformedStringDescriptor {
+                    msg: "don quoxote".to_string(),
+                    desc: descriptor.to_string(),
+                })
+            },
+            None => (descriptor.to_string(), None),
+        };
 
-        for (n, c) in attr_path.chars().enumerate() {
-            match c {
-                '.' if start_quote.is_none() => {
-                    let _ = install_id.insert(std::mem::take(&mut cur));
-                },
-                '"' if start_quote.is_some() => start_quote = None,
-                '"' if start_quote.is_none() => start_quote = Some(n),
-                other => cur.push(other),
+        let install_id = {
+            let mut install_id = None;
+            let mut cur = String::new();
+
+            let mut start_quote = None;
+
+            for (n, c) in attr_path.chars().enumerate() {
+                match c {
+                    '.' if start_quote.is_none() => {
+                        let _ = install_id.insert(std::mem::take(&mut cur));
+                    },
+                    '"' if start_quote.is_some() => start_quote = None,
+                    '"' if start_quote.is_none() => start_quote = Some(n),
+                    other => cur.push(other),
+                }
             }
-        }
 
-        if start_quote.is_some() {
-            return Err(ManifestError::MalformedStringDescriptor {
-                msg: "unclosed quote".to_string(),
-                desc: descriptor.to_string(),
-            });
-        }
+            if start_quote.is_some() {
+                return Err(ManifestError::MalformedStringDescriptor {
+                    msg: "unclosed quote".to_string(),
+                    desc: descriptor.to_string(),
+                });
+            }
 
-        if !cur.is_empty() {
-            let _ = install_id.insert(cur);
-        }
+            if !cur.is_empty() {
+                let _ = install_id.insert(cur);
+            }
 
-        if install_id.is_none() {
-            return Err(ManifestError::MalformedStringDescriptor {
-                msg: "attribute path is empty".to_string(),
-                desc: descriptor.to_string(),
-            });
-        }
+            if install_id.is_none() {
+                return Err(ManifestError::MalformedStringDescriptor {
+                    msg: "attribute path is empty".to_string(),
+                    desc: descriptor.to_string(),
+                });
+            }
 
-        install_id.unwrap()
-    };
+            install_id.unwrap()
+        };
 
-    Ok((install_id, attr_path, version))
+        Ok(Self {
+            install_id,
+            attr_path,
+            version,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1491,39 +1504,34 @@ pub(super) mod test {
 
     #[test]
     fn parses_string_descriptor() {
-        let parsed = parse_descriptor("hello").unwrap();
-        assert_eq!(parsed, ("hello".to_string(), "hello".to_string(), None));
-        let parsed = parse_descriptor("foo.bar@=1.2.3").unwrap();
-        assert_eq!(
-            parsed,
-            (
-                "bar".to_string(),
-                "foo.bar".to_string(),
-                Some("=1.2.3".to_string())
-            )
-        );
-        let parsed = parse_descriptor("foo.bar@23.11").unwrap();
-        assert_eq!(
-            parsed,
-            (
-                "bar".to_string(),
-                "foo.bar".to_string(),
-                Some("23.11".to_string())
-            )
-        );
-        let parsed = parse_descriptor("rubyPackages.\"http_parser.rb\"").unwrap();
-        assert_eq!(
-            parsed,
-            (
-                "http_parser.rb".to_string(),
-                "rubyPackages.\"http_parser.rb\"".to_string(),
-                None
-            )
-        );
+        let parsed: ShorthandDescriptor = "hello".parse().unwrap();
+        assert_eq!(parsed, ShorthandDescriptor {
+            install_id: "hello".to_string(),
+            attr_path: "hello".to_string(),
+            version: None,
+        });
+        let parsed: ShorthandDescriptor = "foo.bar@=1.2.3".parse().unwrap();
+        assert_eq!(parsed, ShorthandDescriptor {
+            install_id: "bar".to_string(),
+            attr_path: "foo.bar".to_string(),
+            version: Some("=1.2.3".to_string())
+        });
+        let parsed: ShorthandDescriptor = "foo.bar@23.11".parse().unwrap();
+        assert_eq!(parsed, ShorthandDescriptor {
+            install_id: "bar".to_string(),
+            attr_path: "foo.bar".to_string(),
+            version: Some("23.11".to_string())
+        });
+        let parsed: ShorthandDescriptor = "rubyPackages.\"http_parser.rb\"".parse().unwrap();
+        assert_eq!(parsed, ShorthandDescriptor {
+            install_id: "http_parser.rb".to_string(),
+            attr_path: "rubyPackages.\"http_parser.rb\"".to_string(),
+            version: None,
+        });
 
-        parse_descriptor("foo.\"bar.baz.qux@1.2.3")
+        ShorthandDescriptor::from_str("foo.\"bar.baz.qux@1.2.3")
             .expect_err("missing closing quote should cause failure");
-        parse_descriptor("@1.2.3").expect_err("missing attrpath should cause failure");
-        parse_descriptor("foo@").expect_err("missing version should cause failure");
+        ShorthandDescriptor::from_str("@1.2.3").expect_err("missing attrpath should cause failure");
+        ShorthandDescriptor::from_str("foo@").expect_err("missing version should cause failure");
     }
 }
