@@ -1520,5 +1520,10 @@ pub(super) mod test {
                 None
             )
         );
+
+        parse_descriptor("foo.\"bar.baz.qux@1.2.3")
+            .expect_err("missing closing quote should cause failure");
+        parse_descriptor("@1.2.3").expect_err("missing attrpath should cause failure");
+        parse_descriptor("foo@").expect_err("missing version should cause failure");
     }
 }
