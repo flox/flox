@@ -1020,6 +1020,7 @@ mod tests {
     use super::*;
     use crate::data::Version;
     use crate::flox::test_helpers::{flox_instance, flox_instance_with_global_lock};
+    use crate::models::lockfile::test_helpers::fake_package;
     use crate::models::manifest::DEFAULT_GROUP_NAME;
     use crate::models::{lockfile, manifest};
 
@@ -1248,7 +1249,7 @@ mod tests {
         let (mut env_view, _flox, _temp_dir_handle) = empty_core_environment();
 
         let mut manifest = manifest::test::empty_catalog_manifest();
-        let (foo_iid, foo_descriptor, foo_locked) = lockfile::tests::fake_package("foo", None);
+        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", None);
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
         let lockfile = lockfile::LockedManifestCatalog {
             version: Version,

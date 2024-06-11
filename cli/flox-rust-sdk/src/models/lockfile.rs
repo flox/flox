@@ -911,6 +911,56 @@ pub struct LockfileCheckWarning {
     pub message: String,
 }
 
+pub mod test_helpers {
+    use super::*;
+
+    pub fn fake_package(
+        name: &str,
+        group: Option<&str>,
+    ) -> (String, ManifestPackageDescriptor, LockedPackageCatalog) {
+        let install_id = format!("{}_install_id", name);
+
+        let descriptor = ManifestPackageDescriptor {
+            pkg_path: name.to_string(),
+            pkg_group: group.map(|s| s.to_string()),
+            systems: Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
+            version: None,
+            priority: None,
+            optional: false,
+        };
+
+        let locked = LockedPackageCatalog {
+            attr_path: name.to_string(),
+            broken: None,
+            derivation: "derivation".to_string(),
+            description: None,
+            install_id: install_id.clone(),
+            license: None,
+            locked_url: "".to_string(),
+            name: name.to_string(),
+            outputs: Default::default(),
+            outputs_to_install: None,
+            pname: name.to_string(),
+            rev: "".to_string(),
+            rev_count: 0,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            stabilities: None,
+            unfree: None,
+            version: "".to_string(),
+            system: SystemEnum::Aarch64Darwin.to_string(),
+            group: group.unwrap_or(DEFAULT_GROUP_NAME).to_string(),
+            priority: 5,
+            optional: false,
+        };
+        (install_id, descriptor, locked)
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use std::collections::HashMap;
@@ -920,6 +970,7 @@ pub(crate) mod tests {
     use indoc::indoc;
     use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
+    use test_helpers::fake_package;
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
@@ -1128,52 +1179,6 @@ pub(crate) mod tests {
             }],
         })
     });
-
-    pub(crate) fn fake_package(
-        name: &str,
-        group: Option<&str>,
-    ) -> (String, ManifestPackageDescriptor, LockedPackageCatalog) {
-        let install_id = format!("{}_install_id", name);
-
-        let descriptor = ManifestPackageDescriptor {
-            pkg_path: name.to_string(),
-            pkg_group: group.map(|s| s.to_string()),
-            systems: Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
-            version: None,
-            priority: None,
-            optional: false,
-        };
-
-        let locked = LockedPackageCatalog {
-            attr_path: name.to_string(),
-            broken: None,
-            derivation: "derivation".to_string(),
-            description: None,
-            install_id: install_id.clone(),
-            license: None,
-            locked_url: "".to_string(),
-            name: name.to_string(),
-            outputs: Default::default(),
-            outputs_to_install: None,
-            pname: name.to_string(),
-            rev: "".to_string(),
-            rev_count: 0,
-            rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
-                .unwrap()
-                .with_timezone(&chrono::offset::Utc),
-            scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
-                .unwrap()
-                .with_timezone(&chrono::offset::Utc),
-            stabilities: None,
-            unfree: None,
-            version: "".to_string(),
-            system: SystemEnum::Aarch64Darwin.to_string(),
-            group: group.unwrap_or(DEFAULT_GROUP_NAME).to_string(),
-            priority: 5,
-            optional: false,
-        };
-        (install_id, descriptor, locked)
-    }
 
     #[test]
     fn make_params_smoke() {
