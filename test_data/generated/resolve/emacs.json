@@ -1,0 +1,266 @@
+[
+  [
+    {
+      "name": "toplevel",
+      "page": {
+        "complete": true,
+        "packages": [
+          {
+            "attr_path": "emacs",
+            "broken": false,
+            "derivation": "/nix/store/77r7blav0jv02n1kjw0l7bd8h4sa514h-emacs-29.3.drv",
+            "description": "The extensible, customizable GNU text editor",
+            "install_id": "emacs",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+            "name": "emacs-29.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/15q4wzvn0ganspgpa2icvj59nr65jhx0-emacs-29.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "emacs",
+            "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+            "rev_count": 630835,
+            "rev_date": "2024-05-24T00:06:08Z",
+            "scrape_date": "2024-05-27T14:10:22Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "29.3"
+          },
+          {
+            "attr_path": "emacs",
+            "broken": false,
+            "derivation": "/nix/store/4w2g9b5hq4ixcl26d9p8xfwdq2npslbb-emacs-29.3.drv",
+            "description": "The extensible, customizable GNU text editor",
+            "install_id": "emacs",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+            "name": "emacs-29.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/bram24m8z63cn8dxa2gi3dsrlmk2mbz9-emacs-29.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "emacs",
+            "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+            "rev_count": 630835,
+            "rev_date": "2024-05-24T00:06:08Z",
+            "scrape_date": "2024-05-27T14:10:22Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "29.3"
+          },
+          {
+            "attr_path": "emacs",
+            "broken": false,
+            "derivation": "/nix/store/vhgawpz4h36h6fv93afkis4i7bw0zj4q-emacs-29.3.drv",
+            "description": "The extensible, customizable GNU text editor",
+            "install_id": "emacs",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+            "name": "emacs-29.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/0m298s7wlvk27d7lc6xyas7jd254xa35-emacs-29.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "emacs",
+            "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+            "rev_count": 630835,
+            "rev_date": "2024-05-24T00:06:08Z",
+            "scrape_date": "2024-05-27T14:10:22Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "29.3"
+          },
+          {
+            "attr_path": "emacs",
+            "broken": false,
+            "derivation": "/nix/store/6jkd962b7v6ss1hqpmajayfqq1z390sh-emacs-29.3.drv",
+            "description": "The extensible, customizable GNU text editor",
+            "install_id": "emacs",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+            "name": "emacs-29.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/8r6lgsfyak1mr2gg3ka6zkffxswkj3wv-emacs-29.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "emacs",
+            "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+            "rev_count": 630835,
+            "rev_date": "2024-05-24T00:06:08Z",
+            "scrape_date": "2024-05-27T14:10:22Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "29.3"
+          }
+        ],
+        "page": 630835,
+        "url": ""
+      }
+    }
+  ],
+  [
+    {
+      "name": "toplevel",
+      "page": {
+        "complete": true,
+        "packages": [
+          {
+            "attr_path": "emacs",
+            "broken": false,
+            "derivation": "/nix/store/77r7blav0jv02n1kjw0l7bd8h4sa514h-emacs-29.3.drv",
+            "description": "The extensible, customizable GNU text editor",
+            "install_id": "emacs",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+            "name": "emacs-29.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/15q4wzvn0ganspgpa2icvj59nr65jhx0-emacs-29.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "emacs",
+            "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+            "rev_count": 630835,
+            "rev_date": "2024-05-24T00:06:08Z",
+            "scrape_date": "2024-05-27T14:10:22Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "29.3"
+          },
+          {
+            "attr_path": "emacs",
+            "broken": false,
+            "derivation": "/nix/store/4w2g9b5hq4ixcl26d9p8xfwdq2npslbb-emacs-29.3.drv",
+            "description": "The extensible, customizable GNU text editor",
+            "install_id": "emacs",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+            "name": "emacs-29.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/bram24m8z63cn8dxa2gi3dsrlmk2mbz9-emacs-29.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "emacs",
+            "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+            "rev_count": 630835,
+            "rev_date": "2024-05-24T00:06:08Z",
+            "scrape_date": "2024-05-27T14:10:22Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "29.3"
+          },
+          {
+            "attr_path": "emacs",
+            "broken": false,
+            "derivation": "/nix/store/vhgawpz4h36h6fv93afkis4i7bw0zj4q-emacs-29.3.drv",
+            "description": "The extensible, customizable GNU text editor",
+            "install_id": "emacs",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+            "name": "emacs-29.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/0m298s7wlvk27d7lc6xyas7jd254xa35-emacs-29.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "emacs",
+            "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+            "rev_count": 630835,
+            "rev_date": "2024-05-24T00:06:08Z",
+            "scrape_date": "2024-05-27T14:10:22Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "29.3"
+          },
+          {
+            "attr_path": "emacs",
+            "broken": false,
+            "derivation": "/nix/store/6jkd962b7v6ss1hqpmajayfqq1z390sh-emacs-29.3.drv",
+            "description": "The extensible, customizable GNU text editor",
+            "install_id": "emacs",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=bfb7a882678e518398ce9a31a881538679f6f092",
+            "name": "emacs-29.3",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/8r6lgsfyak1mr2gg3ka6zkffxswkj3wv-emacs-29.3"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "emacs",
+            "rev": "bfb7a882678e518398ce9a31a881538679f6f092",
+            "rev_count": 630835,
+            "rev_date": "2024-05-24T00:06:08Z",
+            "scrape_date": "2024-05-27T14:10:22Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "29.3"
+          }
+        ],
+        "page": 630835,
+        "url": ""
+      }
+    }
+  ]
+]

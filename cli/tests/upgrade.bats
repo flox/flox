@@ -50,7 +50,8 @@ setup() {
   common_test_setup
   setup_isolated_flox
   project_setup
-  export CATALOG_RESPONSES="$TESTS_DIR/catalog_responses"
+  export FLOX_FEATURES_USE_CATALOG=true
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 teardown() {
   project_teardown
@@ -62,6 +63,7 @@ teardown() {
 # pkgdb tests
 
 @test "upgrade hello" {
+  export FLOX_FEATURES_USE_CATALOG=false
   rm -f "$GLOBAL_MANIFEST_LOCK"
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
@@ -91,6 +93,7 @@ teardown() {
 }
 
 @test "upgrade by group" {
+  export FLOX_FEATURES_USE_CATALOG=false
   rm -f "$GLOBAL_MANIFEST_LOCK"
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
@@ -112,6 +115,7 @@ EOF
 }
 
 @test "upgrade toplevel group" {
+  export FLOX_FEATURES_USE_CATALOG=false
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" init
   "$FLOX_BIN" install hello
@@ -125,6 +129,7 @@ EOF
 }
 
 @test "upgrade by iid" {
+  export FLOX_FEATURES_USE_CATALOG=false
   rm -f "$GLOBAL_MANIFEST_LOCK"
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
@@ -140,6 +145,7 @@ EOF
 }
 
 @test "upgrade errors on iid in group with other packages" {
+  export FLOX_FEATURES_USE_CATALOG=false
   "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" install curl hello
@@ -153,6 +159,7 @@ EOF
 }
 
 @test "check confirmation when all packages are up to date" {
+  export FLOX_FEATURES_USE_CATALOG=false
   "$FLOX_BIN" init
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
     "$FLOX_BIN" install curl hello
@@ -167,19 +174,18 @@ EOF
 
 @test "catalog: upgrade hello" {
   skip "FIXME: upgrades package but reports that no packages were upgraded"
-  export FLOX_FEATURES_USE_CATALOG=true
 
   "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSES/install_old_hello.json" "$FLOX_BIN" install hello
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
 
-  old_hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$CATALOG_RESPONSES/install_old_hello.json")
+  old_hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$GENERATED_DATA/resolve/old_hello.json")
   old_hello_locked_rev=$(jq -r '.packages.[0].rev_count' "$LOCK_PATH")
   assert_equal "$old_hello_locked_rev" "$old_hello_response_rev" 
 
-  export _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSES/install_hello.json"
-  run "$FLOX_BIN" upgrade
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" upgrade
   assert_output --partial "Upgraded 'hello'"
-  hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$CATALOG_RESPONSES/install_hello.json")
+  hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_rev=$(jq -r '.packages.[0].rev_count' "$LOCK_PATH")
   assert_equal "$hello_locked_rev" "$hello_response_rev"
   
@@ -188,23 +194,22 @@ EOF
 
 @test "catalog: upgrade by group" {
   skip "FIXME: upgrades package but reports that no packages were upgraded"
-  export FLOX_FEATURES_USE_CATALOG=true
 
   "$FLOX_BIN" init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
   tomlq -i -t '.install.hello."pkg-path" = "hello"' "$TMP_MANIFEST_PATH"
   tomlq -i -t '.install.hello."pkg-group" = "blue"' "$TMP_MANIFEST_PATH"
-  _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSES/install_old_hello.json" "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
 
-  old_hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$CATALOG_RESPONSES/install_old_hello.json")
+  old_hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$GENERATED_DATA/resolve/old_hello.json")
   old_hello_locked_rev=$(jq -r '.packages.[0].rev_count' "$LOCK_PATH")
   assert_equal "$old_hello_locked_rev" "$old_hello_response_rev"
 
   # add the package group
 
-  export _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSES/install_hello.json"
-  run "$FLOX_BIN" upgrade blue
-  hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$CATALOG_RESPONSES/install_hello.json")
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" \
+    run "$FLOX_BIN" upgrade blue
+  hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_rev=$(jq -r '.packages.[0].rev_count' "$LOCK_PATH")
   assert_equal "$hello_locked_rev" "$hello_response_rev"
   assert_output --partial "Upgraded 'hello'"
@@ -214,19 +219,18 @@ EOF
 
 @test "catalog: upgrade toplevel group" {
   skip "FIXME: upgrades package but reports that no packages were upgraded"
-  export FLOX_FEATURES_USE_CATALOG=true
 
   "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSES/install_old_hello.json" "$FLOX_BIN" install hello
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
 
-  old_hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$CATALOG_RESPONSES/install_old_hello.json")
+  old_hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$GENERATED_DATA/resolve/old_hello.json")
   old_hello_locked_rev=$(jq -r '.packages.[0].rev_count' "$LOCK_PATH")
   assert_equal "$old_hello_locked_rev" "$old_hello_response_rev"
 
-  export _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSES/install_hello.json"
-  run "$FLOX_BIN" upgrade toplevel
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" upgrade toplevel
   assert_output --partial "Upgraded 'hello'"
-  hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$CATALOG_RESPONSES/install_hello.json")
+  hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_rev=$(jq -r '.packages.[0].rev_count' "$LOCK_PATH")
   assert_equal "$hello_locked_rev" "$hello_response_rev"
   
@@ -235,19 +239,18 @@ EOF
 
 @test "catalog: upgrade by iid" {
   skip "FIXME: upgrades package but reports that no packages were upgraded"
-  export FLOX_FEATURES_USE_CATALOG=true
 
   "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSES/install_old_hello.json" "$FLOX_BIN" install hello
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
 
-  old_hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$CATALOG_RESPONSES/install_old_hello.json")
+  old_hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$GENERATED_DATA/resolve/old_hello.json")
   old_hello_locked_rev=$(jq -r '.packages.[0].rev_count' "$LOCK_PATH")
   assert_equal "$old_hello_locked_rev" "$old_hello_response_rev"
 
-  export _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSES/install_hello.json"
-  run "$FLOX_BIN" upgrade hello
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" upgrade hello
   assert_output --partial "Upgraded 'hello'"
-  hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$CATALOG_RESPONSES/install_hello.json")
+  hello_response_rev=$(jq -r '.[0].[0].pages.[0].page' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_rev=$(jq -r '.packages.[0].rev_count' "$LOCK_PATH")
   assert_equal "$hello_locked_rev" "$hello_response_rev"
   
@@ -256,12 +259,11 @@ EOF
 
 @test "catalog: upgrade errors on iid in group with other packages" {
   skip "FIXME: upgrades package but reports that no packages were upgraded"
-  export FLOX_FEATURES_USE_CATALOG=true
 
   "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSES/install_curl_hello.json" "$FLOX_BIN" install curl hello
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" "$FLOX_BIN" install curl hello
 
-  export _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSES/install_hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" upgrade hello
   assert_output --partial "package in the group 'toplevel' with multiple packages"
 }
@@ -274,10 +276,10 @@ EOF
   export FLOX_FEATURES_USE_CATALOG=true
 
   "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSES/install_curl_hello.json" "$FLOX_BIN" install curl hello
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" "$FLOX_BIN" install curl hello
 
-  export _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSES/install_curl_hello.json"
-  run "$FLOX_BIN" upgrade
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" \
+    run "$FLOX_BIN" upgrade
   assert_success
   assert_output --partial "No packages need to be upgraded"
 }

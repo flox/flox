@@ -28,7 +28,7 @@ project_setup() {
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
   export FLOX_FEATURES_USE_CATALOG=true
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 project_teardown() {
@@ -70,8 +70,10 @@ teardown() {
 # bats test_tags=python:activate:poetry
 @test "flox activate works with poetry" {
   export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/python/single-dependency/poetry/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/python/poetry/* "$PROJECT_DIR/"
+  # Files copied from the store are read-only
+  chmod -R +w .
 
   run "$FLOX_BIN" init --auto-setup
   assert_success
@@ -86,8 +88,10 @@ teardown() {
 # bats test_tags=python:activate:pyproject:pip
 @test "flox activate works with pyproject and pip" {
   export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/python/single-dependency/pyproject-pip/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/python/pyproject-pip/* "$PROJECT_DIR/"
+  # Files copied from the store are read-only
+  chmod -R +w .
 
   run "$FLOX_BIN" init --auto-setup
   assert_success
@@ -101,8 +105,10 @@ teardown() {
 # bats test_tags=python:activate:requirements
 @test "flox activate works with requirements.txt and pip" {
   export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/python/single-dependency/requirements/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/python/requirements/* "$PROJECT_DIR/"
+  # Files copied from the store are read-only
+  chmod -R +w .
 
   run "$FLOX_BIN" init --auto-setup
   assert_success
@@ -174,7 +180,7 @@ teardown() {
 @test "catalog: install requests with pip" {
   "$FLOX_BIN" init
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/python3_pip.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python3_pip.json" \
       run "$FLOX_BIN" install -i pip python310Packages.pip python3
 
   assert_success
@@ -186,15 +192,17 @@ teardown() {
 
 # bats test_tags=python:activate:poetry,catalog
 @test "catalog: flox activate works with poetry" {
-  cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/python/single-dependency/poetry/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/python/poetry/* "$PROJECT_DIR/"
+  # Files copied from the store are read-only
+  chmod -R +w .
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_poetry.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_poetry.json" \
     run "$FLOX_BIN" init --auto-setup
   assert_success
   assert_output --partial "'poetry' installed"
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_poetry_zlib.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_poetry_zlib.json" \
     "$FLOX_BIN" install zlib
 
   run "$FLOX_BIN" activate -- python -m project
@@ -204,14 +212,16 @@ teardown() {
 
 # bats test_tags=python:activate:pyproject:pip,catalog
 @test "catalog: flox activate works with pyproject and pip" {
-  cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/python/single-dependency/pyproject-pip/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/python/pyproject-pip/* "$PROJECT_DIR/"
+  # Files copied from the store are read-only
+  chmod -R +w .
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_pyproject_pip.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_pyproject_pip.json" \
     run "$FLOX_BIN" init --auto-setup
   assert_success
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_pyproject_pip_zlib.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_pyproject_pip_zlib.json" \
     "$FLOX_BIN" install zlib
 
   run "$FLOX_BIN" activate -- python -m project
@@ -221,14 +231,16 @@ teardown() {
 
 # bats test_tags=python:activate:requirements,catalog
 @test "catalog: flox activate works with requirements.txt and pip" {
-  cp -r "$TESTS_DIR"/python/single-dependency/common/* "$PROJECT_DIR/"
-  cp -r "$TESTS_DIR"/python/single-dependency/requirements/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
+  cp -r "$INPUT_DATA"/init/python/requirements/* "$PROJECT_DIR/"
+  # Files copied from the store are read-only
+  chmod -R +w .
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requirements.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requirements.json" \
     run "$FLOX_BIN" init --auto-setup
   assert_success
 
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requirements_zlib.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requirements_zlib.json" \
     "$FLOX_BIN" install zlib
 
   run "$FLOX_BIN" activate -- python -m project
@@ -242,7 +254,7 @@ teardown() {
   NAME="name"
   echo "requests" > requirements.txt
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requests.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.json" \
     "$FLOX_BIN" init --auto-setup --name "$NAME"
   FLOX_SHELL="bash" run "$FLOX_BIN" activate -- type deactivate
   assert_success
@@ -255,7 +267,7 @@ teardown() {
   NAME="name"
   echo "requests" > requirements.txt
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requests.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.json" \
     "$FLOX_BIN" init --auto-setup --name "$NAME"
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- type deactivate
   assert_success
@@ -268,7 +280,7 @@ teardown() {
   NAME="name"
   echo "requests" > requirements.txt
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requests.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.json" \
     "$FLOX_BIN" init --auto-setup --name "$NAME"
   FLOX_SHELL="fish" run "$FLOX_BIN" activate -- type deactivate
   assert_success
@@ -281,7 +293,7 @@ teardown() {
   NAME="name"
   echo "requests" > requirements.txt
   [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/python_requests.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.json" \
     "$FLOX_BIN" init --auto-setup --name "$NAME"
   FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- which deactivate
   assert_success

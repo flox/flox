@@ -1,0 +1,206 @@
+[vars]
+FLOX_FEATURES_USE_CATALOG = "true"
+
+[resolve.empty]
+# Not actually a resolve response, just have to put it somewhere
+skip_if_output_exists = "empty.json"
+cmd = '''
+    echo "[]" > empty.json
+'''
+post_cmd = '''
+    main_output_dir="$(dirname $(dirname $RESPONSE_FILE))"
+    mv empty.json "$main_output_dir/empty.json"
+'''
+
+[resolve.curl_hello]
+pre_cmd = "flox init"
+cmd = "flox install curl hello"
+
+[resolve.emacs]
+pre_cmd = "flox init"
+cmd = "flox install emacs"
+
+[resolve.emacs_vim]
+pre_cmd = "flox init"
+cmd = "flox install emacs vim"
+
+[resolve.gzip]
+pre_cmd = "flox init"
+cmd = "flox install gzip"
+
+[resolve.hello]
+pre_cmd = "flox init"
+cmd = "flox install hello"
+
+[resolve.krb5_after_prereqs_installed]
+files = ["envs/krb5_prereqs/manifest.toml"]
+pre_cmd = '''
+    flox init
+    flox edit -f manifest.toml
+'''
+cmd = "flox install krb5"
+
+[resolve.ld_floxlib]
+skip_if_output_exists = "envs/ld_floxlib"
+files = ["envs/ld_floxlib/manifest.toml"]
+pre_cmd = "flox init"
+ignore_cmd_errors = true
+cmd = "flox edit -f manifest.toml"
+
+[resolve.old_hello]
+pre_cmd = "flox init"
+cmd = "flox install hello"
+post_cmd = '''
+    cat "$RESPONSE_FILE" | jq | sed 's/"version": "2.12.1"/"version": "old_version"/g' > tmp.json
+    mv tmp.json "$RESPONSE_FILE"
+'''
+
+[resolve.python3]
+pre_cmd = "flox init"
+cmd = "flox install python3"
+
+[resolve.python3_pip]
+pre_cmd = "flox init"
+cmd = "flox install -i pip python311Packages.pip python3"
+
+[resolve."python311Packages.pip"]
+pre_cmd = "flox init"
+cmd = "flox install python311Packages.pip"
+
+[resolve."rubyPackages_3_2.rails"]
+pre_cmd = "flox init"
+cmd = "flox install rubyPackages_3_2.rails"
+
+[resolve.webmention_ripgrep_rails]
+pre_cmd = "flox init"
+cmd = "flox install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails"
+
+[resolve.vim]
+pre_cmd = "flox init"
+cmd = "flox install vim"
+
+[search.hello]
+cmd = "flox search hello"
+
+[search.python]
+cmd = "flox search python"
+
+[search.surely_doesnt_exist]
+# This command is intended to fail, it still dumps a useful response
+cmd = "flox search surely_doesnt_exist || true"
+
+[search.ello_all]
+cmd = "flox search ello --all"
+
+[search.exactly_ten]
+cmd = "flox search python"
+post_cmd = '''
+    cat "$RESPONSE_FILE" | jq '[{"count": 10, "results": .[0].results[:10]}]' > tmp.json
+    mv tmp.json "$RESPONSE_FILE"
+'''
+
+[show.hello]
+cmd = "flox show hello"
+
+[show.flask]
+cmd = "flox show python310Packages.flask"
+
+[init.go]
+files = ["init/go/common", "init/go/module"]
+pre_cmd = '''
+    cp -r {common,module}/* .
+'''
+cmd = "flox init --auto-setup"
+
+[init.node_npm]
+files = ["init/node/common", "init/node/npm"]
+pre_cmd = '''
+    cp -r {common,npm}/* .
+'''
+cmd = "flox init --auto-setup"
+
+[init.node_yarn]
+files = ["init/node/common", "init/node/yarn"]
+pre_cmd = '''
+    cp -r {common,yarn}/* .
+'''
+cmd = "flox init --auto-setup"
+
+[init.python_poetry]
+files = ["init/python/common", "init/python/poetry"]
+pre_cmd = '''
+    cp -r {common,poetry}/* .
+'''
+cmd = "flox init --auto-setup"
+
+[init.python_poetry_zlib]
+files = ["init/python/common", "init/python/poetry"]
+pre_cmd = '''
+    cp -r {common,poetry}/* .
+    flox init --auto-setup
+'''
+cmd = "flox install zlib"
+
+[init.python_pyproject_pip]
+files = ["init/python/common", "init/python/pyproject-pip"]
+pre_cmd = '''
+    cp -r {common,pyproject-pip}/* .
+'''
+cmd = "flox init --auto-setup"
+
+[init.python_pyproject_pip_zlib]
+files = ["init/python/common", "init/python/pyproject-pip"]
+pre_cmd = '''
+    cp -r {common,pyproject-pip}/* .
+    flox init --auto-setup
+'''
+cmd = "flox install zlib"
+
+[init.python_requirements]
+files = ["init/python/common", "init/python/requirements"]
+pre_cmd = '''
+    cp -r {common,requirements}/* .
+'''
+cmd = "flox init --auto-setup"
+
+[init.python_requirements_zlib]
+files = ["init/python/common", "init/python/requirements"]
+pre_cmd = '''
+    cp -r {common,requirements}/* .
+    flox init --auto-setup
+'''
+cmd = "flox install zlib"
+
+[init.python_requests]
+pre_cmd = '''
+    echo requests > requirements.txt
+'''
+cmd = "flox init --auto-setup"
+
+[envs.kitchen_sink]
+skip_if_output_exists = "envs/kitchen_sink"
+files = ["envs/kitchen_sink/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/kitchen_sink"
+    mkdir -p "$env_dir"
+    cp manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
+'''
+
+[envs.krb5_prereqs]
+skip_if_output_exists = "envs/krb5_prereqs"
+files = ["envs/krb5_prereqs/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/krb5_prereqs"
+    mkdir -p "$env_dir"
+    cp manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
+'''

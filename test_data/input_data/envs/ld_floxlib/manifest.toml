@@ -1,0 +1,14 @@
+version = 1
+
+[install]
+boost.pkg-path = "boost"
+curl.pkg-path = "curl"
+gcc.pkg-path = "gcc"
+gcc-unwrapped = { pkg-path = "gcc-unwrapped", priority = 4 }
+glibc = { pkg-path = "glibc" , version = "2.34-210" }
+libarchive.pkg-path = "libarchive"
+nix = { pkg-path = "nix", priority = 4, version = "2.8.1" }
+patchelf.pkg-path = "patchelf"
+
+[options]
+systems = ["aarch64-linux", "x86_64-linux"]

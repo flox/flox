@@ -1,0 +1,32 @@
+version = 1
+
+[install]
+nodejs.pkg-path = "nodejs"
+python3.pkg-path = "python3"
+make.pkg-path = "gnumake"
+
+# Darwin only
+[install.clang]
+pkg-path = "clang"
+systems = ["aarch64-darwin", "x86_64-darwin"]
+
+[install.cctools]
+pkg-path = "darwin.cctools"
+systems = ["aarch64-darwin", "x86_64-darwin"]
+priority = 6
+
+[install.libcxx]
+pkg-path = "libcxx"
+systems = ["aarch64-darwin", "x86_64-darwin"]
+
+[install.libcxxabi]
+pkg-path = "libcxxabi"
+systems = ["aarch64-darwin", "x86_64-darwin"]
+
+# Linux only
+[install.gcc]
+pkg-path = "gcc"
+systems = ["aarch64-linux", "x86_64-linux"]
+
+[options]
+systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
