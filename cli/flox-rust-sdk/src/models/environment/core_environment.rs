@@ -15,6 +15,7 @@ use super::{
     InstallationAttempt,
     UninstallationAttempt,
     UpdateResult,
+    UpgradeError,
     LOCKFILE_FILENAME,
     MANIFEST_FILENAME,
 };
@@ -33,6 +34,7 @@ use crate::models::manifest::{
     insert_packages,
     remove_packages,
     Manifest,
+    ManifestError,
     PackageToInstall,
     TomlEditError,
     TypedManifest,
@@ -532,6 +534,49 @@ impl CoreEnvironment<ReadOnly> {
                 (LockedManifest::Pkgdb(lockfile), upgraded)
             },
             TypedManifest::Catalog(catalog) => {
+                for id in groups_or_iids {
+                    tracing::debug!(id, "checking that id is a package or group");
+                    if id == "toplevel" {
+                        continue;
+                    }
+                    if !catalog.pkg_or_group_found_in_manifest(id) {
+                        return Err(CoreEnvironmentError::UpgradeFailedCatalog(
+                            UpgradeError::PkgNotFound(ManifestError::NotFound(id.to_string())),
+                        ));
+                    }
+                }
+                tracing::debug!("checking group membership for requested packages");
+                for id in groups_or_iids {
+                    if catalog.pkg_descriptor_with_id(id).is_none() {
+                        // We've already checked that the id is a package or group,
+                        // and if this is None then we know it's a group and therefore
+                        // we don't need to check what other packages are in the group
+                        // with this id.
+                        continue;
+                    }
+                    if catalog
+                        .pkg_belongs_to_non_empty_toplevel_group(id)
+                        .expect("already checked that package exists")
+                    {
+                        return Err(CoreEnvironmentError::UpgradeFailedCatalog(
+                            UpgradeError::NonEmptyNamedGroup {
+                                pkg: id.clone(),
+                                group: "toplevel".to_string(),
+                            },
+                        ));
+                    }
+                    if let Some(group) = catalog
+                        .pkg_belongs_to_non_empty_named_group(id)
+                        .expect("already checked that package exists")
+                    {
+                        return Err(CoreEnvironmentError::UpgradeFailedCatalog(
+                            UpgradeError::NonEmptyNamedGroup {
+                                pkg: id.clone(),
+                                group,
+                            },
+                        ));
+                    }
+                }
                 tracing::debug!("using catalog client to upgrade");
                 let client = flox
                     .catalog_client
@@ -599,7 +644,7 @@ impl CoreEnvironment<ReadOnly> {
             pkgdb_cmd.display()
         );
         let json: UpgradeResultJSON = serde_json::from_value(
-            call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::UpgradeFailed)?,
+            call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::UpgradeFailedPkgDb)?,
         )
         .map_err(CoreEnvironmentError::ParseUpgradeOutput)?;
 
@@ -956,7 +1001,9 @@ pub enum CoreEnvironmentError {
     #[error("unexpected output from pkgdb upgrade")]
     ParseUpgradeOutput(#[source] serde_json::Error),
     #[error("failed to upgrade environment")]
-    UpgradeFailed(#[source] CallPkgDbError),
+    UpgradeFailedPkgDb(#[source] CallPkgDbError),
+    #[error("failed to upgrade environment")]
+    UpgradeFailedCatalog(#[source] UpgradeError),
     // endregion
 
     // endregion

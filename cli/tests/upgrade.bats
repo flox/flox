@@ -255,8 +255,8 @@ EOF
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" "$FLOX_BIN" install curl hello
 
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
-  run "$FLOX_BIN" upgrade hello
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" upgrade hello
   assert_output --partial "package in the group 'toplevel' with multiple packages"
 }
 
