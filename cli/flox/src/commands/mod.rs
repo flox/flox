@@ -80,6 +80,7 @@ use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FIL
 use crate::utils::{message, TRAILING_NETWORK_CALL_TIMEOUT};
 
 // Relative to flox executable
+const DEFAULT_UPDATE_INSTRUCTIONS: &str = "Get the latest at https://flox.dev/docs/install-flox/#upgrade-existing-flox-installation";
 const UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH: &str =
     "../../share/flox/files/update-instructions.txt";
 const UPDATE_NOTIFICATION_FILE_NAME: &str = "update-notification.json";
@@ -545,11 +546,10 @@ impl UpdateNotification {
 
     // Check for update instructions file which is located relative to the current executable
     // and is created by an installer
-    fn update_instructions(&self) -> String {
-        let default_update_instructions = "Get the latest at https://flox.dev/docs/install-flox/#upgrade-existing-flox-installation";
+    fn update_instructions(update_instructions_relative_file_path : &str) -> String {
         if let Ok(exe) = env::current_exe() {
             if let Ok(update_instructions_file) = exe
-                .join(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH)
+                .join(update_instructions_relative_file_path)
                 .canonicalize()
             {
                 debug!(
@@ -558,12 +558,12 @@ impl UpdateNotification {
                 );
                 fs::read_to_string(update_instructions_file)
                     .map(|docs| format!("Get the latest with:\n{}", indent::indent_all_by(2, docs)))
-                    .unwrap_or(default_update_instructions.to_string())
+                    .unwrap_or(DEFAULT_UPDATE_INSTRUCTIONS.to_string())
             } else {
-                default_update_instructions.to_string()
+                DEFAULT_UPDATE_INSTRUCTIONS.to_string()
             }
         } else {
-            default_update_instructions.to_string()
+            DEFAULT_UPDATE_INSTRUCTIONS.to_string()
         }
     }
 
@@ -579,7 +579,7 @@ impl UpdateNotification {
         ",
             *FLOX_VERSION,
             self.new_version,
-            self.update_instructions(),
+            Self::update_instructions(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH),
         });
 
         if let Err(e) = serde_json::to_string_pretty(&LastUpdateNotification {
@@ -1823,6 +1823,7 @@ mod tests {
             _ => panic!(),
         }
     }
+
     /// testable_check_for_update fails when get_latest_version_function doesn't
     /// return something that looks like a version
     #[tokio::test]
@@ -1839,4 +1840,28 @@ mod tests {
 
         assert!(result.unwrap().is_none());
     }
+
+    //
+    #[tokio::test]
+    async fn test_update_instructions_default_message() {
+        let message = UpdateNotification::update_instructions("does-not-exists");
+        assert!(message == DEFAULT_UPDATE_INSTRUCTIONS);
+    }
+
+    #[tokio::test]
+    async fn test_update_instructions_custom_message() {
+        let temp_dir = tempdir().unwrap();
+        let update_instructions_file = temp_dir.path().join("update-instructions.txt");
+        let custom_message = "This are custom update instructions";
+
+        fs::write(
+            &update_instructions_file,
+            custom_message.to_string(),
+        )
+        .unwrap();
+
+        let message = UpdateNotification::update_instructions(update_instructions_file.to_str().unwrap());
+        assert!(message.contains(custom_message));
+    }
+
 }
