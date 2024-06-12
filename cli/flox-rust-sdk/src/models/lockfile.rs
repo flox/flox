@@ -885,6 +885,7 @@ impl TypedLockedManifestPkgdb {
 
 // TODO: consider dropping this in favor of mapping to [LockedPackageCatalog]?
 /// A locked package with additionally derived attributes
+#[derive(Debug, Clone, PartialEq)]
 pub struct InstalledPackage {
     pub install_id: String,
     pub rel_path: String,
@@ -2204,5 +2205,65 @@ pub(crate) mod tests {
             }),
             Err(LockedManifestError::UnfreeNotAllowed { .. })
         ));
+    }
+
+    #[test]
+    fn test_list_packages() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", Some("group1"));
+        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", Some("group1"));
+        let (baz_iid, mut baz_descriptor, mut baz_locked) = fake_package("baz", Some("group2"));
+
+        baz_descriptor.systems = Some(vec![SystemEnum::Aarch64Linux.to_string()]);
+        baz_locked.system = SystemEnum::Aarch64Linux.to_string();
+
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        manifest
+            .install
+            .insert(foo_iid.clone(), foo_descriptor.clone());
+        manifest
+            .install
+            .insert(bar_iid.clone(), bar_descriptor.clone());
+        manifest
+            .install
+            .insert(baz_iid.clone(), baz_descriptor.clone());
+
+        let locked = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest,
+            packages: vec![foo_locked.clone(), bar_locked.clone(), baz_locked.clone()],
+        };
+
+        let actual = locked.list_packages(&SystemEnum::Aarch64Darwin.to_string());
+        let expected = [
+            InstalledPackage {
+                install_id: foo_iid,
+                rel_path: foo_descriptor.pkg_path,
+                info: PackageInfo {
+                    description: foo_locked.description,
+                    broken: foo_locked.broken,
+                    license: foo_locked.license,
+                    pname: foo_locked.pname,
+                    unfree: foo_locked.unfree,
+                    version: Some(foo_locked.version),
+                },
+                priority: Some(foo_locked.priority),
+            },
+            InstalledPackage {
+                install_id: bar_iid,
+                rel_path: bar_descriptor.pkg_path,
+                info: PackageInfo {
+                    description: bar_locked.description,
+                    broken: bar_locked.broken,
+                    license: bar_locked.license,
+                    pname: bar_locked.pname,
+                    unfree: bar_locked.unfree,
+                    version: Some(bar_locked.version),
+                },
+                priority: Some(bar_locked.priority),
+            },
+            // baz is not in the list because it is not available for the requested system
+        ];
+
+        assert_eq!(&actual, &expected);
     }
 }
