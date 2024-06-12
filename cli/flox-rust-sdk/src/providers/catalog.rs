@@ -5,7 +5,7 @@ use std::future::ready;
 use std::io::Read;
 use std::num::NonZeroU32;
 use std::os::unix::fs::FileExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
@@ -22,6 +22,7 @@ use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
+use once_cell::sync::Lazy;
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,9 @@ pub const DEFAULT_CATALOG_URL: &str = "https://flox-catalog.flox.dev";
 const NIXPKGS_CATALOG: &str = "nixpkgs";
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
+
+static GENERATED_DATA: Lazy<PathBuf> =
+    Lazy::new(|| PathBuf::from(std::env::var("GENERATED_DATA").unwrap()));
 
 const RESPONSE_PAGE_SIZE: NonZeroU32 = unsafe { NonZeroU32::new_unchecked(10) };
 
@@ -222,6 +226,16 @@ impl MockClient {
         Ok(Self {
             mock_responses: Arc::new(Mutex::new(mock_responses)),
         })
+    }
+
+    /// Load responses from a file into the list of mock responses
+    pub fn load_responses_from_file(&mut self, relative_path: &str) {
+        let responses = read_mock_responses((*GENERATED_DATA).join(relative_path))
+            .expect("couldn't read mock responses");
+        self.mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock")
+            .extend(responses);
     }
 
     /// Push a new response into the list of mock responses

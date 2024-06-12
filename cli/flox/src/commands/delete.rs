@@ -41,7 +41,7 @@ impl Delete {
             bail!("{message}")
         }
 
-        let comfirm = Dialog {
+        let confirm = Dialog {
             message: "Are you sure?",
             help_message: Some("Use `-f` to force deletion"),
             typed: Confirm {
@@ -49,7 +49,7 @@ impl Delete {
             },
         };
 
-        if !self.force && Dialog::can_prompt() && !comfirm.prompt().await? {
+        if !self.force && Dialog::can_prompt() && !confirm.prompt().await? {
             bail!("Environment deletion cancelled");
         }
 

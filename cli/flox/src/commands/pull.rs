@@ -76,6 +76,7 @@ pub struct Pull {
 /// These are passed to allow testing without prompting
 struct QueryFunctions {
     query_add_system: fn(&str) -> Result<bool>,
+    query_migrate_and_add_system: fn(&str) -> Result<bool>,
     query_ignore_build_errors: fn() -> Result<bool>,
 }
 
@@ -278,10 +279,11 @@ impl Pull {
             result,
             &dot_flox_path,
             force,
-            env,
+            &mut env,
             Dialog::can_prompt().then_some(QueryFunctions {
                 query_add_system: Self::query_add_system,
                 query_ignore_build_errors: Self::query_ignore_build_errors,
+                query_migrate_and_add_system: Self::query_migrate_and_add_system,
             }),
         )
     }
@@ -295,7 +297,7 @@ impl Pull {
         result: Result<(), EnvironmentError>,
         dot_flox_path: &PathBuf,
         force: bool,
-        mut env: ManagedEnvironment,
+        env: &mut ManagedEnvironment,
         query_functions: Option<QueryFunctions>,
     ) -> Result<()> {
         let pulled_line = format!(
@@ -329,10 +331,23 @@ impl Pull {
                     , system = flox.system});
                 }
 
+                let migration_info = if flox.catalog_client.is_some() {
+                    env.needs_migration_to_v1(flox)?
+                } else {
+                    None
+                };
+
                 // Will return OK if the user chose to abort the pull.
                 // The unwrap() is only reached if !force,
                 // and we return above if !force and query_functions.is_none()
-                let force = force || (query_functions.unwrap().query_add_system)(&flox.system)?;
+                let force = force || {
+                    if migration_info.is_some() {
+                        (query_functions.unwrap().query_migrate_and_add_system)(&flox.system)?
+                    } else {
+                        (query_functions.unwrap().query_add_system)(&flox.system)?
+                    }
+                };
+
                 if !force {
                     // prompt available, user chose to abort
                     fs::remove_dir_all(dot_flox_path)
@@ -344,7 +359,39 @@ impl Pull {
                     "});
                 }
 
-                let doc = Self::amend_current_system(&env, flox)?;
+                if migration_info.is_some() {
+                    let doc = Self::amend_current_system(env, flox)?;
+                    let migrate_to_v1 = Dialog {
+                        message: "Migrating environment to version 1 and adding your system.",
+                        help_message: None,
+                        typed: Spinner::new(|| env.migrate_and_edit_unsafe(flox, doc.to_string())),
+                    }
+                    .spin()?;
+
+                    match migrate_to_v1 {
+                        Err(err) => {
+                            // TODO: this could probably benefit from some newlines
+                            message::warning(display_chain(&err));
+
+                            let message_with_warning = formatdoc! {"
+                                {pulled_line}
+
+                                Migrated the environment to version 1 and included your system but could not
+                                build.
+                                Use 'flox edit' to address issues before activating.
+                            "};
+
+                            message::created(message_with_warning);
+                        },
+                        Ok(_) => {
+                            message::plain("⬆️  Migrated environment to version 1.");
+                            message::created(&completed);
+                        },
+                    }
+                    return Ok(());
+                }
+
+                let doc = Self::amend_current_system(env, flox)?;
                 let rebuild_with_current_system = Dialog {
                     message: "Adding your system to the manifest and validating the environment.",
                     help_message: None,
@@ -414,9 +461,8 @@ impl Pull {
         Ok(())
     }
 
-    /// if possible, prompt the user to automatically add their system to the manifest
+    /// prompt the user whether to automatically add their system to the manifest
     ///
-    /// returns [Ok(None)]` if the user can't be prompted
     /// returns `[Ok(bool)]` depending on the users choice
     /// returns `[Err]` if the prompt failed or was cancelled
     fn query_add_system(system: &str) -> Result<bool> {
@@ -430,6 +476,36 @@ impl Pull {
         let confirm_choice = format!(
             "Pull this environment anyway and add '{system}' to the supported systems list."
         );
+
+        let dialog = Dialog {
+            message: &message,
+            help_message: Some(help),
+            typed: Select {
+                options: [reject_choice, &confirm_choice].to_vec(),
+            },
+        };
+
+        let (choice, _) = dialog.raw_prompt()?;
+
+        Ok(choice == 1)
+    }
+
+    /// prompt the user whether to automatically migrate the environment and add
+    /// their system to the manifest
+    ///
+    /// returns `[Ok(bool)]` depending on the users choice
+    /// returns `[Err]` if the prompt failed or was cancelled
+    fn query_migrate_and_add_system(system: &str) -> Result<bool> {
+        let message = formatdoc! {"
+            The environment you are trying to pull needs to be migrated to the latest
+            environment format, and it's not yet compatible with your system ({system}).
+        "};
+
+        let help = "Use 'flox pull --force' to automatically add your system to the list of compatible systems";
+
+        let reject_choice = "Don't pull this environment.";
+        // Choices don't wrap
+        let confirm_choice = format!("Pull this environment anyway, migrate it to version 1, and add '{system}' to the supported systems list.");
 
         let dialog = Dialog {
             message: &message,
@@ -518,12 +594,17 @@ mod tests {
     use flox_rust_sdk::flox::test_helpers::{
         flox_instance,
         flox_instance_with_global_lock_and_floxhub,
+        flox_instance_with_optional_floxhub_and_client,
     };
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::{
         mock_managed_environment,
         unusable_mock_managed_environment,
     };
-    use flox_rust_sdk::models::environment::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
+    use flox_rust_sdk::models::environment::test_helpers::{
+        MANIFEST_INCOMPATIBLE_SYSTEM,
+        MANIFEST_INCOMPATIBLE_SYSTEM_V0_FIELDS,
+        MANIFEST_INCOMPATIBLE_SYSTEM_V1,
+    };
     use flox_rust_sdk::models::pkgdb::error_codes::PACKAGE_BUILD_FAILURE;
     use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
     use tempfile::tempdir_in;
@@ -583,7 +664,7 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             false,
-            unusable_mock_managed_environment(),
+            &mut unusable_mock_managed_environment(),
             None
         )
         .unwrap_err()
@@ -608,7 +689,7 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             true,
-            mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            &mut mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
             None,
         )
         .unwrap();
@@ -630,10 +711,11 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             false,
-            unusable_mock_managed_environment(),
+            &mut unusable_mock_managed_environment(),
             Some(QueryFunctions {
                 query_add_system: |_| Ok(false),
                 query_ignore_build_errors: || panic!(),
+                query_migrate_and_add_system: |_| panic!(),
             })
         )
         .unwrap_err()
@@ -659,10 +741,11 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             false,
-            mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
+            &mut mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
             Some(QueryFunctions {
                 query_add_system: |_| Ok(true),
                 query_ignore_build_errors: || panic!(),
+                query_migrate_and_add_system: |_| panic!(),
             }),
         )
         .unwrap();
@@ -684,10 +767,11 @@ mod tests {
             incompatible_package_result(),
             &dot_flox_path,
             false,
-            unusable_mock_managed_environment(),
+            &mut unusable_mock_managed_environment(),
             Some(QueryFunctions {
                 query_add_system: |_| panic!(),
                 query_ignore_build_errors: || Ok(false),
+                query_migrate_and_add_system: |_| panic!(),
             })
         )
         .unwrap_err()
@@ -711,14 +795,135 @@ mod tests {
             incompatible_package_result(),
             &dot_flox_path,
             false,
-            unusable_mock_managed_environment(),
+            &mut unusable_mock_managed_environment(),
             Some(QueryFunctions {
                 query_add_system: |_| panic!(),
                 query_ignore_build_errors: || Ok(true),
+                query_migrate_and_add_system: |_| panic!(),
             }),
         )
         .unwrap();
 
         assert!(dot_flox_path.exists());
+    }
+
+    /// When
+    /// - the environment being pulled doesn't support the current system
+    /// - the user confirms migration and adding the current system
+    /// - the manifest is v0
+    /// [Pull::handle_pull_result] should leave an environment with:
+    /// - `version = 1` and an extra system added to the manifest
+    /// - a lockfile
+    // handle_pull_result() calls spin() which depends on tokio
+    #[tokio::test]
+    async fn handle_pull_result_migration_success() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+
+        let mut environment = mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner);
+
+        Pull::handle_pull_result(
+            &flox,
+            incompatible_system_result(),
+            &dot_flox_path,
+            false,
+            &mut environment,
+            Some(QueryFunctions {
+                query_add_system: |_| panic!(),
+                query_ignore_build_errors: || panic!(),
+                query_migrate_and_add_system: |_| Ok(true),
+            }),
+        )
+        .unwrap();
+
+        assert!(dot_flox_path.exists());
+
+        let new_content = environment.manifest_content(&flox).unwrap();
+        assert!(environment.lockfile_path(&flox).unwrap().exists());
+        assert!(new_content.contains("version = 1"));
+        // The test might be run on aarch64 or x86_64
+        assert!(new_content.contains("-darwin"));
+        assert!(new_content.contains("-linux"));
+    }
+
+    /// When
+    /// - the environment being pulled doesn't support the current system
+    /// - the user confirms migration and adding the current system
+    /// - the manifest is v0
+    /// - the manifest has v0 only fields
+    /// [Pull::handle_pull_result] should leave an environment with:
+    /// - `version = 1` and an extra system added to the manifest
+    /// - no lockfile
+    // handle_pull_result() calls spin() which depends on tokio
+    #[tokio::test]
+    async fn handle_pull_result_migration_errors() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+
+        let mut environment =
+            mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM_V0_FIELDS, owner);
+
+        Pull::handle_pull_result(
+            &flox,
+            incompatible_system_result(),
+            &dot_flox_path,
+            false,
+            &mut environment,
+            Some(QueryFunctions {
+                query_add_system: |_| panic!(),
+                query_ignore_build_errors: || panic!(),
+                query_migrate_and_add_system: |_| Ok(true),
+            }),
+        )
+        .unwrap();
+
+        assert!(dot_flox_path.exists());
+
+        let new_content = environment.manifest_content(&flox).unwrap();
+        assert!(!environment.lockfile_path(&flox).unwrap().exists());
+        assert!(new_content.contains("version = 1"));
+        // The test might be run on aarch64 or x86_64
+        assert!(new_content.contains("-darwin"));
+        assert!(new_content.contains("-linux"));
+    }
+
+    /// When
+    /// - the environment being pulled doesn't support the current system
+    /// - the environment is v1
+    /// The user should be prompted to add the system but not migrate.
+    #[test]
+    fn handle_pull_result_migration_skipped() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+
+        let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
+
+        let mut environment =
+            mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM_V1, owner);
+
+        Pull::handle_pull_result(
+            &flox,
+            incompatible_system_result(),
+            &dot_flox_path,
+            false,
+            &mut environment,
+            Some(QueryFunctions {
+                query_add_system: |_| Ok(false),
+                query_ignore_build_errors: || panic!(),
+                query_migrate_and_add_system: |_| panic!(),
+            }),
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("Did not pull the environment");
+
+        assert!(!dot_flox_path.exists());
     }
 }

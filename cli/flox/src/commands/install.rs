@@ -23,6 +23,7 @@ use super::{environment_select, EnvironmentSelect};
 use crate::commands::{
     ensure_floxhub_token,
     environment_description,
+    maybe_migrate_environment_to_v1,
     ConcreteEnvironment,
     EnvironmentSelectError,
 };
@@ -107,6 +108,8 @@ impl Install {
         };
 
         let mut environment = concrete_environment.into_dyn_environment();
+        maybe_migrate_environment_to_v1(&flox, &mut environment, &description).await?;
+
         let mut packages_to_install = self
             .packages
             .iter()
