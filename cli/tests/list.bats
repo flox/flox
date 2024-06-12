@@ -21,7 +21,7 @@ project_setup() {
   pushd "$PROJECT_DIR" >/dev/null || return
 
   export FLOX_FEATURES_USE_CATALOG=true
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 project_teardown() {
@@ -160,7 +160,7 @@ EOF
 # bats test_tags=list,list:catalog
 @test "catalog: 'flox list' lists packages of environment in the current dir; One package from nixpkgs" {
   "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json" \
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     "$FLOX_BIN" install hello
 
   run "$FLOX_BIN" list
