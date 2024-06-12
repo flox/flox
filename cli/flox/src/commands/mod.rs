@@ -1842,13 +1842,15 @@ mod tests {
         assert!(result.unwrap().is_none());
     }
 
-    //
+    // test that update_instructions provides default message when update-instructions.txt file
+    // does not exits
     #[tokio::test]
     async fn test_update_instructions_default_message() {
         let message = UpdateNotification::update_instructions("does-not-exists");
         assert!(message == DEFAULT_UPDATE_INSTRUCTIONS);
     }
 
+    // test that update_instructions returns the message from update-instructions.txt file
     #[tokio::test]
     async fn test_update_instructions_custom_message() {
         let temp_dir = tempdir().unwrap();
