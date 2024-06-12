@@ -144,10 +144,6 @@ Each option is described below:
 
 `version`
 :   Requires that the package match either an exact version or a semver range.
-    When the first character of the `version` string is '=' the version must be
-    an exact match,
-    otherwise the `version` string is matched as a semver range.
-    Versions that don't conform to semver must be specified with '='.
 
     The semantic version can be specified with the typical qualifiers such as
     `^`, `>=`, etc.
@@ -156,8 +152,6 @@ Each option is described below:
     This instructs Flox to find the latest versions for those fields.
     For example `version = "1.2"` would select the latest version in the
     `1.2.X` series.
-
-    This option is mutually exclusive with the `semver` option.
 
 `systems`
 :   A list of systems on which to install this package.

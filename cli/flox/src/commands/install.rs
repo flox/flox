@@ -59,6 +59,8 @@ pub struct PkgWithIdOption {
     pub id: String,
 
     /// The pkg-path of the package to install as shown by 'flox search'
+    ///
+    /// Append `@<version>` to specify a version requirement
     #[bpaf(positional("package"))]
     pub path: String,
 }
@@ -114,7 +116,6 @@ impl Install {
             id: p.id.clone(),
             pkg_path: p.path.clone(),
             version: None,
-            input: None,
         }));
         if packages_to_install.is_empty() {
             bail!("Must specify at least one package");
@@ -313,7 +314,6 @@ mod tests {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
             version: None,
-            input: None,
         }];
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
@@ -342,7 +342,6 @@ mod tests {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
             version: None,
-            input: None,
         }];
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
@@ -363,7 +362,6 @@ mod tests {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
             version: None,
-            input: None,
         }];
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
@@ -392,7 +390,6 @@ mod tests {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
             version: None,
-            input: None,
         }];
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
