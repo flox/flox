@@ -40,7 +40,7 @@ impl Update {
     #[instrument(name = "update", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         if flox.catalog_client.is_some() {
-            bail!("'flox update' has been removed. To upgrade packages, run 'flox upgrade'. See flox-upgrade(1) for more.");
+            bail!("'flox update' has been removed.\n\nTo upgrade packages, run 'flox upgrade'. See flox-upgrade(1) for more.");
         }
 
         subcommand_metric!("update");
