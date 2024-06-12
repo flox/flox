@@ -349,14 +349,17 @@ pub struct TypedManifestCatalog {
 }
 
 impl TypedManifestCatalog {
+    /// Get the package descriptor with the specified install_id.
     pub fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<ManifestPackageDescriptor> {
-        pkg_descriptor_with_id(id, &self.install.0)
+        self.install.0.get(id.as_ref()).cloned()
     }
 
+    /// Get the package descriptors in the "toplevel" group.
     pub fn pkg_descriptors_in_toplevel_group(&self) -> Vec<(String, ManifestPackageDescriptor)> {
         pkg_descriptors_in_toplevel_group(&self.install.0)
     }
 
+    /// Get the package descriptors in a named group.
     pub fn pkg_descriptors_in_named_group(
         &self,
         name: impl AsRef<str>,
@@ -364,10 +367,13 @@ impl TypedManifestCatalog {
         pkg_descriptors_in_named_group(name, &self.install.0)
     }
 
+    /// Check whether the specified name is either an install_id or group name.
     pub fn pkg_or_group_found_in_manifest(&self, name: impl AsRef<str>) -> bool {
         pkg_or_group_found_in_manifest(name.as_ref(), &self.install.0)
     }
 
+    /// Check whether the specified package belongs to a named group
+    /// with additional packages.
     pub fn pkg_belongs_to_non_empty_named_group(
         &self,
         pkg: impl AsRef<str>,
@@ -375,22 +381,14 @@ impl TypedManifestCatalog {
         pkg_belongs_to_non_empty_named_group(pkg.as_ref(), &self.install.0)
     }
 
+    /// Check whether the specified package belongs to the "toplevel" group
+    /// with additional packages.
     pub fn pkg_belongs_to_non_empty_toplevel_group(
         &self,
         pkg: impl AsRef<str>,
     ) -> Result<bool, ManifestError> {
         pkg_belongs_to_non_empty_toplevel_group(pkg.as_ref(), &self.install.0)
     }
-}
-
-pub(crate) fn pkg_descriptor_with_id(
-    id: impl AsRef<str>,
-    descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
-) -> Option<ManifestPackageDescriptor> {
-    descriptors
-        .iter()
-        .find(|(install_id, _)| install_id.as_str() == id.as_ref())
-        .map(|(_, desc)| desc.clone())
 }
 
 pub(crate) fn pkg_descriptors_in_toplevel_group(
@@ -420,30 +418,32 @@ pub(crate) fn pkg_descriptors_in_named_group(
 
 /// Scans the provided package descriptors to determine if the search term is a package or
 /// group in the manifest.
+
 fn pkg_or_group_found_in_manifest(
-    search_term: &str,
+    search_term: impl AsRef<str>,
     descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
 ) -> bool {
     descriptors.iter().any(|(id, desc)| {
-        (search_term == id.as_str()) || (Some(search_term.to_string()) == desc.pkg_group)
+        let search_term = search_term.as_ref();
+        (search_term == id.as_str()) || (Some(search_term) == desc.pkg_group.as_deref())
     })
 }
 
-/// Scans the provided package descriptors to determine if the specified package belongs to a
 /// named group in the manifest with other packages.
 fn pkg_belongs_to_non_empty_named_group(
     pkg: &str,
     descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
 ) -> Result<Option<String>, ManifestError> {
-    let descriptor =
-        pkg_descriptor_with_id(pkg, descriptors).ok_or(ManifestError::NotFound(pkg.to_string()))?;
-    let Some(group) = descriptor.pkg_group else {
+    let descriptor = descriptors
+        .get(pkg)
+        .ok_or(ManifestError::PkgOrGroupNotFound(pkg.to_string()))?;
+    let Some(ref group) = descriptor.pkg_group else {
         return Ok(None);
     };
-    let pkgs = pkg_descriptors_in_named_group(&group, descriptors);
+    let pkgs = pkg_descriptors_in_named_group(group, descriptors);
     let other_pkgs_in_group = pkgs.iter().any(|(id, _)| id != pkg);
     if other_pkgs_in_group {
-        Ok(Some(group))
+        Ok(Some(group.clone()))
     } else {
         Ok(None)
     }
@@ -455,7 +455,9 @@ fn pkg_belongs_to_non_empty_toplevel_group(
     pkg: &str,
     descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
 ) -> Result<bool, ManifestError> {
-    pkg_descriptor_with_id(pkg, descriptors).ok_or(ManifestError::NotFound(pkg.to_string()))?;
+    descriptors
+        .get(pkg)
+        .ok_or(ManifestError::PkgOrGroupNotFound(pkg.to_string()))?;
     let pkgs = pkg_descriptors_in_toplevel_group(descriptors);
     let other_toplevel_packages_exist = pkgs.iter().any(|(id, _)| id != pkg);
     Ok(other_toplevel_packages_exist)
@@ -603,7 +605,7 @@ pub enum ManifestError {
     #[error("failed while calling pkgdb")]
     PkgDbCall(#[source] std::io::Error),
     #[error("no package or group named '{0}' in the manifest")]
-    NotFound(String),
+    PkgOrGroupNotFound(String),
 }
 
 /// A subset of the manifest used to check what type of edits users make. We

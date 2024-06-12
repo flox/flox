@@ -534,49 +534,7 @@ impl CoreEnvironment<ReadOnly> {
                 (LockedManifest::Pkgdb(lockfile), upgraded)
             },
             TypedManifest::Catalog(catalog) => {
-                for id in groups_or_iids {
-                    tracing::debug!(id, "checking that id is a package or group");
-                    if id == "toplevel" {
-                        continue;
-                    }
-                    if !catalog.pkg_or_group_found_in_manifest(id) {
-                        return Err(CoreEnvironmentError::UpgradeFailedCatalog(
-                            UpgradeError::PkgNotFound(ManifestError::NotFound(id.to_string())),
-                        ));
-                    }
-                }
-                tracing::debug!("checking group membership for requested packages");
-                for id in groups_or_iids {
-                    if catalog.pkg_descriptor_with_id(id).is_none() {
-                        // We've already checked that the id is a package or group,
-                        // and if this is None then we know it's a group and therefore
-                        // we don't need to check what other packages are in the group
-                        // with this id.
-                        continue;
-                    }
-                    if catalog
-                        .pkg_belongs_to_non_empty_toplevel_group(id)
-                        .expect("already checked that package exists")
-                    {
-                        return Err(CoreEnvironmentError::UpgradeFailedCatalog(
-                            UpgradeError::NonEmptyNamedGroup {
-                                pkg: id.clone(),
-                                group: "toplevel".to_string(),
-                            },
-                        ));
-                    }
-                    if let Some(group) = catalog
-                        .pkg_belongs_to_non_empty_named_group(id)
-                        .expect("already checked that package exists")
-                    {
-                        return Err(CoreEnvironmentError::UpgradeFailedCatalog(
-                            UpgradeError::NonEmptyNamedGroup {
-                                pkg: id.clone(),
-                                group,
-                            },
-                        ));
-                    }
-                }
+                Self::ensure_valid_upgrade(groups_or_iids, &catalog)?;
                 tracing::debug!("using catalog client to upgrade");
                 let client = flox
                     .catalog_client
@@ -608,6 +566,56 @@ impl CoreEnvironment<ReadOnly> {
             packages: upgraded,
             store_path: Some(store_path),
         })
+    }
+
+    fn ensure_valid_upgrade(
+        groups_or_iids: &[String],
+        manifest: &TypedManifestCatalog,
+    ) -> Result<(), CoreEnvironmentError> {
+        for id in groups_or_iids {
+            tracing::debug!(id, "checking that id is a package or group");
+            if id == "toplevel" {
+                continue;
+            }
+            if !manifest.pkg_or_group_found_in_manifest(id) {
+                return Err(CoreEnvironmentError::UpgradeFailedCatalog(
+                    UpgradeError::PkgNotFound(ManifestError::PkgOrGroupNotFound(id.to_string())),
+                ));
+            }
+        }
+        tracing::debug!("checking group membership for requested packages");
+        for id in groups_or_iids {
+            if manifest.pkg_descriptor_with_id(id).is_none() {
+                // We've already checked that the id is a package or group,
+                // and if this is None then we know it's a group and therefore
+                // we don't need to check what other packages are in the group
+                // with this id.
+                continue;
+            }
+            if manifest
+                .pkg_belongs_to_non_empty_toplevel_group(id)
+                .expect("already checked that package exists")
+            {
+                return Err(CoreEnvironmentError::UpgradeFailedCatalog(
+                    UpgradeError::NonEmptyNamedGroup {
+                        pkg: id.clone(),
+                        group: "toplevel".to_string(),
+                    },
+                ));
+            }
+            if let Some(group) = manifest
+                .pkg_belongs_to_non_empty_named_group(id)
+                .expect("already checked that package exists")
+            {
+                return Err(CoreEnvironmentError::UpgradeFailedCatalog(
+                    UpgradeError::NonEmptyNamedGroup {
+                        pkg: id.clone(),
+                        group,
+                    },
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn upgrade_with_pkgdb(
