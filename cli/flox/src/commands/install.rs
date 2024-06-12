@@ -53,6 +53,8 @@ pub struct PkgWithIdOption {
     pub id: String,
 
     /// The pkg-path of the package to install as shown by 'flox search'
+    ///
+    /// Append `@<version>` to specify a version requirement
     #[bpaf(positional("package"))]
     pub path: String,
 }
