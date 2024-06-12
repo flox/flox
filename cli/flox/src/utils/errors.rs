@@ -727,6 +727,12 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
 
         LockedManifestError::ResolutionFailed(_) => display_chain(err),
         LockedManifestError::EmptyPage => display_chain(err),
+        // User facing
+        LockedManifestError::LicenseNotAllowed(..) => display_chain(err),
+        // User facing
+        LockedManifestError::BrokenNotAllowed(_) => display_chain(err),
+        // User facing
+        LockedManifestError::UnfreeNotAllowed(_) => display_chain(err),
     }
 }
 

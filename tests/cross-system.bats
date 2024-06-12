@@ -42,7 +42,7 @@ setup_file() {
 
   export OWNER="floxEM"
   export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 teardown_file() {
@@ -97,8 +97,8 @@ teardown() {
   name="created-on-$NIX_SYSTEM.catalog"
 
   "$FLOX_BIN" init -n "$name"
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello.json"
-  "$FLOX_BIN" install hello
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" install hello
   run "$FLOX_BIN" push --owner "$OWNER" --force
   assert_success
   assert_output --partial "pushed to FloxHub (forced)"
@@ -156,8 +156,8 @@ teardown() {
   name="created-on-$pull_system.catalog"
 
   # With --force, pull will add the current system and try to lock
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/hello.json"
-  "$FLOX_BIN" pull "$OWNER/$name" --force
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" pull "$OWNER/$name" --force
 
   run "$FLOX_BIN" activate -- hello
 

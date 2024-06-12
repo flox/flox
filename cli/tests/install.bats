@@ -38,7 +38,7 @@ setup() {
   setup_isolated_flox
   project_setup
   export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 teardown() {
   project_teardown
@@ -54,7 +54,7 @@ teardown() {
 }
 
 @test "catalog: 'flox install' displays confirmation message" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -71,7 +71,7 @@ teardown() {
 }
 
 @test "catalog: 'flox install' edits manifest" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -93,7 +93,7 @@ teardown() {
 }
 
 @test "catalog: uninstall confirmation message" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -116,7 +116,7 @@ teardown() {
 }
 
 @test "catalog: 'flox uninstall' edits manifest" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -255,7 +255,7 @@ teardown() {
 }
 
 @test "catalog: 'flox install' creates link to installed binary" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -279,7 +279,7 @@ teardown() {
 }
 
 @test "catalog: 'flox uninstall' removes link to installed binary" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
@@ -303,7 +303,7 @@ teardown() {
 }
 
 @test "catalog: 'flox uninstall' has helpful error message with no packages installed" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   # If the [install] table is missing entirely we don't want to report a TOML
   # parse error, we want to report that there's nothing to uninstall.
   "$FLOX_BIN" init
@@ -324,7 +324,7 @@ teardown() {
 }
 
 @test "catalog: 'flox install' installs by path" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install hello
@@ -346,7 +346,7 @@ teardown() {
 }
 
 @test "catalog: 'flox install' infers install ID" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/rubyPackages_3_2.rails.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rubyPackages_3_2.rails.json"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install rubyPackages_3_2.rails
@@ -367,7 +367,7 @@ teardown() {
 }
 
 @test "catalog: 'flox install' overrides install ID with '-i'" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install -i foo hello
@@ -387,7 +387,7 @@ teardown() {
 }
 
 @test "catalog: 'flox install' overrides install ID with '--id'" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install --id foo hello
@@ -409,7 +409,7 @@ teardown() {
 }
 
 @test "catalog: 'flox install' accepts mix of inferred and supplied install IDs" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/webmention_ripgrep_rails.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/webmention_ripgrep_rails.json"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails
@@ -431,7 +431,7 @@ teardown() {
 }
 
 @test "catalog: 'flox i' aliases to 'install'" {
-  export  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/resolve/hello.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" i hello
@@ -485,13 +485,23 @@ teardown() {
   assert_line --partial "The package 'hello-unfree' has an unfree license"
 }
 
+# This is also checking we can build an unfree package
 @test "catalog: 'flox install' warns about unfree packages" {
-  skip "will be fixed by https://github.com/flox/flox/issues/1507"
   "$FLOX_BIN" init
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello-unfree.json"
   run "$FLOX_BIN" install hello-unfree
   assert_success
   assert_line --partial "The package 'hello-unfree' has an unfree license"
 }
+
+@test "catalog: 'flox install' warns about broken packages" {
+  skip "waiting for broken packages to be added to catalog"
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install TODO
+  assert_success
+  assert_line --partial "The package 'TODO' is marked as broken, it may not behave as expected during runtime"
+}
+
 
 @test "'flox install' fails to install unfree packages if forbidden" {
   export FLOX_FEATURES_USE_CATALOG=false
@@ -504,29 +514,8 @@ teardown() {
   assert_output --partial "'options.allow.unfree = true'"
 }
 
-@test "catalog: 'flox install' fails to install unfree packages if forbidden" {
-  skip "will be fixed by https://github.com/flox/flox/issues/1507"
-  "$FLOX_BIN" init
-  tomlq --in-place -t '.options.allow.unfree = false' "$MANIFEST_PATH"
-
-  run "$FLOX_BIN" install hello-unfree
-  assert_failure
-  assert_line --partial "The package 'hello-unfree' has an unfree license."
-  assert_output --partial "'options.allow.unfree = true'"
-}
-
 @test "'flox install' fails to install broken packages" {
   export FLOX_FEATURES_USE_CATALOG=false
-  "$FLOX_BIN" init
-
-  run "$FLOX_BIN" install yi
-  assert_failure
-  assert_line --partial "The package 'yi' is marked as broken."
-  assert_output --partial "'options.allow.broken = true'"
-}
-
-@test "catalog: 'flox install' fails to install broken packages" {
-  skip "will be fixed by https://github.com/flox/flox/issues/1507"
   "$FLOX_BIN" init
 
   run "$FLOX_BIN" install yi

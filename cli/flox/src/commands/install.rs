@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Result};
@@ -5,7 +6,12 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{CoreEnvironmentError, Environment, EnvironmentError};
-use flox_rust_sdk::models::lockfile::{LockedManifest, LockedManifestError, LockedManifestPkgdb};
+use flox_rust_sdk::models::lockfile::{
+    LockedManifest,
+    LockedManifestError,
+    LockedManifestPkgdb,
+    LockedPackageCatalog,
+};
 use flox_rust_sdk::models::manifest::PackageToInstall;
 use flox_rust_sdk::models::pkgdb::error_codes;
 use indoc::formatdoc;
@@ -101,31 +107,33 @@ impl Install {
         };
 
         let mut environment = concrete_environment.into_dyn_environment();
-        let mut packages = self
+        let mut packages_to_install = self
             .packages
             .iter()
             .map(|p| PackageToInstall::from_str(p))
             .collect::<Result<Vec<_>, _>>()?;
-        packages.extend(self.id.iter().map(|p| PackageToInstall {
+        packages_to_install.extend(self.id.iter().map(|p| PackageToInstall {
             id: p.id.clone(),
             pkg_path: p.path.clone(),
             version: None,
         }));
-        if packages.is_empty() {
+        if packages_to_install.is_empty() {
             bail!("Must specify at least one package");
         }
 
         // We don't know the contents of the packages field when the span is created
-        tracing::Span::current()
-            .record("packages", Install::format_packages_for_tracing(&packages));
+        tracing::Span::current().record(
+            "packages",
+            Install::format_packages_for_tracing(&packages_to_install),
+        );
 
         let installation = Dialog {
             message: &format!("Installing packages to environment {description}..."),
             help_message: None,
-            typed: Spinner::new(|| environment.install(&packages, &flox)),
+            typed: Spinner::new(|| environment.install(&packages_to_install, &flox)),
         }
         .spin()
-        .map_err(|err| Self::handle_error(err, &flox, &*environment, &packages))?;
+        .map_err(|err| Self::handle_error(err, &flox, &*environment, &packages_to_install))?;
 
         let lockfile_path = environment.lockfile_path(&flox)?;
         let lockfile_path = CanonicalPath::new(lockfile_path)?;
@@ -134,28 +142,32 @@ impl Install {
         // Check for warnings in the lockfile
         let lockfile: LockedManifest = serde_json::from_str(&lockfile_content)?;
 
-        let warnings = match lockfile {
-            LockedManifest::Catalog(_) => {
-                // TODO: implement lockfile checking for catalog lockfiles
-                Vec::new()
+        match lockfile {
+            // TODO: move this behind the `installation.new_manifest.is_some()`
+            // check below so we don't warn when we don't even install anything
+            LockedManifest::Catalog(locked_manifest) => {
+                for warning in
+                    Self::generate_warnings(&locked_manifest.packages, &packages_to_install)
+                {
+                    message::warning(warning);
+                }
             },
             LockedManifest::Pkgdb(_) => {
                 // run `pkgdb manifest check`
-                LockedManifestPkgdb::check_lockfile(&lockfile_path)?
+                let warnings = LockedManifestPkgdb::check_lockfile(&lockfile_path)?;
+                warnings
+                    .iter()
+                    .filter(|w| {
+                        // Filter out warnings that are not related to the packages we just installed
+                        packages_to_install.iter().any(|p| w.package == p.id)
+                    })
+                    .for_each(|w| message::warning(&w.message));
             },
         };
 
-        warnings
-            .iter()
-            .filter(|w| {
-                // Filter out warnings that are not related to the packages we just installed
-                packages.iter().any(|p| w.package == p.id)
-            })
-            .for_each(|w| message::warning(&w.message));
-
         if installation.new_manifest.is_some() {
             // Print which new packages were installed
-            for pkg in packages.iter() {
+            for pkg in packages_to_install.iter() {
                 if let Some(false) = installation.already_installed.get(&pkg.id) {
                     message::package_installed(pkg, &description);
                 } else {
@@ -166,7 +178,7 @@ impl Install {
                 }
             }
         } else {
-            for pkg in packages.iter() {
+            for pkg in packages_to_install.iter() {
                 message::warning(format!(
                     "Package with id '{}' already installed to environment {description}",
                     pkg.id
@@ -226,5 +238,165 @@ impl Install {
             },
             err => apply_doc_link_for_unsupported_packages(err).into(),
         }
+    }
+
+    /// Generate warnings to print to the user about unfree and broken packages.
+    fn generate_warnings(
+        locked_packages: &[LockedPackageCatalog],
+        packages_to_install: &[PackageToInstall],
+    ) -> Vec<String> {
+        let mut warnings = vec![];
+
+        // There could be multiple packages with the same install_id but different systems.
+        // A package could be broken on one system but not another.
+        // So just keep track of which install_ids we've warned for.
+        // TODO: does the warning need to take system into account?
+        let mut warned_unfree = HashSet::new();
+        let mut warned_broken = HashSet::new();
+        for locked_package in locked_packages.iter() {
+            // If unfree && just installed && we haven't already warned for this install_id,
+            // warn that this package is unfree
+            if locked_package.unfree == Some(true)
+                && packages_to_install
+                    .iter()
+                    .any(|p| locked_package.install_id == p.id)
+                && !warned_unfree.contains(&locked_package.install_id)
+            {
+                warnings.push(format!("The package '{}' has an unfree license, please verify the licensing terms of use", locked_package.install_id));
+                warned_unfree.insert(&locked_package.install_id);
+            }
+
+            // If broken && just installed && we haven't already warned for this install_id,
+            // warn that this package is broken
+            if locked_package.broken == Some(true)
+                && packages_to_install
+                    .iter()
+                    .any(|p| locked_package.install_id == p.id)
+                && !warned_broken.contains(&locked_package.install_id)
+            {
+                warnings.push(format!("The package '{}' is marked as broken, it may not behave as expected during runtime.", locked_package.install_id));
+                warned_broken.insert(&locked_package.install_id);
+            }
+        }
+        warnings
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use flox_rust_sdk::models::lockfile::test_helpers::fake_package;
+    use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
+    use flox_rust_sdk::models::manifest::PackageToInstall;
+    use flox_rust_sdk::providers::catalog::SystemEnum;
+
+    use crate::commands::install::Install;
+
+    /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
+    #[test]
+    fn generate_warnings_empty() {
+        let (_, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.unfree = Some(true);
+        let locked_packages = vec![];
+        let packages_to_install = vec![];
+        assert_eq!(
+            Install::generate_warnings(&locked_packages, &packages_to_install),
+            Vec::<String>::new()
+        );
+    }
+
+    /// [Install::generate_warnings] should warn for an unfree package
+    #[test]
+    fn generate_warnings_unfree() {
+        let (foo_iid, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.unfree = Some(true);
+        let locked_packages = vec![foo_locked];
+        let packages_to_install = vec![PackageToInstall {
+            id: foo_iid.clone(),
+            pkg_path: "foo".to_string(),
+            version: None,
+        }];
+        assert_eq!(
+            Install::generate_warnings(&locked_packages, &packages_to_install),
+            vec![format!(
+                "The package '{}' has an unfree license, please verify the licensing terms of use",
+                foo_iid
+            )]
+        );
+    }
+
+    /// [Install::generate_warnings] should only warn for an unfree package once
+    /// even if it's installed on multiple systems
+    #[test]
+    fn generate_warnings_unfree_multi_system() {
+        let (foo_iid, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.unfree = Some(true);
+
+        // TODO: fake_package shouldn't hardcode system?
+        let foo_locked_second_system = LockedPackageCatalog {
+            system: SystemEnum::Aarch64Linux.to_string(),
+            ..foo_locked.clone()
+        };
+
+        let locked_packages = vec![foo_locked, foo_locked_second_system];
+        let packages_to_install = vec![PackageToInstall {
+            id: foo_iid.clone(),
+            pkg_path: "foo".to_string(),
+            version: None,
+        }];
+        assert_eq!(
+            Install::generate_warnings(&locked_packages, &packages_to_install),
+            vec![format!(
+                "The package '{}' has an unfree license, please verify the licensing terms of use",
+                foo_iid
+            )]
+        );
+    }
+
+    /// [Install::generate_warnings] should warn for a broken package
+    #[test]
+    fn generate_warnings_broken() {
+        let (foo_iid, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.broken = Some(true);
+        let locked_packages = vec![foo_locked];
+        let packages_to_install = vec![PackageToInstall {
+            id: foo_iid.clone(),
+            pkg_path: "foo".to_string(),
+            version: None,
+        }];
+        assert_eq!(
+            Install::generate_warnings(&locked_packages, &packages_to_install),
+            vec![format!(
+                "The package '{}' is marked as broken, it may not behave as expected during runtime.",
+                foo_iid
+            )]
+        );
+    }
+
+    /// [Install::generate_warnings] should only warn for a broken package once
+    /// even if it's installed on multiple systems
+    #[test]
+    fn generate_warnings_broken_multi_system() {
+        let (foo_iid, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.broken = Some(true);
+
+        // TODO: fake_package shouldn't hardcode system?
+        let foo_locked_second_system = LockedPackageCatalog {
+            system: SystemEnum::Aarch64Linux.to_string(),
+            ..foo_locked.clone()
+        };
+
+        let locked_packages = vec![foo_locked, foo_locked_second_system];
+        let packages_to_install = vec![PackageToInstall {
+            id: foo_iid.clone(),
+            pkg_path: "foo".to_string(),
+            version: None,
+        }];
+        assert_eq!(
+            Install::generate_warnings(&locked_packages, &packages_to_install),
+            vec![format!(
+                "The package '{}' is marked as broken, it may not behave as expected during runtime.",
+                foo_iid
+            )]
+        );
     }
 }
