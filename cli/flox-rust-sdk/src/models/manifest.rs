@@ -579,7 +579,10 @@ impl FromStr for PackageToInstall {
             },
             Some(_) => {
                 return Err(ManifestError::MalformedStringDescriptor {
-                    msg: "don quoxote".to_string(),
+                    msg: indoc! {"
+                        Expected version requrement after '@'.
+                        Try adding quotes around the argument."}
+                    .to_string(),
                     desc: descriptor.to_string(),
                 })
             },
