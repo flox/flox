@@ -485,13 +485,23 @@ teardown() {
   assert_line --partial "The package 'hello-unfree' has an unfree license"
 }
 
+# This is also checking we can build an unfree package
 @test "catalog: 'flox install' warns about unfree packages" {
-  skip "will be fixed by https://github.com/flox/flox/issues/1507"
   "$FLOX_BIN" init
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello-unfree.json"
   run "$FLOX_BIN" install hello-unfree
   assert_success
   assert_line --partial "The package 'hello-unfree' has an unfree license"
 }
+
+@test "catalog: 'flox install' warns about broken packages" {
+  skip "waiting for broken packages to be added to catalog"
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install TODO
+  assert_success
+  assert_line --partial "The package 'TODO' is marked as broken, it may not behave as expected during runtime"
+}
+
 
 @test "'flox install' fails to install unfree packages if forbidden" {
   export FLOX_FEATURES_USE_CATALOG=false
@@ -504,29 +514,8 @@ teardown() {
   assert_output --partial "'options.allow.unfree = true'"
 }
 
-@test "catalog: 'flox install' fails to install unfree packages if forbidden" {
-  skip "will be fixed by https://github.com/flox/flox/issues/1507"
-  "$FLOX_BIN" init
-  tomlq --in-place -t '.options.allow.unfree = false' "$MANIFEST_PATH"
-
-  run "$FLOX_BIN" install hello-unfree
-  assert_failure
-  assert_line --partial "The package 'hello-unfree' has an unfree license."
-  assert_output --partial "'options.allow.unfree = true'"
-}
-
 @test "'flox install' fails to install broken packages" {
   export FLOX_FEATURES_USE_CATALOG=false
-  "$FLOX_BIN" init
-
-  run "$FLOX_BIN" install yi
-  assert_failure
-  assert_line --partial "The package 'yi' is marked as broken."
-  assert_output --partial "'options.allow.broken = true'"
-}
-
-@test "catalog: 'flox install' fails to install broken packages" {
-  skip "will be fixed by https://github.com/flox/flox/issues/1507"
   "$FLOX_BIN" init
 
   run "$FLOX_BIN" install yi

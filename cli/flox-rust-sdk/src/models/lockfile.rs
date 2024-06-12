@@ -16,6 +16,7 @@ use thiserror::Error;
 use super::container_builder::ContainerBuilder;
 use super::environment::UpdateResult;
 use super::manifest::{
+    Allows,
     ManifestPackageDescriptor,
     TypedManifestCatalog,
     DEFAULT_GROUP_NAME,
@@ -316,6 +317,10 @@ impl LockedManifestCatalog {
         let (already_locked_packages, groups_to_lock) =
             Self::split_fully_locked_groups(groups, seed_lockfile);
 
+        // The manifest could have been edited since locking packages,
+        // in which case there may be packages that aren't allowed.
+        Self::check_packages_are_allowed(&already_locked_packages, &manifest.options.allow)?;
+
         if groups_to_lock.is_empty() {
             debug!("All packages are already locked, skipping resolution");
             return Ok(LockedManifestCatalog {
@@ -332,7 +337,12 @@ impl LockedManifestCatalog {
             .map_err(LockedManifestError::CatalogResolve)?;
 
         // unpack locked packages from response
-        let locked_packages = Self::locked_packages_from_resolution(manifest, resolved)?.collect();
+        let locked_packages: Vec<LockedPackageCatalog> =
+            Self::locked_packages_from_resolution(manifest, resolved)?.collect();
+
+        // The server should be checking this,
+        // but double check
+        Self::check_packages_are_allowed(&locked_packages, &manifest.options.allow)?;
 
         let lockfile = LockedManifestCatalog {
             version: Version::<1>,
@@ -341,6 +351,51 @@ impl LockedManifestCatalog {
         };
 
         Ok(lockfile)
+    }
+
+    /// Given locked packages and manifest options allows, verify that the
+    /// locked packages are allowed.
+    fn check_packages_are_allowed(
+        locked_packages: &[LockedPackageCatalog],
+        allow: &Allows,
+    ) -> Result<(), LockedManifestError> {
+        if !allow.licenses.is_empty() {
+            for package in locked_packages {
+                if let Some(license) = &package.license {
+                    if !allow.licenses.contains(license) {
+                        return Err(LockedManifestError::LicenseNotAllowed(
+                            package.install_id.clone(),
+                            license.clone(),
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Don't allow broken by default
+        if !allow.broken.unwrap_or(false) {
+            for package in locked_packages {
+                // Assume a package isn't broken
+                if package.broken.unwrap_or(false) {
+                    return Err(LockedManifestError::BrokenNotAllowed(
+                        package.install_id.clone(),
+                    ));
+                }
+            }
+        }
+
+        // Allow unfree by default
+        if !allow.unfree.unwrap_or(true) {
+            for package in locked_packages {
+                // Assume a package isn't unfree
+                if package.unfree.unwrap_or(false) {
+                    return Err(LockedManifestError::UnfreeNotAllowed(
+                        package.install_id.clone(),
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Transform a lockfile into a mapping that is easier to query:
@@ -902,6 +957,13 @@ pub enum LockedManifestError {
 
     #[error("Catalog lockfile does not support update")]
     UnsupportedLockfileForUpdate,
+
+    #[error("The package '{0}' has license '{1}' which is not in the list of allowed licenses.\n\nAllow this license by adding it to 'options.allow.licenses' in manifest.toml")]
+    LicenseNotAllowed(String, String),
+    #[error("The package '{0}' is marked as broken.\n\nAllow broken packages by setting 'options.allow.broken = true' in manifest.toml")]
+    BrokenNotAllowed(String),
+    #[error("The package '{0}' has an unfree license.\n\nAllow unfree packages by setting 'options.allow.unfree = true' in manifest.toml")]
+    UnfreeNotAllowed(String),
 }
 
 /// A warning produced by `pkgdb manifest check`
@@ -911,18 +973,71 @@ pub struct LockfileCheckWarning {
     pub message: String,
 }
 
+pub mod test_helpers {
+    use super::*;
+
+    pub fn fake_package(
+        name: &str,
+        group: Option<&str>,
+    ) -> (String, ManifestPackageDescriptor, LockedPackageCatalog) {
+        let install_id = format!("{}_install_id", name);
+
+        let descriptor = ManifestPackageDescriptor {
+            pkg_path: name.to_string(),
+            pkg_group: group.map(|s| s.to_string()),
+            systems: Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
+            version: None,
+            priority: None,
+            optional: false,
+        };
+
+        let locked = LockedPackageCatalog {
+            attr_path: name.to_string(),
+            broken: None,
+            derivation: "derivation".to_string(),
+            description: None,
+            install_id: install_id.clone(),
+            license: None,
+            locked_url: "".to_string(),
+            name: name.to_string(),
+            outputs: Default::default(),
+            outputs_to_install: None,
+            pname: name.to_string(),
+            rev: "".to_string(),
+            rev_count: 0,
+            rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
+                .unwrap()
+                .with_timezone(&chrono::offset::Utc),
+            stabilities: None,
+            unfree: None,
+            version: "".to_string(),
+            system: SystemEnum::Aarch64Darwin.to_string(),
+            group: group.unwrap_or(DEFAULT_GROUP_NAME).to_string(),
+            priority: 5,
+            optional: false,
+        };
+        (install_id, descriptor, locked)
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use std::collections::HashMap;
     use std::vec;
 
+    use catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use catalog_api_v1::types::Output;
     use indoc::indoc;
     use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
+    use test_helpers::fake_package;
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
+    use crate::models::manifest::test::empty_catalog_manifest;
     use crate::models::manifest::{self, RawManifest, TypedManifest};
 
     /// Validate that the parser for the locked manifest can handle null values
@@ -1128,52 +1243,6 @@ pub(crate) mod tests {
             }],
         })
     });
-
-    pub(crate) fn fake_package(
-        name: &str,
-        group: Option<&str>,
-    ) -> (String, ManifestPackageDescriptor, LockedPackageCatalog) {
-        let install_id = format!("{}_install_id", name);
-
-        let descriptor = ManifestPackageDescriptor {
-            pkg_path: name.to_string(),
-            pkg_group: group.map(|s| s.to_string()),
-            systems: Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
-            version: None,
-            priority: None,
-            optional: false,
-        };
-
-        let locked = LockedPackageCatalog {
-            attr_path: name.to_string(),
-            broken: None,
-            derivation: "derivation".to_string(),
-            description: None,
-            install_id: install_id.clone(),
-            license: None,
-            locked_url: "".to_string(),
-            name: name.to_string(),
-            outputs: Default::default(),
-            outputs_to_install: None,
-            pname: name.to_string(),
-            rev: "".to_string(),
-            rev_count: 0,
-            rev_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
-                .unwrap()
-                .with_timezone(&chrono::offset::Utc),
-            scrape_date: chrono::DateTime::parse_from_rfc3339("2021-08-31T00:00:00Z")
-                .unwrap()
-                .with_timezone(&chrono::offset::Utc),
-            stabilities: None,
-            unfree: None,
-            version: "".to_string(),
-            system: SystemEnum::Aarch64Darwin.to_string(),
-            group: group.unwrap_or(DEFAULT_GROUP_NAME).to_string(),
-            priority: 5,
-            optional: false,
-        };
-        (install_id, descriptor, locked)
-    }
 
     #[test]
     fn make_params_smoke() {
@@ -1929,5 +1998,211 @@ pub(crate) mod tests {
 
         assert_eq!(fully_locked, vec![]);
         assert_eq!(to_resolve.len(), 1);
+    }
+
+    /// [LockedManifestCatalog::lock_manifest] returns an error if an already
+    /// locked package is no longer allowed
+    #[tokio::test]
+    async fn lock_manifest_catches_not_allowed_package() {
+        // Create a manifest and lockfile with an unfree package foo.
+        // Don't set `options.allow.unfree`
+        let (foo_iid, foo_descriptor_one_system, mut foo_locked) = fake_package("foo", None);
+        foo_locked.unfree = Some(true);
+        let mut manifest = empty_catalog_manifest();
+        manifest
+            .install
+            .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
+
+        let locked = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone()],
+        };
+
+        // Set `options.allow.unfree = false` in the manifest, but not the lockfile
+        manifest.options.allow.unfree = Some(false);
+
+        let client = catalog::MockClient::new(None::<String>).unwrap();
+        assert!(matches!(
+            LockedManifestCatalog::lock_manifest(&manifest, Some(&locked), &client)
+                .await
+                .unwrap_err(),
+            LockedManifestError::UnfreeNotAllowed { .. }
+        ));
+    }
+
+    /// [LockedManifestCatalog::lock_manifest] returns an error if the server
+    /// returns a package that is not allowed.
+    #[tokio::test]
+    async fn lock_manifest_catches_not_allowed_package_from_server() {
+        // Create a manifest with a package foo and `options.allow.unfree = false`
+        let (foo_iid, foo_descriptor_one_system, _) = fake_package("foo", Some("toplevel"));
+        let mut manifest = empty_catalog_manifest();
+        manifest
+            .install
+            .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
+        manifest.options.allow.unfree = Some(false);
+
+        // Return a response that says foo is unfree. If this happens, it's a bug in the server
+        let mut client = catalog::MockClient::new(None::<String>).unwrap();
+        let mut resolved_group = resolved_pkg_group_with_dummy_package(
+            "toplevel",
+            // TODO: this is hardcoded in fake_package
+            &System::from("aarch64-darwin"),
+            &foo_iid,
+            "foo",
+            "0",
+        );
+        resolved_group
+            .page
+            .as_mut()
+            .unwrap()
+            .packages
+            .as_mut()
+            .unwrap()[0]
+            .unfree = Some(true);
+        client.push_resolve_response(vec![resolved_group]);
+        assert!(matches!(
+            LockedManifestCatalog::lock_manifest(&manifest, None, &client)
+                .await
+                .unwrap_err(),
+            LockedManifestError::UnfreeNotAllowed { .. }
+        ));
+    }
+
+    /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
+    /// when it finds a disallowed license
+    #[test]
+    fn check_packages_are_allowed_disallowed_license() {
+        let (_, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.license = Some("disallowed".to_string());
+
+        assert!(matches!(
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: None,
+                licenses: vec!["allowed".to_string()]
+            }),
+            Err(LockedManifestError::LicenseNotAllowed { .. })
+        ));
+    }
+
+    /// [LockedManifestCatalog::check_packages_are_allowed] does not error when
+    /// a package's license is allowed
+    #[test]
+    fn check_packages_are_allowed_allowed_license() {
+        let (_, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.license = Some("allowed".to_string());
+
+        assert!(
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: None,
+                licenses: vec!["allowed".to_string()]
+            })
+            .is_ok()
+        );
+    }
+
+    /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
+    /// when a package is broken even if `allow.broken` is unset
+    #[test]
+    fn check_packages_are_allowed_broken_default() {
+        let (_, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.broken = Some(true);
+
+        assert!(matches!(
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: None,
+                licenses: vec![]
+            }),
+            Err(LockedManifestError::BrokenNotAllowed { .. })
+        ));
+    }
+
+    /// [LockedManifestCatalog::check_packages_are_allowed] does not error for a
+    /// broken package when `allow.broken = true`
+    #[test]
+    fn check_packages_are_allowed_broken_true() {
+        let (_, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.broken = Some(true);
+
+        assert!(
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: Some(true),
+                licenses: vec![]
+            })
+            .is_ok()
+        );
+    }
+
+    /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
+    /// when a package is broken and `allow.broken = false`
+    #[test]
+    fn check_packages_are_allowed_broken_false() {
+        let (_, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.broken = Some(true);
+
+        assert!(matches!(
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: Some(false),
+                licenses: vec![]
+            }),
+            Err(LockedManifestError::BrokenNotAllowed { .. })
+        ));
+    }
+
+    /// [LockedManifestCatalog::check_packages_are_allowed] does not error for
+    /// an unfree package when `allow.unfree` is unset
+    #[test]
+    fn check_packages_are_allowed_unfree_default() {
+        let (_, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.unfree = Some(true);
+
+        assert!(
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: None,
+                broken: None,
+                licenses: vec![]
+            })
+            .is_ok()
+        );
+    }
+
+    /// [LockedManifestCatalog::check_packages_are_allowed] does not error for a
+    /// an unfree package when `allow.unfree = true`
+    #[test]
+    fn check_packages_are_allowed_unfree_true() {
+        let (_, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.unfree = Some(true);
+
+        assert!(
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: Some(true),
+                broken: None,
+                licenses: vec![]
+            })
+            .is_ok()
+        );
+    }
+
+    /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
+    /// when a package is unfree and `allow.unfree = false`
+    #[test]
+    fn check_packages_are_allowed_unfree_false() {
+        let (_, _, mut foo_locked) = fake_package("foo", None);
+        foo_locked.unfree = Some(true);
+
+        assert!(matches!(
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+                unfree: Some(false),
+                broken: None,
+                licenses: vec![]
+            }),
+            Err(LockedManifestError::UnfreeNotAllowed { .. })
+        ));
     }
 }

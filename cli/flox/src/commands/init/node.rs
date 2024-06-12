@@ -702,12 +702,12 @@ mod tests {
         flox_instance_with_global_lock,
         flox_instance_with_optional_floxhub_and_client,
     };
+    use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use flox_rust_sdk::providers::catalog::Client;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
 
     use super::*;
-    use crate::commands::init::tests::resolved_pkg_group_with_dummy_package;
 
     #[test]
     fn parse_nvmrc_version_some() {
