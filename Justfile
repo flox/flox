@@ -53,11 +53,18 @@ build-cdb:
 
 # Build only flox
 @build-cli: build-pkgdb
-    pushd cli; cargo build -q
+    pushd cli; cargo build -q --workspace
+
+# Build just the data generator
+@build-data-gen:
+    pushd cli; cargo build -q -p mk_data; popd
 
 # Build the binaries
 build: build-cli
 
+# Regenerate test data
+gen-data +mk_data_args="": build-data-gen
+    mkdata="$PWD/cli/target/debug/mk_data"; pushd test_data; "$mkdata" {{mk_data_args}} config.toml; popd
 
 # ---------------------------------------------------------------------------- #
 

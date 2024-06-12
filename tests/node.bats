@@ -27,7 +27,7 @@ project_setup() {
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
   export FLOX_FEATURES_USE_CATALOG=true
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/empty_responses.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 project_teardown() {
@@ -52,8 +52,11 @@ teardown() {
 
 @test "flox activate works with npm" {
   export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$TESTS_DIR/node/single-dependency/common/." .
-  cp -r "$TESTS_DIR/node/single-dependency/npm/." .
+  cp -r "$INPUT_DATA/init/node/common/." .
+  cp -r "$INPUT_DATA/init/node/npm/." .
+  # Files copied from the store are read-only
+  chmod -R +w .
+
   run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'nodejs' installed"
   run "$FLOX_BIN" activate -- npm run start
@@ -62,8 +65,11 @@ teardown() {
 
 @test "flox activate works with yarn" {
   export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$TESTS_DIR/node/single-dependency/common/." .
-  cp -r "$TESTS_DIR/node/single-dependency/yarn/." .
+  cp -r "$INPUT_DATA/init/node/common/." .
+  cp -r "$INPUT_DATA/init/node/yarn/." .
+  # Files copied from the store are read-only
+  chmod -R +w .
+
   run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'yarn' installed"
   refute_output "nodejs"
@@ -139,9 +145,12 @@ EOF
 
 # bats test_tags=catalog
 @test "catalog: flox activate works with npm" {
-  cp -r "$TESTS_DIR/node/single-dependency/common/." .
-  cp -r "$TESTS_DIR/node/single-dependency/npm/." .
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/node_npm.json" \
+  cp -r "$INPUT_DATA/init/node/common/." .
+  cp -r "$INPUT_DATA/init/node/npm/." .
+  # Files copied from the store are read-only
+  chmod -R +w .
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/node_npm.json" \
     run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'nodejs' installed"
   run "$FLOX_BIN" activate -- npm run start
@@ -150,9 +159,12 @@ EOF
 
 # bats test_tags=catalog
 @test "catalog: flox activate works with yarn" {
-  cp -r "$TESTS_DIR/node/single-dependency/common/." .
-  cp -r "$TESTS_DIR/node/single-dependency/yarn/." .
-  _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/init/node_yarn.json" \
+  cp -r "$INPUT_DATA/init/node/common/." .
+  cp -r "$INPUT_DATA/init/node/yarn/." .
+  # Files copied from the store are read-only
+  chmod -R +w .
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/node_yarn.json" \
     run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'yarn' installed"
   refute_output "nodejs"
@@ -164,33 +176,7 @@ EOF
 @test "catalog: install krb5 with node" {
   "$FLOX_BIN" init
 
-  MANIFEST_CONTENT="$(cat << "EOF"
-    version = 1
-
-    [install]
-    nodejs.pkg-path = "nodejs"
-    python3.pkg-path = "python3"
-    make.pkg-path = "gnumake"
-
-    # darwin only
-    clang = { pkg-path = "clang", systems = ["aarch64-darwin", "x86_64-darwin"]}
-    cctools = { pkg-path = "darwin.cctools", systems = ["aarch64-darwin", "x86_64-darwin"], priority = 6 }
-
-    # TODO: these are only necessary because of how we handle CPATH in
-    # activate
-    libcxx = { pkg-path = "libcxx", systems = ["aarch64-darwin", "x86_64-darwin"] }
-    libcxxabi = { pkg-path = "libcxxabi", systems = ["aarch64-darwin", "x86_64-darwin"] }
-
-    # linux only
-    gcc = { pkg-path = "gcc", systems = ["aarch64-linux", "x86_64-linux"] }
-
-    [options]
-    systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
-EOF
-  )"
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/node_krb5_prereqs.json"
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
-  export _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/node_krb5_krb5.json"
+  cat "$GENERATED_DATA/envs/krb5_prereqs/manifest.toml" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/krb5_prereqs/krb5_prereqs.json" "$FLOX_BIN" edit -f -
 
   # With dependencies installed, we can now install krb5 and run system-specific
   # checks.
@@ -198,9 +184,9 @@ EOF
     *-linux)
       # Ensure we're getting krb5 from the flox package by first checking
       # installation fails
-      run ! "$FLOX_BIN" activate -- bash "$TESTS_DIR/node/krb5.sh"
+      run ! "$FLOX_BIN" activate -- bash "$TESTS_DIR/init/node/krb5.sh"
 
-      _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/node_krb5_krb5.json" \
+      _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/krb5_after_prereqs_installed.json" \
         "$FLOX_BIN" install krb5
 
       "$FLOX_BIN" activate -- bash "$TESTS_DIR/node/krb5.sh"
@@ -208,9 +194,9 @@ EOF
     *-darwin)
       # Ensure we're getting krb5 from the flox package by first checking
       # installation fails
-      run ! "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/node/krb5.sh"'
+      run ! "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/init/node/krb5.sh"'
 
-      _FLOX_USE_CATALOG_MOCK="$TESTS_DIR/catalog_responses/node_krb5_krb5.json" \
+      _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/krb5_after_prereqs_installed.json" \
           "$FLOX_BIN" install krb5
 
       # TODO: fix CPATH in activate

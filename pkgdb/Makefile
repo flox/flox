@@ -199,7 +199,7 @@ FULLCLEANDIRS  =
 FULLCLEANFILES =
 
 # Where to find test suite input data files.
-TEST_DATA_DIR = $(PKGDB_ROOT)/tests/data
+GENERATED_DATA = $(PKGDB_ROOT)/tests/data
 
 
 # ---------------------------------------------------------------------------- #
@@ -481,7 +481,7 @@ ccls: ../.ccls
 	  fi;                                                                 \
 	  echo $(CXXFLAGS) $(nljson_CFLAGS) $(nix_CFLAGS);                    \
 	  echo $(argparse_CFLAGS) $(sqlite3pp_CFLAGS);                        \
-	  echo '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"';                          \
+	  echo '-DGENERATED_DATA="$(GENERATED_DATA)"';                          \
 	}|$(TR) ' ' '\n'|$(SED) 's/-std=\(.*\)/%cpp -std=\1|%h -std=\1/'      \
 	 |$(TR) '|' '\n' >> "$@";
 
@@ -636,7 +636,7 @@ lib/ld-floxlib.so: src/ld-floxlib.c
 
 # ---------------------------------------------------------------------------- #
 
-$(test_SRCS:.cc=.o): CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
+$(test_SRCS:.cc=.o): CXXFLAGS += '-DGENERATED_DATA="$(GENERATED_DATA)"'
 $(TESTS) $(TEST_UTILS): tests/%: $(filter-out src/main.o,$(SRCS:.cc=.o))
 $(TESTS) $(TEST_UTILS): tests/%: tests/%.o tests/test.hh
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;

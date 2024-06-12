@@ -165,6 +165,8 @@
         };
       };
 
+      GENERATED_DATA = ./test_data/generated;
+
       # Customized `gh' executable used for auth.
       flox-gh = callPackage ./pkgs/flox-gh {};
 
@@ -184,7 +186,9 @@
       flox = callPackage ./pkgs/flox {};
 
       # Wrapper scripts for running test suites.
-      flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
+      flox-cli-tests =
+        callPackage ./pkgs/flox-cli-tests {
+        };
 
       # Integration tests
       flox-tests = callPackage ./pkgs/flox-tests {};

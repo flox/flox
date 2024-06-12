@@ -5,7 +5,9 @@ use anyhow::{anyhow, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::PackageToInstall;
+use flox_rust_sdk::utils::traceable_path;
 use indoc::{formatdoc, indoc};
+use tracing::debug;
 
 use super::{
     format_customization,
@@ -57,6 +59,7 @@ impl Go {
     /// Since the [GO_WORK_FILENAME] file declares a multiple module based workspace, it takes
     /// precedence over any other [GO_MOD_FILENAME] file that could possibly be found.
     async fn detect_module_system(flox: &Flox, path: &Path) -> Result<Option<GoModuleSystemKind>> {
+        debug!(path = traceable_path(path), "detecting go module system");
         if let Some(go_work) = GoWorkSystem::try_new_from_path(flox, path).await? {
             return Ok(Some(GoModuleSystemKind::Workspace(go_work)));
         }
@@ -221,9 +224,10 @@ impl GoModuleSystemMode for GoModSystem {
     async fn try_new_from_path(flox: &Flox, path: &Path) -> Result<Option<Self>> {
         let mod_path = path.join(GO_MOD_FILENAME);
         if !mod_path.exists() || mod_path.is_dir() {
+            debug!(path = traceable_path(&mod_path), "go.mod not located");
             return Ok(None);
         }
-
+        debug!(path = traceable_path(&mod_path), "go.mod located");
         let mod_content = fs::read_to_string(mod_path)?;
         Self::try_new_from_content(flox, &mod_content).await
     }
@@ -258,9 +262,10 @@ impl GoModuleSystemMode for GoWorkSystem {
     async fn try_new_from_path(flox: &Flox, path: &Path) -> Result<Option<Self>> {
         let work_path = path.join(GO_WORK_FILENAME);
         if !work_path.exists() || work_path.is_dir() {
+            debug!(path = traceable_path(&work_path), "go.work not located");
             return Ok(None);
         }
-
+        debug!(path = traceable_path(&work_path), "go.work located");
         let work_content = fs::read_to_string(work_path)?;
         Self::try_new_from_content(flox, &work_content).await
     }
