@@ -80,7 +80,8 @@ use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FIL
 use crate::utils::{message, TRAILING_NETWORK_CALL_TIMEOUT};
 
 // Relative to flox executable
-const DEFAULT_UPDATE_INSTRUCTIONS: &str = "Get the latest at https://flox.dev/docs/install-flox/#upgrade-existing-flox-installation";
+const DEFAULT_UPDATE_INSTRUCTIONS: &str =
+    "Get the latest at https://flox.dev/docs/install-flox/#upgrade-existing-flox-installation";
 const UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH: &str =
     "../../share/flox/files/update-instructions.txt";
 const UPDATE_NOTIFICATION_FILE_NAME: &str = "update-notification.json";
@@ -546,7 +547,7 @@ impl UpdateNotification {
 
     // Check for update instructions file which is located relative to the current executable
     // and is created by an installer
-    fn update_instructions(update_instructions_relative_file_path : &str) -> String {
+    fn update_instructions(update_instructions_relative_file_path: &str) -> String {
         if let Ok(exe) = env::current_exe() {
             if let Ok(update_instructions_file) = exe
                 .join(update_instructions_relative_file_path)
@@ -1854,14 +1855,10 @@ mod tests {
         let update_instructions_file = temp_dir.path().join("update-instructions.txt");
         let custom_message = "This are custom update instructions";
 
-        fs::write(
-            &update_instructions_file,
-            custom_message.to_string(),
-        )
-        .unwrap();
+        fs::write(&update_instructions_file, custom_message.to_string()).unwrap();
 
-        let message = UpdateNotification::update_instructions(update_instructions_file.to_str().unwrap());
+        let message =
+            UpdateNotification::update_instructions(update_instructions_file.to_str().unwrap());
         assert!(message.contains(custom_message));
     }
-
 }
