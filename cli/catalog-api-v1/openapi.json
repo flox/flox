@@ -3,7 +3,7 @@
   "info": {
     "title": "Flox Catalog Service",
     "description": "\n# Flox Catalog Service API\n\nTBD\n\n*Markdown is available here*\n",
-    "version": "v0.1.dev162+geac55ad.d19800101",
+    "version": "vundefined",
     "x-logo": {
       "url": "https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png"
     }
@@ -190,16 +190,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResolvedPackageGroups-Input"
-                }
-              }
-            }
-          },
-          "406": {
-            "description": "One or more package groups could not be resolved.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }

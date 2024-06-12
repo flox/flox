@@ -2204,7 +2204,7 @@ TBD
 *Markdown is available here*
 
 
-Version: v0.1.dev162+geac55ad.d19800101*/
+Version: vundefined*/
 pub struct Client {
     pub(crate) baseurl: String,
     pub(crate) client: reqwest::Client,
@@ -2250,7 +2250,7 @@ impl Client {
     /// This string is pulled directly from the source OpenAPI
     /// document and may be in any format the API selects.
     pub fn api_version(&self) -> &'static str {
-        "v0.1.dev162+geac55ad.d19800101"
+        "vundefined"
     }
 }
 #[allow(clippy::all)]
@@ -2433,9 +2433,6 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
-            406u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
             422u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
