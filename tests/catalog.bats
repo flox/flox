@@ -64,15 +64,16 @@ teardown_file() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" \
     "$FLOX_BIN" install hello
 
-  run "$FLOX_BIN" list
-  assert_success
-  assert_line "hello: hello (old_version)"
+  old_derivation=$(cat .flox/env/manifest.lock | jq -r -c '.packages[] | select(.system == "aarch64-darwin" and .install_id == "hello") | .derivation')
+  assert_equal "$old_derivation" "/nix/store/AAA-hello-2.12.1.drv"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade -vvv
+  new_derivation=$(cat .flox/env/manifest.lock | jq -r -c '.packages[] | select(.system == "aarch64-darwin" and .install_id == "hello") | .derivation')
   assert_success
   assert_output --partial "using catalog client to upgrade"
   assert_output --partial "Upgraded 'hello'"
+  assert_not_equal "$old_derivation" "$new_derivation"
 
   run "$FLOX_BIN" list
   assert_success

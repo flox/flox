@@ -55,7 +55,7 @@ cmd = "flox edit -f manifest.toml"
 pre_cmd = "flox init"
 cmd = "flox install hello"
 post_cmd = '''
-    cat "$RESPONSE_FILE" | jq | sed 's/"version": "2.12.1"/"version": "old_version"/g' > tmp.json
+    cat "$RESPONSE_FILE" | jq | sed 's/"derivation": .*$/"derivation": "\/nix\/store\/AAA-hello-2.12.1.drv",/g' > tmp.json
     mv tmp.json "$RESPONSE_FILE"
 '''
 

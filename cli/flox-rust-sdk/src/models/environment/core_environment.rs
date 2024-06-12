@@ -1,3 +1,4 @@
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -14,6 +15,7 @@ use super::{
     InstallationAttempt,
     UninstallationAttempt,
     UpdateResult,
+    UpgradeError,
     LOCKFILE_FILENAME,
     MANIFEST_FILENAME,
 };
@@ -32,6 +34,7 @@ use crate::models::manifest::{
     insert_packages,
     remove_packages,
     Manifest,
+    ManifestError,
     PackageToInstall,
     TomlEditError,
     TypedManifest,
@@ -531,6 +534,7 @@ impl CoreEnvironment<ReadOnly> {
                 (LockedManifest::Pkgdb(lockfile), upgraded)
             },
             TypedManifest::Catalog(catalog) => {
+                Self::ensure_valid_upgrade(groups_or_iids, &catalog)?;
                 tracing::debug!("using catalog client to upgrade");
                 let client = flox
                     .catalog_client
@@ -540,10 +544,16 @@ impl CoreEnvironment<ReadOnly> {
                 let (lockfile, upgraded) =
                     self.upgrade_with_catalog_client(client, groups_or_iids, &catalog)?;
 
-                let upgraded = upgraded
-                    .into_iter()
-                    .map(|(_, pkg)| pkg.install_id.clone())
-                    .collect();
+                let upgraded = {
+                    let mut install_ids = upgraded
+                        .into_iter()
+                        .map(|(_, pkg)| pkg.install_id.clone())
+                        .collect::<HashSet<_>>()
+                        .into_iter()
+                        .collect::<Vec<_>>();
+                    install_ids.sort();
+                    install_ids
+                };
 
                 (LockedManifest::Catalog(lockfile), upgraded)
             },
@@ -556,6 +566,56 @@ impl CoreEnvironment<ReadOnly> {
             packages: upgraded,
             store_path: Some(store_path),
         })
+    }
+
+    fn ensure_valid_upgrade(
+        groups_or_iids: &[String],
+        manifest: &TypedManifestCatalog,
+    ) -> Result<(), CoreEnvironmentError> {
+        for id in groups_or_iids {
+            tracing::debug!(id, "checking that id is a package or group");
+            if id == "toplevel" {
+                continue;
+            }
+            if !manifest.pkg_or_group_found_in_manifest(id) {
+                return Err(CoreEnvironmentError::UpgradeFailedCatalog(
+                    UpgradeError::PkgNotFound(ManifestError::PkgOrGroupNotFound(id.to_string())),
+                ));
+            }
+        }
+        tracing::debug!("checking group membership for requested packages");
+        for id in groups_or_iids {
+            if manifest.pkg_descriptor_with_id(id).is_none() {
+                // We've already checked that the id is a package or group,
+                // and if this is None then we know it's a group and therefore
+                // we don't need to check what other packages are in the group
+                // with this id.
+                continue;
+            }
+            if manifest
+                .pkg_belongs_to_non_empty_toplevel_group(id)
+                .expect("already checked that package exists")
+            {
+                return Err(CoreEnvironmentError::UpgradeFailedCatalog(
+                    UpgradeError::NonEmptyNamedGroup {
+                        pkg: id.clone(),
+                        group: "toplevel".to_string(),
+                    },
+                ));
+            }
+            if let Some(group) = manifest
+                .pkg_belongs_to_non_empty_named_group(id)
+                .expect("already checked that package exists")
+            {
+                return Err(CoreEnvironmentError::UpgradeFailedCatalog(
+                    UpgradeError::NonEmptyNamedGroup {
+                        pkg: id.clone(),
+                        group,
+                    },
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn upgrade_with_pkgdb(
@@ -592,7 +652,7 @@ impl CoreEnvironment<ReadOnly> {
             pkgdb_cmd.display()
         );
         let json: UpgradeResultJSON = serde_json::from_value(
-            call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::UpgradeFailed)?,
+            call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::UpgradeFailedPkgDb)?,
         )
         .map_err(CoreEnvironmentError::ParseUpgradeOutput)?;
 
@@ -633,10 +693,20 @@ impl CoreEnvironment<ReadOnly> {
             }
         };
 
-        let previous_packages = existing_lockfile
-            .as_ref()
-            .map(|lockfile| lockfile.packages.clone())
-            .unwrap_or_default();
+        // Record a nested map where you retrieve the locked package
+        // via pkgs[install_id][system]
+        let previous_packages = if let Some(ref lockfile) = existing_lockfile {
+            let mut pkgs_by_id = BTreeMap::new();
+            lockfile.packages.iter().for_each(|pkg| {
+                let by_system = pkgs_by_id
+                    .entry(pkg.install_id.clone())
+                    .or_insert(BTreeMap::new());
+                by_system.entry(pkg.system.clone()).or_insert(pkg.clone());
+            });
+            pkgs_by_id
+        } else {
+            BTreeMap::new()
+        };
 
         // Create a seed lockfile by "unlocking" (i.e. removing the locked entries of)
         // all packages matching the given groups or iids.
@@ -651,26 +721,40 @@ impl CoreEnvironment<ReadOnly> {
             })
         };
 
-        let upgraded =
+        let upgraded_lockfile =
             LockedManifestCatalog::lock_manifest(manifest, seed_lockfile.as_ref(), client)
                 .block_on()
                 .map_err(CoreEnvironmentError::LockedManifest)?;
 
-        // find all packages that after upgrading have a different derivation
-        let package_diff = upgraded
-            .packages
-            .iter()
-            .filter_map(move |pkg| {
-                previous_packages
-                    .iter()
-                    .find(|prev| {
-                        prev.install_id == pkg.install_id && prev.derivation != pkg.derivation
-                    })
-                    .map(|prev| (prev.clone(), pkg.clone()))
-            })
-            .collect();
+        let pkgs_after_upgrade = {
+            let mut pkgs_by_id = BTreeMap::new();
+            upgraded_lockfile.packages.iter().for_each(|pkg| {
+                let by_system = pkgs_by_id
+                    .entry(pkg.install_id.clone())
+                    .or_insert(BTreeMap::new());
+                by_system.entry(pkg.system.clone()).or_insert(pkg.clone());
+            });
+            pkgs_by_id
+        };
 
-        Ok((upgraded, package_diff))
+        // Iterate over the two sorted maps in lockstep
+        let package_diff = previous_packages
+            .iter()
+            .zip(pkgs_after_upgrade.iter())
+            .flat_map(|((_prev_id, prev_map), (_curr_id, curr_map))| {
+                let curr_iter = curr_map.iter().map(|(_sys, pkg)| pkg);
+                prev_map.iter().map(|(_sys, pkg)| pkg).zip(curr_iter)
+            })
+            .filter_map(|(prev_pkg, curr_pkg)| {
+                if prev_pkg.derivation != curr_pkg.derivation {
+                    Some((prev_pkg.clone(), curr_pkg.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        Ok((upgraded_lockfile, package_diff))
     }
 
     /// Makes a temporary copy of the environment so modifications to the manifest
@@ -925,7 +1009,9 @@ pub enum CoreEnvironmentError {
     #[error("unexpected output from pkgdb upgrade")]
     ParseUpgradeOutput(#[source] serde_json::Error),
     #[error("failed to upgrade environment")]
-    UpgradeFailed(#[source] CallPkgDbError),
+    UpgradeFailedPkgDb(#[source] CallPkgDbError),
+    #[error("failed to upgrade environment")]
+    UpgradeFailedCatalog(#[source] UpgradeError),
     // endregion
 
     // endregion

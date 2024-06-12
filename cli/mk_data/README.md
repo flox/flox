@@ -51,13 +51,20 @@ Each job is executed in a temporary directory inside the output directory.
 
 The config for a job is as follows:
 ```
-files    := [str] | null
-pre_cmd  := str | null
-cmd      := str | null
-post_cmd := str | null
+files                  := [str] | null
+pre_cmd                := str | null
+cmd                    := str | null
+post_cmd               := str | null
+ignore_pre_cmd_errors  := bool | null
+ignore_cmd_errors      := bool | null
+ignore_post_cmd_errors := bool | null
+skip_if_output_exists  := str | null
 ```
+where `*cmd`s are run by Bash.
 
 Semantics:
+- If `skip_if_output_exists` is `<path>`, then `$output_dir/<path>` is checked and if it exists the job is skipped.
+    - This is necessary if the job puts output in a place other than `<category>/<name>.json`.
 - `files` are relative paths specified relative to the input data directory.
 - `files` are copied from the input data directory into the working directory before anything else happens.
 - `pre_cmd` executes next, but no response file is generated during execution.
@@ -65,7 +72,8 @@ Semantics:
 - `post_cmd` is executed next, but no response file is generated.
 - `$RESPONSE_FILE` contains the path to the generated response file and is available inside `post_cmd` for post-processing of response files.
 
-Any error encountered while copying files or running commands will fail the job.
+Any error encountered while copying files or running commands will fail the job
+unless the appropriate `ignore_*_errors` field is set.
 If you expect a command to fail and still want to record the response, you should
 run the command as `cmd || true`.
 

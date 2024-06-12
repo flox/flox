@@ -7,6 +7,7 @@ use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentErr
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     EnvironmentError,
+    UpgradeError,
     ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::lockfile::LockedManifestError;
@@ -293,7 +294,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         CoreEnvironmentError::BadLockfilePath(_) => display_chain(err),
 
         // todo: should be in LockedManifesterror
-        CoreEnvironmentError::UpgradeFailed(pkgdb_error) => {
+        CoreEnvironmentError::UpgradeFailedPkgDb(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to upgrade environment.")
         },
         // other pkgdb call errors are unexpected
@@ -312,6 +313,16 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 
             Please enable the catalog feature and try again.
         "},
+        CoreEnvironmentError::UpgradeFailedCatalog(err) => match err {
+            UpgradeError::PkgNotFound(err) => err.to_string(),
+            UpgradeError::NonEmptyNamedGroup { pkg, group } => formatdoc! {"
+                '{pkg}' is a package in the group '{group}' with multiple packages.
+                To upgrade the group, specify the group name:
+                    $ flox upgrade {group}
+                To upgrade all packages, run:
+                    $ flox upgrade
+            "},
+        },
     }
 }
 
