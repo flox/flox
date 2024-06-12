@@ -168,4 +168,25 @@ EOF
   assert_output --regexp 'hello: hello \([0-9]+\.[0-9]+(\.[0-9]+)?\)'
 }
 
+# bats test_tags=list,list:catalog,list:config
+@test "catalog: 'flox list --config' shows manifest content" {
+  "$FLOX_BIN" init
+  MANIFEST_CONTENT="$(
+    cat <<-EOF
+    version = 1
+
+    [install]
+
+    [hook]
+    on-activate = "something suspicious"
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+  run "$FLOX_BIN" list --config
+  assert_success
+  assert_output "$MANIFEST_CONTENT"
+}
+
 # ---------------------------------------------------------------------------- #
