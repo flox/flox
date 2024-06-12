@@ -108,7 +108,6 @@ impl Install {
             id: p.id.clone(),
             pkg_path: p.path.clone(),
             version: None,
-            input: None,
         }));
         if packages.is_empty() {
             bail!("Must specify at least one package");

@@ -512,7 +512,7 @@ impl From<ProvidedPackage> for PackageToInstall {
         PackageToInstall {
             id: value.name,
             pkg_path: value.rel_path.into(),
-            input: None,
+
             version: value.version,
         }
     }
@@ -851,13 +851,11 @@ mod tests {
                         id: "pip".to_string(),
                         pkg_path: "python311Packages.pip".to_string(),
                         version: None,
-                        input: None,
                     },
                     PackageToInstall {
                         id: "package2".to_string(),
                         pkg_path: "path2".to_string(),
                         version: None,
-                        input: None,
                     },
                 ]),
             },
@@ -873,13 +871,11 @@ mod tests {
                         id: "pip".to_string(),
                         pkg_path: "python311Packages.pip".to_string(),
                         version: None,
-                        input: None,
                     },
                     PackageToInstall {
                         id: "package1".to_string(),
                         pkg_path: "path1".to_string(),
                         version: None,
-                        input: None,
                     },
                 ]),
             },
@@ -964,19 +960,16 @@ mod tests {
                     id: "package1".to_string(),
                     pkg_path: "path1".to_string(),
                     version: None,
-                    input: None,
                 },
                 PackageToInstall {
                     id: "package2".to_string(),
                     pkg_path: "path2".to_string(),
                     version: None,
-                    input: None,
                 },
                 PackageToInstall {
                     id: "pip".to_string(),
                     pkg_path: "python311Packages.pip".to_string(),
                     version: None,
-                    input: None,
                 },
             ]),
         });

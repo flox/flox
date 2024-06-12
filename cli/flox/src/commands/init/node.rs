@@ -652,7 +652,6 @@ impl InitHook for Node {
                     // TODO: we probably shouldn't pin this when we're just
                     // providing the default
                     version: yarn_install.yarn.version.clone(),
-                    input: None,
                 });
                 Some(YARN_HOOK.to_string())
             },
@@ -665,13 +664,11 @@ impl InitHook for Node {
                         id: "nodejs".to_string(),
                         pkg_path: result.rel_path.clone().into(),
                         version: result.version.clone(),
-                        input: None,
                     },
                     None => PackageToInstall {
                         id: "nodejs".to_string(),
                         pkg_path: "nodejs".to_string(),
                         version: None,
-                        input: None,
                     },
                 };
                 packages.push(nodejs_to_install);
@@ -787,7 +784,6 @@ mod tests {
                     id: "yarn".to_string(),
                     pkg_path: "yarn.path".to_string(),
                     version: Some("1".to_string()),
-                    input: None,
                 }]),
                 hook_on_activate: Some(YARN_HOOK.to_string()),
                 profile_common: None,
@@ -839,7 +835,6 @@ mod tests {
                     id: "nodejs".to_string(),
                     pkg_path: "nodejs.path".to_string(),
                     version: Some("1".to_string()),
-                    input: None,
                 }]),
                 hook_on_activate: Some(NPM_HOOK.to_string()),
                 profile_common: None,
@@ -873,7 +868,6 @@ mod tests {
                     id: "nodejs".to_string(),
                     pkg_path: "nodejs.path".to_string(),
                     version: Some("1".to_string()),
-                    input: None,
                 }]),
                 hook_on_activate: None,
                 profile_common: None,

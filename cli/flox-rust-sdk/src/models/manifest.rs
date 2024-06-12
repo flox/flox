@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
 use std::ops::{Deref, DerefMut};
-use std::process::Command;
 use std::str::FromStr;
 
 use indoc::{formatdoc, indoc};
@@ -11,7 +10,6 @@ use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Tab
 
 use super::environment::path_environment::InitCustomization;
 use crate::data::{System, Version};
-use crate::models::pkgdb::PKGDB_BIN;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub(super) const DEFAULT_PRIORITY: usize = 5;
@@ -551,20 +549,85 @@ pub struct PackageToInstall {
     pub id: String,
     pub pkg_path: String,
     pub version: Option<String>,
-    pub input: Option<String>,
 }
 
 impl FromStr for PackageToInstall {
     type Err = ManifestError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let descriptor = ShorthandDescriptor::from_str(s)?;
+    /// Parse a shorthand descriptor into `install_id`, `attribute_path` and `version`.
+    ///
+    /// A shorthand descriptor consists of a package name and an optional version.
+    /// The attribute path is a dot-separated path to a package in the catalog.
+    /// The last component of the attribute path is the `install_id`.
+    ///
+    /// The descriptor is parsed as follows:
+    /// ```text
+    ///     descriptor ::= <attribute_path>[@<version>]
+    ///
+    ///     attribute_path ::= <install_id> | <attribute_path_rest>.<install_id>
+    ///     attribute_path_rest ::= <identifier> | <attribute_path_rest>.<identifier>
+    ///     install_id ::= <identifier>
+    ///
+    ///     version ::= <string> # interpreted as semver or plain version by the resolver
+    /// ```
+    /// Todo: this does currently _not_ handle any more pathological cases like
+    ///  - `@` in the version string (the last `@` is the delimiter)
+    fn from_str(descriptor: &str) -> Result<Self, ManifestError> {
+        let (attr_path, version) = match descriptor.split_once('@') {
+            Some((attr_path, version)) if !version.is_empty() => {
+                (attr_path.to_string(), Some(version.to_string()))
+            },
+            Some(_) => {
+                return Err(ManifestError::MalformedStringDescriptor {
+                    msg: "don quoxote".to_string(),
+                    desc: descriptor.to_string(),
+                })
+            },
+            None => (descriptor.to_string(), None),
+        };
 
-        Ok(PackageToInstall {
-            id: descriptor.install_id,
-            pkg_path: descriptor.attr_path,
-            version: descriptor.version,
-            input: None,
+        let install_id = {
+            let mut install_id = None;
+            let mut cur = String::new();
+
+            let mut start_quote = None;
+
+            for (n, c) in attr_path.chars().enumerate() {
+                match c {
+                    '.' if start_quote.is_none() => {
+                        let _ = install_id.insert(std::mem::take(&mut cur));
+                    },
+                    '"' if start_quote.is_some() => start_quote = None,
+                    '"' if start_quote.is_none() => start_quote = Some(n),
+                    other => cur.push(other),
+                }
+            }
+
+            if start_quote.is_some() {
+                return Err(ManifestError::MalformedStringDescriptor {
+                    msg: "unclosed quote".to_string(),
+                    desc: descriptor.to_string(),
+                });
+            }
+
+            if !cur.is_empty() {
+                let _ = install_id.insert(cur);
+            }
+
+            if install_id.is_none() {
+                return Err(ManifestError::MalformedStringDescriptor {
+                    msg: "attribute path is empty".to_string(),
+                    desc: descriptor.to_string(),
+                });
+            }
+
+            install_id.unwrap()
+        };
+
+        Ok(Self {
+            id: install_id,
+            pkg_path: attr_path,
+            version,
         })
     }
 }
@@ -574,9 +637,6 @@ impl From<&PackageToInstall> for Vec<(&'static str, String)> {
         let mut vec = vec![("pkg-path", val.pkg_path.clone())];
         if let Some(version) = &val.version {
             vec.push(("version", version.clone()));
-        }
-        if let Some(input) = &val.input {
-            vec.push(("input", input.clone()));
         }
         vec
     }
@@ -604,8 +664,6 @@ pub fn insert_packages(
         .parse::<RawManifest>()
         .map_err(TomlEditError::ParseManifest)?;
 
-    let manifest_version = manifest.get_version();
-
     let mut toml = manifest.0;
 
     let install_table = {
@@ -628,16 +686,6 @@ pub fn insert_packages(
             );
             if let Some(ref version) = pkg.version {
                 descriptor_table.insert("version", Value::String(Formatted::new(version.clone())));
-            }
-            if let Some(ref input) = pkg.input {
-                // TODO: drop input from `PackageToInstall` when removing support for v0 manifests
-                if let Some(1) = manifest_version {
-                    Err(TomlEditError::UnsupportedAttributeV1(format!(
-                        "{}.input",
-                        pkg.id
-                    )))?;
-                }
-                descriptor_table.insert("input", Value::String(Formatted::new(input.clone())));
             }
             descriptor_table.set_dotted(true);
             install_table.insert(&pkg.id, Item::Value(Value::InlineTable(descriptor_table)));
@@ -757,178 +805,6 @@ pub fn add_system(toml: &str, system: &str) -> Result<DocumentMut, TomlEditError
     systems_list.push(system.to_string());
 
     Ok(doc)
-}
-
-/// A parsed descriptor from `pkgdb parse descriptor --manifest`
-///
-/// FIXME: this is currently a hack using a tool in `pkgdb` only meant for debugging.
-#[derive(Debug, Deserialize)]
-pub struct ParsedDescriptor {
-    pub name: Option<String>,
-    #[serde(rename = "pkg-path")]
-    pub pkg_path: Option<Vec<String>>,
-    pub input: Option<Input>,
-    pub version: Option<String>,
-    pub semver: Option<String>,
-}
-
-/// A parsed input
-///
-/// FIXME: this is currently a hack using a tool in `pkgdb` only meant for debugging.
-#[derive(Debug, Deserialize, PartialEq)]
-pub struct Input {
-    pub id: String,
-}
-
-/// Parse a shorthand descriptor into structured data
-///
-/// FIXME: this is currently a hack using a tool in `pkgdb` only meant for debugging.
-pub fn temporary_parse_descriptor(descriptor: &str) -> Result<PackageToInstall, ManifestError> {
-    let output = Command::new(&*PKGDB_BIN)
-        .arg("parse")
-        .arg("descriptor")
-        .arg("--to")
-        .arg("manifest")
-        .arg(descriptor)
-        .output()
-        .map_err(ManifestError::PkgDbCall)?;
-    let parsed: Result<ParsedDescriptor, _> = serde_json::from_slice(&output.stdout);
-    if let Ok(parsed) = parsed {
-        let (id, path) = if let Some(mut path) = parsed.pkg_path {
-            // Quote any path components that need quoting
-            path.iter_mut().for_each(|attr| {
-                if attr.contains('.') || attr.contains('"') {
-                    *attr = format!("\"{}\"", attr);
-                }
-            });
-            let id_part = path.last().cloned().map(Ok).unwrap_or_else(|| {
-                Err(ManifestError::MalformedStringDescriptor {
-                    msg: "descriptor had an empty path".to_string(),
-                    desc: descriptor.to_string(),
-                })
-            })?;
-            (id_part, path.join("."))
-        } else if let Some(name) = parsed.name {
-            (name.clone(), name)
-        } else {
-            // This should have been caught by `pkgdb parse descriptor`,
-            // it's more likely that if we hit this we got unexpected output
-            // that we didn't know how to parse. It's possible, but unlikely,
-            // and something ignored for the sake of time when we can write
-            // a parser in `flox` instead of leaning on `pkgdb` debugging tools.
-            return Err(ManifestError::MalformedStringDescriptor {
-                msg: "descriptor had no name or path".to_string(),
-                desc: descriptor.to_string(),
-            });
-        };
-        let version = if let Some(version) = parsed.version {
-            let mut v = "=".to_string();
-            v.push_str(&version);
-            Some(v)
-        } else {
-            parsed.semver
-        };
-        let input = parsed.input.map(|input| input.id);
-        Ok(PackageToInstall {
-            id,
-            pkg_path: path,
-            version,
-            input,
-        })
-    } else {
-        Err(ManifestError::MalformedStringDescriptor {
-            msg: String::from_utf8_lossy(&output.stdout).to_string(),
-            desc: descriptor.to_string(),
-        })
-    }
-}
-
-/// Parse a shorthand descriptor into `install_id`, `attribute_path` and `version`.
-///
-/// A shorthand descriptor consists of a package name and an optional version.
-/// The attribute path is a dot-separated path to a package in the catalog.
-/// The last component of the attribute path is the `install_id`.
-///
-/// The descriptor is parsed as follows:
-/// ```text
-///     descriptor ::= <attribute_path>[@<version>]
-///
-///     attribute_path ::= <install_id> | <attribute_path_rest>.<install_id>
-///     attribute_path_rest ::= <identifier> | <attribute_path_rest>.<identifier>
-///     install_id ::= <identifier>
-///
-///     version ::= <string> # interpreted as semver or plain version by the resolver
-/// ```
-/// Todo: this does currently _not_ handle any more pathological cases like
-///  - `@` in the version string (the last `@` is the delimiter)
-#[derive(Debug, Clone, PartialEq)]
-struct ShorthandDescriptor {
-    install_id: String,
-    attr_path: String,
-    version: Option<String>,
-}
-
-impl FromStr for ShorthandDescriptor {
-    type Err = ManifestError;
-
-    fn from_str(descriptor: &str) -> Result<ShorthandDescriptor, ManifestError> {
-        let (attr_path, version) = match descriptor.rsplit_once('@') {
-            Some((attr_path, version)) if !version.is_empty() => {
-                (attr_path.to_string(), Some(version.to_string()))
-            },
-            Some(_) => {
-                return Err(ManifestError::MalformedStringDescriptor {
-                    msg: "don quoxote".to_string(),
-                    desc: descriptor.to_string(),
-                })
-            },
-            None => (descriptor.to_string(), None),
-        };
-
-        let install_id = {
-            let mut install_id = None;
-            let mut cur = String::new();
-
-            let mut start_quote = None;
-
-            for (n, c) in attr_path.chars().enumerate() {
-                match c {
-                    '.' if start_quote.is_none() => {
-                        let _ = install_id.insert(std::mem::take(&mut cur));
-                    },
-                    '"' if start_quote.is_some() => start_quote = None,
-                    '"' if start_quote.is_none() => start_quote = Some(n),
-                    other => cur.push(other),
-                }
-            }
-
-            if start_quote.is_some() {
-                return Err(ManifestError::MalformedStringDescriptor {
-                    msg: "unclosed quote".to_string(),
-                    desc: descriptor.to_string(),
-                });
-            }
-
-            if !cur.is_empty() {
-                let _ = install_id.insert(cur);
-            }
-
-            if install_id.is_none() {
-                return Err(ManifestError::MalformedStringDescriptor {
-                    msg: "attribute path is empty".to_string(),
-                    desc: descriptor.to_string(),
-                });
-            }
-
-            install_id.unwrap()
-        };
-
-        Ok(Self {
-            install_id,
-            attr_path,
-            version,
-        })
-    }
 }
 
 #[cfg(test)]
@@ -1120,7 +996,6 @@ pub(super) mod test {
                 id: "python3".to_string(),
                 pkg_path: "python3".to_string(),
                 version: Some("3.11.6".to_string()),
-                input: None,
             }]),
         };
 
@@ -1460,78 +1335,35 @@ pub(super) mod test {
     }
 
     #[test]
-    fn insert_into_v1_throws_error_with_input() {
-        let test_packages = temporary_parse_descriptor("nixpkgs:foo.bar@=1.2.3").unwrap();
-        let attempted_insertion = insert_packages(CATALOG_MANIFEST, &[test_packages]);
-        assert_eq!(
-            attempted_insertion.expect_err("insertion should fail"),
-            TomlEditError::UnsupportedAttributeV1("bar.input".to_string())
-        )
-    }
-
-    #[test]
-    fn parses_string_descriptor_pkgdb() {
-        // FIXME: remove or update this test when `flox` can parse descriptors on its own
-        let parsed = temporary_parse_descriptor("hello").unwrap();
+    fn parses_string_descriptor() {
+        let parsed: PackageToInstall = "hello".parse().unwrap();
         assert_eq!(parsed, PackageToInstall {
             id: "hello".to_string(),
             pkg_path: "hello".to_string(),
             version: None,
-            input: None,
         });
-        let parsed = temporary_parse_descriptor("nixpkgs:foo.bar@=1.2.3").unwrap();
+        let parsed: PackageToInstall = "foo.bar@=1.2.3".parse().unwrap();
         assert_eq!(parsed, PackageToInstall {
             id: "bar".to_string(),
             pkg_path: "foo.bar".to_string(),
             version: Some("=1.2.3".to_string()),
-            input: Some("nixpkgs".to_string())
         });
-        let parsed = temporary_parse_descriptor("nixpkgs:foo.bar@23.11").unwrap();
+        let parsed: PackageToInstall = "foo.bar@23.11".parse().unwrap();
         assert_eq!(parsed, PackageToInstall {
             id: "bar".to_string(),
             pkg_path: "foo.bar".to_string(),
             version: Some("23.11".to_string()),
-            input: Some("nixpkgs".to_string())
         });
-        let parsed = temporary_parse_descriptor("nixpkgs:rubyPackages.\"http_parser.rb\"").unwrap();
+        let parsed: PackageToInstall = "rubyPackages.\"http_parser.rb\"".parse().unwrap();
         assert_eq!(parsed, PackageToInstall {
-            id: "\"http_parser.rb\"".to_string(),
+            id: "http_parser.rb".to_string(),
             pkg_path: "rubyPackages.\"http_parser.rb\"".to_string(),
             version: None,
-            input: Some("nixpkgs".to_string())
-        });
-    }
-
-    #[test]
-    fn parses_string_descriptor() {
-        let parsed: ShorthandDescriptor = "hello".parse().unwrap();
-        assert_eq!(parsed, ShorthandDescriptor {
-            install_id: "hello".to_string(),
-            attr_path: "hello".to_string(),
-            version: None,
-        });
-        let parsed: ShorthandDescriptor = "foo.bar@=1.2.3".parse().unwrap();
-        assert_eq!(parsed, ShorthandDescriptor {
-            install_id: "bar".to_string(),
-            attr_path: "foo.bar".to_string(),
-            version: Some("=1.2.3".to_string())
-        });
-        let parsed: ShorthandDescriptor = "foo.bar@23.11".parse().unwrap();
-        assert_eq!(parsed, ShorthandDescriptor {
-            install_id: "bar".to_string(),
-            attr_path: "foo.bar".to_string(),
-            version: Some("23.11".to_string())
-        });
-        let parsed: ShorthandDescriptor = "rubyPackages.\"http_parser.rb\"".parse().unwrap();
-        assert_eq!(parsed, ShorthandDescriptor {
-            install_id: "http_parser.rb".to_string(),
-            attr_path: "rubyPackages.\"http_parser.rb\"".to_string(),
-            version: None,
         });
 
-        ShorthandDescriptor::from_str("foo.\"bar.baz.qux@1.2.3")
+        PackageToInstall::from_str("foo.\"bar.baz.qux@1.2.3")
             .expect_err("missing closing quote should cause failure");
-        ShorthandDescriptor::from_str("@1.2.3").expect_err("missing attrpath should cause failure");
-        ShorthandDescriptor::from_str("foo@").expect_err("missing version should cause failure");
+        PackageToInstall::from_str("@1.2.3").expect_err("missing attrpath should cause failure");
+        PackageToInstall::from_str("foo@").expect_err("missing version should cause failure");
     }
 }
