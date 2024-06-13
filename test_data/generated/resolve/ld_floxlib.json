@@ -2862,5 +2862,721 @@
         "url": ""
       }
     }
+  ],
+  [
+    {
+      "name": "toplevel",
+      "page": {
+        "complete": true,
+        "packages": [
+          {
+            "attr_path": "boost",
+            "broken": false,
+            "derivation": "/nix/store/f4lbyvmjqk26cmmh1d4cfwin24l9r6sf-boost-1.77.0.drv",
+            "description": "Collection of C++ libraries",
+            "install_id": "boost",
+            "license": "BSL-1.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "boost-1.77.0",
+            "outputs": [
+              {
+                "name": "dev",
+                "store_path": "/nix/store/8ckvglanbdmk16c6prsl8h1r1v4yax9s-boost-1.77.0-dev"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/drq40ap1m6mrzxhxlr5x1mm6nix8264l-boost-1.77.0"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "boost",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "1.77.0"
+          },
+          {
+            "attr_path": "boost",
+            "broken": false,
+            "derivation": "/nix/store/jl55kmmi1c437n8wsxng89dwfrnmg7rl-boost-1.77.0.drv",
+            "description": "Collection of C++ libraries",
+            "install_id": "boost",
+            "license": "BSL-1.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "boost-1.77.0",
+            "outputs": [
+              {
+                "name": "dev",
+                "store_path": "/nix/store/jm316gmh0dqhl4k1cj2nr5jsvgwpdcmd-boost-1.77.0-dev"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/528145k645s9ifdhpf10a64x5h6ywyaf-boost-1.77.0"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "boost",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "1.77.0"
+          },
+          {
+            "attr_path": "curl",
+            "broken": false,
+            "derivation": "/nix/store/8cyrx5sfaqg8z4wcvh4qwayl0gsszpxw-curl-7.83.1.drv",
+            "description": "A command line tool for transferring files with URL syntax",
+            "install_id": "curl",
+            "license": "curl",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "curl-7.83.1",
+            "outputs": [
+              {
+                "name": "bin",
+                "store_path": "/nix/store/hiw29pil1z7cdcrpwp8bpq1z3zm92fx0-curl-7.83.1-bin"
+              },
+              {
+                "name": "dev",
+                "store_path": "/nix/store/3rk4a7p3x5hxgxk4yfp0pxi5zfdbxr37-curl-7.83.1-dev"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/kxklnppdags8imd3iffz5zcb7b7hca99-curl-7.83.1-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/ng5cilhwzr9d555b0n2p407p96f183b5-curl-7.83.1"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/xmyjcfyfi48d053zmfwn6z8jhvis0z1i-curl-7.83.1-debug"
+              },
+              {
+                "name": "devdoc",
+                "store_path": "/nix/store/j15pxckpm2wg694cxas8zhm2njyr5z9s-curl-7.83.1-devdoc"
+              }
+            ],
+            "outputs_to_install": [
+              "bin",
+              "man"
+            ],
+            "pname": "curl",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "7.83.1"
+          },
+          {
+            "attr_path": "curl",
+            "broken": false,
+            "derivation": "/nix/store/ff9r07sqpsxdfbjgpmsvvqp1bfnbl05k-curl-7.83.1.drv",
+            "description": "A command line tool for transferring files with URL syntax",
+            "install_id": "curl",
+            "license": "curl",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "curl-7.83.1",
+            "outputs": [
+              {
+                "name": "bin",
+                "store_path": "/nix/store/0q5f1vysmr6m6q44jp7jvf97b9h8nrm6-curl-7.83.1-bin"
+              },
+              {
+                "name": "dev",
+                "store_path": "/nix/store/kxyz4sl8hna586np50zg0zv3v7ah0pv2-curl-7.83.1-dev"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/vs3pbnahxgh0gxrbz8gd934kcw2335dh-curl-7.83.1-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/x2zhf8q1ih9xg72wikg367wzi2vrxlcl-curl-7.83.1"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/n66d6z8hqy7i806z8ykwa0vclhfyqawn-curl-7.83.1-debug"
+              },
+              {
+                "name": "devdoc",
+                "store_path": "/nix/store/cs0w34gdxdbdkfd0c8zz6pyfhdr99akv-curl-7.83.1-devdoc"
+              }
+            ],
+            "outputs_to_install": [
+              "bin",
+              "man"
+            ],
+            "pname": "curl",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "7.83.1"
+          },
+          {
+            "attr_path": "gcc",
+            "broken": false,
+            "derivation": "/nix/store/4srkh5i5537w3wxqwjfh9m2f928pyvsp-gcc-wrapper-9.3.0.drv",
+            "description": "GNU Compiler Collection, version 9.3.0 (wrapper script)",
+            "install_id": "gcc",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "gcc-wrapper-9.3.0",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/n5xxnndkh517hxs2l2sakjwbdzjq24wm-gcc-wrapper-9.3.0-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/d4ddmx4w0baxr3hd5d0ni5il0pja8pg9-gcc-wrapper-9.3.0"
+              },
+              {
+                "name": "info",
+                "store_path": "/nix/store/j0wm8hfvsbykds5f43gdpcnfvc53irw3-gcc-wrapper-9.3.0-info"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "gcc",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "wrapper-9.3.0"
+          },
+          {
+            "attr_path": "gcc",
+            "broken": false,
+            "derivation": "/nix/store/hgi9979z6i6yzav843xkv5wj4qmp43xb-gcc-wrapper-11.3.0.drv",
+            "description": "GNU Compiler Collection, version 11.3.0 (wrapper script)",
+            "install_id": "gcc",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "gcc-wrapper-11.3.0",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/wrnfwzjccax7b8sbady0yx1h71g1vibf-gcc-wrapper-11.3.0-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/gfr4ljdlr1wplc01j4fchw4w9x3lfvv9-gcc-wrapper-11.3.0"
+              },
+              {
+                "name": "info",
+                "store_path": "/nix/store/8sxyfqyrgzm1zdwhsd57jjchbp5w9mkx-gcc-wrapper-11.3.0-info"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "gcc",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "wrapper-11.3.0"
+          },
+          {
+            "attr_path": "gcc-unwrapped",
+            "broken": false,
+            "derivation": "/nix/store/5zn0yx0xxb7z5scfynsjw4kdrk13x80k-gcc-9.3.0.drv",
+            "description": "GNU Compiler Collection, version 9.3.0",
+            "install_id": "gcc-unwrapped",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "gcc-9.3.0",
+            "outputs": [
+              {
+                "name": "lib",
+                "store_path": "/nix/store/fgd63nah44kd1w4naj8ikqgv332qkb5l-gcc-9.3.0-lib"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/204hcl4pdh1lyyjl9p0m0pxwzqysm5ap-gcc-9.3.0-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/njk5sbd21305bhr7gwibxbbvgbx5lxvn-gcc-9.3.0"
+              },
+              {
+                "name": "info",
+                "store_path": "/nix/store/gcpp2jlx6jn58fsjvrvzjx4q0xhn7p0p-gcc-9.3.0-info"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "gcc-unwrapped",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "gcc-9.3.0"
+          },
+          {
+            "attr_path": "gcc-unwrapped",
+            "broken": false,
+            "derivation": "/nix/store/f6xszh6p5wilx99bcl8mxjc3kain10qp-gcc-11.3.0.drv",
+            "description": "GNU Compiler Collection, version 11.3.0",
+            "install_id": "gcc-unwrapped",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "gcc-11.3.0",
+            "outputs": [
+              {
+                "name": "lib",
+                "store_path": "/nix/store/gka59hya7l7qp26s0rydcgq8hj0d7v7k-gcc-11.3.0-lib"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/p0xr48gxh1c3dkccrcr3fdkkzv7bhwgd-gcc-11.3.0-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/ck3jkdhlvqznybcq4s4s3hp2qyqp5kkm-gcc-11.3.0"
+              },
+              {
+                "name": "info",
+                "store_path": "/nix/store/50n7zq1vl63qhbp68cr2fwfh6jpm80vz-gcc-11.3.0-info"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "gcc-unwrapped",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "gcc-11.3.0"
+          },
+          {
+            "attr_path": "glibc",
+            "broken": false,
+            "derivation": "/nix/store/51vr2ic5am7g48q2f939517c0ly3q7wl-glibc-2.34-210.drv",
+            "description": "The GNU C Library",
+            "install_id": "glibc",
+            "license": "LGPL-2.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "glibc-2.34-210",
+            "outputs": [
+              {
+                "name": "bin",
+                "store_path": "/nix/store/93f8dlqnr5kbpn6xidggm1gnkcm2dnah-glibc-2.34-210-bin"
+              },
+              {
+                "name": "dev",
+                "store_path": "/nix/store/sivqq5f8y0gdjds20wf7rlchpvk3a3k6-glibc-2.34-210-dev"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/zv343xh8cqdddp31kn4z1v6sk783vcm5-glibc-2.34-210"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/mc9qlbwbnjw2lgcyz25fghqc444qp9zs-glibc-2.34-210-debug"
+              },
+              {
+                "name": "static",
+                "store_path": "/nix/store/1kwpdkqzlvbmhfngkv591m5vhd03m6az-glibc-2.34-210-static"
+              }
+            ],
+            "outputs_to_install": [
+              "bin"
+            ],
+            "pname": "glibc",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "2.34-210"
+          },
+          {
+            "attr_path": "glibc",
+            "broken": false,
+            "derivation": "/nix/store/slh6i99w5w5vppjcxi6ksxh56yw87xq6-glibc-2.34-210.drv",
+            "description": "The GNU C Library",
+            "install_id": "glibc",
+            "license": "LGPL-2.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "glibc-2.34-210",
+            "outputs": [
+              {
+                "name": "bin",
+                "store_path": "/nix/store/vinqsa9jxqjg590i9rxy1d6ikvn3zv0g-glibc-2.34-210-bin"
+              },
+              {
+                "name": "dev",
+                "store_path": "/nix/store/hd3j5xfvffs4vaa74l1har94q10fpnm5-glibc-2.34-210-dev"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/bvy2z17rzlvkx2sj7fy99ajm853yv898-glibc-2.34-210"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/2amsd6idljrkcnbl34ll7kl6vy9wicsk-glibc-2.34-210-debug"
+              },
+              {
+                "name": "static",
+                "store_path": "/nix/store/5v40r4vq2gh5ss6pkg22v81maa38hl8i-glibc-2.34-210-static"
+              }
+            ],
+            "outputs_to_install": [
+              "bin"
+            ],
+            "pname": "glibc",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "2.34-210"
+          },
+          {
+            "attr_path": "libarchive",
+            "broken": false,
+            "derivation": "/nix/store/jlklm2wyvgcvkwrg8bq13sg7x9pgpxiw-libarchive-3.6.1.drv",
+            "description": "Multi-format archive and compression library",
+            "install_id": "libarchive",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "libarchive-3.6.1",
+            "outputs": [
+              {
+                "name": "dev",
+                "store_path": "/nix/store/g9hw7ar085ppqx8psggd8cj6h7imbind-libarchive-3.6.1-dev"
+              },
+              {
+                "name": "lib",
+                "store_path": "/nix/store/ys2qh2jj219bc91n9a0wh3i9bxnvfqji-libarchive-3.6.1-lib"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/8w480ahlfln96iyknqrqbkvb9glwki05-libarchive-3.6.1"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "libarchive",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "3.6.1"
+          },
+          {
+            "attr_path": "libarchive",
+            "broken": false,
+            "derivation": "/nix/store/vqn8ia59vj1dz9irr05b84idz5g5gqma-libarchive-3.6.1.drv",
+            "description": "Multi-format archive and compression library",
+            "install_id": "libarchive",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "libarchive-3.6.1",
+            "outputs": [
+              {
+                "name": "dev",
+                "store_path": "/nix/store/wlsl4lxlz9yaymq78ndzk4qfz603pdlg-libarchive-3.6.1-dev"
+              },
+              {
+                "name": "lib",
+                "store_path": "/nix/store/aiyh3f9gxbh69lflpzyn2pdb4fvdqz1z-libarchive-3.6.1-lib"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/bic5py4nshwcrwk19b65miwidcppbcva-libarchive-3.6.1"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "libarchive",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "3.6.1"
+          },
+          {
+            "attr_path": "nix",
+            "broken": false,
+            "derivation": "/nix/store/2ljynv6q88sc5g144mv4n38vmxf2ilbm-nix-2.8.1.drv",
+            "description": "Powerful package manager that makes package management reliable and reproducible",
+            "install_id": "nix",
+            "license": "LGPL-2.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "nix-2.8.1",
+            "outputs": [
+              {
+                "name": "dev",
+                "store_path": "/nix/store/v5v6zsihyi3m57gdxv74jq83hgih8j2n-nix-2.8.1-dev"
+              },
+              {
+                "name": "doc",
+                "store_path": "/nix/store/sfmamsjxl17xjhhklxmzaparrbjlf0vj-nix-2.8.1-doc"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/xikb1gm50ikzxbf0ncnl6jlyql1xcbig-nix-2.8.1-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/pag4ry3zx2lznkc7vv8awgdsb3n5np4a-nix-2.8.1"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/h2dxg4jlgw1h8zrsd1zjsvqxhrshhz7x-nix-2.8.1-debug"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "nix",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "2.8.1"
+          },
+          {
+            "attr_path": "nix",
+            "broken": false,
+            "derivation": "/nix/store/kgnlqvdb7y213ackz45n1jb5b8wrbd82-nix-2.8.1.drv",
+            "description": "Powerful package manager that makes package management reliable and reproducible",
+            "install_id": "nix",
+            "license": "LGPL-2.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "nix-2.8.1",
+            "outputs": [
+              {
+                "name": "dev",
+                "store_path": "/nix/store/20hcg2szw9x02psynbhmxxz13yzaws53-nix-2.8.1-dev"
+              },
+              {
+                "name": "doc",
+                "store_path": "/nix/store/4yc5a49wydg457m5qxibwapplvqm8sc2-nix-2.8.1-doc"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/q7yfw0rcl7bp7casywa2kcx7fg7c7vpk-nix-2.8.1-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/gjr9ylm023rl9di484g1wxcd1jp84xxv-nix-2.8.1"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/mf8kanq3yq0cgz430nhrpjqjw022rgg4-nix-2.8.1-debug"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "nix",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "2.8.1"
+          },
+          {
+            "attr_path": "patchelf",
+            "broken": false,
+            "derivation": "/nix/store/yp11bmqnvqgd97hlg5ypgiwdk75c51r0-patchelf-0.14.5.drv",
+            "description": "A small utility to modify the dynamic linker and RPATH of ELF executables",
+            "install_id": "patchelf",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "patchelf-0.14.5",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/y8srqnp0gamm4wi8q8z0b64v6g7inir3-patchelf-0.14.5"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "patchelf",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "0.14.5"
+          },
+          {
+            "attr_path": "patchelf",
+            "broken": false,
+            "derivation": "/nix/store/1rmb4wd54m6mmnmrhzmdxfsn4788rfm1-patchelf-0.14.5.drv",
+            "description": "A small utility to modify the dynamic linker and RPATH of ELF executables",
+            "install_id": "patchelf",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=dfd82985c273aac6eced03625f454b334daae2e8",
+            "name": "patchelf-0.14.5",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/ibb2bhi5by0vlkj2lfc3f0rklaf36692-patchelf-0.14.5"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "patchelf",
+            "rev": "dfd82985c273aac6eced03625f454b334daae2e8",
+            "rev_count": 379159,
+            "rev_date": "2022-05-20T15:32:24Z",
+            "scrape_date": "2024-04-25T00:33:16Z",
+            "stabilities": [
+              "lts",
+              "stable",
+              "staging",
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "0.14.5"
+          }
+        ],
+        "page": 379159,
+        "url": ""
+      }
+    }
   ]
 ]

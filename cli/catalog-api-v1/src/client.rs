@@ -86,15 +86,15 @@ pub mod types {
     ///      "title": "Messages",
     ///      "type": "array",
     ///      "items": {
-    ///        "anyOf": [
+    ///        "oneOf": [
     ///          {
-    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral-Input"
+    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral"
     ///          },
     ///          {
-    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound-Input"
+    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
     ///          },
     ///          {
-    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight-Input"
+    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
     ///          }
     ///        ]
     ///      }
@@ -179,15 +179,15 @@ pub mod types {
     ///      "title": "Messages",
     ///      "type": "array",
     ///      "items": {
-    ///        "anyOf": [
+    ///        "oneOf": [
     ///          {
-    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral-Output"
+    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral"
     ///          },
     ///          {
-    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound-Output"
+    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
     ///          },
     ///          {
-    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight-Output"
+    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
     ///          }
     ///        ]
     ///      }
@@ -438,38 +438,135 @@ pub mod types {
             value.parse()
         }
     }
+    ///MessageType
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "MessageType",
+    ///  "type": "string",
+    ///  "enum": [
+    ///    "general",
+    ///    "resolution_trace",
+    ///    "attr_path_not_found",
+    ///    "constraints_too_tight"
+    ///  ]
+    ///}
+    /// ```
+    /// </details>
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        Deserialize,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd,
+        Serialize
+    )]
+    pub enum MessageType {
+        #[serde(rename = "general")]
+        General,
+        #[serde(rename = "resolution_trace")]
+        ResolutionTrace,
+        #[serde(rename = "attr_path_not_found")]
+        AttrPathNotFound,
+        #[serde(rename = "constraints_too_tight")]
+        ConstraintsTooTight,
+    }
+    impl From<&MessageType> for MessageType {
+        fn from(value: &MessageType) -> Self {
+            value.clone()
+        }
+    }
+    impl ToString for MessageType {
+        fn to_string(&self) -> String {
+            match *self {
+                Self::General => "general".to_string(),
+                Self::ResolutionTrace => "resolution_trace".to_string(),
+                Self::AttrPathNotFound => "attr_path_not_found".to_string(),
+                Self::ConstraintsTooTight => "constraints_too_tight".to_string(),
+            }
+        }
+    }
+    impl std::str::FromStr for MessageType {
+        type Err = self::error::ConversionError;
+        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+            match value {
+                "general" => Ok(Self::General),
+                "resolution_trace" => Ok(Self::ResolutionTrace),
+                "attr_path_not_found" => Ok(Self::AttrPathNotFound),
+                "constraints_too_tight" => Ok(Self::ConstraintsTooTight),
+                _ => Err("invalid value".into()),
+            }
+        }
+    }
+    impl std::convert::TryFrom<&str> for MessageType {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<&String> for MessageType {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<String> for MessageType {
+        type Error = self::error::ConversionError;
+        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
     ///MessagesItem
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
-    ///  "anyOf": [
+    ///  "oneOf": [
     ///    {
-    ///      "$ref": "#/components/schemas/ResolutionMessageGeneral-Input"
+    ///      "$ref": "#/components/schemas/ResolutionMessageGeneral"
     ///    },
     ///    {
-    ///      "$ref": "#/components/schemas/ResolutionAttrPathNotFound-Input"
+    ///      "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
     ///    },
     ///    {
-    ///      "$ref": "#/components/schemas/ResolutionConstraintsTooTight-Input"
+    ///      "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
     ///    }
     ///  ]
     ///}
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct MessagesItem {
-        #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
-        pub subtype_0: Option<ResolutionMessageGeneralInput>,
-        #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
-        pub subtype_1: Option<ResolutionAttrPathNotFoundInput>,
-        #[serde(flatten, default, skip_serializing_if = "Option::is_none")]
-        pub subtype_2: Option<ResolutionConstraintsTooTightInput>,
+    #[serde(untagged)]
+    pub enum MessagesItem {
+        MessageGeneral(ResolutionMessageGeneral),
+        AttrPathNotFound(ResolutionAttrPathNotFound),
+        ConstraintsTooTight(ResolutionConstraintsTooTight),
     }
     impl From<&MessagesItem> for MessagesItem {
         fn from(value: &MessagesItem) -> Self {
             value.clone()
+        }
+    }
+    impl From<ResolutionMessageGeneral> for MessagesItem {
+        fn from(value: ResolutionMessageGeneral) -> Self {
+            Self::MessageGeneral(value)
+        }
+    }
+    impl From<ResolutionAttrPathNotFound> for MessagesItem {
+        fn from(value: ResolutionAttrPathNotFound) -> Self {
+            Self::AttrPathNotFound(value)
+        }
+    }
+    impl From<ResolutionConstraintsTooTight> for MessagesItem {
+        fn from(value: ResolutionConstraintsTooTight) -> Self {
+            Self::ConstraintsTooTight(value)
         }
     }
     ///Output
@@ -1177,7 +1274,7 @@ pub mod types {
             value.clone()
         }
     }
-    ///ResolutionAttrPathNotFoundInput
+    ///ResolutionAttrPathNotFound
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1198,7 +1295,10 @@ pub mod types {
     ///    "context": {
     ///      "title": "Context",
     ///      "default": {},
-    ///      "type": "object",
+    ///      "type": [
+    ///        "object",
+    ///        "null"
+    ///      ],
     ///      "additionalProperties": {
     ///        "type": "string"
     ///      }
@@ -1208,12 +1308,15 @@ pub mod types {
     ///      "type": "string"
     ///    },
     ///    "level": {
-    ///      "title": "Level",
-    ///      "default": "error"
+    ///      "$ref": "#/components/schemas/MessageLevel"
+    ///    },
+    ///    "message": {
+    ///      "title": "Message",
+    ///      "default": "",
+    ///      "type": "string"
     ///    },
     ///    "type": {
-    ///      "title": "Type",
-    ///      "default": "attr_path_not_found"
+    ///      "$ref": "#/components/schemas/MessageType"
     ///    },
     ///    "valid_systems": {
     ///      "title": "Valid Systems",
@@ -1227,102 +1330,25 @@ pub mod types {
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ResolutionAttrPathNotFoundInput {
+    pub struct ResolutionAttrPathNotFound {
         pub attr_path: String,
-        #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-        pub context: std::collections::HashMap<String, String>,
+        #[serde(default = "defaults::resolution_attr_path_not_found_context")]
+        pub context: Option<std::collections::HashMap<String, String>>,
         pub install_id: String,
-        #[serde(default = "defaults::resolution_attr_path_not_found_input_level")]
-        pub level: serde_json::Value,
-        #[serde(
-            rename = "type",
-            default = "defaults::resolution_attr_path_not_found_input_type"
-        )]
-        pub type_: serde_json::Value,
-        pub valid_systems: Vec<SystemEnum>,
-    }
-    impl From<&ResolutionAttrPathNotFoundInput> for ResolutionAttrPathNotFoundInput {
-        fn from(value: &ResolutionAttrPathNotFoundInput) -> Self {
-            value.clone()
-        }
-    }
-    ///ResolutionAttrPathNotFoundOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "ResolutionAttrPathNotFound",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "attr_path",
-    ///    "install_id",
-    ///    "message",
-    ///    "valid_systems"
-    ///  ],
-    ///  "properties": {
-    ///    "attr_path": {
-    ///      "title": "Attr Path",
-    ///      "type": "string"
-    ///    },
-    ///    "context": {
-    ///      "title": "Context",
-    ///      "default": {},
-    ///      "type": "object",
-    ///      "additionalProperties": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "install_id": {
-    ///      "title": "Install Id",
-    ///      "type": "string"
-    ///    },
-    ///    "level": {
-    ///      "title": "Level",
-    ///      "default": "error"
-    ///    },
-    ///    "message": {
-    ///      "title": "Message",
-    ///      "readOnly": true,
-    ///      "type": "string"
-    ///    },
-    ///    "type": {
-    ///      "title": "Type",
-    ///      "default": "attr_path_not_found"
-    ///    },
-    ///    "valid_systems": {
-    ///      "title": "Valid Systems",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/SystemEnum"
-    ///      }
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ResolutionAttrPathNotFoundOutput {
-        pub attr_path: String,
-        #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-        pub context: std::collections::HashMap<String, String>,
-        pub install_id: String,
-        #[serde(default = "defaults::resolution_attr_path_not_found_output_level")]
-        pub level: serde_json::Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub level: Option<MessageLevel>,
+        #[serde(default)]
         pub message: String,
-        #[serde(
-            rename = "type",
-            default = "defaults::resolution_attr_path_not_found_output_type"
-        )]
-        pub type_: serde_json::Value,
+        #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+        pub type_: Option<MessageType>,
         pub valid_systems: Vec<SystemEnum>,
     }
-    impl From<&ResolutionAttrPathNotFoundOutput> for ResolutionAttrPathNotFoundOutput {
-        fn from(value: &ResolutionAttrPathNotFoundOutput) -> Self {
+    impl From<&ResolutionAttrPathNotFound> for ResolutionAttrPathNotFound {
+        fn from(value: &ResolutionAttrPathNotFound) -> Self {
             value.clone()
         }
     }
-    ///ResolutionConstraintsTooTightInput
+    ///ResolutionConstraintsTooTight
     ///
     /// <details><summary>JSON schema</summary>
     ///
@@ -1334,161 +1360,10 @@ pub mod types {
     ///    "context": {
     ///      "title": "Context",
     ///      "default": {},
-    ///      "type": "object",
-    ///      "additionalProperties": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "level": {
-    ///      "title": "Level",
-    ///      "default": "error"
-    ///    },
-    ///    "type": {
-    ///      "title": "Type",
-    ///      "default": "constraints_too_tight"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ResolutionConstraintsTooTightInput {
-        #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-        pub context: std::collections::HashMap<String, String>,
-        #[serde(default = "defaults::resolution_constraints_too_tight_input_level")]
-        pub level: serde_json::Value,
-        #[serde(
-            rename = "type",
-            default = "defaults::resolution_constraints_too_tight_input_type"
-        )]
-        pub type_: serde_json::Value,
-    }
-    impl From<&ResolutionConstraintsTooTightInput>
-    for ResolutionConstraintsTooTightInput {
-        fn from(value: &ResolutionConstraintsTooTightInput) -> Self {
-            value.clone()
-        }
-    }
-    ///ResolutionConstraintsTooTightOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "ResolutionConstraintsTooTight",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "message"
-    ///  ],
-    ///  "properties": {
-    ///    "context": {
-    ///      "title": "Context",
-    ///      "default": {},
-    ///      "type": "object",
-    ///      "additionalProperties": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "level": {
-    ///      "title": "Level",
-    ///      "default": "error"
-    ///    },
-    ///    "message": {
-    ///      "title": "Message",
-    ///      "readOnly": true,
-    ///      "type": "string"
-    ///    },
-    ///    "type": {
-    ///      "title": "Type",
-    ///      "default": "constraints_too_tight"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ResolutionConstraintsTooTightOutput {
-        #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-        pub context: std::collections::HashMap<String, String>,
-        #[serde(default = "defaults::resolution_constraints_too_tight_output_level")]
-        pub level: serde_json::Value,
-        pub message: String,
-        #[serde(
-            rename = "type",
-            default = "defaults::resolution_constraints_too_tight_output_type"
-        )]
-        pub type_: serde_json::Value,
-    }
-    impl From<&ResolutionConstraintsTooTightOutput>
-    for ResolutionConstraintsTooTightOutput {
-        fn from(value: &ResolutionConstraintsTooTightOutput) -> Self {
-            value.clone()
-        }
-    }
-    ///ResolutionMessageGeneralInput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "ResolutionMessageGeneral",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "level"
-    ///  ],
-    ///  "properties": {
-    ///    "context": {
-    ///      "title": "Context",
-    ///      "default": {},
-    ///      "type": "object",
-    ///      "additionalProperties": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "level": {
-    ///      "$ref": "#/components/schemas/MessageLevel"
-    ///    },
-    ///    "type": {
-    ///      "title": "Type",
-    ///      "default": "general"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ResolutionMessageGeneralInput {
-        #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-        pub context: std::collections::HashMap<String, String>,
-        pub level: MessageLevel,
-        #[serde(
-            rename = "type",
-            default = "defaults::resolution_message_general_input_type"
-        )]
-        pub type_: serde_json::Value,
-    }
-    impl From<&ResolutionMessageGeneralInput> for ResolutionMessageGeneralInput {
-        fn from(value: &ResolutionMessageGeneralInput) -> Self {
-            value.clone()
-        }
-    }
-    ///ResolutionMessageGeneralOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "ResolutionMessageGeneral",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "level",
-    ///    "message"
-    ///  ],
-    ///  "properties": {
-    ///    "context": {
-    ///      "title": "Context",
-    ///      "default": {},
-    ///      "type": "object",
+    ///      "type": [
+    ///        "object",
+    ///        "null"
+    ///      ],
     ///      "additionalProperties": {
     ///        "type": "string"
     ///      }
@@ -1498,31 +1373,80 @@ pub mod types {
     ///    },
     ///    "message": {
     ///      "title": "Message",
-    ///      "readOnly": true,
+    ///      "default": "",
     ///      "type": "string"
     ///    },
     ///    "type": {
-    ///      "title": "Type",
-    ///      "default": "general"
+    ///      "$ref": "#/components/schemas/MessageType"
     ///    }
     ///  }
     ///}
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ResolutionMessageGeneralOutput {
-        #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
-        pub context: std::collections::HashMap<String, String>,
-        pub level: MessageLevel,
+    pub struct ResolutionConstraintsTooTight {
+        #[serde(default = "defaults::resolution_constraints_too_tight_context")]
+        pub context: Option<std::collections::HashMap<String, String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub level: Option<MessageLevel>,
+        #[serde(default)]
         pub message: String,
-        #[serde(
-            rename = "type",
-            default = "defaults::resolution_message_general_output_type"
-        )]
-        pub type_: serde_json::Value,
+        #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+        pub type_: Option<MessageType>,
     }
-    impl From<&ResolutionMessageGeneralOutput> for ResolutionMessageGeneralOutput {
-        fn from(value: &ResolutionMessageGeneralOutput) -> Self {
+    impl From<&ResolutionConstraintsTooTight> for ResolutionConstraintsTooTight {
+        fn from(value: &ResolutionConstraintsTooTight) -> Self {
+            value.clone()
+        }
+    }
+    ///ResolutionMessageGeneral
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "ResolutionMessageGeneral",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "context": {
+    ///      "title": "Context",
+    ///      "default": {},
+    ///      "type": [
+    ///        "object",
+    ///        "null"
+    ///      ],
+    ///      "additionalProperties": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "level": {
+    ///      "$ref": "#/components/schemas/MessageLevel"
+    ///    },
+    ///    "message": {
+    ///      "title": "Message",
+    ///      "default": "",
+    ///      "type": "string"
+    ///    },
+    ///    "type": {
+    ///      "$ref": "#/components/schemas/MessageType"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct ResolutionMessageGeneral {
+        #[serde(default = "defaults::resolution_message_general_context")]
+        pub context: Option<std::collections::HashMap<String, String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub level: Option<MessageLevel>,
+        #[serde(default)]
+        pub message: String,
+        #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+        pub type_: Option<MessageType>,
+    }
+    impl From<&ResolutionMessageGeneral> for ResolutionMessageGeneral {
+        fn from(value: &ResolutionMessageGeneral) -> Self {
             value.clone()
         }
     }
@@ -1729,15 +1653,15 @@ pub mod types {
     ///      "title": "Messages",
     ///      "type": "array",
     ///      "items": {
-    ///        "anyOf": [
+    ///        "oneOf": [
     ///          {
-    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral-Input"
+    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral"
     ///          },
     ///          {
-    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound-Input"
+    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
     ///          },
     ///          {
-    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight-Input"
+    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
     ///          }
     ///        ]
     ///      }
@@ -1803,15 +1727,15 @@ pub mod types {
     ///      "title": "Messages",
     ///      "type": "array",
     ///      "items": {
-    ///        "anyOf": [
+    ///        "oneOf": [
     ///          {
-    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral-Output"
+    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral"
     ///          },
     ///          {
-    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound-Output"
+    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
     ///          },
     ///          {
-    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight-Output"
+    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
     ///          }
     ///        ]
     ///      }
@@ -2159,37 +2083,20 @@ pub mod types {
         pub(super) fn package_descriptor_allow_unfree() -> Option<bool> {
             Some(true)
         }
-        pub(super) fn resolution_attr_path_not_found_input_level() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"error\"").unwrap()
+        pub(super) fn resolution_attr_path_not_found_context() -> Option<
+            std::collections::HashMap<String, String>,
+        > {
+            Some([].into_iter().collect())
         }
-        pub(super) fn resolution_attr_path_not_found_input_type() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"attr_path_not_found\"").unwrap()
+        pub(super) fn resolution_constraints_too_tight_context() -> Option<
+            std::collections::HashMap<String, String>,
+        > {
+            Some([].into_iter().collect())
         }
-        pub(super) fn resolution_attr_path_not_found_output_level() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"error\"").unwrap()
-        }
-        pub(super) fn resolution_attr_path_not_found_output_type() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"attr_path_not_found\"").unwrap()
-        }
-        pub(super) fn resolution_constraints_too_tight_input_level() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"error\"").unwrap()
-        }
-        pub(super) fn resolution_constraints_too_tight_input_type() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"constraints_too_tight\"")
-                .unwrap()
-        }
-        pub(super) fn resolution_constraints_too_tight_output_level() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"error\"").unwrap()
-        }
-        pub(super) fn resolution_constraints_too_tight_output_type() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"constraints_too_tight\"")
-                .unwrap()
-        }
-        pub(super) fn resolution_message_general_input_type() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"general\"").unwrap()
-        }
-        pub(super) fn resolution_message_general_output_type() -> serde_json::Value {
-            serde_json::from_str::<serde_json::Value>("\"general\"").unwrap()
+        pub(super) fn resolution_message_general_context() -> Option<
+            std::collections::HashMap<String, String>,
+        > {
+            Some([].into_iter().collect())
         }
     }
 }
