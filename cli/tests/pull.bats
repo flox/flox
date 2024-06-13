@@ -143,12 +143,12 @@ function add_incompatible_package() {
   # replace linux with darwin or darwin with linux
   if [ -z "${NIX_SYSTEM##*-linux}" ]; then
     package='"darwin.ps"'
-    export INCOMPATIBLE_MOCK_RESPONSE_ONE_TIME="$GENERATED_DATA/resolve/darwin-ps.json"
-    export INCOMPATIBLE_MOCK_RESPONSE_TWO_TIMES="$GENERATED_DATA/resolve/darwin-ps-twice.json"
+    export INCOMPATIBLE_MOCK_RESPONSE_ONE_TIME="$GENERATED_DATA/resolve/darwin_ps.json"
+    export INCOMPATIBLE_MOCK_RESPONSE_TWO_TIMES="$GENERATED_DATA/resolve/darwin_ps_twice.json"
   elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
     package='"glibc"'
     export INCOMPATIBLE_MOCK_RESPONSE_ONE_TIME="$GENERATED_DATA/resolve/glibc.json"
-    export INCOMPATIBLE_MOCK_RESPONSE_TWO_TIMES="$GENERATED_DATA/resolve/glibc-twice.json"
+    export INCOMPATIBLE_MOCK_RESPONSE_TWO_TIMES="$GENERATED_DATA/resolve/glibc_twice.json"
   else
     echo "unknown system: '$NIX_SYSTEM'"
     exit 1

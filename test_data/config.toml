@@ -1,6 +1,4 @@
 [vars]
-FLOX_FEATURES_USE_CATALOG = "true"
-
 [resolve.empty]
 # Not actually a resolve response, just have to put it somewhere
 skip_if_output_exists = "empty.json"
@@ -12,7 +10,7 @@ post_cmd = '''
     mv empty.json "$main_output_dir/empty.json"
 '''
 
-[resolve.failed-resolution]
+[resolve.failed_resolution]
 pre_cmd = '''
     flox init
 '''
@@ -43,7 +41,7 @@ pre_cmd = '''
 cmd = "flox install glibc"
 ignore_cmd_errors = true # build will fail on macos, thats fine
 
-[resolve.glibc-twice]
+[resolve.glibc_twice]
 pre_cmd = '''
     flox init
     tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux" ]' .flox/env/manifest.toml
@@ -56,8 +54,7 @@ cmd = '''
 '''
 ignore_cmd_errors = true # build will fail on macos, thats fine
 
-
-[resolve.darwin-ps]
+[resolve.darwin_ps]
 pre_cmd = '''
     flox init
     tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin" ]' .flox/env/manifest.toml
@@ -65,7 +62,7 @@ pre_cmd = '''
 cmd = "flox install darwin.ps"
 ignore_cmd_errors = true # build will fail on linux, thats fine
 
-[resolve.darwin-ps-twice]
+[resolve.darwin_ps_twice]
 pre_cmd = '''
     flox init
 '''
