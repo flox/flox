@@ -234,7 +234,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         // todo: enrich with path
         // raised during edit
         CoreEnvironmentError::DeserializeManifest(err) => formatdoc! {
-            "Failed to parse manifest: {err:#?}
+            "Failed to parse manifest: {err}
         ",
             // The message adds a newline at the end,
             // trim to make the error look better
