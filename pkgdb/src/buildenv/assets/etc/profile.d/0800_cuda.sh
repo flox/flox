@@ -8,7 +8,7 @@ export _findutils="@findutils@"
 #
 # ---------------------------------------------------------------------------- #
 
-# Only run if FLOX_ENV_ENABLE_CUDA feature flag is set
+# Only run if FLOX_FEATURES_ENV_ENABLE_CUDA feature flag is set
 activate_cuda(){
   if [[ "$FLOX_FEATURES_ENV_ENABLE_CUDA" != 1 ]]; then
     return 0
@@ -23,8 +23,8 @@ activate_cuda(){
   for target in libcuda.so.1 libcuda.so ; do
       "$_findutils/bin/find" /run/opengl-drivers /lib /usr/lib /usr/local/lib \
           -name "$target" \
-          -exec "$_coreutils/bin/ln" -sf "$LIB_DIR"/"$target" {} \; \
-          -quit
+          -exec "$_coreutils/bin/ln" -sf {} "$LIB_DIR"/"$target" \; \
+          -quit 2>/dev/null
   done
   export FLOX_ENV_LIB_DIRS="$FLOX_ENV_LIB_DIRS":"$LIB_DIR"
 }
