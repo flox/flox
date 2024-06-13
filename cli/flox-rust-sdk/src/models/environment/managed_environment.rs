@@ -4,7 +4,6 @@ use std::{fs, io};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::warn;
 
 use super::core_environment::CoreEnvironment;
 use super::generations::{Generations, GenerationsError};
@@ -1071,7 +1070,7 @@ impl ManagedEnvironment {
         {
             Ok(_) => {},
             Err(GitRemoteCommandError::RefNotFound(_)) => {
-                warn!("Upstream environment was deleted.")
+                debug!("Upstream environment was deleted.")
             },
             Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
         };
