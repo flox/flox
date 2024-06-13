@@ -19,7 +19,7 @@ use crate::config::Config;
 /// - Initialize a real client otherwise
 pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Error> {
     // Do not initialize a client if the Catalog API is disabled
-    if !config.features.clone().unwrap_or_default().use_catalog {
+    if !*config.features.clone().unwrap_or_default().use_catalog {
         debug!("catalog feature is disabled, skipping client initialization");
         return Ok(None);
     }
