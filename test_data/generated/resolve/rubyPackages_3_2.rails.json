@@ -1,9 +1,11 @@
 [
   [
     {
+      "msgs": [],
       "name": "toplevel",
       "page": {
         "complete": true,
+        "msgs": [],
         "packages": [
           {
             "attr_path": "rubyPackages_3_2.rails",

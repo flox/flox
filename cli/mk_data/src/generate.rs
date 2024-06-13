@@ -401,9 +401,6 @@ pub fn run_cmd(
         }
     }
 
-    // Don't want to accidentally merge response files
-    let _ = std::fs::remove_file(output_file);
-
     cmd.env("_FLOX_CATALOG_DUMP_RESPONSE_FILE", output_file);
     debug!("cmd: {:?}", cmd);
     let output = cmd.output().context("couldn't call command")?;
