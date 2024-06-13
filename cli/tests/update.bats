@@ -32,6 +32,9 @@ setup() {
   common_test_setup
   setup_isolated_flox
   project_setup
+
+  # update is only supported with pkgdb
+  export FLOX_FEATURES_USE_CATALOG=false
 }
 teardown() {
   project_teardown
