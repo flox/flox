@@ -19,7 +19,7 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" > /dev/null || return
+  pushd "$PROJECT_DIR" >/dev/null || return
   run "$FLOX_BIN" init
   assert_success
   unset output
@@ -27,7 +27,7 @@ project_setup() {
 }
 
 project_teardown() {
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
   unset MANIFEST_PATH
@@ -38,9 +38,6 @@ project_teardown() {
 setup() {
   common_test_setup
   setup_isolated_flox
-
-  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
-    "$FLOX_BIN" update --global
 
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
@@ -63,7 +60,7 @@ setup_file() {
 }
 
 # ---------------------------------------------------------------------------- #
-
+# bats test_tags=search:basic
 @test "'flox search' can be called at all" {
   export FLOX_FEATURES_USE_CATALOG=false
   run "$FLOX_BIN" search hello
@@ -108,6 +105,9 @@ setup_file() {
 # bats test_tags=search:match-stategy
 @test "'FLOX_FEATURES_SEARCH_STRATEGY=match flox search' expected number of results: 'hello'" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   FLOX_FEATURES_SEARCH_STRATEGY=match run --separate-stderr "$FLOX_BIN" search hello --all
   assert_equal "${#lines[@]}" 11
   assert_equal "$stderr" "$SHOW_HINT"
@@ -117,6 +117,9 @@ setup_file() {
 
 @test "'flox search' expected number of results: 'hello'" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run --separate-stderr "$FLOX_BIN" search hello --all
   assert_equal "${#lines[@]}" 10
   assert_equal "$stderr" "$SHOW_HINT"
@@ -126,6 +129,9 @@ setup_file() {
 
 @test "'flox search' semver search: hello@2.12.1" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run --separate-stderr "$FLOX_BIN" search hello@2.12.1
   assert_equal "${#lines[@]}" 1 # 1 result
   assert_equal "${stderr_lines[0]}" "$SHOW_HINT"
@@ -135,6 +141,9 @@ setup_file() {
 
 @test "'flox search' returns JSON" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run "$FLOX_BIN" search hello --json
   version="$(echo "$output" | jq '.[0].version')"
   assert_equal "$version" '"2.12.1"'
@@ -153,15 +162,18 @@ setup_file() {
 
 @test "'flox search' semver search: 'hello@>=1'" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run "$FLOX_BIN" search 'hello@>=1' --json
   versions="$(echo "$output" | jq -c 'map(.version)')"
   case "$THIS_SYSTEM" in
-    *-darwin)
-      assert_equal "$versions" '["2.12.1","2.12","2.10"]'
-      ;;
-    *-linux)
-      assert_equal "$versions" '[]'
-      ;;
+  *-darwin)
+    assert_equal "$versions" '["2.12.1","2.12","2.10"]'
+    ;;
+  *-linux)
+    assert_equal "$versions" '[]'
+    ;;
   esac
 }
 
@@ -169,6 +181,9 @@ setup_file() {
 
 @test "'flox search' semver search: hello@2.x" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run "$FLOX_BIN" search hello@2.x --json
   versions="$(echo "$output" | jq -c 'map(.version)')"
   assert_equal "$versions" '["2.12.1"]'
@@ -187,6 +202,9 @@ setup_file() {
 
 @test "'flox search' semver search: hello@v2" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run "$FLOX_BIN" search hello@v2 --json
   versions="$(echo "$output" | jq -c 'map(.version)')"
   assert_equal "$versions" '["2.12.1"]'
@@ -196,6 +214,9 @@ setup_file() {
 
 @test "'flox search' semver search: 'hello@>1 <3'" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run "$FLOX_BIN" search 'hello@>1 <3' --json
   versions="$(echo "$output" | jq -c 'map(.version)')"
   assert_equal "$versions" '["2.12.1"]'
@@ -205,6 +226,9 @@ setup_file() {
 
 @test "'flox search' exact semver match listed first" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run "$FLOX_BIN" search hello@2.12.1 --json
   first_line="$(echo "$output" | head -n 1 | grep 2.12.1)"
   assert [ -n first_line ]
@@ -232,6 +256,7 @@ setup_file() {
 
 @test "'flox search' error message when no results" {
   export FLOX_FEATURES_USE_CATALOG=false
+
   run "$FLOX_BIN" search surely_doesnt_exist
   assert_equal "${#lines[@]}" 1
   assert_output --partial "No packages matched this search term: 'surely_doesnt_exist'"
@@ -250,6 +275,8 @@ setup_file() {
 
 @test "'flox search' with 'FLOX_FEATURES_SEARCH_STRATEGY=match-name' shows fewer packages" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
 
   MATCH="$(FLOX_FEATURES_SEARCH_STRATEGY=match "$FLOX_BIN" search node --all | wc -l)"
   MATCH_NAME="$(FLOX_FEATURES_SEARCH_STRATEGY=match-name "$FLOX_BIN" search node --all | wc -l)"
@@ -261,6 +288,8 @@ setup_file() {
 
 @test "'flox search' works in project without manifest or lockfile" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
   project_setup
 
   rm -f "$PROJECT_DIR/.flox/manifest.toml"
@@ -419,6 +448,8 @@ setup_file() {
 
 @test "'flox search' - same number of results for single and multi-system environments" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
   project_setup
 
   local extra_system
