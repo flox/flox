@@ -26,7 +26,6 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
-  export FLOX_FEATURES_USE_CATALOG=true
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 

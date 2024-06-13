@@ -35,7 +35,6 @@ setup() {
   floxhub_setup "owner"
   make_dummy_env "owner" "name"
 
-  export FLOX_FEATURES_USE_CATALOG=true
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 
   export UNSUPPORTED_SYSTEM_PROMPT="The environment you are trying to pull is not yet compatible with your system ($NIX_SYSTEM)."

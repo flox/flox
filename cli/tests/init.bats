@@ -19,7 +19,6 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
-  export FLOX_FEATURES_USE_CATALOG=true
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
@@ -242,7 +241,6 @@ EOF
 
 # bats test_tags=init:catalog
 @test "catalog: init creates manifest with all 4 systems" {
-  export FLOX_FEATURES_USE_CATALOG=true
   "$FLOX_BIN" init
   systems=$(tomlq -r -c '.options.systems' .flox/env/manifest.toml)
   assert_equal "$systems" '["aarch64-darwin","aarch64-linux","x86_64-darwin","x86_64-linux"]'
