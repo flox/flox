@@ -79,6 +79,11 @@ use crate::utils::init::{
 use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FILE_NAME};
 use crate::utils::{message, TRAILING_NETWORK_CALL_TIMEOUT};
 
+// Relative to flox executable
+const DEFAULT_UPDATE_INSTRUCTIONS: &str =
+    "Get the latest at https://flox.dev/docs/install-flox/#upgrade-existing-flox-installation";
+const UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH: &str =
+    "../../share/flox/files/update-instructions.txt";
 const UPDATE_NOTIFICATION_FILE_NAME: &str = "update-notification.json";
 const UPDATE_NOTIFICATION_EXPIRY: Duration = Duration::days(1);
 
@@ -540,15 +545,43 @@ impl UpdateNotification {
         }
     }
 
+    // Check for update instructions file which is located relative to the current executable
+    // and is created by an installer
+    fn update_instructions(update_instructions_relative_file_path: &str) -> String {
+        if let Ok(exe) = env::current_exe() {
+            if let Ok(update_instructions_file) = exe
+                .join(update_instructions_relative_file_path)
+                .canonicalize()
+            {
+                debug!(
+                    "Looking for update instructions file at: {}",
+                    update_instructions_file.display()
+                );
+                fs::read_to_string(update_instructions_file)
+                    .map(|docs| format!("Get the latest with:\n{}", indent::indent_all_by(2, docs)))
+                    .unwrap_or(DEFAULT_UPDATE_INSTRUCTIONS.to_string())
+            } else {
+                DEFAULT_UPDATE_INSTRUCTIONS.to_string()
+            }
+        } else {
+            DEFAULT_UPDATE_INSTRUCTIONS.to_string()
+        }
+    }
+
     /// If a new version is available, print a message to the user.
     ///
     /// Write the notification_file with the current time.
     fn print_new_version_available(self) {
         message::plain(formatdoc! {"
+
             🚀  Flox has a new version available. {} -> {}
 
-            Get the latest at https://flox.dev/docs/install-flox/
-        ", *FLOX_VERSION, self.new_version});
+            {}
+        ",
+            *FLOX_VERSION,
+            self.new_version,
+            Self::update_instructions(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH),
+        });
 
         if let Err(e) = serde_json::to_string_pretty(&LastUpdateNotification {
             last_notification: OffsetDateTime::now_utc(),
@@ -1791,6 +1824,7 @@ mod tests {
             _ => panic!(),
         }
     }
+
     /// testable_check_for_update fails when get_latest_version_function doesn't
     /// return something that looks like a version
     #[tokio::test]
@@ -1806,5 +1840,27 @@ mod tests {
         .await;
 
         assert!(result.unwrap().is_none());
+    }
+
+    // test that update_instructions provides default message when update-instructions.txt file
+    // does not exits
+    #[test]
+    fn test_update_instructions_default_message() {
+        let message = UpdateNotification::update_instructions("does-not-exists");
+        assert!(message == DEFAULT_UPDATE_INSTRUCTIONS);
+    }
+
+    // test that update_instructions returns the message from update-instructions.txt file
+    #[test]
+    fn test_update_instructions_custom_message() {
+        let temp_dir = tempdir().unwrap();
+        let update_instructions_file = temp_dir.path().join("update-instructions.txt");
+        let custom_message = "This are custom update instructions";
+
+        fs::write(&update_instructions_file, custom_message.to_string()).unwrap();
+
+        let message =
+            UpdateNotification::update_instructions(update_instructions_file.to_str().unwrap());
+        assert!(message.contains(custom_message));
     }
 }
