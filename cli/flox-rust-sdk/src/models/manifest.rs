@@ -619,10 +619,6 @@ pub struct TypedManifestPkgdb {
     _toml: toml::Table,
 }
 
-/// An alias to the Pkgdb backed Maifest Schema for backwards compatibility.
-/// TODO: remove this as part of <https://github.com/flox/flox/issues/1320>
-pub type Manifest = TypedManifestPkgdb;
-
 /// An error encountered while installing packages.
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum TomlEditError {
