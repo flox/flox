@@ -814,6 +814,21 @@ impl TryFrom<PackageInfoCommon> for SearchResult {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum SearchTerm {
+    Clean(String),
+    VersionStripped(String),
+}
+
+impl SearchTerm {
+    pub fn from_arg(search_term: &str) -> Self {
+        match search_term.split_once('@') {
+            Some((package, _version)) => SearchTerm::VersionStripped(package.to_string()),
+            None => SearchTerm::Clean(search_term.to_string()),
+        }
+    }
+}
+
 pub mod test_helpers {
     use super::*;
     use crate::data::System;
@@ -1040,5 +1055,42 @@ mod tests {
         // Empty file will fail to deserialize, so we should get the default (an empty array)
         let (_, json) = CatalogClient::read_dump_file(tmp.path());
         assert!(matches!(json, Value::Array(_)));
+    }
+
+    #[test]
+    fn search_term_without_version() {
+        assert_eq!(
+            SearchTerm::from_arg("hello"),
+            SearchTerm::Clean("hello".to_string())
+        );
+    }
+
+    #[test]
+    fn search_term_with_version_specifiers() {
+        let inputs = vec!["hello@", "hello@1.x", "hello@>=1", "hello@>1 <3"];
+        for input in inputs {
+            assert_eq!(
+                SearchTerm::from_arg(input),
+                SearchTerm::VersionStripped("hello".to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn search_term_with_at_in_attr_path() {
+        let inputs = vec![
+            "nodePackages.@angular/cli",
+            "nodePackages.@angular/cli@_at_angular_slash_cli-18.0.2",
+        ];
+        for input in inputs {
+            assert_eq!(
+                SearchTerm::from_arg(input),
+                // Catalog service indexes on the last tuple of `attr_path` so neither
+                // of these searches will work. However at least the behaviour with
+                // `split_once("@")` is consistently wrong whereas `rsplit_once("@")`
+                // would be inconsistently wrong.
+                SearchTerm::VersionStripped("nodePackages.".to_string())
+            );
+        }
     }
 }
