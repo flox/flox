@@ -111,7 +111,7 @@ setup_file() {
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
   assert_equal "${lines[1]}" "    hello@2.12.1"
   assert_equal "${lines[2]}" "    hello@2.12"
-  assert_equal "${lines[3]}" "    hello@2.10"
+  assert_equal "${lines[3]}" "    hello@2.10 (aarch64-linux, x86_64-darwin, x86_64-linux only)"
 }
 
 # ---------------------------------------------------------------------------- #

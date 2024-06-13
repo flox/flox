@@ -59,6 +59,9 @@ impl Show {
                 },
                 Err(e) => Err(e)?,
             };
+            if results.results.is_empty() {
+                bail!("no packages matched this pkg-path: '{}'", self.pkg_path);
+            }
             let expected_systems = [
                 "aarch64-darwin",
                 "aarch64-linux",
