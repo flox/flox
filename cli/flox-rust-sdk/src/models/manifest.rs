@@ -615,6 +615,7 @@ pub enum ManifestError {
 pub struct TypedManifestPkgdb {
     pub vars: Option<toml::Table>,
     pub hook: Option<toml::Table>,
+    pub profile: Option<toml::Table>,
     #[serde(flatten)]
     _toml: toml::Table,
 }

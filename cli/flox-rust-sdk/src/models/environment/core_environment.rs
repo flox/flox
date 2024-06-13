@@ -943,14 +943,14 @@ impl EditResult {
 
             match (&old_manifest, &new_manifest) {
                 (TypedManifest::Pkgdb(old), TypedManifest::Pkgdb(new)) => {
-                    if old.hook != new.hook || old.vars != new.vars {
+                    if old.hook != new.hook || old.vars != new.vars || old.profile != new.profile {
                         Ok(Self::ReActivateRequired { store_path })
                     } else {
                         Ok(Self::Success { store_path })
                     }
                 },
                 (TypedManifest::Catalog(old), TypedManifest::Catalog(new)) => {
-                    if old.hook != new.hook || old.vars != new.vars {
+                    if old.hook != new.hook || old.vars != new.vars || old.profile != new.profile {
                         Ok(Self::ReActivateRequired { store_path })
                     } else {
                         Ok(Self::Success { store_path })
