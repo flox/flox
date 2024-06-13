@@ -1395,10 +1395,12 @@ mod tests {
                     version: "1.0".to_string(),
                     system: SystemEnum::Aarch64Darwin,
                 }]),
+                msgs: vec![],
                 page: 1,
                 url: "url".to_string(),
                 complete: true,
             }),
+            msgs: vec![],
         }]);
 
         let (_, upgraded_packages) = env_view

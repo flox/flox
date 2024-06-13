@@ -14,6 +14,8 @@ use catalog_api_v1::types::{
     self as api_types,
     error as api_error,
     ErrorResponse,
+    MessageLevel,
+    MessagesItem,
     PackageInfoSearch,
 };
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
@@ -296,8 +298,8 @@ impl ClientTrait for CatalogClient {
         let resolved_package_groups = api_resolved_package_groups
             .items
             .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(ResolvedPackageGroup::from)
+            .collect::<Vec<_>>();
 
         tracing::debug!(
             n_groups = resolved_package_groups.len(),
@@ -661,58 +663,98 @@ impl TryFrom<PackageGroup> for api_types::PackageGroup {
     }
 }
 
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct ResolutionMessageInner {
-//     /// The log level of the message
-//     pub level: MessageLevel,
-//     /// Per-package details (unclear)
-//     pub context: HashMap<String, String>,
-// }
+/// The content of a generic message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsgGeneral {
+    /// The log level of the message
+    pub level: Option<MessageLevel>,
+    /// The actual message
+    pub msg: String,
+}
 
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub enum ResolutionMessage {
-//     General(ResolutionMessageInner),
-//     AttrPathNotFound(ResolutionMessageInner),
-//     ConstraintsTooTight(ResolutionMessageInner),
-// }
+/// The content of a "attr path not found" message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsgAttrPathNotFound {
+    /// The log level of the message
+    pub level: Option<MessageLevel>,
+    /// The actual message
+    pub msg: String,
+    /// The requested attribute path
+    pub attr_path: String,
+    /// The install id that requested this attribute path
+    pub install_id: String,
+    /// The systems on which this attribute path is valid
+    pub valid_systems: Vec<System>,
+}
 
-// impl TryFrom<api_types::MessagesItem> for ResolutionMessage {
-//     type Error = CatalogClientError;
+/// The content of a "constraints too tight" message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsgConstraintsTooTight {
+    /// The log level of the message
+    pub level: Option<MessageLevel>,
+    /// The actual message
+    pub msg: String,
+}
 
-//     fn try_from(value: api_types::MessagesItem) -> Result<Self, Self::Error> {
-//         if let Some(msg) = value.subtype_0 {
-//             let inner = ResolutionMessageInner {
-//                 level: msg.level,
-//                 context: msg.context,
-//             };
-//             Ok(ResolutionMessage::General(inner))
-//         } else if let Some(msg) = value.subtype_1 {
-//             let inner = ResolutionMessageInner {
-//                 // FIXME: there's an error in the schema that turns this field into something other
-//                 //        than MessageLevel
-//                 level: MessageLevel::Error,
-//                 context: msg.context,
-//             };
-//             Ok(ResolutionMessage::AttrPathNotFound(inner))
-//         } else if let Some(msg) = value.subtype_2 {
-//             let inner = ResolutionMessageInner {
-//                 // FIXME: there's an error in the schema that turns this field into something other
-//                 //        than MessageLevel
-//                 level: MessageLevel::Error,
-//                 context: msg.context,
-//             };
-//             Ok(ResolutionMessage::ConstraintsTooTight(inner))
-//         } else {
-//             unreachable!("message was empty")
-//         }
-//     }
-// }
+/// The kinds of resolution messages we can receive
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ResolutionMessage {
+    /// A generic message about resolution
+    General(MsgGeneral),
+    /// The attribute path requested for an install id either doesn't exist at all,
+    /// or isn't available on this system
+    AttrPathNotFound(MsgAttrPathNotFound),
+    /// Couldn't resolve a package group because the constraints were too tight,
+    /// which could mean that all the version constraints can't be satisfied by
+    /// a single page.
+    ConstraintsTooTight(MsgConstraintsTooTight),
+}
+
+impl ResolutionMessage {
+    pub fn msg(&self) -> String {
+        match self {
+            ResolutionMessage::General(msg) => msg.msg.clone(),
+            ResolutionMessage::AttrPathNotFound(msg) => msg.msg.clone(),
+            ResolutionMessage::ConstraintsTooTight(msg) => msg.msg.clone(),
+        }
+    }
+}
+
+impl From<MessagesItem> for ResolutionMessage {
+    fn from(value: MessagesItem) -> Self {
+        match value {
+            MessagesItem::MessageGeneral(msg) => ResolutionMessage::General(MsgGeneral {
+                level: msg.level,
+                msg: msg.message,
+            }),
+            MessagesItem::AttrPathNotFound(msg) => {
+                ResolutionMessage::AttrPathNotFound(MsgAttrPathNotFound {
+                    level: msg.level,
+                    msg: msg.message,
+                    attr_path: msg.attr_path,
+                    install_id: msg.install_id,
+                    valid_systems: msg
+                        .valid_systems
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>(),
+                })
+            },
+            MessagesItem::ConstraintsTooTight(msg) => {
+                ResolutionMessage::ConstraintsTooTight(MsgConstraintsTooTight {
+                    level: msg.level,
+                    msg: msg.message,
+                })
+            },
+        }
+    }
+}
 
 /// A resolved package group
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedPackageGroup {
     /// Messages generated by the server regarding how this group was resolved
-    // pub msgs: Vec<ResolutionMessage>,
+    pub msgs: Vec<ResolutionMessage>,
     /// The name of the group
     pub name: String,
     /// Which page this group was resolved to if it resolved at all
@@ -729,21 +771,17 @@ impl ResolvedPackageGroup {
     }
 }
 
-impl TryFrom<api_types::ResolvedPackageGroupInput> for ResolvedPackageGroup {
-    type Error = CatalogClientError;
-
-    fn try_from(
-        resolved_package_group: api_types::ResolvedPackageGroupInput,
-    ) -> Result<Self, Self::Error> {
-        Ok(Self {
+impl From<api_types::ResolvedPackageGroupInput> for ResolvedPackageGroup {
+    fn from(resolved_package_group: api_types::ResolvedPackageGroupInput) -> Self {
+        Self {
             name: resolved_package_group.name,
             page: resolved_package_group.page.map(CatalogPage::from),
-            // msgs: resolved_package_group
-            //     .messages
-            //     .into_iter()
-            //     .map(|msg| msg.try_into())
-            //     .collect::<Result<Vec<_>, _>>()?,
-        })
+            msgs: resolved_package_group
+                .messages
+                .into_iter()
+                .map(|msg| msg.into())
+                .collect::<Vec<_>>(),
+        }
     }
 }
 
@@ -756,6 +794,7 @@ pub struct CatalogPage {
     pub packages: Option<Vec<PackageResolutionInfo>>,
     pub page: i64,
     pub url: String,
+    pub msgs: Vec<ResolutionMessage>,
 }
 
 impl From<api_types::CatalogPageInput> for CatalogPage {
@@ -765,6 +804,11 @@ impl From<api_types::CatalogPageInput> for CatalogPage {
             packages: catalog_page.packages,
             page: catalog_page.page,
             url: catalog_page.url,
+            msgs: catalog_page
+                .messages
+                .into_iter()
+                .map(|msg| msg.into())
+                .collect::<Vec<_>>(),
         }
     }
 }
@@ -873,10 +917,12 @@ pub mod test_helpers {
             page: 0,
             url: String::new(),
             complete: true,
+            msgs: vec![],
         };
         ResolvedPackageGroup {
             name: group_name.to_string(),
             page: Some(page),
+            msgs: vec![],
         }
     }
 }

@@ -587,9 +587,13 @@ impl LockedManifestCatalog {
                         Err(LockedManifestError::EmptyPage)
                     }
                 } else {
-                    Err(LockedManifestError::ResolutionFailed(
-                        "package group had no page".into(),
-                    ))
+                    // FIXME: this is temporary until #1482 (install resolution messages)
+                    let err_msg = group
+                        .msgs
+                        .first()
+                        .map(|rm| rm.msg())
+                        .unwrap_or("for no good reason".to_string());
+                    Err(LockedManifestError::ResolutionFailed(err_msg))
                 }
             })
             .collect::<Result<Vec<_>, _>>()?
@@ -1197,8 +1201,10 @@ pub(crate) mod tests {
                     unfree: Some(false),
                     version: "version".to_string(),
                 }]),
+                msgs: vec![],
             }),
             name: "group".to_string(),
+            msgs: vec![],
         }]
     });
 
@@ -1674,8 +1680,10 @@ pub(crate) mod tests {
                     version: "version".to_string(),
                     system: SystemEnum::Aarch64Darwin,
                 }]),
+                msgs: vec![],
             }),
             name: "group".to_string(),
+            msgs: vec![],
         }];
 
         let manifest = &*TEST_TYPED_MANIFEST;
