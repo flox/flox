@@ -26,7 +26,7 @@ use super::{
 use crate::commands::{ensure_floxhub_token, ConcreteEnvironment};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
-use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_locked_manifest_error};
+use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_core_error};
 use crate::utils::message;
 
 // Edit declarative environment configuration
@@ -180,8 +180,9 @@ impl Edit {
             .map_err(apply_doc_link_for_unsupported_packages);
 
             match result {
-                Err(EnvironmentError::Core(CoreEnvironmentError::LockedManifest(e))) => {
-                    message::error(format_locked_manifest_error(&e));
+                Err(EnvironmentError::Core(e @ CoreEnvironmentError::LockedManifest(_)))
+                | Err(EnvironmentError::Core(e @ CoreEnvironmentError::DeserializeManifest(_))) => {
+                    message::error(format_core_error(&e));
 
                     if !Dialog::can_prompt() {
                         bail!("Can't prompt to continue editing in non-interactive context");
