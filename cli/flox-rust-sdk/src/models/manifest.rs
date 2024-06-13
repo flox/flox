@@ -325,6 +325,7 @@ pub enum TypedManifest {
 /// Modifications should be made using the the raw functions in this module.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
 pub struct TypedManifestCatalog {
     pub(super) version: Version<1>,
     /// The packages to install in the form of a map from install_id
@@ -963,6 +964,19 @@ pub(super) mod test {
             profile: ManifestProfile::default(),
             options: ManifestOptions::default(),
         }
+    }
+
+    #[test]
+    fn catalog_manifest_rejects_unknown_fields() {
+        let manifest = formatdoc! {"
+            {CATALOG_MANIFEST}
+
+            unknown = 'field'
+        "};
+
+        let result = toml_edit::de::from_str::<TypedManifest>(&manifest);
+
+        assert!(result.is_err(), "{:?}", result);
     }
 
     #[test]
