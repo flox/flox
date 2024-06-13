@@ -483,8 +483,6 @@ pub struct ManifestPackageDescriptor {
     pub(crate) priority: Option<usize>,
     pub(crate) version: Option<String>,
     pub(crate) systems: Option<Vec<System>>,
-    #[serde(default)]
-    pub(crate) optional: bool,
 }
 
 impl ManifestPackageDescriptor {
@@ -501,15 +499,11 @@ impl ManifestPackageDescriptor {
             pkg_path,
             pkg_group,
             version,
-            optional,
             systems: _,
             priority: _,
         } = self;
 
-        pkg_path != &other.pkg_path
-            || pkg_group != &other.pkg_group
-            || version != &other.version
-            || optional != &other.optional
+        pkg_path != &other.pkg_path || pkg_group != &other.pkg_group || version != &other.version
     }
 }
 
