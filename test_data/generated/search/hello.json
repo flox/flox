@@ -556,5 +556,128 @@
         "version": null
       }
     ]
+  },
+  {
+    "count": 15,
+    "results": [
+      {
+        "description": "A program that produces a familiar, friendly greeting",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "hello",
+        "relPath": [
+          "hello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "An example package with unfree license (for testing)",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "hello-unfree",
+        "relPath": [
+          "hello-unfree"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Modification of a Go package to create othello boards",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "othello",
+        "relPath": [
+          "texlivePackages",
+          "othello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": null,
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "hello-clog",
+        "relPath": [
+          "sbclPackages",
+          "hello-clog"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": null,
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "hello-builder",
+        "relPath": [
+          "sbclPackages",
+          "hello-builder"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Maven Hello World",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "mavenHello_1_1",
+        "relPath": [
+          "javaPackages",
+          "mavenHello_1_1"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Maven Hello World",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "mavenHello_1_0",
+        "relPath": [
+          "javaPackages",
+          "mavenHello_1_0"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Typeset Othello (Reversi) diagrams of any size, with annotations",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "othelloboard",
+        "relPath": [
+          "texlivePackages",
+          "othelloboard"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": null,
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "sly-hello-world",
+        "relPath": [
+          "emacsPackages",
+          "sly-hello-world"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": null,
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "qtools-helloworld",
+        "relPath": [
+          "sbclPackages",
+          "qtools-helloworld"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      }
+    ]
   }
 ]
