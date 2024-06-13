@@ -115,6 +115,12 @@ pub struct CatalogClient {
 
 impl CatalogClient {
     pub fn new(baseurl: &str) -> Self {
+        // Remove the existing output file if it exists so we don't merge with
+        // a previous `flox` invocation
+        if let Ok(path_str) = std::env::var(FLOX_CATALOG_DUMP_DATA_VAR) {
+            let path = Path::new(&path_str);
+            let _ = std::fs::remove_file(path);
+        }
         Self {
             client: APIClient::new(baseurl),
         }

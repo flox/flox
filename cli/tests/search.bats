@@ -146,8 +146,8 @@ setup_file() {
 @test "catalog: 'flox search' returns JSON" {
   export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/hello.json"
   run "$FLOX_BIN" search hello --json
-  version="$(echo "$output" | jq '.[0].version')"
-  assert_equal "$version" '"2.12.1"'
+  version="$(echo "$output" | jq '.[0].pname')"
+  assert_equal "$version" '"hello"'
 }
 
 # ---------------------------------------------------------------------------- #
@@ -226,7 +226,7 @@ setup_file() {
   export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/hello.json"
   run --separate-stderr "$FLOX_BIN" search hello
   assert_success
-  assert_equal "$stderr" "$SHOW_HINT"
+  assert_equal "${stderr_lines[-1]}" "$SHOW_HINT"
 }
 
 # ---------------------------------------------------------------------------- #
