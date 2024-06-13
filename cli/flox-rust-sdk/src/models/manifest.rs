@@ -974,9 +974,14 @@ pub(super) mod test {
             unknown = 'field'
         "};
 
-        let result = toml_edit::de::from_str::<TypedManifest>(&manifest);
+        let err = toml_edit::de::from_str::<TypedManifest>(&manifest)
+            .expect_err("manifest.toml should be invalid");
 
-        assert!(result.is_err(), "{:?}", result);
+        assert!(
+            err.message()
+                .starts_with("unknown field `unknown`, expected one of"),
+            "unexpected error message: {err}",
+        );
     }
 
     #[test]
