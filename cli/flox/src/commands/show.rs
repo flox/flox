@@ -158,16 +158,23 @@ fn render_show_catalog(
     let version_to_systems = {
         let mut map = BTreeMap::new();
         for pkg in search_results.iter() {
+            // The `version` field on `SearchResult` is optional for compatibility with `pkgdb`.
+            // Every package from the catalog will have a version, but right now `search` and `show`
+            // both convert to `SearchResult` with this optional `version` field for compatibility
+            // with `pkgdb` even though with the catalog we get much more data.
             if let Some(ref version) = pkg.version {
                 map.entry(version.clone())
                     .or_insert(HashSet::new())
                     .insert(pkg.system.clone());
-                // map.insert(version.clone(), pkg.system.clone());
             }
         }
         map
     };
     let mut seen_versions = HashSet::new();
+    // We iterate over the search results again instead of just the `version_to_systems` map since
+    // although the keys (and therefore the versions) in the map are sorted (BTreeMap is a sorted map),
+    // they are sorted lexically. This may be a different order than how the versions *should* be sorted,
+    // so we defer to the order in which the server returns results to us.
     for pkg in search_results {
         if let Some(ref version) = pkg.version {
             if seen_versions.contains(&version) {
@@ -176,6 +183,7 @@ fn render_show_catalog(
                 continue;
             }
             let Some(systems) = version_to_systems.get(version) else {
+                // This should be unreachable since we've already iterated over the search results.
                 continue;
             };
             let available_systems = {

@@ -1,9 +1,11 @@
 [
   [
     {
+      "msgs": [],
       "name": "default",
       "page": {
         "complete": true,
+        "msgs": [],
         "packages": [
           {
             "attr_path": "nodejs",
@@ -45,9 +47,11 @@
   ],
   [
     {
+      "msgs": [],
       "name": "yarn",
       "page": {
         "complete": true,
+        "msgs": [],
         "packages": [
           {
             "attr_path": "yarn",
@@ -85,9 +89,11 @@
   ],
   [
     {
+      "msgs": [],
       "name": "toplevel",
       "page": {
         "complete": true,
+        "msgs": [],
         "packages": [
           {
             "attr_path": "yarn",

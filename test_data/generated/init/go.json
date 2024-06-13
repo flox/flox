@@ -1,9 +1,11 @@
 [
   [
     {
+      "msgs": [],
       "name": "go",
       "page": {
         "complete": true,
+        "msgs": [],
         "packages": [
           {
             "attr_path": "go",
@@ -41,9 +43,11 @@
   ],
   [
     {
+      "msgs": [],
       "name": "toplevel",
       "page": {
         "complete": true,
+        "msgs": [],
         "packages": [
           {
             "attr_path": "go",

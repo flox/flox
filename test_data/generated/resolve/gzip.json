@@ -1,9 +1,11 @@
 [
   [
     {
+      "msgs": [],
       "name": "toplevel",
       "page": {
         "complete": true,
+        "msgs": [],
         "packages": [
           {
             "attr_path": "gzip",

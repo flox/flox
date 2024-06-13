@@ -1,9 +1,11 @@
 [
   [
     {
+      "msgs": [],
       "name": "python3",
       "page": {
         "complete": true,
+        "msgs": [],
         "packages": [
           {
             "attr_path": "python3",
@@ -41,9 +43,11 @@
   ],
   [
     {
+      "msgs": [],
       "name": "default",
       "page": {
         "complete": true,
+        "msgs": [],
         "packages": [
           {
             "attr_path": "poetry",
@@ -85,9 +89,11 @@
   ],
   [
     {
+      "msgs": [],
       "name": "default",
       "page": {
         "complete": true,
+        "msgs": [],
         "packages": [
           {
             "attr_path": "python3",
@@ -125,9 +131,11 @@
   ],
   [
     {
+      "msgs": [],
       "name": "toplevel",
       "page": {
         "complete": true,
+        "msgs": [],
         "packages": [
           {
             "attr_path": "poetry",
