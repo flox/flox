@@ -2096,6 +2096,11 @@ EOF
   # environment to confirm that _flox_activate_tracelevel is set
   # for the outer activation.
 
+  # Each of the shell-specific dotfiles has also been updated to emit a
+  # warning if sourced without _flox_activate_tracelevel set in the
+  # environment, so we also assert that this warning is not present
+  # in any of the activation output.
+
   # Start by adding logic to create semaphore files for all shells.
   for i in "$HOME/.bashrc.extra" "$HOME/.config/fish/config.fish.extra" "$HOME/.tcshrc.extra" "$HOME/.zshrc.extra"; do
     cat > "$i" <<EOF
@@ -2119,6 +2124,7 @@ EOF
   echo "Testing bash"
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
   assert_success
+  refute_output --partial "_flox_activate_tracelevel not defined"
   run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
   assert_success
   run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
@@ -2128,6 +2134,7 @@ EOF
   echo "Testing fish"
   FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
   assert_success
+  refute_output --partial "_flox_activate_tracelevel not defined"
   run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
   assert_success
   run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
@@ -2137,6 +2144,7 @@ EOF
   echo "Testing tcsh"
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
   assert_success
+  refute_output --partial "_flox_activate_tracelevel not defined"
   cat "$HOME/.tcshrc.extra"
   run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
   assert_success
@@ -2147,6 +2155,7 @@ EOF
   echo "Testing zsh"
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
   assert_success
+  refute_output --partial "_flox_activate_tracelevel not defined"
   run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
   assert_success
   run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
