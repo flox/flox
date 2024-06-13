@@ -21,7 +21,6 @@ setup_file() {
 }
 
 teardown_file() {
-  unset FLOX_FEATURES_USE_CATALOG
   unset FLOX_CATALOG_URL
   common_file_teardown
 }

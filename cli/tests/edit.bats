@@ -17,7 +17,6 @@ setup_file() {
 }
 
 teardown_file() {
-  unset FLOX_FEATURES_USE_CATALOG
   unset _FLOX_USE_CATALOG_MOCK
 }
 
