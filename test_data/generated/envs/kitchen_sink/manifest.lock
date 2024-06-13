@@ -51,8 +51,11 @@
       "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
       "rev_count": 633517,
       "rev_date": "2024-05-31T23:09:26Z",
-      "scrape_date": "2024-06-04T09:46:16Z",
-      "stabilities": null,
+      "scrape_date": "2024-06-04T19:02:00Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
       "unfree": false,
       "version": "2.12.1",
       "outputs_to_install": [
@@ -79,8 +82,11 @@
       "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
       "rev_count": 633517,
       "rev_date": "2024-05-31T23:09:26Z",
-      "scrape_date": "2024-06-04T09:46:16Z",
-      "stabilities": null,
+      "scrape_date": "2024-06-04T19:02:00Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
       "unfree": false,
       "version": "2.12.1",
       "outputs_to_install": [
@@ -107,8 +113,11 @@
       "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
       "rev_count": 633517,
       "rev_date": "2024-05-31T23:09:26Z",
-      "scrape_date": "2024-06-04T09:46:16Z",
-      "stabilities": null,
+      "scrape_date": "2024-06-04T19:02:00Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
       "unfree": false,
       "version": "2.12.1",
       "outputs_to_install": [
@@ -135,8 +144,11 @@
       "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
       "rev_count": 633517,
       "rev_date": "2024-05-31T23:09:26Z",
-      "scrape_date": "2024-06-04T09:46:16Z",
-      "stabilities": null,
+      "scrape_date": "2024-06-04T19:02:00Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
       "unfree": false,
       "version": "2.12.1",
       "outputs_to_install": [
