@@ -956,7 +956,19 @@ impl EditResult {
                         Ok(Self::Success { store_path })
                     }
                 },
-                _ => Ok(Self::ReActivateRequired { store_path }),
+                (TypedManifest::Catalog(catalog), TypedManifest::Pkgdb(pkgdb))
+                | (TypedManifest::Pkgdb(pkgdb), TypedManifest::Catalog(catalog)) => {
+                    if toml::Value::try_from(&pkgdb.hook) != toml::Value::try_from(&catalog.hook)
+                        || toml::Value::try_from(&pkgdb.vars)
+                            != toml::Value::try_from(&catalog.vars)
+                        || toml::Value::try_from(&pkgdb.profile)
+                            != toml::Value::try_from(&catalog.profile)
+                    {
+                        Ok(Self::ReActivateRequired { store_path })
+                    } else {
+                        Ok(Self::Success { store_path })
+                    }
+                },
             }
         }
     }
