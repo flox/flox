@@ -35,8 +35,8 @@ More specific information for a single package is available via the
 ```
 
 ## Fuzzy search
-`flox search` uses a fuzzy search mechanism that tries to match either the
-package name itself or some portion of the pkg-path.
+`flox search` uses a fuzzy search mechanism that tries to match either some
+portion of the pkg-path or description.
 
 # OPTIONS
 
