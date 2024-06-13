@@ -33,7 +33,6 @@ use crate::models::lockfile::{
 use crate::models::manifest::{
     insert_packages,
     remove_packages,
-    Manifest,
     ManifestError,
     PackageToInstall,
     TomlEditError,
@@ -937,15 +936,39 @@ impl EditResult {
             // todo: use a single toml crate (toml_edit already implements serde traits)
             // TODO: use different error variants, users _can_ fix errors in the _new_ manifest
             //       but they _can't_ fix errors in the _old_ manifest
-            let old_manifest: Manifest =
+            let old_manifest: TypedManifest =
                 toml::from_str(old_manifest).map_err(CoreEnvironmentError::DeserializeManifest)?;
-            let new_manifest: Manifest =
+            let new_manifest: TypedManifest =
                 toml::from_str(new_manifest).map_err(CoreEnvironmentError::DeserializeManifest)?;
-            // TODO: some modifications to `install` currently require re-activation
-            if old_manifest.hook != new_manifest.hook || old_manifest.vars != new_manifest.vars {
-                Ok(Self::ReActivateRequired { store_path })
-            } else {
-                Ok(Self::Success { store_path })
+
+            match (&old_manifest, &new_manifest) {
+                (TypedManifest::Pkgdb(old), TypedManifest::Pkgdb(new)) => {
+                    if old.hook != new.hook || old.vars != new.vars || old.profile != new.profile {
+                        Ok(Self::ReActivateRequired { store_path })
+                    } else {
+                        Ok(Self::Success { store_path })
+                    }
+                },
+                (TypedManifest::Catalog(old), TypedManifest::Catalog(new)) => {
+                    if old.hook != new.hook || old.vars != new.vars || old.profile != new.profile {
+                        Ok(Self::ReActivateRequired { store_path })
+                    } else {
+                        Ok(Self::Success { store_path })
+                    }
+                },
+                (TypedManifest::Catalog(catalog), TypedManifest::Pkgdb(pkgdb))
+                | (TypedManifest::Pkgdb(pkgdb), TypedManifest::Catalog(catalog)) => {
+                    if toml::Value::try_from(&pkgdb.hook) != toml::Value::try_from(&catalog.hook)
+                        || toml::Value::try_from(&pkgdb.vars)
+                            != toml::Value::try_from(&catalog.vars)
+                        || toml::Value::try_from(&pkgdb.profile)
+                            != toml::Value::try_from(&catalog.profile)
+                    {
+                        Ok(Self::ReActivateRequired { store_path })
+                    } else {
+                        Ok(Self::Success { store_path })
+                    }
+                },
             }
         }
     }

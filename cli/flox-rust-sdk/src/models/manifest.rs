@@ -610,13 +610,10 @@ pub enum ManifestError {
 pub struct TypedManifestPkgdb {
     pub vars: Option<toml::Table>,
     pub hook: Option<toml::Table>,
+    pub profile: Option<toml::Table>,
     #[serde(flatten)]
     _toml: toml::Table,
 }
-
-/// An alias to the Pkgdb backed Maifest Schema for backwards compatibility.
-/// TODO: remove this as part of <https://github.com/flox/flox/issues/1320>
-pub type Manifest = TypedManifestPkgdb;
 
 /// An error encountered while installing packages.
 #[derive(Debug, thiserror::Error, PartialEq)]
