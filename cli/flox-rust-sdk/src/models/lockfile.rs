@@ -189,7 +189,6 @@ pub struct LockedPackageCatalog {
     pub system: System, // FIXME: this is an enum in the generated code, can't derive Arbitrary there
     pub group: String,
     pub priority: usize,
-    pub optional: bool,
     // endregion
 }
 
@@ -236,7 +235,6 @@ impl LockedPackageCatalog {
             .as_deref()
             .unwrap_or(DEFAULT_GROUP_NAME)
             .to_string();
-        let optional = descriptor.optional;
 
         LockedPackageCatalog {
             attr_path,
@@ -260,7 +258,6 @@ impl LockedPackageCatalog {
             system: system.to_string(),
             priority,
             group,
-            optional,
         }
     }
 }
@@ -989,7 +986,6 @@ pub mod test_helpers {
             systems: Some(vec![SystemEnum::Aarch64Darwin.to_string()]),
             version: None,
             priority: None,
-            optional: false,
         };
 
         let locked = LockedPackageCatalog {
@@ -1018,7 +1014,6 @@ pub mod test_helpers {
             system: SystemEnum::Aarch64Darwin.to_string(),
             group: group.unwrap_or(DEFAULT_GROUP_NAME).to_string(),
             priority: 5,
-            optional: false,
         };
         (install_id, descriptor, locked)
     }
@@ -1240,7 +1235,6 @@ pub(crate) mod tests {
                 system: SystemEnum::Aarch64Darwin.to_string(),
                 group: "group".to_string(),
                 priority: 5,
-                optional: false,
             }],
         })
     });
@@ -1494,7 +1488,6 @@ pub(crate) mod tests {
                 systems: None,
                 version: None,
                 priority: None,
-                optional: false,
             });
 
         let LockedManifest::Catalog(seed) = &*TEST_LOCKED_MANIFEST else {
