@@ -16,6 +16,7 @@ pub mod message;
 pub mod metrics;
 pub mod openers;
 pub mod search;
+pub mod watchdog;
 
 pub static TERMINAL_STDERR: Lazy<Mutex<Stderr>> = Lazy::new(|| Mutex::new(std::io::stderr()));
 /// Timeout used for network operations that run after the main flox command has
