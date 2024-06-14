@@ -459,6 +459,24 @@ setup_file() {
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=search:suggestions
+@test "'flox search' shows suggested results" {
+  unset FLOX_FEATURES_USE_CATALOG
+  run "$FLOX_BIN" search java
+  assert_success
+  assert_output --partial "Related search results for 'jdk'"
+}
+
+# bats test_tags=search:suggestions
+@test "catalog: 'flox search' shows suggested results" {
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/search/java_suggestions.json" \
+    run "$FLOX_BIN" search java
+  assert_success
+  assert_output --partial "Related search results for 'jdk'"
+}
+
+# ---------------------------------------------------------------------------- #
 #
 #
 #
