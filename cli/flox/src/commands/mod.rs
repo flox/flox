@@ -1850,7 +1850,7 @@ mod tests {
         let update_instructions_file = temp_dir.path().join("update-instructions.txt");
         let custom_message = "This are custom update instructions";
 
-        fs::write(&update_instructions_file, custom_message.to_string()).unwrap();
+        fs::write(&update_instructions_file, custom_message).unwrap();
 
         let message =
             UpdateNotification::update_instructions(update_instructions_file.to_str().unwrap());

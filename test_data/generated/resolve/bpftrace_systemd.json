@@ -1,0 +1,34 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "AttrPathNotFound": {
+            "attr_path": "bpftrace",
+            "install_id": null,
+            "level": "error",
+            "msg": "AttrPath bpftrace not found for some systems, valid systems are (['a', 'a', 'r', 'c', 'h', '6', '4', '-', 'l', 'i', 'n', 'u', 'x', ',', 'x', '8', '6', '_', '6', '4', '-', 'l', 'i', 'n', 'u', 'x']).",
+            "valid_systems": [
+              "aarch64-linux",
+              "x86_64-linux"
+            ]
+          }
+        },
+        {
+          "AttrPathNotFound": {
+            "attr_path": "systemd",
+            "install_id": null,
+            "level": "error",
+            "msg": "AttrPath systemd not found for some systems, valid systems are (['a', 'a', 'r', 'c', 'h', '6', '4', '-', 'l', 'i', 'n', 'u', 'x', ',', 'x', '8', '6', '_', '6', '4', '-', 'l', 'i', 'n', 'u', 'x']).",
+            "valid_systems": [
+              "aarch64-linux",
+              "x86_64-linux"
+            ]
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ]
+]

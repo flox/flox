@@ -487,7 +487,7 @@ teardown() {
 # This is also checking we can build an unfree package
 @test "catalog: 'flox install' warns about unfree packages" {
   "$FLOX_BIN" init
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello-unfree.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello_unfree.json"
   run "$FLOX_BIN" install hello-unfree
   assert_success
   assert_line --partial "The package 'hello-unfree' has an unfree license"
@@ -521,4 +521,29 @@ teardown() {
   assert_failure
   assert_line --partial "The package 'yi' is marked as broken."
   assert_output --partial "'options.allow.broken = true'"
+}
+
+# bats test_tags=bats:focus
+@test "resolution message: single package not found" {
+  skip
+}
+
+# bats test_tags=bats:focus
+@test "resolution message: multiple packages not found" {
+  skip
+}
+
+# bats test_tags=bats:focus
+@test "resolution message: single package not availabe on all systems" {
+  skip
+}
+
+# bats test_tags=bats:focus
+@test "resolution message: multiple packages not available on all systems" {
+  skip
+}
+
+# bats test_tags=bats:focus
+@test "resolution message: constraints too tight" {
+  skip
 }

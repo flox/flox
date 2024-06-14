@@ -1,0 +1,28 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "AttrPathNotFound": {
+            "attr_path": "badpkg1",
+            "install_id": null,
+            "level": "error",
+            "msg": "AttrPath 'badpkg1' not found.",
+            "valid_systems": []
+          }
+        },
+        {
+          "AttrPathNotFound": {
+            "attr_path": "badpkg2",
+            "install_id": null,
+            "level": "error",
+            "msg": "AttrPath 'badpkg2' not found.",
+            "valid_systems": []
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ]
+]

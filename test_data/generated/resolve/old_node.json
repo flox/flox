@@ -1,0 +1,16 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "ConstraintsTooTight": {
+            "level": "error",
+            "msg": "Resolution constraints are too tight."
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ]
+]
