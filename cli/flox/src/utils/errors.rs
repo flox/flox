@@ -440,8 +440,11 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             Please check the spelling of the remote environment
             and make sure that you have access to it.
         "},
-        // todo: mark as bug?
-        ManagedEnvironmentError::UpstreamNotFound(_, _) => display_chain(err),
+        ManagedEnvironmentError::UpstreamNotFound(_, _) => formatdoc! {"
+            Environment not found in FloxHub.
+
+            You can run `flox push` to push the environment back to FloxHub.
+        "},
         // acces denied is catched early as ManagedEnvironmentError::AccessDenied
         ManagedEnvironmentError::Push(_) => display_chain(err),
         ManagedEnvironmentError::DeleteBranch(_) => display_chain(err),

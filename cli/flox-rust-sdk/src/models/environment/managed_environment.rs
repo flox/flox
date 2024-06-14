@@ -1114,10 +1114,20 @@ impl ManagedEnvironment {
         // Fetch the remote branch into the local sync branch.
         // The sync branch is always a reset to the remote branch
         // and it's state should not be depended on.
-        self.floxmeta
+        match self
+            .floxmeta
             .git
             .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}"))
-            .map_err(ManagedEnvironmentError::FetchUpdates)?;
+        {
+            Ok(_) => {},
+            Err(GitRemoteCommandError::RefNotFound(_)) => {
+                Err(ManagedEnvironmentError::UpstreamNotFound(
+                    self.pointer.clone().into(),
+                    self.pointer.floxhub_url.to_string(),
+                ))?
+            },
+            Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
+        };
 
         // Check whether we can fast-forward the remote branch to the local branch,
         // if not the environment has diverged.
