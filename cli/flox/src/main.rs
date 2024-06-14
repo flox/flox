@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use bpaf::{Args, Parser};
-use commands::{FloxArgs, FloxCli, Prefix, Version};
+use commands::{EnvironmentSelectError, FloxArgs, FloxCli, Prefix, Version};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
@@ -130,6 +130,13 @@ fn main() -> ExitCode {
             // Do not print any error if caused by wrapped flox (sh)
             if e.is::<FloxShellErrorCode>() {
                 return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;
+            }
+
+            if let Some(EnvironmentSelectError::Environment(e)) =
+                e.downcast_ref::<EnvironmentSelectError>()
+            {
+                message::error(format_error(e));
+                return ExitCode::from(1);
             }
 
             if let Some(e) = e.downcast_ref::<EnvironmentError>() {
