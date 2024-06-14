@@ -462,7 +462,7 @@ setup_file() {
 
 # bats test_tags=search:suggestions
 @test "'flox search' shows suggested results" {
-  unset FLOX_FEATURES_USE_CATALOG
+  export FLOX_FEATURES_USE_CATALOG=false
   run "$FLOX_BIN" search java
   assert_success
   assert_output --partial "Related search results for 'jdk'"
