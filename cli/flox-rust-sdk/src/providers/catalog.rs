@@ -29,6 +29,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::data::System;
+use crate::flox::FLOX_VERSION;
 use crate::models::search::{ResultCount, SearchLimit, SearchResult, SearchResults};
 use crate::utils::traceable_path;
 
@@ -123,8 +124,16 @@ impl CatalogClient {
             let path = Path::new(&path_str);
             let _ = std::fs::remove_file(path);
         }
+
+        let client = {
+            let timeout = std::time::Duration::from_secs(15);
+            reqwest::ClientBuilder::new()
+                .connect_timeout(timeout)
+                .timeout(timeout)
+                .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
+        };
         Self {
-            client: APIClient::new(baseurl),
+            client: APIClient::new_with_client(baseurl, client.build().unwrap()),
         }
     }
 
@@ -934,6 +943,7 @@ mod tests {
     use std::path::PathBuf;
 
     use futures::TryStreamExt;
+    use httpmock::prelude::MockServer;
     use itertools::Itertools;
     use pollster::FutureExt;
     use proptest::collection::vec;
@@ -941,6 +951,25 @@ mod tests {
     use tempfile::NamedTempFile;
 
     use super::*;
+
+    #[tokio::test]
+    async fn user_agent_set_on_all_requests() {
+        let expected_agent = format!("flox-cli/{}", &*FLOX_VERSION);
+        let empty_response = &api_types::PackageSearchResultOutput {
+            items: vec![],
+            total_count: 0,
+        };
+
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.header("user-agent", expected_agent);
+            then.status(200).json_body_obj(empty_response);
+        });
+
+        let client = CatalogClient::new(&server.base_url());
+        let _ = client.package_versions("some-package").await;
+        mock.assert();
+    }
 
     /// make_depaging_stream collects items from multiple pages
     #[tokio::test]
