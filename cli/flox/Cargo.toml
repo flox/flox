@@ -34,6 +34,7 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 serde.workspace = true
 shell-escape.workspace = true
+source-span.workspace = true
 supports-color.workspace = true
 sys-info.workspace = true
 sysinfo.workspace = true

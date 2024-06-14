@@ -6,6 +6,7 @@ use indoc::{formatdoc, indoc};
 use log::debug;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
+use toml::Spanned;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
 
 use super::environment::path_environment::InitCustomization;
@@ -347,6 +348,31 @@ pub struct TypedManifestCatalog {
     pub(super) options: ManifestOptions,
 }
 
+/// Not meant for writing manifest files, only for reading them.
+/// Modifications should be made using the the raw functions in this module.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SpannedManifest {
+    pub(super) version: Spanned<Version<1>>,
+    /// The packages to install in the form of a map from install_id
+    /// to package descriptor.
+    #[serde(default)]
+    pub(super) install: SpannedInstall,
+    /// Variables that are exported to the shell environment upon activation.
+    #[serde(default)]
+    pub(super) vars: SpannedVariables,
+    /// Hooks that are run at various times during the lifecycle of the manifest
+    /// in a known shell environment.
+    #[serde(default)]
+    pub(super) hook: SpannedHook,
+    /// Profile scripts that are run in the user's shell upon activation.
+    #[serde(default)]
+    pub(super) profile: SpannedProfile,
+    /// Options that control the behavior of the manifest.
+    #[serde(default)]
+    pub(super) options: SpannedOptions,
+}
+
 impl TypedManifestCatalog {
     /// Get the package descriptor with the specified install_id.
     pub fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<ManifestPackageDescriptor> {
@@ -475,6 +501,18 @@ fn pkg_belongs_to_non_empty_toplevel_group(
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    derive_more::Deref,
+    derive_more::DerefMut,
+    Default,
+)]
+pub struct SpannedInstall(BTreeMap<Spanned<String>, Spanned<ManifestPackageDescriptor>>);
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
@@ -484,6 +522,16 @@ pub struct ManifestPackageDescriptor {
     pub(crate) priority: Option<usize>,
     pub(crate) version: Option<String>,
     pub(crate) systems: Option<Vec<System>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub struct SpannedPackageDescriptor {
+    pub(crate) pkg_path: Spanned<String>,
+    pub(crate) pkg_group: Spanned<Option<String>>,
+    pub(crate) priority: Spanned<Option<usize>>,
+    pub(crate) version: Spanned<Option<String>>,
+    pub(crate) systems: Spanned<Option<Vec<System>>>,
 }
 
 impl ManifestPackageDescriptor {
@@ -513,12 +561,23 @@ impl ManifestPackageDescriptor {
 pub struct ManifestVariables(BTreeMap<String, String>);
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+pub struct SpannedVariables(BTreeMap<Spanned<String>, Spanned<String>>);
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 pub struct ManifestHook {
     /// A script that is run at activation time,
     /// in a flox provided bash shell
     on_activate: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub struct SpannedHook {
+    /// A script that is run at activation time,
+    /// in a flox provided bash shell
+    on_activate: Option<Spanned<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
@@ -537,6 +596,20 @@ pub struct ManifestProfile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+pub struct SpannedProfile {
+    /// When defined, this hook is run by _all_ shells upon activation
+    common: Option<Spanned<String>>,
+    /// When defined, this hook is run upon activation in a bash shell
+    bash: Option<Spanned<String>>,
+    /// When defined, this hook is run upon activation in a zsh shell
+    zsh: Option<Spanned<String>>,
+    /// When defined, this hook is run upon activation in a fish shell
+    fish: Option<Spanned<String>>,
+    /// When defined, this hook is run upon activation in a tcsh shell
+    tcsh: Option<Spanned<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 pub struct ManifestOptions {
@@ -545,6 +618,19 @@ pub struct ManifestOptions {
     /// Options that control what types of packages are allowed.
     #[serde(default)]
     pub allow: Allows,
+    /// Options that control how semver versions are resolved.
+    #[serde(default)]
+    pub semver: SemverOptions,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub struct SpannedOptions {
+    /// A list of systems that each package is resolved for.
+    pub(super) systems: Option<Spanned<Vec<System>>>,
+    /// Options that control what types of packages are allowed.
+    #[serde(default)]
+    pub allow: SpannedAllows,
     /// Options that control how semver versions are resolved.
     #[serde(default)]
     pub semver: SemverOptions,
@@ -563,12 +649,31 @@ pub struct Allows {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+pub struct SpannedAllows {
+    /// Whether to allow packages that are marked as `unfree`
+    pub unfree: Option<Spanned<bool>>,
+    /// Whether to allow packages that are marked as `broken`
+    pub broken: Option<Spanned<bool>>,
+    /// A list of license descriptors that are allowed
+    #[serde(default)]
+    pub licenses: Vec<Spanned<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
 pub struct SemverOptions {
     /// Whether to allow pre-release versions when resolving
     #[serde(default)]
     pub allow_pre_releases: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub struct SpannedSemverOptions {
+    /// Whether to allow pre-release versions when resolving
+    #[serde(default)]
+    pub allow_pre_releases: Option<Spanned<bool>>,
 }
 
 /// Deserialize the manifest as a [serde_json::Value],

@@ -15,6 +15,8 @@ use flox_rust_sdk::models::environment::{
 };
 use itertools::Itertools;
 use log::debug;
+use source_span::fmt::{Formatter, Style};
+use source_span::{Position, Span};
 use tracing::instrument;
 
 use super::{
@@ -26,7 +28,11 @@ use super::{
 use crate::commands::{ensure_floxhub_token, ConcreteEnvironment};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
-use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_locked_manifest_error};
+use crate::utils::errors::{
+    apply_doc_link_for_unsupported_packages,
+    format_core_error,
+    format_locked_manifest_error,
+};
 use crate::utils::message;
 
 // Edit declarative environment configuration
@@ -169,6 +175,7 @@ impl Edit {
         // Let the user keep editing the file until the build succeeds or the user
         // decides to stop.
         loop {
+            tracing::debug!("inside the edit loop");
             let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
 
             let result = Dialog {
@@ -190,6 +197,58 @@ impl Edit {
                         bail!("Environment editing cancelled");
                     }
                 },
+                Err(EnvironmentError::Core(
+                    ref e @ CoreEnvironmentError::DeserializeManifest(ref err),
+                )) => {
+                    tracing::debug!("formatting manifest error");
+                    let maybe_byte_span = err.span();
+                    if let Some(byte_span) = maybe_byte_span {
+                        tracing::debug!("got byte span");
+                        // Confusingly:
+                        // - start = first character of span
+                        // - last = last character of span
+                        // - end = first character after span
+                        let (start_line, start_col) =
+                            Self::translate_position(&new_manifest, byte_span.start);
+                        let (last_line, last_col) =
+                            Self::translate_position(&new_manifest, byte_span.end);
+                        let (end_line, end_col) = Self::translate_position(
+                            &new_manifest,
+                            new_manifest.len().min(byte_span.end + 1),
+                        );
+                        let manifest_span = Span::new(
+                            Position::new(start_line, start_col),
+                            Position::new(last_line, last_col),
+                            Position::new(end_line, end_col),
+                        );
+                        let mut formatter = Formatter::new();
+                        formatter.add(manifest_span, Some(err.to_string()), Style::Error);
+                        let char_metrics = source_span::DefaultMetrics::with_tab_stop(4);
+                        let formatted = formatter
+                            .render(
+                                new_manifest.chars().map(Ok::<char, anyhow::Error>),
+                                manifest_span,
+                                &char_metrics,
+                            )
+                            .unwrap();
+                        message::error(formatted);
+                        if !Dialog::can_prompt() {
+                            bail!("Can't prompt to continue editing in non-interactive context");
+                        }
+                        if !should_continue.clone().prompt().await? {
+                            bail!("Environment editing cancelled");
+                        }
+                    } else {
+                        message::error(format_core_error(e));
+
+                        if !Dialog::can_prompt() {
+                            bail!("Can't prompt to continue editing in non-interactive context");
+                        }
+                        if !should_continue.clone().prompt().await? {
+                            bail!("Environment editing cancelled");
+                        }
+                    }
+                },
                 Err(e) => {
                     bail!(e)
                 },
@@ -198,6 +257,37 @@ impl Edit {
                 },
             }
         }
+    }
+
+    // Shamelessly copied from cargo source code
+    fn translate_position(input: &str, index: usize) -> (usize, usize) {
+        if input.is_empty() {
+            return (0, index);
+        }
+
+        let safe_index = index.min(input.len() - 1);
+        let column_offset = index - safe_index;
+
+        let nl = input[0..safe_index]
+            .as_bytes()
+            .iter()
+            .rev()
+            .enumerate()
+            .find(|(_, b)| **b == b'\n')
+            .map(|(nl, _)| safe_index - nl - 1);
+        let line_start = match nl {
+            Some(nl) => nl + 1,
+            None => 0,
+        };
+        let line = input[0..line_start]
+            .as_bytes()
+            .iter()
+            .filter(|c| **c == b'\n')
+            .count();
+        let column = input[line_start..=safe_index].chars().count() - 1;
+        let column = column + column_offset;
+
+        (line, column)
     }
 
     /// Determines the editor to use for interactive editing

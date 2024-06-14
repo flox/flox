@@ -36,6 +36,7 @@ use crate::models::manifest::{
     Manifest,
     ManifestError,
     PackageToInstall,
+    SpannedManifest,
     TomlEditError,
     TypedManifest,
     TypedManifestCatalog,
@@ -107,6 +108,10 @@ impl<State> CoreEnvironment<State> {
     ///
     /// todo: should we always write the lockfile to disk?
     pub fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, CoreEnvironmentError> {
+        // Just need to know that it succeeds, don't need the actual value
+        let _: SpannedManifest = toml::from_str(&self.manifest_content()?)
+            .map_err(CoreEnvironmentError::DeserializeManifest)?;
+
         let manifest: TypedManifest = toml::from_str(&self.manifest_content()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
 
