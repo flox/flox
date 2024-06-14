@@ -143,12 +143,13 @@ function add_incompatible_package() {
   # replace linux with darwin or darwin with linux
   if [ -z "${NIX_SYSTEM##*-linux}" ]; then
     package='"darwin.ps"'
-    export INCOMPATIBLE_MOCK_RESPONSE_ONE_TIME="$GENERATED_DATA/resolve/darwin_ps.json"
-    export INCOMPATIBLE_MOCK_RESPONSE_TWO_TIMES="$GENERATED_DATA/resolve/darwin_ps_twice.json"
+    export INCOMPATIBLE_MOCK_RESPONSE_FIRST_TIME="$GENERATED_DATA/resolve/darwin_ps.json"
+    export INCOMPATIBLE_MOCK_RESPONSE_SECOND_TIME="$GENERATED_DATA/resolve/darwin_ps_incompatible.json"
+
   elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
     package='"glibc"'
-    export INCOMPATIBLE_MOCK_RESPONSE_ONE_TIME="$GENERATED_DATA/resolve/glibc.json"
-    export INCOMPATIBLE_MOCK_RESPONSE_TWO_TIMES="$GENERATED_DATA/resolve/glibc_twice.json"
+    export INCOMPATIBLE_MOCK_RESPONSE_FIRST_TIME="$GENERATED_DATA/resolve/glibc.json"
+    export INCOMPATIBLE_MOCK_RESPONSE_SECOND_TIME="$GENERATED_DATA/resolve/glibc_incompatible.json"
   else
     echo "unknown system: '$NIX_SYSTEM'"
     exit 1
@@ -611,12 +612,20 @@ function add_insecure_package() {
   make_incompatible "owner" "name"
   add_incompatible_package "owner" "name"
 
-  _FLOX_USE_CATALOG_MOCK="$INCOMPATIBLE_MOCK_RESPONSE_ONE_TIME" \
+  # add_incompatible_package does not _lock_ the environment,
+  # therefore pull will resolve the package.
+  _FLOX_USE_CATALOG_MOCK="$INCOMPATIBLE_MOCK_RESPONSE_FIRST_TIME" \
     run "$FLOX_BIN" pull --remote owner/name
   assert_failure
   assert_line --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
 
-  _FLOX_USE_CATALOG_MOCK="$INCOMPATIBLE_MOCK_RESPONSE_TWO_TIMES" \
+  # combine output of calling resolve before and after adding the system
+  jq -s add \
+    "$INCOMPATIBLE_MOCK_RESPONSE_FIRST_TIME" \
+    "$INCOMPATIBLE_MOCK_RESPONSE_SECOND_TIME" \
+    >"./twice.json"
+
+  _FLOX_USE_CATALOG_MOCK="./twice.json" \
     run "$FLOX_BIN" pull --remote owner/name --force
   assert_success
   assert_line --partial "Modified the manifest to include your system but could not build."

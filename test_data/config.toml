@@ -41,14 +41,12 @@ pre_cmd = '''
 cmd = "flox install glibc"
 ignore_cmd_errors = true # build will fail on macos, thats fine
 
-[resolve.glibc_twice]
+[resolve.glibc_incompatible]
 pre_cmd = '''
     flox init
     tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux" ]' .flox/env/manifest.toml
 '''
 cmd = '''
- tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux" ]' .flox/env/manifest.toml
- flox install glibc || true
  tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux", "aarch64-darwin" ]' .flox/env/manifest.toml
  flox install glibc || true
 '''
@@ -62,14 +60,12 @@ pre_cmd = '''
 cmd = "flox install darwin.ps"
 ignore_cmd_errors = true # build will fail on linux, thats fine
 
-[resolve.darwin_ps_twice]
+[resolve.darwin_ps_incompatible]
 pre_cmd = '''
     flox init
 '''
 cmd = '''
-    tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin" ]' .flox/env/manifest.toml
-    flox install darwin.ps
-    tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin", "aarch64-darwin" ]' .flox/env/manifest.toml
+    tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin", "aarch64-linux" ]' .flox/env/manifest.toml
     flox install darwin.ps
 '''
 ignore_cmd_errors = true # build will fail on linux, thats fine

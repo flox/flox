@@ -1055,7 +1055,7 @@ impl CoreEnvironmentError {
                     ..
                 })
             ))
-        )
+        ) || matches!(self, CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(msg)) if msg.contains("not found for some systems"))
     }
 
     pub fn is_incompatible_package_error(&self) -> bool {

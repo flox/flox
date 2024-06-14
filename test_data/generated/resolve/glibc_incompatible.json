@@ -5,7 +5,7 @@
         {
           "General": {
             "level": "error",
-            "msg": "AttrPath 'definitely-not-a-package' not found."
+            "msg": "AttrPath 'glibc' not found for some systems, valid systems are (['aarch64-linux', 'x86_64-linux'])."
           }
         }
       ],
