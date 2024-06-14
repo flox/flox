@@ -394,6 +394,10 @@ subsets of tests.
 See the [bats usage documentation](https://bats-core.readthedocs.io/en/stable/usage.html)
 for details.
 
+## Rust Style Guidelines
+
+- In general, structs should derive `Clone` and `Debug`.
+
 ## Merges
 
 Changes should be **squashed and merged** into `main`.
