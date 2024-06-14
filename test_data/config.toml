@@ -145,6 +145,9 @@ post_cmd = '''
     mv tmp.json "$RESPONSE_FILE"
 '''
 
+[search.java_suggestions]
+cmd = "flox search java"
+
 [show.hello]
 cmd = "flox show hello"
 
