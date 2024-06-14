@@ -19,7 +19,7 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" > /dev/null || return
+  pushd "$PROJECT_DIR" >/dev/null || return
   run "$FLOX_BIN" init
   assert_success
   unset output
@@ -27,7 +27,7 @@ project_setup() {
 }
 
 project_teardown() {
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
   unset LOCKFILE_PATH
@@ -39,10 +39,7 @@ setup() {
   common_test_setup
   setup_isolated_flox
   rm -f "$GLOBAL_MANIFEST_LOCK"
-  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
-    "$FLOX_BIN" update --global
-  export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 teardown() {
@@ -64,7 +61,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "catalog: 'flox show' can be called at all" {
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
   run "$FLOX_BIN" show hello
   assert_success
 }
@@ -83,11 +80,11 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "catalog: 'flox show' accepts search output without separator" {
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA//search/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA//search/hello.json"
   run "$FLOX_BIN" search hello
   assert_success
   first_result="${lines[0]%% *}"
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
   run "$FLOX_BIN" show "$first_result"
   assert_success
 }
@@ -96,6 +93,9 @@ setup_file() {
 
 @test "'flox show' - hello" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run "$FLOX_BIN" show hello
   assert_success
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
@@ -105,7 +105,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "catalog: 'flox show' - hello" {
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
   run "$FLOX_BIN" show hello
   assert_success
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
@@ -118,6 +118,9 @@ setup_file() {
 
 @test "'flox show' - hello --all" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run --separate-stderr "$FLOX_BIN" show hello --all
   assert_success
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
@@ -128,7 +131,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 @test "catalog: 'flox show' - hello --all" {
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
   run --separate-stderr "$FLOX_BIN" show hello --all
   assert_success
   assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
@@ -142,6 +145,9 @@ setup_file() {
 
 @test "'flox show' - python27Full" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run "$FLOX_BIN" show python27Full
   assert_success
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language"
@@ -154,6 +160,9 @@ setup_file() {
 
 @test "'flox show' - python27Full --all" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run --separate-stderr "$FLOX_BIN" show python27Full --all
   assert_success
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language"
@@ -167,6 +176,9 @@ setup_file() {
 
 @test "'flox show' - python310Packages.flask" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run "$FLOX_BIN" show python310Packages.flask
   assert_success
   # Ensure that the package and part of the description show up
@@ -192,6 +204,9 @@ setup_file() {
 
 @test "'flox show' - rubyPackages.rails" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   run "$FLOX_BIN" show rubyPackages.rails
   assert_success
   assert_output --partial 'rubyPackages.rails - '
@@ -201,6 +216,9 @@ setup_file() {
 
 @test "'flox show' works in project without manifest or lockfile" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   project_setup
 
   rm -f "$PROJECT_DIR/.flox/manifest.toml"
@@ -216,6 +234,9 @@ setup_file() {
 
 @test "'flox show' uses '_PKGDB_GA_REGISTRY_REF_OR_REV' revision" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
+
   project_setup
 
   rm -f "$GLOBAL_MANIFEST_LOCK"
@@ -223,7 +244,7 @@ setup_file() {
   mkdir -p "$PROJECT_DIR/.flox/env"
   # Note: at some point it may also be necessary to create a .flox/env.json
   echo 'options.systems = ["x86_64-linux"]' \
-    > "$PROJECT_DIR/.flox/env/manifest.toml"
+    >"$PROJECT_DIR/.flox/env/manifest.toml"
 
   # Search for a package with `pkgdb`
   run --separate-stderr sh -c "$PKGDB_BIN search --ga-registry '{
@@ -249,6 +270,8 @@ setup_file() {
 
 @test "'flox show' uses locked revision when available" {
   export FLOX_FEATURES_USE_CATALOG=false
+  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
+    "$FLOX_BIN" update --global
   project_setup
 
   mkdir -p "$PROJECT_DIR/.flox/env"
@@ -256,7 +279,7 @@ setup_file() {
   {
     echo 'options.systems = ["x86_64-linux"]'
     echo 'install.nodejs = {}'
-  } > "$PROJECT_DIR/.flox/env/manifest.toml"
+  } >"$PROJECT_DIR/.flox/env/manifest.toml"
 
   # Force lockfile to pin a specific revision of `nixpkgs'
   run --separate-stderr sh -c \

@@ -33,8 +33,7 @@ load test_support.bash
 
 setup_file() {
   common_file_setup
-  export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 # ---------------------------------------------------------------------------- #

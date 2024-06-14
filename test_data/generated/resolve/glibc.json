@@ -1,0 +1,66 @@
+[
+  [
+    {
+      "msgs": [],
+      "name": "toplevel",
+      "page": {
+        "complete": true,
+        "msgs": [],
+        "packages": [
+          {
+            "attr_path": "glibc",
+            "broken": false,
+            "derivation": "/nix/store/giq55ck4qbyhjak92g7qi60r7yy8a2mc-glibc-2.39-52.drv",
+            "description": "The GNU C Library",
+            "install_id": "glibc",
+            "license": "LGPL-2.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "glibc-2.39-52",
+            "outputs": [
+              {
+                "name": "bin",
+                "store_path": "/nix/store/c2i631h8i5vcs1sqifwxfsazhwrg6wr5-glibc-2.39-52-bin"
+              },
+              {
+                "name": "dev",
+                "store_path": "/nix/store/fwh4fxd747m0py3ib3s5abamia9nrf90-glibc-2.39-52-dev"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/k7zgvzp2r31zkg9xqgjim7mbknryv6bs-glibc-2.39-52"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/34f1yi6gg84yg0bvapbjhls9q9pvcmzm-glibc-2.39-52-debug"
+              },
+              {
+                "name": "getent",
+                "store_path": "/nix/store/ggsvk22xykxpsqznqipvr6lfl31qzslg-glibc-2.39-52-getent"
+              },
+              {
+                "name": "static",
+                "store_path": "/nix/store/bpqw3qzqyr5msyxmg7b5m8nj13b1iyj0-glibc-2.39-52-static"
+              }
+            ],
+            "outputs_to_install": [
+              "bin"
+            ],
+            "pname": "glibc",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "2.39-52"
+          }
+        ],
+        "page": 633517,
+        "url": ""
+      }
+    }
+  ]
+]

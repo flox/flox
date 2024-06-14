@@ -1,0 +1,16 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "General": {
+            "level": "error",
+            "msg": "AttrPath 'glibc' not found for some systems, valid systems are (['aarch64-linux', 'x86_64-linux'])."
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ]
+]

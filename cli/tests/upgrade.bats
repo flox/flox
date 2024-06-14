@@ -21,7 +21,6 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
-  export FLOX_FEATURES_USE_CATALOG=true
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
@@ -52,7 +51,6 @@ setup() {
   common_test_setup
   setup_isolated_flox
   project_setup
-  export FLOX_FEATURES_USE_CATALOG=true
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 teardown() {
@@ -180,7 +178,7 @@ EOF
 
   old_hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/old_hello.json")
   old_hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
-  assert_equal "$old_hello_locked_drv" "$old_hello_response_drv" 
+  assert_equal "$old_hello_locked_drv" "$old_hello_response_drv"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade
@@ -188,7 +186,7 @@ EOF
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$hello_locked_drv" "$hello_response_drv"
-  
+
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
 
@@ -211,7 +209,7 @@ EOF
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$hello_locked_drv" "$hello_response_drv"
   assert_output --partial "Upgraded 'hello'"
-  
+
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
 
@@ -229,7 +227,7 @@ EOF
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$hello_locked_drv" "$hello_response_drv"
-  
+
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
 
@@ -247,7 +245,7 @@ EOF
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$hello_locked_drv" "$hello_response_drv"
-  
+
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
 
@@ -261,8 +259,6 @@ EOF
 }
 
 @test "catalog: check confirmation when all packages are up to date" {
-  export FLOX_FEATURES_USE_CATALOG=true
-
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" "$FLOX_BIN" install curl hello
 

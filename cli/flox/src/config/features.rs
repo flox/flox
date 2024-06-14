@@ -10,7 +10,16 @@ pub struct Features {
     #[serde(default)]
     pub search_strategy: SearchStrategy,
     #[serde(default)]
-    pub use_catalog: bool,
+    pub use_catalog: UseCatalog,
+}
+
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, derive_more::Deref)]
+pub struct UseCatalog(bool);
+
+impl Default for UseCatalog {
+    fn default() -> Self {
+        UseCatalog(true)
+    }
 }
 
 impl Features {

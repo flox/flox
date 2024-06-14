@@ -14,7 +14,6 @@ load test_support.bash
 
 setup_file() {
   common_file_setup
-  export FLOX_FEATURES_USE_CATALOG=true
   if [ -z "${TESTING_FLOX_CATALOG_URL:-}" ]; then
     skip "TESTING_FLOX_CATALOG_URL is not set"
   fi
@@ -22,7 +21,6 @@ setup_file() {
 }
 
 teardown_file() {
-  unset FLOX_FEATURES_USE_CATALOG
   unset FLOX_CATALOG_URL
   common_file_teardown
 }

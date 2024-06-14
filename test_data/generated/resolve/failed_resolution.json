@@ -1,0 +1,16 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "General": {
+            "level": "error",
+            "msg": "AttrPath 'definitely-not-a-package' not found."
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ]
+]

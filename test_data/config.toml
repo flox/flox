@@ -1,6 +1,4 @@
 [vars]
-FLOX_FEATURES_USE_CATALOG = "true"
-
 [resolve.empty]
 # Not actually a resolve response, just have to put it somewhere
 skip_if_output_exists = "empty.json"
@@ -11,6 +9,13 @@ post_cmd = '''
     main_output_dir="$(dirname $(dirname $RESPONSE_FILE))"
     mv empty.json "$main_output_dir/empty.json"
 '''
+
+[resolve.failed_resolution]
+pre_cmd = '''
+    flox init
+'''
+cmd = "flox install definitely-not-a-package"
+ignore_cmd_errors = true
 
 [resolve.curl_hello]
 pre_cmd = "flox init"
@@ -27,6 +32,43 @@ cmd = "flox install emacs vim"
 [resolve.gzip]
 pre_cmd = "flox init"
 cmd = "flox install gzip"
+
+[resolve.glibc]
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux" ]' .flox/env/manifest.toml
+'''
+cmd = "flox install glibc"
+ignore_cmd_errors = true # build will fail on macos, thats fine
+
+[resolve.glibc_incompatible]
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux" ]' .flox/env/manifest.toml
+'''
+cmd = '''
+ tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux", "aarch64-darwin" ]' .flox/env/manifest.toml
+ flox install glibc || true
+'''
+ignore_cmd_errors = true # build will fail on macos, thats fine
+
+[resolve.darwin_ps]
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin" ]' .flox/env/manifest.toml
+'''
+cmd = "flox install darwin.ps"
+ignore_cmd_errors = true # build will fail on linux, thats fine
+
+[resolve.darwin_ps_incompatible]
+pre_cmd = '''
+    flox init
+'''
+cmd = '''
+    tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin", "aarch64-linux" ]' .flox/env/manifest.toml
+    flox install darwin.ps
+'''
+ignore_cmd_errors = true # build will fail on linux, thats fine
 
 [resolve.hello]
 pre_cmd = "flox init"

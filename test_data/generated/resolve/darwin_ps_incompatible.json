@@ -1,0 +1,16 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "General": {
+            "level": "error",
+            "msg": "AttrPath 'darwin.ps' not found for some systems, valid systems are (['aarch64-darwin', 'x86_64-darwin'])."
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ]
+]
