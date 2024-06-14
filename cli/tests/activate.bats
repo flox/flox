@@ -2007,8 +2007,8 @@ EOF
   project_setup
   FLOX_SHELL="bash" run $FLOX_BIN activate --dir "$PROJECT_DIR" -- env
   assert_success
-  refute_output "FLOX_SHELL="
-  refute_output "_flox_shell="
+  refute_output --partial "FLOX_SHELL="
+  refute_output --partial "_flox_shell="
 }
 
 # ---------------------------------------------------------------------------- #
@@ -2077,6 +2077,96 @@ EOF
   assert_equal "${lines[12]}" "Setting PATH from .zlogout"
   echo # leave a line between test outputs
 
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:nested_flox_activate_tracelevel
+@test "{bash,fish,tcsh,zsh}: confirm _flox_activate_tracelevel set in nested activation" {
+  project_setup
+
+  # The shell-specific flox init scripts finish by unsetting the
+  # _flox_activate_tracelevel environment variable, and this can
+  # cause problems for an "outer" interactive activation when there
+  # is an "inner" in-place activation happening by way of a "dotfile".
+
+  # Set up this test by creating dotfiles which perform an in-place
+  # activation, and then run an interactive activation of a second
+  # environment to confirm that _flox_activate_tracelevel is set
+  # for the outer activation.
+
+  # Each of the shell-specific dotfiles has also been updated to emit a
+  # warning if sourced without _flox_activate_tracelevel set in the
+  # environment, so we also assert that this warning is not present
+  # in any of the activation output.
+
+  # Start by adding logic to create semaphore files for all shells.
+  for i in "$HOME/.bashrc.extra" "$HOME/.config/fish/config.fish.extra" "$HOME/.tcshrc.extra" "$HOME/.zshrc.extra"; do
+    cat > "$i" <<EOF
+touch "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+test -n "\$_flox_activate_tracelevel" || touch "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+EOF
+  done
+
+  # Finish by appending shell-specific flox activation syntax.
+  for i in "$HOME/.bashrc.extra" "$HOME/.config/fish/config.fish.extra" "$HOME/.zshrc.extra"; do
+    echo "eval \"\$($FLOX_BIN activate --dir $PROJECT_DIR)\"" >> "$i"
+  done
+  echo "eval \"\`$FLOX_BIN activate --dir $PROJECT_DIR\`\"" >> "$HOME/.tcshrc.extra"
+
+  # Create a test environment.
+  _temp_env="$(mktemp -d)"
+  "$FLOX_BIN" init -d "$_temp_env"
+
+  # Activate the test environment from each shell, each of which will
+  # launch an interactive shell that sources the relevant dotfile.
+  echo "Testing bash"
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
+  assert_success
+  refute_output --partial "_flox_activate_tracelevel not defined"
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+  assert_success
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+  assert_failure
+  echo # leave a line between test outputs
+
+  echo "Testing fish"
+  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
+  assert_success
+  refute_output --partial "_flox_activate_tracelevel not defined"
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+  assert_success
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+  assert_failure
+  echo # leave a line between test outputs
+
+  echo "Testing tcsh"
+  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
+  assert_success
+  refute_output --partial "_flox_activate_tracelevel not defined"
+  cat "$HOME/.tcshrc.extra"
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+  assert_success
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+  assert_failure
+  echo # leave a line between test outputs
+
+  echo "Testing zsh"
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
+  assert_success
+  refute_output --partial "_flox_activate_tracelevel not defined"
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+  assert_success
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+  assert_failure
+  echo # leave a line between test outputs
+
+  rm -rf "$_temp_env"
+  rm \
+    "$HOME/.bashrc.extra" \
+    "$HOME/.tcshrc.extra" \
+    "$HOME/.config/fish/config.fish.extra" \
+    "$HOME/.zshrc.extra"
 }
 
 # ---------------------------------------------------------------------------- #
