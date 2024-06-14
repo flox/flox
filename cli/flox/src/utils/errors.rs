@@ -234,10 +234,14 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         // todo: enrich with path
         // raised during edit
         CoreEnvironmentError::DeserializeManifest(err) => formatdoc! {
-            "Failed to parse manifest: {err}
+            "Failed to parse manifest:
 
-            Please ensure that '.flox/env/manifest.toml' is a valid TOML file.
-        "},
+            {err}
+        ",
+            // The message adds a newline at the end,
+            // trim to make the error look better
+            err = err.message().trim()
+        },
         CoreEnvironmentError::MakeSandbox(_) => display_chain(err),
         // witin transaction, user should not see this and likely can't do anything about it
         CoreEnvironmentError::WriteLockfile(_) => display_chain(err),
