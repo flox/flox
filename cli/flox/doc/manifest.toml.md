@@ -288,6 +288,11 @@ zsh = """
     alias foo="echo bar"
     bindkey -v
 """
+fish = """
+    source $venv_dir/bin/activate.fish
+    alias foo="echo bar"
+    fish_vi_key_bindings
+"""
 ```
 
 Profile scripts are re-run for nested activations.
