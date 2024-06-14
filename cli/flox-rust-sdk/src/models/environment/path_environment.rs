@@ -36,6 +36,7 @@ use super::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     GCROOTS_DIR_NAME,
+    LIB_DIR_NAME,
     LOCKFILE_FILENAME,
 };
 use crate::data::{CanonicalPath, System};
@@ -460,6 +461,7 @@ impl PathEnvironment {
         fs::write(dot_flox_path.join(".gitignore"), formatdoc! {"
             {GCROOTS_DIR_NAME}/
             {CACHE_DIR_NAME}/
+            {LIB_DIR_NAME}/
             "})
         .map_err(EnvironmentError::WriteGitignore)?;
 
