@@ -127,22 +127,15 @@ teardown() {
 @test "'flox install' reports error when package not found" {
   export FLOX_FEATURES_USE_CATALOG=false
   "$FLOX_BIN" init
-  run "$FLOX_BIN" install not-a-package
+  run "$FLOX_BIN" install badpkg
   assert_failure
-  assert_output --partial "Could not find package not-a-package. Try 'flox search' with a broader search term."
-}
-
-@test "catalog: 'flox install' reports error when package not found" {
-  skip "will be fixed by https://github.com/flox/flox/issues/1482"
-  "$FLOX_BIN" init
-  run "$FLOX_BIN" install not-a-package
-  assert_failure
-  assert_output --partial "Could not find package not-a-package. Try 'flox search' with a broader search term."
+  assert_output --partial "Could not find package 'badpkg'. Try 'flox search' with a broader search term."
 }
 
 @test "'flox install' provides suggestions when package not found" {
   export FLOX_FEATURES_USE_CATALOG=false
   "$FLOX_BIN" init
+  # This package doesn't exist but *does* have suggestions
   run "$FLOX_BIN" install package
   assert_failure
   assert_output --partial "Here are a few other similar options:"
@@ -150,9 +143,10 @@ teardown() {
 }
 
 @test "catalog: 'flox install' provides suggestions when package not found" {
-  skip "will be fixed by https://github.com/flox/flox/issues/1482"
   "$FLOX_BIN" init
-  run "$FLOX_BIN" install package
+  # This package doesn't exist but *does* have suggestions
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/package_suggestions.json" \
+    run "$FLOX_BIN" install package
   assert_failure
   assert_output --partial "Here are a few other similar options:"
   assert_output --partial "options with 'flox search package'"
@@ -523,27 +517,74 @@ teardown() {
   assert_output --partial "'options.allow.broken = true'"
 }
 
-# bats test_tags=bats:focus
-@test "resolution message: single package not found" {
-  skip
+@test "resolution message: single package not found, without curation" {
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg.json" \
+    run "$FLOX_BIN" install badpkg
+
+  assert_failure
+  assert_output --partial "Could not find package 'badpkg'"
 }
 
-# bats test_tags=bats:focus
-@test "resolution message: multiple packages not found" {
-  skip
+@test "resolution message: multiple packages not found, without curation" {
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg1_badpkg2.json" \
+    run "$FLOX_BIN" install badpkg1 badpkg2
+
+  assert_failure
+  assert_output --partial "- Could not find package 'badpkg1'"
+  assert_output --partial "- Could not find package 'badpkg2'"
 }
 
-# bats test_tags=bats:focus
+@test "resolution message: single package not found, with curation" {
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/node_suggestions.json" \
+    run "$FLOX_BIN" install node
+
+  assert_failure
+  assert_output --partial "Could not find package 'node'"
+  assert_output --partial "Here are a few other similar options"
+  assert_output --partial "$ flox install nodejs"
+}
+
 @test "resolution message: single package not availabe on all systems" {
-  skip
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace.json" \
+    run "$FLOX_BIN" install bpftrace
+
+  assert_failure
+  assert_regex "${lines[0]}" "resolution failed: package 'bpftrace' not available for"
+  assert_regex "${lines[1]}" "aarch64-darwin"
+  assert_regex "${lines[2]}" "x86_64-darwin"
+  assert_regex "${lines[3]}" "but it is available for"
+  assert_regex "${lines[4]}" "aarch64-linux"
+  assert_regex "${lines[5]}" "x86_64-linux"
+  assert_output --partial "For more on managing system-specific packages"
 }
 
-# bats test_tags=bats:focus
 @test "resolution message: multiple packages not available on all systems" {
-  skip
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace_systemd.json" \
+    run "$FLOX_BIN" install bpftrace systemd
+
+  assert_failure
+  assert_output --partial "- package 'bpftrace' not available for"
+  assert_output --partial "- package 'systemd' not available for"
+  assert_output --partial "For more on managing system-specific packages"
 }
 
-# bats test_tags=bats:focus
 @test "resolution message: constraints too tight" {
-  skip
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_node.json" \
+    run "$FLOX_BIN" install nodejs@14.16.1
+
+  assert_failure
+  assert_output --partial "constraints for group 'toplevel' are too tight"
+  assert_output --partial "adjust version constraints"
 }

@@ -281,6 +281,7 @@ struct LockedGroup {
     page: CatalogPage,
 }
 
+/// All the resolution failures for a single resolution request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolutionFailures(pub Vec<ResolutionFailure>);
 
@@ -328,7 +329,9 @@ impl Display for ResolutionFailures {
 fn format_single_resolution_failure(failure: &ResolutionFailure, is_one_of_many: bool) -> String {
     match failure {
         ResolutionFailure::PackageNotFound { attr_path, .. } => {
-            format!("package '{attr_path}' not found")
+            // Note: you should never actually see this variant formatted *here* since
+            //       it will go through the "didyoumean" mechanism and get formatted there
+            format!("could not find package '{attr_path}'.")
         },
         ResolutionFailure::PackageUnavailableOnSomeSystems {
             attr_path,
@@ -356,7 +359,7 @@ fn format_single_resolution_failure(failure: &ResolutionFailure, is_one_of_many:
             .join("\n");
             let with_doc_link = formatdoc! {"
             {listed}
-            
+
             For more on managing system-specific packages, visit the documentation:
             https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages"};
             indent_by(extra_indent, with_doc_link)
@@ -694,11 +697,13 @@ impl LockedManifestCatalog {
             let failures = Self::collect_failures(&failed_groups, manifest);
             Some(failures)
         };
-        if failures.as_ref().is_some_and(|f| !f.is_empty()) {
-            tracing::debug!("returning resolution failure message");
-            return Err(LockedManifestError::ResolutionFailed(ResolutionFailures(
-                failures.expect("already checked that there were failures"),
-            )));
+        if let Some(failures) = failures {
+            if !failures.is_empty() {
+                tracing::debug!("returning resolution failure message");
+                return Err(LockedManifestError::ResolutionFailed(ResolutionFailures(
+                    failures,
+                )));
+            }
         }
         let locked_pkg_iter = groups
             .into_iter()
@@ -708,8 +713,10 @@ impl LockedManifestCatalog {
                     .and_then(|p| p.packages.clone())
                     .map(|pkgs| pkgs.into_iter())
                     .ok_or(LockedManifestError::ResolutionFailed(
+                        // This should be unreachable, otherwise we would have detected
+                        // it as a failure
                         ResolutionFailure::FallbackMessage {
-                            msg: "page wasn't complete".into(),
+                            msg: "catalog page wasn't complete".into(),
                         }
                         .into(),
                     ))
@@ -809,51 +816,53 @@ impl LockedManifestCatalog {
         failures
     }
 
+    /// Converts a "attr path not found" message into different resolution failures
     fn attr_path_not_found_failure(
-        inner: &MsgAttrPathNotFound,
+        r_msg: &MsgAttrPathNotFound,
         manifest: &TypedManifestCatalog,
     ) -> Option<ResolutionFailure> {
         // If we have a level and it's not an error, skip this message
-        if let Some(level) = inner.level {
+        if let Some(level) = r_msg.level {
             if level != MessageLevel::Error {
                 tracing::debug!(
                     level = level.to_string(),
-                    msg = inner.msg,
+                    msg = r_msg.msg,
                     "non-error resolution message"
                 );
                 return None;
             }
         }
-        if inner.valid_systems.is_empty() {
+        if r_msg.valid_systems.is_empty() {
             tracing::debug!(
-                attr_path = inner.attr_path,
+                attr_path = r_msg.attr_path,
                 "no valid systems for requested attr_path"
             );
             Some(ResolutionFailure::PackageNotFound {
-                install_id: inner.install_id.clone(),
-                attr_path: inner.attr_path.clone(),
+                install_id: r_msg.install_id.clone(),
+                attr_path: r_msg.attr_path.clone(),
             })
         } else {
             let (valid_systems, requested_systems) =
-                Self::determine_valid_and_requested_systems(inner, manifest)?;
+                Self::determine_valid_and_requested_systems(r_msg, manifest)?;
             let mut diff = requested_systems
                 .difference(&valid_systems)
                 .cloned()
                 .collect::<Vec<_>>();
             diff.sort();
-            let mut available = inner.valid_systems.clone();
+            let mut available = r_msg.valid_systems.clone();
             available.sort();
             Some(ResolutionFailure::PackageUnavailableOnSomeSystems {
-                install_id: inner.install_id.clone(),
-                attr_path: inner.attr_path.clone(),
+                install_id: r_msg.install_id.clone(),
+                attr_path: r_msg.attr_path.clone(),
                 invalid_systems: diff,
                 valid_systems: available,
             })
         }
     }
 
+    /// Determines which systems a package is available for and which it was requested on
     fn determine_valid_and_requested_systems(
-        inner: &MsgAttrPathNotFound,
+        r_msg: &MsgAttrPathNotFound,
         manifest: &TypedManifestCatalog,
     ) -> Option<(HashSet<System>, HashSet<System>)> {
         let default_systems = [
@@ -864,7 +873,7 @@ impl LockedManifestCatalog {
         ]
         .into_iter()
         .collect::<HashSet<_>>();
-        let valid_systems = inner
+        let valid_systems = r_msg
             .valid_systems
             .clone()
             .into_iter()
@@ -875,7 +884,7 @@ impl LockedManifestCatalog {
             .clone()
             .map(|s| s.iter().cloned().collect::<HashSet<_>>())
             .unwrap_or(default_systems);
-        let pkg_descriptor = Self::get_pkg_descriptor_for_failed_pkg(inner, manifest)?;
+        let pkg_descriptor = Self::get_pkg_descriptor_for_failed_pkg(r_msg, manifest)?;
         let pkg_systems = pkg_descriptor
             .systems
             .map(|s| s.iter().cloned().collect::<HashSet<_>>())
@@ -888,11 +897,12 @@ impl LockedManifestCatalog {
         Some((valid_systems, requested_systems))
     }
 
+    /// Looks up the package descriptor referenced by a resolution message
     fn get_pkg_descriptor_for_failed_pkg(
-        inner: &MsgAttrPathNotFound,
+        r_msg: &MsgAttrPathNotFound,
         manifest: &TypedManifestCatalog,
     ) -> Option<ManifestPackageDescriptor> {
-        if let Some(ref id) = inner.install_id {
+        if let Some(ref id) = r_msg.install_id {
             let pd = manifest.pkg_descriptor_with_id(id);
             if pd.is_some() {
                 tracing::debug!(install_id = id, "descriptor found for install_id");
@@ -905,16 +915,16 @@ impl LockedManifestCatalog {
             let pd = manifest
                 .install
                 .values()
-                .find(|pd| pd.pkg_path == inner.attr_path)
+                .find(|pd| pd.pkg_path == r_msg.attr_path)
                 .cloned();
             if pd.is_some() {
                 tracing::debug!(
-                    attr_path = inner.attr_path,
+                    attr_path = r_msg.attr_path,
                     "descriptor found for attr_path"
                 );
             } else {
                 tracing::debug!(
-                    attr_path = inner.attr_path,
+                    attr_path = r_msg.attr_path,
                     "descriptor not found for attr_path"
                 );
             }

@@ -4,10 +4,10 @@
       "msgs": [
         {
           "AttrPathNotFound": {
-            "attr_path": "surely_doesnt_exist",
+            "attr_path": "badpkg",
             "install_id": null,
             "level": "error",
-            "msg": "AttrPath 'surely_doesnt_exist' not found.",
+            "msg": "AttrPath 'badpkg' not found.",
             "valid_systems": []
           }
         }
@@ -15,5 +15,9 @@
       "name": "toplevel",
       "page": null
     }
-  ]
+  ],
+  {
+    "count": 0,
+    "results": []
+  }
 ]

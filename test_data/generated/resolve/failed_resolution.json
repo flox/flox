@@ -3,9 +3,12 @@
     {
       "msgs": [
         {
-          "General": {
+          "AttrPathNotFound": {
+            "attr_path": "definitely-not-a-package",
+            "install_id": null,
             "level": "error",
-            "msg": "AttrPath 'definitely-not-a-package' not found."
+            "msg": "AttrPath 'definitely-not-a-package' not found.",
+            "valid_systems": []
           }
         }
       ],

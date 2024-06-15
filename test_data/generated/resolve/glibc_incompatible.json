@@ -3,9 +3,15 @@
     {
       "msgs": [
         {
-          "General": {
+          "AttrPathNotFound": {
+            "attr_path": "glibc",
+            "install_id": null,
             "level": "error",
-            "msg": "AttrPath 'glibc' not found for some systems, valid systems are (['aarch64-linux', 'x86_64-linux'])."
+            "msg": "AttrPath glibc not found for some systems, valid systems are (['a', 'a', 'r', 'c', 'h', '6', '4', '-', 'l', 'i', 'n', 'u', 'x', ',', 'x', '8', '6', '_', '6', '4', '-', 'l', 'i', 'n', 'u', 'x']).",
+            "valid_systems": [
+              "aarch64-linux",
+              "x86_64-linux"
+            ]
           }
         }
       ],

@@ -22,6 +22,7 @@ pub const SUGGESTION_SEARCH_LIMIT: u8 = 3;
 /// [DidYouMean] is parameterized by a type `S`,
 /// which is used to distinguish input types for the suggestion
 /// and specific suggestion output.
+#[derive(Debug)]
 pub struct DidYouMean<'a, S> {
     searched_term: &'a str,
     curated: Option<&'static str>,
@@ -29,6 +30,7 @@ pub struct DidYouMean<'a, S> {
     _suggestion: S,
 }
 
+#[derive(Debug)]
 pub struct InstallSuggestion;
 
 impl<S> DidYouMean<'_, S> {
@@ -61,6 +63,20 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
         environment: &dyn Environment,
         term: &str,
     ) -> Result<SearchResults> {
+        match flox.catalog_client {
+            Some(ref client) => {
+                Self::suggest_searched_packages_catalog(client, term, flox.system.clone())
+            },
+            None => Self::suggest_searched_packages_pkgdb(flox, environment, term),
+        }
+    }
+
+    /// Collects installation suggestions for a given query using pkgdb
+    fn suggest_searched_packages_pkgdb(
+        flox: &Flox,
+        environment: &dyn Environment,
+        term: &str,
+    ) -> Result<SearchResults> {
         let lockfile_path = environment.lockfile_path(flox)?;
 
         // Use the global lock if we don't have a lock yet
@@ -85,6 +101,27 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
         }
         .spin()?;
 
+        Ok(results)
+    }
+
+    /// Collects installation suggestions for a given query using the catalog
+    fn suggest_searched_packages_catalog(
+        client: &Client,
+        term: &str,
+        system: String,
+    ) -> Result<SearchResults> {
+        let results = Dialog {
+            message: "Looking for alternative suggestions...",
+            help_message: None,
+            typed: Spinner::new(|| {
+                tokio::runtime::Handle::current().block_on(client.search(
+                    term,
+                    system.to_string(),
+                    NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
+                ))
+            }),
+        }
+        .spin_with_delay(Duration::from_secs(1))?;
         Ok(results)
     }
 
@@ -200,7 +237,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
     }
 
     fn suggest_searched_packages_catalog(
-        client: Client,
+        client: &Client,
         term: &str,
         system: String,
     ) -> Result<SearchResults> {
@@ -241,7 +278,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         };
 
         let search_results = if let Some(curated) = curated {
-            let res = if let Some(client) = catalog_client {
+            let res = if let Some(ref client) = catalog_client {
                 Self::suggest_searched_packages_catalog(client, curated, system)
             } else {
                 Self::suggest_searched_packages_pkgdb(curated, manifest, global_manifest, lockfile)

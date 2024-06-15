@@ -1,0 +1,58 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "AttrPathNotFound": {
+            "attr_path": "package",
+            "install_id": null,
+            "level": "error",
+            "msg": "AttrPath 'package' not found.",
+            "valid_systems": []
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ],
+  {
+    "count": 1966,
+    "results": [
+      {
+        "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "runtimeShellPackage",
+        "relPath": [
+          "runtimeShellPackage"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": null,
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "kpackage",
+        "relPath": [
+          "libsForQt5",
+          "kpackage"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": null,
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "xmonad-with-packages",
+        "relPath": [
+          "xmonad-with-packages"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      }
+    ]
+  }
+]

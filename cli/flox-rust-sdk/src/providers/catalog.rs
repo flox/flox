@@ -732,31 +732,6 @@ impl ResolutionMessage {
 
 impl From<ResolutionMessageGeneral> for ResolutionMessage {
     fn from(r_msg: ResolutionMessageGeneral) -> Self {
-        // match value {
-        //     MessagesItem::MessageGeneral(msg) => ResolutionMessage::General(MsgGeneral {
-        //         level: msg.level,
-        //         msg: msg.message,
-        //     }),
-        //     MessagesItem::AttrPathNotFound(msg) => {
-        //         ResolutionMessage::AttrPathNotFound(MsgAttrPathNotFound {
-        //             level: msg.level,
-        //             msg: msg.message,
-        //             attr_path: msg.attr_path,
-        //             install_id: msg.install_id,
-        //             valid_systems: msg
-        //                 .valid_systems
-        //                 .iter()
-        //                 .map(|s| s.to_string())
-        //                 .collect::<Vec<_>>(),
-        //         })
-        //     },
-        //     MessagesItem::ConstraintsTooTight(msg) => {
-        //         ResolutionMessage::ConstraintsTooTight(MsgConstraintsTooTight {
-        //             level: msg.level,
-        //             msg: msg.message,
-        //         })
-        //     },
-        // }
         match r_msg.type_ {
             MessageType::General => ResolutionMessage::General(MsgGeneral {
                 level: Some(r_msg.level),
@@ -769,6 +744,8 @@ impl From<ResolutionMessageGeneral> for ResolutionMessage {
             MessageType::AttrPathNotFound => {
                 let level = r_msg.level;
                 let msg = r_msg.message;
+                // Should always be present for this type of message, but that's not enforced
+                // by the type system
                 let attr_path = r_msg
                     .context
                     .get("attr_path")
@@ -790,7 +767,10 @@ impl From<ResolutionMessageGeneral> for ResolutionMessage {
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
+                // TODO: `install_id` is *supposed* to be populated, but for the moment
+                //       it's not.
                 let install_id = r_msg.context.get("install_id").cloned().and_then(|id| {
+                    // Could be present and an empty string
                     if id.is_empty() {
                         None
                     } else {

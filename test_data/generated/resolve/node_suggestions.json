@@ -1,0 +1,57 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "AttrPathNotFound": {
+            "attr_path": "node",
+            "install_id": null,
+            "level": "error",
+            "msg": "AttrPath 'node' not found.",
+            "valid_systems": []
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ],
+  {
+    "count": 42,
+    "results": [
+      {
+        "description": "Event-driven I/O framework for the V8 JavaScript engine",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "nodejs",
+        "relPath": [
+          "nodejs"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Event-driven I/O framework for the V8 JavaScript engine",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "nodejs_22",
+        "relPath": [
+          "nodejs_22"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Event-driven I/O framework for the V8 JavaScript engine",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "nodejs_21",
+        "relPath": [
+          "nodejs_21"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      }
+    ]
+  }
+]

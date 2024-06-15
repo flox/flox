@@ -29,6 +29,7 @@ use crate::models::lockfile::{
     LockedManifestError,
     LockedManifestPkgdb,
     LockedPackageCatalog,
+    ResolutionFailure,
 };
 use crate::models::manifest::{
     insert_packages,
@@ -1047,7 +1048,7 @@ pub enum CoreEnvironmentError {
 
 impl CoreEnvironmentError {
     pub fn is_incompatible_system_error(&self) -> bool {
-        matches!(
+        let is_pkgdb_incompatible_system_error = matches!(
             self,
             CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
                 CallPkgDbError::PkgDbError(PkgDbError {
@@ -1055,7 +1056,12 @@ impl CoreEnvironmentError {
                     ..
                 })
             ))
-        ) || matches!(self, CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(msg)) if msg.contains("not found for some systems"))
+        );
+        let is_catalog_incompatible_system_error = matches!(
+            self,
+            CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(failures))
+             if failures.0.iter().any(|f| matches!(f, ResolutionFailure::PackageUnavailableOnSomeSystems { .. })));
+        is_catalog_incompatible_system_error || is_pkgdb_incompatible_system_error
     }
 
     pub fn is_incompatible_package_error(&self) -> bool {
