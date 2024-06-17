@@ -19,13 +19,23 @@ activate_cuda(){
   fi
 
   LIB_DIR="$("$_coreutils/bin/realpath" --no-symlinks "$FLOX_ENV/../../lib")"
+  SYSTEM_LIB_DIR=$("$_findutils/bin/find" \
+	  /run/opengl-drivers /lib64 /lib /usr/lib64 /usr/lib /usr/local/lib64 /usr/local/lib \
+          -name libcuda.so.1 \
+	  -execdir pwd \; -quit 2>/dev/null )
+
+  if [ -z "$SYSTEM_LIB_DIR" ]; then
+    return 0
+  fi
+
   "$_coreutils/bin/mkdir" -p "$LIB_DIR"
-  for target in libcuda.so.1 libcuda.so libdxcore.so ; do
-      "$_findutils/bin/find" /run/opengl-drivers /lib /usr/lib /usr/local/lib \
-          -name "$target" \
-          -exec "$_coreutils/bin/ln" -sf {} "$LIB_DIR"/"$target" \; \
-          -quit 2>/dev/null
-  done
+  (
+    shopt -s nullglob
+    "$_coreutils/bin/ln" -sft "$LIB_DIR"/. \
+      "$SYSTEM_LIB_DIR"/libcuda*.so*   \
+      "$SYSTEM_LIB_DIR"/libnvidia*.so* \
+      "$SYSTEM_LIB_DIR"/libdxcore*.so*
+  )
   export FLOX_ENV_LIB_DIRS="$FLOX_ENV_LIB_DIRS":"$LIB_DIR"
 }
 
