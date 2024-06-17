@@ -96,7 +96,7 @@ static FLOX_DESCRIPTION: &'_ str = indoc! {"
 
 /// Manually documented commands that are to keep the help text short
 const ADDITIONAL_COMMANDS: &str = indoc! {"
-    auth, config, envs, update, upgrade
+    auth, config, envs, upgrade
 "};
 
 fn vec_len<T>(x: Vec<T>) -> usize {
