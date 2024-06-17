@@ -101,7 +101,7 @@ pub enum ManagedEnvironmentError {
     #[error("access to floxmeta repository was denied")]
     AccessDenied,
     #[error("environment '{0}' does not exist at upstream '{1}'")]
-    UpstreamNotFound(EnvironmentRef, String),
+    UpstreamNotFound(EnvironmentRef, String, Option<String>),
     #[error("failed to push environment")]
     Push(#[source] GitRemoteCommandError),
     #[error("failed to delete local environment branch")]
@@ -533,6 +533,7 @@ impl ManagedEnvironment {
                 return Err(ManagedEnvironmentError::UpstreamNotFound(
                     pointer.into(),
                     flox.floxhub.base_url().to_string(),
+                    flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
                 ))
             },
             Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
@@ -1102,12 +1103,16 @@ impl ManagedEnvironment {
             })?;
 
         // update local environment branch, should be fast-forward and a noop if the branches didn't diverge
-        self.pull(force)?;
+        self.pull(flox, force)?;
 
         Ok(())
     }
 
-    pub fn pull(&mut self, force: bool) -> Result<PullResult, ManagedEnvironmentError> {
+    pub fn pull(
+        &mut self,
+        flox: &Flox,
+        force: bool,
+    ) -> Result<PullResult, ManagedEnvironmentError> {
         let sync_branch = remote_branch_name(&self.pointer);
         let project_branch = branch_name(&self.pointer, &self.path);
 
@@ -1124,6 +1129,7 @@ impl ManagedEnvironment {
                 Err(ManagedEnvironmentError::UpstreamNotFound(
                     self.pointer.clone().into(),
                     self.pointer.floxhub_url.to_string(),
+                    flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
                 ))?
             },
             Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
