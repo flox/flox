@@ -374,7 +374,13 @@ fn format_single_resolution_failure(failure: &ResolutionFailure, is_one_of_many:
             or isolate dependencies in a new group with '<pkg>.pkg-group = \"newgroup\"'", base_msg};
             indent_by(extra_indent, msg)
         },
-        ResolutionFailure::FallbackMessage { msg } => msg.to_string(),
+        ResolutionFailure::FallbackMessage { msg } => {
+            if is_one_of_many {
+                indent_by(2, msg.to_string())
+            } else {
+                msg.to_string()
+            }
+        },
     }
 }
 
