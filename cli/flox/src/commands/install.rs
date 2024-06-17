@@ -230,7 +230,7 @@ impl Install {
 
                 let suggestion = DidYouMean::<InstallSuggestion>::new(flox, environment, &path);
                 if !suggestion.has_suggestions() {
-                    break 'error anyhow!("{head} Try 'flox search' with a broader search term.");
+                    break 'error anyhow!("{head}\nTry 'flox search' with a broader search term.");
                 }
 
                 anyhow!(formatdoc! {"
@@ -264,7 +264,7 @@ impl Install {
                         {head}
                         {suggestion}"}
                     } else {
-                        format!("{head} Try 'flox search' with a broader search term.")
+                        format!("{head}\nTry 'flox search' with a broader search term.")
                     };
                     other_failures.push(ResolutionFailure::FallbackMessage { msg });
                 }

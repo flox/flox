@@ -129,7 +129,8 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install badpkg
   assert_failure
-  assert_output --partial "Could not find package 'badpkg'. Try 'flox search' with a broader search term."
+  assert_output --partial "Could not find package 'badpkg'."
+  assert_output --partial "Try 'flox search' with a broader search term."
 }
 
 @test "'flox install' provides suggestions when package not found" {
