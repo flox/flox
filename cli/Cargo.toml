@@ -65,7 +65,7 @@ url = { version = "2.5", features = ["serde"] }
 uuid = { version = "1.2", features = ["serde", "v4"] }
 walkdir = "2"
 xdg = "2.4"
-httpmock = "0.7"
+httpmock = { version = "0.7.0", default-features = false }
 regex = "1.10"
 regress = "0.9.1"
 
