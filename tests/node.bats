@@ -26,6 +26,7 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 project_teardown() {
@@ -49,8 +50,12 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "flox activate works with npm" {
-  cp -r "$TESTS_DIR/node/single-dependency/common/." .
-  cp -r "$TESTS_DIR/node/single-dependency/npm/." .
+  export FLOX_FEATURES_USE_CATALOG=false
+  cp -r "$INPUT_DATA/init/node/common/." .
+  cp -r "$INPUT_DATA/init/node/npm/." .
+  # Files copied from the store are read-only
+  chmod -R +w .
+
   run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'nodejs' installed"
   run "$FLOX_BIN" activate -- npm run start
@@ -58,8 +63,12 @@ teardown() {
 }
 
 @test "flox activate works with yarn" {
-  cp -r "$TESTS_DIR/node/single-dependency/common/." .
-  cp -r "$TESTS_DIR/node/single-dependency/yarn/." .
+  export FLOX_FEATURES_USE_CATALOG=false
+  cp -r "$INPUT_DATA/init/node/common/." .
+  cp -r "$INPUT_DATA/init/node/yarn/." .
+  # Files copied from the store are read-only
+  chmod -R +w .
+
   run "$FLOX_BIN" init --auto-setup
   assert_output --partial "'yarn' installed"
   refute_output "nodejs"
@@ -68,6 +77,7 @@ teardown() {
 }
 
 @test "install krb5 with node" {
+  export FLOX_FEATURES_USE_CATALOG=false
   "$FLOX_BIN" init
 
   # install a bunch of dependencies needed by npm install krb5 (except for
@@ -118,6 +128,75 @@ EOF
       run ! "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/node/krb5.sh"'
 
       "$FLOX_BIN" install krb5
+
+      # TODO: fix CPATH in activate
+      "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/node/krb5.sh"'
+      ;;
+    *)
+      echo "unsupported system: $NIX_SYSTEM"
+      return 1
+      ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------- #
+# catalog tests
+
+# bats test_tags=catalog
+@test "catalog: flox activate works with npm" {
+  cp -r "$INPUT_DATA/init/node/common/." .
+  cp -r "$INPUT_DATA/init/node/npm/." .
+  # Files copied from the store are read-only
+  chmod -R +w .
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/node_npm.json" \
+    run "$FLOX_BIN" init --auto-setup
+  assert_output --partial "'nodejs' installed"
+  run "$FLOX_BIN" activate -- npm run start
+  assert_output --partial "86400000"
+}
+
+# bats test_tags=catalog
+@test "catalog: flox activate works with yarn" {
+  cp -r "$INPUT_DATA/init/node/common/." .
+  cp -r "$INPUT_DATA/init/node/yarn/." .
+  # Files copied from the store are read-only
+  chmod -R +w .
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/node_yarn.json" \
+    run "$FLOX_BIN" init --auto-setup
+  assert_output --partial "'yarn' installed"
+  refute_output "nodejs"
+  run "$FLOX_BIN" activate -- yarn run start
+  assert_output --partial "86400000"
+}
+
+# bats test_tags=catalog
+@test "catalog: install krb5 with node" {
+  "$FLOX_BIN" init
+
+  cat "$GENERATED_DATA/envs/krb5_prereqs/manifest.toml" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/krb5_prereqs/krb5_prereqs.json" "$FLOX_BIN" edit -f -
+
+  # With dependencies installed, we can now install krb5 and run system-specific
+  # checks.
+  case "$NIX_SYSTEM" in
+    *-linux)
+      # Ensure we're getting krb5 from the flox package by first checking
+      # installation fails
+      run ! "$FLOX_BIN" activate -- bash "$TESTS_DIR/init/node/krb5.sh"
+
+      _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/krb5_after_prereqs_installed.json" \
+        "$FLOX_BIN" install krb5
+
+      "$FLOX_BIN" activate -- bash "$TESTS_DIR/node/krb5.sh"
+      ;;
+    *-darwin)
+      # Ensure we're getting krb5 from the flox package by first checking
+      # installation fails
+      run ! "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/init/node/krb5.sh"'
+
+      _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/krb5_after_prereqs_installed.json" \
+          "$FLOX_BIN" install krb5
 
       # TODO: fix CPATH in activate
       "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/node/krb5.sh"'

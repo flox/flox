@@ -22,6 +22,26 @@ bash = """
   export _already_ran_profile_bash=1
 """
 
+fish = """
+  if set -q _already_ran_profile_fish
+    echo "ERROR: profile section sourced twice" >&2
+    exit 1
+  else
+    echo "sourcing profile.fish for first time" >&2
+  end
+  set -gx _already_ran_profile_fish 1
+"""
+
+tcsh = """
+  if ( $?_already_ran_profile_tcsh ) then
+    echo "ERROR: profile section sourced twice" >&2
+    exit 1
+  else
+    echo "sourcing profile.tcsh for first time" >&2
+  endif
+  setenv _already_ran_profile_tcsh 1
+"""
+
 zsh = """
   if [ -n "$_already_ran_profile_zsh" ]; then
     echo "ERROR: profile section sourced twice" >&2

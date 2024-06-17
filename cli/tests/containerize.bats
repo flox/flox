@@ -27,6 +27,11 @@ project_teardown() {
   unset PROJECT_DIR
 }
 
+env_setup_catalog() {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  env_setup
+}
+
 env_setup() {
   "$FLOX_BIN" init
   "$FLOX_BIN" edit -f "$TESTS_DIR/container/manifest.toml"
@@ -48,7 +53,6 @@ setup() {
   common_test_setup
   setup_isolated_flox
   project_setup
-  env_setup
 
   mkdir -p $HOME/.config/containers
   echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$HOME/.config/containers/policy.json"
@@ -88,6 +92,8 @@ function skip_if_linux() {
 
   skip_if_linux
 
+  "$FLOX_BIN" init
+
   run "$FLOX_BIN" containerize
   assert_failure
   assert_output --partial "'containerize' is currently only supported on linux (found macos)."
@@ -95,7 +101,28 @@ function skip_if_linux() {
 
 # bats test_tags=containerize:default-to-file
 @test "container is written to a file by default" {
+  export FLOX_FEATURES_USE_CATALOG=false
   skip_if_not_linux
+
+  env_setup
+
+  run "$FLOX_BIN" containerize
+  assert_success
+
+  assert [ -f "test-container.tar.gz" ] # <env-name>-container.tar.gz by default
+
+  run which podman
+
+  run podman load -i test-container.tar.gz
+  assert_success
+  assert_line --partial "Loaded image:"
+}
+
+# bats test_tags=containerize:default-to-file
+@test "catalog: container is written to a file by default" {
+  skip_if_not_linux
+
+  env_setup_catalog
 
   run "$FLOX_BIN" containerize
   assert_success
@@ -111,7 +138,21 @@ function skip_if_linux() {
 
 # bats test_tags=containerize:piped-to-stdout
 @test "container is written to stdout when '-o -' is passed" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
   skip_if_not_linux
+
+  env_setup
+
+  run bash -c '"$FLOX_BIN" containerize -o - | podman load'
+  assert_success
+  assert_line --partial "Loaded image:"
+}
+
+# bats test_tags=containerize:piped-to-stdout
+@test "catalog: container is written to stdout when '-o -' is passed" {
+  skip_if_not_linux
+
+  env_setup_catalog
 
   run bash -c '"$FLOX_BIN" containerize -o - | podman load'
   assert_success
@@ -120,7 +161,44 @@ function skip_if_linux() {
 
 # bats test_tags=containerize:run-container-i
 @test "container can be run with 'podman/docker run -i'" {
+  export FLOX_FEATURES_USE_CATALOG=false
   skip_if_not_linux
+
+  env_setup
+
+  CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
+  run --separate-stderr podman run -q -i "$CONTAINER_ID" -c 'echo $foo'
+  assert_success
+
+  # check:
+  # (1) if the variable `foo = bar` is set in the container
+  #   - printed to STDOUT by the container invocation
+  # (2) if the binary `hello` is present in the container
+  # (3) if the binary `hello` operates as expected
+  #   - printed to STDOUT by the on-activate hook, but then
+  #     redirected to STDERR by the flox activate script
+  assert_equal "${#lines[@]}" 1 # 1 result
+  assert_equal "${lines[0]}" "bar"
+
+  # Podman generates some errors/warnings about UIDs/GIDs due to how the rootless
+  # setup works: https://github.com/containers/podman/issues/15611
+  # Another error you may see is that the container file already exists, which is
+  # harmless and can be ignored.
+  # So, we can't rely on the *number* of stderr lines, but we know the lines we
+  # care about will be the last two lines.
+
+  n_stderr_lines="${#stderr_lines[@]}"
+  hello_line="$(($n_stderr_lines - 1))"
+  store_path_line="$(($n_stderr_lines - 2))"
+  assert_regex "${stderr_lines[$store_path_line]}" "\/nix\/store\/.*\/bin\/hello"
+  assert_equal "${stderr_lines[$hello_line]}" "Hello, world!"
+}
+
+# bats test_tags=containerize:run-container-i
+@test "catalog: container can be run with 'podman/docker run -i'" {
+  skip_if_not_linux
+
+  env_setup_catalog
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
   run --separate-stderr podman run -q -i "$CONTAINER_ID" -c 'echo $foo'
@@ -153,6 +231,36 @@ function skip_if_linux() {
 # bats test_tags=containerize:run-container-no-i
 @test "container can be run with 'podman/docker run'" {
   skip_if_not_linux
+
+  export FLOX_FEATURES_USE_CATALOG=false
+  env_setup
+
+  CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
+  run --separate-stderr podman run "$CONTAINER_ID" -c 'echo $foo'
+  assert_success
+
+  assert_equal "${#lines[@]}" 1 # 1 result
+  assert_equal "${lines[0]}" "bar"
+
+  # Podman generates some errors/warnings about UIDs/GIDs due to how the rootless
+  # setup works: https://github.com/containers/podman/issues/15611
+  # Another error you may see is that the container file already exists, which is
+  # harmless and can be ignored.
+  # So, we can't rely on the *number* of stderr lines, but we know the lines we
+  # care about will be the last two lines.
+
+  n_stderr_lines="${#stderr_lines[@]}"
+  hello_line="$(($n_stderr_lines - 1))"
+  store_path_line="$(($n_stderr_lines - 2))"
+  assert_regex "${stderr_lines[$store_path_line]}" "\/nix\/store\/.*\/bin\/hello"
+  assert_equal "${stderr_lines[$hello_line]}" "Hello, world!"
+}
+
+# bats test_tags=containerize:run-container-no-i
+@test "catalog: container can be run with 'podman/docker run'" {
+  skip_if_not_linux
+
+  env_setup_catalog
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
   run --separate-stderr podman run "$CONTAINER_ID" -c 'echo $foo'

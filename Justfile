@@ -53,11 +53,18 @@ build-cdb:
 
 # Build only flox
 @build-cli: build-pkgdb
-    pushd cli; cargo build -q
+    pushd cli; cargo build -q --workspace
+
+# Build just the data generator
+@build-data-gen:
+    pushd cli; cargo build -q -p mk_data; popd
 
 # Build the binaries
 build: build-cli
 
+# Generate test data
+gen-data +mk_data_args="": build-data-gen
+    mkdata="$PWD/cli/target/debug/mk_data"; pushd test_data; "$mkdata" {{mk_data_args}} config.toml; popd
 
 # ---------------------------------------------------------------------------- #
 
@@ -141,7 +148,11 @@ test-all: test-pkgdb impure-tests integ-tests functional-tests
 
 # Run a `flox` command using the catalog
 @catalog-flox +args="": build
-    FLOX_FEATURES_USE_CATALOG=true cli/target/debug/flox {{args}}
+    echo "just: DEPRECATED TARGET: Use 'flox' instead" >&2;
+    cli/target/debug/flox {{args}}
+
+@pkgdb-flox +args="": build
+    FLOX_FEATURES_USE_CATALOG=false cli/target/debug/flox {{args}}
 
 # Run a `pkgdb` command
 @pkgdb +args="": build-pkgdb

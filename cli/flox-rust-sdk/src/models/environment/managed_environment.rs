@@ -397,7 +397,7 @@ impl Environment for ManagedEnvironment {
             out_link_modified_at: {out_link_modified_at:?}"
         );
 
-        if pointer_lock_modified_at >= out_link_modified_at {
+        if pointer_lock_modified_at >= out_link_modified_at || !self.out_link.exists() {
             self.build(flox)?;
         }
 
@@ -1129,10 +1129,17 @@ impl ManagedEnvironment {
         }
 
         // Fetch the remote branch into sync branch
-        self.floxmeta
+        match self
+            .floxmeta
             .git
             .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}",))
-            .map_err(ManagedEnvironmentError::FetchUpdates)?;
+        {
+            Ok(_) => {},
+            Err(GitRemoteCommandError::RefNotFound(_)) => {
+                debug!("Upstream environment was deleted.")
+            },
+            Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
+        };
 
         // Check whether we can fast-forward merge the remote branch into the local branch
         // If "not" the environment has diverged.

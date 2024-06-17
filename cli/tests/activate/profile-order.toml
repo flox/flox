@@ -6,10 +6,20 @@ on-activate = """
 [profile]
 common = """
     mkdir "$HOOK_VAR-common"
-    export COMMON_VAR="common"
+    # You cannot export variables in a common language from the
+    # profile.common hook, so any "common" variables should
+    # really be instead set from hook.on-activate, but hacks
+    # like the following will work in a pinch.
+    export COMMON_VAR="common" || setenv COMMON_VAR "common"
 """
 bash = """
     mkdir "$COMMON_VAR-bash"
+"""
+fish = """
+    mkdir "$COMMON_VAR-fish"
+"""
+tcsh = """
+    mkdir "$COMMON_VAR-tcsh"
 """
 zsh = """
     mkdir "$COMMON_VAR-zsh"

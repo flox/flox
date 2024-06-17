@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
 use std::ops::{Deref, DerefMut};
-use std::process::Command;
 use std::str::FromStr;
 
 use indoc::{formatdoc, indoc};
@@ -11,7 +10,6 @@ use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Tab
 
 use super::environment::path_environment::InitCustomization;
 use crate::data::{System, Version};
-use crate::models::pkgdb::PKGDB_BIN;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub(super) const DEFAULT_PRIORITY: usize = 5;
@@ -118,14 +116,14 @@ impl RawManifest {
         } else {
             hook_table.decor_mut().set_suffix(indoc! {r#"
 
-                # on-activate = """
+                # on-activate = '''
                 #   # Set variables, create files and directories
                 #   venv_dir="$(mktemp -d)"
                 #   export venv_dir
                 #
                 #   # Perform initialization steps, e.g. create a python venv
                 #   python -m venv "$venv_dir"
-                # """"#
+                # '''"#
             });
         };
 
@@ -139,22 +137,24 @@ impl RawManifest {
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
         "#});
 
         match customization {
             InitCustomization {
                 profile_common: None,
                 profile_bash: None,
+                profile_fish: None,
+                profile_tcsh: None,
                 profile_zsh: None,
                 ..
             } => {
                 profile_table.decor_mut().set_suffix(indoc! {r#"
 
-                    # common = """
+                    # common = '''
                     #   echo "it's gettin' flox in here"
-                    # """"#
+                    # '''"#
                 });
             },
             _ => {
@@ -168,6 +168,18 @@ impl RawManifest {
                     profile_table.insert(
                         "bash",
                         toml_edit::value(indent::indent_all_by(2, profile_bash)),
+                    );
+                }
+                if let Some(profile_fish) = &customization.profile_fish {
+                    profile_table.insert(
+                        "fish",
+                        toml_edit::value(indent::indent_all_by(2, profile_fish)),
+                    );
+                }
+                if let Some(profile_tcsh) = &customization.profile_tcsh {
+                    profile_table.insert(
+                        "tcsh",
+                        toml_edit::value(indent::indent_all_by(2, profile_tcsh)),
                     );
                 }
                 if let Some(profile_zsh) = &customization.profile_zsh {
@@ -313,6 +325,7 @@ pub enum TypedManifest {
 /// Modifications should be made using the the raw functions in this module.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
 pub struct TypedManifestCatalog {
     pub(super) version: Version<1>,
     /// The packages to install in the form of a map from install_id
@@ -334,6 +347,121 @@ pub struct TypedManifestCatalog {
     pub(super) options: ManifestOptions,
 }
 
+impl TypedManifestCatalog {
+    /// Get the package descriptor with the specified install_id.
+    pub fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<ManifestPackageDescriptor> {
+        self.install.0.get(id.as_ref()).cloned()
+    }
+
+    /// Get the package descriptors in the "toplevel" group.
+    pub fn pkg_descriptors_in_toplevel_group(&self) -> Vec<(String, ManifestPackageDescriptor)> {
+        pkg_descriptors_in_toplevel_group(&self.install.0)
+    }
+
+    /// Get the package descriptors in a named group.
+    pub fn pkg_descriptors_in_named_group(
+        &self,
+        name: impl AsRef<str>,
+    ) -> Vec<(String, ManifestPackageDescriptor)> {
+        pkg_descriptors_in_named_group(name, &self.install.0)
+    }
+
+    /// Check whether the specified name is either an install_id or group name.
+    pub fn pkg_or_group_found_in_manifest(&self, name: impl AsRef<str>) -> bool {
+        pkg_or_group_found_in_manifest(name.as_ref(), &self.install.0)
+    }
+
+    /// Check whether the specified package belongs to a named group
+    /// with additional packages.
+    pub fn pkg_belongs_to_non_empty_named_group(
+        &self,
+        pkg: impl AsRef<str>,
+    ) -> Result<Option<String>, ManifestError> {
+        pkg_belongs_to_non_empty_named_group(pkg.as_ref(), &self.install.0)
+    }
+
+    /// Check whether the specified package belongs to the "toplevel" group
+    /// with additional packages.
+    pub fn pkg_belongs_to_non_empty_toplevel_group(
+        &self,
+        pkg: impl AsRef<str>,
+    ) -> Result<bool, ManifestError> {
+        pkg_belongs_to_non_empty_toplevel_group(pkg.as_ref(), &self.install.0)
+    }
+}
+
+pub(crate) fn pkg_descriptors_in_toplevel_group(
+    descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
+) -> Vec<(String, ManifestPackageDescriptor)> {
+    descriptors
+        .iter()
+        .filter(|(_, desc)| desc.pkg_group.is_none())
+        .map(|(id, desc)| (id.clone(), desc.clone()))
+        .collect::<Vec<_>>()
+}
+
+pub(crate) fn pkg_descriptors_in_named_group(
+    name: impl AsRef<str>,
+    descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
+) -> Vec<(String, ManifestPackageDescriptor)> {
+    descriptors
+        .iter()
+        .filter(|(_, desc)| {
+            desc.pkg_group
+                .as_ref()
+                .is_some_and(|n| n.as_str() == name.as_ref())
+        })
+        .map(|(id, desc)| (id.clone(), desc.clone()))
+        .collect::<Vec<_>>()
+}
+
+/// Scans the provided package descriptors to determine if the search term is a package or
+/// group in the manifest.
+
+fn pkg_or_group_found_in_manifest(
+    search_term: impl AsRef<str>,
+    descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
+) -> bool {
+    descriptors.iter().any(|(id, desc)| {
+        let search_term = search_term.as_ref();
+        (search_term == id.as_str()) || (Some(search_term) == desc.pkg_group.as_deref())
+    })
+}
+
+/// named group in the manifest with other packages.
+fn pkg_belongs_to_non_empty_named_group(
+    pkg: &str,
+    descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
+) -> Result<Option<String>, ManifestError> {
+    let descriptor = descriptors
+        .get(pkg)
+        .ok_or(ManifestError::PkgOrGroupNotFound(pkg.to_string()))?;
+    let Some(ref group) = descriptor.pkg_group else {
+        return Ok(None);
+    };
+    let pkgs = pkg_descriptors_in_named_group(group, descriptors);
+    let other_pkgs_in_group = pkgs.iter().any(|(id, _)| id != pkg);
+    if other_pkgs_in_group {
+        Ok(Some(group.clone()))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Scans the provided package descriptors to determine if the specified package belongs to
+/// the "toplevel" group with other packages.
+fn pkg_belongs_to_non_empty_toplevel_group(
+    pkg: &str,
+    descriptors: &BTreeMap<String, ManifestPackageDescriptor>,
+) -> Result<bool, ManifestError> {
+    descriptors
+        .get(pkg)
+        .ok_or(ManifestError::PkgOrGroupNotFound(pkg.to_string()))?;
+    let pkgs = pkg_descriptors_in_toplevel_group(descriptors);
+    let other_toplevel_packages_exist = pkgs.iter().any(|(id, _)| id != pkg);
+    Ok(other_toplevel_packages_exist)
+}
+
 #[derive(
     Debug,
     Clone,
@@ -350,14 +478,13 @@ pub struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct ManifestPackageDescriptor {
     pub(crate) pkg_path: String,
     pub(crate) pkg_group: Option<String>,
     pub(crate) priority: Option<usize>,
     pub(crate) version: Option<String>,
     pub(crate) systems: Option<Vec<System>>,
-    #[serde(default)]
-    pub(crate) optional: bool,
 }
 
 impl ManifestPackageDescriptor {
@@ -374,15 +501,11 @@ impl ManifestPackageDescriptor {
             pkg_path,
             pkg_group,
             version,
-            optional,
             systems: _,
             priority: _,
         } = self;
 
-        pkg_path != &other.pkg_path
-            || pkg_group != &other.pkg_group
-            || version != &other.version
-            || optional != &other.optional
+        pkg_path != &other.pkg_path || pkg_group != &other.pkg_group || version != &other.version
     }
 }
 
@@ -393,6 +516,7 @@ pub struct ManifestVariables(BTreeMap<String, String>);
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct ManifestHook {
     /// A script that is run at activation time,
     /// in a flox provided bash shell
@@ -401,6 +525,7 @@ pub struct ManifestHook {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
 pub struct ManifestProfile {
     /// When defined, this hook is run by _all_ shells upon activation
     common: Option<String>,
@@ -408,17 +533,22 @@ pub struct ManifestProfile {
     bash: Option<String>,
     /// When defined, this hook is run upon activation in a zsh shell
     zsh: Option<String>,
+    /// When defined, this hook is run upon activation in a fish shell
+    fish: Option<String>,
+    /// When defined, this hook is run upon activation in a tcsh shell
+    tcsh: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct ManifestOptions {
     /// A list of systems that each package is resolved for.
     pub(super) systems: Option<Vec<System>>,
     /// Options that control what types of packages are allowed.
     #[serde(default)]
-    allow: Allows,
+    pub allow: Allows,
     /// Options that control how semver versions are resolved.
     #[serde(default)]
     pub semver: SemverOptions,
@@ -426,19 +556,21 @@ pub struct ManifestOptions {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
 pub struct Allows {
     /// Whether to allow packages that are marked as `unfree`
-    unfree: Option<bool>,
+    pub unfree: Option<bool>,
     /// Whether to allow packages that are marked as `broken`
-    broken: Option<bool>,
+    pub broken: Option<bool>,
     /// A list of license descriptors that are allowed
     #[serde(default)]
-    licenses: Vec<String>,
+    pub licenses: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct SemverOptions {
     /// Whether to allow pre-release versions when resolving
     #[serde(default)]
@@ -471,6 +603,8 @@ pub enum ManifestError {
     /// FIXME: This is a temporary error variant until `flox` parses descriptors on its own
     #[error("failed while calling pkgdb")]
     PkgDbCall(#[source] std::io::Error),
+    #[error("no package or group named '{0}' in the manifest")]
+    PkgOrGroupNotFound(String),
 }
 
 /// A subset of the manifest used to check what type of edits users make. We
@@ -482,13 +616,10 @@ pub enum ManifestError {
 pub struct TypedManifestPkgdb {
     pub vars: Option<toml::Table>,
     pub hook: Option<toml::Table>,
+    pub profile: Option<toml::Table>,
     #[serde(flatten)]
     _toml: toml::Table,
 }
-
-/// An alias to the Pkgdb backed Maifest Schema for backwards compatibility.
-/// TODO: remove this as part of <https://github.com/flox/flox/issues/1320>
-pub type Manifest = TypedManifestPkgdb;
 
 /// An error encountered while installing packages.
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -533,14 +664,89 @@ pub struct PackageToInstall {
     pub id: String,
     pub pkg_path: String,
     pub version: Option<String>,
-    pub input: Option<String>,
 }
 
 impl FromStr for PackageToInstall {
     type Err = ManifestError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        temporary_parse_descriptor(s)
+    /// Parse a shorthand descriptor into `install_id`, `attribute_path` and `version`.
+    ///
+    /// A shorthand descriptor consists of a package name and an optional version.
+    /// The attribute path is a dot-separated path to a package in the catalog.
+    /// The last component of the attribute path is the `install_id`.
+    ///
+    /// The descriptor is parsed as follows:
+    /// ```text
+    ///     descriptor ::= <attribute_path>[@<version>]
+    ///
+    ///     attribute_path ::= <install_id> | <attribute_path_rest>.<install_id>
+    ///     attribute_path_rest ::= <identifier> | <attribute_path_rest>.<identifier>
+    ///     install_id ::= <identifier>
+    ///
+    ///     version ::= <string> # interpreted as semver or plain version by the resolver
+    /// ```
+    /// Todo: this does currently _not_ handle any more pathological cases like
+    ///  - `@` in the version string (the last `@` is the delimiter)
+    fn from_str(descriptor: &str) -> Result<Self, ManifestError> {
+        let (attr_path, version) = match descriptor.split_once('@') {
+            Some((attr_path, version)) if !version.is_empty() => {
+                (attr_path.to_string(), Some(version.to_string()))
+            },
+            Some(_) => {
+                return Err(ManifestError::MalformedStringDescriptor {
+                    msg: indoc! {"
+                        Expected version requrement after '@'.
+                        Try adding quotes around the argument."}
+                    .to_string(),
+                    desc: descriptor.to_string(),
+                })
+            },
+            None => (descriptor.to_string(), None),
+        };
+
+        let install_id = {
+            let mut install_id = None;
+            let mut cur = String::new();
+
+            let mut start_quote = None;
+
+            for (n, c) in attr_path.chars().enumerate() {
+                match c {
+                    '.' if start_quote.is_none() => {
+                        let _ = install_id.insert(std::mem::take(&mut cur));
+                    },
+                    '"' if start_quote.is_some() => start_quote = None,
+                    '"' if start_quote.is_none() => start_quote = Some(n),
+                    other => cur.push(other),
+                }
+            }
+
+            if start_quote.is_some() {
+                return Err(ManifestError::MalformedStringDescriptor {
+                    msg: "unclosed quote".to_string(),
+                    desc: descriptor.to_string(),
+                });
+            }
+
+            if !cur.is_empty() {
+                let _ = install_id.insert(cur);
+            }
+
+            if install_id.is_none() {
+                return Err(ManifestError::MalformedStringDescriptor {
+                    msg: "attribute path is empty".to_string(),
+                    desc: descriptor.to_string(),
+                });
+            }
+
+            install_id.unwrap()
+        };
+
+        Ok(Self {
+            id: install_id,
+            pkg_path: attr_path,
+            version,
+        })
     }
 }
 
@@ -549,9 +755,6 @@ impl From<&PackageToInstall> for Vec<(&'static str, String)> {
         let mut vec = vec![("pkg-path", val.pkg_path.clone())];
         if let Some(version) = &val.version {
             vec.push(("version", version.clone()));
-        }
-        if let Some(input) = &val.input {
-            vec.push(("input", input.clone()));
         }
         vec
     }
@@ -579,8 +782,6 @@ pub fn insert_packages(
         .parse::<RawManifest>()
         .map_err(TomlEditError::ParseManifest)?;
 
-    let manifest_version = manifest.get_version();
-
     let mut toml = manifest.0;
 
     let install_table = {
@@ -603,16 +804,6 @@ pub fn insert_packages(
             );
             if let Some(ref version) = pkg.version {
                 descriptor_table.insert("version", Value::String(Formatted::new(version.clone())));
-            }
-            if let Some(ref input) = pkg.input {
-                // TODO: drop input from `PackageToInstall` when removing support for v0 manifests
-                if let Some(1) = manifest_version {
-                    Err(TomlEditError::UnsupportedAttributeV1(format!(
-                        "{}.input",
-                        pkg.id
-                    )))?;
-                }
-                descriptor_table.insert("input", Value::String(Formatted::new(input.clone())));
             }
             descriptor_table.set_dotted(true);
             install_table.insert(&pkg.id, Item::Value(Value::InlineTable(descriptor_table)));
@@ -734,90 +925,6 @@ pub fn add_system(toml: &str, system: &str) -> Result<DocumentMut, TomlEditError
     Ok(doc)
 }
 
-/// A parsed descriptor from `pkgdb parse descriptor --manifest`
-///
-/// FIXME: this is currently a hack using a tool in `pkgdb` only meant for debugging.
-#[derive(Debug, Deserialize)]
-pub struct ParsedDescriptor {
-    pub name: Option<String>,
-    #[serde(rename = "pkg-path")]
-    pub pkg_path: Option<Vec<String>>,
-    pub input: Option<Input>,
-    pub version: Option<String>,
-    pub semver: Option<String>,
-}
-
-/// A parsed input
-///
-/// FIXME: this is currently a hack using a tool in `pkgdb` only meant for debugging.
-#[derive(Debug, Deserialize, PartialEq)]
-pub struct Input {
-    pub id: String,
-}
-
-/// Parse a shorthand descriptor into structured data
-///
-/// FIXME: this is currently a hack using a tool in `pkgdb` only meant for debugging.
-pub fn temporary_parse_descriptor(descriptor: &str) -> Result<PackageToInstall, ManifestError> {
-    let output = Command::new(&*PKGDB_BIN)
-        .arg("parse")
-        .arg("descriptor")
-        .arg("--to")
-        .arg("manifest")
-        .arg(descriptor)
-        .output()
-        .map_err(ManifestError::PkgDbCall)?;
-    let parsed: Result<ParsedDescriptor, _> = serde_json::from_slice(&output.stdout);
-    if let Ok(parsed) = parsed {
-        let (id, path) = if let Some(mut path) = parsed.pkg_path {
-            // Quote any path components that need quoting
-            path.iter_mut().for_each(|attr| {
-                if attr.contains('.') || attr.contains('"') {
-                    *attr = format!("\"{}\"", attr);
-                }
-            });
-            let id_part = path.last().cloned().map(Ok).unwrap_or_else(|| {
-                Err(ManifestError::MalformedStringDescriptor {
-                    msg: "descriptor had an empty path".to_string(),
-                    desc: descriptor.to_string(),
-                })
-            })?;
-            (id_part, path.join("."))
-        } else if let Some(name) = parsed.name {
-            (name.clone(), name)
-        } else {
-            // This should have been caught by `pkgdb parse descriptor`,
-            // it's more likely that if we hit this we got unexpected output
-            // that we didn't know how to parse. It's possible, but unlikely,
-            // and something ignored for the sake of time when we can write
-            // a parser in `flox` instead of leaning on `pkgdb` debugging tools.
-            return Err(ManifestError::MalformedStringDescriptor {
-                msg: "descriptor had no name or path".to_string(),
-                desc: descriptor.to_string(),
-            });
-        };
-        let version = if let Some(version) = parsed.version {
-            let mut v = "=".to_string();
-            v.push_str(&version);
-            Some(v)
-        } else {
-            parsed.semver
-        };
-        let input = parsed.input.map(|input| input.id);
-        Ok(PackageToInstall {
-            id,
-            pkg_path: path,
-            version,
-            input,
-        })
-    } else {
-        Err(ManifestError::MalformedStringDescriptor {
-            msg: String::from_utf8_lossy(&output.stdout).to_string(),
-            desc: descriptor.to_string(),
-        })
-    }
-}
-
 #[cfg(test)]
 pub(super) mod test {
     use pretty_assertions::assert_eq;
@@ -857,12 +964,51 @@ pub(super) mod test {
     }
 
     #[test]
+    fn catalog_manifest_rejects_unknown_fields() {
+        let manifest = formatdoc! {"
+            {CATALOG_MANIFEST}
+
+            unknown = 'field'
+        "};
+
+        let err = toml_edit::de::from_str::<TypedManifest>(&manifest)
+            .expect_err("manifest.toml should be invalid");
+
+        assert!(
+            err.message()
+                .starts_with("unknown field `unknown`, expected one of"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn catalog_manifest_rejects_unknown_nested_fields() {
+        let manifest = formatdoc! {"
+            {CATALOG_MANIFEST}
+
+            [options]
+            allow.unknown = true
+        "};
+
+        let err = toml_edit::de::from_str::<TypedManifest>(&manifest)
+            .expect_err("manifest.toml should be invalid");
+
+        assert!(
+            err.message()
+                .starts_with("unknown field `unknown`, expected one of"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
     fn create_documented_manifest_not_customized() {
         let systems = [];
         let customization = InitCustomization {
             hook_on_activate: None,
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: None,
         };
@@ -893,24 +1039,24 @@ pub(super) mod test {
             # be inherited by `[profile]` scripts defined below. Note that any stdout
             # generated by the script will be redirected to stderr.
             [hook]
-            # on-activate = """
+            # on-activate = '''
             #   # Set variables, create files and directories
             #   venv_dir="$(mktemp -d)"
             #   export venv_dir
             #
             #   # Perform initialization steps, e.g. create a python venv
             #   python -m venv "$venv_dir"
-            # """
+            # '''
 
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
-            # common = """
+            # common = '''
             #   echo "it's gettin' flox in here"
-            # """
+            # '''
 
             # Additional options can be set in the `[options]` section. Refer to
             # manifest.toml(5) for a list of available options.
@@ -929,6 +1075,8 @@ pub(super) mod test {
             hook_on_activate: None,
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: Some(vec![]),
         };
@@ -960,24 +1108,24 @@ pub(super) mod test {
             # be inherited by `[profile]` scripts defined below. Note that any stdout
             # generated by the script will be redirected to stderr.
             [hook]
-            # on-activate = """
+            # on-activate = '''
             #   # Set variables, create files and directories
             #   venv_dir="$(mktemp -d)"
             #   export venv_dir
             #
             #   # Perform initialization steps, e.g. create a python venv
             #   python -m venv "$venv_dir"
-            # """
+            # '''
 
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
-            # common = """
+            # common = '''
             #   echo "it's gettin' flox in here"
-            # """
+            # '''
 
             # Additional options can be set in the `[options]` section. Refer to
             # manifest.toml(5) for a list of available options.
@@ -996,12 +1144,13 @@ pub(super) mod test {
             hook_on_activate: None,
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: Some(vec![PackageToInstall {
                 id: "python3".to_string(),
                 pkg_path: "python3".to_string(),
                 version: Some("3.11.6".to_string()),
-                input: None,
             }]),
         };
 
@@ -1030,24 +1179,24 @@ pub(super) mod test {
             # be inherited by `[profile]` scripts defined below. Note that any stdout
             # generated by the script will be redirected to stderr.
             [hook]
-            # on-activate = """
+            # on-activate = '''
             #   # Set variables, create files and directories
             #   venv_dir="$(mktemp -d)"
             #   export venv_dir
             #
             #   # Perform initialization steps, e.g. create a python venv
             #   python -m venv "$venv_dir"
-            # """
+            # '''
 
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
-            # common = """
+            # common = '''
             #   echo "it's gettin' flox in here"
-            # """
+            # '''
 
             # Additional options can be set in the `[options]` section. Refer to
             # manifest.toml(5) for a list of available options.
@@ -1075,6 +1224,8 @@ pub(super) mod test {
             ),
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: None,
         };
@@ -1105,23 +1256,23 @@ pub(super) mod test {
             # be inherited by `[profile]` scripts defined below. Note that any stdout
             # generated by the script will be redirected to stderr.
             [hook]
-            on-activate = """
+            on-activate = '''
               # Print something
-              echo \"hello world\"
+              echo "hello world"
 
               # Set a environment variable
-              $FOO=\"bar\"
-            """
+              $FOO="bar"
+            '''
 
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
-            # common = """
+            # common = '''
             #   echo "it's gettin' flox in here"
-            # """
+            # '''
 
             # Additional options can be set in the `[options]` section. Refer to
             # manifest.toml(5) for a list of available options.
@@ -1145,6 +1296,8 @@ pub(super) mod test {
                 .to_string(),
             ),
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: None,
         };
@@ -1175,24 +1328,24 @@ pub(super) mod test {
             # be inherited by `[profile]` scripts defined below. Note that any stdout
             # generated by the script will be redirected to stderr.
             [hook]
-            # on-activate = """
+            # on-activate = '''
             #   # Set variables, create files and directories
             #   venv_dir="$(mktemp -d)"
             #   export venv_dir
             #
             #   # Perform initialization steps, e.g. create a python venv
             #   python -m venv "$venv_dir"
-            # """
+            # '''
 
             # Scripts defined in the `[profile]` section are *sourced* by *your shell* and
             # inherit environment variables set in the `[vars]` section and by `[hook]` scripts.
             # The `profile.common` script is sourced by all shells and special care should be
-            # taken to ensure compatibility with all shells. The `profile.bash` and `profile.zsh`
-            # scripts are then sourced by the corresponding shell.
+            # taken to ensure compatibility with all shells, after which exactly one of
+            # `profile.{bash,fish,tcsh,zsh}` is sourced by the corresponding shell.
             [profile]
-            common = """
-              echo \"Hello from Flox\"
-            """
+            common = '''
+              echo "Hello from Flox"
+            '''
 
             # Additional options can be set in the `[options]` section. Refer to
             # manifest.toml(5) for a list of available options.
@@ -1337,45 +1490,35 @@ pub(super) mod test {
     }
 
     #[test]
-    fn insert_into_v1_throws_error_with_input() {
-        let test_packages = temporary_parse_descriptor("nixpkgs:foo.bar@=1.2.3").unwrap();
-        let attempted_insertion = insert_packages(CATALOG_MANIFEST, &[test_packages]);
-        assert_eq!(
-            attempted_insertion.expect_err("insertion should fail"),
-            TomlEditError::UnsupportedAttributeV1("bar.input".to_string())
-        )
-    }
-
-    #[test]
     fn parses_string_descriptor() {
-        // FIXME: remove or update this test when `flox` can parse descriptors on its own
-        let parsed = temporary_parse_descriptor("hello").unwrap();
+        let parsed: PackageToInstall = "hello".parse().unwrap();
         assert_eq!(parsed, PackageToInstall {
             id: "hello".to_string(),
             pkg_path: "hello".to_string(),
             version: None,
-            input: None,
         });
-        let parsed = temporary_parse_descriptor("nixpkgs:foo.bar@=1.2.3").unwrap();
+        let parsed: PackageToInstall = "foo.bar@=1.2.3".parse().unwrap();
         assert_eq!(parsed, PackageToInstall {
             id: "bar".to_string(),
             pkg_path: "foo.bar".to_string(),
             version: Some("=1.2.3".to_string()),
-            input: Some("nixpkgs".to_string())
         });
-        let parsed = temporary_parse_descriptor("nixpkgs:foo.bar@23.11").unwrap();
+        let parsed: PackageToInstall = "foo.bar@23.11".parse().unwrap();
         assert_eq!(parsed, PackageToInstall {
             id: "bar".to_string(),
             pkg_path: "foo.bar".to_string(),
             version: Some("23.11".to_string()),
-            input: Some("nixpkgs".to_string())
         });
-        let parsed = temporary_parse_descriptor("nixpkgs:rubyPackages.\"http_parser.rb\"").unwrap();
+        let parsed: PackageToInstall = "rubyPackages.\"http_parser.rb\"".parse().unwrap();
         assert_eq!(parsed, PackageToInstall {
-            id: "\"http_parser.rb\"".to_string(),
+            id: "http_parser.rb".to_string(),
             pkg_path: "rubyPackages.\"http_parser.rb\"".to_string(),
             version: None,
-            input: Some("nixpkgs".to_string())
         });
+
+        PackageToInstall::from_str("foo.\"bar.baz.qux@1.2.3")
+            .expect_err("missing closing quote should cause failure");
+        PackageToInstall::from_str("@1.2.3").expect_err("missing attrpath should cause failure");
+        PackageToInstall::from_str("foo@").expect_err("missing version should cause failure");
     }
 }

@@ -42,6 +42,9 @@ async fn run(args: FloxArgs) -> Result<()> {
 }
 
 fn main() -> ExitCode {
+    // Avoid SIGPIPE from killing the process
+    reset_sigpipe();
+
     // initialize logger with "best guess" defaults
     // updating the logger conf is cheap, so we reinitialize whenever we get more information
     init_logger(None);
@@ -206,4 +209,13 @@ fn set_user() -> Result<()> {
 fn set_parent_process_id() {
     let ppid = nix::unistd::getppid();
     env::set_var("FLOX_PARENT_PID", ppid.to_string());
+}
+
+/// Avoid SIGPIPE from killing the process
+///
+/// SECURITY: This is safe because we are setting the signal handler to the default
+fn reset_sigpipe() {
+    unsafe {
+        nix::libc::signal(nix::libc::SIGPIPE, nix::libc::SIG_DFL);
+    }
 }

@@ -19,6 +19,7 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" > /dev/null || return
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 project_teardown() {
@@ -43,7 +44,6 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "c2: flox init without a name should create an environment named the same as the directory the user is in" {
-
   run "$FLOX_BIN" init
   assert_success
 
@@ -170,22 +170,54 @@ EOF
   assert_line "run/"
 }
 
-@test "'flox init' injects current system" {
-  "$FLOX_BIN" init
-  init_system=$(tomlq -r '.options.systems[0]' .flox/env/manifest.toml)
-  assert_equal "$init_system" "$NIX_SYSTEM"
-}
-
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=init:python:requirements
 @test "'flox init' sets up a working Python environment that works across all methods of activate" {
+  export FLOX_FEATURES_USE_CATALOG=false
   OWNER="owner"
   NAME="name"
 
   echo "requests" > requirements.txt
 
   "$FLOX_BIN" init --auto-setup --name "$NAME"
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=fish "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=tcsh "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
+
+  floxhub_setup "$OWNER"
+
+  "$FLOX_BIN" push --owner "$OWNER"
+
+  "$FLOX_BIN" delete -f
+
+  "$FLOX_BIN" pull "$OWNER/$NAME"
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=fish "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=tcsh "$FLOX_BIN" activate -- python -c "import requests"
+  FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
+
+  "$FLOX_BIN" delete -f
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
+  FLOX_SHELL=fish "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
+  FLOX_SHELL=tcsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
+  FLOX_SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=init:python:requirements
+@test "catalog: 'flox init' sets up a working Python environment that works across all methods of activate" {
+  OWNER="owner"
+  NAME="name"
+
+  echo "requests" > requirements.txt
+
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requests.json"
+  "$FLOX_BIN" init --auto-setup --name "$NAME"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 
   FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
   FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
@@ -205,6 +237,13 @@ EOF
 
   FLOX_SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
   FLOX_SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
+}
+
+# bats test_tags=init:catalog
+@test "catalog: init creates manifest with all 4 systems" {
+  "$FLOX_BIN" init
+  systems=$(tomlq -r -c '.options.systems' .flox/env/manifest.toml)
+  assert_equal "$systems" '["aarch64-darwin","aarch64-linux","x86_64-darwin","x86_64-linux"]'
 }
 
 # ---------------------------------------------------------------------------- #

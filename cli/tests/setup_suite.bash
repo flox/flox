@@ -115,6 +115,7 @@ reals_setup() {
     print_var REAL_XDG_DATA_HOME
     print_var REAL_XDG_STATE_HOME
     print_var TESTS_DIR
+    print_var GENERATED_DATA
   } >&3
 }
 
@@ -179,6 +180,7 @@ misc_vars_setup() {
 flox_cli_vars_setup() {
   unset FLOX_PROMPT_ENVIRONMENTS _FLOX_ACTIVE_ENVIRONMENTS
   export FLOX_DISABLE_METRICS='true'
+  unset FLOX_FEATURES_USE_CATALOG
 }
 
 # ---------------------------------------------------------------------------- #

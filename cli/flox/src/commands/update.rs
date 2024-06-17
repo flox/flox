@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::UpdateResult;
@@ -10,7 +10,7 @@ use super::{environment_select, ConcreteEnvironment, EnvironmentSelect};
 use crate::commands::environment_description;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
-use crate::utils::message;
+use crate::utils::message::{self};
 
 #[derive(Debug, Bpaf, Clone)]
 pub enum EnvironmentOrGlobalSelect {
@@ -39,6 +39,10 @@ pub struct Update {
 impl Update {
     #[instrument(name = "update", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
+        if flox.catalog_client.is_some() {
+            bail!("'flox update' has been removed.\n\nTo upgrade packages, run 'flox upgrade'. See flox-upgrade(1) for more.");
+        }
+
         subcommand_metric!("update");
 
         let (old_lockfile, new_lockfile, global, description) = match self.environment_or_global {

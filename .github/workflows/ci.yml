@@ -66,9 +66,6 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -121,9 +118,6 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -188,9 +182,6 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -212,7 +203,7 @@ jobs:
             echo "Building $package ..."
             git clean -xfd .
             if nix path-info                 \
-                --store "$FLOX_SUBSTITUTER"  \
+                --store "$CONFIGURE_NIX_SUBSTITUTER"  \
                 --eval-store auto            \
                 --builders ''                \
                 -j0                          \
@@ -319,9 +310,6 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -356,7 +344,7 @@ jobs:
               --no-update-lock-file \
               --print-out-paths \
               '.#packages.${{ matrix.system }}.flox-cli-tests'
-          nix copy --to "$FLOX_SUBSTITUTER" ./result
+          nix copy --extra-experimental-features 'nix-command' --to "$CONFIGURE_NIX_SUBSTITUTER" ./result
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         run: |

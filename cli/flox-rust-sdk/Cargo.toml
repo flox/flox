@@ -39,6 +39,7 @@ walkdir.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
+httpmock.workspace = true
 pretty_assertions.workspace = true
 proptest.workspace = true
 proptest-derive.workspace = true

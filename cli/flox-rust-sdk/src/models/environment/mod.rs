@@ -15,7 +15,7 @@ use super::container_builder::ContainerBuilder;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::{LockedManifest, LockedManifestPkgdb};
-use super::manifest::PackageToInstall;
+use super::manifest::{ManifestError, PackageToInstall};
 use super::pkgdb::UpgradeResult;
 use crate::data::{CanonicalPath, CanonicalizeError, Version};
 use crate::flox::{Flox, Floxhub};
@@ -51,6 +51,7 @@ pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
+pub const LIB_DIR_NAME: &str = "lib";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 
@@ -464,6 +465,14 @@ pub enum EnvironmentError {
 
     #[error("failed to access the environment registry")]
     Registry(#[from] EnvRegistryError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum UpgradeError {
+    #[error(transparent)]
+    PkgNotFound(#[from] ManifestError),
+    #[error("'{pkg}' is a package in the group '{group}' with multiple packages")]
+    NonEmptyNamedGroup { pkg: String, group: String },
 }
 
 /// Copy a whole directory recursively ignoring the original permissions

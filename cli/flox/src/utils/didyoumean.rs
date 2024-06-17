@@ -1,11 +1,13 @@
 use std::fmt::Display;
 use std::num::NonZeroU8;
+use std::time::Duration;
 
 use anyhow::Result;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{global_manifest_path, Environment};
 use flox_rust_sdk::models::lockfile::LockedManifestPkgdb;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, SearchResults};
+use flox_rust_sdk::providers::catalog::{Client, ClientTrait};
 use log::debug;
 
 use super::search::{DisplayItems, DisplaySearchResults};
@@ -170,7 +172,10 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         Some(suggestion)
     }
 
-    fn suggest_searched_packages(
+    /// `search` may run without a (local) manifest,
+    /// but still needs to be able to suggest search results
+    /// based on an existing (global) manifest/lockfile.
+    fn suggest_searched_packages_pkgdb(
         term: &str,
         manifest: Option<PathOrJson>,
         global_manifest: PathOrJson,
@@ -194,18 +199,36 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         Ok(results)
     }
 
+    fn suggest_searched_packages_catalog(
+        client: Client,
+        term: &str,
+        system: String,
+    ) -> Result<SearchResults> {
+        let results = Dialog {
+            message: "Looking for alternative suggestions...",
+            help_message: None,
+            typed: Spinner::new(|| {
+                tokio::runtime::Handle::current().block_on(client.search(
+                    term,
+                    system.to_string(),
+                    NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
+                ))
+            }),
+        }
+        .spin_with_delay(Duration::from_secs(1))?;
+        Ok(results)
+    }
+
     /// Create a new [DidYouMean] instance for the given search term.
     ///
     /// This will attempt to find curated suggestions for the given term,
-    /// and then query `pkgdb` for related search results.
+    /// and then query for related search results.
     /// Either of these may fail, in which case we will return with empty [SearchResults]
     /// and log the error.
-    ///
-    /// `search` may run without a (local) manifest,
-    /// but still needs to be able to suggest search results
-    /// based on an existing (global) manifest/lockfile.
     pub fn new(
         term: &'a str,
+        catalog_client: Option<Client>,
+        system: String,
         manifest: Option<PathOrJson>,
         global_manifest: PathOrJson,
         lockfile: PathOrJson,
@@ -218,7 +241,12 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         };
 
         let search_results = if let Some(curated) = curated {
-            match Self::suggest_searched_packages(curated, manifest, global_manifest, lockfile) {
+            let res = if let Some(client) = catalog_client {
+                Self::suggest_searched_packages_catalog(client, curated, system)
+            } else {
+                Self::suggest_searched_packages_pkgdb(curated, manifest, global_manifest, lockfile)
+            };
+            match res {
                 Ok(results) => results,
                 Err(err) => {
                     debug!("failed to search for suggestions: {}", err);

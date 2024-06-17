@@ -4,6 +4,8 @@
   stdenv,
   lib,
   bashInteractive,
+  fish,
+  tcsh,
   zsh,
   dash,
   bats,
@@ -27,6 +29,8 @@
   unixtools,
   which,
   writeShellScriptBin,
+  GENERATED_DATA ? ./../../test_data/generated,
+  INPUT_DATA ? ./../../test_data/input_data,
   PROJECT_NAME ? "flox-tests",
   PROJECT_TESTS_DIR ? ./../../tests,
   NIX_BIN ? "${nix}/bin/nix",
@@ -43,6 +47,8 @@
   paths =
     [
       bashInteractive
+      fish
+      tcsh
       zsh
       dash
       batsWith
@@ -84,6 +90,10 @@ in
   writeShellScriptBin PROJECT_NAME ''
     set -eu;
     set -o pipefail;
+
+    # Set the test data location
+    export GENERATED_DATA='${GENERATED_DATA}'
+    export INPUT_DATA='${INPUT_DATA}'
 
     # Find root of the subproject if not specified
     PROJECT_TESTS_DIR='${PROJECT_TESTS_DIR}';

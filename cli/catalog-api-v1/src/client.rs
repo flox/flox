@@ -62,7 +62,6 @@ pub mod types {
     ///      "rev": "xyz",
     ///      "rev_count": 4,
     ///      "rev_date": 0,
-    ///      "search_string": "curl^curl^my description",
     ///      "stabilities": [
     ///        "stable",
     ///        "unstable"
@@ -73,10 +72,33 @@ pub mod types {
     ///  ],
     ///  "type": "object",
     ///  "required": [
+    ///    "complete",
+    ///    "messages",
     ///    "page",
     ///    "url"
     ///  ],
     ///  "properties": {
+    ///    "complete": {
+    ///      "title": "Complete",
+    ///      "type": "boolean"
+    ///    },
+    ///    "messages": {
+    ///      "title": "Messages",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "oneOf": [
+    ///          {
+    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral"
+    ///          },
+    ///          {
+    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
+    ///          },
+    ///          {
+    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
+    ///          }
+    ///        ]
+    ///      }
+    ///    },
     ///    "packages": {
     ///      "title": "Packages",
     ///      "type": [
@@ -101,6 +123,8 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct CatalogPageInput {
+        pub complete: bool,
+        pub messages: Vec<MessagesItem>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub packages: Option<Vec<ResolvedPackageDescriptor>>,
         pub page: i64,
@@ -131,7 +155,6 @@ pub mod types {
     ///      "rev": "xyz",
     ///      "rev_count": 4,
     ///      "rev_date": 0,
-    ///      "search_string": "curl^curl^my description",
     ///      "stabilities": [
     ///        "stable",
     ///        "unstable"
@@ -142,10 +165,33 @@ pub mod types {
     ///  ],
     ///  "type": "object",
     ///  "required": [
+    ///    "complete",
+    ///    "messages",
     ///    "page",
     ///    "url"
     ///  ],
     ///  "properties": {
+    ///    "complete": {
+    ///      "title": "Complete",
+    ///      "type": "boolean"
+    ///    },
+    ///    "messages": {
+    ///      "title": "Messages",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "oneOf": [
+    ///          {
+    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral"
+    ///          },
+    ///          {
+    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
+    ///          },
+    ///          {
+    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
+    ///          }
+    ///        ]
+    ///      }
+    ///    },
     ///    "packages": {
     ///      "title": "Packages",
     ///      "type": [
@@ -170,6 +216,8 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct CatalogPageOutput {
+        pub complete: bool,
+        pub messages: Vec<MessagesItem>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub packages: Option<Vec<ResolvedPackageDescriptor>>,
         pub page: i64,
@@ -197,7 +245,8 @@ pub mod types {
     ///    "pages_ct",
     ///    "schema_version",
     ///    "search_index_ct",
-    ///    "systems"
+    ///    "systems",
+    ///    "tags"
     ///  ],
     ///  "properties": {
     ///    "attribute_path_ct": {
@@ -243,6 +292,16 @@ pub mod types {
     ///      "items": {
     ///        "type": "string"
     ///      }
+    ///    },
+    ///    "tags": {
+    ///      "title": "Tags",
+    ///      "type": "object",
+    ///      "additionalProperties": {
+    ///        "type": "array",
+    ///        "items": {
+    ///          "type": "string"
+    ///        }
+    ///      }
     ///    }
     ///  }
     ///}
@@ -259,6 +318,7 @@ pub mod types {
         pub schema_version: f64,
         pub search_index_ct: i64,
         pub systems: Vec<String>,
+        pub tags: std::collections::HashMap<String, Vec<String>>,
     }
     impl From<&CatalogStatus> for CatalogStatus {
         fn from(value: &CatalogStatus) -> Self {
@@ -292,6 +352,221 @@ pub mod types {
     impl From<&ErrorResponse> for ErrorResponse {
         fn from(value: &ErrorResponse) -> Self {
             value.clone()
+        }
+    }
+    ///MessageLevel
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "MessageLevel",
+    ///  "type": "string",
+    ///  "enum": [
+    ///    "trace",
+    ///    "info",
+    ///    "warning",
+    ///    "error"
+    ///  ]
+    ///}
+    /// ```
+    /// </details>
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        Deserialize,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd,
+        Serialize
+    )]
+    pub enum MessageLevel {
+        #[serde(rename = "trace")]
+        Trace,
+        #[serde(rename = "info")]
+        Info,
+        #[serde(rename = "warning")]
+        Warning,
+        #[serde(rename = "error")]
+        Error,
+    }
+    impl From<&MessageLevel> for MessageLevel {
+        fn from(value: &MessageLevel) -> Self {
+            value.clone()
+        }
+    }
+    impl ToString for MessageLevel {
+        fn to_string(&self) -> String {
+            match *self {
+                Self::Trace => "trace".to_string(),
+                Self::Info => "info".to_string(),
+                Self::Warning => "warning".to_string(),
+                Self::Error => "error".to_string(),
+            }
+        }
+    }
+    impl std::str::FromStr for MessageLevel {
+        type Err = self::error::ConversionError;
+        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+            match value {
+                "trace" => Ok(Self::Trace),
+                "info" => Ok(Self::Info),
+                "warning" => Ok(Self::Warning),
+                "error" => Ok(Self::Error),
+                _ => Err("invalid value".into()),
+            }
+        }
+    }
+    impl std::convert::TryFrom<&str> for MessageLevel {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<&String> for MessageLevel {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<String> for MessageLevel {
+        type Error = self::error::ConversionError;
+        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    ///MessageType
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "MessageType",
+    ///  "type": "string",
+    ///  "enum": [
+    ///    "general",
+    ///    "resolution_trace",
+    ///    "attr_path_not_found",
+    ///    "constraints_too_tight"
+    ///  ]
+    ///}
+    /// ```
+    /// </details>
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        Deserialize,
+        Eq,
+        Hash,
+        Ord,
+        PartialEq,
+        PartialOrd,
+        Serialize
+    )]
+    pub enum MessageType {
+        #[serde(rename = "general")]
+        General,
+        #[serde(rename = "resolution_trace")]
+        ResolutionTrace,
+        #[serde(rename = "attr_path_not_found")]
+        AttrPathNotFound,
+        #[serde(rename = "constraints_too_tight")]
+        ConstraintsTooTight,
+    }
+    impl From<&MessageType> for MessageType {
+        fn from(value: &MessageType) -> Self {
+            value.clone()
+        }
+    }
+    impl ToString for MessageType {
+        fn to_string(&self) -> String {
+            match *self {
+                Self::General => "general".to_string(),
+                Self::ResolutionTrace => "resolution_trace".to_string(),
+                Self::AttrPathNotFound => "attr_path_not_found".to_string(),
+                Self::ConstraintsTooTight => "constraints_too_tight".to_string(),
+            }
+        }
+    }
+    impl std::str::FromStr for MessageType {
+        type Err = self::error::ConversionError;
+        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+            match value {
+                "general" => Ok(Self::General),
+                "resolution_trace" => Ok(Self::ResolutionTrace),
+                "attr_path_not_found" => Ok(Self::AttrPathNotFound),
+                "constraints_too_tight" => Ok(Self::ConstraintsTooTight),
+                _ => Err("invalid value".into()),
+            }
+        }
+    }
+    impl std::convert::TryFrom<&str> for MessageType {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<&String> for MessageType {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<String> for MessageType {
+        type Error = self::error::ConversionError;
+        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    ///MessagesItem
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "oneOf": [
+    ///    {
+    ///      "$ref": "#/components/schemas/ResolutionMessageGeneral"
+    ///    },
+    ///    {
+    ///      "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
+    ///    },
+    ///    {
+    ///      "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
+    ///    }
+    ///  ]
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    #[serde(untagged)]
+    pub enum MessagesItem {
+        MessageGeneral(ResolutionMessageGeneral),
+        AttrPathNotFound(ResolutionAttrPathNotFound),
+        ConstraintsTooTight(ResolutionConstraintsTooTight),
+    }
+    impl From<&MessagesItem> for MessagesItem {
+        fn from(value: &MessagesItem) -> Self {
+            value.clone()
+        }
+    }
+    impl From<ResolutionMessageGeneral> for MessagesItem {
+        fn from(value: ResolutionMessageGeneral) -> Self {
+            Self::MessageGeneral(value)
+        }
+    }
+    impl From<ResolutionAttrPathNotFound> for MessagesItem {
+        fn from(value: ResolutionAttrPathNotFound) -> Self {
+            Self::AttrPathNotFound(value)
+        }
+    }
+    impl From<ResolutionConstraintsTooTight> for MessagesItem {
+        fn from(value: ResolutionConstraintsTooTight) -> Self {
+            Self::ConstraintsTooTight(value)
         }
     }
     ///Output
@@ -339,15 +614,27 @@ pub mod types {
     ///  "examples": [
     ///    {
     ///      "attr_path": "curl",
-    ///      "install_id": "curl"
+    ///      "install_id": "curl",
+    ///      "systems": [
+    ///        "x86_64-linux"
+    ///      ]
     ///    }
     ///  ],
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
-    ///    "install_id"
+    ///    "install_id",
+    ///    "systems"
     ///  ],
     ///  "properties": {
+    ///    "allow_broken": {
+    ///      "title": "Allow Broken",
+    ///      "default": false,
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
     ///    "allow_pre_releases": {
     ///      "title": "Allow Pre Releases",
     ///      "default": false,
@@ -355,6 +642,24 @@ pub mod types {
     ///        "boolean",
     ///        "null"
     ///      ]
+    ///    },
+    ///    "allow_unfree": {
+    ///      "title": "Allow Unfree",
+    ///      "default": true,
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "allowed_licenses": {
+    ///      "title": "Allowed Licenses",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
     ///    },
     ///    "attr_path": {
     ///      "title": "Attr Path",
@@ -371,6 +676,13 @@ pub mod types {
     ///      "title": "Install Id",
     ///      "type": "string"
     ///    },
+    ///    "systems": {
+    ///      "title": "Systems",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/SystemEnum"
+    ///      }
+    ///    },
     ///    "version": {
     ///      "title": "Version",
     ///      "type": [
@@ -384,12 +696,19 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct PackageDescriptor {
+        #[serde(default = "defaults::package_descriptor_allow_broken")]
+        pub allow_broken: Option<bool>,
         #[serde(default = "defaults::package_descriptor_allow_pre_releases")]
         pub allow_pre_releases: Option<bool>,
+        #[serde(default = "defaults::package_descriptor_allow_unfree")]
+        pub allow_unfree: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub allowed_licenses: Option<Vec<String>>,
         pub attr_path: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub derivation: Option<String>,
         pub install_id: String,
+        pub systems: Vec<SystemEnum>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub version: Option<String>,
     }
@@ -410,26 +729,33 @@ pub mod types {
     ///      "descriptors": [
     ///        {
     ///          "attr_path": "curl",
-    ///          "install_id": "curl"
+    ///          "install_id": "curl",
+    ///          "systems": [
+    ///            "x86_64-linux"
+    ///          ]
     ///        },
     ///        {
     ///          "attr_path": "slack",
-    ///          "install_id": "slack"
+    ///          "install_id": "slack",
+    ///          "systems": [
+    ///            "x86_64-linux"
+    ///          ]
     ///        },
     ///        {
     ///          "attr_path": "xorg.xeyes",
-    ///          "install_id": "xeyes"
+    ///          "install_id": "xeyes",
+    ///          "systems": [
+    ///            "x86_64-linux"
+    ///          ]
     ///        }
     ///      ],
-    ///      "name": "test",
-    ///      "system": "x86_64-linux"
+    ///      "name": "test"
     ///    }
     ///  ],
     ///  "type": "object",
     ///  "required": [
     ///    "descriptors",
-    ///    "name",
-    ///    "system"
+    ///    "name"
     ///  ],
     ///  "properties": {
     ///    "descriptors": {
@@ -449,9 +775,6 @@ pub mod types {
     ///        "string",
     ///        "null"
     ///      ]
-    ///    },
-    ///    "system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
     ///    }
     ///  }
     ///}
@@ -463,7 +786,6 @@ pub mod types {
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub stability: Option<String>,
-        pub system: SystemEnum,
     }
     impl From<&PackageGroup> for PackageGroup {
         fn from(value: &PackageGroup) -> Self {
@@ -484,19 +806,27 @@ pub mod types {
     ///          "descriptors": [
     ///            {
     ///              "attr_path": "curl",
-    ///              "install_id": "curl"
+    ///              "install_id": "curl",
+    ///              "systems": [
+    ///                "x86_64-linux"
+    ///              ]
     ///            },
     ///            {
     ///              "attr_path": "slack",
-    ///              "install_id": "slack"
+    ///              "install_id": "slack",
+    ///              "systems": [
+    ///                "x86_64-linux"
+    ///              ]
     ///            },
     ///            {
     ///              "attr_path": "xorg.xeyes",
-    ///              "install_id": "xeyes"
+    ///              "install_id": "xeyes",
+    ///              "systems": [
+    ///                "x86_64-linux"
+    ///              ]
     ///            }
     ///          ],
-    ///          "name": "test",
-    ///          "system": "x86_64-linux"
+    ///          "name": "test"
     ///        }
     ///      ]
     ///    }
@@ -526,51 +856,34 @@ pub mod types {
             value.clone()
         }
     }
-    ///PackageInfoApi
+    ///PackageInfoSearch
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
-    ///  "title": "PackageInfoAPI",
+    ///  "title": "PackageInfoSearch",
     ///  "examples": [
     ///    {
     ///      "attr_path": "foo.bar.curl",
     ///      "description": "A very nice Item",
-    ///      "license": "foo",
-    ///      "locked_url": "git:git?rev=xyz",
     ///      "name": "curl",
-    ///      "outputs": "{}",
-    ///      "outputs_to_install": "{}",
     ///      "pname": "curl",
-    ///      "rev": "xyz",
-    ///      "rev_count": 4,
-    ///      "rev_date": 0,
-    ///      "search_string": "curl^curl^my description",
     ///      "stabilities": [
     ///        "stable",
     ///        "unstable"
     ///      ],
-    ///      "system": "x86_64-linux",
-    ///      "version": "1.0"
+    ///      "system": "x86_64-linux"
     ///    }
     ///  ],
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
     ///    "description",
-    ///    "license",
-    ///    "locked_url",
     ///    "name",
-    ///    "outputs",
-    ///    "outputs_to_install",
     ///    "pname",
-    ///    "rev",
-    ///    "rev_count",
-    ///    "rev_date",
     ///    "stabilities",
-    ///    "system",
-    ///    "version"
+    ///    "system"
     ///  ],
     ///  "properties": {
     ///    "attr_path": {
@@ -584,57 +897,13 @@ pub mod types {
     ///        "null"
     ///      ]
     ///    },
-    ///    "license": {
-    ///      "title": "License",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "locked_url": {
-    ///      "title": "Locked Url",
-    ///      "type": "string"
-    ///    },
     ///    "name": {
     ///      "title": "Name",
     ///      "type": "string"
     ///    },
-    ///    "outputs": {
-    ///      "title": "Outputs",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/Output"
-    ///      }
-    ///    },
-    ///    "outputs_to_install": {
-    ///      "title": "Outputs To Install",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    },
     ///    "pname": {
     ///      "title": "Pname",
     ///      "type": "string"
-    ///    },
-    ///    "rev": {
-    ///      "title": "Rev",
-    ///      "type": "string"
-    ///    },
-    ///    "rev_count": {
-    ///      "title": "Rev Count",
-    ///      "type": "integer"
-    ///    },
-    ///    "rev_date": {
-    ///      "title": "Rev Date",
-    ///      "type": "string",
-    ///      "format": "date-time"
     ///    },
     ///    "stabilities": {
     ///      "title": "Stabilities",
@@ -645,364 +914,38 @@ pub mod types {
     ///    },
     ///    "system": {
     ///      "$ref": "#/components/schemas/SystemEnum"
-    ///    },
-    ///    "version": {
-    ///      "title": "Version",
-    ///      "type": "string"
     ///    }
     ///  }
     ///}
     /// ```
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PackageInfoApi {
+    pub struct PackageInfoSearch {
         pub attr_path: String,
         pub description: Option<String>,
-        pub license: Option<String>,
-        pub locked_url: String,
         pub name: String,
-        pub outputs: Option<Vec<Output>>,
-        pub outputs_to_install: Option<Vec<String>>,
         pub pname: String,
-        pub rev: String,
-        pub rev_count: i64,
-        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
         pub stabilities: Vec<String>,
         pub system: SystemEnum,
-        pub version: String,
     }
-    impl From<&PackageInfoApi> for PackageInfoApi {
-        fn from(value: &PackageInfoApi) -> Self {
+    impl From<&PackageInfoSearch> for PackageInfoSearch {
+        fn from(value: &PackageInfoSearch) -> Self {
             value.clone()
         }
     }
-    ///PackageInfoCommon
+    ///PackageResolutionInfo
     ///
     /// <details><summary>JSON schema</summary>
     ///
     /// ```json
     ///{
-    ///  "title": "PackageInfoCommon",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "attr_path",
-    ///    "description",
-    ///    "license",
-    ///    "name",
-    ///    "outputs",
-    ///    "outputs_to_install",
-    ///    "pname",
-    ///    "rev",
-    ///    "rev_count",
-    ///    "rev_date",
-    ///    "system",
-    ///    "version"
-    ///  ],
-    ///  "properties": {
-    ///    "attr_path": {
-    ///      "title": "Attr Path",
-    ///      "type": "string"
-    ///    },
-    ///    "description": {
-    ///      "title": "Description",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "license": {
-    ///      "title": "License",
-    ///      "type": [
-    ///        "string",
-    ///        "null"
-    ///      ]
-    ///    },
-    ///    "name": {
-    ///      "title": "Name",
-    ///      "type": "string"
-    ///    },
-    ///    "outputs": {
-    ///      "title": "Outputs",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/Output"
-    ///      }
-    ///    },
-    ///    "outputs_to_install": {
-    ///      "title": "Outputs To Install",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
-    ///      "items": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "pname": {
-    ///      "title": "Pname",
-    ///      "type": "string"
-    ///    },
-    ///    "rev": {
-    ///      "title": "Rev",
-    ///      "type": "string"
-    ///    },
-    ///    "rev_count": {
-    ///      "title": "Rev Count",
-    ///      "type": "integer"
-    ///    },
-    ///    "rev_date": {
-    ///      "title": "Rev Date",
-    ///      "type": "string",
-    ///      "format": "date-time"
-    ///    },
-    ///    "system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
-    ///    },
-    ///    "version": {
-    ///      "title": "Version",
-    ///      "type": "string"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PackageInfoCommon {
-        pub attr_path: String,
-        pub description: Option<String>,
-        pub license: Option<String>,
-        pub name: String,
-        pub outputs: Option<Vec<Output>>,
-        pub outputs_to_install: Option<Vec<String>>,
-        pub pname: String,
-        pub rev: String,
-        pub rev_count: i64,
-        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
-        pub system: SystemEnum,
-        pub version: String,
-    }
-    impl From<&PackageInfoCommon> for PackageInfoCommon {
-        fn from(value: &PackageInfoCommon) -> Self {
-            value.clone()
-        }
-    }
-    ///PackageSearchResultInput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackageSearchResult",
-    ///  "examples": [
-    ///    [
-    ///      {
-    ///        "attr_path": "foo.bar.curl",
-    ///        "description": "A very nice Item",
-    ///        "license": "foo",
-    ///        "locked_url": "git:git?rev=xyz",
-    ///        "name": "curl",
-    ///        "outputs": "{}",
-    ///        "outputs_to_install": "{}",
-    ///        "pname": "curl",
-    ///        "rev": "xyz",
-    ///        "rev_count": 4,
-    ///        "rev_date": 0,
-    ///        "search_string": "curl^curl^my description",
-    ///        "stabilities": [
-    ///          "stable",
-    ///          "unstable"
-    ///        ],
-    ///        "system": "x86_64-linux",
-    ///        "version": "1.0"
-    ///      }
-    ///    ]
-    ///  ],
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items",
-    ///    "total_count"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoAPI"
-    ///      }
-    ///    },
-    ///    "total_count": {
-    ///      "title": "Total Count",
-    ///      "type": "integer"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PackageSearchResultInput {
-        pub items: Vec<PackageInfoApi>,
-        pub total_count: i64,
-    }
-    impl From<&PackageSearchResultInput> for PackageSearchResultInput {
-        fn from(value: &PackageSearchResultInput) -> Self {
-            value.clone()
-        }
-    }
-    ///PackageSearchResultOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackageSearchResult",
-    ///  "examples": [
-    ///    [
-    ///      {
-    ///        "attr_path": "foo.bar.curl",
-    ///        "description": "A very nice Item",
-    ///        "license": "foo",
-    ///        "locked_url": "git:git?rev=xyz",
-    ///        "name": "curl",
-    ///        "outputs": "{}",
-    ///        "outputs_to_install": "{}",
-    ///        "pname": "curl",
-    ///        "rev": "xyz",
-    ///        "rev_count": 4,
-    ///        "rev_date": 0,
-    ///        "search_string": "curl^curl^my description",
-    ///        "stabilities": [
-    ///          "stable",
-    ///          "unstable"
-    ///        ],
-    ///        "system": "x86_64-linux",
-    ///        "version": "1.0"
-    ///      }
-    ///    ]
-    ///  ],
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items",
-    ///    "total_count"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoAPI"
-    ///      }
-    ///    },
-    ///    "total_count": {
-    ///      "title": "Total Count",
-    ///      "type": "integer"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PackageSearchResultOutput {
-        pub items: Vec<PackageInfoApi>,
-        pub total_count: i64,
-    }
-    impl From<&PackageSearchResultOutput> for PackageSearchResultOutput {
-        fn from(value: &PackageSearchResultOutput) -> Self {
-            value.clone()
-        }
-    }
-    ///PackagesResultInput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackagesResult",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items",
-    ///    "total_count"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoCommon"
-    ///      }
-    ///    },
-    ///    "total_count": {
-    ///      "title": "Total Count",
-    ///      "type": "integer"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PackagesResultInput {
-        pub items: Vec<PackageInfoCommon>,
-        pub total_count: i64,
-    }
-    impl From<&PackagesResultInput> for PackagesResultInput {
-        fn from(value: &PackagesResultInput) -> Self {
-            value.clone()
-        }
-    }
-    ///PackagesResultOutput
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "PackagesResult",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "items",
-    ///    "total_count"
-    ///  ],
-    ///  "properties": {
-    ///    "items": {
-    ///      "title": "Items",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/PackageInfoCommon"
-    ///      }
-    ///    },
-    ///    "total_count": {
-    ///      "title": "Total Count",
-    ///      "type": "integer"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct PackagesResultOutput {
-        pub items: Vec<PackageInfoCommon>,
-        pub total_count: i64,
-    }
-    impl From<&PackagesResultOutput> for PackagesResultOutput {
-        fn from(value: &PackagesResultOutput) -> Self {
-            value.clone()
-        }
-    }
-    ///ResolvedPackageDescriptor
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "ResolvedPackageDescriptor",
+    ///  "title": "PackageResolutionInfo",
     ///  "type": "object",
     ///  "required": [
     ///    "attr_path",
     ///    "broken",
     ///    "derivation",
     ///    "description",
-    ///    "install_id",
     ///    "license",
     ///    "locked_url",
     ///    "name",
@@ -1014,6 +957,7 @@ pub mod types {
     ///    "rev_date",
     ///    "scrape_date",
     ///    "stabilities",
+    ///    "system",
     ///    "unfree",
     ///    "version"
     ///  ],
@@ -1024,7 +968,10 @@ pub mod types {
     ///    },
     ///    "broken": {
     ///      "title": "Broken",
-    ///      "type": "boolean"
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
     ///    },
     ///    "derivation": {
     ///      "title": "Derivation",
@@ -1037,10 +984,6 @@ pub mod types {
     ///        "null"
     ///      ]
     ///    },
-    ///    "install_id": {
-    ///      "title": "Install Id",
-    ///      "type": "string"
-    ///    },
     ///    "license": {
     ///      "title": "License",
     ///      "type": [
@@ -1058,10 +1001,7 @@ pub mod types {
     ///    },
     ///    "outputs": {
     ///      "title": "Outputs",
-    ///      "type": [
-    ///        "array",
-    ///        "null"
-    ///      ],
+    ///      "type": "array",
     ///      "items": {
     ///        "$ref": "#/components/schemas/Output"
     ///      }
@@ -1108,6 +1048,531 @@ pub mod types {
     ///        "type": "string"
     ///      }
     ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    },
+    ///    "unfree": {
+    ///      "title": "Unfree",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct PackageResolutionInfo {
+        pub attr_path: String,
+        pub broken: Option<bool>,
+        pub derivation: String,
+        pub description: Option<String>,
+        pub license: Option<String>,
+        pub locked_url: String,
+        pub name: String,
+        pub outputs: Vec<Output>,
+        pub outputs_to_install: Option<Vec<String>>,
+        pub pname: String,
+        pub rev: String,
+        pub rev_count: i64,
+        pub rev_date: chrono::DateTime<chrono::offset::Utc>,
+        pub scrape_date: chrono::DateTime<chrono::offset::Utc>,
+        pub stabilities: Option<Vec<String>>,
+        pub system: SystemEnum,
+        pub unfree: Option<bool>,
+        pub version: String,
+    }
+    impl From<&PackageResolutionInfo> for PackageResolutionInfo {
+        fn from(value: &PackageResolutionInfo) -> Self {
+            value.clone()
+        }
+    }
+    ///PackageSearchResultInput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageSearchResult",
+    ///  "examples": [
+    ///    [
+    ///      {
+    ///        "attr_path": "foo.bar.curl",
+    ///        "description": "A very nice Item",
+    ///        "name": "curl",
+    ///        "pname": "curl",
+    ///        "stabilities": [
+    ///          "stable",
+    ///          "unstable"
+    ///        ],
+    ///        "system": "x86_64-linux"
+    ///      }
+    ///    ]
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items",
+    ///    "total_count"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PackageInfoSearch"
+    ///      }
+    ///    },
+    ///    "total_count": {
+    ///      "title": "Total Count",
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct PackageSearchResultInput {
+        pub items: Vec<PackageInfoSearch>,
+        pub total_count: i64,
+    }
+    impl From<&PackageSearchResultInput> for PackageSearchResultInput {
+        fn from(value: &PackageSearchResultInput) -> Self {
+            value.clone()
+        }
+    }
+    ///PackageSearchResultOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackageSearchResult",
+    ///  "examples": [
+    ///    [
+    ///      {
+    ///        "attr_path": "foo.bar.curl",
+    ///        "description": "A very nice Item",
+    ///        "name": "curl",
+    ///        "pname": "curl",
+    ///        "stabilities": [
+    ///          "stable",
+    ///          "unstable"
+    ///        ],
+    ///        "system": "x86_64-linux"
+    ///      }
+    ///    ]
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items",
+    ///    "total_count"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PackageInfoSearch"
+    ///      }
+    ///    },
+    ///    "total_count": {
+    ///      "title": "Total Count",
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct PackageSearchResultOutput {
+        pub items: Vec<PackageInfoSearch>,
+        pub total_count: i64,
+    }
+    impl From<&PackageSearchResultOutput> for PackageSearchResultOutput {
+        fn from(value: &PackageSearchResultOutput) -> Self {
+            value.clone()
+        }
+    }
+    ///PackagesResultInput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackagesResult",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items",
+    ///    "total_count"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PackageResolutionInfo"
+    ///      }
+    ///    },
+    ///    "total_count": {
+    ///      "title": "Total Count",
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct PackagesResultInput {
+        pub items: Vec<PackageResolutionInfo>,
+        pub total_count: i64,
+    }
+    impl From<&PackagesResultInput> for PackagesResultInput {
+        fn from(value: &PackagesResultInput) -> Self {
+            value.clone()
+        }
+    }
+    ///PackagesResultOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "PackagesResult",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items",
+    ///    "total_count"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/PackageResolutionInfo"
+    ///      }
+    ///    },
+    ///    "total_count": {
+    ///      "title": "Total Count",
+    ///      "type": "integer"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct PackagesResultOutput {
+        pub items: Vec<PackageResolutionInfo>,
+        pub total_count: i64,
+    }
+    impl From<&PackagesResultOutput> for PackagesResultOutput {
+        fn from(value: &PackagesResultOutput) -> Self {
+            value.clone()
+        }
+    }
+    ///ResolutionAttrPathNotFound
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "ResolutionAttrPathNotFound",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "install_id",
+    ///    "valid_systems"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "context": {
+    ///      "title": "Context",
+    ///      "default": {},
+    ///      "type": [
+    ///        "object",
+    ///        "null"
+    ///      ],
+    ///      "additionalProperties": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "install_id": {
+    ///      "title": "Install Id",
+    ///      "type": "string"
+    ///    },
+    ///    "level": {
+    ///      "$ref": "#/components/schemas/MessageLevel"
+    ///    },
+    ///    "message": {
+    ///      "title": "Message",
+    ///      "default": "",
+    ///      "type": "string"
+    ///    },
+    ///    "type": {
+    ///      "$ref": "#/components/schemas/MessageType"
+    ///    },
+    ///    "valid_systems": {
+    ///      "title": "Valid Systems",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/SystemEnum"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct ResolutionAttrPathNotFound {
+        pub attr_path: String,
+        #[serde(default = "defaults::resolution_attr_path_not_found_context")]
+        pub context: Option<std::collections::HashMap<String, String>>,
+        pub install_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub level: Option<MessageLevel>,
+        #[serde(default)]
+        pub message: String,
+        #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+        pub type_: Option<MessageType>,
+        pub valid_systems: Vec<SystemEnum>,
+    }
+    impl From<&ResolutionAttrPathNotFound> for ResolutionAttrPathNotFound {
+        fn from(value: &ResolutionAttrPathNotFound) -> Self {
+            value.clone()
+        }
+    }
+    ///ResolutionConstraintsTooTight
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "ResolutionConstraintsTooTight",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "context": {
+    ///      "title": "Context",
+    ///      "default": {},
+    ///      "type": [
+    ///        "object",
+    ///        "null"
+    ///      ],
+    ///      "additionalProperties": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "level": {
+    ///      "$ref": "#/components/schemas/MessageLevel"
+    ///    },
+    ///    "message": {
+    ///      "title": "Message",
+    ///      "default": "",
+    ///      "type": "string"
+    ///    },
+    ///    "type": {
+    ///      "$ref": "#/components/schemas/MessageType"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct ResolutionConstraintsTooTight {
+        #[serde(default = "defaults::resolution_constraints_too_tight_context")]
+        pub context: Option<std::collections::HashMap<String, String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub level: Option<MessageLevel>,
+        #[serde(default)]
+        pub message: String,
+        #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+        pub type_: Option<MessageType>,
+    }
+    impl From<&ResolutionConstraintsTooTight> for ResolutionConstraintsTooTight {
+        fn from(value: &ResolutionConstraintsTooTight) -> Self {
+            value.clone()
+        }
+    }
+    ///ResolutionMessageGeneral
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "ResolutionMessageGeneral",
+    ///  "type": "object",
+    ///  "properties": {
+    ///    "context": {
+    ///      "title": "Context",
+    ///      "default": {},
+    ///      "type": [
+    ///        "object",
+    ///        "null"
+    ///      ],
+    ///      "additionalProperties": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "level": {
+    ///      "$ref": "#/components/schemas/MessageLevel"
+    ///    },
+    ///    "message": {
+    ///      "title": "Message",
+    ///      "default": "",
+    ///      "type": "string"
+    ///    },
+    ///    "type": {
+    ///      "$ref": "#/components/schemas/MessageType"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct ResolutionMessageGeneral {
+        #[serde(default = "defaults::resolution_message_general_context")]
+        pub context: Option<std::collections::HashMap<String, String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub level: Option<MessageLevel>,
+        #[serde(default)]
+        pub message: String,
+        #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+        pub type_: Option<MessageType>,
+    }
+    impl From<&ResolutionMessageGeneral> for ResolutionMessageGeneral {
+        fn from(value: &ResolutionMessageGeneral) -> Self {
+            value.clone()
+        }
+    }
+    ///ResolvedPackageDescriptor
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "ResolvedPackageDescriptor",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "attr_path",
+    ///    "broken",
+    ///    "derivation",
+    ///    "description",
+    ///    "install_id",
+    ///    "license",
+    ///    "locked_url",
+    ///    "name",
+    ///    "outputs",
+    ///    "outputs_to_install",
+    ///    "pname",
+    ///    "rev",
+    ///    "rev_count",
+    ///    "rev_date",
+    ///    "scrape_date",
+    ///    "stabilities",
+    ///    "system",
+    ///    "unfree",
+    ///    "version"
+    ///  ],
+    ///  "properties": {
+    ///    "attr_path": {
+    ///      "title": "Attr Path",
+    ///      "type": "string"
+    ///    },
+    ///    "broken": {
+    ///      "title": "Broken",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "derivation": {
+    ///      "title": "Derivation",
+    ///      "type": "string"
+    ///    },
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "install_id": {
+    ///      "title": "Install Id",
+    ///      "type": "string"
+    ///    },
+    ///    "license": {
+    ///      "title": "License",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "locked_url": {
+    ///      "title": "Locked Url",
+    ///      "type": "string"
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "outputs": {
+    ///      "title": "Outputs",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/Output"
+    ///      }
+    ///    },
+    ///    "outputs_to_install": {
+    ///      "title": "Outputs To Install",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "pname": {
+    ///      "title": "Pname",
+    ///      "type": "string"
+    ///    },
+    ///    "rev": {
+    ///      "title": "Rev",
+    ///      "type": "string"
+    ///    },
+    ///    "rev_count": {
+    ///      "title": "Rev Count",
+    ///      "type": "integer"
+    ///    },
+    ///    "rev_date": {
+    ///      "title": "Rev Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "scrape_date": {
+    ///      "title": "Scrape Date",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "stabilities": {
+    ///      "title": "Stabilities",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    },
     ///    "unfree": {
     ///      "title": "Unfree",
     ///      "type": [
@@ -1126,14 +1591,14 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ResolvedPackageDescriptor {
         pub attr_path: String,
-        pub broken: bool,
+        pub broken: Option<bool>,
         pub derivation: String,
         pub description: Option<String>,
         pub install_id: String,
         pub license: Option<String>,
         pub locked_url: String,
         pub name: String,
-        pub outputs: Option<Vec<Output>>,
+        pub outputs: Vec<Output>,
         pub outputs_to_install: Option<Vec<String>>,
         pub pname: String,
         pub rev: String,
@@ -1141,6 +1606,7 @@ pub mod types {
         pub rev_date: chrono::DateTime<chrono::offset::Utc>,
         pub scrape_date: chrono::DateTime<chrono::offset::Utc>,
         pub stabilities: Option<Vec<String>>,
+        pub system: SystemEnum,
         pub unfree: Option<bool>,
         pub version: String,
     }
@@ -1169,7 +1635,6 @@ pub mod types {
     ///      "rev": "xyz",
     ///      "rev_count": 4,
     ///      "rev_date": 0,
-    ///      "search_string": "curl^curl^my description",
     ///      "stabilities": [
     ///        "stable",
     ///        "unstable"
@@ -1180,24 +1645,33 @@ pub mod types {
     ///  ],
     ///  "type": "object",
     ///  "required": [
-    ///    "name",
-    ///    "pages",
-    ///    "system"
+    ///    "messages",
+    ///    "name"
     ///  ],
     ///  "properties": {
+    ///    "messages": {
+    ///      "title": "Messages",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "oneOf": [
+    ///          {
+    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral"
+    ///          },
+    ///          {
+    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
+    ///          },
+    ///          {
+    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
+    ///          }
+    ///        ]
+    ///      }
+    ///    },
     ///    "name": {
     ///      "title": "Name",
     ///      "type": "string"
     ///    },
-    ///    "pages": {
-    ///      "title": "Pages",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/CatalogPage-Input"
-    ///      }
-    ///    },
-    ///    "system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    "page": {
+    ///      "$ref": "#/components/schemas/CatalogPage-Input"
     ///    }
     ///  }
     ///}
@@ -1205,9 +1679,10 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ResolvedPackageGroupInput {
+        pub messages: Vec<MessagesItem>,
         pub name: String,
-        pub pages: Vec<CatalogPageInput>,
-        pub system: SystemEnum,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub page: Option<CatalogPageInput>,
     }
     impl From<&ResolvedPackageGroupInput> for ResolvedPackageGroupInput {
         fn from(value: &ResolvedPackageGroupInput) -> Self {
@@ -1234,7 +1709,6 @@ pub mod types {
     ///      "rev": "xyz",
     ///      "rev_count": 4,
     ///      "rev_date": 0,
-    ///      "search_string": "curl^curl^my description",
     ///      "stabilities": [
     ///        "stable",
     ///        "unstable"
@@ -1245,24 +1719,33 @@ pub mod types {
     ///  ],
     ///  "type": "object",
     ///  "required": [
-    ///    "name",
-    ///    "pages",
-    ///    "system"
+    ///    "messages",
+    ///    "name"
     ///  ],
     ///  "properties": {
+    ///    "messages": {
+    ///      "title": "Messages",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "oneOf": [
+    ///          {
+    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral"
+    ///          },
+    ///          {
+    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
+    ///          },
+    ///          {
+    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
+    ///          }
+    ///        ]
+    ///      }
+    ///    },
     ///    "name": {
     ///      "title": "Name",
     ///      "type": "string"
     ///    },
-    ///    "pages": {
-    ///      "title": "Pages",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/CatalogPage-Output"
-    ///      }
-    ///    },
-    ///    "system": {
-    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    "page": {
+    ///      "$ref": "#/components/schemas/CatalogPage-Output"
     ///    }
     ///  }
     ///}
@@ -1270,9 +1753,10 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ResolvedPackageGroupOutput {
+        pub messages: Vec<MessagesItem>,
         pub name: String,
-        pub pages: Vec<CatalogPageOutput>,
-        pub system: SystemEnum,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub page: Option<CatalogPageOutput>,
     }
     impl From<&ResolvedPackageGroupOutput> for ResolvedPackageGroupOutput {
         fn from(value: &ResolvedPackageGroupOutput) -> Self {
@@ -1418,6 +1902,92 @@ pub mod types {
                 })
         }
     }
+    ///ServiceStatusInput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "ServiceStatus",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "service_version",
+    ///    "start_tm"
+    ///  ],
+    ///  "properties": {
+    ///    "service_version": {
+    ///      "title": "Service Version",
+    ///      "type": "string"
+    ///    },
+    ///    "start_tm": {
+    ///      "title": "Start Tm",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct ServiceStatusInput {
+        pub service_version: String,
+        pub start_tm: chrono::DateTime<chrono::offset::Utc>,
+    }
+    impl From<&ServiceStatusInput> for ServiceStatusInput {
+        fn from(value: &ServiceStatusInput) -> Self {
+            value.clone()
+        }
+    }
+    ///ServiceStatusOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "ServiceStatus",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "service_version",
+    ///    "start_tm",
+    ///    "uptime_pretty",
+    ///    "uptime_seconds"
+    ///  ],
+    ///  "properties": {
+    ///    "service_version": {
+    ///      "title": "Service Version",
+    ///      "type": "string"
+    ///    },
+    ///    "start_tm": {
+    ///      "title": "Start Tm",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "uptime_pretty": {
+    ///      "title": "Uptime Pretty",
+    ///      "readOnly": true,
+    ///      "type": "string"
+    ///    },
+    ///    "uptime_seconds": {
+    ///      "title": "Uptime Seconds",
+    ///      "readOnly": true,
+    ///      "type": "number"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct ServiceStatusOutput {
+        pub service_version: String,
+        pub start_tm: chrono::DateTime<chrono::offset::Utc>,
+        pub uptime_pretty: String,
+        pub uptime_seconds: f64,
+    }
+    impl From<&ServiceStatusOutput> for ServiceStatusOutput {
+        fn from(value: &ServiceStatusOutput) -> Self {
+            value.clone()
+        }
+    }
     ///SystemEnum
     ///
     /// <details><summary>JSON schema</summary>
@@ -1504,8 +2074,29 @@ pub mod types {
     }
     /// Generation of default values for serde.
     pub mod defaults {
+        pub(super) fn package_descriptor_allow_broken() -> Option<bool> {
+            Some(false)
+        }
         pub(super) fn package_descriptor_allow_pre_releases() -> Option<bool> {
             Some(false)
+        }
+        pub(super) fn package_descriptor_allow_unfree() -> Option<bool> {
+            Some(true)
+        }
+        pub(super) fn resolution_attr_path_not_found_context() -> Option<
+            std::collections::HashMap<String, String>,
+        > {
+            Some([].into_iter().collect())
+        }
+        pub(super) fn resolution_constraints_too_tight_context() -> Option<
+            std::collections::HashMap<String, String>,
+        > {
+            Some([].into_iter().collect())
+        }
+        pub(super) fn resolution_message_general_context() -> Option<
+            std::collections::HashMap<String, String>,
+        > {
+            Some([].into_iter().collect())
         }
     }
 }
@@ -1520,7 +2111,7 @@ TBD
 *Markdown is available here*
 
 
-Version: v0.1.dev134+gd1854a6.d19800101*/
+Version: vundefined*/
 pub struct Client {
     pub(crate) baseurl: String,
     pub(crate) client: reqwest::Client,
@@ -1566,7 +2157,7 @@ impl Client {
     /// This string is pulled directly from the source OpenAPI
     /// document and may be in any format the API selects.
     pub fn api_version(&self) -> &'static str {
-        "v0.1.dev134+gd1854a6.d19800101"
+        "vundefined"
     }
 }
 #[allow(clippy::all)]
@@ -1749,9 +2340,6 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
-            406u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
             422u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
@@ -1765,13 +2353,13 @@ Gather some basic status values from the database.
 Returns:
 - **CatalogStatus**: A dictionary of various status values.
 
-Sends a `GET` request to `/api/v1/metrics/status`
+Sends a `GET` request to `/api/v1/status/catalog`
 
 */
-    pub async fn get_status_api_v1_metrics_status_get<'a>(
+    pub async fn get_catalog_status_api_v1_status_catalog_get<'a>(
         &'a self,
-    ) -> Result<ResponseValue<types::CatalogStatus>, Error<()>> {
-        let url = format!("{}/api/v1/metrics/status", self.baseurl,);
+    ) -> Result<ResponseValue<types::CatalogStatus>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/status/catalog", self.baseurl,);
         #[allow(unused_mut)]
         let mut request = self
             .client
@@ -1785,6 +2373,139 @@ Sends a `GET` request to `/api/v1/metrics/status`
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
+            500u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get basic service status
+
+Returns basic service status
+
+Returns:
+- **ServiceStatus**: A dictionary of various status values.
+
+Sends a `GET` request to `/api/v1/status/service`
+
+*/
+    pub async fn get_service_status_api_v1_status_service_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<types::ServiceStatusInput>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/status/service", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            500u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Trigger Error
+
+Sends a `GET` request to `/api/v1/status/sentry-debug`
+
+*/
+    pub async fn trigger_error_api_v1_status_sentry_debug_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<serde_json::Value>, Error<()>> {
+        let url = format!("{}/api/v1/status/sentry-debug", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Adjust various settings
+
+Adjusts various settings on the catalog service.
+
+Query Parameters:
+- **key**: The the key to adjust.
+    - "plan" - Enables the logging of the DB query plan for queries for
+    **value** seconds.  It will be scheduled to turn off automatically after
+    that.
+
+Sends a `POST` request to `/api/v1/settings/settings/{key}`
+
+*/
+    pub async fn settings_api_v1_settings_settings_key_post<'a>(
+        &'a self,
+        key: &'a str,
+        value: &'a str,
+    ) -> Result<ResponseValue<serde_json::Value>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/settings/settings/{}", self.baseurl, encode_path(& key
+            .to_string()),
+        );
+        let mut query = Vec::with_capacity(1usize);
+        query.push(("value", value.to_string()));
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&query)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Handle Metrics
+
+Sends a `GET` request to `/metrics/`
+
+*/
+    pub async fn handle_metrics_metrics_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<String>, Error<types::ErrorResponse>> {
+        let url = format!("{}/metrics/", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }

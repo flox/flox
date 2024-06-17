@@ -26,7 +26,7 @@ use super::{
 use crate::commands::{ensure_floxhub_token, ConcreteEnvironment};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
-use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_locked_manifest_error};
+use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_core_error};
 use crate::utils::message;
 
 // Edit declarative environment configuration
@@ -177,7 +177,8 @@ impl Edit {
             .suffix(".toml")
             .tempfile_in(&flox.temp_dir)?;
         std::fs::write(&tmp_manifest, environment.manifest_content(flox)?)?;
-        let should_continue = Dialog {
+
+        let should_continue_dialog = Dialog {
             message: "Continue editing?",
             help_message: Default::default(),
             typed: Confirm {
@@ -198,24 +199,35 @@ impl Edit {
             .spin()
             .map_err(apply_doc_link_for_unsupported_packages);
 
-            match result {
-                Err(EnvironmentError::Core(CoreEnvironmentError::LockedManifest(e))) => {
-                    message::error(format_locked_manifest_error(&e));
+            match Self::make_interactively_recoverable(result)? {
+                Ok(result) => return Ok(result),
+
+                // for recoverable errors, prompt the user to continue editing
+                Err(e) => {
+                    message::error(format_core_error(&e));
 
                     if !Dialog::can_prompt() {
                         bail!("Can't prompt to continue editing in non-interactive context");
                     }
-                    if !should_continue.clone().prompt().await? {
+                    if !should_continue_dialog.clone().prompt().await? {
                         bail!("Environment editing cancelled");
                     }
                 },
-                Err(e) => {
-                    bail!(e)
-                },
-                Ok(result) => {
-                    return Ok(result);
-                },
             }
+        }
+    }
+
+    /// Returns `Ok` if the edit result is successful or recoverable, `Err` otherwise
+    fn make_interactively_recoverable(
+        result: Result<EditResult, EnvironmentError>,
+    ) -> Result<Result<EditResult, CoreEnvironmentError>, EnvironmentError> {
+        match result {
+            Err(EnvironmentError::Core(e @ CoreEnvironmentError::LockedManifest(_)))
+            | Err(EnvironmentError::Core(e @ CoreEnvironmentError::DeserializeManifest(_))) => {
+                Ok(Err(e))
+            },
+            Err(e) => Err(e),
+            Ok(result) => Ok(Ok(result)),
         }
     }
 
@@ -274,5 +286,57 @@ impl Edit {
 
         let contents = std::fs::read_to_string(path)?;
         Ok(contents)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use flox_rust_sdk::models::lockfile::LockedManifestError;
+    use serde::de::Error;
+
+    use super::*;
+
+    /// successful edit returns value that will end the loop
+    #[test]
+    fn test_recover_edit_loop_result_success() {
+        let result = Ok(EditResult::Unchanged);
+
+        Edit::make_interactively_recoverable(result)
+            .expect("should return Ok")
+            .expect("should return Ok");
+    }
+
+    /// errors parsing the manifest are recoverable
+    #[test]
+    fn test_recover_edit_loop_result_bad_manifest() {
+        let result = Err(EnvironmentError::Core(
+            CoreEnvironmentError::DeserializeManifest(toml::de::Error::custom("msg")),
+        ));
+
+        Edit::make_interactively_recoverable(result)
+            .expect("should be recoverable")
+            .expect_err("should return recoverable Err");
+    }
+
+    /// errors parsing the manifest are recoverable
+    #[test]
+    fn test_recover_edit_loop_result_locking() {
+        let result = Err(EnvironmentError::Core(
+            CoreEnvironmentError::LockedManifest(LockedManifestError::EmptyPage),
+        ));
+
+        Edit::make_interactively_recoverable(result)
+            .expect("should be recoverable")
+            .expect_err("should return recoverable err");
+    }
+
+    /// other errors are not recoverable and should be returned as-is
+    #[test]
+    fn test_recover_edit_loop_result_other_error() {
+        let result = Err(EnvironmentError::Core(
+            CoreEnvironmentError::CatalogClientMissing,
+        ));
+
+        Edit::make_interactively_recoverable(result).expect_err("should return unhandled Err");
     }
 }

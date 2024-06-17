@@ -5,6 +5,7 @@ use anyhow::{anyhow, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::PackageToInstall;
+use flox_rust_sdk::utils::traceable_path;
 use indoc::{formatdoc, indoc};
 use semver::VersionReq;
 
@@ -153,13 +154,19 @@ impl Node {
         // satisfies all constraints,
         // but that seems unlikely to be as commonly needed.
         let versions = Self::get_package_json_versions(path)?;
-        let yarn_lock_exists = path.join("yarn.lock").exists();
+        let yarn_lock_path = path.join("yarn.lock");
+        let yarn_lock_exists = yarn_lock_path.exists();
         let yarn_install = match versions {
             None => None,
             Some(ref versions) => {
                 if yarn_lock_exists {
+                    tracing::debug!(path = traceable_path(&yarn_lock_path), "found yarn.lock");
                     Self::try_find_compatible_yarn(flox, versions).await?
                 } else {
+                    tracing::debug!(
+                        path = traceable_path(&yarn_lock_path),
+                        "did not find a yarn.lock at this location"
+                    );
                     None
                 }
             },
@@ -250,8 +257,13 @@ impl Node {
     fn get_package_json_versions(path: &Path) -> Result<Option<PackageJSONVersions>> {
         let package_json = path.join("package.json");
         if !package_json.exists() {
+            tracing::debug!(
+                path = traceable_path(&package_json),
+                "did not find a package.json at this location"
+            );
             return Ok(None);
         }
+        tracing::debug!(path = traceable_path(&package_json), "found a package.json");
         let package_json_contents = fs::read_to_string(package_json)?;
         match serde_json::from_str::<serde_json::Value>(&package_json_contents) {
             // Treat a package.json that can't be parsed as JSON the same as it not existing
@@ -640,7 +652,6 @@ impl InitHook for Node {
                     // TODO: we probably shouldn't pin this when we're just
                     // providing the default
                     version: yarn_install.yarn.version.clone(),
-                    input: None,
                 });
                 Some(YARN_HOOK.to_string())
             },
@@ -653,13 +664,11 @@ impl InitHook for Node {
                         id: "nodejs".to_string(),
                         pkg_path: result.rel_path.clone().into(),
                         version: result.version.clone(),
-                        input: None,
                     },
                     None => PackageToInstall {
                         id: "nodejs".to_string(),
                         pkg_path: "nodejs".to_string(),
                         version: None,
-                        input: None,
                     },
                 };
                 packages.push(nodejs_to_install);
@@ -675,6 +684,8 @@ impl InitHook for Node {
             hook_on_activate,
             profile_common: None,
             profile_bash: None,
+            profile_fish: None,
+            profile_tcsh: None,
             profile_zsh: None,
             packages: Some(packages),
         }
@@ -688,12 +699,12 @@ mod tests {
         flox_instance_with_global_lock,
         flox_instance_with_optional_floxhub_and_client,
     };
+    use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use flox_rust_sdk::providers::catalog::Client;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
 
     use super::*;
-    use crate::commands::init::tests::resolved_pkg_group_with_dummy_package;
 
     #[test]
     fn parse_nvmrc_version_some() {
@@ -773,11 +784,12 @@ mod tests {
                     id: "yarn".to_string(),
                     pkg_path: "yarn.path".to_string(),
                     version: Some("1".to_string()),
-                    input: None,
                 }]),
                 hook_on_activate: Some(YARN_HOOK.to_string()),
                 profile_common: None,
                 profile_bash: None,
+                profile_fish: None,
+                profile_tcsh: None,
                 profile_zsh: None,
             }
         );
@@ -823,11 +835,12 @@ mod tests {
                     id: "nodejs".to_string(),
                     pkg_path: "nodejs.path".to_string(),
                     version: Some("1".to_string()),
-                    input: None,
                 }]),
                 hook_on_activate: Some(NPM_HOOK.to_string()),
                 profile_common: None,
                 profile_bash: None,
+                profile_fish: None,
+                profile_tcsh: None,
                 profile_zsh: None,
             }
         );
@@ -855,11 +868,12 @@ mod tests {
                     id: "nodejs".to_string(),
                     pkg_path: "nodejs.path".to_string(),
                     version: Some("1".to_string()),
-                    input: None,
                 }]),
                 hook_on_activate: None,
                 profile_common: None,
                 profile_bash: None,
+                profile_fish: None,
+                profile_tcsh: None,
                 profile_zsh: None,
             }
         );

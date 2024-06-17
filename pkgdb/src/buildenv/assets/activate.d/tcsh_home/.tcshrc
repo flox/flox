@@ -1,0 +1,52 @@
+# tcsh (unbelievably) does not have a way to source an alternate "rc" file,
+# but it will follow $HOME to a .tcshrc file of our making. This is that
+# file, and we use it to source the files that tcsh would normally source
+# from the user's home directory, after which we can proceed with flox
+# environment initialization.
+
+# Start by reinstating the user's original $HOME.
+setenv HOME "$FLOX_ORIG_HOME"
+
+# Save the current tracelevel in the event that sourcing one of the user
+# dotfiles launches an inner nested activation which unsets it.
+set _save_flox_activate_tracelevel = "$_flox_activate_tracelevel"
+
+# We invoke tcsh with -f to prevent the user and system-wide
+# config files from coming back and overriding the environment
+# that we're trying to set up here, so we start by replicating
+# the startup that tcsh would normally do. Unfortunately that
+# startup is quite sophisticated (or convoluted?), involving
+# tcsh compilation options that can reverse the loading order,
+# files that load conditionally based on the existence of other
+# files, and so on. We _could_ replicate that all here, but
+# until we see a demand for it we'll just cover the default,
+# expected case. See the "Startup and shutdown" section of
+# tcsh(1) for the full details.
+if ( -f /etc/csh.cshrc ) then
+  source /etc/csh.cshrc
+endif
+if ( $?loginsh ) then
+  if ( -f /etc/csh.login ) then
+    source /etc/csh.login
+  endif
+endif
+if ( -f ~/.tcshrc ) then
+  source ~/.tcshrc
+else if ( -f ~/.cshrc ) then
+  source ~/.cshrc
+endif
+# TODO: handle sourcing of $histfile (.history), as per tcsh(1).
+if ( $?loginsh ) then
+  if ( -f ~/.login ) then
+    source ~/.login
+  endif
+endif
+# TODO: handle sourcing of $dirsfile (.cshdirs), as per tcsh(1).
+
+# Restore the current tracelevel.
+setenv _flox_activate_tracelevel "$_save_flox_activate_tracelevel"
+
+# Bring in the Nix and Flox environment customizations.
+if ( $?FLOX_TCSH_INIT_SCRIPT ) then
+    source "$FLOX_TCSH_INIT_SCRIPT"
+endif

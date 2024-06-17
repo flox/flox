@@ -1,0 +1,156 @@
+[
+  {
+    "count": 546,
+    "results": [
+      {
+        "description": "A parser generator for building parsers from grammars",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "javacc",
+        "relPath": [
+          "javacc"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "LALR parser generator for Java",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "javaCup",
+        "relPath": [
+          "javaCup"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "GeoIP Java API",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "geoipjava",
+        "relPath": [
+          "geoipjava"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "A library for extracting tables from PDF files.",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "tabula-java",
+        "relPath": [
+          "tabula-java"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "An interface compiler that connects C/C++ code to higher-level languages",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "swigWithJava",
+        "relPath": [
+          "swigWithJava"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Programming language used for massively scalable soft real-time systems",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "erlang_javac",
+        "relPath": [
+          "erlang_javac"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Cap'n Proto codegen plugin for Java",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "capnproto-java",
+        "relPath": [
+          "capnproto-java"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": null,
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "setJavaClassPath",
+        "relPath": [
+          "setJavaClassPath"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Gauge plugin that lets you write tests in Java",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "java",
+        "relPath": [
+          "gaugePlugins",
+          "java"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Programming language used for massively scalable soft real-time systems",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "erlang_odbc_javac",
+        "relPath": [
+          "erlang_odbc_javac"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      }
+    ]
+  },
+  {
+    "count": 72,
+    "results": [
+      {
+        "description": "The open-source Java Development Kit",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "jdk",
+        "relPath": [
+          "jdk"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Certified builds of OpenJDK",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "jdk8",
+        "relPath": [
+          "jdk8"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Certified builds of OpenJDK",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "jdk22",
+        "relPath": [
+          "jdk22"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      }
+    ]
+  }
+]

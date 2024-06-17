@@ -1,3 +1,5 @@
+use std::io::{stdout, Write};
+
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
@@ -87,15 +89,15 @@ impl List {
         match self.list_mode {
             ListMode::NameOnly => {
                 tracing::Span::current().record("mode", "name");
-                Self::print_name_only(&packages);
+                Self::print_name_only(stdout().lock(), &packages)?;
             },
             ListMode::Extended => {
                 tracing::Span::current().record("mode", "extended");
-                Self::print_extended(&packages);
+                Self::print_extended(stdout().lock(), &packages)?;
             },
             ListMode::All => {
                 tracing::Span::current().record("mode", "all");
-                Self::print_detail(&packages);
+                Self::print_detail(stdout().lock(), &packages)?;
             },
             ListMode::Config => unreachable!(),
         }
@@ -104,8 +106,11 @@ impl List {
     }
 
     /// print package ids only
-    fn print_name_only(packages: &[InstalledPackage]) {
-        packages.iter().for_each(|p| println!("{}", p.install_id));
+    fn print_name_only(mut out: impl Write, packages: &[InstalledPackage]) -> Result<()> {
+        for p in packages {
+            writeln!(&mut out, "{}", p.install_id)?;
+        }
+        Ok(())
     }
 
     /// print package ids, as well as path and version
@@ -113,34 +118,37 @@ impl List {
     /// e.g. `pip: python3Packages.pip (20.3.4)`
     ///
     /// This is the default mode
-    fn print_extended(packages: &[InstalledPackage]) {
-        packages.iter().for_each(|p| {
-            println!(
+    fn print_extended(mut out: impl Write, packages: &[InstalledPackage]) -> Result<()> {
+        for p in packages {
+            writeln!(
+                &mut out,
                 "{id}: {path} ({version})",
                 id = p.install_id,
                 path = p.rel_path,
                 version = p.info.version.as_deref().unwrap_or("N/A")
-            )
-        });
+            )?;
+        }
+        Ok(())
     }
 
     /// print package ids, as well as extended detailed information
-    fn print_detail(packages: &[InstalledPackage]) {
-        for InstalledPackage {
-            install_id: name,
-            rel_path,
-            info:
-                PackageInfo {
-                    broken,
-                    license,
-                    pname,
-                    unfree,
-                    version,
-                    description,
-                },
-            priority,
-        } in packages.iter().sorted_by_key(|p| p.priority)
-        {
+    fn print_detail(mut out: impl Write, packages: &[InstalledPackage]) -> Result<()> {
+        for (idx, package) in packages.iter().sorted_by_key(|p| p.priority).enumerate() {
+            let InstalledPackage {
+                install_id: name,
+                rel_path,
+                info:
+                    PackageInfo {
+                        pname,
+                        version,
+                        description,
+                        license,
+                        unfree,
+                        broken,
+                    },
+                priority,
+            } = package;
+
             let message = formatdoc! {"
                 {name}: ({pname})
                   Description: {description}
@@ -156,10 +164,17 @@ impl List {
                 version = version.as_deref().unwrap_or("N/A"),
                 license = license.as_deref().unwrap_or("N/A"),
                 unfree = unfree.map(|u|u.to_string()).as_deref().unwrap_or("N/A"),
+                broken = broken.map(|b|b.to_string()).as_deref().unwrap_or("N/A"),
             };
 
-            println!("{message}");
+            // add an empty line between packages
+            if idx < packages.len() - 1 {
+                writeln!(&mut out, "{message}")?;
+            } else {
+                write!(&mut out, "{message}")?;
+            }
         }
+        Ok(())
     }
 
     /// Read existing lockfile or resolve to create a new [LockedManifest].
@@ -187,5 +202,195 @@ impl List {
         };
 
         Ok(lockfile)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use indoc::indoc;
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    fn test_packages() -> [InstalledPackage; 2] {
+        [
+            InstalledPackage {
+                install_id: "pip-iid".to_string(),
+                rel_path: "python3Packages.pip".to_string(),
+                info: PackageInfo {
+                    pname: "pip".to_string(),
+                    version: Some("20.3.4".to_string()),
+                    description: Some("Python package installer".to_string()),
+                    license: Some("MIT".to_string()),
+                    unfree: Some(true),
+                    broken: Some(false),
+                },
+                priority: Some(100),
+            },
+            InstalledPackage {
+                install_id: "python".to_string(),
+                rel_path: "python3Packages.python".to_string(),
+                info: PackageInfo {
+                    pname: "python".to_string(),
+                    version: Some("3.9.5".to_string()),
+                    description: Some("Python interpreter".to_string()),
+                    license: Some("PSF".to_string()),
+                    unfree: Some(false),
+                    broken: Some(false),
+                },
+                priority: Some(200),
+            },
+        ]
+    }
+
+    fn uninformative_package() -> InstalledPackage {
+        InstalledPackage {
+            install_id: "pip-iid".to_string(),
+            rel_path: "python3Packages.pip".to_string(),
+            info: PackageInfo {
+                pname: "pip".to_string(),
+                version: None,
+                description: None,
+                license: None,
+                unfree: None,
+                broken: None,
+            },
+            priority: None,
+        }
+    }
+
+    #[test]
+    fn test_name_only_output() {
+        let mut out = Vec::new();
+        List::print_name_only(&mut out, &test_packages()).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            pip-iid
+            python
+        "});
+    }
+
+    #[test]
+    fn test_print_extended_output() {
+        let mut out = Vec::new();
+        List::print_extended(&mut out, &test_packages()).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            pip-iid: python3Packages.pip (20.3.4)
+            python: python3Packages.python (3.9.5)
+        "});
+    }
+
+    /// If a package is missing some values, they should be replaced with "N/A"
+    #[test]
+    fn test_print_extended_output_handles_missing_values() {
+        let mut out = Vec::new();
+        List::print_extended(&mut out, &[uninformative_package()]).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            pip-iid: python3Packages.pip (N/A)
+        "});
+    }
+
+    #[test]
+    fn test_print_detail_output() {
+        let mut out = Vec::new();
+        List::print_detail(&mut out, &test_packages()).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            pip-iid: (pip)
+              Description: Python package installer
+              Path:     python3Packages.pip
+              Priority: 100
+              Version:  20.3.4
+              License:  MIT
+              Unfree:   true
+              Broken:   false
+
+            python: (python)
+              Description: Python interpreter
+              Path:     python3Packages.python
+              Priority: 200
+              Version:  3.9.5
+              License:  PSF
+              Unfree:   false
+              Broken:   false
+        "})
+    }
+
+    #[test]
+    fn test_print_detail_output_orders_by_priority_unknown_first() {
+        let mut packages = test_packages();
+        packages[1].priority = None;
+
+        let mut out = Vec::new();
+        List::print_detail(&mut out, &packages).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            python: (python)
+              Description: Python interpreter
+              Path:     python3Packages.python
+              Priority: N/A
+              Version:  3.9.5
+              License:  PSF
+              Unfree:   false
+              Broken:   false
+
+            pip-iid: (pip)
+              Description: Python package installer
+              Path:     python3Packages.pip
+              Priority: 100
+              Version:  20.3.4
+              License:  MIT
+              Unfree:   true
+              Broken:   false
+        "})
+    }
+
+    #[test]
+    fn test_print_detail_output_orders_by_priority() {
+        let mut packages = test_packages();
+        packages[1].priority = Some(10);
+
+        let mut out = Vec::new();
+        List::print_detail(&mut out, &packages).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            python: (python)
+              Description: Python interpreter
+              Path:     python3Packages.python
+              Priority: 10
+              Version:  3.9.5
+              License:  PSF
+              Unfree:   false
+              Broken:   false
+
+            pip-iid: (pip)
+              Description: Python package installer
+              Path:     python3Packages.pip
+              Priority: 100
+              Version:  20.3.4
+              License:  MIT
+              Unfree:   true
+              Broken:   false
+        "})
+    }
+
+    /// If a package is missing some values, they should be replaced with "N/A"
+    #[test]
+    fn test_print_detail_output_handles_missing_values() {
+        let mut out = Vec::new();
+        List::print_detail(&mut out, &[uninformative_package()]).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            pip-iid: (pip)
+              Description: N/A
+              Path:     python3Packages.pip
+              Priority: N/A
+              Version:  N/A
+              License:  N/A
+              Unfree:   N/A
+              Broken:   N/A
+        "})
     }
 }

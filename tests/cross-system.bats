@@ -41,6 +41,7 @@ setup_file() {
   )"
 
   export OWNER="floxEM"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 teardown_file() {
@@ -81,10 +82,22 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 
 @test "flox push succeeds" {
+  export FLOX_FEATURES_USE_CATALOG=false
   name="created-on-$NIX_SYSTEM"
 
   "$FLOX_BIN" init -n "$name"
   "$FLOX_BIN" install hello
+  run "$FLOX_BIN" push --owner "$OWNER" --force
+  assert_success
+  assert_output --partial "pushed to FloxHub (forced)"
+}
+
+@test "catalog: flox push succeeds" {
+  name="created-on-$NIX_SYSTEM.catalog"
+
+  "$FLOX_BIN" init -n "$name"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" install hello
   run "$FLOX_BIN" push --owner "$OWNER" --force
   assert_success
   assert_output --partial "pushed to FloxHub (forced)"
@@ -95,6 +108,7 @@ teardown() {
 # Because we don't check for anything other than hello being installed,
 # hopefully race conditions won't be an issue.
 @test "can flox pull and activate an environment created on another system" {
+  export FLOX_FEATURES_USE_CATALOG=false
   local pull_system
   case "$NIX_SYSTEM" in
     x86_64-linux)
@@ -112,9 +126,40 @@ teardown() {
   name="created-on-$pull_system"
 
   "$FLOX_BIN" pull "$OWNER/$name" --force
-  # Close fd 3 because of
-  # https://bats-core.readthedocs.io/en/stable/writing-tests.html#file-descriptor-3-read-this-if-bats-hangs
-  run "$FLOX_BIN" activate -- hello 3>&-
+
+  run "$FLOX_BIN" activate -- hello
+
+  assert_success
+  assert_output --partial "Hello"
+}
+
+# This should pull the environment created by the previous run on a different
+# system of the flox push test above.
+# Because we don't check for anything other than hello being installed,
+# hopefully race conditions won't be an issue.
+@test "catalog: can flox pull and activate an environment created on another system" {
+  local pull_system
+  case "$NIX_SYSTEM" in
+    x86_64-linux)
+      pull_system="x86_64-darwin"
+      ;;
+    x86_64-darwin)
+      pull_system="x86_64-linux"
+      ;;
+    *)
+      # we only run the above two systems consistently in CI
+      skip "unsupported system: $NIX_SYSTEM"
+      ;;
+  esac
+
+  name="created-on-$pull_system.catalog"
+
+  # With --force, pull will add the current system and try to lock
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" pull "$OWNER/$name" --force
+
+  run "$FLOX_BIN" activate -- hello
+
   assert_success
   assert_output --partial "Hello"
 }

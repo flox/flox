@@ -3,7 +3,7 @@
   "info": {
     "title": "Flox Catalog Service",
     "description": "\n# Flox Catalog Service API\n\nTBD\n\n*Markdown is available here*\n",
-    "version": "v0.1.dev134+gd1854a6.d19800101",
+    "version": "vundefined",
     "x-logo": {
       "url": "https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png"
     }
@@ -194,13 +194,136 @@
               }
             }
           },
-          "406": {
-            "description": "One or more package groups could not be resolved.",
+          "422": {
+            "description": "Request validation error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/status/catalog": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "summary": "Get basic catalog database status",
+        "description": "Gather some basic status values from the database.\n\nReturns:\n- **CatalogStatus**: A dictionary of various status values.",
+        "operationId": "get_catalog_status_api_v1_status_catalog_get",
+        "responses": {
+          "200": {
+            "description": "Catalog Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogStatus"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Erorr",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/status/service": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "summary": "Get basic service status",
+        "description": "Returns basic service status\n\nReturns:\n- **ServiceStatus**: A dictionary of various status values.",
+        "operationId": "get_service_status_api_v1_status_service_get",
+        "responses": {
+          "200": {
+            "description": "Service Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceStatus-Input"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Erorr",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/status/sentry-debug": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "summary": "Trigger Error",
+        "operationId": "trigger_error_api_v1_status_sentry_debug_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/settings/{key}": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Adjust various settings",
+        "description": "Adjusts various settings on the catalog service.\n\nQuery Parameters:\n- **key**: The the key to adjust.\n    - \"plan\" - Enables the logging of the DB query plan for queries for\n    **value** seconds.  It will be scheduled to turn off automatically after\n    that.",
+        "operationId": "settings_api_v1_settings_settings__key__post",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          },
+          {
+            "name": "value",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Value"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful.",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -217,21 +340,28 @@
         }
       }
     },
-    "/api/v1/metrics/status": {
+    "/metrics/": {
       "get": {
-        "tags": [
-          "metrics"
-        ],
-        "summary": "Get basic catalog database status",
-        "description": "Gather some basic status values from the database.\n\nReturns:\n- **CatalogStatus**: A dictionary of various status values.",
-        "operationId": "get_status_api_v1_metrics_status_get",
+        "summary": "Handle Metrics",
+        "operationId": "handle_metrics_metrics__get",
         "responses": {
           "200": {
-            "description": "Various status values",
+            "description": "Service Status",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CatalogStatus"
+                  "type": "string",
+                  "title": "Response 200 Handle Metrics Metrics  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -259,12 +389,35 @@
               "$ref": "#/components/schemas/ResolvedPackageDescriptor"
             },
             "type": "array"
+          },
+          "messages": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ResolutionMessageGeneral"
+                },
+                {
+                  "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
+                },
+                {
+                  "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete"
           }
         },
         "type": "object",
         "required": [
           "page",
-          "url"
+          "url",
+          "messages",
+          "complete"
         ],
         "title": "CatalogPage",
         "example": {
@@ -279,7 +432,6 @@
           "rev": "xyz",
           "rev_count": 4,
           "rev_date": 0,
-          "search_string": "curl^curl^my description",
           "stabilities": [
             "stable",
             "unstable"
@@ -305,12 +457,35 @@
               "$ref": "#/components/schemas/ResolvedPackageDescriptor"
             },
             "type": "array"
+          },
+          "messages": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ResolutionMessageGeneral"
+                },
+                {
+                  "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
+                },
+                {
+                  "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete"
           }
         },
         "type": "object",
         "required": [
           "page",
-          "url"
+          "url",
+          "messages",
+          "complete"
         ],
         "title": "CatalogPage",
         "example": {
@@ -325,7 +500,6 @@
           "rev": "xyz",
           "rev_count": 4,
           "rev_date": 0,
-          "search_string": "curl^curl^my description",
           "stabilities": [
             "stable",
             "unstable"
@@ -379,6 +553,16 @@
           "schema_version": {
             "type": "number",
             "title": "Schema Version"
+          },
+          "tags": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Tags"
           }
         },
         "type": "object",
@@ -391,7 +575,8 @@
           "attribute_path_ct",
           "search_index_ct",
           "derivations_ct",
-          "schema_version"
+          "schema_version",
+          "tags"
         ],
         "title": "CatalogStatus"
       },
@@ -407,6 +592,26 @@
           "detail"
         ],
         "title": "ErrorResponse"
+      },
+      "MessageLevel": {
+        "type": "string",
+        "enum": [
+          "trace",
+          "info",
+          "warning",
+          "error"
+        ],
+        "title": "MessageLevel"
+      },
+      "MessageType": {
+        "type": "string",
+        "enum": [
+          "general",
+          "resolution_trace",
+          "attr_path_not_found",
+          "constraints_too_tight"
+        ],
+        "title": "MessageType"
       },
       "Output": {
         "properties": {
@@ -436,6 +641,13 @@
             "type": "string",
             "title": "Attr Path"
           },
+          "systems": {
+            "items": {
+              "$ref": "#/components/schemas/SystemEnum"
+            },
+            "type": "array",
+            "title": "Systems"
+          },
           "version": {
             "title": "Version",
             "nullable": true,
@@ -447,6 +659,26 @@
             "nullable": true,
             "type": "boolean"
           },
+          "allow_unfree": {
+            "title": "Allow Unfree",
+            "default": true,
+            "nullable": true,
+            "type": "boolean"
+          },
+          "allow_broken": {
+            "title": "Allow Broken",
+            "default": false,
+            "nullable": true,
+            "type": "boolean"
+          },
+          "allowed_licenses": {
+            "title": "Allowed Licenses",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "derivation": {
             "title": "Derivation",
             "nullable": true,
@@ -456,12 +688,16 @@
         "type": "object",
         "required": [
           "install_id",
-          "attr_path"
+          "attr_path",
+          "systems"
         ],
         "title": "PackageDescriptor",
         "example": {
           "attr_path": "curl",
-          "install_id": "curl"
+          "install_id": "curl",
+          "systems": [
+            "x86_64-linux"
+          ]
         }
       },
       "PackageGroup": {
@@ -469,9 +705,6 @@
           "name": {
             "type": "string",
             "title": "Name"
-          },
-          "system": {
-            "$ref": "#/components/schemas/SystemEnum"
           },
           "stability": {
             "title": "Stability",
@@ -489,7 +722,6 @@
         "type": "object",
         "required": [
           "name",
-          "system",
           "descriptors"
         ],
         "title": "PackageGroup",
@@ -497,19 +729,27 @@
           "descriptors": [
             {
               "attr_path": "curl",
-              "install_id": "curl"
+              "install_id": "curl",
+              "systems": [
+                "x86_64-linux"
+              ]
             },
             {
               "attr_path": "slack",
-              "install_id": "slack"
+              "install_id": "slack",
+              "systems": [
+                "x86_64-linux"
+              ]
             },
             {
               "attr_path": "xorg.xeyes",
-              "install_id": "xeyes"
+              "install_id": "xeyes",
+              "systems": [
+                "x86_64-linux"
+              ]
             }
           ],
-          "name": "test",
-          "system": "x86_64-linux"
+          "name": "test"
         }
       },
       "PackageGroups": {
@@ -533,24 +773,32 @@
               "descriptors": [
                 {
                   "attr_path": "curl",
-                  "install_id": "curl"
+                  "install_id": "curl",
+                  "systems": [
+                    "x86_64-linux"
+                  ]
                 },
                 {
                   "attr_path": "slack",
-                  "install_id": "slack"
+                  "install_id": "slack",
+                  "systems": [
+                    "x86_64-linux"
+                  ]
                 },
                 {
                   "attr_path": "xorg.xeyes",
-                  "install_id": "xeyes"
+                  "install_id": "xeyes",
+                  "systems": [
+                    "x86_64-linux"
+                  ]
                 }
               ],
-              "name": "test",
-              "system": "x86_64-linux"
+              "name": "test"
             }
           ]
         }
       },
-      "PackageInfoAPI": {
+      "PackageInfoSearch": {
         "properties": {
           "attr_path": {
             "type": "string",
@@ -564,51 +812,10 @@
             "type": "string",
             "title": "Pname"
           },
-          "version": {
-            "type": "string",
-            "title": "Version"
-          },
-          "outputs": {
-            "title": "Outputs",
-            "nullable": true,
-            "items": {
-              "$ref": "#/components/schemas/Output"
-            },
-            "type": "array"
-          },
-          "outputs_to_install": {
-            "title": "Outputs To Install",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "description": {
             "title": "Description",
             "nullable": true,
             "type": "string"
-          },
-          "license": {
-            "title": "License",
-            "nullable": true,
-            "type": "string"
-          },
-          "rev": {
-            "type": "string",
-            "title": "Rev"
-          },
-          "rev_count": {
-            "type": "integer",
-            "title": "Rev Count"
-          },
-          "rev_date": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Rev Date"
-          },
-          "system": {
-            "$ref": "#/components/schemas/SystemEnum"
           },
           "stabilities": {
             "items": {
@@ -617,107 +824,6 @@
             "type": "array",
             "title": "Stabilities"
           },
-          "locked_url": {
-            "type": "string",
-            "title": "Locked Url"
-          }
-        },
-        "type": "object",
-        "required": [
-          "attr_path",
-          "name",
-          "pname",
-          "version",
-          "outputs",
-          "outputs_to_install",
-          "description",
-          "license",
-          "rev",
-          "rev_count",
-          "rev_date",
-          "system",
-          "stabilities",
-          "locked_url"
-        ],
-        "title": "PackageInfoAPI",
-        "example": {
-          "attr_path": "foo.bar.curl",
-          "description": "A very nice Item",
-          "license": "foo",
-          "locked_url": "git:git?rev=xyz",
-          "name": "curl",
-          "outputs": "{}",
-          "outputs_to_install": "{}",
-          "pname": "curl",
-          "rev": "xyz",
-          "rev_count": 4,
-          "rev_date": 0,
-          "search_string": "curl^curl^my description",
-          "stabilities": [
-            "stable",
-            "unstable"
-          ],
-          "system": "x86_64-linux",
-          "version": "1.0"
-        }
-      },
-      "PackageInfoCommon": {
-        "properties": {
-          "attr_path": {
-            "type": "string",
-            "title": "Attr Path"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "pname": {
-            "type": "string",
-            "title": "Pname"
-          },
-          "version": {
-            "type": "string",
-            "title": "Version"
-          },
-          "outputs": {
-            "title": "Outputs",
-            "nullable": true,
-            "items": {
-              "$ref": "#/components/schemas/Output"
-            },
-            "type": "array"
-          },
-          "outputs_to_install": {
-            "title": "Outputs To Install",
-            "nullable": true,
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "description": {
-            "title": "Description",
-            "nullable": true,
-            "type": "string"
-          },
-          "license": {
-            "title": "License",
-            "nullable": true,
-            "type": "string"
-          },
-          "rev": {
-            "type": "string",
-            "title": "Rev"
-          },
-          "rev_count": {
-            "type": "integer",
-            "title": "Rev Count"
-          },
-          "rev_date": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Rev Date"
-          },
           "system": {
             "$ref": "#/components/schemas/SystemEnum"
           }
@@ -727,147 +833,24 @@
           "attr_path",
           "name",
           "pname",
-          "version",
-          "outputs",
-          "outputs_to_install",
           "description",
-          "license",
-          "rev",
-          "rev_count",
-          "rev_date",
+          "stabilities",
           "system"
         ],
-        "title": "PackageInfoCommon"
+        "title": "PackageInfoSearch",
+        "example": {
+          "attr_path": "foo.bar.curl",
+          "description": "A very nice Item",
+          "name": "curl",
+          "pname": "curl",
+          "stabilities": [
+            "stable",
+            "unstable"
+          ],
+          "system": "x86_64-linux"
+        }
       },
-      "PackageSearchResult-Input": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/PackageInfoAPI"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total_count": {
-            "type": "integer",
-            "title": "Total Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total_count"
-        ],
-        "title": "PackageSearchResult",
-        "example": [
-          {
-            "attr_path": "foo.bar.curl",
-            "description": "A very nice Item",
-            "license": "foo",
-            "locked_url": "git:git?rev=xyz",
-            "name": "curl",
-            "outputs": "{}",
-            "outputs_to_install": "{}",
-            "pname": "curl",
-            "rev": "xyz",
-            "rev_count": 4,
-            "rev_date": 0,
-            "search_string": "curl^curl^my description",
-            "stabilities": [
-              "stable",
-              "unstable"
-            ],
-            "system": "x86_64-linux",
-            "version": "1.0"
-          }
-        ]
-      },
-      "PackageSearchResult-Output": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/PackageInfoAPI"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total_count": {
-            "type": "integer",
-            "title": "Total Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total_count"
-        ],
-        "title": "PackageSearchResult",
-        "example": [
-          {
-            "attr_path": "foo.bar.curl",
-            "description": "A very nice Item",
-            "license": "foo",
-            "locked_url": "git:git?rev=xyz",
-            "name": "curl",
-            "outputs": "{}",
-            "outputs_to_install": "{}",
-            "pname": "curl",
-            "rev": "xyz",
-            "rev_count": 4,
-            "rev_date": 0,
-            "search_string": "curl^curl^my description",
-            "stabilities": [
-              "stable",
-              "unstable"
-            ],
-            "system": "x86_64-linux",
-            "version": "1.0"
-          }
-        ]
-      },
-      "PackagesResult-Input": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/PackageInfoCommon"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total_count": {
-            "type": "integer",
-            "title": "Total Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total_count"
-        ],
-        "title": "PackagesResult"
-      },
-      "PackagesResult-Output": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/PackageInfoCommon"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total_count": {
-            "type": "integer",
-            "title": "Total Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total_count"
-        ],
-        "title": "PackagesResult"
-      },
-      "ResolvedPackageDescriptor": {
+      "PackageResolutionInfo": {
         "properties": {
           "attr_path": {
             "type": "string",
@@ -889,13 +872,15 @@
             "type": "string",
             "title": "Version"
           },
+          "system": {
+            "$ref": "#/components/schemas/SystemEnum"
+          },
           "outputs": {
-            "title": "Outputs",
-            "nullable": true,
             "items": {
               "$ref": "#/components/schemas/Output"
             },
-            "type": "array"
+            "type": "array",
+            "title": "Outputs"
           },
           "outputs_to_install": {
             "title": "Outputs To Install",
@@ -933,8 +918,331 @@
             "title": "Rev Date"
           },
           "broken": {
-            "type": "boolean",
-            "title": "Broken"
+            "title": "Broken",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "unfree": {
+            "title": "Unfree",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "stabilities": {
+            "title": "Stabilities",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scrape_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Scrape Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "attr_path",
+          "derivation",
+          "name",
+          "pname",
+          "version",
+          "system",
+          "outputs",
+          "outputs_to_install",
+          "description",
+          "license",
+          "locked_url",
+          "rev",
+          "rev_count",
+          "rev_date",
+          "broken",
+          "unfree",
+          "stabilities",
+          "scrape_date"
+        ],
+        "title": "PackageResolutionInfo"
+      },
+      "PackageSearchResult-Input": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PackageInfoSearch"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_count"
+        ],
+        "title": "PackageSearchResult",
+        "example": [
+          {
+            "attr_path": "foo.bar.curl",
+            "description": "A very nice Item",
+            "name": "curl",
+            "pname": "curl",
+            "stabilities": [
+              "stable",
+              "unstable"
+            ],
+            "system": "x86_64-linux"
+          }
+        ]
+      },
+      "PackageSearchResult-Output": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PackageInfoSearch"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_count"
+        ],
+        "title": "PackageSearchResult",
+        "example": [
+          {
+            "attr_path": "foo.bar.curl",
+            "description": "A very nice Item",
+            "name": "curl",
+            "pname": "curl",
+            "stabilities": [
+              "stable",
+              "unstable"
+            ],
+            "system": "x86_64-linux"
+          }
+        ]
+      },
+      "PackagesResult-Input": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PackageResolutionInfo"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_count"
+        ],
+        "title": "PackagesResult"
+      },
+      "PackagesResult-Output": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PackageResolutionInfo"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total_count"
+        ],
+        "title": "PackagesResult"
+      },
+      "ResolutionAttrPathNotFound": {
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/MessageLevel"
+          },
+          "type": {
+            "$ref": "#/components/schemas/MessageType"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          },
+          "context": {
+            "title": "Context",
+            "default": {},
+            "nullable": true,
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "install_id": {
+            "type": "string",
+            "title": "Install Id"
+          },
+          "attr_path": {
+            "type": "string",
+            "title": "Attr Path"
+          },
+          "valid_systems": {
+            "items": {
+              "$ref": "#/components/schemas/SystemEnum"
+            },
+            "type": "array",
+            "title": "Valid Systems"
+          }
+        },
+        "type": "object",
+        "required": [
+          "install_id",
+          "attr_path",
+          "valid_systems"
+        ],
+        "title": "ResolutionAttrPathNotFound"
+      },
+      "ResolutionConstraintsTooTight": {
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/MessageLevel"
+          },
+          "type": {
+            "$ref": "#/components/schemas/MessageType"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          },
+          "context": {
+            "title": "Context",
+            "default": {},
+            "nullable": true,
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "type": "object",
+        "title": "ResolutionConstraintsTooTight"
+      },
+      "ResolutionMessageGeneral": {
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/MessageLevel"
+          },
+          "type": {
+            "$ref": "#/components/schemas/MessageType"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          },
+          "context": {
+            "title": "Context",
+            "default": {},
+            "nullable": true,
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "type": "object",
+        "title": "ResolutionMessageGeneral"
+      },
+      "ResolvedPackageDescriptor": {
+        "properties": {
+          "attr_path": {
+            "type": "string",
+            "title": "Attr Path"
+          },
+          "derivation": {
+            "type": "string",
+            "title": "Derivation"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "pname": {
+            "type": "string",
+            "title": "Pname"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "system": {
+            "$ref": "#/components/schemas/SystemEnum"
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/Output"
+            },
+            "type": "array",
+            "title": "Outputs"
+          },
+          "outputs_to_install": {
+            "title": "Outputs To Install",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": {
+            "title": "Description",
+            "nullable": true,
+            "type": "string"
+          },
+          "license": {
+            "title": "License",
+            "nullable": true,
+            "type": "string"
+          },
+          "locked_url": {
+            "type": "string",
+            "title": "Locked Url"
+          },
+          "rev": {
+            "type": "string",
+            "title": "Rev"
+          },
+          "rev_count": {
+            "type": "integer",
+            "title": "Rev Count"
+          },
+          "rev_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Rev Date"
+          },
+          "broken": {
+            "title": "Broken",
+            "nullable": true,
+            "type": "boolean"
           },
           "unfree": {
             "title": "Unfree",
@@ -966,6 +1274,7 @@
           "name",
           "pname",
           "version",
+          "system",
           "outputs",
           "outputs_to_install",
           "description",
@@ -988,22 +1297,32 @@
             "type": "string",
             "title": "Name"
           },
-          "system": {
-            "$ref": "#/components/schemas/SystemEnum"
+          "page": {
+            "nullable": true,
+            "$ref": "#/components/schemas/CatalogPage-Input"
           },
-          "pages": {
+          "messages": {
             "items": {
-              "$ref": "#/components/schemas/CatalogPage-Input"
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ResolutionMessageGeneral"
+                },
+                {
+                  "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
+                },
+                {
+                  "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
+                }
+              ]
             },
             "type": "array",
-            "title": "Pages"
+            "title": "Messages"
           }
         },
         "type": "object",
         "required": [
           "name",
-          "system",
-          "pages"
+          "messages"
         ],
         "title": "ResolvedPackageGroup",
         "example": {
@@ -1018,7 +1337,6 @@
           "rev": "xyz",
           "rev_count": 4,
           "rev_date": 0,
-          "search_string": "curl^curl^my description",
           "stabilities": [
             "stable",
             "unstable"
@@ -1033,22 +1351,32 @@
             "type": "string",
             "title": "Name"
           },
-          "system": {
-            "$ref": "#/components/schemas/SystemEnum"
+          "page": {
+            "nullable": true,
+            "$ref": "#/components/schemas/CatalogPage-Output"
           },
-          "pages": {
+          "messages": {
             "items": {
-              "$ref": "#/components/schemas/CatalogPage-Output"
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ResolutionMessageGeneral"
+                },
+                {
+                  "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
+                },
+                {
+                  "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
+                }
+              ]
             },
             "type": "array",
-            "title": "Pages"
+            "title": "Messages"
           }
         },
         "type": "object",
         "required": [
           "name",
-          "system",
-          "pages"
+          "messages"
         ],
         "title": "ResolvedPackageGroup",
         "example": {
@@ -1063,7 +1391,6 @@
           "rev": "xyz",
           "rev_count": 4,
           "rev_date": 0,
-          "search_string": "curl^curl^my description",
           "stabilities": [
             "stable",
             "unstable"
@@ -1103,6 +1430,56 @@
           "items"
         ],
         "title": "ResolvedPackageGroups"
+      },
+      "ServiceStatus-Input": {
+        "properties": {
+          "service_version": {
+            "type": "string",
+            "title": "Service Version"
+          },
+          "start_tm": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start Tm"
+          }
+        },
+        "type": "object",
+        "required": [
+          "service_version",
+          "start_tm"
+        ],
+        "title": "ServiceStatus"
+      },
+      "ServiceStatus-Output": {
+        "properties": {
+          "service_version": {
+            "type": "string",
+            "title": "Service Version"
+          },
+          "start_tm": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start Tm"
+          },
+          "uptime_seconds": {
+            "type": "number",
+            "title": "Uptime Seconds",
+            "readOnly": true
+          },
+          "uptime_pretty": {
+            "type": "string",
+            "title": "Uptime Pretty",
+            "readOnly": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "service_version",
+          "start_tm",
+          "uptime_seconds",
+          "uptime_pretty"
+        ],
+        "title": "ServiceStatus"
       },
       "SystemEnum": {
         "type": "string",

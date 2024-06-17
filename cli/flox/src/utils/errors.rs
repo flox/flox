@@ -7,6 +7,7 @@ use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentErr
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     EnvironmentError,
+    UpgradeError,
     ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::lockfile::LockedManifestError;
@@ -233,10 +234,14 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         // todo: enrich with path
         // raised during edit
         CoreEnvironmentError::DeserializeManifest(err) => formatdoc! {
-            "Failed to parse manifest: {err}
+            "Failed to parse manifest:
 
-            Please ensure that '.flox/env/manifest.toml' is a valid TOML file.
-        "},
+            {err}
+        ",
+            // The message adds a newline at the end,
+            // trim to make the error look better
+            err = err.message().trim()
+        },
         CoreEnvironmentError::MakeSandbox(_) => display_chain(err),
         // witin transaction, user should not see this and likely can't do anything about it
         CoreEnvironmentError::WriteLockfile(_) => display_chain(err),
@@ -293,7 +298,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         CoreEnvironmentError::BadLockfilePath(_) => display_chain(err),
 
         // todo: should be in LockedManifesterror
-        CoreEnvironmentError::UpgradeFailed(pkgdb_error) => {
+        CoreEnvironmentError::UpgradeFailedPkgDb(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to upgrade environment.")
         },
         // other pkgdb call errors are unexpected
@@ -312,6 +317,16 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 
             Please enable the catalog feature and try again.
         "},
+        CoreEnvironmentError::UpgradeFailedCatalog(err) => match err {
+            UpgradeError::PkgNotFound(err) => err.to_string(),
+            UpgradeError::NonEmptyNamedGroup { pkg, group } => formatdoc! {"
+                '{pkg}' is a package in the group '{group}' with multiple packages.
+                To upgrade the group, specify the group name:
+                    $ flox upgrade {group}
+                To upgrade all packages, run:
+                    $ flox upgrade
+            "},
+        },
     }
 }
 
@@ -717,6 +732,22 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         LockedManifestError::ParseCheckWarnings(_) => display_chain(err),
         LockedManifestError::UnsupportedLockfileForUpdate => display_chain(err),
         LockedManifestError::NoPackagesOnFirstPage(_, _) => display_chain(err),
+        LockedManifestError::UnrecognizedSystem(system) => formatdoc! {"
+            Unrecognized system in manifest: {system}
+
+            Supported systems are: aarch64-linux, x86_64-linux, aarch64-darwin, x86_64-darwin
+        "},
+
+        LockedManifestError::SystemUnavailableInManifest { .. } => display_chain(err),
+
+        LockedManifestError::ResolutionFailed(_) => display_chain(err),
+        LockedManifestError::EmptyPage => display_chain(err),
+        // User facing
+        LockedManifestError::LicenseNotAllowed(..) => display_chain(err),
+        // User facing
+        LockedManifestError::BrokenNotAllowed(_) => display_chain(err),
+        // User facing
+        LockedManifestError::UnfreeNotAllowed(_) => display_chain(err),
     }
 }
 

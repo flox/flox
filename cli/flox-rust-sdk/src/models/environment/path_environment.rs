@@ -36,6 +36,7 @@ use super::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     GCROOTS_DIR_NAME,
+    LIB_DIR_NAME,
     LOCKFILE_FILENAME,
 };
 use crate::data::{CanonicalPath, System};
@@ -78,6 +79,8 @@ pub struct InitCustomization {
     pub hook_on_activate: Option<String>,
     pub profile_common: Option<String>,
     pub profile_bash: Option<String>,
+    pub profile_fish: Option<String>,
+    pub profile_tcsh: Option<String>,
     pub profile_zsh: Option<String>,
     pub packages: Option<Vec<PackageToInstall>>,
 }
@@ -378,11 +381,19 @@ impl PathEnvironment {
         }
 
         // Create manifest
-        let manifest = RawManifest::new_documented(
-            &[&system.to_string()],
-            customization,
-            flox.catalog_client.is_some(),
-        );
+        let all_systems = [
+            &System::from("aarch64-darwin"),
+            &System::from("aarch64-linux"),
+            &System::from("x86_64-darwin"),
+            &System::from("x86_64-linux"),
+        ];
+        let manifest = if flox.catalog_client.is_some() {
+            tracing::debug!("creating raw catalog manifest");
+            RawManifest::new_documented(all_systems.as_slice(), customization, true)
+        } else {
+            tracing::debug!("creating raw pkgdb manifest");
+            RawManifest::new_documented(&[&system.to_string()], customization, false)
+        };
 
         let mut environment = Self::write_new_unchecked(
             flox,
@@ -450,6 +461,7 @@ impl PathEnvironment {
         fs::write(dot_flox_path.join(".gitignore"), formatdoc! {"
             {GCROOTS_DIR_NAME}/
             {CACHE_DIR_NAME}/
+            {LIB_DIR_NAME}/
             "})
         .map_err(EnvironmentError::WriteGitignore)?;
 
@@ -483,7 +495,7 @@ impl PathEnvironment {
              out_link_modified_at: {out_link_modified_at:?}"
         );
 
-        Ok(manifest_modified_at >= out_link_modified_at)
+        Ok(manifest_modified_at >= out_link_modified_at || !self.out_link(&flox.system)?.exists())
     }
 }
 

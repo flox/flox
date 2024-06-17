@@ -31,6 +31,7 @@
   git,
   coreutils,
   gnused,
+  findutils,
   procps,
   parallel,
   llvm, # for `llvm-symbolizer'
@@ -76,11 +77,17 @@
 
           substituteInPlace $out/activate.d/bash \
             --replace "@gnused@" "${gnused}"
+          substituteInPlace $out/activate.d/fish \
+            --replace "@gnused@" "${gnused}"
+          substituteInPlace $out/activate.d/tcsh \
+            --replace "@gnused@" "${gnused}"
           substituteInPlace $out/activate.d/zsh \
             --replace "@gnused@" "${gnused}"
 
           for i in $out/etc/profile.d/*; do
             substituteInPlace $i --replace "@coreutils@" "${coreutils}"
+            substituteInPlace $i --replace "@gnused@" "${gnused}"
+            substituteInPlace $i --replace "@findutils@" "${findutils}"
           done
 
           ${shellcheck}/bin/shellcheck \

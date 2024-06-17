@@ -3,6 +3,10 @@
 #
 # See README.md for more information on the initialization process.
 
+# Save and restore the current tracelevel in the event that sourcing
+# bashrc launches an inner nested activation which unsets it.
+_save_flox_activate_tracelevel="$_flox_activate_tracelevel"
+
 if [ -f /etc/zshrc ]
 then
     if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
@@ -11,6 +15,7 @@ then
     else
         ZDOTDIR= source /etc/zshrc
     fi
+    export _flox_activate_tracelevel="$_save_flox_activate_tracelevel"
 fi
 
 zshrc="${FLOX_ORIG_ZDOTDIR:-$HOME}/.zshrc"
@@ -22,6 +27,7 @@ then
     else
         ZDOTDIR= source "$zshrc"
     fi
+    export _flox_activate_tracelevel="$_save_flox_activate_tracelevel"
 fi
 
 # Bring in the Nix and Flox environment customizations, but _not_ if this is

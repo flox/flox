@@ -412,7 +412,6 @@ impl Provider for PoetryPyProject {
 
         InitCustomization {
             hook_on_activate: Some(
-                // TODO: when we support fish, we'll need to source activate.fish
                 indoc! {r#"
                 # Setup a Python virtual environment
 
@@ -438,6 +437,18 @@ impl Provider for PoetryPyProject {
                 source "$(poetry env info --path)/bin/activate""#}
                 .to_string(),
             ),
+            profile_fish: Some(
+                indoc! {r#"
+                echo "Activating poetry virtual environment" >&2
+                source "$(poetry env info --path)/bin/activate.fish""#}
+                .to_string(),
+            ),
+            profile_tcsh: Some(
+                indoc! {r#"
+                echo "Activating poetry virtual environment" >&2
+                source "$(poetry env info --path)/bin/activate.csh""#}
+                .to_string(),
+            ),
             profile_zsh: Some(
                 indoc! {r#"
                 echo "Activating poetry virtual environment" >&2
@@ -449,13 +460,11 @@ impl Provider for PoetryPyProject {
                     id: "python3".to_string(),
                     pkg_path: "python3".to_string(),
                     version: python_version,
-                    input: None,
                 },
                 PackageToInstall {
                     id: "poetry".to_string(),
                     pkg_path: "poetry".to_string(),
                     version: None,
-                    input: None,
                 },
             ]),
         }
@@ -603,7 +612,6 @@ impl Provider for PyProject {
 
         InitCustomization {
             hook_on_activate: Some(
-                // TODO: when we support fish, we'll need to source activate.fish
                 indoc! {r#"
                 # Setup a Python virtual environment
 
@@ -630,6 +638,18 @@ impl Provider for PyProject {
                 source "$PYTHON_DIR/bin/activate""#}
                 .to_string(),
             ),
+            profile_fish: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate.fish""#}
+                .to_string(),
+            ),
+            profile_tcsh: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate.csh""#}
+                .to_string(),
+            ),
             profile_zsh: Some(
                 indoc! {r#"
                 echo "Activating python virtual environment" >&2
@@ -640,7 +660,6 @@ impl Provider for PyProject {
                 id: "python3".to_string(),
                 pkg_path: "python3".to_string(),
                 version: python_version,
-                input: None,
             }]),
         }
     }
@@ -746,7 +765,6 @@ impl Provider for Requirements {
             .join("\n");
         InitCustomization {
             hook_on_activate: Some(
-                // TODO: when we support fish, we'll need to source activate.fish
                 formatdoc! {r#"
                 # Setup a Python virtual environment
 
@@ -771,6 +789,18 @@ impl Provider for Requirements {
                 source "$PYTHON_DIR/bin/activate""#}
                 .to_string(),
             ),
+            profile_fish: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate.fish""#}
+                .to_string(),
+            ),
+            profile_tcsh: Some(
+                indoc! {r#"
+                echo "Activating python virtual environment" >&2
+                source "$PYTHON_DIR/bin/activate.csh""#}
+                .to_string(),
+            ),
             profile_zsh: Some(
                 indoc! {r#"
                 echo "Activating python virtual environment" >&2
@@ -781,7 +811,6 @@ impl Provider for Requirements {
                 id: "python3".to_string(),
                 pkg_path: "python3".to_string(),
                 version: None,
-                input: None,
             }]),
         }
     }
@@ -796,12 +825,12 @@ mod tests {
         flox_instance_with_global_lock,
         flox_instance_with_optional_floxhub_and_client,
     };
+    use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use flox_rust_sdk::providers::catalog::Client;
     use pretty_assertions::assert_eq;
     use serial_test::serial;
 
     use super::*;
-    use crate::commands::init::tests::resolved_pkg_group_with_dummy_package;
     use crate::commands::init::ProvidedPackage;
 
     /// An invalid pyproject.toml should return an error
