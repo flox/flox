@@ -65,9 +65,13 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
     ) -> Result<SearchResults> {
         match flox.catalog_client {
             Some(ref client) => {
+                tracing::debug!("using client for install suggestions");
                 Self::suggest_searched_packages_catalog(client, term, flox.system.clone())
             },
-            None => Self::suggest_searched_packages_pkgdb(flox, environment, term),
+            None => {
+                tracing::debug!("using pkgdb for install suggestions");
+                Self::suggest_searched_packages_pkgdb(flox, environment, term)
+            },
         }
     }
 

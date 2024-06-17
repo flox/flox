@@ -692,10 +692,10 @@ impl LockedManifestCatalog {
         let groups = groups.into_iter().collect::<Vec<_>>();
         let failed_group_indices = Self::detect_failed_resolutions(&groups);
         let failures = if failed_group_indices.is_empty() {
-            tracing::debug!("all groups resolved");
+            tracing::debug!("no resolution failures detected");
             None
         } else {
-            tracing::debug!("resolution failed");
+            tracing::debug!("resolution failures detected");
             let failed_groups = failed_group_indices
                 .iter()
                 .map(|&i| groups[i].clone())
@@ -705,7 +705,7 @@ impl LockedManifestCatalog {
         };
         if let Some(failures) = failures {
             if !failures.is_empty() {
-                tracing::debug!("returning resolution failure message");
+                tracing::debug!(n = failures.len(), "returning resolution failures");
                 return Err(LockedManifestError::ResolutionFailed(ResolutionFailures(
                     failures,
                 )));
