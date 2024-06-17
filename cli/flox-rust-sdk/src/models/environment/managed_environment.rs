@@ -1122,10 +1122,21 @@ impl ManagedEnvironment {
         // or it could fail to build.
         // So we have to verify we don't have a "broken" generation before pushing.
         {
-            let mut env = self.get_current_generation(flox)?;
+            let remote = self.get_current_generation(flox)?;
+
+            let mut local_checkout = self.local_checkout(flox).unwrap();
+
+            if !Self::validate_checkout(&local_checkout, &remote) {
+                panic!(
+                    "local checkout and remote checkout are not equal, use 'edit --apply' to apply updates first"
+                );
+            }
+
             // [sic] We do not _lock_ the environment here,
             // as a valid lockfile is a precondition for creating a generation.
-            env.build(flox).map_err(ManagedEnvironmentError::Build)?;
+            local_checkout
+                .build(flox)
+                .map_err(ManagedEnvironmentError::Build)?;
         }
 
         // Fetch the remote branch into sync branch
