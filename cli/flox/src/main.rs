@@ -124,9 +124,6 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::from(0),
 
         Err(e) => {
-            // todo: figure out how to deal with context, properly
-            debug!("{:#}", e);
-
             // Do not print any error if caused by wrapped flox (sh)
             if e.is::<FloxShellErrorCode>() {
                 return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;

@@ -11,6 +11,8 @@ use flox_rust_sdk::models::lockfile::{
     LockedManifestError,
     LockedManifestPkgdb,
     LockedPackageCatalog,
+    ResolutionFailure,
+    ResolutionFailures,
 };
 use flox_rust_sdk::models::manifest::PackageToInstall;
 use flox_rust_sdk::models::pkgdb::error_codes;
@@ -224,17 +226,52 @@ impl Install {
                 }
                 let path = packages[0].pkg_path.clone();
 
-                let head = format!("Could not find package {path}.");
+                let head = format!("Could not find package '{path}'.");
 
                 let suggestion = DidYouMean::<InstallSuggestion>::new(flox, environment, &path);
                 if !suggestion.has_suggestions() {
-                    break 'error anyhow!("{head} Try 'flox search' with a broader search term.");
+                    break 'error anyhow!("{head}\nTry 'flox search' with a broader search term.");
                 }
 
                 anyhow!(formatdoc! {"
                     {head}
                     {suggestion}
                 "})
+            },
+            EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
+                LockedManifestError::ResolutionFailed(failures),
+            )) => {
+                // We only have to do this bullshit because `DidYouMean` only lives
+                // in `flox`, otherwise we could just use it to format the failure in
+                // `flox-rust-sdk`.
+                // Essentially we're going to convert the `PackageNotFound` variants into
+                // `FallbackMessage` variants, which are just strings we're going to generate
+                // with `DidYouMean`
+                let (need_didyoumean, mut other_failures): (Vec<_>, Vec<_>) = failures
+                    .0
+                    .into_iter()
+                    .partition(|f| matches!(f, ResolutionFailure::PackageNotFound { .. }));
+                for failure in need_didyoumean.into_iter() {
+                    let ResolutionFailure::PackageNotFound { attr_path, .. } = failure else {
+                        unreachable!("already checked that these failures are 'package not found'")
+                    };
+                    let suggestion =
+                        DidYouMean::<InstallSuggestion>::new(flox, environment, &attr_path);
+                    let head = format!("Could not find package '{attr_path}'.");
+                    let msg = if suggestion.has_suggestions() {
+                        tracing::debug!(query = attr_path, "found suggestions for package");
+                        formatdoc! {"
+                        {head}
+                        {suggestion}"}
+                    } else {
+                        format!("{head}\nTry 'flox search' with a broader search term.")
+                    };
+                    other_failures.push(ResolutionFailure::FallbackMessage { msg });
+                }
+                EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
+                    LockedManifestError::ResolutionFailed(ResolutionFailures(other_failures)),
+                ))
+                .into()
             },
             err => apply_doc_link_for_unsupported_packages(err).into(),
         }

@@ -10,11 +10,11 @@
           {
             "attr_path": "go",
             "broken": false,
-            "derivation": "/nix/store/1dszwwglrmz9asmbs1xg1qy45g27mdcj-go-1.22.3.drv",
+            "derivation": "/nix/store/4mci68kiqns6dxsdw24yhzbsfqpqy8y9-go-1.22.3.drv",
             "description": "The Go Programming language",
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=051f920625ab5aabe37c920346e3e69d7d34400e",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
             "name": "go-1.22.3",
             "outputs": [
               {
@@ -26,17 +26,20 @@
               "out"
             ],
             "pname": "go",
-            "rev": "051f920625ab5aabe37c920346e3e69d7d34400e",
-            "rev_count": 636273,
-            "rev_date": "2024-06-07T18:50:04Z",
-            "scrape_date": "2024-06-11T01:57:26Z",
-            "stabilities": null,
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
+            "stabilities": [
+              "staging",
+              "unstable"
+            ],
             "system": "aarch64-darwin",
             "unfree": false,
             "version": "1.22.3"
           }
         ],
-        "page": 636273,
+        "page": 633517,
         "url": ""
       }
     }
@@ -71,8 +74,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T09:46:16Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -101,8 +105,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T09:46:16Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -131,8 +136,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T09:46:16Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -161,8 +167,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T09:46:16Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
