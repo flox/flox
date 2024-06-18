@@ -767,12 +767,9 @@ impl From<ResolutionMessageGeneral> for ResolutionMessage {
                             .collect::<Vec<_>>()
                     })
                     .unwrap_or_default();
-                // TODO: `install_id` is *supposed* to be populated, but for the moment
-                //       it's not.
                 let install_id: String = r_msg
                     .context
                     .get("install_id")
-                    .clone()
                     .map(|s| s.to_string())
                     .unwrap_or("default_install_id".to_string());
                 ResolutionMessage::AttrPathNotFound(MsgAttrPathNotFound {
