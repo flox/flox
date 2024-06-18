@@ -1732,11 +1732,19 @@ mod tests {
                 ResolutionFailures(failures),
             )) = *e
             {
-                let expected_message = "AttrPath 'glibc' not found for some systems, valid systems are (['aarch64-linux', 'x86_64-linux']).".to_string();
                 assert!(failures.len() == 1);
-                assert_eq!(failures[0], ResolutionFailure::FallbackMessage {
-                    msg: expected_message
-                });
+                assert_eq!(
+                    failures[0],
+                    ResolutionFailure::PackageUnavailableOnSomeSystems {
+                        install_id: "glibc".to_string(),
+                        attr_path: "glibc".to_string(),
+                        invalid_systems: vec!["aarch64-darwin".to_string()],
+                        valid_systems: vec![
+                            "aarch64-linux".to_string(),
+                            "x86_64-linux".to_string()
+                        ],
+                    }
+                );
             } else {
                 panic!("expected ResolutionFailures")
             }
