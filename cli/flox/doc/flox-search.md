@@ -56,5 +56,4 @@ portion of the pkg-path or description.
 ```
 
 # SEE ALSO
-[`flox-show(1)`](./flox-show.md),
-[`flox-update(1)`](./flox-update.md)
+[`flox-show(1)`](./flox-show.md)
