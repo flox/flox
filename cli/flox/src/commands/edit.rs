@@ -23,12 +23,17 @@ use super::{
     environment_select,
     maybe_migrate_environment_to_v1,
     EnvironmentSelect,
+    MigrationError,
     UninitializedEnvironment,
 };
 use crate::commands::{ensure_floxhub_token, ConcreteEnvironment};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
-use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_core_error};
+use crate::utils::errors::{
+    apply_doc_link_for_unsupported_packages,
+    display_chain,
+    format_core_error,
+};
 use crate::utils::message;
 
 // Edit declarative environment configuration
@@ -120,10 +125,19 @@ impl Edit {
         description: String,
         contents: Option<String>,
     ) -> Result<()> {
-        // Swallow migration errors because edit is the only way to fix them.
-        // Don't print anything if there's an error, because the editor will
-        // open too fast for the user to see it.
-        let _ = maybe_migrate_environment_to_v1(flox, environment, &description).await;
+        match maybe_migrate_environment_to_v1(flox, environment, &description).await {
+            Ok(_) => (),
+            e @ Err(MigrationError::MigrationCancelled) => e?,
+            // If the user said they wanted an upgrade and it failed, print why but don't fail
+            Err(MigrationError::ConfirmedUpgradeFailed(environment_error)) => {
+                // TODO: this could probably benefit from some newlines
+                message::warning(display_chain(&environment_error));
+            },
+            // Swallow other migration errors because edit is the only way to fix them.
+            // Don't print anything if there's an error, because the editor will
+            // open too fast for the user to see it.
+            Err(_) => (),
+        };
 
         let result = match contents {
             // If provided with the contents of a manifest file, either via a path to a file or via
@@ -297,6 +311,7 @@ impl Edit {
 mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
+    use flox_rust_sdk::models::environment::test_helpers::MANIFEST_V0_FIELDS;
     use flox_rust_sdk::models::lockfile::LockedManifestError;
     use indoc::indoc;
     use serde::de::Error;
@@ -403,13 +418,9 @@ mod tests {
     #[tokio::test]
     async fn migration_unsuccessful_migration_unsuccessful_edit() {
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
-        let old_contents = indoc! {r#"
-            [options]
-            semver.prefer-pre-releases = true
-            "#};
 
         let concrete_environment =
-            ConcreteEnvironment::Path(new_path_environment(&flox, old_contents));
+            ConcreteEnvironment::Path(new_path_environment(&flox, MANIFEST_V0_FIELDS));
 
         let active_environment =
             UninitializedEnvironment::from_concrete_environment(&concrete_environment).unwrap();
@@ -448,13 +459,9 @@ mod tests {
     #[tokio::test]
     async fn migration_unsuccessful_migration_successful_edit() {
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
-        let old_contents = indoc! {r#"
-            [options]
-            semver.prefer-pre-releases = true
-            "#};
 
         let concrete_environment =
-            ConcreteEnvironment::Path(new_path_environment(&flox, old_contents));
+            ConcreteEnvironment::Path(new_path_environment(&flox, MANIFEST_V0_FIELDS));
 
         let active_environment =
             UninitializedEnvironment::from_concrete_environment(&concrete_environment).unwrap();

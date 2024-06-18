@@ -1223,6 +1223,10 @@ pub mod test_helpers {
     use super::*;
     use crate::flox::Flox;
 
+    pub const MANIFEST_V0_FIELDS: &str = indoc! {r#"
+        [options]
+        semver.prefer-pre-releases = true
+        "#};
     // TODO: add version = 1 to this manifest
     #[cfg(target_os = "macos")]
     pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
