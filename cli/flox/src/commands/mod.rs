@@ -22,7 +22,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{env, fmt, fs, io, mem};
 
-use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
 use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::{
@@ -41,7 +40,10 @@ use flox_rust_sdk::flox::{
 use flox_rust_sdk::models::env_registry::{EnvRegistry, ENV_REGISTRY_FILENAME};
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
-use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
+use flox_rust_sdk::models::environment::remote_environment::{
+    RemoteEnvironment,
+    RemoteEnvironmentError,
+};
 use flox_rust_sdk::models::environment::{
     find_dot_flox,
     DotFlox,
@@ -56,6 +58,7 @@ use flox_rust_sdk::models::{env_registry, environment_ref};
 use futures::Future;
 use indoc::{formatdoc, indoc};
 use log::{debug, info};
+use miette::{bail, diagnostic, miette, Context, Diagnostic, IntoDiagnostic, Result};
 use sentry::integrations::anyhow::capture_anyhow;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
@@ -183,22 +186,29 @@ impl FloxArgs {
     /// Initialize the command line by creating an initial FloxBuilder
     pub async fn handle(self, mut config: crate::config::Config) -> Result<()> {
         // ensure xdg dirs exist
-        tokio::fs::create_dir_all(&config.flox.config_dir).await?;
-        tokio::fs::create_dir_all(&config.flox.data_dir).await?;
+        tokio::fs::create_dir_all(&config.flox.config_dir)
+            .await
+            .into_diagnostic()?;
+        tokio::fs::create_dir_all(&config.flox.data_dir)
+            .await
+            .into_diagnostic()?;
 
         // prepare a temp dir for the run:
         let process_dir = config.flox.cache_dir.join("process");
-        tokio::fs::create_dir_all(&process_dir).await?;
+        tokio::fs::create_dir_all(&process_dir)
+            .await
+            .into_diagnostic()?;
 
         // `temp_dir` will automatically be removed from disk when the function returns
-        let temp_dir = TempDir::new_in(process_dir)?;
+        let temp_dir = TempDir::new_in(process_dir).into_diagnostic()?;
         let temp_dir_path = temp_dir.path().to_owned();
 
         // Given no command, skip initialization and print welcome message
         if self.command.is_none() {
             let envs = env_registry::read_environment_registry(
                 config.flox.data_dir.join(ENV_REGISTRY_FILENAME),
-            )?
+            )
+            .into_diagnostic()?
             .unwrap_or_default();
             let active_environments = activated_environments();
             print_welcome_message(envs, active_environments);
@@ -226,10 +236,13 @@ impl FloxArgs {
                 &temp_dir,
                 &[Key::new("disable_metrics")],
                 Some(true),
-            )?;
+            )
+            .into_diagnostic()?;
 
             // remove marker uuid file
-            tokio::fs::remove_file(&config.flox.data_dir.join(METRICS_UUID_FILE_NAME)).await?;
+            tokio::fs::remove_file(&config.flox.data_dir.join(METRICS_UUID_FILE_NAME))
+                .await
+                .into_diagnostic()?;
         }
 
         if !config.flox.disable_metrics {
@@ -263,7 +276,7 @@ impl FloxArgs {
                     '$_FLOX_FLOXHUB_GIT_URL' is used for testing purposes only,
                     alternative FloxHub hosts are not yet supported!
                 "});
-                Some(Url::parse(&env_set_host)?)
+                Some(Url::parse(&env_set_host).into_diagnostic()?)
             } else {
                 None
             }
@@ -276,7 +289,8 @@ impl FloxArgs {
                 .clone()
                 .unwrap_or_else(|| DEFAULT_FLOXHUB_URL.clone()),
             git_url_override,
-        )?;
+        )
+        .into_diagnostic()?;
 
         let floxhub_token = config
             .flox
@@ -450,7 +464,7 @@ enum UpdateNotificationError {
     /// Other errors indicate something we didn't expect may have happened,
     /// so we want to report it with Sentry.
     #[error(transparent)]
-    WeMayHaveMessedUp(#[from] anyhow::Error),
+    WeMayHaveMessedUp(#[from] Box<dyn Diagnostic + Send + Sync + 'static>),
 }
 
 impl UpdateNotification {
@@ -491,9 +505,9 @@ impl UpdateNotification {
             // If the file doesn't it exist, it means we haven't shown the notification recently
             Err(e) if e.kind() == io::ErrorKind::NotFound => {},
             Ok(contents) => {
-                let update_notification: LastUpdateNotification =
-                    serde_json::from_str(&contents)
-                        .map_err(|e| UpdateNotificationError::WeMayHaveMessedUp(anyhow!(e)))?;
+                let update_notification: LastUpdateNotification = serde_json::from_str(&contents)
+                    .into_diagnostic()
+                    .map_err(|e| UpdateNotificationError::WeMayHaveMessedUp(e.into()))?;
 
                 let now = OffsetDateTime::now_utc();
                 if now - update_notification.last_notification < expiry {
@@ -507,8 +521,8 @@ impl UpdateNotification {
 
         // Sanity check we got a version back
         if let Err(e) = semver::Version::parse(&new_version) {
-            return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
-                "version is invalid: {e}"
+            return Err(UpdateNotificationError::WeMayHaveMessedUp(Box::new(
+                diagnostic!("version is invalid: {e}"),
             )));
         }
 
@@ -534,7 +548,7 @@ impl UpdateNotification {
             },
             Err(UpdateNotificationError::WeMayHaveMessedUp(e)) => {
                 debug!("Failed to check for CLI updates. Sending error to Sentry if enabled");
-                capture_anyhow(&anyhow!("Failed to check for CLI updates: {e}"));
+                // capture_anyhow(&miette!("Failed to check for CLI updates: {e}"));
             },
             Err(e) => {
                 debug!(
@@ -611,7 +625,7 @@ impl UpdateNotification {
             if e.is_connect() || e.is_timeout() {
                 UpdateNotificationError::Network(e)
             } else {
-                UpdateNotificationError::WeMayHaveMessedUp(anyhow!(e))
+                UpdateNotificationError::WeMayHaveMessedUp(miette!(e).into())
             }
         })?;
 
@@ -619,19 +633,22 @@ impl UpdateNotification {
             Ok(response
                 .text()
                 .await
-                .map_err(|e| UpdateNotificationError::WeMayHaveMessedUp(anyhow!(e)))?
+                .map_err(|e| UpdateNotificationError::WeMayHaveMessedUp(miette!(e).into()))?
                 .trim()
                 .to_string())
         } else {
-            Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
-                "got response body:\n{}",
-                response
-                    .text()
-                    .await
-                    .unwrap_or_else(|e| format!("couldn't decode body: {e}"))
-                    .trim()
-                    .to_string()
-            )))
+            Err(UpdateNotificationError::WeMayHaveMessedUp(
+                miette!(
+                    "got response body:\n{}",
+                    response
+                        .text()
+                        .await
+                        .unwrap_or_else(|e| format!("couldn't decode body: {e}"))
+                        .trim()
+                        .to_string()
+                )
+                .into(),
+            ))
         }
     }
 }
@@ -919,8 +936,12 @@ pub enum EnvironmentSelectError {
     Environment(#[from] EnvironmentError),
     #[error("Did not find an environment in the current directory.")]
     EnvNotFoundInCurrentDirectory,
+    #[error("Directory does not exist")]
+    Io(#[from] io::Error),
     #[error(transparent)]
-    Anyhow(#[from] anyhow::Error),
+    Remote(#[from] RemoteEnvironmentError),
+    #[error(transparent)]
+    Other(#[from] Box<dyn Diagnostic + Send + Sync + 'static>),
 }
 
 impl EnvironmentSelect {
@@ -938,7 +959,7 @@ impl EnvironmentSelect {
         match self {
             EnvironmentSelect::Dir(path) => Ok(open_path(flox, path)?),
             EnvironmentSelect::Unspecified => {
-                let current_dir = env::current_dir().context("could not get current directory")?;
+                let current_dir = env::current_dir()?;
                 let maybe_found_environment = find_dot_flox(&current_dir)?;
                 match maybe_found_environment {
                     Some(found) => {
@@ -955,7 +976,7 @@ impl EnvironmentSelect {
                     &flox.floxhub,
                 );
 
-                let env = RemoteEnvironment::new(flox, pointer).map_err(anyhow::Error::new)?;
+                let env = RemoteEnvironment::new(flox, pointer)?;
                 Ok(ConcreteEnvironment::Remote(env))
             },
         }
@@ -988,7 +1009,7 @@ impl EnvironmentSelect {
                     &flox.floxhub,
                 );
 
-                let env = RemoteEnvironment::new(flox, pointer).map_err(anyhow::Error::new)?;
+                let env = RemoteEnvironment::new(flox, pointer)?;
                 Ok(ConcreteEnvironment::Remote(env))
             },
         }
@@ -1004,7 +1025,7 @@ impl EnvironmentSelect {
 pub fn detect_environment(
     message: &str,
 ) -> Result<Option<UninitializedEnvironment>, EnvironmentSelectError> {
-    let current_dir = env::current_dir().context("could not get current directory")?;
+    let current_dir = env::current_dir()?;
     let maybe_activated = last_activated_environment();
     let maybe_found_environment = find_dot_flox(&current_dir)?;
 
@@ -1031,12 +1052,10 @@ pub fn detect_environment(
         // current directory or git repo, prompt for which to use.
         (Some(activated_env), Some(found)) => {
             let found_in_current_dir = found.path == current_dir.join(DOT_FLOX);
-            Some(query_which_environment(
-                message,
-                activated_env,
-                found,
-                found_in_current_dir,
-            )?)
+            Some(
+                query_which_environment(message, activated_env, found, found_in_current_dir)
+                    .map_err(std::convert::Into::<Box<_>>::into)?,
+            )
         },
         (Some(activated_env), None) => Some(activated_env),
         (None, Some(found)) => Some(UninitializedEnvironment::DotFlox(found)),
@@ -1071,7 +1090,7 @@ fn query_which_environment(
             ],
         },
     };
-    let (index, _) = dialog.raw_prompt().map_err(anyhow::Error::new)?;
+    let (index, _) = dialog.raw_prompt().into_diagnostic()?;
     match index {
         0 => Ok(found),
         1 => Ok(activated_env),
@@ -1226,8 +1245,9 @@ impl UninitializedEnvironment {
     pub fn is_current_dir(&self) -> Result<bool> {
         match self {
             UninitializedEnvironment::DotFlox(DotFlox { path, .. }) => {
-                let current_dir = std::env::current_dir()?;
-                let is_current = current_dir.canonicalize()? == path.canonicalize()?;
+                let current_dir = std::env::current_dir().into_diagnostic()?;
+                let is_current = current_dir.canonicalize().into_diagnostic()?
+                    == path.canonicalize().into_diagnostic()?;
                 Ok(is_current)
             },
             UninitializedEnvironment::Remote(_) => Ok(false),
@@ -1280,14 +1300,14 @@ impl UninitializedEnvironment {
             Ok(format!(
                 "{}/{} (remote)",
                 self.owner()
-                    .context("remote environments should have an owner")?,
+                    .ok_or(miette!("remote environments should have an owner"))?,
                 self.name()
             ))
         } else if self.is_managed() {
             Ok(format!(
                 "{}/{}",
                 self.owner()
-                    .context("managed environments should have an owner")?,
+                    .ok_or(miette!("managed environments should have an owner"))?,
                 self.name()
             ))
         } else {
@@ -1301,19 +1321,19 @@ impl UninitializedEnvironment {
             Ok(format!(
                 "'{}/{}' (remote)",
                 self.owner()
-                    .context("remote environments should have an owner")?,
+                    .ok_or(miette!("remote environments should have an owner"))?,
                 self.name()
             ))
         } else if self.is_managed() {
             Ok(format!(
                 "'{}/{}'",
                 self.owner()
-                    .context("managed environments should have an owner")?,
+                    .ok_or(miette!("managed environments should have an owner"))?,
                 self.name()
             ))
         } else if self
             .is_current_dir()
-            .context("couldn't read current directory")?
+            .wrap_err("couldn't read current directory")?
         {
             Ok(String::from("in current directory"))
         } else {
@@ -1515,7 +1535,8 @@ pub(super) async fn ensure_environment_trust(
             },
         }
         .prompt()
-        .await?;
+        .await
+        .into_diagnostic()?;
 
         debug!("user chose: {choice:?}");
 
@@ -1527,7 +1548,7 @@ pub(super) async fn ensure_environment_trust(
                     format!("trusted_environments.'{}'", env_ref),
                     Some(EnvironmentTrust::Trust),
                 )
-                .context("Could not write token to config")?;
+                .wrap_err("Could not write token to config")?;
                 let _ = mem::replace(config, Config::parse()?);
                 info!("Trusted environment {env_ref} (saved choice)",);
                 return Ok(());
@@ -1539,7 +1560,7 @@ pub(super) async fn ensure_environment_trust(
                     format!("trusted_environments.'{}'", env_ref),
                     Some(EnvironmentTrust::Deny),
                 )
-                .context("Could not write token to config")?;
+                .wrap_err("Could not write token to config")?;
                 let _ = mem::replace(config, Config::parse()?);
                 bail!("Denied {env_ref} (saved choice).");
             },
@@ -1548,7 +1569,9 @@ pub(super) async fn ensure_environment_trust(
                 return Ok(());
             },
             Choices::Abort => bail!("Denied {env_ref} (temporary)"),
-            Choices::ShowConfig => eprintln!("{}", environment.manifest_content(flox)?),
+            Choices::ShowConfig => {
+                eprintln!("{}", environment.manifest_content(flox).into_diagnostic()?)
+            },
         }
     }
 }
@@ -1600,7 +1623,7 @@ enum MigrationError {
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
     #[error(transparent)]
-    Other(#[from] anyhow::Error),
+    Other(#[from] Box<dyn Diagnostic + Send + Sync + 'static>),
 }
 
 /// Check if the environment needs to be migrated to version 1.
@@ -1639,13 +1662,19 @@ async fn maybe_migrate_environment_to_v1_inner(
             // But we'll be re-writing the lock, so call it an upgrade.
             match confirm_upgrade_future {
                 None => {
-                    Err(anyhow!(formatdoc! {"
+                    Err::<_, MigrationError>(MigrationError::Other(
+                        miette!(formatdoc! {"
                     To edit environment {description}, you must upgrade to environment version 1.
                     Run 'flox upgrade' to migrate the environment."
-                    }))?;
+                        })
+                        .into(),
+                    ))?;
                 },
                 Some(confirm_upgrade_future) => {
-                    if !confirm_upgrade_future.await? {
+                    if !confirm_upgrade_future
+                        .await
+                        .map_err(|e| MigrationError::Other(e.into()))?
+                    {
                         Err(MigrationError::MigrationCancelled)?;
                     }
                     confirmed_upgrade = true;
@@ -1685,7 +1714,8 @@ async fn confirm_migration_upgrade(description: &str) -> Result<bool> {
         },
     }
     .prompt()
-    .await?)
+    .await
+    .into_diagnostic()?)
 }
 
 #[cfg(test)]
@@ -1802,7 +1832,7 @@ mod tests {
     fn test_handle_update_result_sends_error_to_sentry() {
         let events = with_captured_events(|| {
             UpdateNotification::handle_update_result(Err(
-                UpdateNotificationError::WeMayHaveMessedUp(anyhow!("error")),
+                UpdateNotificationError::WeMayHaveMessedUp(miette!("error").into()),
             ));
         });
         assert_eq!(events.len(), 1);

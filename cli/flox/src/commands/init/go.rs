@@ -1,12 +1,12 @@
 use std::fs;
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::PackageToInstall;
 use flox_rust_sdk::utils::traceable_path;
 use indoc::{formatdoc, indoc};
+use miette::{miette, IntoDiagnostic, Result};
 use tracing::debug;
 
 use super::{
@@ -115,7 +115,7 @@ impl InitHook for Go {
                 },
             };
 
-            let (choice, _) = dialog.raw_prompt()?;
+            let (choice, _) = dialog.raw_prompt().into_diagnostic()?;
 
             match choice {
                 accept if accept < accept_options_offset => return Ok(true),
@@ -227,7 +227,7 @@ impl GoModuleSystemMode for GoModSystem {
             return Ok(None);
         }
         debug!(path = traceable_path(&mod_path), "go.mod located");
-        let mod_content = fs::read_to_string(mod_path)?;
+        let mod_content = fs::read_to_string(mod_path).into_diagnostic()?;
         Self::try_new_from_content(flox, &mod_content).await
     }
 
@@ -265,7 +265,7 @@ impl GoModuleSystemMode for GoWorkSystem {
             return Ok(None);
         }
         debug!(path = traceable_path(&work_path), "go.work located");
-        let work_content = fs::read_to_string(work_path)?;
+        let work_content = fs::read_to_string(work_path).into_diagnostic()?;
         Self::try_new_from_content(flox, &work_content).await
     }
 
@@ -300,7 +300,8 @@ impl GoVersion {
         .await?;
 
         if let Some(found_go_version) = provided_go_version {
-            let found_go_version = TryInto::<ProvidedPackage>::try_into(found_go_version)?;
+            let found_go_version =
+                TryInto::<ProvidedPackage>::try_into(found_go_version).into_diagnostic()?;
 
             return Ok(Some(ProvidedVersion::Compatible {
                 requested: Some(required_go_version),
@@ -325,11 +326,11 @@ impl GoVersion {
             .and_then(|version| {
                 version
                     .parse::<semver::VersionReq>()
-                    .map_err(|err| anyhow!(err))
+                    .map_err(|err| miette!(err))
                     .map(|semver| Some(semver.to_string()))
                     .into()
             })
-            .unwrap_or(Err(anyhow!("Flox found an invalid Go module system file")))
+            .unwrap_or(Err(miette!("Flox found an invalid Go module system file")))
     }
 }
 

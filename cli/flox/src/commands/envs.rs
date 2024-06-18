@@ -3,7 +3,6 @@ use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::path::Path;
 
-use anyhow::Result;
 use bpaf::Bpaf;
 use crossterm::style::Stylize;
 use flox_rust_sdk::flox::Flox;
@@ -13,6 +12,7 @@ use flox_rust_sdk::models::env_registry::{
     EnvRegistry,
 };
 use flox_rust_sdk::models::environment::DotFlox;
+use miette::{IntoDiagnostic, Result};
 use serde_json::json;
 use tracing::instrument;
 
@@ -56,8 +56,9 @@ impl Envs {
         match self.mode {
             Mode::Active => tracing::info_span!("active").in_scope(|| self.handle_active(active)),
             Mode::All => tracing::info_span!("all").in_scope(|| {
-                let env_registry =
-                    read_environment_registry(env_registry_path(&flox))?.unwrap_or_default();
+                let env_registry = read_environment_registry(env_registry_path(&flox))
+                    .into_diagnostic()?
+                    .unwrap_or_default();
                 let registered = get_registered_environments(&env_registry);
 
                 self.handle_all(active, registered)

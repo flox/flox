@@ -3,13 +3,13 @@ use std::fmt::Debug;
 use std::path::Path;
 use std::str::FromStr;
 
-use anyhow::{anyhow, Context, Error, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::PackageToInstall;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::debug;
+use miette::{miette, Context, Error, IntoDiagnostic, Result};
 use regex::Regex;
 
 use super::{
@@ -121,7 +121,7 @@ impl InitHook for Python {
                 },
             };
 
-            let (choice, _) = dialog.raw_prompt()?;
+            let (choice, _) = dialog.raw_prompt().into_diagnostic()?;
 
             match choice {
                 choice if choice < n_accept_options => {
@@ -302,13 +302,13 @@ impl PoetryPyProject {
             return Ok(None);
         }
 
-        let content = std::fs::read_to_string(&pyproject_toml)?;
+        let content = std::fs::read_to_string(&pyproject_toml).into_diagnostic()?;
 
         Self::from_pyproject_content(flox, &content).await
     }
 
     async fn from_pyproject_content(flox: &Flox, content: &str) -> Result<Option<PoetryPyProject>> {
-        let toml = toml_edit::DocumentMut::from_str(content)?;
+        let toml = toml_edit::DocumentMut::from_str(content).into_diagnostic()?;
 
         // poetry _requires_ `tool.poetry.dependencies.python` to be set [1],
         // so we do not resolve a default version here if the key is missing.
@@ -322,12 +322,13 @@ impl PoetryPyProject {
         let required_python_version = poetry
             .get("dependencies")
             .and_then(|dependencies| dependencies.get("python"))
-            .map(|python| python.as_str().context("expected a string"))
+            .map(|python| python.as_str().ok_or(miette!("expected a string")))
             .transpose()?
             .ok_or_else(|| {
-                anyhow!("No python version specified at 'tool.poetry.dependencies.python'")
+                miette!("No python version specified at 'tool.poetry.dependencies.python'")
             })?
-            .parse::<semver::VersionReq>()?
+            .parse::<semver::VersionReq>()
+            .into_diagnostic()?
             .to_string();
 
         let provided_python_version = 'version: {
@@ -351,7 +352,7 @@ impl PoetryPyProject {
             let substitute =
                 get_default_package_if_compatible(flox, vec!["python3".to_string()], None)
                     .await?
-                    .context("No python3 in the catalogs")?;
+                    .ok_or(miette!("No python3 in the catalogs"))?;
 
             ProvidedVersion::Incompatible {
                 substitute,
@@ -362,7 +363,7 @@ impl PoetryPyProject {
         let poetry_version =
             get_default_package_if_compatible(flox, vec!["poetry".to_string()], None)
                 .await?
-                .context("Did not find poetry in the catalogs")?
+                .ok_or(miette!("Did not find poetry in the catalogs"))?
                 .version
                 .unwrap_or_else(|| "N/A".to_string());
 
@@ -503,13 +504,13 @@ impl PyProject {
             return Ok(None);
         }
 
-        let content = std::fs::read_to_string(&pyproject_toml)?;
+        let content = std::fs::read_to_string(&pyproject_toml).into_diagnostic()?;
 
         Self::from_pyproject_content(flox, &content).await
     }
 
     async fn from_pyproject_content(flox: &Flox, content: &str) -> Result<Option<PyProject>> {
-        let toml = toml_edit::DocumentMut::from_str(content)?;
+        let toml = toml_edit::DocumentMut::from_str(content).into_diagnostic()?;
 
         // unlike in poetry, `project.require-python` does not seem to be required
         //
@@ -521,10 +522,11 @@ impl PyProject {
         let required_python_version = toml
             .get("project")
             .and_then(|project| project.get("requires-python"))
-            .map(|constraint| constraint.as_str().context("expected a string"))
+            .map(|constraint| constraint.as_str().ok_or(miette!("expected a string")))
             .transpose()?
             .map(|s| s.parse::<semver::VersionReq>())
-            .transpose()?
+            .transpose()
+            .into_diagnostic()?
             .map(|req| req.to_string());
 
         let provided_python_version = 'version: {
@@ -532,7 +534,7 @@ impl PyProject {
                 let default =
                     get_default_package_if_compatible(flox, vec!["python3".to_string()], None)
                         .await?
-                        .context("No python3 in the catalogs")?;
+                        .ok_or(miette!("No python3 in the catalogs"))?;
                 Ok::<_, Error>(default)
             };
 
@@ -677,8 +679,8 @@ impl Requirements {
     fn get_matches(path: &Path) -> Result<Vec<String>> {
         // NOTE: Does not match requirements files that have a prefix like `example_requirements.txt`
         // See https://github.com/flox/flox/issues/1323
-        let pat = Regex::new(r"^requirements\S*\.txt")?;
-        let dir_it = std::fs::read_dir(path)?;
+        let pat = Regex::new(r"^requirements\S*\.txt").into_diagnostic()?;
+        let dir_it = std::fs::read_dir(path).into_diagnostic()?;
         let matches: Vec<String> = dir_it
             .filter_map(|entry_res| match entry_res {
                 Ok(entry) => {
@@ -700,8 +702,8 @@ impl Requirements {
                     }
                     None
                 },
-                // Convert from std::io::Error to anyhow::Error
-                Err(e) => Some(Err(e.into())),
+                // Convert from std::io::Error to miette::Error
+                Err(e) => Some(Err(miette!(e))),
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -715,7 +717,7 @@ impl Requirements {
         if !matches.is_empty() {
             let result = get_default_package_if_compatible(flox, vec!["python3".to_string()], None)
                 .await?
-                .context("Did not find python3 in the catalogs")?;
+                .ok_or(miette!("Did not find python3 in the catalogs"))?;
             // given our catalog is based on nixpkgs,
             // we can assume that the version is always present.
             let python_version = result.version.unwrap_or_else(|| "N/A".to_string());

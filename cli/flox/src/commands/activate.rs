@@ -6,7 +6,6 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
@@ -29,6 +28,7 @@ use indexmap::IndexSet;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::{debug, warn};
+use miette::{bail, miette, Context, IntoDiagnostic, Result};
 
 use super::{
     activated_environments,
@@ -77,8 +77,7 @@ impl Activate {
             Create an environment with 'flox init'"
                 })
             },
-            Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
-            Err(e) => Err(e)?,
+            Err(e) => Err(e).into_diagnostic()?,
         };
 
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
@@ -130,7 +129,7 @@ impl Activate {
 
                 bail!("{message}")
             },
-            other => other?,
+            other => other.into_diagnostic()?,
         };
 
         // read the currently active environments from the environment
@@ -173,13 +172,17 @@ impl Activate {
         let (flox_env_dirs_joined, flox_env_lib_dirs_joined) = {
             let flox_env_lib_dirs = flox_env_install_prefixes.iter().map(|p| p.join("lib"));
 
-            let flox_env_dirs = env::join_paths(&flox_env_install_prefixes).context(
-                "Cannot activate environment because its path contains an invalid character",
-            )?;
+            let flox_env_dirs = env::join_paths(&flox_env_install_prefixes)
+                .into_diagnostic()
+                .wrap_err(
+                    "Cannot activate environment because its path contains an invalid character",
+                )?;
 
-            let flox_env_lib_dirs = env::join_paths(flox_env_lib_dirs).context(
-                "Cannot activate environment because its path contains an invalid character",
-            )?;
+            let flox_env_lib_dirs = env::join_paths(flox_env_lib_dirs)
+                .into_diagnostic()
+                .wrap_err(
+                    "Cannot activate environment because its path contains an invalid character",
+                )?;
 
             (flox_env_dirs, flox_env_lib_dirs)
         };
@@ -216,11 +219,19 @@ impl Activate {
             ),
             (
                 FLOX_ENV_CACHE_VAR,
-                environment.cache_path()?.to_string_lossy().to_string(),
+                environment
+                    .cache_path()
+                    .into_diagnostic()?
+                    .to_string_lossy()
+                    .to_string(),
             ),
             (
                 FLOX_ENV_PROJECT_VAR,
-                environment.project_path()?.to_string_lossy().to_string(),
+                environment
+                    .project_path()
+                    .into_diagnostic()?
+                    .to_string_lossy()
+                    .to_string(),
             ),
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
@@ -301,7 +312,7 @@ impl Activate {
         debug!("running activation command: {:?}", command);
 
         // exec should never return
-        Err(command.exec().into())
+        Err(miette!(command.exec()))
     }
 
     /// Used for `flox activate -- run_args`
@@ -344,7 +355,7 @@ impl Activate {
         debug!("running activation command: {:?}", command);
 
         // exec should never return
-        Err(command.exec().into())
+        Err(miette!(command.exec()))
     }
 
     /// Activate the environment interactively by spawning a new shell
@@ -367,10 +378,10 @@ impl Activate {
                     .arg(activation_path.join("activate").join("bash"));
             },
             Shell::Fish(_) => {
-                return Err(anyhow!("fish not supported with environments rendered before version 1.0.5; please update environment and try again"));
+                return Err(miette!("fish not supported with environments rendered before version 1.0.5; please update environment and try again"));
             },
             Shell::Tcsh(_) => {
-                return Err(anyhow!("tcsh not supported with environments rendered before version 1.0.5; please update environment and try again"));
+                return Err(miette!("tcsh not supported with environments rendered before version 1.0.5; please update environment and try again"));
             },
             Shell::Zsh(_) => {
                 // From man zsh:
@@ -414,7 +425,7 @@ impl Activate {
         message::updated(message);
 
         // exec should never return
-        Err(command.exec().into())
+        Err(miette!(command.exec()))
     }
 
     /// Activate the environment interactively by spawning a new shell
@@ -454,7 +465,7 @@ impl Activate {
         debug!("running activation command: {:?}", command);
 
         // exec should never return
-        Err(command.exec().into())
+        Err(miette!(command.exec()))
     }
 
     /// Used for `eval "$(flox activate)"`
@@ -648,7 +659,7 @@ mod tests {
     const FLOX_SHELL_UNSET: (&'_ str, Option<&'_ str>) = ("FLOX_SHELL", None);
     const PARENT_DETECTED: &dyn Fn() -> Result<Shell> = &|| Ok(Shell::Bash("/parent/bash".into()));
     const PARENT_UNDETECTED: &dyn Fn() -> Result<Shell> =
-        &|| Err(anyhow::anyhow!("parent shell detection failed"));
+        &|| Err(miette::miette!("parent shell detection failed"));
 
     #[test]
     fn test_detect_shell_for_subshell() {

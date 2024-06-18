@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, HashMap};
 
-use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use indoc::indoc;
 use log::debug;
+use miette::{Context, IntoDiagnostic, Result};
 use serde::Deserialize;
 
 mod catalog_client;
@@ -26,12 +26,15 @@ pub fn init_access_tokens(
         oauth_token: Option<String>,
     }
 
-    let gh_config_file = xdg::BaseDirectories::with_prefix("gh")?.get_config_file("hosts.yml");
+    let gh_config_file = xdg::BaseDirectories::with_prefix("gh")
+        .into_diagnostic()?
+        .get_config_file("hosts.yml");
     let gh_tokens: BTreeMap<String, String> = if gh_config_file.exists() {
-        serde_yaml::from_reader::<_, IndexMap<String, GhHost>>(std::fs::File::open(
-            &gh_config_file,
-        )?)
-        .context("Could not read `gh` config file")?
+        serde_yaml::from_reader::<_, IndexMap<String, GhHost>>(
+            std::fs::File::open(&gh_config_file).into_diagnostic()?,
+        )
+        .into_diagnostic()
+        .wrap_err("Could not read `gh` config file")?
         .into_iter()
         .filter_map(|(host, v)| {
             if v.oauth_token.is_none() {
@@ -50,10 +53,13 @@ pub fn init_access_tokens(
         Default::default()
     };
 
-    let nix_tokens_file = xdg::BaseDirectories::with_prefix("nix")?.get_config_file("nix.conf");
+    let nix_tokens_file = xdg::BaseDirectories::with_prefix("nix")
+        .into_diagnostic()?
+        .get_config_file("nix.conf");
     let nix_tokens: Vec<(String, String)> = if nix_tokens_file.exists() {
         let mut tokens = Vec::new();
-        for line in BufReader::new(std::fs::File::open(nix_tokens_file)?).lines() {
+        for line in BufReader::new(std::fs::File::open(nix_tokens_file).into_diagnostic()?).lines()
+        {
             let line = line.unwrap();
             let (k, v) = if let Some(l) = line.split_once('=') {
                 l

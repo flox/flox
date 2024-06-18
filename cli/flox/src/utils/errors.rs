@@ -609,10 +609,9 @@ pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
         EnvironmentSelectError::EnvNotFoundInCurrentDirectory => formatdoc! {"
             Did not find an environment in the current directory.
         "},
-        EnvironmentSelectError::Anyhow(err) => err
-            .chain()
-            .skip(1)
-            .fold(err.to_string(), |acc, cause| format!("{}: {}", acc, cause)),
+        EnvironmentSelectError::Io(err) => display_chain(err),
+        EnvironmentSelectError::Other(err) => display_chain(err),
+        EnvironmentSelectError::Remote(err) => display_chain(err),
     }
 }
 

@@ -1,11 +1,11 @@
 use std::io;
 use std::path::Path;
 
-use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use fslock::LockFile;
 use indoc::indoc;
+use miette::{miette, Context, IntoDiagnostic, Result};
 use serde::Serialize;
 use tokio::fs;
 use toml_edit::Key;
@@ -27,22 +27,26 @@ impl ResetMetrics {
     #[instrument(name = "reset-metrics", skip_all)]
     pub async fn handle(self, _config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("reset-metrics");
-        let mut metrics_lock = LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME))?;
-        tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
+        let mut metrics_lock =
+            LockFile::open(&flox.cache_dir.join(METRICS_LOCK_FILE_NAME)).into_diagnostic()?;
+        tokio::task::spawn_blocking(move || metrics_lock.lock())
+            .await
+            .into_diagnostic()?
+            .into_diagnostic()?;
 
         if let Err(err) =
             tokio::fs::remove_file(flox.cache_dir.join(METRICS_EVENTS_FILE_NAME)).await
         {
             match err.kind() {
                 std::io::ErrorKind::NotFound => {},
-                _ => Err(err)?,
+                _ => Err(miette!(err))?,
             }
         }
 
         if let Err(err) = tokio::fs::remove_file(flox.data_dir.join(METRICS_UUID_FILE_NAME)).await {
             match err.kind() {
                 std::io::ErrorKind::NotFound => {},
-                _ => Err(err)?,
+                _ => Err(miette!(err))?,
             }
         }
 
@@ -88,12 +92,12 @@ impl ConfigArgs {
     pub async fn handle(&self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("config");
         match self {
-            ConfigArgs::List => println!("{}", config.get(&[])?),
+            ConfigArgs::List => println!("{}", config.get(&[]).into_diagnostic()?),
             ConfigArgs::Reset => {
                 match fs::remove_file(&flox.config_dir.join(FLOX_CONFIG_FILE)).await {
-                    Err(err) if err.kind() != io::ErrorKind::NotFound => {
-                        Err(err).context("Could not reset config file")?
-                    },
+                    Err(err) if err.kind() != io::ErrorKind::NotFound => Err(err)
+                        .into_diagnostic()
+                        .wrap_err("Could not reset config file")?,
                     _ => (),
                 }
             },
@@ -173,13 +177,15 @@ pub(super) fn update_config<V: Serialize>(
     key: impl AsRef<str>,
     value: Option<V>,
 ) -> Result<()> {
-    let query = Key::parse(key.as_ref()).context("Could not parse key")?;
+    let query = Key::parse(key.as_ref())
+        .into_diagnostic()
+        .wrap_err("Could not parse key")?;
 
     let config_file_path = config_dir.join(FLOX_CONFIG_FILE);
 
     match Config::write_to_in(config_file_path, temp_dir, &query, value) {
-                err @ Err(ReadWriteError::ReadConfig(_)) => err.context("Could not read current config file.\nPlease verify the format or reset using `flox config --reset`")?,
-                err @ Err(_) => err?,
+                err @ Err(ReadWriteError::ReadConfig(_)) => err.into_diagnostic().wrap_err("Could not read current config file.\nPlease verify the format or reset using `flox config --reset`")?,
+                err @ Err(_) => err.into_diagnostic()?,
                 Ok(()) => ()
             }
     Ok(())

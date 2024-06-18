@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
 
-use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentRef, Flox};
 use flox_rust_sdk::models::environment::managed_environment::{
@@ -23,6 +22,7 @@ use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::manifest;
 use indoc::formatdoc;
 use log::debug;
+use miette::{bail, miette, Context, IntoDiagnostic, Result};
 use toml_edit::DocumentMut;
 use tracing::instrument;
 
@@ -112,7 +112,7 @@ impl Pull {
                 debug!("Resolved user intent: pull changes for environment found in {dir:?}");
 
                 let pointer = {
-                    let p = DotFlox::open_in(&dir)?.pointer;
+                    let p = DotFlox::open_in(&dir).into_diagnostic()?.pointer;
                     match p {
                         EnvironmentPointer::Managed(managed_pointer) => managed_pointer,
                         EnvironmentPointer::Path(_) => bail!("Cannot pull into a path environment"),
@@ -124,7 +124,8 @@ impl Pull {
                     dir.join(DOT_FLOX),
                     pointer.clone(),
                     self.force,
-                )?;
+                )
+                .into_diagnostic()?;
             },
         }
 
@@ -211,19 +212,23 @@ impl Pull {
                     Ok(concrete_env) => match concrete_env {
                         ConcreteEnvironment::Path(env) => {
                             env.delete(flox)
-                                .context("Failed to delete existing environment")?;
+                                .into_diagnostic()
+                                .wrap_err("Failed to delete existing environment")?;
                         },
                         ConcreteEnvironment::Managed(env) => {
                             env.delete(flox)
-                                .context("Failed to delete existing environment")?;
+                                .into_diagnostic()
+                                .wrap_err("Failed to delete existing environment")?;
                         },
                         ConcreteEnvironment::Remote(_) => {},
                     },
                     Err(_) => {
-                        fs::remove_dir_all(&dot_flox_path).context(format!(
-                            "Failed to remove existing .flox directory at {:?}",
-                            dot_flox_path
-                        ))?;
+                        fs::remove_dir_all(&dot_flox_path)
+                            .into_diagnostic()
+                            .wrap_err(format!(
+                                "Failed to remove existing .flox directory at {:?}",
+                                dot_flox_path
+                            ))?;
                     },
                 }
             } else {
@@ -240,12 +245,17 @@ impl Pull {
             env_ref.name().clone(),
             &flox.floxhub,
         );
-        let pointer_content =
-            serde_json::to_string_pretty(&pointer).context("Could not serialize pointer")?;
+        let pointer_content = serde_json::to_string_pretty(&pointer)
+            .into_diagnostic()
+            .wrap_err("Could not serialize pointer")?;
 
-        fs::create_dir_all(&dot_flox_path).context("Could not create .flox/ directory")?;
+        fs::create_dir_all(&dot_flox_path)
+            .into_diagnostic()
+            .wrap_err("Could not create .flox/ directory")?;
         let pointer_path = dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME);
-        fs::write(pointer_path, pointer_content).context("Could not write pointer")?;
+        fs::write(pointer_path, pointer_content)
+            .into_diagnostic()
+            .wrap_err("Could not write pointer")?;
 
         let mut env = {
             let result = Dialog {
@@ -259,7 +269,8 @@ impl Pull {
             match result {
                 Err(err) => {
                     fs::remove_dir_all(&dot_flox_path)
-                        .context("Could not clean up .flox/ directory")?;
+                        .into_diagnostic()
+                        .wrap_err("Could not clean up .flox/ directory")?;
                     Err(err)?
                 },
                 Ok(env) => env,
@@ -323,7 +334,8 @@ impl Pull {
                 "};
                 if !force && query_functions.is_none() {
                     fs::remove_dir_all(dot_flox_path)
-                        .context("Could not clean up .flox/ directory")?;
+                        .into_diagnostic()
+                        .wrap_err("Could not clean up .flox/ directory")?;
                     bail!("{}", formatdoc! {"
                             This environment is not yet compatible with your system ({system}).
 
@@ -332,7 +344,7 @@ impl Pull {
                 }
 
                 let migration_info = if flox.catalog_client.is_some() {
-                    env.needs_migration_to_v1(flox)?
+                    env.needs_migration_to_v1(flox).into_diagnostic()?
                 } else {
                     None
                 };
@@ -351,7 +363,8 @@ impl Pull {
                 if !force {
                     // prompt available, user chose to abort
                     fs::remove_dir_all(dot_flox_path)
-                        .context("Could not clean up .flox/ directory")?;
+                        .into_diagnostic()
+                        .wrap_err("Could not clean up .flox/ directory")?;
                     bail!(formatdoc! {"
                         Did not pull the environment.
 
@@ -371,7 +384,8 @@ impl Pull {
                             )
                         }),
                     }
-                    .spin()?;
+                    .spin()
+                    .into_diagnostic()?;
 
                     match migrate_to_v1 {
                         Err(err) => {
@@ -404,11 +418,12 @@ impl Pull {
                         env.edit_unsafe(flox, manifest_with_current_system.to_string())
                     }),
                 }
-                .spin()?;
+                .spin()
+                .into_diagnostic()?;
 
                 match rebuild_with_current_system {
                     Err(broken_error) => {
-                        message::warning(format!("{err:#}", err = anyhow!(broken_error)));
+                        message::warning(format!("{err:#}", err = miette!(broken_error)));
 
                         let message_with_warning = formatdoc! {"
                             {pulled_line}
@@ -438,7 +453,8 @@ impl Pull {
 
                 if !force && query_functions.is_none() {
                     fs::remove_dir_all(dot_flox_path)
-                        .context("Could not clean up .flox/ directory")?;
+                        .into_diagnostic()
+                        .wrap_err("Could not clean up .flox/ directory")?;
                     bail!("{pkgdb_error}");
                 }
 
@@ -456,12 +472,15 @@ impl Pull {
                     message::warning(message_with_warning);
                 } else {
                     fs::remove_dir_all(dot_flox_path)
-                        .context("Could not clean up .flox/ directory")?;
+                        .into_diagnostic()
+                        .wrap_err("Could not clean up .flox/ directory")?;
                     bail!("Did not pull the environment.");
                 }
             },
             Err(e) => {
-                fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
+                fs::remove_dir_all(dot_flox_path)
+                    .into_diagnostic()
+                    .wrap_err("Could not clean up .flox/ directory")?;
                 bail!(e)
             },
         };
@@ -492,7 +511,7 @@ impl Pull {
             },
         };
 
-        let (choice, _) = dialog.raw_prompt()?;
+        let (choice, _) = dialog.raw_prompt().into_diagnostic()?;
 
         Ok(choice == 1)
     }
@@ -522,7 +541,7 @@ impl Pull {
             },
         };
 
-        let (choice, _) = dialog.raw_prompt()?;
+        let (choice, _) = dialog.raw_prompt().into_diagnostic()?;
 
         Ok(choice == 1)
     }
@@ -531,9 +550,10 @@ impl Pull {
     fn amend_current_system(
         env: &ManagedEnvironment,
         flox: &Flox,
-    ) -> Result<DocumentMut, anyhow::Error> {
-        manifest::add_system(&env.manifest_content(flox)?, &flox.system)
-            .context("Could not add system to manifest")
+    ) -> Result<DocumentMut, miette::Error> {
+        manifest::add_system(&env.manifest_content(flox).into_diagnostic()?, &flox.system)
+            .into_diagnostic()
+            .wrap_err("Could not add system to manifest")
     }
 
     /// Ask the user if they want to ignore build errors and pull a broken environment
@@ -556,20 +576,20 @@ impl Pull {
             },
         };
 
-        let (choice, _) = dialog.raw_prompt()?;
+        let (choice, _) = dialog.raw_prompt().into_diagnostic()?;
 
         Ok(choice == 1)
     }
 
-    fn handle_error(err: ManagedEnvironmentError) -> anyhow::Error {
+    fn handle_error(err: ManagedEnvironmentError) -> miette::Error {
         match err {
             ManagedEnvironmentError::AccessDenied => {
                 let message = "You do not have permission to pull this environment";
-                anyhow::Error::msg(message)
+                miette::Error::msg(message)
             },
             ManagedEnvironmentError::Diverged => {
                 let message = "The environment has diverged from the remote version";
-                anyhow::Error::msg(message)
+                miette::Error::msg(message)
             },
             ManagedEnvironmentError::UpstreamNotFound {
                 env_ref,
@@ -581,7 +601,7 @@ impl Pull {
                     .unwrap_or_default();
                 let message = format!("The environment {env_ref} does not exist.");
                 if by_current_user {
-                    anyhow!(formatdoc! {"
+                    miette!(formatdoc! {"
                         {message}
 
                         Double check the name or create it with:
@@ -590,10 +610,10 @@ impl Pull {
                             $ flox push
                     ", name = env_ref.name()})
                 } else {
-                    anyhow!(message)
+                    miette!(message)
                 }
             },
-            _ => err.into(),
+            _ => miette!(err),
         }
     }
 }

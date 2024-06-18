@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use anyhow::bail;
 use flox_rust_sdk::providers::catalog::{
     CatalogClient,
     Client,
@@ -8,6 +7,7 @@ use flox_rust_sdk::providers::catalog::{
     FLOX_CATALOG_MOCK_DATA_VAR,
 };
 use flox_rust_sdk::utils::traceable_path;
+use miette::{bail, IntoDiagnostic};
 use tracing::debug;
 
 use crate::config::Config;
@@ -17,7 +17,7 @@ use crate::config::Config;
 /// - Return [None] if the Catalog API is disabled through the feature flag
 /// - Initialize a mock client if the `_FLOX_USE_CATALOG_MOCK` environment variable is set to `true`
 /// - Initialize a real client otherwise
-pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Error> {
+pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, miette::Error> {
     // Do not initialize a client if the Catalog API is disabled
     if !*config.features.clone().unwrap_or_default().use_catalog {
         debug!("catalog feature is disabled, skipping client initialization");
@@ -35,7 +35,9 @@ pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Er
             mock_data_path = traceable_path(&path),
             "using mock catalog client"
         );
-        Ok(Some(Client::Mock(MockClient::new(Some(path))?)))
+        Ok(Some(Client::Mock(
+            MockClient::new(Some(path)).into_diagnostic()?,
+        )))
     } else if let Some(ref catalog_url) = config.flox.catalog_url {
         debug!("using catalog client with url: {}", catalog_url);
         Ok(Some(Client::Catalog(CatalogClient::new(catalog_url))))

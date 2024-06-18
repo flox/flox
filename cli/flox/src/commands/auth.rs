@@ -1,13 +1,13 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use chrono::offset::Utc;
 use chrono::{DateTime, Duration};
 use flox_rust_sdk::flox::{Flox, FloxhubToken};
 use indoc::formatdoc;
 use log::debug;
+use miette::{bail, Context, IntoDiagnostic, Result};
 use oauth2::basic::BasicClient;
 use oauth2::{
     AuthUrl,
@@ -46,16 +46,19 @@ fn create_oauth_client() -> Result<BasicClient> {
     let auth_url = AuthUrl::new(
         std::env::var("_FLOX_OAUTH_AUTH_URL").unwrap_or(env!("OAUTH_AUTH_URL").to_string()),
     )
-    .context("Invalid auth url")?;
+    .into_diagnostic()
+    .wrap_err("Invalid auth url")?;
     let token_url = TokenUrl::new(
         std::env::var("_FLOX_OAUTH_TOKEN_URL").unwrap_or(env!("OAUTH_TOKEN_URL").to_string()),
     )
-    .context("Invalid token url")?;
+    .into_diagnostic()
+    .wrap_err("Invalid token url")?;
     let device_auth_url = DeviceAuthorizationUrl::new(
         std::env::var("_FLOX_OAUTH_DEVICE_AUTH_URL")
             .unwrap_or(env!("OAUTH_DEVICE_AUTH_URL").to_string()),
     )
-    .context("Invalid device auth url")?;
+    .into_diagnostic()
+    .wrap_err("Invalid device auth url")?;
     let client_id = ClientId::new(
         std::env::var("_FLOX_OAUTH_CLIENT_ID").unwrap_or(env!("OAUTH_CLIENT_ID").to_string()),
     );
@@ -80,7 +83,8 @@ pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credent
         )
         .request_async(oauth2::reqwest::async_http_client)
         .await
-        .context("Could not request device code")?;
+        .into_diagnostic()
+        .wrap_err("Could not request device code")?;
 
     debug!("Device code details: {details:#?}");
 
@@ -115,7 +119,8 @@ pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credent
                 help_message: None,
                 typed: Checkpoint,
             }
-            .checkpoint()?;
+            .checkpoint()
+            .into_diagnostic()?;
 
             let mut command = opener.to_command();
             command.arg(verification_uri);
@@ -153,7 +158,7 @@ pub async fn authorize(client: BasicClient, floxhub_url: &Url) -> Result<Credent
         {
             bail!("failed to authenticate before the device code expired. Please retry to get a new code.");
         },
-        _ => token_result?,
+        _ => token_result.into_diagnostic()?,
     };
 
     done.store(true, Ordering::Relaxed);
@@ -208,7 +213,7 @@ impl Auth {
                 }
 
                 update_config::<String>(&flox.config_dir, &flox.temp_dir, "floxhub_token", None)
-                    .context("Could not remove token from user config")?;
+                    .wrap_err("Could not remove token from user config")?;
 
                 message::updated("Logout successful");
 
@@ -243,13 +248,15 @@ pub async fn login_flox(flox: &mut Flox) -> Result<()> {
     let client = create_oauth_client()?;
     let cred = authorize(client, flox.floxhub.base_url())
         .await
-        .context("Could not authorize via oauth")?;
+        .wrap_err("Could not authorize via oauth")?;
 
     debug!("Credentials received: {cred:#?}");
     debug!("Writing token to config");
 
     // set the token in the runtime config
-    let token = flox.floxhub_token.insert(FloxhubToken::new(cred.token)?);
+    let token = flox
+        .floxhub_token
+        .insert(FloxhubToken::new(cred.token).into_diagnostic()?);
     let handle = token.handle();
 
     // write the token to the config file
@@ -259,7 +266,7 @@ pub async fn login_flox(flox: &mut Flox) -> Result<()> {
         "floxhub_token",
         Some(token.clone()),
     )
-    .context("Could not write token to config")?;
+    .wrap_err("Could not write token to config")?;
 
     message::updated("Authentication complete");
     message::updated(format!("Logged in as {handle}"));

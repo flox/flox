@@ -1,6 +1,6 @@
-use anyhow::{bail, Result};
 use flox_rust_sdk::flox::{Flox, Floxhub, DEFAULT_FLOXHUB_URL};
 use log::debug;
+use miette::{bail, IntoDiagnostic, Result};
 use tempfile::TempDir;
 
 use super::init::{init_access_tokens, init_catalog_client};
@@ -61,7 +61,7 @@ impl FloxCompletionExt for Flox {
             access_tokens,
             uuid: uuid::Uuid::nil(),
             floxhub_token: None,
-            floxhub: Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None)?,
+            floxhub: Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None).into_diagnostic()?,
             catalog_client,
         })
     }

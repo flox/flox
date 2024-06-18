@@ -4,7 +4,6 @@ use std::io::stdin;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
 use flox_rust_sdk::models::environment::{
@@ -15,6 +14,7 @@ use flox_rust_sdk::models::environment::{
 };
 use itertools::Itertools;
 use log::debug;
+use miette::{bail, miette, Context, IntoDiagnostic, Result};
 use tracing::instrument;
 
 use super::{
@@ -67,7 +67,8 @@ impl Edit {
 
         let detected_environment = self
             .environment
-            .detect_concrete_environment(&flox, "Edit")?;
+            .detect_concrete_environment(&flox, "Edit")
+            .into_diagnostic()?;
 
         // Ensure the user is logged in for the following remote operations
         if let ConcreteEnvironment::Remote(_) = detected_environment {
@@ -112,7 +113,7 @@ impl Edit {
                     if name == old_name {
                         bail!("environment already named '{name}'");
                     }
-                    environment.rename(name.clone())?;
+                    environment.rename(name.clone()).into_diagnostic()?;
                     message::updated(format!("renamed environment '{old_name}' to '{name}'"));
                 } else {
                     // todo: handle remote environments in the future
@@ -135,7 +136,7 @@ impl Edit {
     ) -> Result<()> {
         match maybe_migrate_environment_to_v1(flox, environment, &description).await {
             Ok(_) => (),
-            e @ Err(MigrationError::MigrationCancelled) => e?,
+            e @ Err(MigrationError::MigrationCancelled) => e.into_diagnostic()?,
             // If the user said they wanted an upgrade and it failed, print why but don't fail
             Err(MigrationError::ConfirmedUpgradeFailed(environment_error)) => {
                 // TODO: this could probably benefit from some newlines
@@ -152,7 +153,8 @@ impl Edit {
             // contents piped to stdin, use those contents to try building the environment.
             Some(new_manifest) => environment
                 .edit(flox, new_manifest)
-                .map_err(apply_doc_link_for_unsupported_packages)?,
+                .map_err(apply_doc_link_for_unsupported_packages)
+                .into_diagnostic()?,
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
             None => Self::interactive_edit(flox, environment.as_mut()).await?,
@@ -200,8 +202,13 @@ impl Edit {
         let tmp_manifest = tempfile::Builder::new()
             .prefix("manifest.")
             .suffix(".toml")
-            .tempfile_in(&flox.temp_dir)?;
-        std::fs::write(&tmp_manifest, environment.manifest_content(flox)?)?;
+            .tempfile_in(&flox.temp_dir)
+            .into_diagnostic()?;
+        std::fs::write(
+            &tmp_manifest,
+            environment.manifest_content(flox).into_diagnostic()?,
+        )
+        .into_diagnostic()?;
 
         let should_continue_dialog = Dialog {
             message: "Continue editing?",
@@ -224,7 +231,7 @@ impl Edit {
             .spin()
             .map_err(apply_doc_link_for_unsupported_packages);
 
-            match Self::make_interactively_recoverable(result)? {
+            match Self::make_interactively_recoverable(result).into_diagnostic()? {
                 Ok(result) => return Ok(result),
 
                 // for recoverable errors, prompt the user to continue editing
@@ -234,7 +241,12 @@ impl Edit {
                     if !Dialog::can_prompt() {
                         bail!("Can't prompt to continue editing in non-interactive context");
                     }
-                    if !should_continue_dialog.clone().prompt().await? {
+                    if !should_continue_dialog
+                        .clone()
+                        .prompt()
+                        .await
+                        .into_diagnostic()?
+                    {
                         bail!("Environment editing cancelled");
                     }
                 },
@@ -270,12 +282,14 @@ impl Edit {
             return Ok(PathBuf::from(editor));
         }
 
-        let path_var = env::var("PATH").context("$PATH not set")?;
+        let path_var = env::var("PATH")
+            .into_diagnostic()
+            .wrap_err("$PATH not set")?;
 
         let (path, editor) = env::split_paths(&path_var)
             .cartesian_product(["vim", "vi", "nano", "emacs"])
             .find(|(path, editor)| path.join(editor).exists())
-            .context("no known editor found in $PATH")?;
+            .ok_or(miette!("no known editor found in $PATH"))?;
 
         debug!("Using editor {:?} from {:?}", editor, path);
 
@@ -288,11 +302,11 @@ impl Edit {
             let mut file: Box<dyn std::io::Read + Send> = if file == Path::new("-") {
                 Box::new(stdin())
             } else {
-                Box::new(File::open(file)?)
+                Box::new(File::open(file).into_diagnostic()?)
             };
 
             let mut contents = String::new();
-            file.read_to_string(&mut contents)?;
+            file.read_to_string(&mut contents).into_diagnostic()?;
             Ok(Some(contents))
         } else {
             Ok(None)
@@ -307,10 +321,16 @@ impl Edit {
         let mut command = Command::new(editor.as_ref());
         command.arg(path.as_ref());
 
-        let child = command.spawn().context("editor command failed")?;
-        let _ = child.wait_with_output().context("editor command failed")?;
+        let child = command
+            .spawn()
+            .into_diagnostic()
+            .wrap_err("editor command failed")?;
+        let _ = child
+            .wait_with_output()
+            .into_diagnostic()
+            .wrap_err("editor command failed")?;
 
-        let contents = std::fs::read_to_string(path)?;
+        let contents = std::fs::read_to_string(path).into_diagnostic()?;
         Ok(contents)
     }
 }

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use miette::Result;
 use flox_rust_sdk::models::search::SearchStrategy;
 use serde::{Deserialize, Serialize};
 

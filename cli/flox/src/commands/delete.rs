@@ -1,8 +1,8 @@
-use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use indoc::formatdoc;
+use miette::{bail, IntoDiagnostic, Result};
 use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
@@ -28,7 +28,8 @@ impl Delete {
         subcommand_metric!("delete");
         let environment = self
             .environment
-            .detect_concrete_environment(&flox, "Delete")?;
+            .detect_concrete_environment(&flox, "Delete")
+            .into_diagnostic()?;
 
         let description = environment_description(&environment)?;
 
@@ -49,7 +50,7 @@ impl Delete {
             },
         };
 
-        if !self.force && Dialog::can_prompt() && !confirm.prompt().await? {
+        if !self.force && Dialog::can_prompt() && !confirm.prompt().await.into_diagnostic()? {
             bail!("Environment deletion cancelled");
         }
 
@@ -57,7 +58,8 @@ impl Delete {
             ConcreteEnvironment::Path(environment) => environment.delete(&flox),
             ConcreteEnvironment::Managed(environment) => environment.delete(&flox),
             ConcreteEnvironment::Remote(_) => unreachable!(),
-        }?;
+        }
+        .into_diagnostic()?;
 
         message::deleted(format!("environment {description} deleted"));
 

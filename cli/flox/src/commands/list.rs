@@ -1,6 +1,5 @@
 use std::io::{stdout, Write};
 
-use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::Flox;
@@ -14,6 +13,7 @@ use flox_rust_sdk::models::lockfile::{
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
+use miette::{Context, IntoDiagnostic, Result};
 use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
@@ -57,10 +57,11 @@ impl List {
 
         let mut env = self
             .environment
-            .detect_concrete_environment(&flox, "List using")?
+            .detect_concrete_environment(&flox, "List using")
+            .into_diagnostic()?
             .into_dyn_environment();
 
-        let manifest_contents = env.manifest_content(&flox)?;
+        let manifest_contents = env.manifest_content(&flox).into_diagnostic()?;
         if self.list_mode == ListMode::Config {
             tracing::Span::current().record("mode", "config");
             println!("{}", manifest_contents);
@@ -71,7 +72,9 @@ impl List {
         let lockfile = Self::get_lockfile(&flox, &mut *env)?;
         let packages = match lockfile {
             LockedManifest::Pkgdb(pkgdb_lockfile) => {
-                TypedLockedManifestPkgdb::try_from(pkgdb_lockfile)?.list_packages(system)
+                TypedLockedManifestPkgdb::try_from(pkgdb_lockfile)
+                    .into_diagnostic()?
+                    .list_packages(system)
             },
             LockedManifest::Catalog(catalog_lockfile) => catalog_lockfile.list_packages(system),
         };
@@ -108,7 +111,7 @@ impl List {
     /// print package ids only
     fn print_name_only(mut out: impl Write, packages: &[InstalledPackage]) -> Result<()> {
         for p in packages {
-            writeln!(&mut out, "{}", p.install_id)?;
+            writeln!(&mut out, "{}", p.install_id).into_diagnostic()?;
         }
         Ok(())
     }
@@ -126,7 +129,8 @@ impl List {
                 id = p.install_id,
                 path = p.rel_path,
                 version = p.info.version.as_deref().unwrap_or("N/A")
-            )?;
+            )
+            .into_diagnostic()?;
         }
         Ok(())
     }
@@ -169,9 +173,9 @@ impl List {
 
             // add an empty line between packages
             if idx < packages.len() - 1 {
-                writeln!(&mut out, "{message}")?;
+                writeln!(&mut out, "{message}").into_diagnostic()?;
             } else {
-                write!(&mut out, "{message}")?;
+                write!(&mut out, "{message}").into_diagnostic()?;
             }
         }
         Ok(())
@@ -184,7 +188,8 @@ impl List {
     fn get_lockfile(flox: &Flox, env: &mut dyn Environment) -> Result<LockedManifest> {
         let lockfile_path = env
             .lockfile_path(flox)
-            .context("Could not get lockfile path")?;
+            .into_diagnostic()
+            .wrap_err("Could not get lockfile path")?;
 
         let lockfile = if !lockfile_path.exists() {
             debug!("No lockfile found, locking environment...");
@@ -193,12 +198,13 @@ impl List {
                 help_message: None,
                 typed: Spinner::new(|| env.lock(flox)),
             }
-            .spin()?
+            .spin()
+            .into_diagnostic()?
         } else {
             debug!("Using existing lockfile");
             // we have already checked that the lockfile exists
             let path = CanonicalPath::new(lockfile_path).unwrap();
-            LockedManifest::read_from_file(&path)?
+            LockedManifest::read_from_file(&path).into_diagnostic()?
         };
 
         Ok(lockfile)

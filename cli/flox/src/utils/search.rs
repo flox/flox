@@ -3,7 +3,6 @@ use std::fmt::Display;
 use std::io::stdout;
 use std::path::PathBuf;
 
-use anyhow::Result;
 use crossterm::style::Stylize;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::Flox;
@@ -17,6 +16,7 @@ use flox_rust_sdk::models::search::{
     SearchResults,
 };
 use log::debug;
+use miette::{IntoDiagnostic, Result};
 
 use crate::commands::{detect_environment, UninitializedEnvironment};
 use crate::config::features::Features;
@@ -39,7 +39,10 @@ pub const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
 /// since a freshly cloned user repo with a [ManagedEnvironment] may not have a
 /// manifest or lockfile in floxmeta unless the environment is initialized.
 pub fn manifest_and_lockfile(flox: &Flox, message: &str) -> Result<(Option<PathBuf>, PathBuf)> {
-    manifest_and_lockfile_from_detected_environment(flox, detect_environment(message)?)
+    manifest_and_lockfile_from_detected_environment(
+        flox,
+        detect_environment(message).into_diagnostic()?,
+    )
 }
 
 /// Helper function for [manifest_and_lockfile] that can be unit tested.
@@ -56,10 +59,11 @@ fn manifest_and_lockfile_from_detected_environment(
             debug!("using environment {}", uninitialized.bare_description()?);
 
             let environment = uninitialized
-                .into_concrete_environment(flox)?
+                .into_concrete_environment(flox)
+                .into_diagnostic()?
                 .into_dyn_environment();
 
-            let lockfile_path = environment.lockfile_path(flox)?;
+            let lockfile_path = environment.lockfile_path(flox).into_diagnostic()?;
             debug!("checking lockfile: path={}", lockfile_path.display());
             let lockfile = if lockfile_path.exists() {
                 debug!("lockfile exists");
@@ -68,14 +72,17 @@ fn manifest_and_lockfile_from_detected_environment(
                 debug!("lockfile doesn't exist");
                 None
             };
-            (Some(environment.manifest_path(flox)?), lockfile)
+            (
+                Some(environment.manifest_path(flox).into_diagnostic()?),
+                lockfile,
+            )
         },
     };
 
     // Use the global lock if we don't have a lock yet
     let lockfile_path = match lockfile_path {
         Some(lockfile_path) => lockfile_path,
-        None => LockedManifestPkgdb::ensure_global_lockfile(flox)?,
+        None => LockedManifestPkgdb::ensure_global_lockfile(flox).into_diagnostic()?,
     };
     Ok((manifest_path, lockfile_path))
 }
@@ -94,7 +101,8 @@ pub(crate) fn construct_search_params(
         Features::parse()?.search_strategy,
         results_limit,
         true,
-    )?;
+    )
+    .into_diagnostic()?;
     let params = SearchParams {
         manifest,
         global_manifest,

@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
-use anyhow::{anyhow, Context, Error, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::{AttrPath, CanonicalPath};
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
@@ -31,6 +30,7 @@ use flox_rust_sdk::providers::catalog::{
 };
 use indoc::formatdoc;
 use log::debug;
+use miette::{miette, Error, IntoDiagnostic, Result};
 use path_dedot::ParseDot;
 use toml_edit::{DocumentMut, Formatted, Item, Table, Value};
 use tracing::instrument;
@@ -110,16 +110,17 @@ impl Init {
         let home_dir = dirs::home_dir().unwrap();
 
         let env_name = if let Some(ref name) = self.env_name {
-            EnvironmentName::from_str(name)?
+            EnvironmentName::from_str(name).into_diagnostic()?
         } else if dir == home_dir {
-            EnvironmentName::from_str(DEFAULT_NAME)?
+            EnvironmentName::from_str(DEFAULT_NAME).into_diagnostic()?
         } else {
             let name = dir
-                .parse_dot()?
+                .parse_dot()
+                .into_diagnostic()?
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
-                .context("Can't init in root")?;
-            EnvironmentName::from_str(&name)?
+                .ok_or(miette!("Can't init in root"))?;
+            EnvironmentName::from_str(&name).into_diagnostic()?
         };
 
         // Don't run language hooks in home dir
@@ -131,20 +132,24 @@ impl Init {
                     message: "Generating database for flox packages...",
                     help_message: None,
                     typed: Spinner::new(|| {
-                        let global_lockfile = LockedManifestPkgdb::ensure_global_lockfile(&flox)?;
+                        let global_lockfile =
+                            LockedManifestPkgdb::ensure_global_lockfile(&flox).into_diagnostic()?;
 
-                        let lockfile: LockedManifest =
-                            LockedManifest::read_from_file(&CanonicalPath::new(global_lockfile)?)?;
+                        let lockfile: LockedManifest = LockedManifest::read_from_file(
+                            &CanonicalPath::new(global_lockfile).into_diagnostic()?,
+                        )
+                        .into_diagnostic()?;
 
                         let LockedManifest::Pkgdb(lockfile) = lockfile else {
-                            return Err(anyhow!("Expected a Pkgdb lockfile"));
+                            return Err(miette!("Expected a Pkgdb lockfile"));
                         };
 
-                        let lockfile = TypedLockedManifestPkgdb::try_from(lockfile)?;
+                        let lockfile =
+                            TypedLockedManifestPkgdb::try_from(lockfile).into_diagnostic()?;
 
                         // --ga-registry forces a single input
                         if let Some((_, input)) = lockfile.registry().inputs.iter().next() {
-                            scrape_input(&input.from)?;
+                            scrape_input(&input.from).into_diagnostic()?;
                         };
                         Ok::<(), Error>(())
                     }),
@@ -178,7 +183,8 @@ impl Init {
                     )
                 }),
             }
-            .spin()?
+            .spin()
+            .into_diagnostic()?
         } else {
             PathEnvironment::init(
                 PathPointer::new(env_name),
@@ -187,7 +193,8 @@ impl Init {
                 &flox.system,
                 &customization,
                 &flox,
-            )?
+            )
+            .into_diagnostic()?
         };
 
         message::created(format!(
@@ -354,7 +361,7 @@ trait InitHook {
 /// [InitCustomization], and return it as a string.
 fn format_customization(customization: &InitCustomization) -> Result<String> {
     let mut toml = if let Some(packages) = &customization.packages {
-        let with_packages = insert_packages("", packages)?;
+        let with_packages = insert_packages("", packages).into_diagnostic()?;
         with_packages.new_toml.unwrap_or(DocumentMut::new())
     } else {
         DocumentMut::new()
@@ -366,9 +373,9 @@ fn format_customization(customization: &InitCustomization) -> Result<String> {
             .entry("hook")
             .or_insert_with(|| Item::Table(Table::new()));
         let hook_field_type = hook_field.type_name();
-        hook_field.as_table_mut().context(format!(
+        hook_field.as_table_mut().ok_or(miette!(format!(
             "'hook' must be a table, but found {hook_field_type} instead"
-        ))?
+        )))?
     };
     if let Some(hook_on_activate_script) = &customization.hook_on_activate {
         hook_table.insert(
@@ -385,9 +392,9 @@ fn format_customization(customization: &InitCustomization) -> Result<String> {
             .entry("profile")
             .or_insert_with(|| Item::Table(Table::new()));
         let profile_field_type = profile_field.type_name();
-        profile_field.as_table_mut().context(format!(
+        profile_field.as_table_mut().ok_or(miette!(format!(
             "'profile' must be a table, but found {profile_field_type} instead"
-        ))?
+        )))?
     };
     if let Some(profile_common_script) = &customization.profile_common {
         profile_table.insert(
@@ -494,7 +501,7 @@ impl TryFrom<SearchResult> for ProvidedPackage {
         let path_name = value
             .rel_path
             .last()
-            .ok_or_else(|| anyhow!("invalid search result: 'rel_path' empty in {value:?}"))?;
+            .ok_or_else(|| miette!("invalid search result: 'rel_path' empty in {value:?}"))?;
 
         let name = value.pname.unwrap_or_else(|| path_name.to_string());
 
@@ -564,11 +571,12 @@ async fn get_default_package_if_compatible(
                     allow_broken: None,
                     allow_unfree: None,
                     allowed_licenses: None,
-                    systems: vec![flox.system.parse()?],
+                    systems: vec![flox.system.parse().into_diagnostic()?],
                 }],
                 name: "default".to_string(),
             }])
-            .await?;
+            .await
+            .into_diagnostic()?;
         let pkg: Option<ProvidedPackage> = resolved_groups
             .first()
             .and_then(|pkg_group| pkg_group.page.as_ref())
@@ -599,7 +607,7 @@ async fn get_default_package_if_compatible(
             query,
         };
 
-        let (mut results, _) = do_search(&params)?;
+        let (mut results, _) = do_search(&params).into_diagnostic()?;
         if results.results.is_empty() {
             tracing::debug!("no compatible default package version found");
             return Ok(None);
@@ -632,11 +640,12 @@ async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<Provided
                     allow_broken: None,
                     allow_unfree: None,
                     allowed_licenses: None,
-                    systems: vec![flox.system.parse()?],
+                    systems: vec![flox.system.parse().into_diagnostic()?],
                 }],
                 name: package.to_string(),
             }])
-            .await?;
+            .await
+            .into_diagnostic()?;
         let pkg: Option<ProvidedPackage> = resolved_groups
             .first()
             .and_then(|pkg_group| pkg_group.page.as_ref())
@@ -648,7 +657,7 @@ async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<Provided
             });
         let Some(pkg) = pkg else {
             tracing::debug!("no default package found");
-            return Err(anyhow!("Flox couldn't find any versions of {package}"))?;
+            return Err(miette!("Flox couldn't find any versions of {package}"))?;
         };
         pkg
     } else {
@@ -661,7 +670,8 @@ async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<Provided
             Features::parse()?.search_strategy,
             NonZeroU8::new(1),
             false,
-        )?;
+        )
+        .into_diagnostic()?;
         let params = SearchParams {
             manifest: None,
             global_manifest: PathOrJson::Path(global_manifest_path(flox)),
@@ -669,9 +679,9 @@ async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<Provided
             query,
         };
 
-        let (mut results, _) = do_search(&params)?;
+        let (mut results, _) = do_search(&params).into_diagnostic()?;
         if results.results.is_empty() {
-            Err(anyhow!("Flox couldn't find any versions of {package}"))?
+            Err(miette!("Flox couldn't find any versions of {package}"))?
         }
         results.results.swap_remove(0).try_into()?
     };
@@ -708,11 +718,12 @@ async fn try_find_compatible_version(
                     allow_broken: None,
                     allow_unfree: None,
                     allowed_licenses: None,
-                    systems: vec![flox.system.parse()?],
+                    systems: vec![flox.system.parse().into_diagnostic()?],
                 }],
                 name: pname.to_string(),
             }])
-            .await?;
+            .await
+            .into_diagnostic()?;
         let pkg: Option<ProvidedPackage> = resolved_groups
             .first()
             .and_then(|pkg_group| pkg_group.page.as_ref())
@@ -744,7 +755,7 @@ async fn try_find_compatible_version(
             query,
         };
 
-        let (mut results, _) = do_search(&params)?;
+        let (mut results, _) = do_search(&params).into_diagnostic()?;
         if results.results.is_empty() {
             return Ok(None);
         }

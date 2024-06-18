@@ -1,10 +1,10 @@
-use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::EnvironmentError;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
+use miette::{bail, IntoDiagnostic, Result};
 use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
@@ -66,7 +66,7 @@ impl Uninstall {
                 Create an environment with 'flox init' or uninstall packages from an environment found elsewhere with 'flox uninstall {} --dir <path>'",
                 self.packages.join(" ")})
             },
-            Err(e) => Err(e)?,
+            Err(e) => Err(e).into_diagnostic()?,
         };
 
         // Ensure the user is logged in for the following remote operations
@@ -76,14 +76,17 @@ impl Uninstall {
 
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
-        maybe_migrate_environment_to_v1(&flox, &mut environment, &description).await?;
+        maybe_migrate_environment_to_v1(&flox, &mut environment, &description)
+            .await
+            .into_diagnostic()?;
 
         let _ = Dialog {
             message: &format!("Uninstalling packages from environment {description}..."),
             help_message: None,
             typed: Spinner::new(|| environment.uninstall(self.packages.clone(), &flox)),
         }
-        .spin()?;
+        .spin()
+        .into_diagnostic()?;
 
         // Note, you need two spaces between this emoji and the package name
         // otherwise they appear right next to each other.

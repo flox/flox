@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::str::FromStr;
 
-use anyhow::{anyhow, bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::Flox;
@@ -19,6 +18,7 @@ use flox_rust_sdk::models::pkgdb::error_codes;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
+use miette::{bail, miette, IntoDiagnostic, Result};
 use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
@@ -100,7 +100,7 @@ impl Install {
                 Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
                 self.packages.join(" ")})
             },
-            Err(e) => Err(e)?,
+            Err(e) => Err(miette!(e))?,
         };
         let description = environment_description(&concrete_environment)?;
 
@@ -110,13 +110,16 @@ impl Install {
         };
 
         let mut environment = concrete_environment.into_dyn_environment();
-        maybe_migrate_environment_to_v1(&flox, &mut environment, &description).await?;
+        maybe_migrate_environment_to_v1(&flox, &mut environment, &description)
+            .await
+            .into_diagnostic()?;
 
         let mut packages_to_install = self
             .packages
             .iter()
             .map(|p| PackageToInstall::from_str(p))
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()
+            .into_diagnostic()?;
         packages_to_install.extend(self.id.iter().map(|p| PackageToInstall {
             id: p.id.clone(),
             pkg_path: p.path.clone(),
@@ -140,12 +143,12 @@ impl Install {
         .spin()
         .map_err(|err| Self::handle_error(err, &flox, &*environment, &packages_to_install))?;
 
-        let lockfile_path = environment.lockfile_path(&flox)?;
-        let lockfile_path = CanonicalPath::new(lockfile_path)?;
-        let lockfile_content = std::fs::read_to_string(&lockfile_path)?;
+        let lockfile_path = environment.lockfile_path(&flox).into_diagnostic()?;
+        let lockfile_path = CanonicalPath::new(lockfile_path).into_diagnostic()?;
+        let lockfile_content = std::fs::read_to_string(&lockfile_path).into_diagnostic()?;
 
         // Check for warnings in the lockfile
-        let lockfile: LockedManifest = serde_json::from_str(&lockfile_content)?;
+        let lockfile: LockedManifest = serde_json::from_str(&lockfile_content).into_diagnostic()?;
 
         match lockfile {
             // TODO: move this behind the `installation.new_manifest.is_some()`
@@ -159,7 +162,8 @@ impl Install {
             },
             LockedManifest::Pkgdb(_) => {
                 // run `pkgdb manifest check`
-                let warnings = LockedManifestPkgdb::check_lockfile(&lockfile_path)?;
+                let warnings =
+                    LockedManifestPkgdb::check_lockfile(&lockfile_path).into_diagnostic()?;
                 warnings
                     .iter()
                     .filter(|w| {
@@ -203,7 +207,7 @@ impl Install {
         flox: &Flox,
         environment: &dyn Environment,
         packages: &[PackageToInstall],
-    ) -> anyhow::Error {
+    ) -> miette::Error {
         debug!("install error: {:?}", err);
 
         subcommand_metric!(
@@ -222,7 +226,7 @@ impl Install {
                 let paths = packages.iter().map(|p| p.pkg_path.clone()).join(", ");
 
                 if packages.len() > 1 {
-                    break 'error anyhow!(formatdoc! {"
+                    break 'error miette!(formatdoc! {"
                         Could not install {paths}.
                         One or more of the packages you are trying to install does not exist.
                     "});
@@ -233,10 +237,10 @@ impl Install {
 
                 let suggestion = DidYouMean::<InstallSuggestion>::new(flox, environment, &path);
                 if !suggestion.has_suggestions() {
-                    break 'error anyhow!("{head}\nTry 'flox search' with a broader search term.");
+                    break 'error miette!("{head}\nTry 'flox search' with a broader search term.");
                 }
 
-                anyhow!(formatdoc! {"
+                miette!(formatdoc! {"
                     {head}
                     {suggestion}
                 "})
@@ -271,12 +275,13 @@ impl Install {
                     };
                     other_failures.push(ResolutionFailure::FallbackMessage { msg });
                 }
-                EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
-                    LockedManifestError::ResolutionFailed(ResolutionFailures(other_failures)),
+                miette!(EnvironmentError::Core(
+                    CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(
+                        ResolutionFailures(other_failures)
+                    ),)
                 ))
-                .into()
             },
-            err => apply_doc_link_for_unsupported_packages(err).into(),
+            err => miette!(apply_doc_link_for_unsupported_packages(err)),
         }
     }
 

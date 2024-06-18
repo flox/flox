@@ -2,7 +2,6 @@ use std::fmt::Write;
 use std::num::NonZeroU8;
 use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::global_manifest_path;
@@ -10,6 +9,7 @@ use flox_rust_sdk::models::search::{do_search, PathOrJson, SearchResults};
 use flox_rust_sdk::providers::catalog::{ClientTrait, SearchTerm};
 use indoc::formatdoc;
 use log::debug;
+use miette::{bail, Context, IntoDiagnostic, Result};
 use tracing::instrument;
 
 use crate::config::Config;
@@ -59,11 +59,15 @@ impl Search {
         debug!("performing search for term: {}", self.search_term);
 
         let (manifest, lockfile) = manifest_and_lockfile(&flox, "Search using")
-            .context("failed while looking for manifest and lockfile")?;
+            .wrap_err("failed while looking for manifest and lockfile")?;
 
-        let manifest = manifest.map(|p| p.try_into()).transpose()?;
+        let manifest = manifest
+            .map(|p| p.try_into())
+            .transpose()
+            .into_diagnostic()?;
         let lockfile = PathOrJson::Path(lockfile);
-        let global_manifest: PathOrJson = global_manifest_path(&flox).try_into()?;
+        let global_manifest: PathOrJson =
+            global_manifest_path(&flox).try_into().into_diagnostic()?;
 
         let limit = if self.all {
             None
@@ -94,7 +98,8 @@ impl Search {
                     ))
                 }),
             }
-            .spin_with_delay(Duration::from_secs(1))?
+            .spin_with_delay(Duration::from_secs(1))
+            .into_diagnostic()?
         } else {
             tracing::debug!("using pkgdb for search");
 
@@ -111,7 +116,8 @@ impl Search {
                 help_message: Some("This may take a while the first time you run it."),
                 typed: Spinner::new(|| do_search(&search_params)),
             }
-            .spin_with_delay(Duration::from_secs(1))?;
+            .spin_with_delay(Duration::from_secs(1))
+            .into_diagnostic()?;
             tracing::debug!("search call exit status: {}", exit_status.to_string());
             results
         };
@@ -158,16 +164,16 @@ impl Search {
             let mut hints = String::new();
 
             if let Some(hint) = results.search_results_truncated_hint() {
-                writeln!(&mut hints)?;
-                writeln!(&mut hints, "{hint}")?;
+                writeln!(&mut hints).into_diagnostic()?;
+                writeln!(&mut hints, "{hint}").into_diagnostic()?;
             }
 
-            writeln!(&mut hints)?;
-            writeln!(&mut hints, "{FLOX_SHOW_HINT}")?;
+            writeln!(&mut hints).into_diagnostic()?;
+            writeln!(&mut hints, "{FLOX_SHOW_HINT}").into_diagnostic()?;
 
             if suggestion.has_suggestions() {
-                writeln!(&mut hints)?;
-                writeln!(&mut hints, "{suggestion}")?;
+                writeln!(&mut hints).into_diagnostic()?;
+                writeln!(&mut hints, "{suggestion}").into_diagnostic()?;
             };
 
             message::plain(hints);
@@ -177,7 +183,7 @@ impl Search {
 }
 
 fn render_search_results_json(search_results: SearchResults) -> Result<()> {
-    let json = serde_json::to_string(&search_results.results)?;
+    let json = serde_json::to_string(&search_results.results).into_diagnostic()?;
     println!("{}", json);
     Ok(())
 }

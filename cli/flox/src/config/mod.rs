@@ -4,12 +4,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::{env, fs};
 
-use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
 use flox_rust_sdk::flox::EnvironmentRef;
 use flox_rust_sdk::models::search::SearchLimit;
 use itertools::{Either, Itertools};
 use log::{debug, trace};
+use miette::{Context, IntoDiagnostic, Result};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use tempfile::PersistError;
@@ -152,7 +152,7 @@ impl Config {
         );
 
         fn read_raw_cofig() -> Result<HierarchicalConfig> {
-            let flox_dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
+            let flox_dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME).into_diagnostic()?;
 
             let cache_dir = flox_dirs.get_cache_home();
             let data_dir = flox_dirs.get_data_home();
@@ -161,29 +161,32 @@ impl Config {
                 Ok(v) => {
                     debug!("`${FLOX_CONFIG_DIR_VAR}` set: {v}");
                     fs::create_dir_all(&v)
-                        .context(format!("Could not create config directory: {v:?}"))?;
+                        .into_diagnostic()
+                        .wrap_err(format!("Could not create config directory: {v:?}"))?;
                     v.into()
                 },
                 Err(_) => {
                     let config_dir = flox_dirs.get_config_home();
                     debug!("`${FLOX_CONFIG_DIR_VAR}` not set, using {config_dir:?}");
                     fs::create_dir_all(&config_dir)
-                        .context(format!("Could not create config directory: {config_dir:?}"))?;
+                        .into_diagnostic()
+                        .wrap_err(format!("Could not create config directory: {config_dir:?}"))?;
                     let config_dir = config_dir
                         .canonicalize()
-                        .context("Could not canonicalize config directory '{config_dir:?}'")?;
+                        .into_diagnostic()
+                        .wrap_err("Could not canonicalize config directory '{config_dir:?}'")?;
                     env::set_var(FLOX_CONFIG_DIR_VAR, &config_dir);
                     config_dir
                 },
             };
 
             let mut builder = HierarchicalConfig::builder()
-                .set_default("default_substituter", "https://cache.floxdev.com/")?
-                .set_default("cache_dir", cache_dir.to_str().unwrap())?
-                .set_default("data_dir", data_dir.to_str().unwrap())?
+                .set_default("default_substituter", "https://cache.floxdev.com/").into_diagnostic()?
+                .set_default("cache_dir", cache_dir.to_str().unwrap()).into_diagnostic()?
+                .set_default("data_dir", data_dir.to_str().unwrap()).into_diagnostic()?
                 // Config dir is added to the config for completeness;
                 // the config file cannot change the config dir.
-                .set_override("config_dir", config_dir.to_str().unwrap())?;
+                .set_override("config_dir", config_dir.to_str().unwrap()).into_diagnostic()?;
 
             // read from /etc
             builder = builder.add_source(
@@ -220,7 +223,7 @@ impl Config {
                         .try_parsing(true),
                 );
 
-            let final_config = builder.build()?;
+            let final_config = builder.build().into_diagnostic()?;
             Ok(final_config)
         }
 
@@ -230,7 +233,7 @@ impl Config {
             reload = false;
             let config = read_raw_cofig()?;
 
-            Ok::<_, anyhow::Error>(Mutex::new(config))
+            Ok::<_, miette::Error>(Mutex::new(config))
         })?;
 
         let mut config_guard = instance.lock().expect("config mutex poisoned");
@@ -255,7 +258,8 @@ impl Config {
         let cli_confg: Config = final_config
             .to_owned()
             .try_deserialize()
-            .context("Could not parse config")?;
+            .into_diagnostic()
+            .wrap_err("Could not parse config")?;
         Ok(cli_confg)
     }
 

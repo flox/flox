@@ -1,9 +1,9 @@
-use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::UpdateResult;
 use flox_rust_sdk::models::lockfile::{Input, LockedManifestPkgdb, TypedLockedManifestPkgdb};
 use flox_rust_sdk::models::pkgdb::{self, ScrapeError};
+use miette::{bail, IntoDiagnostic, Result};
 use tracing::instrument;
 
 use super::{environment_select, ConcreteEnvironment, EnvironmentSelect};
@@ -50,8 +50,9 @@ impl Update {
                 let span = tracing::info_span!("update_local");
                 let _guard = span.enter();
 
-                let concrete_environment =
-                    environment_select.detect_concrete_environment(&flox, "Update")?;
+                let concrete_environment = environment_select
+                    .detect_concrete_environment(&flox, "Update")
+                    .into_diagnostic()?;
 
                 let description = Some(environment_description(&concrete_environment)?);
                 let UpdateResult {
@@ -68,8 +69,9 @@ impl Update {
                 (
                     old_lockfile
                         .map(TypedLockedManifestPkgdb::try_from)
-                        .transpose()?,
-                    TypedLockedManifestPkgdb::try_from(new_lockfile)?,
+                        .transpose()
+                        .into_diagnostic()?,
+                    TypedLockedManifestPkgdb::try_from(new_lockfile).into_diagnostic()?,
                     false,
                     description,
                 )
@@ -89,13 +91,15 @@ impl Update {
                         LockedManifestPkgdb::update_global_manifest(&flox, self.inputs)
                     }),
                 }
-                .spin()?;
+                .spin()
+                .into_diagnostic()?;
 
                 (
                     old_lockfile
                         .map(TypedLockedManifestPkgdb::try_from)
-                        .transpose()?,
-                    TypedLockedManifestPkgdb::try_from(new_lockfile)?,
+                        .transpose()
+                        .into_diagnostic()?,
+                    TypedLockedManifestPkgdb::try_from(new_lockfile).into_diagnostic()?,
                     true,
                     None,
                 )
@@ -187,7 +191,7 @@ impl Update {
         drop(_guard);
 
         for result in results {
-            result?;
+            result.into_diagnostic()?;
         }
 
         Ok(())
@@ -200,7 +204,9 @@ impl Update {
     ) -> Result<UpdateResult> {
         let mut environment = concrete_environment.into_dyn_environment();
 
-        Ok(environment.update(&flox, self.inputs.clone())?)
-        // .context("updating environment failed")
+        Ok(environment
+            .update(&flox, self.inputs.clone())
+            .into_diagnostic()?)
+        // .into_diagnostic().wrap_err("updating environment failed")
     }
 }

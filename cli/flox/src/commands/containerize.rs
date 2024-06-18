@@ -2,10 +2,10 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use log::debug;
+use miette::{Context, IntoDiagnostic, Result};
 use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
@@ -30,13 +30,15 @@ impl Containerize {
 
         let mut env = self
             .environment
-            .detect_concrete_environment(&flox, "Upgrade")?
+            .detect_concrete_environment(&flox, "Upgrade")
+            .into_diagnostic()?
             .into_dyn_environment();
 
         let output_path = match self.output {
             Some(output) => output,
             None => std::env::current_dir()
-                .context("Could not get current directory")?
+                .into_diagnostic()
+                .wrap_err("Could not get current directory")?
                 .join(format!("{}-container.tar.gz", env.name())),
         };
 
@@ -53,7 +55,8 @@ impl Containerize {
                     .create(true)
                     .truncate(true)
                     .open(&output_path)
-                    .context("Could not open output file")?;
+                    .into_diagnostic()
+                    .wrap_err("Could not open output file")?;
 
                 (Box::new(file), output_path.display().to_string())
             };
@@ -63,14 +66,16 @@ impl Containerize {
             help_message: None,
             typed: Spinner::new(|| env.build_container(&flox)),
         }
-        .spin()?;
+        .spin()
+        .into_diagnostic()?;
 
         Dialog {
             message: &format!("Writing container to '{output_name}'"),
             help_message: None,
             typed: Spinner::new(|| builder.stream_container(output)),
         }
-        .spin()?;
+        .spin()
+        .into_diagnostic()?;
 
         message::created(format!("Container written to '{output_name}'"));
         Ok(())

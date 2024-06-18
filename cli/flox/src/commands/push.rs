@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::{EnvironmentOwner, Flox};
@@ -19,6 +18,7 @@ use flox_rust_sdk::models::environment::{
 };
 use indoc::formatdoc;
 use log::debug;
+use miette::{miette, Context, IntoDiagnostic, Result};
 use tracing::instrument;
 
 use crate::commands::ensure_floxhub_token;
@@ -57,7 +57,7 @@ impl Push {
 
         let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
 
-        let dot_flox = DotFlox::open_in(dir)?;
+        let dot_flox = DotFlox::open_in(dir).into_diagnostic()?;
         let canonical_dot_flox_path =
             CanonicalPath::new(&dot_flox.path).expect("DotFlox path was just opened");
 
@@ -84,9 +84,10 @@ impl Push {
                     EnvironmentOwner::from_str(
                         flox.floxhub_token
                             .as_ref()
-                            .context("Need to be loggedin")?
+                            .ok_or(miette!("Need to be loggedin"))?
                             .handle(),
-                    )?
+                    )
+                    .into_diagnostic()?
                 };
 
                 let env = Dialog {
@@ -116,7 +117,8 @@ impl Push {
         dot_flox_dir: &Path,
         force: bool,
     ) -> Result<()> {
-        let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dot_flox_dir)?;
+        let mut env = ManagedEnvironment::open(flox, managed_pointer.clone(), dot_flox_dir)
+            .into_diagnostic()?;
         env.push(flox, force)
             .map_err(|err| Self::convert_error(err, managed_pointer, false))?;
 
@@ -136,7 +138,8 @@ impl Push {
             path_pointer,
             dot_flox_path,
             &flox.temp_dir,
-        )?;
+        )
+        .into_diagnostic()?;
 
         let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);
 
@@ -150,7 +153,7 @@ impl Push {
         err: ManagedEnvironmentError,
         pointer: ManagedPointer,
         create_remote: bool,
-    ) -> anyhow::Error {
+    ) -> miette::Error {
         let owner = &pointer.owner;
         let name = &pointer.name;
 
@@ -179,9 +182,9 @@ impl Push {
         // todo: add message to error using `context` when we work more on polishing errors
         if let Some(message) = message {
             debug!("converted error to message: {err:?} -> {message}");
-            anyhow::Error::msg(message)
+            miette::Error::msg(message)
         } else {
-            err.into()
+            miette!(err)
         }
     }
 

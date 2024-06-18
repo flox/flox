@@ -1,6 +1,6 @@
-use anyhow::anyhow;
 use flox_rust_sdk::flox::FLOX_SENTRY_ENV;
 use log::{debug, warn};
+use miette::miette;
 use sentry::{ClientInitGuard, IntoDsn};
 
 pub fn init_sentry() -> Option<ClientInitGuard> {
@@ -18,7 +18,7 @@ pub fn init_sentry() -> Option<ClientInitGuard> {
             return None;
         },
         Err(err) => {
-            warn!("Invalid Sentry DSN: {}", anyhow!(err));
+            warn!("Invalid Sentry DSN: {}", miette!(err));
             return None;
         },
     };

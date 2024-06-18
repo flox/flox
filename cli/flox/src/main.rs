@@ -2,7 +2,6 @@ use std::env;
 use std::fmt::{Debug, Display};
 use std::process::ExitCode;
 
-use anyhow::{Context, Result};
 use bpaf::{Args, Parser};
 use commands::{EnvironmentSelectError, FloxArgs, FloxCli, Prefix, Version};
 use flox_rust_sdk::flox::FLOX_VERSION;
@@ -10,6 +9,7 @@ use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentE
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::{init_global_manifest, EnvironmentError};
 use log::{debug, warn};
+use miette::{Context, IntoDiagnostic, Result};
 use utils::init::{init_logger, init_sentry};
 use utils::{message, populate_default_nix_env_vars};
 
@@ -41,7 +41,7 @@ async fn run(args: FloxArgs) -> Result<()> {
             ..Default::default()
         }));
     });
-    init_global_manifest(&config.flox.config_dir.join("global-manifest.toml"))?;
+    init_global_manifest(&config.flox.config_dir.join("global-manifest.toml")).into_diagnostic()?;
     args.handle(config).await?;
     Ok(())
 }
@@ -184,7 +184,9 @@ impl std::error::Error for FloxShellErrorCode {}
 /// Resetting `$USER`/`$HOME` will solve that.
 fn set_user() -> Result<()> {
     {
-        if let Some(effective_user) = nix::unistd::User::from_uid(nix::unistd::geteuid())? {
+        if let Some(effective_user) =
+            nix::unistd::User::from_uid(nix::unistd::geteuid()).into_diagnostic()?
+        {
             // TODO: warn if variable is empty?
             if env::var("USER").unwrap_or_default() != effective_user.name {
                 env::set_var("USER", effective_user.name);
@@ -201,7 +203,9 @@ fn set_user() -> Result<()> {
             // likely to cause problems at some point.
             warn!(
                 "cannot determine effective uid - continuing as user '{}'",
-                env::var("USER").context("Could not read '$USER' variable")?
+                env::var("USER")
+                    .into_diagnostic()
+                    .wrap_err("Could not read '$USER' variable")?
             );
         };
         Ok(())

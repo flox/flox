@@ -7,11 +7,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration as TimeoutDuration;
 
-use anyhow::{bail, Context, Result};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use fslock::LockFile;
 use indoc::indoc;
 use log::debug;
+use miette::{bail, Context, IntoDiagnostic, Result};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -177,19 +177,23 @@ impl MetricsBuffer {
         // The lock is released once the object is dropped.
         // We store the lock in the instance of [MetricsBuffer],
         // thus the lifetime of the lock is extended until the buffer is dropped.
-        let mut metrics_lock = LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME))?;
-        metrics_lock.lock()?;
+        let mut metrics_lock =
+            LockFile::open(&cache_dir.join(METRICS_LOCK_FILE_NAME)).into_diagnostic()?;
+        metrics_lock.lock().into_diagnostic()?;
 
         let buffer_file_path = cache_dir.join(METRICS_EVENTS_FILE_NAME);
         let mut events_buffer_file = OpenOptions::new()
             .read(true)
             .append(true)
             .create(true)
-            .open(buffer_file_path)?;
+            .open(buffer_file_path)
+            .into_diagnostic()?;
 
         let mut buffer_json = String::new();
 
-        events_buffer_file.read_to_string(&mut buffer_json)?;
+        events_buffer_file
+            .read_to_string(&mut buffer_json)
+            .into_diagnostic()?;
 
         let buffer_iter = serde_json::Deserializer::from_str(&buffer_json)
             .into_iter::<MetricEntry>()
@@ -228,12 +232,13 @@ impl MetricsBuffer {
         // [MetricsBuffer::read] ensures that the file is opened with write permissions
         // and append mode.
         let mut buffer_json = String::new();
-        buffer_json.push_str(&serde_json::to_string(&entry)?);
+        buffer_json.push_str(&serde_json::to_string(&entry).into_diagnostic()?);
         buffer_json.push('\n');
         self.storage
             .write_all(buffer_json.as_bytes())
-            .context("could not write new metrics entry to buffer file")?;
-        self.storage.flush()?;
+            .into_diagnostic()
+            .wrap_err("could not write new metrics entry to buffer file")?;
+        self.storage.flush().into_diagnostic()?;
 
         // update the buffer in memory
         self.buffer.push_back(entry);
@@ -248,7 +253,8 @@ impl MetricsBuffer {
     fn clear(&mut self) -> Result<()> {
         self.storage
             .set_len(0)
-            .context("Could not truncate metrics buffer file")?;
+            .into_diagnostic()
+            .wrap_err("Could not truncate metrics buffer file")?;
         self.buffer.clear();
         Ok(())
     }
@@ -264,16 +270,19 @@ pub fn read_metrics_uuid(config: &Config) -> Result<Uuid> {
     let uuid_path = data_dir.join(METRICS_UUID_FILE_NAME);
 
     File::open(uuid_path)
-        .context("Could not read metrics UUID file")
+        .into_diagnostic()
+        .wrap_err("Could not read metrics UUID file")
         .and_then(|mut f| {
             let mut uuid_str = String::new();
-            f.read_to_string(&mut uuid_str)?;
+            f.read_to_string(&mut uuid_str).into_diagnostic()?;
             let uuid_str_trimmed = uuid_str.trim();
-            Uuid::try_parse(uuid_str_trimmed).with_context(|| {
-                indoc! {"
+            Uuid::try_parse(uuid_str_trimmed)
+                .into_diagnostic()
+                .wrap_err_with(|| {
+                    indoc! {"
                 Could not parse the metrics UUID of this installation in {uuid_path}
             "}
-            })
+                })
         })
 }
 
@@ -455,7 +464,7 @@ impl Connection for AWSDatalakeConnection {
                     // Event ID used for deduplication
                     "uuid": Uuid::new_v4(),
 
-                    "timestamp": entry.timestamp.format(&Iso8601::DEFAULT)?,
+                    "timestamp": entry.timestamp.format(&Iso8601::DEFAULT).into_diagnostic()?,
                 }))
             })
             .collect::<Result<Vec<serde_json::Value>>>()?;
@@ -472,7 +481,8 @@ impl Connection for AWSDatalakeConnection {
             .header("user-agent", format!("flox-cli/{}", &*FLOX_VERSION))
             .json(&events)
             .timeout(self.timeout)
-            .send()?;
+            .send()
+            .into_diagnostic()?;
         Ok(())
     }
 

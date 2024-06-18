@@ -1,10 +1,10 @@
 use std::fs;
 use std::path::Path;
 
-use anyhow::Result;
 use fslock::LockFile;
 use indoc::formatdoc;
 use log::debug;
+use miette::{IntoDiagnostic, Result};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::utils::message;
@@ -22,25 +22,33 @@ pub async fn telemetry_opt_out_needs_migration(
     data_dir: impl AsRef<Path>,
     cache_dir: impl AsRef<Path>,
 ) -> Result<bool> {
-    tokio::fs::create_dir_all(&data_dir).await?;
-    tokio::fs::create_dir_all(&cache_dir).await?;
+    tokio::fs::create_dir_all(&data_dir)
+        .await
+        .into_diagnostic()?;
+    tokio::fs::create_dir_all(&cache_dir)
+        .await
+        .into_diagnostic()?;
 
-    let mut metrics_lock = LockFile::open(&cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME))?;
-    tokio::task::spawn_blocking(move || metrics_lock.lock()).await??;
+    let mut metrics_lock =
+        LockFile::open(&cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME)).into_diagnostic()?;
+    tokio::task::spawn_blocking(move || metrics_lock.lock())
+        .await
+        .into_diagnostic()?
+        .into_diagnostic()?;
 
     let uuid_path = data_dir.as_ref().join(METRICS_UUID_FILE_NAME);
 
     match tokio::fs::File::open(&uuid_path).await {
         Ok(mut file) => {
             let mut content = String::new();
-            file.read_to_string(&mut content).await?;
+            file.read_to_string(&mut content).await.into_diagnostic()?;
             if content.trim().is_empty() {
                 return Ok(true);
             }
             Ok(false)
         },
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(err) => Err(err.into()),
+        Err(err) => Err(err).into_diagnostic(),
     }
 }
 
@@ -49,13 +57,14 @@ pub async fn telemetry_opt_out_needs_migration(
 /// If a metrics-uuid file is present, assume telemetry is already set up.
 /// Any migration concerning user opt-out should be handled before using [telemetry_denial_need_migration].
 pub fn init_telemetry_uuid(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Path>) -> Result<()> {
-    fs::create_dir_all(&data_dir)?;
-    fs::create_dir_all(&cache_dir)?;
+    fs::create_dir_all(&data_dir).into_diagnostic()?;
+    fs::create_dir_all(&cache_dir).into_diagnostic()?;
 
     // set a lock to avoid initializing telemetry multiple times from concurrent processes
     // the lock is released when the `metrics_lock` is dropped.
-    let mut metrics_lock = LockFile::open(&cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME))?;
-    metrics_lock.lock()?;
+    let mut metrics_lock =
+        LockFile::open(&cache_dir.as_ref().join(METRICS_LOCK_FILE_NAME)).into_diagnostic()?;
+    metrics_lock.lock().into_diagnostic()?;
 
     let uuid_path = data_dir.as_ref().join(METRICS_UUID_FILE_NAME);
 
@@ -89,12 +98,14 @@ pub fn init_telemetry_uuid(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pat
 
     message::plain(notice);
 
-    fs::write(uuid_path, telemetry_uuid.to_string())?;
+    fs::write(uuid_path, telemetry_uuid.to_string()).into_diagnostic()?;
     Ok(())
 }
 
 pub async fn init_uuid(data_dir: &Path) -> Result<uuid::Uuid> {
-    tokio::fs::create_dir_all(data_dir).await?;
+    tokio::fs::create_dir_all(data_dir)
+        .await
+        .into_diagnostic()?;
 
     let uuid_file_path = data_dir.join("uuid");
 
@@ -102,19 +113,26 @@ pub async fn init_uuid(data_dir: &Path) -> Result<uuid::Uuid> {
         Ok(mut uuid_file) => {
             debug!("Attempting to read own UUID from file");
             let mut uuid_str = String::new();
-            uuid_file.read_to_string(&mut uuid_str).await?;
-            Ok(uuid::Uuid::try_parse(&uuid_str)?)
+            uuid_file
+                .read_to_string(&mut uuid_str)
+                .await
+                .into_diagnostic()?;
+            Ok(uuid::Uuid::try_parse(&uuid_str).into_diagnostic()?)
         },
         Err(err) => match err.kind() {
             std::io::ErrorKind::NotFound => {
                 debug!("Creating new uuid");
                 let uuid = uuid::Uuid::new_v4();
-                let mut file = tokio::fs::File::create(&uuid_file_path).await?;
-                file.write_all(uuid.to_string().as_bytes()).await?;
+                let mut file = tokio::fs::File::create(&uuid_file_path)
+                    .await
+                    .into_diagnostic()?;
+                file.write_all(uuid.to_string().as_bytes())
+                    .await
+                    .into_diagnostic()?;
 
                 Ok(uuid)
             },
-            _ => Err(err.into()),
+            _ => Err(err).into_diagnostic(),
         },
     }
 }

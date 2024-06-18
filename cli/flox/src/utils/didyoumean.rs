@@ -2,13 +2,13 @@ use std::fmt::Display;
 use std::num::NonZeroU8;
 use std::time::Duration;
 
-use anyhow::Result;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{global_manifest_path, Environment};
 use flox_rust_sdk::models::lockfile::LockedManifestPkgdb;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, SearchResults};
 use flox_rust_sdk::providers::catalog::{Client, ClientTrait};
 use log::debug;
+use miette::{IntoDiagnostic, Result};
 
 use super::search::{DisplayItems, DisplaySearchResults};
 use crate::utils::dialog::{Dialog, Spinner};
@@ -81,20 +81,26 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
         environment: &dyn Environment,
         term: &str,
     ) -> Result<SearchResults> {
-        let lockfile_path = environment.lockfile_path(flox)?;
+        let lockfile_path = environment.lockfile_path(flox).into_diagnostic()?;
 
         // Use the global lock if we don't have a lock yet
         let lockfile = if lockfile_path.exists() {
             PathOrJson::Path(lockfile_path)
         } else {
-            PathOrJson::Path(LockedManifestPkgdb::ensure_global_lockfile(flox)?)
+            PathOrJson::Path(LockedManifestPkgdb::ensure_global_lockfile(flox).into_diagnostic()?)
         };
 
         let search_params = construct_search_params(
             term,
             NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
-            Some(environment.manifest_path(flox)?.try_into()?),
-            global_manifest_path(flox).try_into()?,
+            Some(
+                environment
+                    .manifest_path(flox)
+                    .into_diagnostic()?
+                    .try_into()
+                    .into_diagnostic()?,
+            ),
+            global_manifest_path(flox).try_into().into_diagnostic()?,
             lockfile,
         )?;
 
@@ -103,7 +109,8 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
             help_message: None,
             typed: Spinner::new(|| do_search(&search_params)),
         }
-        .spin()?;
+        .spin()
+        .into_diagnostic()?;
 
         Ok(results)
     }
@@ -125,7 +132,8 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
                 ))
             }),
         }
-        .spin_with_delay(Duration::from_secs(1))?;
+        .spin_with_delay(Duration::from_secs(1))
+        .into_diagnostic()?;
         Ok(results)
     }
 
@@ -235,7 +243,8 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
             help_message: None,
             typed: Spinner::new(|| do_search(&search_params)),
         }
-        .spin()?;
+        .spin()
+        .into_diagnostic()?;
 
         Ok(results)
     }
@@ -256,7 +265,8 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
                 ))
             }),
         }
-        .spin_with_delay(Duration::from_secs(1))?;
+        .spin_with_delay(Duration::from_secs(1))
+        .into_diagnostic()?;
         Ok(results)
     }
 

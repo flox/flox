@@ -3,9 +3,9 @@ use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use log::debug;
+use miette::{miette, Context, IntoDiagnostic, Result};
 use sysinfo::{Pid, System};
 
 const OPENERS: &[&str] = &["xdg-open", "gnome-open", "kde-open"];
@@ -80,7 +80,7 @@ pub enum Shell {
 }
 
 impl TryFrom<&Path> for Shell {
-    type Error = anyhow::Error;
+    type Error = miette::Error;
 
     fn try_from(value: &Path) -> std::prelude::v1::Result<Self, Self::Error> {
         match value.file_name() {
@@ -88,7 +88,7 @@ impl TryFrom<&Path> for Shell {
             Some(name) if name == "fish" => Ok(Shell::Fish(value.to_owned())),
             Some(name) if name == "tcsh" => Ok(Shell::Tcsh(value.to_owned())),
             Some(name) if name == "zsh" => Ok(Shell::Zsh(value.to_owned())),
-            _ => Err(anyhow!("Unsupported shell {value:?}")),
+            _ => Err(miette!("Unsupported shell {value:?}")),
         }
     }
 }
@@ -121,7 +121,8 @@ impl Shell {
     /// Detect the current shell from the {var} environment variable
     pub fn detect_from_env(var: &str) -> Result<Self> {
         env::var(var)
-            .with_context(|| format!("{var} environment variable not set"))
+            .into_diagnostic()
+            .wrap_err_with(|| format!("{var} environment variable not set"))
             .and_then(|shell| {
                 let path = PathBuf::from(shell);
                 Self::try_from(path.as_path())
@@ -145,7 +146,7 @@ fn get_parent_process_exe() -> Result<PathBuf> {
 
     let parent_process = system
         .process(Pid::from_u32(std::os::unix::process::parent_id()))
-        .context("Failed to get info about parent process")?;
+        .ok_or(miette!("Failed to get info about parent process"))?;
 
     // Investigate whether to use `parent_process.cmd()[0]` instead.
     // Shells often have a compatibility mode with `sh` if invoked as `sh`.
@@ -158,7 +159,7 @@ fn get_parent_process_exe() -> Result<PathBuf> {
     // -- including `sh` -- and not just `bash` and `zsh`.
     let parent_exe = parent_process
         .exe()
-        .context("Failed to get parent process exe")?
+        .ok_or(miette!("Failed to get parent process exe"))?
         .to_path_buf();
 
     Ok(parent_exe)

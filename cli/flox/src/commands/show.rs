@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, HashSet};
 
-use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
@@ -16,6 +15,7 @@ use flox_rust_sdk::models::search::{
 };
 use flox_rust_sdk::providers::catalog::{ClientTrait, VersionsError};
 use log::debug;
+use miette::{bail, Context, IntoDiagnostic, Result};
 use tracing::instrument;
 
 use crate::config::features::Features;
@@ -57,7 +57,7 @@ impl Show {
                     results: vec![],
                     count: None::<u64>,
                 },
-                Err(e) => Err(e)?,
+                Err(e) => Err(e).into_diagnostic()?,
             };
             if results.results.is_empty() {
                 bail!("no packages matched this pkg-path: '{}'", self.pkg_path);
@@ -76,15 +76,18 @@ impl Show {
             tracing::debug!("using pkgdb for show");
 
             let (manifest, lockfile) = manifest_and_lockfile(&flox, "Show using")
-                .context("failed while looking for manifest and lockfile")?;
+                .wrap_err("failed while looking for manifest and lockfile")?;
             let search_params = construct_show_params(
                 &self.pkg_path,
-                manifest.map(|p| p.try_into()).transpose()?,
-                global_manifest_path(&flox).try_into()?,
+                manifest
+                    .map(|p| p.try_into())
+                    .transpose()
+                    .into_diagnostic()?,
+                global_manifest_path(&flox).try_into().into_diagnostic()?,
                 PathOrJson::Path(lockfile),
             )?;
 
-            let (search_results, exit_status) = do_search(&search_params)?;
+            let (search_results, exit_status) = do_search(&search_params).into_diagnostic()?;
 
             if search_results.results.is_empty() {
                 bail!("no packages matched this pkg-path: '{}'", self.pkg_path);
@@ -118,7 +121,7 @@ fn construct_show_params(
     let (_input_name, package_name) = match parts.as_slice() {
         [package_name] => (None, Some(package_name.to_owned())),
         [input_name, package_name] => (Some(input_name.to_owned()), Some(package_name.to_owned())),
-        _ => Err(ShowError::InvalidSearchTerm(search_term.to_owned()))?,
+        _ => Err(ShowError::InvalidSearchTerm(search_term.to_owned())).into_diagnostic()?,
     };
 
     let query = Query::new(
@@ -126,7 +129,8 @@ fn construct_show_params(
         Features::parse()?.search_strategy,
         None,
         false,
-    )?;
+    )
+    .into_diagnostic()?;
     let search_params = SearchParams {
         manifest,
         global_manifest,

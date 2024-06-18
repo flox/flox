@@ -1,12 +1,12 @@
 use std::fs;
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
 use flox_rust_sdk::models::manifest::PackageToInstall;
 use flox_rust_sdk::utils::traceable_path;
 use indoc::{formatdoc, indoc};
+use miette::{miette, IntoDiagnostic, Result};
 use semver::VersionReq;
 
 use super::{
@@ -264,7 +264,7 @@ impl Node {
             return Ok(None);
         }
         tracing::debug!(path = traceable_path(&package_json), "found a package.json");
-        let package_json_contents = fs::read_to_string(package_json)?;
+        let package_json_contents = fs::read_to_string(package_json).into_diagnostic()?;
         match serde_json::from_str::<serde_json::Value>(&package_json_contents) {
             // Treat a package.json that can't be parsed as JSON the same as it not existing
             Err(_) => Ok(None),
@@ -304,7 +304,7 @@ impl Node {
             },
             None => get_default_package_if_compatible(flox, vec!["nodejs".to_string()], None)
                 .await?
-                .ok_or(anyhow!("Flox couldn't find nodejs in nixpkgs"))?,
+                .ok_or(miette!("Flox couldn't find nodejs in nixpkgs"))?,
         };
 
         // We assume that yarn is built with found_node, which is currently true
@@ -333,7 +333,7 @@ impl Node {
             return Ok(None);
         }
 
-        let nvmrc_contents = fs::read_to_string(&nvmrc)?;
+        let nvmrc_contents = fs::read_to_string(&nvmrc).into_diagnostic()?;
         let nvmrc_version = match Self::parse_nvmrc_version(&nvmrc_contents) {
             RequestedNVMRCVersion::None => None,
             RequestedNVMRCVersion::Unsure => Some(NVMRCVersion::Unsure),
@@ -493,12 +493,12 @@ impl Node {
                 options: ["Yes", "No", "Show suggested modifications"].to_vec(),
             },
         };
-        let (mut choice, _) = dialog.clone().raw_prompt()?;
+        let (mut choice, _) = dialog.clone().raw_prompt().into_diagnostic()?;
 
         while choice == 2 {
             message::plain(format_customization(&self.get_init_customization())?);
 
-            (choice, _) = dialog.clone().raw_prompt()?;
+            (choice, _) = dialog.clone().raw_prompt().into_diagnostic()?;
         }
 
         Ok(choice == 0)
@@ -597,7 +597,7 @@ impl Node {
             },
         };
 
-        let (mut choice, _) = dialog.clone().raw_prompt()?;
+        let (mut choice, _) = dialog.clone().raw_prompt().into_diagnostic()?;
 
         while choice == 3 || choice == 4 {
             // Temporarily set choice so self.get_init_customization() returns
@@ -609,7 +609,7 @@ impl Node {
             }
             message::plain(format_customization(&self.get_init_customization())?);
 
-            (choice, _) = dialog.clone().raw_prompt()?;
+            (choice, _) = dialog.clone().raw_prompt().into_diagnostic()?;
         }
 
         if choice == 0 {
