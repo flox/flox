@@ -472,7 +472,7 @@ impl Environment for ManagedEnvironment {
             (true, true) => "Migrated manifest to v1 and upgraded packages",
             (true, false) => "Migrated manifest to v1", // and locked
             (false, true) => "Upgraded packages",
-            _ => unreachable!(),
+            _ => unreachable!("called with invalid migration metadata"),
         };
 
         let store_path = temporary.migrate_to_v1(flox, migration_info)?;

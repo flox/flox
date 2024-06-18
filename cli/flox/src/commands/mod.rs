@@ -1600,7 +1600,7 @@ enum MigrationError {
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
     #[error(transparent)]
-    Anyhow(#[from] anyhow::Error),
+    Other(#[from] anyhow::Error),
 }
 
 /// Check if the environment needs to be migrated to version 1.

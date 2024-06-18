@@ -360,11 +360,16 @@ impl Pull {
                 }
 
                 if migration_info.is_some() {
-                    let doc = Self::amend_current_system(env, flox)?;
+                    let manifest_with_current_system = Self::amend_current_system(env, flox)?;
                     let migrate_to_v1 = Dialog {
                         message: "Migrating environment to version 1 and adding your system.",
                         help_message: None,
-                        typed: Spinner::new(|| env.migrate_and_edit_unsafe(flox, doc.to_string())),
+                        typed: Spinner::new(|| {
+                            env.migrate_and_edit_unsafe(
+                                flox,
+                                manifest_with_current_system.to_string(),
+                            )
+                        }),
                     }
                     .spin()?;
 
@@ -391,11 +396,13 @@ impl Pull {
                     return Ok(());
                 }
 
-                let doc = Self::amend_current_system(env, flox)?;
+                let manifest_with_current_system = Self::amend_current_system(env, flox)?;
                 let rebuild_with_current_system = Dialog {
                     message: "Adding your system to the manifest and validating the environment.",
                     help_message: None,
-                    typed: Spinner::new(|| env.edit_unsafe(flox, doc.to_string())),
+                    typed: Spinner::new(|| {
+                        env.edit_unsafe(flox, manifest_with_current_system.to_string())
+                    }),
                 }
                 .spin()?;
 

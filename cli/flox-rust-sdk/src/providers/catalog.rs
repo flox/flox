@@ -228,14 +228,17 @@ impl MockClient {
         })
     }
 
-    /// Load responses from a file into the list of mock responses
-    pub fn load_responses_from_file(&mut self, relative_path: &str) {
+    /// Clear mock responses and then load responses from a file into the list
+    /// of mock responses
+    pub fn clear_and_load_responses_from_file(&mut self, relative_path: &str) {
         let responses = read_mock_responses((*GENERATED_DATA).join(relative_path))
             .expect("couldn't read mock responses");
-        self.mock_responses
+        let mut locked_mock_responses = self
+            .mock_responses
             .lock()
-            .expect("couldn't acquire mock lock")
-            .extend(responses);
+            .expect("couldn't acquire mock lock");
+        locked_mock_responses.clear();
+        locked_mock_responses.extend(responses);
     }
 
     /// Push a new response into the list of mock responses

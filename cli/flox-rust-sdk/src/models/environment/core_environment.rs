@@ -934,7 +934,9 @@ impl CoreEnvironment<ReadOnly> {
         // Lock if there's a v0 manifest, regardless of whether there's a
         // lockfile or what version it is.
         // This could lock an environment that isn't already locked,
-        // but we don't want to perform a transaction without locking.
+        // but particularly for managed and remote environments, we want to keep
+        // the lock in sync with the manifest,
+        // so we don't want to perform a transaction without locking.
         debug!("migration transaction: locking environment");
         temp_env
             .lock(flox)
@@ -1703,7 +1705,7 @@ mod tests {
         let (mut flox_catalog, _temp_dir_handle) =
             flox_instance_with_optional_floxhub_and_client(None, true);
         if let Some(Client::Mock(ref mut client)) = flox_catalog.catalog_client {
-            client.load_responses_from_file("resolve/glibc_incompatible.json");
+            client.clear_and_load_responses_from_file("resolve/glibc_incompatible.json");
         } else {
             panic!("expected Mock client")
         };

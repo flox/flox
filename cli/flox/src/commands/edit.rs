@@ -81,6 +81,14 @@ impl Edit {
                 let _guard = span.enter();
                 let contents = Self::provided_manifest_contents(file)?;
 
+                // TODO: we have various functionality spread across
+                // UninitializedEnvironment, ConcreteEnvironment, and
+                // Environment.
+                // UninitializedEnvironment is used to compare to what
+                // environments are active.
+                // description can't currently be derived from an Environment
+                // but is used for messages.
+                // Environment is what we'll actually use to perform the edit.
                 let active_environment =
                     UninitializedEnvironment::from_concrete_environment(&detected_environment)?;
                 let description = environment_description(&detected_environment)?;
