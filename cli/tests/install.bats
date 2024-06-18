@@ -525,7 +525,11 @@ teardown() {
     run "$FLOX_BIN" install badpkg
 
   assert_failure
-  assert_output --partial "Could not find package 'badpkg'"
+  assert_output "$(cat <<EOF
+❌ ERROR: resolution failed: Could not find package 'badpkg'.
+Try 'flox search' with a broader search term.
+EOF
+)"
 }
 
 @test "resolution message: multiple packages not found, without curation" {
@@ -535,8 +539,14 @@ teardown() {
     run "$FLOX_BIN" install badpkg1 badpkg2
 
   assert_failure
-  assert_output --partial "- Could not find package 'badpkg1'"
-  assert_output --partial "- Could not find package 'badpkg2'"
+  assert_output "$(cat <<EOF
+❌ ERROR: resolution failed: multiple resolution failures:
+- Could not find package 'badpkg1'.
+  Try 'flox search' with a broader search term.
+- Could not find package 'badpkg2'.
+  Try 'flox search' with a broader search term.
+EOF
+)"
 }
 
 @test "resolution message: single package not found, with curation" {
@@ -546,9 +556,14 @@ teardown() {
     run "$FLOX_BIN" install node
 
   assert_failure
-  assert_output --partial "Could not find package 'node'"
-  assert_output --partial "Here are a few other similar options"
-  assert_output --partial "$ flox install nodejs"
+  assert_output --partial "$(cat <<EOF
+❌ ERROR: resolution failed: Could not find package 'node'.
+Try 'flox install nodejs' instead.
+
+Here are a few other similar options:
+  $ flox install nodejs
+EOF
+)"
 }
 
 @test "resolution message: single package not availabe on all systems" {
@@ -558,13 +573,18 @@ teardown() {
     run "$FLOX_BIN" install bpftrace
 
   assert_failure
-  assert_regex "${lines[0]}" "resolution failed: package 'bpftrace' not available for"
-  assert_regex "${lines[1]}" "aarch64-darwin"
-  assert_regex "${lines[2]}" "x86_64-darwin"
-  assert_regex "${lines[3]}" "but it is available for"
-  assert_regex "${lines[4]}" "aarch64-linux"
-  assert_regex "${lines[5]}" "x86_64-linux"
-  assert_output --partial "For more on managing system-specific packages"
+  assert_output "$(cat <<EOF
+❌ ERROR: resolution failed: package 'bpftrace' not available for
+    - aarch64-darwin
+    - x86_64-darwin
+  but it is available for
+    - aarch64-linux
+    - x86_64-linux
+
+For more on managing system-specific packages, visit the documentation:
+https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+EOF
+)"
 }
 
 @test "resolution message: multiple packages not available on all systems" {
@@ -574,9 +594,28 @@ teardown() {
     run "$FLOX_BIN" install bpftrace systemd
 
   assert_failure
-  assert_output --partial "- package 'bpftrace' not available for"
-  assert_output --partial "- package 'systemd' not available for"
-  assert_output --partial "For more on managing system-specific packages"
+  assert_output "$(cat <<EOF
+❌ ERROR: resolution failed: multiple resolution failures:
+- package 'bpftrace' not available for
+      - aarch64-darwin
+      - x86_64-darwin
+    but it is available for
+      - aarch64-linux
+      - x86_64-linux
+
+  For more on managing system-specific packages, visit the documentation:
+  https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+- package 'systemd' not available for
+      - aarch64-darwin
+      - x86_64-darwin
+    but it is available for
+      - aarch64-linux
+      - x86_64-linux
+
+  For more on managing system-specific packages, visit the documentation:
+  https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+EOF
+)"
 }
 
 @test "resolution message: constraints too tight" {
@@ -586,6 +625,11 @@ teardown() {
     run "$FLOX_BIN" install nodejs@14.16.1
 
   assert_failure
-  assert_output --partial "constraints for group 'toplevel' are too tight"
-  assert_output --partial "adjust version constraints"
+  assert_output "$(cat <<EOF
+❌ ERROR: resolution failed: constraints for group 'toplevel' are too tight
+
+   Use 'flox edit' to adjust version constraints in the [install] section,
+   or isolate dependencies in a new group with '<pkg>.pkg-group = "newgroup"'
+EOF
+)"
 }
