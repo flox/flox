@@ -5,9 +5,9 @@
         {
           "AttrPathNotFound": {
             "attr_path": "definitely-not-a-package",
-            "install_id": null,
+            "install_id": "definitely-not-a-package",
             "level": "error",
-            "msg": "AttrPath 'definitely-not-a-package' not found.",
+            "msg": "The attr_path 'definitely-not-a-package' is not found.",
             "valid_systems": []
           }
         }

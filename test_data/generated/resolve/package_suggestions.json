@@ -5,9 +5,9 @@
         {
           "AttrPathNotFound": {
             "attr_path": "package",
-            "install_id": null,
+            "install_id": "package",
             "level": "error",
-            "msg": "AttrPath 'package' not found.",
+            "msg": "The attr_path 'package' is not found.",
             "valid_systems": []
           }
         }

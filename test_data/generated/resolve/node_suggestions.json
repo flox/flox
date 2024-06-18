@@ -5,9 +5,9 @@
         {
           "AttrPathNotFound": {
             "attr_path": "node",
-            "install_id": null,
+            "install_id": "node",
             "level": "error",
-            "msg": "AttrPath 'node' not found.",
+            "msg": "The attr_path 'node' is not found.",
             "valid_systems": []
           }
         }

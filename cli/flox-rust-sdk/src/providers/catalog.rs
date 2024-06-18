@@ -692,7 +692,7 @@ pub struct MsgAttrPathNotFound {
     /// The requested attribute path
     pub attr_path: String,
     /// The install id that requested this attribute path
-    pub install_id: Option<String>,
+    pub install_id: String,
     /// The systems on which this attribute path is valid
     pub valid_systems: Vec<System>,
 }
@@ -769,14 +769,12 @@ impl From<ResolutionMessageGeneral> for ResolutionMessage {
                     .unwrap_or_default();
                 // TODO: `install_id` is *supposed* to be populated, but for the moment
                 //       it's not.
-                let install_id = r_msg.context.get("install_id").cloned().and_then(|id| {
-                    // Could be present and an empty string
-                    if id.is_empty() {
-                        None
-                    } else {
-                        Some(id)
-                    }
-                });
+                let install_id: String = r_msg
+                    .context
+                    .get("install_id")
+                    .clone()
+                    .map(|s| s.to_string())
+                    .unwrap_or("default_install_id".to_string());
                 ResolutionMessage::AttrPathNotFound(MsgAttrPathNotFound {
                     level: Some(level),
                     msg,

@@ -5,9 +5,9 @@
         {
           "AttrPathNotFound": {
             "attr_path": "glibc",
-            "install_id": null,
+            "install_id": "glibc",
             "level": "error",
-            "msg": "AttrPath glibc not found for some systems, valid systems are (['a', 'a', 'r', 'c', 'h', '6', '4', '-', 'l', 'i', 'n', 'u', 'x', ',', 'x', '8', '6', '_', '6', '4', '-', 'l', 'i', 'n', 'u', 'x']).",
+            "msg": "The attr_path glibc is not found for some systems, valid systems are (aarch64-linux,x86_64-linux).",
             "valid_systems": [
               "aarch64-linux",
               "x86_64-linux"

@@ -844,7 +844,7 @@ impl LockedManifestCatalog {
                 "no valid systems for requested attr_path"
             );
             Some(ResolutionFailure::PackageNotFound {
-                install_id: r_msg.install_id.clone(),
+                install_id: Some(r_msg.install_id.clone()),
                 attr_path: r_msg.attr_path.clone(),
             })
         } else {
@@ -858,7 +858,7 @@ impl LockedManifestCatalog {
             let mut available = r_msg.valid_systems.clone();
             available.sort();
             Some(ResolutionFailure::PackageUnavailableOnSomeSystems {
-                install_id: r_msg.install_id.clone(),
+                install_id: Some(r_msg.install_id.clone()),
                 attr_path: r_msg.attr_path.clone(),
                 invalid_systems: diff,
                 valid_systems: available,
@@ -890,7 +890,7 @@ impl LockedManifestCatalog {
             .clone()
             .map(|s| s.iter().cloned().collect::<HashSet<_>>())
             .unwrap_or(default_systems);
-        let pkg_descriptor = Self::get_pkg_descriptor_for_failed_pkg(r_msg, manifest)?;
+        let pkg_descriptor = manifest.pkg_descriptor_with_id(&r_msg.install_id)?;
         let pkg_systems = pkg_descriptor
             .systems
             .map(|s| s.iter().cloned().collect::<HashSet<_>>())
@@ -901,41 +901,6 @@ impl LockedManifestCatalog {
             manifest_systems
         };
         Some((valid_systems, requested_systems))
-    }
-
-    /// Looks up the package descriptor referenced by a resolution message
-    fn get_pkg_descriptor_for_failed_pkg(
-        r_msg: &MsgAttrPathNotFound,
-        manifest: &TypedManifestCatalog,
-    ) -> Option<ManifestPackageDescriptor> {
-        if let Some(ref id) = r_msg.install_id {
-            let pd = manifest.pkg_descriptor_with_id(id);
-            if pd.is_some() {
-                tracing::debug!(install_id = id, "descriptor found for install_id");
-            } else {
-                tracing::debug!(install_id = id, "descriptor not found for install_id");
-            }
-            pd
-        } else {
-            // TODO: temporary, the `install_id` field is empty in messages at the moment
-            let pd = manifest
-                .install
-                .values()
-                .find(|pd| pd.pkg_path == r_msg.attr_path)
-                .cloned();
-            if pd.is_some() {
-                tracing::debug!(
-                    attr_path = r_msg.attr_path,
-                    "descriptor found for attr_path"
-                );
-            } else {
-                tracing::debug!(
-                    attr_path = r_msg.attr_path,
-                    "descriptor not found for attr_path"
-                );
-            }
-            pd
-        }
     }
 
     /// Detects whether any groups failed to resolve

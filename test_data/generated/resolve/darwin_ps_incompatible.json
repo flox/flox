@@ -5,9 +5,9 @@
         {
           "AttrPathNotFound": {
             "attr_path": "darwin.ps",
-            "install_id": null,
+            "install_id": "ps",
             "level": "error",
-            "msg": "AttrPath darwin.ps not found for some systems, valid systems are (['a', 'a', 'r', 'c', 'h', '6', '4', '-', 'd', 'a', 'r', 'w', 'i', 'n', ',', 'x', '8', '6', '_', '6', '4', '-', 'd', 'a', 'r', 'w', 'i', 'n']).",
+            "msg": "The attr_path darwin.ps is not found for some systems, valid systems are (aarch64-darwin,x86_64-darwin).",
             "valid_systems": [
               "aarch64-darwin",
               "x86_64-darwin"

@@ -5,18 +5,18 @@
         {
           "AttrPathNotFound": {
             "attr_path": "badpkg1",
-            "install_id": null,
+            "install_id": "badpkg1",
             "level": "error",
-            "msg": "AttrPath 'badpkg1' not found.",
+            "msg": "The attr_path 'badpkg1' is not found.",
             "valid_systems": []
           }
         },
         {
           "AttrPathNotFound": {
             "attr_path": "badpkg2",
-            "install_id": null,
+            "install_id": "badpkg2",
             "level": "error",
-            "msg": "AttrPath 'badpkg2' not found.",
+            "msg": "The attr_path 'badpkg2' is not found.",
             "valid_systems": []
           }
         }
