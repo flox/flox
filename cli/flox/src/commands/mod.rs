@@ -1626,7 +1626,7 @@ async fn maybe_migrate_environment_to_v1_inner(
             match confirm_upgrade_future {
                 None => {
                     bail!(formatdoc! {"
-                    Environment {description} needs to be migrated to the latest environment format.
+                    To edit environment {description}, you must upgrade to environment version 1.
                     Run 'flox upgrade' to migrate the environment."
                     });
                 },
@@ -1655,8 +1655,8 @@ async fn maybe_migrate_environment_to_v1_inner(
 async fn confirm_migration_upgrade(description: &str) -> Result<bool> {
     Ok(Dialog {
         message: &formatdoc! {"
-                    Environment {description} needs to be migrated to the latest environment format,
-                    which requires upgrading it. Do you want to upgrade the environment?"},
+                    To edit environment {description}, you must upgrade to environment version 1.
+                    Do you want to upgrade now?"},
         help_message: None,
         typed: Confirm {
             default: Some(false),
