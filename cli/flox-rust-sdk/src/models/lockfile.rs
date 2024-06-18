@@ -289,11 +289,11 @@ pub struct ResolutionFailures(pub Vec<ResolutionFailure>);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResolutionFailure {
     PackageNotFound {
-        install_id: Option<String>,
+        install_id: String,
         attr_path: String,
     },
     PackageUnavailableOnSomeSystems {
-        install_id: Option<String>,
+        install_id: String,
         attr_path: String,
         invalid_systems: Vec<System>,
         valid_systems: Vec<String>,
@@ -844,7 +844,7 @@ impl LockedManifestCatalog {
                 "no valid systems for requested attr_path"
             );
             Some(ResolutionFailure::PackageNotFound {
-                install_id: Some(r_msg.install_id.clone()),
+                install_id: r_msg.install_id.clone(),
                 attr_path: r_msg.attr_path.clone(),
             })
         } else {
@@ -858,7 +858,7 @@ impl LockedManifestCatalog {
             let mut available = r_msg.valid_systems.clone();
             available.sort();
             Some(ResolutionFailure::PackageUnavailableOnSomeSystems {
-                install_id: Some(r_msg.install_id.clone()),
+                install_id: r_msg.install_id.clone(),
                 attr_path: r_msg.attr_path.clone(),
                 invalid_systems: diff,
                 valid_systems: available,
