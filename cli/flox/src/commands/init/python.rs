@@ -9,7 +9,7 @@ use flox_rust_sdk::models::manifest::PackageToInstall;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::debug;
-use miette::{miette, Context, Error, IntoDiagnostic, Result};
+use miette::{miette, Error, IntoDiagnostic, Result};
 use regex::Regex;
 
 use super::{

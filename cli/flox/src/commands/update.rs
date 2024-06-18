@@ -204,9 +204,9 @@ impl Update {
     ) -> Result<UpdateResult> {
         let mut environment = concrete_environment.into_dyn_environment();
 
-        Ok(environment
+        environment
             .update(&flox, self.inputs.clone())
-            .into_diagnostic()?)
+            .into_diagnostic()
         // .into_diagnostic().wrap_err("updating environment failed")
     }
 }

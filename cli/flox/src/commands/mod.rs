@@ -59,7 +59,7 @@ use futures::Future;
 use indoc::{formatdoc, indoc};
 use log::{debug, info};
 use miette::{bail, diagnostic, miette, Context, Diagnostic, IntoDiagnostic, Result};
-use sentry::integrations::anyhow::capture_anyhow;
+// use sentry::integrations::anyhow::capture_anyhow;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use thiserror::Error;
@@ -546,7 +546,7 @@ impl UpdateNotification {
             Ok(Some(update_notification)) => {
                 update_notification.print_new_version_available();
             },
-            Err(UpdateNotificationError::WeMayHaveMessedUp(e)) => {
+            Err(UpdateNotificationError::WeMayHaveMessedUp(_)) => {
                 debug!("Failed to check for CLI updates. Sending error to Sentry if enabled");
                 // capture_anyhow(&miette!("Failed to check for CLI updates: {e}"));
             },

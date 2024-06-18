@@ -18,7 +18,7 @@ use flox_rust_sdk::models::environment::{
 };
 use indoc::formatdoc;
 use log::debug;
-use miette::{miette, Context, IntoDiagnostic, Result};
+use miette::{miette, IntoDiagnostic, Result};
 use tracing::instrument;
 
 use crate::commands::ensure_floxhub_token;
