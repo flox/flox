@@ -149,11 +149,6 @@ jobs:
           RUST_BACKTRACE: 1
         run: nix develop -L --no-update-lock-file --command just impure-tests
 
-      - name: "CLI Integration Tests"
-        env:
-          RUST_BACKTRACE: 1
-        run: nix develop -L --no-update-lock-file --command just integ-tests
-
       - name: "Functional Tests"
         if: ${{ github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
         env:
@@ -278,7 +273,7 @@ jobs:
       - "nix-build"
       - "pkgdb-dev"
       - "cli-dev"
-      # TODO: enable these when deemed reliable - "nix-build-bats-tests"
+      - "nix-build-bats-tests"
 
     steps:
       - name: "Slack Notification"
