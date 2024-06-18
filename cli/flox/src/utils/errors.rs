@@ -442,7 +442,11 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             Please check the spelling of the remote environment
             and make sure that you have access to it.
         "},
-        ManagedEnvironmentError::UpstreamNotFound(env_ref, _, user) => {
+        ManagedEnvironmentError::UpstreamNotFound {
+            env_ref,
+            upstream: _,
+            user,
+        } => {
             let by_current_user = user
                 .as_ref()
                 .map(|u| u == env_ref.owner().as_str())

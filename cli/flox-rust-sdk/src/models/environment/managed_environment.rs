@@ -100,8 +100,12 @@ pub enum ManagedEnvironmentError {
     Diverged,
     #[error("access to floxmeta repository was denied")]
     AccessDenied,
-    #[error("environment '{0}' does not exist at upstream '{1}'")]
-    UpstreamNotFound(EnvironmentRef, String, Option<String>),
+    #[error("environment '{env_ref}' does not exist at upstream '{upstream}'")]
+    UpstreamNotFound {
+        env_ref: EnvironmentRef,
+        upstream: String,
+        user: Option<String>,
+    },
     #[error("failed to push environment")]
     Push(#[source] GitRemoteCommandError),
     #[error("failed to delete local environment branch")]
@@ -530,11 +534,11 @@ impl ManagedEnvironment {
             },
             Err(FloxMetaError::CloneBranch(GitRemoteCommandError::RefNotFound(_)))
             | Err(FloxMetaError::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
-                return Err(ManagedEnvironmentError::UpstreamNotFound(
-                    pointer.into(),
-                    flox.floxhub.base_url().to_string(),
-                    flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
-                ))
+                return Err(ManagedEnvironmentError::UpstreamNotFound {
+                    env_ref: pointer.into(),
+                    upstream: flox.floxhub.base_url().to_string(),
+                    user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
+                })
             },
             Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
         };
@@ -1126,11 +1130,11 @@ impl ManagedEnvironment {
         {
             Ok(_) => {},
             Err(GitRemoteCommandError::RefNotFound(_)) => {
-                Err(ManagedEnvironmentError::UpstreamNotFound(
-                    self.pointer.clone().into(),
-                    self.pointer.floxhub_url.to_string(),
-                    flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
-                ))?
+                Err(ManagedEnvironmentError::UpstreamNotFound {
+                    env_ref: self.pointer.clone().into(),
+                    upstream: self.pointer.floxhub_url.to_string(),
+                    user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
+                })?
             },
             Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
         };

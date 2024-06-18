@@ -488,7 +488,11 @@ impl Pull {
                 let message = "The environment has diverged from the remote version";
                 anyhow::Error::msg(message)
             },
-            ManagedEnvironmentError::UpstreamNotFound(env_ref, _, user) => {
+            ManagedEnvironmentError::UpstreamNotFound {
+                env_ref,
+                upstream: _,
+                user,
+            } => {
                 let by_current_user = user
                     .map(|u| u == env_ref.owner().as_str())
                     .unwrap_or_default();
