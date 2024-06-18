@@ -13,7 +13,12 @@ use log::{debug, warn};
 use utils::init::{init_logger, init_sentry};
 use utils::{message, populate_default_nix_env_vars};
 
-use crate::utils::errors::{format_error, format_managed_error, format_remote_error};
+use crate::utils::errors::{
+    format_environment_select_error,
+    format_error,
+    format_managed_error,
+    format_remote_error,
+};
 use crate::utils::metrics::Hub;
 
 mod build;
@@ -132,13 +137,6 @@ fn main() -> ExitCode {
                 return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;
             }
 
-            if let Some(EnvironmentSelectError::Environment(e)) =
-                e.downcast_ref::<EnvironmentSelectError>()
-            {
-                message::error(format_error(e));
-                return ExitCode::from(1);
-            }
-
             if let Some(e) = e.downcast_ref::<EnvironmentError>() {
                 message::error(format_error(e));
                 return ExitCode::from(1);
@@ -151,6 +149,11 @@ fn main() -> ExitCode {
 
             if let Some(e) = e.downcast_ref::<RemoteEnvironmentError>() {
                 message::error(format_remote_error(e));
+                return ExitCode::from(1);
+            }
+
+            if let Some(e) = e.downcast_ref::<EnvironmentSelectError>() {
+                message::error(format_environment_select_error(e));
                 return ExitCode::from(1);
             }
 
