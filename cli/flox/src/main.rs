@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use bpaf::{Args, Parser};
-use commands::{FloxArgs, FloxCli, Prefix, Version};
+use commands::{EnvironmentSelectError, FloxArgs, FloxCli, Prefix, Version};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
@@ -13,7 +13,12 @@ use log::{debug, warn};
 use utils::init::{init_logger, init_sentry};
 use utils::{message, populate_default_nix_env_vars};
 
-use crate::utils::errors::{format_error, format_managed_error, format_remote_error};
+use crate::utils::errors::{
+    format_environment_select_error,
+    format_error,
+    format_managed_error,
+    format_remote_error,
+};
 use crate::utils::metrics::Hub;
 
 mod build;
@@ -141,6 +146,11 @@ fn main() -> ExitCode {
 
             if let Some(e) = e.downcast_ref::<RemoteEnvironmentError>() {
                 message::error(format_remote_error(e));
+                return ExitCode::from(1);
+            }
+
+            if let Some(e) = e.downcast_ref::<EnvironmentSelectError>() {
+                message::error(format_environment_select_error(e));
                 return ExitCode::from(1);
             }
 

@@ -17,6 +17,8 @@ use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use indoc::formatdoc;
 use log::{debug, trace};
 
+use crate::commands::EnvironmentSelectError;
+
 /// Convert to an error variant that directs the user to the docs if the provided error is
 /// due to a package not being supported on the current system.
 pub fn apply_doc_link_for_unsupported_packages(err: EnvironmentError) -> EnvironmentError {
@@ -442,8 +444,26 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             Please check the spelling of the remote environment
             and make sure that you have access to it.
         "},
-        // todo: mark as bug?
-        ManagedEnvironmentError::UpstreamNotFound(_, _) => display_chain(err),
+        ManagedEnvironmentError::UpstreamNotFound {
+            env_ref,
+            upstream: _,
+            user,
+        } => {
+            let by_current_user = user
+                .as_ref()
+                .map(|u| u == env_ref.owner().as_str())
+                .unwrap_or_default();
+            let message = "Environment not found in FloxHub.";
+            if by_current_user {
+                formatdoc! {"
+                    {message}
+
+                    You can run 'flox push' to push the environment back to FloxHub.
+                "}
+            } else {
+                message.to_string()
+            }
+        },
         // acces denied is catched early as ManagedEnvironmentError::AccessDenied
         ManagedEnvironmentError::Push(_) => display_chain(err),
         ManagedEnvironmentError::DeleteBranch(_) => display_chain(err),
@@ -556,6 +576,21 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
         RemoteEnvironmentError::ReadInternalOutLink(_) => display_chain(err),
         RemoteEnvironmentError::DeleteOldOutLink(_) => display_chain(err),
         RemoteEnvironmentError::WriteNewOutlink(_) => display_chain(err),
+    }
+}
+
+pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
+    trace!("formatting environment_select_error: {err:?}");
+
+    match err {
+        EnvironmentSelectError::Environment(err) => format_error(err),
+        EnvironmentSelectError::EnvNotFoundInCurrentDirectory => formatdoc! {"
+            Did not find an environment in the current directory.
+        "},
+        EnvironmentSelectError::Anyhow(err) => err
+            .chain()
+            .skip(1)
+            .fold(err.to_string(), |acc, cause| format!("{}: {}", acc, cause)),
     }
 }
 

@@ -107,7 +107,7 @@ impl RemoteEnvironment {
         // (force) Pull latest changes of the environment from upstream.
         // remote environments stay in sync with upstream without providing a local staging state.
         inner
-            .pull(true)
+            .pull(flox, true)
             .map_err(RemoteEnvironmentError::ResetManagedEnvironment)?;
 
         let out_link = path.join(GCROOTS_DIR_NAME);

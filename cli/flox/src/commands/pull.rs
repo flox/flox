@@ -152,7 +152,7 @@ impl Pull {
         let state = Dialog {
             message: &pull_message,
             help_message: None,
-            typed: Spinner::new(|| env.pull(force)),
+            typed: Spinner::new(|| env.pull(flox, force)),
         }
         .spin()?;
 
@@ -253,7 +253,7 @@ impl Pull {
                 typed: Spinner::new(|| ManagedEnvironment::open(flox, pointer, &dot_flox_path)),
             }
             .spin()
-            .map_err(|err| Self::handle_error(flox, err));
+            .map_err(Self::handle_error);
 
             match result {
                 Err(err) => {
@@ -478,7 +478,7 @@ impl Pull {
         Ok(choice == 1)
     }
 
-    fn handle_error(flox: &Flox, err: ManagedEnvironmentError) -> anyhow::Error {
+    fn handle_error(err: ManagedEnvironmentError) -> anyhow::Error {
         match err {
             ManagedEnvironmentError::AccessDenied => {
                 let message = "You do not have permission to pull this environment";
@@ -488,11 +488,13 @@ impl Pull {
                 let message = "The environment has diverged from the remote version";
                 anyhow::Error::msg(message)
             },
-            ManagedEnvironmentError::UpstreamNotFound(env_ref, _) => {
-                let by_current_user = flox
-                    .floxhub_token
-                    .as_ref()
-                    .map(|token| token.handle() == env_ref.owner().as_str())
+            ManagedEnvironmentError::UpstreamNotFound {
+                env_ref,
+                upstream: _,
+                user,
+            } => {
+                let by_current_user = user
+                    .map(|u| u == env_ref.owner().as_str())
                     .unwrap_or_default();
                 let message = format!("The environment {env_ref} does not exist.");
                 if by_current_user {

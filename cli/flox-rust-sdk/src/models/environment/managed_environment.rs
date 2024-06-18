@@ -100,8 +100,12 @@ pub enum ManagedEnvironmentError {
     Diverged,
     #[error("access to floxmeta repository was denied")]
     AccessDenied,
-    #[error("environment '{0}' does not exist at upstream '{1}'")]
-    UpstreamNotFound(EnvironmentRef, String),
+    #[error("environment '{env_ref}' does not exist at upstream '{upstream}'")]
+    UpstreamNotFound {
+        env_ref: EnvironmentRef,
+        upstream: String,
+        user: Option<String>,
+    },
     #[error("failed to push environment")]
     Push(#[source] GitRemoteCommandError),
     #[error("failed to delete local environment branch")]
@@ -530,10 +534,11 @@ impl ManagedEnvironment {
             },
             Err(FloxMetaError::CloneBranch(GitRemoteCommandError::RefNotFound(_)))
             | Err(FloxMetaError::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
-                return Err(ManagedEnvironmentError::UpstreamNotFound(
-                    pointer.into(),
-                    flox.floxhub.base_url().to_string(),
-                ))
+                return Err(ManagedEnvironmentError::UpstreamNotFound {
+                    env_ref: pointer.into(),
+                    upstream: flox.floxhub.base_url().to_string(),
+                    user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
+                })
             },
             Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
         };
@@ -1102,22 +1107,37 @@ impl ManagedEnvironment {
             })?;
 
         // update local environment branch, should be fast-forward and a noop if the branches didn't diverge
-        self.pull(force)?;
+        self.pull(flox, force)?;
 
         Ok(())
     }
 
-    pub fn pull(&mut self, force: bool) -> Result<PullResult, ManagedEnvironmentError> {
+    pub fn pull(
+        &mut self,
+        flox: &Flox,
+        force: bool,
+    ) -> Result<PullResult, ManagedEnvironmentError> {
         let sync_branch = remote_branch_name(&self.pointer);
         let project_branch = branch_name(&self.pointer, &self.path);
 
         // Fetch the remote branch into the local sync branch.
         // The sync branch is always a reset to the remote branch
         // and it's state should not be depended on.
-        self.floxmeta
+        match self
+            .floxmeta
             .git
             .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}"))
-            .map_err(ManagedEnvironmentError::FetchUpdates)?;
+        {
+            Ok(_) => {},
+            Err(GitRemoteCommandError::RefNotFound(_)) => {
+                Err(ManagedEnvironmentError::UpstreamNotFound {
+                    env_ref: self.pointer.clone().into(),
+                    upstream: self.pointer.floxhub_url.to_string(),
+                    user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
+                })?
+            },
+            Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
+        };
 
         // Check whether we can fast-forward the remote branch to the local branch,
         // if not the environment has diverged.
