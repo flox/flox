@@ -616,8 +616,11 @@ pub enum GitRemoteCommandError {
     RefNotFound(String),
 }
 
+/// Failure message when _fetching_ a specific ref
 const REF_NOT_FOUND_ERR_PREFIX: &str = "fatal: couldn't find remote ref ";
+/// Message prefix when _fetching_ a missing branch
 const REMOTE_BRANCH_NOT_FOUND_ERR_PREFIX: &str = "warning: Could not find remote branch ";
+/// Message prefix when _cloning_ a missing branch of a repo
 const REMOTE_BRANCH_NOT_FOUND_IN_UPSTREAM_ERR_PREFIX: &str = "fatal: Remote branch ";
 impl From<GitCommandError> for GitRemoteCommandError {
     fn from(err: GitCommandError) -> Self {
