@@ -29,12 +29,13 @@ project_teardown() {
 
 env_setup_catalog() {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
-  env_setup
+  "$FLOX_BIN" init
+  "$FLOX_BIN" edit -f "$TESTS_DIR/container/manifest1.toml"
 }
 
 env_setup() {
   "$FLOX_BIN" init
-  "$FLOX_BIN" edit -f "$TESTS_DIR/container/manifest.toml"
+  "$FLOX_BIN" edit -f "$TESTS_DIR/container/manifest0.toml"
 }
 
 # podman writes containers to ~/.local/share/containers/storage
