@@ -139,7 +139,7 @@ function skip_if_linux() {
 
 # bats test_tags=containerize:piped-to-stdout
 @test "container is written to stdout when '-o -' is passed" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
+  export FLOX_FEATURES_USE_CATALOG=false
   skip_if_not_linux
 
   env_setup
