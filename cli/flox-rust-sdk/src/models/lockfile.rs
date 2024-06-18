@@ -286,7 +286,7 @@ struct LockedGroup {
 pub struct ResolutionFailures(pub Vec<ResolutionFailure>);
 
 /// Data relevant for formatting a resolution failure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ResolutionFailure {
     PackageNotFound {
         install_id: String,
@@ -369,7 +369,7 @@ fn format_single_resolution_failure(failure: &ResolutionFailure, is_one_of_many:
             let base_msg = format!("constraints for group '{group}' are too tight");
             let msg = formatdoc! {"
             {}
-            
+
             Use 'flox edit' to adjust version constraints in the [install] section,
             or isolate dependencies in a new group with '<pkg>.pkg-group = \"newgroup\"'", base_msg};
             indent_by(extra_indent, msg)

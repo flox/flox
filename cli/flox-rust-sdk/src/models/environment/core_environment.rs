@@ -1303,6 +1303,7 @@ mod tests {
         flox_instance_with_optional_floxhub_and_client,
     };
     use crate::models::lockfile::test_helpers::fake_package;
+    use crate::models::lockfile::ResolutionFailures;
     use crate::models::manifest::{RawManifest, DEFAULT_GROUP_NAME};
     use crate::models::{lockfile, manifest};
 
@@ -1728,12 +1729,16 @@ mod tests {
 
         if let CoreEnvironmentError::LockForMigration(e) = err {
             if let CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(
-                message,
+                ResolutionFailures(failures),
             )) = *e
             {
-                assert_eq!(message, "AttrPath 'glibc' not found for some systems, valid systems are (['aarch64-linux', 'x86_64-linux']).");
+                let expected_message = "AttrPath 'glibc' not found for some systems, valid systems are (['aarch64-linux', 'x86_64-linux']).".to_string();
+                assert!(failures.len() == 1);
+                assert_eq!(failures[0], ResolutionFailure::FallbackMessage {
+                    msg: expected_message
+                });
             } else {
-                panic!("expected ResolutionFailed error")
+                panic!("expected ResolutionFailures")
             }
         } else {
             panic!("expected LockForMigration error");
