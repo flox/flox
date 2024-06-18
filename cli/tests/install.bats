@@ -518,7 +518,7 @@ teardown() {
   assert_output --partial "'options.allow.broken = true'"
 }
 
-@test "resolution message: single package not found, without curation" {
+@test "catalog: resolution message: single package not found, without curation" {
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg.json" \
@@ -532,7 +532,7 @@ EOF
 )"
 }
 
-@test "resolution message: multiple packages not found, without curation" {
+@test "catalog: resolution message: multiple packages not found, without curation" {
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg1_badpkg2.json" \
@@ -549,7 +549,7 @@ EOF
 )"
 }
 
-@test "resolution message: single package not found, with curation" {
+@test "catalog: resolution message: single package not found, with curation" {
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/node_suggestions.json" \
@@ -566,7 +566,7 @@ EOF
 )"
 }
 
-@test "resolution message: single package not availabe on all systems" {
+@test "catalog: resolution message: single package not availabe on all systems" {
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace.json" \
@@ -587,7 +587,7 @@ EOF
 )"
 }
 
-@test "resolution message: multiple packages not available on all systems" {
+@test "catalog: resolution message: multiple packages not available on all systems" {
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace_systemd.json" \
@@ -618,7 +618,7 @@ EOF
 )"
 }
 
-@test "resolution message: constraints too tight" {
+@test "catalog: resolution message: constraints too tight" {
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_node.json" \
