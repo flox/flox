@@ -127,22 +127,16 @@ teardown() {
 @test "'flox install' reports error when package not found" {
   export FLOX_FEATURES_USE_CATALOG=false
   "$FLOX_BIN" init
-  run "$FLOX_BIN" install not-a-package
+  run "$FLOX_BIN" install badpkg
   assert_failure
-  assert_output --partial "Could not find package not-a-package. Try 'flox search' with a broader search term."
-}
-
-@test "catalog: 'flox install' reports error when package not found" {
-  skip "will be fixed by https://github.com/flox/flox/issues/1482"
-  "$FLOX_BIN" init
-  run "$FLOX_BIN" install not-a-package
-  assert_failure
-  assert_output --partial "Could not find package not-a-package. Try 'flox search' with a broader search term."
+  assert_output --partial "Could not find package 'badpkg'."
+  assert_output --partial "Try 'flox search' with a broader search term."
 }
 
 @test "'flox install' provides suggestions when package not found" {
   export FLOX_FEATURES_USE_CATALOG=false
   "$FLOX_BIN" init
+  # This package doesn't exist but *does* have suggestions
   run "$FLOX_BIN" install package
   assert_failure
   assert_output --partial "Here are a few other similar options:"
@@ -150,9 +144,10 @@ teardown() {
 }
 
 @test "catalog: 'flox install' provides suggestions when package not found" {
-  skip "will be fixed by https://github.com/flox/flox/issues/1482"
   "$FLOX_BIN" init
-  run "$FLOX_BIN" install package
+  # This package doesn't exist but *does* have suggestions
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/package_suggestions.json" \
+    run "$FLOX_BIN" install package
   assert_failure
   assert_output --partial "Here are a few other similar options:"
   assert_output --partial "options with 'flox search package'"
@@ -487,7 +482,7 @@ teardown() {
 # This is also checking we can build an unfree package
 @test "catalog: 'flox install' warns about unfree packages" {
   "$FLOX_BIN" init
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello-unfree.json"
+  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello_unfree.json"
   run "$FLOX_BIN" install hello-unfree
   assert_success
   assert_line --partial "The package 'hello-unfree' has an unfree license"
@@ -521,4 +516,120 @@ teardown() {
   assert_failure
   assert_line --partial "The package 'yi' is marked as broken."
   assert_output --partial "'options.allow.broken = true'"
+}
+
+@test "catalog: resolution message: single package not found, without curation" {
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg.json" \
+    run "$FLOX_BIN" install badpkg
+
+  assert_failure
+  assert_output "$(cat <<EOF
+❌ ERROR: resolution failed: Could not find package 'badpkg'.
+Try 'flox search' with a broader search term.
+EOF
+)"
+}
+
+@test "catalog: resolution message: multiple packages not found, without curation" {
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg1_badpkg2.json" \
+    run "$FLOX_BIN" install badpkg1 badpkg2
+
+  assert_failure
+  assert_output "$(cat <<EOF
+❌ ERROR: resolution failed: multiple resolution failures:
+- Could not find package 'badpkg1'.
+  Try 'flox search' with a broader search term.
+- Could not find package 'badpkg2'.
+  Try 'flox search' with a broader search term.
+EOF
+)"
+}
+
+@test "catalog: resolution message: single package not found, with curation" {
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/node_suggestions.json" \
+    run "$FLOX_BIN" install node
+
+  assert_failure
+  assert_output --partial "$(cat <<EOF
+❌ ERROR: resolution failed: Could not find package 'node'.
+Try 'flox install nodejs' instead.
+
+Here are a few other similar options:
+  $ flox install nodejs
+EOF
+)"
+}
+
+@test "catalog: resolution message: single package not availabe on all systems" {
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace.json" \
+    run "$FLOX_BIN" install bpftrace
+
+  assert_failure
+  assert_output "$(cat <<EOF
+❌ ERROR: resolution failed: package 'bpftrace' not available for
+    - aarch64-darwin
+    - x86_64-darwin
+  but it is available for
+    - aarch64-linux
+    - x86_64-linux
+
+For more on managing system-specific packages, visit the documentation:
+https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+EOF
+)"
+}
+
+@test "catalog: resolution message: multiple packages not available on all systems" {
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace_systemd.json" \
+    run "$FLOX_BIN" install bpftrace systemd
+
+  assert_failure
+  assert_output "$(cat <<EOF
+❌ ERROR: resolution failed: multiple resolution failures:
+- package 'bpftrace' not available for
+      - aarch64-darwin
+      - x86_64-darwin
+    but it is available for
+      - aarch64-linux
+      - x86_64-linux
+
+  For more on managing system-specific packages, visit the documentation:
+  https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+- package 'systemd' not available for
+      - aarch64-darwin
+      - x86_64-darwin
+    but it is available for
+      - aarch64-linux
+      - x86_64-linux
+
+  For more on managing system-specific packages, visit the documentation:
+  https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+EOF
+)"
+}
+
+@test "catalog: resolution message: constraints too tight" {
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_node.json" \
+    run "$FLOX_BIN" install nodejs@14.16.1
+
+  assert_failure
+  assert_output "$(cat <<EOF
+❌ ERROR: resolution failed: constraints for group 'toplevel' are too tight
+
+   Use 'flox edit' to adjust version constraints in the [install] section,
+   or isolate dependencies in a new group with '<pkg>.pkg-group = "newgroup"'
+EOF
+)"
 }

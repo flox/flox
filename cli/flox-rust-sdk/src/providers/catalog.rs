@@ -15,8 +15,9 @@ use catalog_api_v1::types::{
     error as api_error,
     ErrorResponse,
     MessageLevel,
-    MessagesItem,
+    MessageType,
     PackageInfoSearch,
+    ResolutionMessageGeneral,
 };
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
@@ -746,30 +747,60 @@ impl ResolutionMessage {
     }
 }
 
-impl From<MessagesItem> for ResolutionMessage {
-    fn from(value: MessagesItem) -> Self {
-        match value {
-            MessagesItem::MessageGeneral(msg) => ResolutionMessage::General(MsgGeneral {
-                level: msg.level,
-                msg: msg.message,
+impl From<ResolutionMessageGeneral> for ResolutionMessage {
+    fn from(r_msg: ResolutionMessageGeneral) -> Self {
+        match r_msg.type_ {
+            MessageType::General => ResolutionMessage::General(MsgGeneral {
+                level: Some(r_msg.level),
+                msg: r_msg.message,
             }),
-            MessagesItem::AttrPathNotFound(msg) => {
+            MessageType::ResolutionTrace => ResolutionMessage::General(MsgGeneral {
+                level: Some(MessageLevel::Trace),
+                msg: r_msg.message,
+            }),
+            MessageType::AttrPathNotFound => {
+                let level = r_msg.level;
+                let msg = r_msg.message;
+                // Should always be present for this type of message, but that's not enforced
+                // by the type system
+                let attr_path = r_msg
+                    .context
+                    .get("attr_path")
+                    .cloned()
+                    .unwrap_or("default_attr_path".into());
+
+                // TODO: `valid_systems` currently come back as a ',' delimited string rather than
+                //       and array of strings, so you need to check whether the string is empty,
+                //       and if it's not empty you need to split on ',' hoping that there's not
+                //       and escaped ',' in there somewhere.
+                let valid_systems = r_msg
+                    .context
+                    .get("valid_systems")
+                    .and_then(|s| if s.is_empty() { None } else { Some(s) })
+                    .map(|combined| {
+                        combined
+                            .split(',')
+                            .map(|s| s.to_string())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                let install_id: String = r_msg
+                    .context
+                    .get("install_id")
+                    .map(|s| s.to_string())
+                    .unwrap_or("default_install_id".to_string());
                 ResolutionMessage::AttrPathNotFound(MsgAttrPathNotFound {
-                    level: msg.level,
-                    msg: msg.message,
-                    attr_path: msg.attr_path,
-                    install_id: msg.install_id,
-                    valid_systems: msg
-                        .valid_systems
-                        .iter()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<_>>(),
+                    level: Some(level),
+                    msg,
+                    attr_path: attr_path.to_string(),
+                    install_id,
+                    valid_systems,
                 })
             },
-            MessagesItem::ConstraintsTooTight(msg) => {
+            MessageType::ConstraintsTooTight => {
                 ResolutionMessage::ConstraintsTooTight(MsgConstraintsTooTight {
-                    level: msg.level,
-                    msg: msg.message,
+                    level: Some(r_msg.level),
+                    msg: r_msg.message,
                 })
             },
         }

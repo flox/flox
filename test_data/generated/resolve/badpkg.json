@@ -4,10 +4,10 @@
       "msgs": [
         {
           "AttrPathNotFound": {
-            "attr_path": "definitely-not-a-package",
-            "install_id": "definitely-not-a-package",
+            "attr_path": "badpkg",
+            "install_id": "badpkg",
             "level": "error",
-            "msg": "The attr_path 'definitely-not-a-package' is not found.",
+            "msg": "The attr_path 'badpkg' is not found.",
             "valid_systems": []
           }
         }

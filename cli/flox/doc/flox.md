@@ -119,7 +119,6 @@ sharing environments, and administration.
 [`flox-activate`(1)](./flox-activate.md),
 [`flox-install`(1)](./flox-install.md),
 [`flox-uninstall(1)`](./flox-uninstall.md),
-[`flox-update(1)`](./flox-update.md),
 [`flox-upgrade`(1)](./flox-upgrade.md),
 [`flox-search`(1)](./flox-search.md),
 [`flox-show(1)`](./flox-show.md),
