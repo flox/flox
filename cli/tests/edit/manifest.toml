@@ -1,2 +1,4 @@
+version = 1
+
 [install]
 hello.pkg-path = "hello"

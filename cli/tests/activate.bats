@@ -527,6 +527,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       echo "sourcing hook.on-activate"
@@ -551,6 +552,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       echo "sourcing hook.on-activate"
@@ -577,6 +579,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       echo "sourcing hook.on-activate"
@@ -603,6 +606,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       echo "sourcing hook.on-activate"
@@ -629,6 +633,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [profile]
     bash = """
       echo "sourcing profile.bash"
@@ -653,6 +658,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [profile]
     fish = """
       echo "sourcing profile.fish"
@@ -676,6 +682,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [profile]
     tcsh = """
       echo "sourcing profile.tcsh"
@@ -698,6 +705,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [profile]
     zsh = """
       echo "sourcing profile.zsh"
@@ -1604,6 +1612,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       unset foo
@@ -1628,6 +1637,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       unset foo
@@ -1657,6 +1667,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       unset foo
@@ -1686,6 +1697,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       unset foo

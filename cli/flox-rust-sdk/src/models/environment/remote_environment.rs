@@ -15,6 +15,7 @@ use super::{
     EnvironmentError,
     InstallationAttempt,
     ManagedPointer,
+    MigrationInfo,
     UninstallationAttempt,
     UpdateResult,
     DOT_FLOX,
@@ -308,5 +309,19 @@ impl Environment for RemoteEnvironment {
     /// When extended to delete upstream environments, this will be more useful.
     fn delete(self, flox: &Flox) -> Result<(), EnvironmentError> {
         self.inner.delete(flox)
+    }
+
+    fn migrate_to_v1(
+        &mut self,
+        flox: &Flox,
+        migration_info: MigrationInfo,
+    ) -> Result<(), EnvironmentError> {
+        self.inner.migrate_to_v1(flox, migration_info)?;
+        self.inner
+            .push(flox, false)
+            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
+            .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
+
+        Ok(())
     }
 }

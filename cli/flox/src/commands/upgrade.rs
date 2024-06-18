@@ -35,6 +35,41 @@ impl Upgrade {
         let description = environment_description(&concrete_environment)?;
 
         let mut environment = concrete_environment.into_dyn_environment();
+        if flox.catalog_client.is_some() {
+            if let Some(migration_info) = environment.needs_migration_to_v1(&flox)? {
+                if migration_info.needs_upgrade {
+                    message::warning(
+                        "Detected an old environment version. Attempting to migrate to version 1 and upgrade packages.",
+                    );
+                    Dialog {
+                        message: "Upgrading packages...",
+                        help_message: None,
+                        typed: Spinner::new(|| environment.migrate_to_v1(&flox, migration_info)),
+                    }
+                    .spin()?;
+                    message::plain(format!(
+                    "⬆️  Migrated environment to version 1 and upgraded all packages for environment {description}."
+                ));
+                } else {
+                    message::warning(
+                        "Detected an old environment version. Attempting to migrate to version 1.",
+                    );
+                    Dialog {
+                        message: "Migrating environment...",
+                        help_message: None,
+                        typed: Spinner::new(|| environment.migrate_to_v1(&flox, migration_info)),
+                    }
+                    .spin()?;
+                    message::plain(format!(
+                        "⬆️  Migrated environment {description} to version 1."
+                    ));
+                    message::plain(format!(
+                        "ℹ️  No packages need to be upgraded in environment {description}."
+                    ));
+                }
+                return Ok(());
+            }
+        }
 
         let result = Dialog {
             message: "Upgrading packages...",

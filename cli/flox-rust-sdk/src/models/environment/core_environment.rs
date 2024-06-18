@@ -3,16 +3,17 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::str::FromStr;
 
 use log::debug;
 use pollster::FutureExt;
 use thiserror::Error;
-use tracing::warn;
 
 use super::{
     copy_dir_recursive,
     CanonicalizeError,
     InstallationAttempt,
+    MigrationInfo,
     UninstallationAttempt,
     UpdateResult,
     UpgradeError,
@@ -36,9 +37,11 @@ use crate::models::manifest::{
     remove_packages,
     ManifestError,
     PackageToInstall,
+    RawManifest,
     TomlEditError,
     TypedManifest,
     TypedManifestCatalog,
+    MANIFEST_VERSION_KEY,
 };
 use crate::models::pkgdb::{
     error_codes,
@@ -197,7 +200,8 @@ impl<State> CoreEnvironment<State> {
             match lockfile {
                 LockedManifest::Catalog(lockfile) => Some(lockfile),
                 _ => {
-                    warn!(
+                    // This will be the case when performing a migration
+                    debug!(
                         "Found version 1 manifest, but lockfile doesn't match: Ignoring lockfile."
                     );
                     None
@@ -685,7 +689,8 @@ impl CoreEnvironment<ReadOnly> {
             match lockfile {
                 LockedManifest::Catalog(lockfile) => Some(lockfile),
                 _ => {
-                    warn!(
+                    // This will be the case when performing a migration
+                    debug!(
                         "Found version 1 manifest, but lockfile doesn't match: Ignoring lockfile."
                     );
                     None
@@ -826,6 +831,15 @@ impl CoreEnvironment<ReadOnly> {
         manifest_contents: impl AsRef<str>,
         flox: &Flox,
     ) -> Result<PathBuf, CoreEnvironmentError> {
+        // Return an error for deprecated modifications of v0 manifests
+        if flox.catalog_client.is_some() {
+            let manifest: TypedManifest = toml::from_str(manifest_contents.as_ref())
+                .map_err(CoreEnvironmentError::DeserializeManifest)?;
+            if let TypedManifest::Pkgdb(_) = manifest {
+                Err(CoreEnvironmentError::Version0NotSupported)?;
+            }
+        }
+
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
             .into_path();
@@ -884,6 +898,113 @@ impl CoreEnvironment<ReadOnly> {
         debug!("transaction: replacing environment");
         self.replace_with(temp_env)?;
         Ok(store_path)
+    }
+
+    /// Should not be called with
+    /// !migration_info.needs_manifest_migration && !migration_info.needs_upgrade
+    pub fn migrate_to_v1(
+        &mut self,
+        flox: &Flox,
+        mut migration_info: MigrationInfo,
+    ) -> Result<PathBuf, CoreEnvironmentError> {
+        let tempdir = tempfile::tempdir_in(&flox.temp_dir)
+            .map_err(CoreEnvironmentError::MakeSandbox)?
+            .into_path();
+
+        debug!(
+            "migration transaction: making temporary environment in {}",
+            tempdir.display()
+        );
+        let mut temp_env = self.writable(&tempdir)?;
+
+        if migration_info.needs_manifest_migration {
+            migration_info
+                .raw_manifest
+                .insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
+
+            // Make sure it parses
+            migration_info
+                .raw_manifest
+                .to_typed()
+                .map_err(CoreEnvironmentError::MigrateManifest)?;
+
+            debug!("migration transaction: updating manifest");
+            temp_env.update_manifest(migration_info.raw_manifest.to_string())?;
+        }
+
+        // Lock if there's a v0 manifest, regardless of whether there's a
+        // lockfile or what version it is.
+        // This could lock an environment that isn't already locked,
+        // but particularly for managed and remote environments, we want to keep
+        // the lock in sync with the manifest,
+        // so we don't want to perform a transaction without locking.
+        debug!("migration transaction: locking environment");
+        temp_env
+            .lock(flox)
+            .map_err(|e| CoreEnvironmentError::LockForMigration(Box::new(e)))?;
+
+        debug!("migration transaction: building environment");
+        let store_path = temp_env.build(flox)?;
+
+        debug!("migration transaction: replacing environment");
+        self.replace_with(temp_env)?;
+        Ok(store_path)
+    }
+
+    pub fn migrate_and_edit_unsafe(
+        &mut self,
+        flox: &Flox,
+        contents: String,
+    ) -> Result<Result<PathBuf, CoreEnvironmentError>, CoreEnvironmentError> {
+        let tempdir = tempfile::tempdir_in(&flox.temp_dir)
+            .map_err(CoreEnvironmentError::MakeSandbox)?
+            .into_path();
+
+        debug!(
+            "migration transaction: making temporary environment in {}",
+            tempdir.display()
+        );
+        let mut temp_env = self.writable(&tempdir)?;
+
+        let mut raw_manifest = RawManifest::from_str(&contents)
+            .map_err(|e| CoreEnvironmentError::ModifyToml(TomlEditError::ParseManifest(e)))?;
+
+        raw_manifest.insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
+
+        debug!("migration transaction: updating manifest");
+        temp_env.update_manifest(raw_manifest.to_string())?;
+
+        // Check if the manifest is valid after updating it, because we want to
+        // update it no matter what.
+        if let Err(migrate_error) = raw_manifest
+            .to_typed()
+            .map_err(CoreEnvironmentError::MigrateManifest)
+        {
+            debug!(
+                "migration transaction: migration failed: {:?}",
+                migrate_error
+            );
+            debug!("migration transaction: replacing environment");
+            self.replace_with(temp_env)?;
+            return Ok(Err(migrate_error));
+        }
+
+        if let Err(lock_err) = temp_env.lock(flox) {
+            debug!("migration transaction: lock failed: {:?}", lock_err);
+            debug!("migration transaction: replacing environment");
+            self.replace_with(temp_env)?;
+            return Ok(Err(lock_err));
+        };
+
+        let build_attempt = temp_env.build(flox);
+
+        debug!("migration transaction: replacing environment");
+        self.replace_with(temp_env)?;
+
+        match build_attempt {
+            Ok(store_path) => Ok(Ok(store_path)),
+            Err(err) => Ok(Err(err)),
+        }
     }
 }
 
@@ -1044,6 +1165,17 @@ pub enum CoreEnvironmentError {
 
     #[error("Could not process catalog manifest without a catalog client")]
     CatalogClientMissing,
+
+    #[error("could not automatically migrate manifest to version 1")]
+    MigrateManifest(#[source] toml_edit::de::Error),
+
+    #[error("failed to create version 1 lock")]
+    LockForMigration(#[source] Box<CoreEnvironmentError>),
+
+    #[error(
+        "Modifying version 0 manifests is no longer supported.\nSet 'version = 1' in the manifest."
+    )]
+    Version0NotSupported,
 }
 
 impl CoreEnvironmentError {
@@ -1099,14 +1231,43 @@ pub mod test_helpers {
     use super::*;
     use crate::flox::Flox;
 
+    pub const MANIFEST_V0_FIELDS: &str = indoc! {r#"
+        [options]
+        semver.prefer-pre-releases = true
+        "#};
+    // TODO: add version = 1 to this manifest
     #[cfg(target_os = "macos")]
     pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
+        [options]
+        systems = ["x86_64-linux"]
+        "#};
+    #[cfg(target_os = "macos")]
+    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V0_FIELDS: &str = indoc! {r#"
+        [options]
+        systems = ["x86_64-linux"]
+        semver.prefer-pre-releases = true
+        "#};
+    #[cfg(target_os = "macos")]
+    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V1: &str = indoc! {r#"
+        version = 1
         [options]
         systems = ["x86_64-linux"]
         "#};
 
     #[cfg(target_os = "linux")]
     pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
+        [options]
+        systems = ["aarch64-darwin"]
+        "#};
+    #[cfg(target_os = "linux")]
+    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V0_FIELDS: &str = indoc! {r#"
+        [options]
+        systems = ["aarch64-darwin"]
+        semver.prefer-pre-releases = true
+        "#};
+    #[cfg(target_os = "linux")]
+    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V1: &str = indoc! {r#"
+        version = 1
         [options]
         systems = ["aarch64-darwin"]
         "#};
@@ -1122,7 +1283,9 @@ pub mod test_helpers {
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
+    use std::str::FromStr;
 
+    use catalog::Client;
     use catalog_api_v1::types::{ResolvedPackageDescriptor, SystemEnum};
     use chrono::{DateTime, Utc};
     use indoc::{formatdoc, indoc};
@@ -1134,9 +1297,14 @@ mod tests {
     use self::test_helpers::new_core_environment;
     use super::*;
     use crate::data::Version;
-    use crate::flox::test_helpers::{flox_instance, flox_instance_with_global_lock};
+    use crate::flox::test_helpers::{
+        flox_instance,
+        flox_instance_with_global_lock,
+        flox_instance_with_optional_floxhub_and_client,
+    };
     use crate::models::lockfile::test_helpers::fake_package;
-    use crate::models::manifest::DEFAULT_GROUP_NAME;
+    use crate::models::lockfile::ResolutionFailures;
+    use crate::models::manifest::{RawManifest, DEFAULT_GROUP_NAME};
     use crate::models::{lockfile, manifest};
 
     /// Create a CoreEnvironment with an empty manifest
@@ -1496,5 +1664,92 @@ mod tests {
             .with_extension("out-link")
             .join("bin/hello")
             .exists());
+    }
+
+    #[test]
+    fn migrate_to_v1_error_for_dropped_field() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let contents = indoc! {r#"
+            [options]
+            semver.prefer-pre-releases = true
+            "#};
+
+        let mut environment = new_core_environment(&flox, contents);
+
+        let raw_manifest = RawManifest::from_str(contents).unwrap();
+
+        let err = environment
+            .migrate_to_v1(&flox, MigrationInfo {
+                raw_manifest,
+                needs_manifest_migration: true,
+                needs_upgrade: false,
+            })
+            .unwrap_err();
+
+        if let CoreEnvironmentError::MigrateManifest(e) = err {
+            assert!(e.message().contains("unknown field `prefer-pre-releases`"));
+        } else {
+            panic!("expected MigrateManifest error");
+        }
+    }
+
+    #[test]
+    fn migrate_to_v1_error_for_locking() {
+        let (flox_pkgdb, _temp_dir_handle) = flox_instance_with_global_lock();
+        let contents = indoc! {r#"
+            [install]
+            glibc.pkg-path = "glibc"
+
+            [options]
+            systems = [ "x86_64-linux", "aarch64-darwin" ]
+            "#};
+
+        let mut environment = new_core_environment(&flox_pkgdb, contents);
+        // The v0 lockfile should get ignored,
+        // but create it just to keep this more realistic
+        environment.lock(&flox_pkgdb).unwrap();
+
+        let (mut flox_catalog, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(None, true);
+        if let Some(Client::Mock(ref mut client)) = flox_catalog.catalog_client {
+            client.clear_and_load_responses_from_file("resolve/glibc_incompatible.json");
+        } else {
+            panic!("expected Mock client")
+        };
+
+        let raw_manifest = RawManifest::from_str(contents).unwrap();
+
+        let err = environment
+            .migrate_to_v1(&flox_catalog, MigrationInfo {
+                raw_manifest,
+                needs_manifest_migration: true,
+                needs_upgrade: true,
+            })
+            .unwrap_err();
+
+        if let CoreEnvironmentError::LockForMigration(e) = err {
+            if let CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(
+                ResolutionFailures(failures),
+            )) = *e
+            {
+                assert!(failures.len() == 1);
+                assert_eq!(
+                    failures[0],
+                    ResolutionFailure::PackageUnavailableOnSomeSystems {
+                        install_id: "glibc".to_string(),
+                        attr_path: "glibc".to_string(),
+                        invalid_systems: vec!["aarch64-darwin".to_string()],
+                        valid_systems: vec![
+                            "aarch64-linux".to_string(),
+                            "x86_64-linux".to_string()
+                        ],
+                    }
+                );
+            } else {
+                panic!("expected ResolutionFailures")
+            }
+        } else {
+            panic!("expected LockForMigration error");
+        }
     }
 }

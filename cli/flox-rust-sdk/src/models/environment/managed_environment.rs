@@ -19,6 +19,7 @@ use super::{
     EnvironmentPointer,
     InstallationAttempt,
     ManagedPointer,
+    MigrationInfo,
     UninstallationAttempt,
     UpdateResult,
     CACHE_DIR_NAME,
@@ -454,6 +455,40 @@ impl Environment for ManagedEnvironment {
 
         Ok(())
     }
+
+    fn migrate_to_v1(
+        &mut self,
+        flox: &Flox,
+        migration_info: MigrationInfo,
+    ) -> Result<(), EnvironmentError> {
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        let metadata = match (
+            migration_info.needs_manifest_migration,
+            migration_info.needs_upgrade,
+        ) {
+            (true, true) => "Migrated manifest to v1 and upgraded packages",
+            (true, false) => "Migrated manifest to v1", // and locked
+            (false, true) => "Upgraded packages",
+            _ => unreachable!("called with invalid migration metadata"),
+        };
+
+        let store_path = temporary.migrate_to_v1(flox, migration_info)?;
+
+        generations
+            .add_generation(&mut temporary, metadata.to_string())
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
+        self.lock_pointer()?;
+        temporary.link(flox, &self.out_link, &Some(store_path))?;
+
+        Ok(())
+    }
 }
 
 /// Constructors and related functions
@@ -763,6 +798,38 @@ impl ManagedEnvironment {
         if matches!(result, Ok(EditResult::Unchanged)) {
             return Ok(result);
         }
+
+        debug!("Environment changed, create and lock generation");
+
+        generations
+            .add_generation(&mut temporary, "manually edited".to_string())
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
+        self.lock_pointer()?;
+
+        // don't link, the environment may be broken
+
+        Ok(result)
+    }
+
+    /// Edit the environment while also adding `version = 1` to the provided manifest contents.
+    /// Don't check that the environment builds.
+    ///
+    /// This is used to allow `flox pull` to work with environments
+    /// that don't specify the current system as supported.
+    pub fn migrate_and_edit_unsafe(
+        &mut self,
+        flox: &Flox,
+        contents: String,
+    ) -> Result<Result<PathBuf, CoreEnvironmentError>, EnvironmentError> {
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        let result = temporary.migrate_and_edit_unsafe(flox, contents)?;
 
         debug!("Environment changed, create and lock generation");
 

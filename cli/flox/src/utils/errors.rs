@@ -246,6 +246,26 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             // trim to make the error look better
             err = err.message().trim()
         },
+        CoreEnvironmentError::MigrateManifest(err) => formatdoc! {
+            "Could not automatically migrate manifest to version 1:
+
+            {err}
+
+            Use 'flox edit' to resolve errors and then try again.
+        ",
+            // The message adds a newline at the end,
+            // trim to make the error look better
+            err = err.message().trim()
+        },
+        CoreEnvironmentError::LockForMigration(err) => formatdoc! {
+            "Failed to create version 1 lock:
+
+            {err}
+
+            Use 'flox edit' to resolve errors and then try again.
+        ",
+            err = format_core_error(err)
+        },
         CoreEnvironmentError::MakeSandbox(_) => display_chain(err),
         // witin transaction, user should not see this and likely can't do anything about it
         CoreEnvironmentError::WriteLockfile(_) => display_chain(err),
@@ -331,6 +351,8 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
                     $ flox upgrade
             "},
         },
+        // User facing
+        CoreEnvironmentError::Version0NotSupported => display_chain(err),
     }
 }
 

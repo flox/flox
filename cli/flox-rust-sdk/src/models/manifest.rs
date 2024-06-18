@@ -32,7 +32,7 @@ pub const MANIFEST_SYSTEMS_KEY: &str = "systems";
 /// A wrapper around a [`toml_edit::DocumentMut`]
 /// that allows modifications of the raw manifest document,
 /// while preserving comments and user formatting.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RawManifest(toml_edit::DocumentMut);
 impl RawManifest {
     /// Creates a new [RawManifest] instance, populating its configuration from
@@ -344,7 +344,7 @@ pub struct TypedManifestCatalog {
     pub(super) profile: ManifestProfile,
     /// Options that control the behavior of the manifest.
     #[serde(default)]
-    pub(super) options: ManifestOptions,
+    pub options: ManifestOptions,
 }
 
 impl TypedManifestCatalog {
@@ -545,7 +545,7 @@ pub struct ManifestProfile {
 #[serde(deny_unknown_fields)]
 pub struct ManifestOptions {
     /// A list of systems that each package is resolved for.
-    pub(super) systems: Option<Vec<System>>,
+    pub systems: Option<Vec<System>>,
     /// Options that control what types of packages are allowed.
     #[serde(default)]
     pub allow: Allows,
@@ -621,7 +621,7 @@ pub struct TypedManifestPkgdb {
     _toml: toml::Table,
 }
 
-/// An error encountered while installing packages.
+/// An error encountered while manipulating a manifest using toml_edit.
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum TomlEditError {
     /// The provided string couldn't be parsed into a valid TOML document

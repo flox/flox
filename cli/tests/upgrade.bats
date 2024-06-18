@@ -267,3 +267,22 @@ EOF
   assert_success
   assert_output --partial "No packages need to be upgraded"
 }
+
+@test "upgrade performs manifest migration" {
+  NAME="name"
+  FLOX_FEATURES_USE_CATALOG=false "$FLOX_BIN" init -n "$NAME"
+  run "$FLOX_BIN" upgrade
+  assert_output --partial "Detected an old environment version. Attempting to migrate to version 1."
+  assert_output --partial "ℹ️  No packages need to be upgraded in environment '$NAME'"
+  assert_output --partial "⬆️  Migrated environment '$NAME' to version 1."
+}
+
+@test "upgrade performs lockfile migration" {
+  NAME="name"
+  FLOX_FEATURES_USE_CATALOG=false "$FLOX_BIN" init -n "$NAME"
+  # Perform a no-op upgrade to create a lockfile
+  FLOX_FEATURES_USE_CATALOG=false "$FLOX_BIN" upgrade
+  run "$FLOX_BIN" upgrade
+  assert_output --partial "Detected an old environment version. Attempting to migrate to version 1 and upgrade packages."
+  assert_output --partial "⬆️  Migrated environment to version 1 and upgraded all packages for environment '$NAME'."
+}
