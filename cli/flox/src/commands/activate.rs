@@ -77,6 +77,7 @@ impl Activate {
             Create an environment with 'flox init'"
                 })
             },
+            Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
             Err(e) => Err(e)?,
         };
 

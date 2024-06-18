@@ -10,8 +10,10 @@ use flox_rust_sdk::models::environment::{
     UpgradeError,
     ENVIRONMENT_POINTER_FILENAME,
 };
+use flox_rust_sdk::models::floxmeta::FloxMetaError;
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, ContextMsgError, PkgDbError};
+use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use indoc::formatdoc;
 use log::{debug, trace};
 
@@ -509,12 +511,23 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
             Please ensure that you have write permissions to FLOX_CACHE_DIR/remote.
         "},
 
+        RemoteEnvironmentError::ResetManagedEnvironment(ManagedEnvironmentError::FetchUpdates(
+            GitRemoteCommandError::RefNotFound(_),
+        ))
+        | RemoteEnvironmentError::GetLatestVersion(FloxMetaError::CloneBranch(
+            GitRemoteCommandError::AccessDenied,
+        ))
+        | RemoteEnvironmentError::GetLatestVersion(FloxMetaError::CloneBranch(
+            GitRemoteCommandError::RefNotFound(_),
+        )) => formatdoc! {"
+            Environment not found in FloxHub.
+            "},
+
         RemoteEnvironmentError::ResetManagedEnvironment(err) => formatdoc! {"
             Failed to reset remote environment to latest upstream version:
 
             {err}
             ", err = format_managed_error(err)},
-
         RemoteEnvironmentError::GetLatestVersion(err) => formatdoc! {"
             Failed to get latest version of remote environment: {err}
 

@@ -344,3 +344,10 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=remote,remote:not-found
+@test "activate --remote fails on a non existent environment" {
+  run "$FLOX_BIN" activate -r "$OWNER/i-dont-exist"
+  assert_failure
+  assert_output --partial "Environment not found in FloxHub."
+}

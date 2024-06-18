@@ -427,6 +427,7 @@ impl GitCommandProvider {
 
         command
             .arg("clone")
+            .arg("--quiet")
             .arg("--single-branch")
             .arg("--no-tags")
             .arg("--branch")
@@ -615,7 +616,12 @@ pub enum GitRemoteCommandError {
     RefNotFound(String),
 }
 
+/// Failure message when _fetching_ a specific ref
 const REF_NOT_FOUND_ERR_PREFIX: &str = "fatal: couldn't find remote ref ";
+/// Message prefix when _fetching_ a missing branch
+const REMOTE_BRANCH_NOT_FOUND_ERR_PREFIX: &str = "warning: Could not find remote branch ";
+/// Message prefix when _cloning_ a missing branch of a repo
+const REMOTE_BRANCH_NOT_FOUND_IN_UPSTREAM_ERR_PREFIX: &str = "fatal: Remote branch ";
 impl From<GitCommandError> for GitRemoteCommandError {
     fn from(err: GitCommandError) -> Self {
         match err {
@@ -637,6 +643,28 @@ impl From<GitCommandError> for GitRemoteCommandError {
                 let ref_name = stderr.strip_prefix(REF_NOT_FOUND_ERR_PREFIX).unwrap();
                 debug!("Ref not found: {ref_name}");
                 GitRemoteCommandError::RefNotFound(ref_name.to_string())
+            },
+            GitCommandError::BadExit(_, _, ref stderr)
+                if stderr.starts_with(REMOTE_BRANCH_NOT_FOUND_ERR_PREFIX) =>
+            {
+                let branch_name = stderr
+                    .strip_prefix(REMOTE_BRANCH_NOT_FOUND_ERR_PREFIX)
+                    .unwrap();
+                let branch_name = branch_name.strip_suffix(" to clone").unwrap_or(branch_name);
+                debug!("Could not find remote branch: {branch_name}");
+                GitRemoteCommandError::RefNotFound(branch_name.to_string())
+            },
+            GitCommandError::BadExit(_, _, ref stderr)
+                if stderr.starts_with(REMOTE_BRANCH_NOT_FOUND_IN_UPSTREAM_ERR_PREFIX) =>
+            {
+                let branch_name = stderr
+                    .strip_prefix(REMOTE_BRANCH_NOT_FOUND_IN_UPSTREAM_ERR_PREFIX)
+                    .unwrap();
+                let branch_name = branch_name
+                    .strip_suffix(" not found in upstream origin")
+                    .unwrap_or(branch_name);
+                debug!("Could not find remote branch in upstream: {branch_name}");
+                GitRemoteCommandError::RefNotFound(branch_name.to_string())
             },
             e => GitRemoteCommandError::Command(e),
         }
@@ -716,6 +744,7 @@ impl GitProvider for GitCommandProvider {
         if bare {
             command.arg("--bare");
         }
+        command.arg("--quiet");
 
         command.arg(origin.as_ref());
         command.arg("./");
