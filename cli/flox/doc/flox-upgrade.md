@@ -49,5 +49,4 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more on using pkg-groups.
 
 # SEE ALSO
 
-[`flox-update(1)`](./flox-update.md)
-[`manifest.toml(5)`](./manifest.toml.md),
+[`manifest.toml(5)`](./manifest.toml.md)

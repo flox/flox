@@ -50,5 +50,4 @@ ripgrep - A utility that combines the usability of The Silver Searcher with the 
 
 # SEE ALSO
 [`flox-search(1)`](./flox-search.md),
-[`flox-install(1)`](./flox-install.md),
-[`flox-update(1)`](./flox-update.md)
+[`flox-install(1)`](./flox-install.md)
