@@ -1704,7 +1704,7 @@ async fn maybe_migrate_environment_to_v1_inner(
 }
 
 async fn confirm_migration_upgrade(description: &str) -> Result<bool> {
-    Ok(Dialog {
+    Dialog {
         message: &formatdoc! {"
                     To edit environment {description}, you must upgrade to environment version 1.
                     Do you want to upgrade now?"},
@@ -1715,7 +1715,7 @@ async fn confirm_migration_upgrade(description: &str) -> Result<bool> {
     }
     .prompt()
     .await
-    .into_diagnostic()?)
+    .into_diagnostic()
 }
 
 #[cfg(test)]

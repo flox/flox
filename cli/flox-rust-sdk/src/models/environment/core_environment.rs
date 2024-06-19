@@ -110,7 +110,7 @@ impl<State> CoreEnvironment<State> {
     ///
     /// todo: should we always write the lockfile to disk?
     pub fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, CoreEnvironmentError> {
-        let manifest: TypedManifest = toml::from_str(&self.manifest_content()?)
+        let manifest = TypedManifest::from_str(&self.manifest_content()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
 
         let lockfile = match manifest {
@@ -528,7 +528,7 @@ impl CoreEnvironment<ReadOnly> {
         groups_or_iids: &[String],
     ) -> Result<UpgradeResult, CoreEnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
-        let manifest = toml::from_str(&self.manifest_content()?)
+        let manifest = TypedManifest::from_str(&self.manifest_content()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
 
         let (lockfile, upgraded) = match manifest {
@@ -833,7 +833,7 @@ impl CoreEnvironment<ReadOnly> {
     ) -> Result<PathBuf, CoreEnvironmentError> {
         // Return an error for deprecated modifications of v0 manifests
         if flox.catalog_client.is_some() {
-            let manifest: TypedManifest = toml::from_str(manifest_contents.as_ref())
+            let manifest = TypedManifest::from_str(manifest_contents.as_ref())
                 .map_err(CoreEnvironmentError::DeserializeManifest)?;
             if let TypedManifest::Pkgdb(_) = manifest {
                 Err(CoreEnvironmentError::Version0NotSupported)?;
@@ -1058,10 +1058,10 @@ impl EditResult {
             // todo: use a single toml crate (toml_edit already implements serde traits)
             // TODO: use different error variants, users _can_ fix errors in the _new_ manifest
             //       but they _can't_ fix errors in the _old_ manifest
-            let old_manifest: TypedManifest =
-                toml::from_str(old_manifest).map_err(CoreEnvironmentError::DeserializeManifest)?;
-            let new_manifest: TypedManifest =
-                toml::from_str(new_manifest).map_err(CoreEnvironmentError::DeserializeManifest)?;
+            let old_manifest: TypedManifest = toml_edit::de::from_str(old_manifest)
+                .map_err(CoreEnvironmentError::DeserializeManifest)?;
+            let new_manifest: TypedManifest = toml_edit::de::from_str(new_manifest)
+                .map_err(CoreEnvironmentError::DeserializeManifest)?;
 
             match (&old_manifest, &new_manifest) {
                 (TypedManifest::Pkgdb(old), TypedManifest::Pkgdb(new)) => {
@@ -1110,7 +1110,7 @@ pub enum CoreEnvironmentError {
     #[error("could not modify manifest")]
     ModifyToml(#[source] TomlEditError),
     #[error("could not deserialize manifest")]
-    DeserializeManifest(#[source] toml::de::Error),
+    DeserializeManifest(#[source] toml_edit::de::Error),
     // endregion
 
     // region: transaction errors

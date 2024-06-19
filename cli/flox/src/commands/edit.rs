@@ -360,7 +360,7 @@ mod tests {
     #[test]
     fn test_recover_edit_loop_result_bad_manifest() {
         let result = Err(EnvironmentError::Core(
-            CoreEnvironmentError::DeserializeManifest(toml::de::Error::custom("msg")),
+            CoreEnvironmentError::DeserializeManifest(toml_edit::de::Error::custom("msg")),
         ));
 
         Edit::make_interactively_recoverable(result)

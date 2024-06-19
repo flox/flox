@@ -262,11 +262,11 @@ impl RawManifest {
     /// could work today, but is still limited by the lack of an optional tag.
     pub fn to_typed(&self) -> Result<TypedManifest, toml_edit::de::Error> {
         match self.get_version() {
-            Some(1) => Ok(TypedManifest::Catalog(toml_edit::de::from_document(
-                self.0.clone(),
+            Some(1) => Ok(TypedManifest::Catalog(toml_edit::de::from_str(
+                &self.0.to_string(),
             )?)),
-            None => Ok(TypedManifest::Pkgdb(toml_edit::de::from_document(
-                self.0.clone(),
+            None => Ok(TypedManifest::Pkgdb(toml_edit::de::from_str(
+                &self.0.to_string(),
             )?)),
             Some(v) => {
                 let msg = format!("unsupported manifest version: {v}");
@@ -319,6 +319,16 @@ pub enum TypedManifest {
     /// deprecated ~v0~ manifest, processed entirely by `pkgdb`
     #[cfg_attr(test, proptest(skip))]
     Pkgdb(TypedManifestPkgdb),
+}
+
+impl FromStr for TypedManifest {
+    type Err = toml_edit::de::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let doc = s.parse::<DocumentMut>()?;
+        let manifest = RawManifest(doc);
+        manifest.to_typed()
+    }
 }
 
 /// Not meant for writing manifest files, only for reading them.
