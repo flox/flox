@@ -20,16 +20,11 @@ use tracing::instrument;
 
 use crate::config::features::Features;
 use crate::subcommand_metric;
-use crate::utils::message;
 use crate::utils::search::{manifest_and_lockfile, DEFAULT_DESCRIPTION, SEARCH_INPUT_SEPARATOR};
 
 // Show detailed package information
 #[derive(Debug, Bpaf, Clone)]
 pub struct Show {
-    /// Whether to show all available package versions
-    #[bpaf(long, hide)]
-    pub all: bool, // TODO: Remove in future release.
-
     /// The package to show detailed information about. Must be an exact match
     /// for a pkg-path e.g. something copy-pasted from the output of `flox search`.
     #[bpaf(positional("pkg-path"))]
@@ -37,13 +32,9 @@ pub struct Show {
 }
 
 impl Show {
-    #[instrument(name = "show", fields(show_all = self.all, pkg_path = self.pkg_path), skip_all)]
+    #[instrument(name = "show", fields(pkg_path = self.pkg_path), skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
-
-        if self.all {
-            message::warning("'--all' is now the default and the flag has been deprecated.");
-        }
 
         if let Some(client) = flox.catalog_client {
             tracing::debug!("using catalog client for show");
@@ -268,7 +259,6 @@ mod test {
         );
         let search_term = "search_term";
         let err = Show {
-            all: true, // unused
             pkg_path: search_term.to_string(),
         }
         .handle(flox)
