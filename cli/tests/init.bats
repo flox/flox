@@ -170,46 +170,10 @@ EOF
   assert_line "run/"
 }
 
-# bats test_tags=init:python:requirements
-@test "'flox init' sets up a working Python environment that works across all methods of activate" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  OWNER="owner"
-  NAME="name"
-
-  echo "requests" > requirements.txt
-
-  "$FLOX_BIN" init --auto-setup --name "$NAME"
-
-  FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
-  FLOX_SHELL=fish "$FLOX_BIN" activate -- python -c "import requests"
-  FLOX_SHELL=tcsh "$FLOX_BIN" activate -- python -c "import requests"
-  FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
-
-  floxhub_setup "$OWNER"
-
-  "$FLOX_BIN" push --owner "$OWNER"
-
-  "$FLOX_BIN" delete -f
-
-  "$FLOX_BIN" pull "$OWNER/$NAME"
-
-  FLOX_SHELL=bash "$FLOX_BIN" activate -- python -c "import requests"
-  FLOX_SHELL=fish "$FLOX_BIN" activate -- python -c "import requests"
-  FLOX_SHELL=tcsh "$FLOX_BIN" activate -- python -c "import requests"
-  FLOX_SHELL=zsh "$FLOX_BIN" activate -- python -c "import requests"
-
-  "$FLOX_BIN" delete -f
-
-  FLOX_SHELL=bash "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
-  FLOX_SHELL=fish "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
-  FLOX_SHELL=tcsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
-  FLOX_SHELL=zsh "$FLOX_BIN" activate --trust -r "$OWNER/$NAME" -- python -c "import requests"
-}
-
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=init:python:requirements
-@test "catalog: 'flox init' sets up a working Python environment that works across all methods of activate" {
+@test "'flox init' sets up a working Python environment that works across all methods of activate" {
   OWNER="owner"
   NAME="name"
 

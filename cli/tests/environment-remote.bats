@@ -103,20 +103,6 @@ function make_empty_remote_env() {
 
 # bats test_tags=install,remote,remote:install
 @test "m1: install a package to a remote environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  make_empty_remote_env
-
-  run "$FLOX_BIN" install hello --remote "$OWNER/test"
-  assert_success
-  assert_output --partial "environment '$OWNER/test' (remote)" # managed env output
-
-  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
-  assert_success
-  assert_output "hello"
-}
-
-# bats test_tags=install,remote,remote:install
-@test "catalog: m1: install a package to a remote environment" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
 
@@ -131,21 +117,6 @@ function make_empty_remote_env() {
 
 # bats test_tags=uninstall,remote,remote:uninstall
 @test "m2: uninstall a package from a remote environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  make_empty_remote_env
-
-  "$FLOX_BIN" install emacs vim --remote "$OWNER/test"
-
-  run "$FLOX_BIN" uninstall vim --remote "$OWNER/test"
-  assert_success
-
-  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
-  assert_success
-  assert_output "emacs"
-}
-
-# bats test_tags=uninstall,remote,remote:uninstall
-@test "catalog: m2: uninstall a package from a remote environment" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs_vim.json"
   make_empty_remote_env
 
@@ -306,21 +277,6 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "sanity check upgrade works for remote environments" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    make_empty_remote_env
-
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" install hello --remote "$OWNER/test"
-
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
-    "$FLOX_BIN" update --remote "$OWNER/test"
-
-  run "$FLOX_BIN" upgrade --remote "$OWNER/test"
-  assert_output --partial "Upgraded 'hello'"
-}
-
-@test "catalog: sanity check upgrade works for remote environments" {
   skip "will be fixed by https://github.com/flox/flox/issues/1485"
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
