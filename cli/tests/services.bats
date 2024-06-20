@@ -48,6 +48,6 @@ teardown() {
   refute_output --partial "service management enabled"
   unset output
   "$FLOX_BIN" delete -f
-  RUST_LOG=flox=debug FLOX_FEATURES_SM=true run "$FLOX_BIN" init
+  RUST_LOG=flox=debug FLOX_FEATURES_SERVICES=true run "$FLOX_BIN" init
   assert_output --partial "service management enabled"
 }

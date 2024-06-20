@@ -34,7 +34,7 @@ async fn run(args: FloxArgs) -> Result<()> {
     populate_default_nix_env_vars();
     let config = config::Config::parse()?;
     if let Some(features) = config.features.as_ref() {
-        if features.sm {
+        if features.services {
             tracing::debug!("service management enabled");
         }
     }
