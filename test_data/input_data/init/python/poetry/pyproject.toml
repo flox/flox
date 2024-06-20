@@ -9,7 +9,7 @@ packages = [{include = "./project"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-numpy = "^1.26.4"
+numpy = "^2.0"
 
 
 [build-system]

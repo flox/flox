@@ -5,5 +5,5 @@ description = ""
 readme = "README.md"
 
 dependencies = [
-    "numpy ~= 1.26.4"
+    "numpy ~= 2.0"
 ]
