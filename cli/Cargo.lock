@@ -1116,6 +1116,7 @@ dependencies = [
  "itertools",
  "jsonwebtoken",
  "log",
+ "miette",
  "once_cell",
  "pollster",
  "pretty_assertions",

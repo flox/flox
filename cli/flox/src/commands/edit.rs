@@ -14,7 +14,7 @@ use flox_rust_sdk::models::environment::{
 };
 use itertools::Itertools;
 use log::debug;
-use miette::{bail, miette, Context, IntoDiagnostic, Result};
+use miette::{bail, miette, Context, IntoDiagnostic, Result, SourceSpan};
 use tracing::instrument;
 
 use super::{
@@ -233,7 +233,39 @@ impl Edit {
 
             match Self::make_interactively_recoverable(result).into_diagnostic()? {
                 Ok(result) => return Ok(result),
-
+                Err(ref e @ CoreEnvironmentError::DeserializeManifest(ref err)) => {
+                    if let Some(ref span) = err.span() {
+                        let span = SourceSpan::new(span.start.into(), span.end - span.start);
+                        let dynamic = miette::MietteDiagnostic::new(err.message())
+                            .with_code("invalid-manifest")
+                            .with_url(
+                                "https://flox.dev/docs/reference/command-reference/manifest.toml/",
+                            )
+                            .with_help("A 'manifest.toml' file ")
+                            .with_label(miette::LabeledSpan::new_with_span(
+                                Some("here".to_string()),
+                                span,
+                            ))
+                            .with_severity(miette::Severity::Error);
+                        eprintln!(
+                            "{:?}",
+                            miette!(dynamic).with_source_code(new_manifest.clone())
+                        );
+                    } else {
+                        message::error(format_core_error(e));
+                    }
+                    if !Dialog::can_prompt() {
+                        bail!("Can't prompt to continue editing in non-interactive context");
+                    }
+                    if !should_continue_dialog
+                        .clone()
+                        .prompt()
+                        .await
+                        .into_diagnostic()?
+                    {
+                        bail!("Environment editing cancelled");
+                    }
+                },
                 // for recoverable errors, prompt the user to continue editing
                 Err(e) => {
                     message::error(format_core_error(&e));

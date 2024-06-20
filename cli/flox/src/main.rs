@@ -54,6 +54,15 @@ fn main() -> ExitCode {
     // updating the logger conf is cheap, so we reinitialize whenever we get more information
     init_logger(None);
 
+    let _ = miette::set_hook(Box::new(|_| {
+        Box::new(
+            miette::MietteHandlerOpts::new()
+                .context_lines(3)
+                .terminal_links(false)
+                .build(),
+        )
+    }));
+
     // Quit early if `--prefix` is present
     if Prefix::check() {
         println!(env!("out"));

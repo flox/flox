@@ -1,5 +1,5 @@
-use miette::Result;
 use flox_rust_sdk::models::search::SearchStrategy;
+use miette::Result;
 use serde::{Deserialize, Serialize};
 
 use super::Config;
