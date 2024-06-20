@@ -116,31 +116,6 @@ setup_file() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "'flox show' - hello --all" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
-    "$FLOX_BIN" update --global
-
-  run --separate-stderr "$FLOX_BIN" show hello --all
-  assert_success
-  assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
-  assert_equal "${lines[1]}" "    hello@2.12.1"
-  assert_regex "$stderr" "'--all' .* deprecated"
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "catalog: 'flox show' - hello --all" {
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/show/hello.json"
-  run --separate-stderr "$FLOX_BIN" show hello --all
-  assert_success
-  assert_equal "${lines[0]}" "hello - A program that produces a familiar, friendly greeting"
-  assert_equal "${lines[1]}" "    hello@2.12.1"
-  assert_regex "$stderr" "'--all' .* deprecated"
-}
-
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=python
 
 @test "'flox show' - python27Full" {
@@ -152,22 +127,6 @@ setup_file() {
   assert_success
   assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language"
   assert_equal "${lines[1]}" "    python27Full@2.7.18.6"
-}
-
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=python
-
-@test "'flox show' - python27Full --all" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_OLD" \
-    "$FLOX_BIN" update --global
-
-  run --separate-stderr "$FLOX_BIN" show python27Full --all
-  assert_success
-  assert_equal "${lines[0]}" "python27Full - A high-level dynamically-typed programming language"
-  assert_equal "${lines[1]}" "    python27Full@2.7.18.6"
-  assert_regex "$stderr" "'--all' .* deprecated"
 }
 
 # ---------------------------------------------------------------------------- #
