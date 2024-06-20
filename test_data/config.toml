@@ -231,7 +231,7 @@ pre_cmd = '''
     cp -r {common,poetry}/* .
     flox init --auto-setup
 '''
-cmd = "flox install zlib"
+cmd = "flox install zlib gcc"
 
 [init.python_pyproject_pip]
 files = ["init/python/common", "init/python/pyproject-pip"]
@@ -246,7 +246,7 @@ pre_cmd = '''
     cp -r {common,pyproject-pip}/* .
     flox init --auto-setup
 '''
-cmd = "flox install zlib"
+cmd = "flox install zlib gcc"
 
 [init.python_requirements]
 files = ["init/python/common", "init/python/requirements"]
@@ -261,7 +261,7 @@ pre_cmd = '''
     cp -r {common,requirements}/* .
     flox init --auto-setup
 '''
-cmd = "flox install zlib"
+cmd = "flox install zlib gcc"
 
 [init.python_requests]
 pre_cmd = '''

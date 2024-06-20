@@ -8,6 +8,162 @@
         "msgs": [],
         "packages": [
           {
+            "attr_path": "gcc",
+            "broken": false,
+            "derivation": "/nix/store/8m5l91myvp9pq3pkypnm1mgclbpzqypa-gcc-wrapper-13.2.0.drv",
+            "description": "GNU Compiler Collection, version 13.2.0 (wrapper script)",
+            "install_id": "gcc",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "gcc-wrapper-13.2.0",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/z12z1cz69l7d3spknv912xlv4f85zjjs-gcc-wrapper-13.2.0-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/bwcwdgfr3831h4lrh6cfd58bx3x4mk9f-gcc-wrapper-13.2.0"
+              },
+              {
+                "name": "info",
+                "store_path": "/nix/store/6zyjhsn4wr2rdf6a5nlbq4ch034kz385-gcc-wrapper-13.2.0-info"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "gcc",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "wrapper-13.2.0"
+          },
+          {
+            "attr_path": "gcc",
+            "broken": false,
+            "derivation": "/nix/store/2rp7y9qkbjdblcqa65wnwjci3fmv5jyk-gcc-wrapper-13.2.0.drv",
+            "description": "GNU Compiler Collection, version 13.2.0 (wrapper script)",
+            "install_id": "gcc",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "gcc-wrapper-13.2.0",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/3kxysygs6h08l5kimjimphvq9x8x6fgp-gcc-wrapper-13.2.0-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/bqwjxqdz2ywf5zy5lw7wbbkbswwbb26x-gcc-wrapper-13.2.0"
+              },
+              {
+                "name": "info",
+                "store_path": "/nix/store/ajahri5ic1hmsx23c0j3mw6ynnjzryj9-gcc-wrapper-13.2.0-info"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "gcc",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "wrapper-13.2.0"
+          },
+          {
+            "attr_path": "gcc",
+            "broken": false,
+            "derivation": "/nix/store/j64frdfrcwy255yvg46lqr4y6q38sn0x-gcc-wrapper-13.2.0.drv",
+            "description": "GNU Compiler Collection, version 13.2.0 (wrapper script)",
+            "install_id": "gcc",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "gcc-wrapper-13.2.0",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/3v45ibln7q7avw34mmcph75knjnqgxcx-gcc-wrapper-13.2.0-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/ay3y9j6nzcmwjdj4myvixdbqn4pr62hl-gcc-wrapper-13.2.0"
+              },
+              {
+                "name": "info",
+                "store_path": "/nix/store/zfpzdwl7ks1qzc0ahg9ly0pq8664hgxz-gcc-wrapper-13.2.0-info"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "gcc",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "wrapper-13.2.0"
+          },
+          {
+            "attr_path": "gcc",
+            "broken": false,
+            "derivation": "/nix/store/kj60s25m64sijyzlrngnaaz4xywihg8p-gcc-wrapper-13.2.0.drv",
+            "description": "GNU Compiler Collection, version 13.2.0 (wrapper script)",
+            "install_id": "gcc",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "name": "gcc-wrapper-13.2.0",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/vhj52b8nfrxl2n014awiqxs3prxrw2li-gcc-wrapper-13.2.0-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/9bv7dcvmfcjnmg5mnqwqlq2wxfn8d7yi-gcc-wrapper-13.2.0"
+              },
+              {
+                "name": "info",
+                "store_path": "/nix/store/ndw9ai50fky1s26gbx1yvchh3rw0rhw1-gcc-wrapper-13.2.0-info"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "gcc",
+            "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
+            "rev_count": 633517,
+            "rev_date": "2024-05-31T23:09:26Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "wrapper-13.2.0"
+          },
+          {
             "attr_path": "python3",
             "broken": false,
             "derivation": "/nix/store/35h4g197khz9nbw9mhg2rgff7x7bpqzr-python3-3.11.9.drv",
@@ -29,9 +185,8 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T19:02:00Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -64,9 +219,8 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T19:02:00Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -95,9 +249,8 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T19:02:00Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -130,9 +283,8 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T19:02:00Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
@@ -169,9 +321,8 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T19:02:00Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -208,9 +359,8 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T19:02:00Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -247,9 +397,8 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T19:02:00Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -286,9 +435,8 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T19:02:00Z",
+            "scrape_date": "2024-06-04T09:46:16Z",
             "stabilities": [
-              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",

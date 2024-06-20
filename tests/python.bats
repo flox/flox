@@ -78,7 +78,7 @@ teardown() {
   assert_success
   assert_output --partial "'poetry' installed"
 
-  "$FLOX_BIN" install zlib
+  "$FLOX_BIN" install zlib gcc
   run "$FLOX_BIN" activate -- python -m project
   assert_success
   assert_line "<class 'numpy.ndarray'>"
@@ -95,7 +95,7 @@ teardown() {
   run "$FLOX_BIN" init --auto-setup
   assert_success
 
-  "$FLOX_BIN" install zlib
+  "$FLOX_BIN" install zlib gcc
   run "$FLOX_BIN" activate -- python -m project
   assert_success
   assert_line "<class 'numpy.ndarray'>"
@@ -112,7 +112,7 @@ teardown() {
   run "$FLOX_BIN" init --auto-setup
   assert_success
 
-  "$FLOX_BIN" install zlib
+  "$FLOX_BIN" install zlib gcc
   run "$FLOX_BIN" activate -- python -m project
   assert_success
   assert_line "<class 'numpy.ndarray'>"
@@ -202,7 +202,7 @@ teardown() {
   assert_output --partial "'poetry' installed"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_poetry_zlib.json" \
-    "$FLOX_BIN" install zlib
+    "$FLOX_BIN" install zlib gcc
 
   run "$FLOX_BIN" activate -- python -m project
   assert_success
@@ -221,14 +221,13 @@ teardown() {
   assert_success
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_pyproject_pip_zlib.json" \
-    "$FLOX_BIN" install zlib
+    "$FLOX_BIN" install zlib gcc
 
   run "$FLOX_BIN" activate -- python -m project
   assert_success
   assert_line "<class 'numpy.ndarray'>"
 }
 
-# bats test_tags=python:activate:requirements,catalog
 @test "catalog: flox activate works with requirements.txt and pip" {
   cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/python/requirements/* "$PROJECT_DIR/"
@@ -240,7 +239,7 @@ teardown() {
   assert_success
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/init/python_requirements_zlib.json" \
-    "$FLOX_BIN" install zlib
+    "$FLOX_BIN" install zlib gcc
 
   run "$FLOX_BIN" activate -- python -m project
   assert_success
