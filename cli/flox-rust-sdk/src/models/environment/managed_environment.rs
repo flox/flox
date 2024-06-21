@@ -1359,6 +1359,7 @@ mod test {
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
+    use crate::flox::Floxhub;
     use crate::models::env_registry::{
         env_registry_lock_path,
         env_registry_path,
@@ -1370,8 +1371,11 @@ mod test {
     use crate::models::environment::DOT_FLOX;
     use crate::models::floxmeta::floxmeta_dir;
     use crate::providers::git::tests::commit_file;
-    use crate::providers::git::{GitCommandProvider, GitProvider};
+    use crate::providers::git::GitCommandProvider;
 
+    /// Create a [ManagedPointer] for testing with mock owner and name data
+    /// as well as an override for the floxhub git url to fetch from local
+    /// git repositories.
     fn make_test_pointer(mock_floxhub_git_path: &Path) -> ManagedPointer {
         ManagedPointer {
             owner: EnvironmentOwner::from_str("owner").unwrap(),
@@ -1384,6 +1388,11 @@ mod test {
         }
     }
 
+    /// Create a .flox directory at dot_flox_path with a pointer
+    /// and optional generation lock.
+    ///
+    /// Mimics the state of a managed environment
+    /// without an existing view of the current generation.
     fn create_dot_flox(
         dot_flox_path: &Path,
         pointer: &ManagedPointer,
@@ -1399,12 +1408,25 @@ mod test {
             serde_json::to_string_pretty(&pointer).unwrap(),
         )
         .unwrap();
+
         if let Some(lock) = lock {
             let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
             fs::write(lock_path, serde_json::to_string_pretty(lock).unwrap()).unwrap();
         }
 
         CanonicalPath::new(dot_flox_path).unwrap()
+    }
+
+    /// Create an empty mock remote repository
+    fn create_mock_remote(path: impl AsRef<Path>) -> (ManagedPointer, PathBuf, GitCommandProvider) {
+        let test_pointer = make_test_pointer(path.as_ref());
+        let remote_path = path
+            .as_ref()
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        (test_pointer, remote_path, remote)
     }
 
     /// Clone a git repo specified by remote_path into the floxmeta dir
@@ -1445,13 +1467,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1494,13 +1510,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1545,13 +1555,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1612,13 +1616,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1659,13 +1657,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1707,13 +1699,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1756,13 +1742,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1804,13 +1784,7 @@ mod test {
         let dot_flox_path = CanonicalPath::new(flox.temp_dir.join(DOT_FLOX)).unwrap();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let diverged_remote_branch = remote_branch_name(&test_pointer);
         remote.checkout(&diverged_remote_branch, true).unwrap();
@@ -1848,13 +1822,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1883,13 +1851,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1933,13 +1895,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -2014,13 +1970,7 @@ mod test {
         std::fs::create_dir_all(&dot_flox_path).unwrap();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -2053,13 +2003,7 @@ mod test {
         std::fs::create_dir_all(&dot_flox_path).unwrap();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
