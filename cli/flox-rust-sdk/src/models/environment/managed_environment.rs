@@ -883,7 +883,8 @@ impl ManagedEnvironment {
                 &mut local,
                 "Synchronized manual changes to generation".to_string(),
             )
-            .unwrap();
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
+
         self.lock_pointer()?;
         Ok(())
     }
