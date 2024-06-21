@@ -99,6 +99,14 @@ pub enum ManagedEnvironmentError {
     #[error("failed copying environment directory to .flox")]
     CreateLocalEnvironmentView(#[source] std::io::Error),
 
+    /// Error reading the local manifest
+    #[error("failed to read local manifest")]
+    ReadLocalManifest(#[source] CoreEnvironmentError),
+
+    /// Error reading the generation manifest
+    #[error("failed to read generation manifest")]
+    ReadGenerationManifest(#[source] CoreEnvironmentError),
+
     #[error("floxmeta branch name was malformed: {0}")]
     BadBranchName(String),
     #[error("project wasn't found at path {path}: {err}")]
@@ -860,7 +868,7 @@ impl ManagedEnvironment {
     pub fn sync_local(&self, flox: &Flox) -> Result<(), ManagedEnvironmentError> {
         let mut local = self.local_checkout(flox)?;
 
-        if Self::validate_checkout(&local, &self.get_current_generation(flox)?) {
+        if Self::validate_checkout(&local, &self.get_current_generation(flox)?)? {
             debug!("local checkout and remote checkout equal, nothing to apply");
             return Ok(());
         }
@@ -898,16 +906,19 @@ impl ManagedEnvironment {
         Ok(local)
     }
 
-    fn validate_checkout(local: &CoreEnvironment, remote: &CoreEnvironment) -> bool {
-        let local_manifest =
-            toml::from_str::<toml::Value>(&fs::read_to_string(local.manifest_path()).unwrap());
-        let remote_manifest =
-            toml::from_str::<toml::Value>(&fs::read_to_string(remote.manifest_path()).unwrap());
+    fn validate_checkout(
+        local: &CoreEnvironment,
+        remote: &CoreEnvironment,
+    ) -> Result<bool, ManagedEnvironmentError> {
+        let local_manifest_bytes = local
+            .manifest_content()
+            .map_err(ManagedEnvironmentError::ReadLocalManifest)?;
 
-        // todo: validate lockfile and otehr files as well
-        // todo: require binary equal?
+        let remote_manifest_bytes = remote
+            .manifest_content()
+            .map_err(ManagedEnvironmentError::ReadGenerationManifest)?;
 
-        local_manifest == remote_manifest
+        Ok(local_manifest_bytes == remote_manifest_bytes)
     }
 
     /// Lock the environment to the current revision
@@ -1386,6 +1397,7 @@ mod test {
     };
     use crate::models::environment::{DOT_FLOX, MANIFEST_FILENAME};
     use crate::models::floxmeta::floxmeta_dir;
+    use crate::models::lockfile::test_helpers::fake_package;
     use crate::models::manifest::TypedManifestCatalog;
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::GitCommandProvider;
@@ -2078,6 +2090,74 @@ mod test {
             local_checkout.manifest_content().unwrap(),
             generation_manifest
         );
+    }
+
+    #[test]
+    fn test_validate_local_different_toml_content() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let env_a = tempdir.path().join("env_a");
+        let env_b = tempdir.path().join("env_b");
+        fs::create_dir_all(&env_a).unwrap();
+        fs::create_dir_all(&env_b).unwrap();
+
+        let env_a = CoreEnvironment::new(env_a);
+        let env_b = CoreEnvironment::new(env_b);
+
+        let mut manifest_a = TypedManifestCatalog::default();
+        let manifest_b = TypedManifestCatalog::default();
+
+        fs::write(
+            env_a.path().join(MANIFEST_FILENAME),
+            toml_edit::ser::to_string_pretty(&manifest_a).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            env_b.path().join(MANIFEST_FILENAME),
+            toml_edit::ser::to_string_pretty(&manifest_b).unwrap(),
+        )
+        .unwrap();
+
+        assert!(ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
+
+        let (iid, descriptor, _) = fake_package("package", None);
+        manifest_a.install.insert(iid, descriptor);
+
+        fs::write(
+            env_a.path().join(MANIFEST_FILENAME),
+            toml_edit::ser::to_string_pretty(&manifest_a).unwrap(),
+        )
+        .unwrap();
+
+        assert!(!ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
+    }
+
+    #[test]
+    fn test_validate_local_different_binary_content() {
+        let tempdir = tempfile::tempdir().unwrap();
+
+        let env_a = tempdir.path().join("env_a");
+        let env_b = tempdir.path().join("env_b");
+        fs::create_dir_all(&env_a).unwrap();
+        fs::create_dir_all(&env_b).unwrap();
+
+        let env_a = CoreEnvironment::new(env_a);
+        let env_b = CoreEnvironment::new(env_b);
+
+        let manifest = TypedManifestCatalog::default();
+
+        fs::write(
+            env_a.path().join(MANIFEST_FILENAME),
+            toml_edit::ser::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            env_b.path().join(MANIFEST_FILENAME),
+            toml_edit::ser::to_string(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        assert!(!ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
     }
 
     #[test]

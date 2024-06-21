@@ -331,7 +331,7 @@ pub struct TypedManifestCatalog {
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
-    pub(super) install: ManifestInstall,
+    pub install: ManifestInstall,
     /// Variables that are exported to the shell environment upon activation.
     #[serde(default)]
     pub(super) vars: ManifestVariables,

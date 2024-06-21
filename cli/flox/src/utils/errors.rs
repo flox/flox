@@ -435,6 +435,9 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             to the environment directory in '.flox/env'.
         "},
 
+        ManagedEnvironmentError::ReadLocalManifest(_) => display_chain(err),
+        ManagedEnvironmentError::ReadGenerationManifest(_) => display_chain(err),
+
         ManagedEnvironmentError::BadBranchName(_) => display_chain(err),
 
         // currently unused
