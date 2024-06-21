@@ -851,15 +851,18 @@ impl ManagedEnvironment {
         Ok(result)
     }
 
-    pub fn apply_local(
-        &self,
-        flox: &Flox,
-        description: &str,
-    ) -> Result<(), ManagedEnvironmentError> {
+    /// Create a new generation from local changes,
+    /// and updates the generation lock.
+    ///
+    /// If no changes exist, returns without further action.
+    ///
+    /// TODO: this should do a `build` before committing to a generation
+    pub fn sync_local(&self, flox: &Flox) -> Result<(), ManagedEnvironmentError> {
         let mut local = self.local_checkout(flox)?;
 
         if Self::validate_checkout(&local, &self.get_current_generation(flox)?) {
-            panic!("local checkout and remote checkout equal, nothing to apply");
+            debug!("local checkout and remote checkout equal, nothing to apply");
+            return Ok(());
         }
 
         let mut generations = self
@@ -868,10 +871,12 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
         generations
-            .add_generation(&mut local, description.to_string())
+            .add_generation(
+                &mut local,
+                "Synchronized manual changes to generation".to_string(),
+            )
             .unwrap();
         self.lock_pointer()?;
-        local.link(flox, &self.out_link, &None).unwrap();
         Ok(())
     }
 
@@ -1365,6 +1370,7 @@ mod test {
     use std::time::Duration;
 
     use fslock::LockFile;
+    use indoc::indoc;
     use url::Url;
 
     use super::*;
@@ -1998,6 +2004,80 @@ mod test {
             .manifest_content()
             .unwrap();
         assert_eq!(local_manifest, new_content);
+    }
+
+    #[test]
+    fn test_sync_local() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+
+        // create a mock floxmeta
+        let (test_pointer, _, _remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        flox.floxhub = Floxhub::new(
+            flox.floxhub.base_url().clone(),
+            test_pointer.floxhub_git_url_override.clone(),
+        )
+        .unwrap();
+
+        let prepare_env = flox.temp_dir.join("prepare");
+        std::fs::create_dir_all(&prepare_env).unwrap();
+        fs::write(
+            prepare_env.join(MANIFEST_FILENAME),
+            serde_json::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+        )
+        .unwrap();
+
+        let managed_env = flox.temp_dir.join("managed");
+        std::fs::create_dir_all(managed_env.join(DOT_FLOX)).unwrap();
+
+        let managed_env = ManagedEnvironment::push_new_without_building(
+            &flox,
+            test_pointer.owner,
+            test_pointer.name,
+            false,
+            CanonicalPath::new(managed_env.join(DOT_FLOX)).unwrap(),
+            CoreEnvironment::new(prepare_env),
+        )
+        .unwrap();
+
+        // TODO: push may transitively call `local_checkout` at an earlier moment
+        let local_checkout = managed_env.local_checkout(&flox).unwrap();
+        let generation_manifest = managed_env
+            .get_current_generation(&flox)
+            .unwrap()
+            .manifest_content()
+            .unwrap();
+
+        assert_eq!(
+            local_checkout.manifest_content().unwrap(),
+            generation_manifest
+        );
+
+        fs::write(local_checkout.manifest_path(), indoc! {"
+            version = 1
+
+            # nothing else
+        "})
+        .unwrap();
+
+        // sanity check that before synching, the manifest is now different
+        assert_ne!(
+            local_checkout.manifest_content().unwrap(),
+            generation_manifest
+        );
+
+        // check that after synching, the manifest is the same
+        managed_env.sync_local(&flox).unwrap();
+
+        let generation_manifest = managed_env
+            .get_current_generation(&flox)
+            .unwrap()
+            .manifest_content()
+            .unwrap();
+
+        assert_eq!(
+            local_checkout.manifest_content().unwrap(),
+            generation_manifest
+        );
     }
 
     #[test]
