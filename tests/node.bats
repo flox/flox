@@ -125,7 +125,7 @@ teardown() {
       _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/krb5_after_prereqs_installed.json" \
         "$FLOX_BIN" install krb5
 
-      "$FLOX_BIN" activate -- bash "$TESTS_DIR/node/krb5.sh"
+      "$FLOX_BIN" activate -- bash "$INPUT_DATA/init/node/krb5.sh"
       ;;
     *-darwin)
       # Ensure we're getting krb5 from the flox package by first checking
@@ -136,7 +136,7 @@ teardown() {
           "$FLOX_BIN" install krb5
 
       # TODO: fix CPATH in activate
-      "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$TESTS_DIR/node/krb5.sh"'
+      "$FLOX_BIN" activate -- bash -c 'CPATH="$FLOX_ENV/include/c++/v1:$CPATH" . "$INPUT_DATA/init/node/krb5.sh"'
       ;;
     *)
       echo "unsupported system: $NIX_SYSTEM"
