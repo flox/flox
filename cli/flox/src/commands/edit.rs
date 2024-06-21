@@ -42,7 +42,7 @@ pub struct Edit {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    #[bpaf(external(edit_action), fallback(EditAction::EditManifest{file: None}))]
+    #[bpaf(external(edit_action), fallback(EditAction::EditManifest{file: None, apply: false}))]
     action: EditAction,
 }
 #[derive(Bpaf, Clone)]
@@ -51,6 +51,8 @@ pub enum EditAction {
         /// Replace environment manifest with that in <file>
         #[bpaf(long, short, argument("file"))]
         file: Option<PathBuf>,
+
+        apply: bool,
     },
 
     Rename {
@@ -77,10 +79,18 @@ impl Edit {
         };
 
         match self.action {
-            EditAction::EditManifest { file } => {
+            EditAction::EditManifest { file, apply } => {
                 // TODO: differentiate between interactive edits and replacement
                 let span = tracing::info_span!("edit_file");
                 let _guard = span.enter();
+
+                if let ConcreteEnvironment::Managed(ref managed) = detected_environment {
+                    if apply {
+                        managed.create_generation_from_local_env(&flox).unwrap();
+                        return Ok(());
+                    }
+                }
+
                 let contents = Self::provided_manifest_contents(file)?;
 
                 // TODO: we have various functionality spread across

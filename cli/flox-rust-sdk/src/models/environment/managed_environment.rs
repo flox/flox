@@ -198,17 +198,11 @@ impl GenerationLock {
 
 impl Environment for ManagedEnvironment {
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError> {
-        let generations = self
-            .generations()
-            .writable(flox.temp_dir.clone())
-            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-        let mut temporary = generations
-            .get_current_generation()
-            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+        let mut local_checkout = self.local_env_from_current_generation(flox)?;
 
-        temporary.lock(flox)?;
-        let store_path = temporary.build(flox)?;
-        temporary.link(flox, &self.out_link, &Some(store_path))?;
+        local_checkout.lock(flox)?;
+        let store_path = local_checkout.build(flox)?;
+        local_checkout.link(flox, &self.out_link, &Some(store_path))?;
 
         Ok(())
     }
@@ -248,18 +242,27 @@ impl Environment for ManagedEnvironment {
             .generations()
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-        let mut temporary = generations
+
+        let remote = generations
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
+        let mut local_checkout = self.local_env_from_current_generation(flox).unwrap();
+
+        if !Self::validate_checkout(&local_checkout, &remote)? {
+            panic!(
+                "local checkout and remote checkout are not equal, use '--force' or 'edit --apply'"
+            );
+        }
+
         let metadata = format!("installed packages: {:?}", &packages);
-        let result = temporary.install(packages, flox)?;
+        let result = local_checkout.install(packages, flox)?;
 
         generations
-            .add_generation(&mut temporary, metadata)
+            .add_generation(&mut local_checkout, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link, &result.store_path)?;
+        local_checkout.link(flox, &self.out_link, &result.store_path)?;
 
         Ok(result)
     }
@@ -274,18 +277,26 @@ impl Environment for ManagedEnvironment {
             .generations()
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-        let mut temporary = generations
+        let remote = generations
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
+        let mut local_checkout = self.local_env_from_current_generation(flox).unwrap();
+
+        if !Self::validate_checkout(&local_checkout, &remote)? {
+            panic!(
+                "local checkout and remote checkout are not equal, use '--force' or 'edit --apply'"
+            );
+        }
+
         let metadata = format!("uninstalled packages: {:?}", &packages);
-        let result = temporary.uninstall(packages, flox)?;
+        let result = local_checkout.uninstall(packages, flox)?;
 
         generations
-            .add_generation(&mut temporary, metadata)
+            .add_generation(&mut local_checkout, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link, &result.store_path)?;
+        local_checkout.link(flox, &self.out_link, &result.store_path)?;
 
         Ok(result)
     }
@@ -296,25 +307,30 @@ impl Environment for ManagedEnvironment {
             .generations()
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-        let mut temporary = generations
+
+        let remote = generations
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let result = temporary.edit(flox, contents)?;
+        let mut local_checkout = self.local_env_from_current_generation(flox).unwrap();
 
-        if result == EditResult::Unchanged {
-            return Ok(result);
+        if !Self::validate_checkout(&local_checkout, &remote)? {
+            panic!(
+                "local checkout and remote checkout are not equal, use '--force' or 'edit --apply'"
+            );
         }
 
-        let store_path = result.store_path();
+        let result = local_checkout.edit(flox, contents)?;
 
-        debug!("Environment changed, create generation, lock generation, build and link");
-
-        generations
-            .add_generation(&mut temporary, "manually edited".to_string())
-            .map_err(ManagedEnvironmentError::CommitGeneration)?;
-        self.lock_pointer()?;
-        temporary.link(flox, &self.out_link, &store_path)?;
+        if let EditResult::Success { store_path } | EditResult::ReActivateRequired { store_path } =
+            &result
+        {
+            generations
+                .add_generation(&mut local_checkout, "manually edited".to_string())
+                .map_err(ManagedEnvironmentError::CommitGeneration)?;
+            self.lock_pointer()?;
+            local_checkout.link(flox, &self.out_link, store_path)?;
+        }
 
         Ok(result)
     }
@@ -381,11 +397,9 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Extract the current content of the manifest
-    fn manifest_content(&self, _flox: &Flox) -> Result<String, EnvironmentError> {
-        let manifest = self
-            .generations()
-            .current_gen_manifest()
-            .map_err(ManagedEnvironmentError::ReadManifest)?;
+    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError> {
+        let local_checkout = self.local_env_from_current_generation(flox)?;
+        let manifest = local_checkout.manifest_content()?;
         Ok(manifest)
     }
 
@@ -432,7 +446,9 @@ impl Environment for ManagedEnvironment {
     ///
     /// Path will not share a common prefix with the path returned by [`ManagedEnvironment::lockfile_path`]
     fn manifest_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
-        let path = self.get_current_generation(flox)?.manifest_path();
+        let path = self
+            .local_env_from_current_generation(flox)?
+            .manifest_path();
         Ok(path)
     }
 
@@ -440,7 +456,9 @@ impl Environment for ManagedEnvironment {
     ///
     /// Path will not share a common prefix with the path returned by [`ManagedEnvironment::manifest_path`]
     fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
-        let path = self.get_current_generation(flox)?.lockfile_path();
+        let path = self
+            .local_env_from_current_generation(flox)?
+            .lockfile_path();
         Ok(path)
     }
 
@@ -805,9 +823,18 @@ impl ManagedEnvironment {
             .generations()
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-        let mut temporary = generations
+
+        let remote = generations
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        let mut temporary = self.local_env_from_current_generation(flox)?;
+
+        if !Self::validate_checkout(&temporary, &remote)? {
+            Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::CheckoutOutOfSync,
+            ))?
+        }
 
         let result = temporary.edit_unsafe(flox, contents)?;
 
@@ -841,9 +868,18 @@ impl ManagedEnvironment {
             .generations()
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-        let mut temporary = generations
+
+        let remote = generations
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        let mut temporary = self.local_env_from_current_generation(flox)?;
+
+        if !Self::validate_checkout(&temporary, &remote)? {
+            Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::CheckoutOutOfSync,
+            ))?
+        }
 
         let result = temporary.migrate_and_edit_unsafe(flox, contents)?;
 
@@ -1260,10 +1296,21 @@ impl ManagedEnvironment {
         // or it could fail to build.
         // So we have to verify we don't have a "broken" generation before pushing.
         {
-            let mut env = self.get_current_generation(flox)?;
+            let remote = self.get_current_generation(flox)?;
+
+            let mut local_checkout = self.local_env_from_current_generation(flox).unwrap();
+
+            if !Self::validate_checkout(&local_checkout, &remote)? {
+                panic!(
+                    "local checkout and remote checkout are not equal, use 'edit --apply' to apply updates first"
+                );
+            }
+
             // [sic] We do not _lock_ the environment here,
             // as a valid lockfile is a precondition for creating a generation.
-            env.build(flox).map_err(ManagedEnvironmentError::Build)?;
+            local_checkout
+                .build(flox)
+                .map_err(ManagedEnvironmentError::Build)?;
         }
 
         // Fetch the remote branch into sync branch
