@@ -25,7 +25,7 @@ flox [ `<general-options>` ] containerize
 Export a Flox environment as a container image.
 The image is written to `<path>`.
 Then use `docker load -i <path>` to load the image into docker.
-When `<path>` is `-`, the imag is written to `stdout`,
+When `<path>` is `-`, the image is written to `stdout`,
 and can be piped into `docker load` directly.
 
 Running the container will behave like running `flox activate`.
