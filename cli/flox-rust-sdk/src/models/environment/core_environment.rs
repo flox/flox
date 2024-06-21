@@ -918,15 +918,7 @@ impl CoreEnvironment<ReadOnly> {
         let mut temp_env = self.writable(&tempdir)?;
 
         if migration_info.needs_manifest_migration {
-            migration_info
-                .raw_manifest
-                .insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
-
-            // Make sure it parses
-            migration_info
-                .raw_manifest
-                .to_typed()
-                .map_err(CoreEnvironmentError::MigrateManifest)?;
+            Self::migrate_manifest_contents_to_v1(&mut migration_info.raw_manifest)?;
 
             debug!("migration transaction: updating manifest");
             temp_env.update_manifest(migration_info.raw_manifest.to_string())?;
@@ -951,6 +943,50 @@ impl CoreEnvironment<ReadOnly> {
         Ok(store_path)
     }
 
+    /// Migrate a v0 [RawManifest] to a v1 [RawManifest] by inserting
+    /// `version = 1` and moving `hook.script` to `hook.on-activate` if
+    /// `hook.on-activate` doesn't already exist.
+    ///
+    /// `raw_manifest` is expected to be a v0 manifest.
+    /// Return an error if the resulting manifest is not a valid v1 manifest.
+    /// Note that the modifications are still made even if an error is returned to allow
+    /// [Self::migrate_and_edit_unsafe] to use the invalid manifest.
+    fn migrate_manifest_contents_to_v1(
+        raw_manifest: &mut RawManifest,
+    ) -> Result<(), CoreEnvironmentError> {
+        // // Insert `version = 1`
+        raw_manifest.insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
+
+        // Migrate `hook.script` to `hook.on-activate`
+        let hook = raw_manifest.get_mut("hook").and_then(|s| s.as_table_mut());
+        if let Some(hook) = hook {
+            if hook.get("on-activate").is_none() {
+                // Rename `hook.script` to `hook.on-activate`, preserving
+                // comments and formatting
+                if let Some((script_key, script_item)) = hook.remove_entry("script") {
+                    // Unit tests cover this is safe to unwrap
+                    let mut on_activate = toml_edit::Key::from_str("on-activate").unwrap();
+                    let mut on_activate_key = on_activate.as_mut();
+                    let decor = on_activate_key.leaf_decor_mut();
+                    *decor = script_key.leaf_decor().clone();
+                    let dotted_decor = on_activate_key.dotted_decor_mut();
+                    *dotted_decor = script_key.dotted_decor().clone();
+                    // Does not preserve order of hooks,
+                    // but we only have one field in the hook section.
+                    hook.insert_formatted(&on_activate, script_item);
+                }
+            }
+        }
+
+        // Make sure it parses
+        raw_manifest
+            .to_typed()
+            .map_err(CoreEnvironmentError::MigrateManifest)?;
+        Ok(())
+    }
+
+    /// Replace manifest with provided `contents` and perform migration in a
+    /// single transaction
     pub fn migrate_and_edit_unsafe(
         &mut self,
         flox: &Flox,
@@ -969,17 +1005,14 @@ impl CoreEnvironment<ReadOnly> {
         let mut raw_manifest = RawManifest::from_str(&contents)
             .map_err(|e| CoreEnvironmentError::ModifyToml(TomlEditError::ParseManifest(e)))?;
 
-        raw_manifest.insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
+        let migrate_result = Self::migrate_manifest_contents_to_v1(&mut raw_manifest);
 
         debug!("migration transaction: updating manifest");
         temp_env.update_manifest(raw_manifest.to_string())?;
 
         // Check if the manifest is valid after updating it, because we want to
         // update it no matter what.
-        if let Err(migrate_error) = raw_manifest
-            .to_typed()
-            .map_err(CoreEnvironmentError::MigrateManifest)
-        {
+        if let Err(migrate_error) = migrate_result {
             debug!(
                 "migration transaction: migration failed: {:?}",
                 migrate_error
@@ -1289,6 +1322,7 @@ mod tests {
     use catalog_api_v1::types::{ResolvedPackageDescriptor, SystemEnum};
     use chrono::{DateTime, Utc};
     use indoc::{formatdoc, indoc};
+    use pretty_assertions::assert_eq;
     use serial_test::serial;
     use tempfile::{tempdir_in, TempDir};
     use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
@@ -1751,5 +1785,112 @@ mod tests {
         } else {
             panic!("expected LockForMigration error");
         }
+    }
+
+    /// [CoreEnvironment::migrate_manifest_contents_to_v1] migrates a manifest
+    /// with `script` in a `[hook]` table correctly, maintaining comments and
+    /// formatting.
+    #[test]
+    fn migrate_script_hook_table() {
+        let contents = formatdoc! {r#"
+            [vars]
+            foo = "bar"
+
+            # comment 1
+            [hook] # comment 2
+            # comment 3
+             script = "echo hello" # comment 4
+            # comment 5
+
+            [options]
+            "#};
+        let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
+        CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap();
+        assert_eq!(raw_manifest.to_string(), formatdoc! {r#"
+                version = 1
+                [vars]
+                foo = "bar"
+
+                # comment 1
+                [hook] # comment 2
+                # comment 3
+                 on-activate = "echo hello" # comment 4
+                # comment 5
+
+                [options]
+                "#
+        });
+    }
+
+    /// [CoreEnvironment::migrate_manifest_contents_to_v1] migrates a manifest
+    /// with hook.script as a dotted key correctly, maintaining comments and
+    /// formatting.
+    #[test]
+    fn migrate_script_hook_dotted_decor() {
+        let contents = formatdoc! {r#"
+            vars.foo = "bar"
+
+            # comment 1
+            hook . script = "echo hello" # comment 2
+            # comment 3
+
+            options.allow.unfree = false
+            "#};
+        let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
+        CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap();
+        assert_eq!(raw_manifest.to_string(), formatdoc! {r#"
+                vars.foo = "bar"
+
+                # comment 1
+                hook . on-activate = "echo hello" # comment 2
+                # comment 3
+
+                options.allow.unfree = false
+                version = 1
+                "#
+        });
+    }
+
+    /// If a manifest contains both `hook.script` and `hook.on-activate`,
+    /// [CoreEnvironment::migrate_manifest_contents_to_v1] returns an error.
+    #[test]
+    fn migrate_script_skip_for_on_activate() {
+        let contents = formatdoc! {r#"
+            [hook]
+            script = "echo foo"
+            on-activate = "echo bar"
+            "#};
+        let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
+        let err = CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap_err();
+        assert_eq!(raw_manifest.to_string(), formatdoc! {r#"
+                version = 1
+                [hook]
+                script = "echo foo"
+                on-activate = "echo bar"
+                "#
+        });
+        if let CoreEnvironmentError::MigrateManifest(e) = err {
+            assert!(e.message().contains("unknown field `script`"));
+        } else {
+            panic!("expected MigrateManifest error");
+        }
+    }
+
+    /// Even if a manifest fails validation, it is still modified by
+    /// [CoreEnvironment::migrate_manifest_contents_to_v1].
+    #[test]
+    fn migrate_script_modifies_on_error() {
+        let contents = formatdoc! {r#"
+            [hook]
+            script = "echo hello"
+            on-activate = "echo hello"
+            "#};
+        let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
+        assert!(raw_manifest.get("version").is_none());
+        CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap_err();
+        assert_eq!(
+            raw_manifest.get("version").unwrap().as_integer().unwrap(),
+            1
+        );
     }
 }

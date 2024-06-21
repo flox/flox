@@ -1592,10 +1592,10 @@ pub fn environment_description(environment: &ConcreteEnvironment) -> Result<Stri
 }
 
 #[derive(Debug, Error)]
-enum MigrationError {
+pub enum MigrationError {
     #[error("Migration cancelled. Run 'flox upgrade' to migrate the environment.")]
     MigrationCancelled,
-    #[error("Upgrade failed.")]
+    #[error("upgrade failed")]
     ConfirmedUpgradeFailed(#[source] EnvironmentError),
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
