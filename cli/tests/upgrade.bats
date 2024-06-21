@@ -58,121 +58,10 @@ teardown() {
   common_test_teardown
 }
 
-
-# ---------------------------------------------------------------------------- #
-# pkgdb tests
-
-@test "upgrade hello" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  rm -f "$GLOBAL_MANIFEST_LOCK"
-
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" init
-  "$FLOX_BIN" install hello
-
-  # nixpkgs and hello are both locked to the old nixpkgs
-  run jq -r '.registry.inputs.nixpkgs.from.narHash' "$LOCK_PATH"
-  assert_success
-  assert_output "$PKGDB_NIXPKGS_NAR_HASH_OLD"
-
-  assert_old_hello
-
-  # After an update, nixpkgs is the new nixpkgs, but hello is still from the
-  # old one.
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
-    "$FLOX_BIN" update
-  run jq -r '.registry.inputs.nixpkgs.from.narHash' "$LOCK_PATH"
-  assert_success
-  assert_output "$PKGDB_NIXPKGS_NAR_HASH_NEW"
-
-  assert_old_hello
-
-  run "$FLOX_BIN" upgrade
-  assert_output --partial "Upgraded 'hello'"
-  assert_new_hello
-}
-
-@test "upgrade by group" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  rm -f "$GLOBAL_MANIFEST_LOCK"
-
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-   "$FLOX_BIN" init
-  cat << "EOF" > "$TMP_MANIFEST_PATH"
-[install]
-hello = { pkg-group = "blue" }
-EOF
-
-  "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
-
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
-    "$FLOX_BIN" update
-  assert_old_hello
-
-  run "$FLOX_BIN" upgrade blue
-  assert_output --partial "Upgraded 'hello'"
-  assert_new_hello
-}
-
-@test "upgrade toplevel group" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" init
-  "$FLOX_BIN" install hello
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
-    "$FLOX_BIN" update
-  assert_old_hello
-
-  run "$FLOX_BIN" upgrade toplevel
-  assert_output --partial "Upgraded 'hello'"
-  assert_new_hello
-}
-
-@test "upgrade by iid" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  rm -f "$GLOBAL_MANIFEST_LOCK"
-
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" init
-  "$FLOX_BIN" install hello
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
-    "$FLOX_BIN" update
-  assert_old_hello
-
-  run "$FLOX_BIN" upgrade hello
-  assert_output --partial "Upgraded 'hello'"
-  assert_new_hello
-}
-
-@test "upgrade errors on iid in group with other packages" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  "$FLOX_BIN" init
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" install curl hello
-
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
-    "$FLOX_BIN" update
-
-  run "$FLOX_BIN" upgrade hello
-  assert_failure
-  assert_output --partial "package in the group 'toplevel' with multiple packages"
-}
-
-@test "check confirmation when all packages are up to date" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  "$FLOX_BIN" init
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" install curl hello
-
-  run "$FLOX_BIN" upgrade
-  assert_success
-  assert_output --partial "No packages need to be upgraded"
-}
-
 # ---------------------------------------------------------------------------- #
 # catalog tests
 
-@test "catalog: upgrade hello" {
+@test "upgrade hello" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
 
@@ -190,7 +79,7 @@ EOF
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
 
-@test "catalog: upgrade by group" {
+@test "upgrade by group" {
   "$FLOX_BIN" init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
   tomlq -i -t '.install.hello."pkg-path" = "hello"' "$TMP_MANIFEST_PATH"
@@ -213,7 +102,7 @@ EOF
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
 
-@test "catalog: upgrade toplevel group" {
+@test "upgrade toplevel group" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
 
@@ -231,7 +120,7 @@ EOF
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
 
-@test "catalog: upgrade by iid" {
+@test "upgrade by iid" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" "$FLOX_BIN" install hello
 
@@ -249,7 +138,7 @@ EOF
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
 
-@test "catalog: upgrade errors on iid in group with other packages" {
+@test "upgrade errors on iid in group with other packages" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" "$FLOX_BIN" install curl hello
 
@@ -258,7 +147,7 @@ EOF
   assert_output --partial "package in the group 'toplevel' with multiple packages"
 }
 
-@test "catalog: check confirmation when all packages are up to date" {
+@test "check confirmation when all packages are up to date" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" "$FLOX_BIN" install curl hello
 

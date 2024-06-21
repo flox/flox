@@ -48,53 +48,10 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
-
-@test "'flox init' sets up a local working Go module environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$INPUT_DATA"/init/go/common/* "$PROJECT_DIR/"
-  cp -r "$INPUT_DATA"/init/go/module/* "$PROJECT_DIR/"
-  # Files copied from the store are read-only
-  chmod -R +w .
-
-  run "$FLOX_BIN" init --auto-setup
-  assert_success
-  assert_line --partial "'go' installed"
-
-  run "$FLOX_BIN" activate -- go version
-  assert_success
-  assert_line --partial "go version go1."
-
-  run "$FLOX_BIN" activate -- go build
-  assert_success
-}
-
-# ---------------------------------------------------------------------------- #
-
-@test "'flox init' sets up a local working Go workspace environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$INPUT_DATA"/init/go/common/* "$PROJECT_DIR/"
-  cp -r "$INPUT_DATA"/init/go/module/* "$PROJECT_DIR/"
-  cp -r "$INPUT_DATA"/init/go/workspace/* "$PROJECT_DIR/"
-  # Files copied from the store are read-only
-  chmod -R +w .
-
-  run "$FLOX_BIN" init --auto-setup
-  assert_success
-  assert_line --partial "'go' installed"
-
-  run "$FLOX_BIN" activate -- go version
-  assert_success
-  assert_line --partial "go version go1."
-
-  run "$FLOX_BIN" activate -- go build
-  assert_success
-}
-
-# ---------------------------------------------------------------------------- #
 # catalog tests
 
 # bats test_tags=catalog
-@test "catalog: 'flox init' sets up a local working Go module environment" {
+@test "'flox init' sets up a local working Go module environment" {
   cp -r "$INPUT_DATA"/init/go/common/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/go/module/* "$PROJECT_DIR/"
   # Files copied from the store are read-only
@@ -115,7 +72,7 @@ teardown() {
 }
 
 # bats test_tags=catalog
-@test "catalog: 'flox init' sets up a local working Go workspace environment" {
+@test "'flox init' sets up a local working Go workspace environment" {
   cp -r "$INPUT_DATA"/init/go/common/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/go/module/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/go/workspace/* "$PROJECT_DIR/"
