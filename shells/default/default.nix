@@ -12,7 +12,6 @@
   flox-cli,
   flox-cli-tests,
   flox-pkgdb,
-  flox-tests,
   ci ? false,
   GENERATED_DATA ? ./../../test_data/generated,
 }: let
@@ -24,12 +23,6 @@
     ++ [
       (flox-cli-tests.override {
         PROJECT_TESTS_DIR = "/cli/tests";
-        PKGDB_BIN = null;
-        FLOX_BIN = null;
-        LD_FLOXLIB = null;
-      })
-      (flox-tests.override {
-        PROJECT_TESTS_DIR = "/tests";
         PKGDB_BIN = null;
         FLOX_BIN = null;
         LD_FLOXLIB = null;

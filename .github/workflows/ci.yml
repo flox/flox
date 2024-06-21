@@ -152,15 +152,9 @@ jobs:
       - name: "CLI Integration Tests"
         env:
           RUST_BACKTRACE: 1
-        run: nix develop -L --no-update-lock-file --command just integ-tests
-
-      - name: "Functional Tests"
-        if: ${{ github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch' }}
-        env:
-          RUST_BACKTRACE: 1
           AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.MANAGED_AUTH0_FLOX_DEV_CLIENT_SECRET }}"
           TESTING_FLOX_CATALOG_URL: "${{ secrets.MANAGED_TESTING_FLOX_CATALOG_URL }}"
-        run: nix develop -L --no-update-lock-file --command just functional-tests
+        run: nix develop -L --no-update-lock-file --command just integ-tests
 
   nix-build:
     name: "Nix build"

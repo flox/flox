@@ -190,8 +190,7 @@
         callPackage ./pkgs/flox-cli-tests {
         };
 
-      # Integration tests
-      flox-tests = callPackage ./pkgs/flox-tests {};
+      # Other tests
       flox-tests-pure = callPackage ./pkgs/flox-tests-pure {inputs = inputs;};
     };
 
@@ -246,11 +245,6 @@
       pkgs = pkgsBase.extend (final: prev: {
         flox-cli-tests = prev.flox-cli-tests.override {
           PROJECT_TESTS_DIR = "/cli/tests";
-          PKGDB_BIN = null;
-          FLOX_BIN = null;
-        };
-        flox-tests = prev.flox-tests.override {
-          PROJECT_TESTS_DIR = "/tests";
           PKGDB_BIN = null;
           FLOX_BIN = null;
         };
