@@ -126,15 +126,16 @@ Each option is described below:
 
 `pkg-group`
 :   Marks a package as belonging to a pkg-group.
+    
+    The pkg-group is a collection of software that is known to work together at 
+    a point in time. 
+    Adding packages to a pkg-group enables packages in the pkg-group to share
+    the same libraries and dependencies, which ensures maximum compatibility 
+    and minimizes the size of the environment.
 
-    Adding packages to a pkg-group ensures all packages in the pkg-group share
-    the same libraries and dependencies,
-    which ensures maximum compatibility and minimizes the size of the
-    environment.
-    One example is C/C++ projects that depend on specific versions of header
-    files.
     Packages are marked as belonging to a pkg-group simply by setting this
     option to the name of the pkg-group.
+    Packages that do not have a pkg-group specified belong to the same group.
 
     Multiple pkg-groups may resolve to the same version of the catalog.
     Pkg-groups are upgraded as a unit,
