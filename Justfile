@@ -15,7 +15,7 @@ nix_options := "--extra-experimental-features nix-command \
 PKGDB_BIN := "${PWD}/pkgdb/bin/pkgdb"
 FLOX_BIN := "${PWD}/cli/target/debug/flox"
 LD_FLOXLIB := "${PWD}/pkgdb/lib/ld-floxlib.so"
-cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo test --workspace"
+cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo nextest run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
 
 
 # ---------------------------------------------------------------------------- #
@@ -93,12 +93,10 @@ gen-data +mk_data_args="": build-data-gen
 
 # Run the CLI unit tests
 @unit-tests regex="": build
-    pushd cli;                            \
      {{cargo_test_invocation}} {{regex}}
 
 # Run the CLI unit tests, including impure tests
 @impure-tests regex="": build
-    pushd cli;                                                     \
      {{cargo_test_invocation}} {{regex}} --features "extra-tests"
 
 # Run the entire CLI test suite
