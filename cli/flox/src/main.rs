@@ -33,6 +33,11 @@ async fn run(args: FloxArgs) -> Result<()> {
     set_parent_process_id();
     populate_default_nix_env_vars();
     let config = config::Config::parse()?;
+    if let Some(features) = config.features.as_ref() {
+        if features.services {
+            tracing::debug!("service management enabled");
+        }
+    }
     let uuid = utils::metrics::read_metrics_uuid(&config)
         .map(|u| Some(u.to_string()))
         .unwrap_or(None);
