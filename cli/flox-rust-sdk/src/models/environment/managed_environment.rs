@@ -24,6 +24,7 @@ use super::{
     UpdateResult,
     CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
+    ENV_DIR_NAME,
     N_HASH_CHARS,
 };
 use crate::data::{CanonicalPath, Version};
@@ -37,6 +38,7 @@ use crate::models::env_registry::{
     EnvRegistry,
     EnvRegistryError,
 };
+use crate::models::environment::copy_dir_recursive;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
 use crate::models::lockfile::LockedManifest;
@@ -610,12 +612,14 @@ impl ManagedEnvironment {
             &EnvironmentPointer::Managed(pointer.clone()),
         )?;
 
-        Ok(ManagedEnvironment {
+        let env = ManagedEnvironment {
             path: dot_flox_path,
             out_link,
             pointer,
             floxmeta,
-        })
+        };
+
+        Ok(env)
     }
 
     /// Ensure:
@@ -841,6 +845,54 @@ impl ManagedEnvironment {
         // don't link, the environment may be broken
 
         Ok(result)
+    }
+
+    pub fn apply_local(
+        &self,
+        flox: &Flox,
+        description: &str,
+    ) -> Result<(), ManagedEnvironmentError> {
+        let mut local = self.local_checkout(flox)?;
+
+        if Self::validate_checkout(&local, &self.get_current_generation(flox)?) {
+            panic!("local checkout and remote checkout equal, nothing to apply");
+        }
+
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+
+        generations
+            .add_generation(&mut local, description.to_string())
+            .unwrap();
+        self.lock_pointer()?;
+        local.link(flox, &self.out_link, &None).unwrap();
+        Ok(())
+    }
+
+    fn local_checkout(&self, flox: &Flox) -> Result<CoreEnvironment, ManagedEnvironmentError> {
+        if !self.path.join(ENV_DIR_NAME).exists() {
+            debug!("creating environment directory");
+            let latest_gen = self.get_current_generation(flox)?;
+            fs::create_dir_all(self.path.join(ENV_DIR_NAME)).unwrap();
+            copy_dir_recursive(&latest_gen.path(), &self.path.join(ENV_DIR_NAME), true).unwrap();
+        }
+
+        let local = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        Ok(local)
+    }
+
+    fn validate_checkout(local: &CoreEnvironment, remote: &CoreEnvironment) -> bool {
+        let local_manifest =
+            toml::from_str::<toml::Value>(&fs::read_to_string(local.manifest_path()).unwrap());
+        let remote_manifest =
+            toml::from_str::<toml::Value>(&fs::read_to_string(remote.manifest_path()).unwrap());
+
+        // todo: validate lockfile and otehr files as well
+        // todo: require binary equal?
+
+        local_manifest == remote_manifest
     }
 
     /// Lock the environment to the current revision
