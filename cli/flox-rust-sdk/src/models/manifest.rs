@@ -552,6 +552,7 @@ pub struct ManifestOptions {
     /// Options that control how semver versions are resolved.
     #[serde(default)]
     pub semver: SemverOptions,
+    pub cuda_detection: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]

@@ -8,9 +8,9 @@ export _findutils="@findutils@"
 #
 # ---------------------------------------------------------------------------- #
 
-# Only run if FLOX_FEATURES_ENV_ENABLE_CUDA feature flag is set
+# Only run if _FLOX_ENV_CUDA_DETECTION is set
 activate_cuda(){
-  if [[ "$FLOX_FEATURES_ENV_ENABLE_CUDA" != 1 ]]; then
+  if [[ "$_FLOX_ENV_CUDA_DETECTION" != 1 ]]; then
     return 0
   fi
 

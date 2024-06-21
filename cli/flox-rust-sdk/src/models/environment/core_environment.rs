@@ -95,6 +95,10 @@ impl<State> CoreEnvironment<State> {
         fs::read_to_string(self.manifest_path()).map_err(CoreEnvironmentError::OpenManifest)
     }
 
+    pub fn manifest(&self) -> Result<TypedManifest, CoreEnvironmentError> {
+        toml::from_str(&self.manifest_content()?).map_err(CoreEnvironmentError::DeserializeManifest)
+    }
+
     /// Lock the environment.
     ///
     /// When a catalog client is provided, the catalog will be used to lock any
@@ -110,8 +114,7 @@ impl<State> CoreEnvironment<State> {
     ///
     /// todo: should we always write the lockfile to disk?
     pub fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, CoreEnvironmentError> {
-        let manifest: TypedManifest = toml::from_str(&self.manifest_content()?)
-            .map_err(CoreEnvironmentError::DeserializeManifest)?;
+        let manifest = self.manifest()?;
 
         let lockfile = match manifest {
             TypedManifest::Pkgdb(_) => {
@@ -528,8 +531,7 @@ impl CoreEnvironment<ReadOnly> {
         groups_or_iids: &[String],
     ) -> Result<UpgradeResult, CoreEnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
-        let manifest = toml::from_str(&self.manifest_content()?)
-            .map_err(CoreEnvironmentError::DeserializeManifest)?;
+        let manifest = self.manifest()?;
 
         let (lockfile, upgraded) = match manifest {
             TypedManifest::Pkgdb(_) => {

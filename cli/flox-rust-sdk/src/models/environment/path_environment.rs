@@ -47,7 +47,7 @@ use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::LockedManifest;
-use crate::models::manifest::{PackageToInstall, RawManifest};
+use crate::models::manifest::{PackageToInstall, RawManifest, TypedManifest};
 use crate::models::pkgdb::UpgradeResult;
 use crate::utils::mtime_of;
 
@@ -272,6 +272,12 @@ impl Environment for PathEnvironment {
     /// Read the environment definition file as a string
     fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError> {
         fs::read_to_string(self.manifest_path(flox)?).map_err(EnvironmentError::ReadManifest)
+    }
+
+    /// Return the deserialized manifest
+    fn manifest(&self, _flox: &Flox) -> Result<TypedManifest, EnvironmentError> {
+        let env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        env_view.manifest().map_err(EnvironmentError::Core)
     }
 
     /// Returns the environment name
