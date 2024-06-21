@@ -158,7 +158,7 @@ Each option is described below:
 
     Packages are marked as belonging to a pkg-group simply by setting this
     option to the name of the pkg-group.
-    Packages that do not have a `pkg-group` specified belong to the same group.
+    Packages that do not have a pkg-group specified belong to the same group.
 
     Multiple pkg-groups may resolve to the same version of the catalog.
     Pkg-groups are upgraded as a unit,
