@@ -17,7 +17,7 @@ use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use indoc::formatdoc;
 use log::{debug, trace};
 
-use crate::commands::EnvironmentSelectError;
+use crate::commands::{EnvironmentSelectError, MigrationError};
 
 /// Convert to an error variant that directs the user to the docs if the provided error is
 /// due to a package not being supported on the current system.
@@ -613,6 +613,17 @@ pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
             .chain()
             .skip(1)
             .fold(err.to_string(), |acc, cause| format!("{}: {}", acc, cause)),
+    }
+}
+
+pub fn format_migration_error(err: &MigrationError) -> String {
+    trace!("formatting migration_error: {err:?}");
+
+    match err {
+        MigrationError::Environment(err) | MigrationError::ConfirmedUpgradeFailed(err) => {
+            format_error(err)
+        },
+        _ => display_chain(err),
     }
 }
 
