@@ -20,12 +20,12 @@ bats_require_minimum_version '1.5.0'
 #
 # NOTE: we unset these variables past this point to avoid pollution.
 xdg_reals_setup() {
-  if [[ -n "${__FT_RAN_XDG_REALS_SETUP:-}" ]]; then return 0; fi
+  if [[ -n ${__FT_RAN_XDG_REALS_SETUP-} ]]; then return 0; fi
   # Set fallbacks and export.
   : "${USER:=$(id -un 2> /dev/null)}"
-  if [[ -z "${HOME:-}" ]]; then
+  if [[ -z ${HOME-} ]]; then
     : HOME="$(getent passwd "$USER" 2> /dev/null | cut -d: -f6)"
-    if [[ -z "${HOME:-}" ]]; then
+    if [[ -z ${HOME-} ]]; then
       if [[ -d "/home/$USER" ]]; then
         HOME="/home/$USER"
       else
@@ -51,11 +51,11 @@ xdg_reals_setup() {
 # ---------------------------------------------------------------------------- #
 
 git_reals_setup() {
-  if [[ -n "${__FT_RAN_GIT_REALS_SETUP:-}" ]]; then return 0; fi
+  if [[ -n ${__FT_RAN_GIT_REALS_SETUP-} ]]; then return 0; fi
   xdg_reals_setup
   # Set fallbacks and export.
   : "${GIT_CONFIG_SYSTEM:=/etc/gitconfig}"
-  if [[ -z "${GIT_CONFIG_GLOBAL:-}" ]]; then
+  if [[ -z ${GIT_CONFIG_GLOBAL-} ]]; then
     if [[ -r "$REAL_XDG_CONFIG_HOME/git/gitconfig" ]]; then
       GIT_CONFIG_GLOBAL="$REAL_XDG_CONFIG_HOME/git/gitconfig"
     else
@@ -73,7 +73,7 @@ git_reals_setup() {
 
 # Prime the flox-gh authentication to use the test credential.
 floxtest_gitforge_setup() {
-  if [[ -n "${__FT_RAN_FLOXTEST_GITFORGE_SETUP:-}" ]]; then return 0; fi
+  if [[ -n ${__FT_RAN_FLOXTEST_GITFORGE_SETUP-} ]]; then return 0; fi
   xdg_tmp_setup
   flox_vars_setup
   # Create fake flox-gh auth token data recognised as test user on flox
@@ -115,6 +115,7 @@ reals_setup() {
     print_var REAL_XDG_DATA_HOME
     print_var REAL_XDG_STATE_HOME
     print_var TESTS_DIR
+    print_var GENERATED_DATA
   } >&3
 }
 
@@ -143,7 +144,7 @@ nix_store_dir_setup() {
 
 # Set variables related to locating test resources and misc. bats settings.
 misc_vars_setup() {
-  if [[ -n "${__FT_RAN_MISC_VARS_SETUP:-}" ]]; then return 0; fi
+  if [[ -n ${__FT_RAN_MISC_VARS_SETUP-} ]]; then return 0; fi
 
   # Assume that versions:
   # a) start with numbers
@@ -167,6 +168,10 @@ misc_vars_setup() {
   export _FLOX_TEST_SUITE_MODE=:
 
   export __FT_RAN_MISC_VARS_SETUP=:
+
+  # If $ZDOTDIR is set, setting $HOME to a different location won't prevent
+  # rc files from getting loaded.
+  unset ZDOTDIR
 }
 
 # ---------------------------------------------------------------------------- #
@@ -175,10 +180,7 @@ misc_vars_setup() {
 flox_cli_vars_setup() {
   unset FLOX_PROMPT_ENVIRONMENTS _FLOX_ACTIVE_ENVIRONMENTS
   export FLOX_DISABLE_METRICS='true'
-  # Unset catalog feature flags
   unset FLOX_FEATURES_USE_CATALOG
-  unset _FLOX_USE_CATALOG_MOCK
-  unset _FLOX_CATALOG_DUMP_RESPONSE_FILE
 }
 
 # ---------------------------------------------------------------------------- #
@@ -186,10 +188,10 @@ flox_cli_vars_setup() {
 # Creates an ssh key and sets `SSH_AUTH_SOCK' for use by the test suite.
 # It is recommended that you use this setup routine in `setup_suite'.
 ssh_key_setup() {
-  if [[ -n "${__FT_RAN_SSH_KEY_SETUP:-}" ]]; then return 0; fi
+  if [[ -n ${__FT_RAN_SSH_KEY_SETUP-} ]]; then return 0; fi
   : "${FLOX_TEST_SSH_KEY:=${BATS_SUITE_TMPDIR?}/ssh/id_ed25519}"
   export FLOX_TEST_SSH_KEY
-  if ! [[ -r "$FLOX_TEST_SSH_KEY" ]]; then
+  if ! [[ -r $FLOX_TEST_SSH_KEY ]]; then
     mkdir -p "${FLOX_TEST_SSH_KEY%/*}"
     ssh-keygen -t ed25519 -q -N '' -f "$FLOX_TEST_SSH_KEY" \
       -C 'floxuser@example.invalid'
@@ -216,7 +218,7 @@ ssh_key_setup() {
 # TODO: Secret key signing for `git' blows up this needs to be fixed.
 # Tests that require GPG signing are temporarily disabled.
 gpg_key_setup() {
-  if [[ -n "${__FT_RAN_GPG_KEY_SETUP:-}" ]]; then return 0; fi
+  if [[ -n ${__FT_RAN_GPG_KEY_SETUP-} ]]; then return 0; fi
   misc_vars_setup
   mkdir -p "$BATS_RUN_TMPDIR/homeless-shelter/.gnupg"
   gpg --full-gen-key --batch <(
@@ -232,7 +234,7 @@ gpg_key_setup() {
 
 # Create a temporary `gitconfig' suitable for this test suite.
 gitconfig_setup() {
-  if [[ -n "${__FT_RAN_GITCONFIG_SETUP:-}" ]]; then return 0; fi
+  if [[ -n ${__FT_RAN_GITCONFIG_SETUP-} ]]; then return 0; fi
   git_reals_setup
   mkdir -p "$BATS_SUITE_TMPDIR/git"
   export GIT_CONFIG_SYSTEM="$BATS_SUITE_TMPDIR/git/gitconfig.system"
@@ -273,7 +275,7 @@ xdg_vars_setup() {
 xdg_tmp_setup() {
   xdg_reals_setup
   xdg_vars_setup
-  if [[ "${__FT_RAN_XDG_TMP_SETUP:-}" = "${XDG_CACHE_HOME:?}" ]]; then
+  if [[ ${__FT_RAN_XDG_TMP_SETUP-} == "${XDG_CACHE_HOME:?}" ]]; then
     return 0
   fi
 
@@ -328,11 +330,32 @@ xdg_tmp_setup() {
 
 # Set variables related to `pkgdb' settings.
 pkgdb_vars_setup() {
-  if [[ -n "${__FT_RAN_PKGDB_VARS_SETUP:-}" ]]; then return 0; fi
+  if [[ -n ${__FT_RAN_PKGDB_VARS_SETUP-} ]]; then return 0; fi
 
   export _PKGDB_TEST_SUITE_MODE=:
 
+  # This revision is a bit old, but it was created from `release-23.05'.
+  # Notably its default `nodejs' version is `18.16.0' which is referenced in
+  # some test cases.
+  PKGDB_NIXPKGS_REV_OLD='e8039594435c68eb4f780f3e9bf3972a7399c4b1'
+  NODEJS_VERSION_OLD="18.16.0"
+  export NODEJS_VERSION_OLD
+
+  # A revision of release-23.11
   PKGDB_NIXPKGS_REV_NEW='ab5fd150146dcfe41fda501134e6503932cc8dfd'
+  NODEJS_VERSION_NEW="18.18.2"
+  export NODEJS_VERSION_NEW
+  # This revision is even older than OLD, selected for the purpose of serving up
+  # a different and incompatible version of glibc (2.34) than the latest (2.37).
+  # This could probably replace the PKGDB_NIXPKGS_REV_OLD revision with a
+  # refactoring of other test data but we'll tackle that in a separate effort.
+  PKGDB_NIXPKGS_REV_OLDER='bc01a2be500c10f1507dcc8e98c9f5bd72c02aa3'
+
+  PKGDB_NIXPKGS_REF_OLD="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_OLD"
+  PKGDB_NIXPKGS_REF_NEW="github:NixOS/nixpkgs/$PKGDB_NIXPKGS_REV_NEW"
+
+  PKGDB_NIXPKGS_NAR_HASH_OLD="sha256-1UGacsv5coICyvAzwuq89v9NsS00Lo8sz22cDHwhnn8="
+  PKGDB_NIXPKGS_NAR_HASH_NEW="sha256-FRC/OlLVvKkrdm+RtrODQPufD0vVZYA0hpH9RPaHmp4="
 
   # This causes `pkgdb' to use this revision for `nixpkgs' anywhere the
   # `--ga-registry' flag is used.
@@ -340,8 +363,15 @@ pkgdb_vars_setup() {
   # so that we get consistent packages and improved caching.
   _PKGDB_GA_REGISTRY_REF_OR_REV="$PKGDB_NIXPKGS_REV_NEW"
 
-  export PKGDB_NIXPKGS_REV_NEW \
-    _PKGDB_GA_REGISTRY_REF_OR_REV
+  export \
+    PKGDB_NIXPKGS_REV_OLD \
+    PKGDB_NIXPKGS_REV_NEW \
+    PKGDB_NIXPKGS_REV_OLDER \
+    PKGDB_NIXPKGS_REF_OLD \
+    PKGDB_NIXPKGS_REF_NEW \
+    _PKGDB_GA_REGISTRY_REF_OR_REV \
+    PKGDB_NIXPKGS_NAR_HASH_OLD \
+    PKGDB_NIXPKGS_NAR_HASH_NEW
 
   export __FT_RAN_PKGDB_VARS_SETUP=:
 }
@@ -359,6 +389,7 @@ flox_vars_setup() {
   export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments"
   export USER="flox-test"
   export HOME="${FLOX_TEST_HOME:-$HOME}"
+  export GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_DIR/global-manifest.lock"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -369,18 +400,22 @@ flox_vars_setup() {
 # Homedirs can be created "globally" for the entire test suite ( default ), or
 # for individual files or single tests by passing an optional argument.
 home_setup() {
-  case "${1:-suite}" in
-    suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home" ;;
-    file) export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home" ;;
-    test) export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home" ;;
-    *)
-      echo "home_setup: Invalid homedir category '${1?}'" >&2
-      return 1
-      ;;
-  esac
-  #if [[ "${__FT_RAN_HOME_SETUP:-}" = "$FLOX_TEST_HOME" ]]; then return 0; fi
-  # Force recreation on `home' on every invocation.
-  unset __FT_RAN_HOME_SETUP
+  if [[ "${__FT_RAN_HOME_SETUP:-}" = "real" ]]; then
+    export FLOX_TEST_HOME="$REAL_HOME"
+    export HOME="$REAL_HOME"
+  else
+    case "${1:-suite}" in
+      suite) export FLOX_TEST_HOME="${BATS_SUITE_TMPDIR?}/home" ;;
+      file) export FLOX_TEST_HOME="${BATS_FILE_TMPDIR?}/home" ;;
+      test) export FLOX_TEST_HOME="${BATS_TEST_TMPDIR?}/home" ;;
+      *)
+        echo "home_setup: Invalid homedir category '${1?}'" >&2
+        return 1
+        ;;
+    esac
+    # Force recreation on `home' on every invocation.
+    unset __FT_RAN_HOME_SETUP
+  fi
   xdg_tmp_setup
   flox_vars_setup
   export __FT_RAN_HOME_SETUP="$FLOX_TEST_HOME"
@@ -407,16 +442,18 @@ common_suite_setup() {
   nix_system_setup
   misc_vars_setup
   flox_cli_vars_setup
-  pkgdb_vars_setup
   # Generate configs and auth.
   ssh_key_setup
   floxtest_gitforge_setup
   # TODO: fix gpg setup and re-enable along with `gpgsign.bats' tests.
   #gpg_key_setup;
   gitconfig_setup
+  # setup pkgdb and populate cache
+  pkgdb_vars_setup
   {
     print_var FLOX_TEST_HOME
     print_var HOME
+    print_var PATH
     print_var XDG_CACHE_HOME
     print_var XDG_CONFIG_HOME
     print_var XDG_DATA_HOME
@@ -433,6 +470,9 @@ common_suite_setup() {
     print_var GIT_CONFIG_SYSTEM
     print_var GIT_CONFIG_GLOBAL
     print_var PKGDB_NIXPKGS_REV_NEW
+    print_var PKGDB_NIXPKGS_REV_OLD
+    print_var PKGDB_NIXPKGS_REF_NEW
+    print_var PKGDB_NIXPKGS_REF_OLD
     print_var _PKGDB_GA_REGISTRY_REF_OR_REV
   } >&3
 }
@@ -446,7 +486,7 @@ setup_suite() { common_suite_setup; }
 # Run on exit after all other `*teardown' routines.
 common_suite_teardown() {
   # Delete suite tmpdir and envs unless the user requests to preserve them.
-  if [[ -z "${FLOX_TEST_KEEP_TMP:-}" ]]; then
+  if [[ -z ${FLOX_TEST_KEEP_TMP-} ]]; then
     rm -rf "$BATS_SUITE_TMPDIR"
   fi
   # Our agent was useful, but it's time for them to retire.
