@@ -1,0 +1,13 @@
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+
+[vars]
+foo = "bar"
+
+[hook]
+on-activate = """
+    command -v hello
+    hello
+"""

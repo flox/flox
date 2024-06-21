@@ -5,7 +5,7 @@ use std::future::ready;
 use std::io::Read;
 use std::num::NonZeroU32;
 use std::os::unix::fs::FileExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
@@ -14,12 +14,16 @@ use catalog_api_v1::types::{
     self as api_types,
     error as api_error,
     ErrorResponse,
+    MessageLevel,
+    MessageType,
     PackageInfoSearch,
+    ResolutionMessageGeneral,
 };
 use catalog_api_v1::{Client as APIClient, Error as APIError, ResponseValue};
 use enum_dispatch::enum_dispatch;
 use futures::stream::Stream;
 use futures::{Future, StreamExt, TryStreamExt};
+use once_cell::sync::Lazy;
 use reqwest::header::HeaderMap;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -27,6 +31,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::data::System;
+use crate::flox::FLOX_VERSION;
 use crate::models::search::{ResultCount, SearchLimit, SearchResult, SearchResults};
 use crate::utils::traceable_path;
 
@@ -34,6 +39,9 @@ pub const DEFAULT_CATALOG_URL: &str = "https://flox-catalog.flox.dev";
 const NIXPKGS_CATALOG: &str = "nixpkgs";
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
+
+static GENERATED_DATA: Lazy<PathBuf> =
+    Lazy::new(|| PathBuf::from(std::env::var("GENERATED_DATA").unwrap()));
 
 const RESPONSE_PAGE_SIZE: NonZeroU32 = unsafe { NonZeroU32::new_unchecked(10) };
 
@@ -121,8 +129,16 @@ impl CatalogClient {
             let path = Path::new(&path_str);
             let _ = std::fs::remove_file(path);
         }
+
+        let client = {
+            let timeout = std::time::Duration::from_secs(15);
+            reqwest::ClientBuilder::new()
+                .connect_timeout(timeout)
+                .timeout(timeout)
+                .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
+        };
         Self {
-            client: APIClient::new(baseurl),
+            client: APIClient::new_with_client(baseurl, client.build().unwrap()),
         }
     }
 
@@ -213,6 +229,19 @@ impl MockClient {
         })
     }
 
+    /// Clear mock responses and then load responses from a file into the list
+    /// of mock responses
+    pub fn clear_and_load_responses_from_file(&mut self, relative_path: &str) {
+        let responses = read_mock_responses((*GENERATED_DATA).join(relative_path))
+            .expect("couldn't read mock responses");
+        let mut locked_mock_responses = self
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock");
+        locked_mock_responses.clear();
+        locked_mock_responses.extend(responses);
+    }
+
     /// Push a new response into the list of mock responses
     pub fn push_resolve_response(&mut self, resp: ResolvedGroups) {
         self.mock_responses
@@ -296,8 +325,8 @@ impl ClientTrait for CatalogClient {
         let resolved_package_groups = api_resolved_package_groups
             .items
             .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(ResolvedPackageGroup::from)
+            .collect::<Vec<_>>();
 
         tracing::debug!(
             n_groups = resolved_package_groups.len(),
@@ -661,58 +690,128 @@ impl TryFrom<PackageGroup> for api_types::PackageGroup {
     }
 }
 
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct ResolutionMessageInner {
-//     /// The log level of the message
-//     pub level: MessageLevel,
-//     /// Per-package details (unclear)
-//     pub context: HashMap<String, String>,
-// }
+/// The content of a generic message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsgGeneral {
+    /// The log level of the message
+    pub level: Option<MessageLevel>,
+    /// The actual message
+    pub msg: String,
+}
 
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub enum ResolutionMessage {
-//     General(ResolutionMessageInner),
-//     AttrPathNotFound(ResolutionMessageInner),
-//     ConstraintsTooTight(ResolutionMessageInner),
-// }
+/// The content of a "attr path not found" message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsgAttrPathNotFound {
+    /// The log level of the message
+    pub level: Option<MessageLevel>,
+    /// The actual message
+    pub msg: String,
+    /// The requested attribute path
+    pub attr_path: String,
+    /// The install id that requested this attribute path
+    pub install_id: String,
+    /// The systems on which this attribute path is valid
+    pub valid_systems: Vec<System>,
+}
 
-// impl TryFrom<api_types::MessagesItem> for ResolutionMessage {
-//     type Error = CatalogClientError;
+/// The content of a "constraints too tight" message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsgConstraintsTooTight {
+    /// The log level of the message
+    pub level: Option<MessageLevel>,
+    /// The actual message
+    pub msg: String,
+}
 
-//     fn try_from(value: api_types::MessagesItem) -> Result<Self, Self::Error> {
-//         if let Some(msg) = value.subtype_0 {
-//             let inner = ResolutionMessageInner {
-//                 level: msg.level,
-//                 context: msg.context,
-//             };
-//             Ok(ResolutionMessage::General(inner))
-//         } else if let Some(msg) = value.subtype_1 {
-//             let inner = ResolutionMessageInner {
-//                 // FIXME: there's an error in the schema that turns this field into something other
-//                 //        than MessageLevel
-//                 level: MessageLevel::Error,
-//                 context: msg.context,
-//             };
-//             Ok(ResolutionMessage::AttrPathNotFound(inner))
-//         } else if let Some(msg) = value.subtype_2 {
-//             let inner = ResolutionMessageInner {
-//                 // FIXME: there's an error in the schema that turns this field into something other
-//                 //        than MessageLevel
-//                 level: MessageLevel::Error,
-//                 context: msg.context,
-//             };
-//             Ok(ResolutionMessage::ConstraintsTooTight(inner))
-//         } else {
-//             unreachable!("message was empty")
-//         }
-//     }
-// }
+/// The kinds of resolution messages we can receive
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ResolutionMessage {
+    /// A generic message about resolution
+    General(MsgGeneral),
+    /// The attribute path requested for an install id either doesn't exist at all,
+    /// or isn't available on this system
+    AttrPathNotFound(MsgAttrPathNotFound),
+    /// Couldn't resolve a package group because the constraints were too tight,
+    /// which could mean that all the version constraints can't be satisfied by
+    /// a single page.
+    ConstraintsTooTight(MsgConstraintsTooTight),
+}
+
+impl ResolutionMessage {
+    pub fn msg(&self) -> String {
+        match self {
+            ResolutionMessage::General(msg) => msg.msg.clone(),
+            ResolutionMessage::AttrPathNotFound(msg) => msg.msg.clone(),
+            ResolutionMessage::ConstraintsTooTight(msg) => msg.msg.clone(),
+        }
+    }
+}
+
+impl From<ResolutionMessageGeneral> for ResolutionMessage {
+    fn from(r_msg: ResolutionMessageGeneral) -> Self {
+        match r_msg.type_ {
+            MessageType::General => ResolutionMessage::General(MsgGeneral {
+                level: Some(r_msg.level),
+                msg: r_msg.message,
+            }),
+            MessageType::ResolutionTrace => ResolutionMessage::General(MsgGeneral {
+                level: Some(MessageLevel::Trace),
+                msg: r_msg.message,
+            }),
+            MessageType::AttrPathNotFound => {
+                let level = r_msg.level;
+                let msg = r_msg.message;
+                // Should always be present for this type of message, but that's not enforced
+                // by the type system
+                let attr_path = r_msg
+                    .context
+                    .get("attr_path")
+                    .cloned()
+                    .unwrap_or("default_attr_path".into());
+
+                // TODO: `valid_systems` currently come back as a ',' delimited string rather than
+                //       and array of strings, so you need to check whether the string is empty,
+                //       and if it's not empty you need to split on ',' hoping that there's not
+                //       and escaped ',' in there somewhere.
+                let valid_systems = r_msg
+                    .context
+                    .get("valid_systems")
+                    .and_then(|s| if s.is_empty() { None } else { Some(s) })
+                    .map(|combined| {
+                        combined
+                            .split(',')
+                            .map(|s| s.to_string())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                let install_id: String = r_msg
+                    .context
+                    .get("install_id")
+                    .map(|s| s.to_string())
+                    .unwrap_or("default_install_id".to_string());
+                ResolutionMessage::AttrPathNotFound(MsgAttrPathNotFound {
+                    level: Some(level),
+                    msg,
+                    attr_path: attr_path.to_string(),
+                    install_id,
+                    valid_systems,
+                })
+            },
+            MessageType::ConstraintsTooTight => {
+                ResolutionMessage::ConstraintsTooTight(MsgConstraintsTooTight {
+                    level: Some(r_msg.level),
+                    msg: r_msg.message,
+                })
+            },
+        }
+    }
+}
 
 /// A resolved package group
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolvedPackageGroup {
     /// Messages generated by the server regarding how this group was resolved
-    // pub msgs: Vec<ResolutionMessage>,
+    pub msgs: Vec<ResolutionMessage>,
     /// The name of the group
     pub name: String,
     /// Which page this group was resolved to if it resolved at all
@@ -729,21 +828,17 @@ impl ResolvedPackageGroup {
     }
 }
 
-impl TryFrom<api_types::ResolvedPackageGroupInput> for ResolvedPackageGroup {
-    type Error = CatalogClientError;
-
-    fn try_from(
-        resolved_package_group: api_types::ResolvedPackageGroupInput,
-    ) -> Result<Self, Self::Error> {
-        Ok(Self {
+impl From<api_types::ResolvedPackageGroupInput> for ResolvedPackageGroup {
+    fn from(resolved_package_group: api_types::ResolvedPackageGroupInput) -> Self {
+        Self {
             name: resolved_package_group.name,
             page: resolved_package_group.page.map(CatalogPage::from),
-            // msgs: resolved_package_group
-            //     .messages
-            //     .into_iter()
-            //     .map(|msg| msg.try_into())
-            //     .collect::<Result<Vec<_>, _>>()?,
-        })
+            msgs: resolved_package_group
+                .messages
+                .into_iter()
+                .map(|msg| msg.into())
+                .collect::<Vec<_>>(),
+        }
     }
 }
 
@@ -756,6 +851,7 @@ pub struct CatalogPage {
     pub packages: Option<Vec<PackageResolutionInfo>>,
     pub page: i64,
     pub url: String,
+    pub msgs: Vec<ResolutionMessage>,
 }
 
 impl From<api_types::CatalogPageInput> for CatalogPage {
@@ -765,6 +861,11 @@ impl From<api_types::CatalogPageInput> for CatalogPage {
             packages: catalog_page.packages,
             page: catalog_page.page,
             url: catalog_page.url,
+            msgs: catalog_page
+                .messages
+                .into_iter()
+                .map(|msg| msg.into())
+                .collect::<Vec<_>>(),
         }
     }
 }
@@ -873,10 +974,12 @@ pub mod test_helpers {
             page: 0,
             url: String::new(),
             complete: true,
+            msgs: vec![],
         };
         ResolvedPackageGroup {
             name: group_name.to_string(),
             page: Some(page),
+            msgs: vec![],
         }
     }
 }
@@ -888,6 +991,7 @@ mod tests {
     use std::path::PathBuf;
 
     use futures::TryStreamExt;
+    use httpmock::prelude::MockServer;
     use itertools::Itertools;
     use pollster::FutureExt;
     use proptest::collection::vec;
@@ -895,6 +999,25 @@ mod tests {
     use tempfile::NamedTempFile;
 
     use super::*;
+
+    #[tokio::test]
+    async fn user_agent_set_on_all_requests() {
+        let expected_agent = format!("flox-cli/{}", &*FLOX_VERSION);
+        let empty_response = &api_types::PackageSearchResultOutput {
+            items: vec![],
+            total_count: 0,
+        };
+
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.header("user-agent", expected_agent);
+            then.status(200).json_body_obj(empty_response);
+        });
+
+        let client = CatalogClient::new(&server.base_url());
+        let _ = client.package_versions("some-package").await;
+        mock.assert();
+    }
 
     /// make_depaging_stream collects items from multiple pages
     #[tokio::test]

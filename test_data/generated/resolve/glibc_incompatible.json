@@ -1,0 +1,22 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "AttrPathNotFound": {
+            "attr_path": "glibc",
+            "install_id": "glibc",
+            "level": "error",
+            "msg": "The attr_path glibc is not found for some systems, valid systems are (aarch64-linux,x86_64-linux).",
+            "valid_systems": [
+              "aarch64-linux",
+              "x86_64-linux"
+            ]
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ]
+]

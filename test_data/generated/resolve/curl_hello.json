@@ -1,9 +1,11 @@
 [
   [
     {
+      "msgs": [],
       "name": "toplevel",
       "page": {
         "complete": true,
+        "msgs": [],
         "packages": [
           {
             "attr_path": "curl",
@@ -44,8 +46,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T09:46:16Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -95,8 +98,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T09:46:16Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -142,8 +146,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T09:46:16Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -193,8 +198,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T09:46:16Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",
@@ -223,8 +229,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T09:46:16Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "aarch64-darwin",
@@ -253,8 +260,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T09:46:16Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "aarch64-linux",
@@ -283,8 +291,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T09:46:16Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "x86_64-darwin",
@@ -313,8 +322,9 @@
             "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
             "rev_count": 633517,
             "rev_date": "2024-05-31T23:09:26Z",
-            "scrape_date": "2024-06-04T09:46:16Z",
+            "scrape_date": "2024-06-04T19:02:00Z",
             "stabilities": [
+              "staging",
               "unstable"
             ],
             "system": "x86_64-linux",

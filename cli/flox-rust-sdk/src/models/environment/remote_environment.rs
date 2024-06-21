@@ -15,6 +15,7 @@ use super::{
     EnvironmentError,
     InstallationAttempt,
     ManagedPointer,
+    MigrationInfo,
     UninstallationAttempt,
     UpdateResult,
     DOT_FLOX,
@@ -107,7 +108,7 @@ impl RemoteEnvironment {
         // (force) Pull latest changes of the environment from upstream.
         // remote environments stay in sync with upstream without providing a local staging state.
         inner
-            .pull(true)
+            .pull(flox, true)
             .map_err(RemoteEnvironmentError::ResetManagedEnvironment)?;
 
         let out_link = path.join(GCROOTS_DIR_NAME);
@@ -308,5 +309,19 @@ impl Environment for RemoteEnvironment {
     /// When extended to delete upstream environments, this will be more useful.
     fn delete(self, flox: &Flox) -> Result<(), EnvironmentError> {
         self.inner.delete(flox)
+    }
+
+    fn migrate_to_v1(
+        &mut self,
+        flox: &Flox,
+        migration_info: MigrationInfo,
+    ) -> Result<(), EnvironmentError> {
+        self.inner.migrate_to_v1(flox, migration_info)?;
+        self.inner
+            .push(flox, false)
+            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
+            .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
+
+        Ok(())
     }
 }

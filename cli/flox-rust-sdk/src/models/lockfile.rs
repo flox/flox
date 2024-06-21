@@ -1,10 +1,13 @@
-use catalog_api_v1::types::SystemEnum;
+use catalog_api_v1::types::{MessageLevel, SystemEnum};
+use indent::{indent_all_by, indent_by};
+use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub type FlakeRef = Value;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -30,6 +33,7 @@ use crate::models::pkgdb::{call_pkgdb, BuildEnvResult, PKGDB_BIN};
 use crate::providers::catalog::{
     self,
     CatalogPage,
+    MsgAttrPathNotFound,
     PackageDescriptor,
     PackageGroup,
     ResolvedPackageGroup,
@@ -275,6 +279,119 @@ struct LockedGroup {
     /// By default this is the latest page that provides packages
     /// for all requested systems.
     page: CatalogPage,
+}
+
+/// All the resolution failures for a single resolution request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolutionFailures(pub Vec<ResolutionFailure>);
+
+/// Data relevant for formatting a resolution failure
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ResolutionFailure {
+    PackageNotFound {
+        install_id: String,
+        attr_path: String,
+    },
+    PackageUnavailableOnSomeSystems {
+        install_id: String,
+        attr_path: String,
+        invalid_systems: Vec<System>,
+        valid_systems: Vec<String>,
+    },
+    ConstraintsTooTight {
+        fallback_msg: String,
+        group: String,
+    },
+    FallbackMessage {
+        msg: String,
+    },
+}
+
+// Convenience for when you just have a single message
+impl From<ResolutionFailure> for ResolutionFailures {
+    fn from(value: ResolutionFailure) -> Self {
+        ResolutionFailures(vec![value])
+    }
+}
+
+impl Display for ResolutionFailures {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let formatted = if self.0.len() > 1 {
+            format_multiple_resolution_failures(&self.0)
+        } else {
+            format_single_resolution_failure(&self.0[0], false)
+        };
+        write!(f, "{formatted}")
+    }
+}
+
+/// Formats a single resolution failure in a nice way
+fn format_single_resolution_failure(failure: &ResolutionFailure, is_one_of_many: bool) -> String {
+    match failure {
+        ResolutionFailure::PackageNotFound { attr_path, .. } => {
+            // Note: you should never actually see this variant formatted *here* since
+            //       it will go through the "didyoumean" mechanism and get formatted there
+            format!("could not find package '{attr_path}'.")
+        },
+        ResolutionFailure::PackageUnavailableOnSomeSystems {
+            attr_path,
+            invalid_systems,
+            valid_systems,
+            ..
+        } => {
+            let extra_indent = if is_one_of_many { 2 } else { 0 };
+            let indented_invalid = invalid_systems
+                .iter()
+                .map(|s| indent_all_by(4, format!("- {s}")))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let indented_valid = valid_systems
+                .iter()
+                .map(|s| indent_all_by(4, format!("- {s}")))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let listed = [
+                format!("package '{attr_path}' not available for"),
+                indented_invalid,
+                indent_all_by(2, "but it is available for"),
+                indented_valid,
+            ]
+            .join("\n");
+            let with_doc_link = formatdoc! {"
+            {listed}
+
+            For more on managing system-specific packages, visit the documentation:
+            https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages"};
+            indent_by(extra_indent, with_doc_link)
+        },
+        ResolutionFailure::ConstraintsTooTight { group, .. } => {
+            let extra_indent = if is_one_of_many { 2 } else { 3 };
+            let base_msg = format!("constraints for group '{group}' are too tight");
+            let msg = formatdoc! {"
+            {}
+
+            Use 'flox edit' to adjust version constraints in the [install] section,
+            or isolate dependencies in a new group with '<pkg>.pkg-group = \"newgroup\"'", base_msg};
+            indent_by(extra_indent, msg)
+        },
+        ResolutionFailure::FallbackMessage { msg } => {
+            if is_one_of_many {
+                indent_by(2, msg.to_string())
+            } else {
+                msg.to_string()
+            }
+        },
+    }
+}
+
+/// Formats several resolution messages in a more legible way than just one per line
+fn format_multiple_resolution_failures(failures: &[ResolutionFailure]) -> String {
+    let msgs = failures
+        .iter()
+        .map(|f| format!("- {}", format_single_resolution_failure(f, true)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("multiple resolution failures:\n{msgs}")
 }
 
 impl LockedManifestCatalog {
@@ -572,31 +689,47 @@ impl LockedManifestCatalog {
         manifest: &'manifest TypedManifestCatalog,
         groups: impl IntoIterator<Item = ResolvedPackageGroup> + 'manifest,
     ) -> Result<impl Iterator<Item = LockedPackageCatalog> + 'manifest, LockedManifestError> {
-        Ok(groups
+        let groups = groups.into_iter().collect::<Vec<_>>();
+        let failed_group_indices = Self::detect_failed_resolutions(&groups);
+        let failures = if failed_group_indices.is_empty() {
+            tracing::debug!("no resolution failures detected");
+            None
+        } else {
+            tracing::debug!("resolution failures detected");
+            let failed_groups = failed_group_indices
+                .iter()
+                .map(|&i| groups[i].clone())
+                .collect::<Vec<_>>();
+            let failures = Self::collect_failures(&failed_groups, manifest);
+            Some(failures)
+        };
+        if let Some(failures) = failures {
+            if !failures.is_empty() {
+                tracing::debug!(n = failures.len(), "returning resolution failures");
+                return Err(LockedManifestError::ResolutionFailed(ResolutionFailures(
+                    failures,
+                )));
+            }
+        }
+        let locked_pkg_iter = groups
             .into_iter()
-            .map(|group| {
-                if let Some(page) = group.page {
-                    if !page.complete {
-                        return Err(LockedManifestError::ResolutionFailed(
-                            "page wasn't complete".into(),
-                        ));
-                    }
-                    if let Some(pkgs) = page.packages {
-                        Ok(pkgs)
-                    } else {
-                        Err(LockedManifestError::EmptyPage)
-                    }
-                } else {
-                    Err(LockedManifestError::ResolutionFailed(
-                        "package group had no page".into(),
+            .flat_map(|group| {
+                group
+                    .page
+                    .and_then(|p| p.packages.clone())
+                    .map(|pkgs| pkgs.into_iter())
+                    .ok_or(LockedManifestError::ResolutionFailed(
+                        // This should be unreachable, otherwise we would have detected
+                        // it as a failure
+                        ResolutionFailure::FallbackMessage {
+                            msg: "catalog page wasn't complete".into(),
+                        }
+                        .into(),
                     ))
-                }
             })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
             .flatten()
             .filter_map(|resolved_pkg| {
-                let Some(descriptor) = manifest.install.get(&resolved_pkg.install_id).cloned()
+                let Some(descriptor) = manifest.pkg_descriptor_with_id(&resolved_pkg.install_id)
                 else {
                     debug!(
                         "Package {} is not in the manifest, skipping",
@@ -606,7 +739,187 @@ impl LockedManifestCatalog {
                 };
 
                 Some(LockedPackageCatalog::from_parts(resolved_pkg, descriptor))
-            }))
+            });
+        Ok(locked_pkg_iter)
+    }
+
+    /// Constructs [ResolutionFailure]s from the failed groups
+    fn collect_failures(
+        failed_groups: &[ResolvedPackageGroup],
+        manifest: &TypedManifestCatalog,
+    ) -> Vec<ResolutionFailure> {
+        let mut failures = Vec::new();
+        for group in failed_groups {
+            tracing::debug!(
+                name = group.name,
+                "collecting failures from unresolved group"
+            );
+            for res_msg in group.msgs.iter() {
+                match res_msg {
+                    catalog::ResolutionMessage::General(inner) => {
+                        tracing::debug!(kind = "general", "handling resolution message");
+                        // If we have a level and it's not an error, skip this message
+                        if let Some(level) = inner.level {
+                            if level != MessageLevel::Error {
+                                tracing::debug!(
+                                    level = level.to_string(),
+                                    msg = inner.msg,
+                                    "non-error resolution message"
+                                );
+                                continue;
+                            }
+                        }
+                        // If we don't have a level, I guess we have to treat it like an error
+                        tracing::debug!("pushing fallback message");
+                        let failure = ResolutionFailure::FallbackMessage {
+                            msg: inner.msg.clone(),
+                        };
+                        failures.push(failure);
+                    },
+                    catalog::ResolutionMessage::AttrPathNotFound(inner) => {
+                        tracing::debug!(
+                            kind = "attr_path_not_found",
+                            "handling resolution message"
+                        );
+                        if let Some(failure) = Self::attr_path_not_found_failure(inner, manifest) {
+                            tracing::debug!("pushing custom failure");
+                            failures.push(failure);
+                        } else {
+                            tracing::debug!("pushing fallback message");
+                            let failure = ResolutionFailure::FallbackMessage {
+                                msg: inner.msg.clone(),
+                            };
+                            failures.push(failure);
+                        }
+                    },
+                    catalog::ResolutionMessage::ConstraintsTooTight(inner) => {
+                        tracing::debug!(
+                            kind = "constraints_too_tight",
+                            "handling resolution message"
+                        );
+                        // If we have a level and it's not an error, skip this message
+                        if let Some(level) = inner.level {
+                            if level != MessageLevel::Error {
+                                tracing::debug!(
+                                    level = level.to_string(),
+                                    msg = inner.msg,
+                                    "non-error resolution message"
+                                );
+                                continue;
+                            }
+                        }
+                        // If we don't have a level, I guess we have to treat it like an error
+                        tracing::debug!("pushing fallback message");
+                        let failure = ResolutionFailure::ConstraintsTooTight {
+                            fallback_msg: inner.msg.clone(),
+                            group: group.name.clone(),
+                        };
+                        failures.push(failure);
+                    },
+                }
+            }
+        }
+        failures
+    }
+
+    /// Converts a "attr path not found" message into different resolution failures
+    fn attr_path_not_found_failure(
+        r_msg: &MsgAttrPathNotFound,
+        manifest: &TypedManifestCatalog,
+    ) -> Option<ResolutionFailure> {
+        // If we have a level and it's not an error, skip this message
+        if let Some(level) = r_msg.level {
+            if level != MessageLevel::Error {
+                tracing::debug!(
+                    level = level.to_string(),
+                    msg = r_msg.msg,
+                    "non-error resolution message"
+                );
+                return None;
+            }
+        }
+        if r_msg.valid_systems.is_empty() {
+            tracing::debug!(
+                attr_path = r_msg.attr_path,
+                "no valid systems for requested attr_path"
+            );
+            Some(ResolutionFailure::PackageNotFound {
+                install_id: r_msg.install_id.clone(),
+                attr_path: r_msg.attr_path.clone(),
+            })
+        } else {
+            let (valid_systems, requested_systems) =
+                Self::determine_valid_and_requested_systems(r_msg, manifest)?;
+            let mut diff = requested_systems
+                .difference(&valid_systems)
+                .cloned()
+                .collect::<Vec<_>>();
+            diff.sort();
+            let mut available = r_msg.valid_systems.clone();
+            available.sort();
+            Some(ResolutionFailure::PackageUnavailableOnSomeSystems {
+                install_id: r_msg.install_id.clone(),
+                attr_path: r_msg.attr_path.clone(),
+                invalid_systems: diff,
+                valid_systems: available,
+            })
+        }
+    }
+
+    /// Determines which systems a package is available for and which it was requested on
+    fn determine_valid_and_requested_systems(
+        r_msg: &MsgAttrPathNotFound,
+        manifest: &TypedManifestCatalog,
+    ) -> Option<(HashSet<System>, HashSet<System>)> {
+        let default_systems = [
+            "aarch64-darwin".to_string(),
+            "aarch64-linux".to_string(),
+            "x86_64-darwin".to_string(),
+            "x86_64-linux".to_string(),
+        ]
+        .into_iter()
+        .collect::<HashSet<_>>();
+        let valid_systems = r_msg
+            .valid_systems
+            .clone()
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let manifest_systems = manifest
+            .options
+            .systems
+            .clone()
+            .map(|s| s.iter().cloned().collect::<HashSet<_>>())
+            .unwrap_or(default_systems);
+        let pkg_descriptor = manifest.pkg_descriptor_with_id(&r_msg.install_id)?;
+        let pkg_systems = pkg_descriptor
+            .systems
+            .map(|s| s.iter().cloned().collect::<HashSet<_>>())
+            .clone();
+        let requested_systems = if let Some(requested) = pkg_systems {
+            requested
+        } else {
+            manifest_systems
+        };
+        Some((valid_systems, requested_systems))
+    }
+
+    /// Detects whether any groups failed to resolve
+    fn detect_failed_resolutions(groups: &[ResolvedPackageGroup]) -> Vec<usize> {
+        groups
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, group)| {
+                if group.page.is_none() {
+                    tracing::debug!(name = group.name, "detected unresolved group");
+                    Some(idx)
+                } else if group.page.as_ref().is_some_and(|p| !p.complete) {
+                    tracing::debug!(name = group.name, "detected incomplete page");
+                    Some(idx)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
     }
 
     /// Filter out packages from the locked manifest by install_id or group
@@ -937,7 +1250,7 @@ pub enum LockedManifestError {
     UnrecognizedSystem(String),
 
     #[error("resolution failed: {0}")]
-    ResolutionFailed(String),
+    ResolutionFailed(ResolutionFailures),
     #[error("catalog page was empty")]
     EmptyPage,
 
@@ -1197,8 +1510,10 @@ pub(crate) mod tests {
                     unfree: Some(false),
                     version: "version".to_string(),
                 }]),
+                msgs: vec![],
             }),
             name: "group".to_string(),
+            msgs: vec![],
         }]
     });
 
@@ -1674,8 +1989,10 @@ pub(crate) mod tests {
                     version: "version".to_string(),
                     system: SystemEnum::Aarch64Darwin,
                 }]),
+                msgs: vec![],
             }),
             name: "group".to_string(),
+            msgs: vec![],
         }];
 
         let manifest = &*TEST_TYPED_MANIFEST;

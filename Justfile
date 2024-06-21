@@ -148,7 +148,11 @@ test-all: test-pkgdb impure-tests integ-tests functional-tests
 
 # Run a `flox` command using the catalog
 @catalog-flox +args="": build
-    FLOX_FEATURES_USE_CATALOG=true cli/target/debug/flox {{args}}
+    echo "just: DEPRECATED TARGET: Use 'flox' instead" >&2;
+    cli/target/debug/flox {{args}}
+
+@pkgdb-flox +args="": build
+    FLOX_FEATURES_USE_CATALOG=false cli/target/debug/flox {{args}}
 
 # Run a `pkgdb` command
 @pkgdb +args="": build-pkgdb

@@ -29,6 +29,7 @@ use super::{
     EnvironmentError,
     EnvironmentPointer,
     InstallationAttempt,
+    MigrationInfo,
     PathPointer,
     UninstallationAttempt,
     UpdateResult,
@@ -36,6 +37,7 @@ use super::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     GCROOTS_DIR_NAME,
+    LIB_DIR_NAME,
     LOCKFILE_FILENAME,
 };
 use crate::data::{CanonicalPath, System};
@@ -332,6 +334,17 @@ impl Environment for PathEnvironment {
     fn lockfile_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         Ok(self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME))
     }
+
+    fn migrate_to_v1(
+        &mut self,
+        flox: &Flox,
+        migration_info: MigrationInfo,
+    ) -> Result<(), EnvironmentError> {
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let store_path = env_view.migrate_to_v1(flox, migration_info)?;
+        env_view.link(flox, self.out_link(&flox.system)?, &Some(store_path))?;
+        Ok(())
+    }
 }
 
 /// Constructors of PathEnvironments
@@ -460,6 +473,7 @@ impl PathEnvironment {
         fs::write(dot_flox_path.join(".gitignore"), formatdoc! {"
             {GCROOTS_DIR_NAME}/
             {CACHE_DIR_NAME}/
+            {LIB_DIR_NAME}/
             "})
         .map_err(EnvironmentError::WriteGitignore)?;
 

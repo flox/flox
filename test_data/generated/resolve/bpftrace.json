@@ -1,0 +1,22 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "AttrPathNotFound": {
+            "attr_path": "bpftrace",
+            "install_id": "bpftrace",
+            "level": "error",
+            "msg": "The attr_path bpftrace is not found for some systems, valid systems are (aarch64-linux,x86_64-linux).",
+            "valid_systems": [
+              "aarch64-linux",
+              "x86_64-linux"
+            ]
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ]
+]

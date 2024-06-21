@@ -19,6 +19,7 @@ use super::{
     EnvironmentPointer,
     InstallationAttempt,
     ManagedPointer,
+    MigrationInfo,
     UninstallationAttempt,
     UpdateResult,
     CACHE_DIR_NAME,
@@ -100,8 +101,12 @@ pub enum ManagedEnvironmentError {
     Diverged,
     #[error("access to floxmeta repository was denied")]
     AccessDenied,
-    #[error("environment '{0}' does not exist at upstream '{1}'")]
-    UpstreamNotFound(EnvironmentRef, String),
+    #[error("environment '{env_ref}' does not exist at upstream '{upstream}'")]
+    UpstreamNotFound {
+        env_ref: EnvironmentRef,
+        upstream: String,
+        user: Option<String>,
+    },
     #[error("failed to push environment")]
     Push(#[source] GitRemoteCommandError),
     #[error("failed to delete local environment branch")]
@@ -450,6 +455,40 @@ impl Environment for ManagedEnvironment {
 
         Ok(())
     }
+
+    fn migrate_to_v1(
+        &mut self,
+        flox: &Flox,
+        migration_info: MigrationInfo,
+    ) -> Result<(), EnvironmentError> {
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        let metadata = match (
+            migration_info.needs_manifest_migration,
+            migration_info.needs_upgrade,
+        ) {
+            (true, true) => "Migrated manifest to v1 and upgraded packages",
+            (true, false) => "Migrated manifest to v1", // and locked
+            (false, true) => "Upgraded packages",
+            _ => unreachable!("called with invalid migration metadata"),
+        };
+
+        let store_path = temporary.migrate_to_v1(flox, migration_info)?;
+
+        generations
+            .add_generation(&mut temporary, metadata.to_string())
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
+        self.lock_pointer()?;
+        temporary.link(flox, &self.out_link, &Some(store_path))?;
+
+        Ok(())
+    }
 }
 
 /// Constructors and related functions
@@ -530,10 +569,11 @@ impl ManagedEnvironment {
             },
             Err(FloxMetaError::CloneBranch(GitRemoteCommandError::RefNotFound(_)))
             | Err(FloxMetaError::FetchBranch(GitRemoteCommandError::RefNotFound(_))) => {
-                return Err(ManagedEnvironmentError::UpstreamNotFound(
-                    pointer.into(),
-                    flox.floxhub.base_url().to_string(),
-                ))
+                return Err(ManagedEnvironmentError::UpstreamNotFound {
+                    env_ref: pointer.into(),
+                    upstream: flox.floxhub.base_url().to_string(),
+                    user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
+                })
             },
             Err(e) => Err(ManagedEnvironmentError::OpenFloxmeta(e))?,
         };
@@ -758,6 +798,38 @@ impl ManagedEnvironment {
         if matches!(result, Ok(EditResult::Unchanged)) {
             return Ok(result);
         }
+
+        debug!("Environment changed, create and lock generation");
+
+        generations
+            .add_generation(&mut temporary, "manually edited".to_string())
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
+        self.lock_pointer()?;
+
+        // don't link, the environment may be broken
+
+        Ok(result)
+    }
+
+    /// Edit the environment while also adding `version = 1` to the provided manifest contents.
+    /// Don't check that the environment builds.
+    ///
+    /// This is used to allow `flox pull` to work with environments
+    /// that don't specify the current system as supported.
+    pub fn migrate_and_edit_unsafe(
+        &mut self,
+        flox: &Flox,
+        contents: String,
+    ) -> Result<Result<PathBuf, CoreEnvironmentError>, EnvironmentError> {
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+        let mut temporary = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        let result = temporary.migrate_and_edit_unsafe(flox, contents)?;
 
         debug!("Environment changed, create and lock generation");
 
@@ -1063,10 +1135,17 @@ impl ManagedEnvironment {
         }
 
         // Fetch the remote branch into sync branch
-        self.floxmeta
+        match self
+            .floxmeta
             .git
             .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}",))
-            .map_err(ManagedEnvironmentError::FetchUpdates)?;
+        {
+            Ok(_) => {},
+            Err(GitRemoteCommandError::RefNotFound(_)) => {
+                debug!("Upstream environment was deleted.")
+            },
+            Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
+        };
 
         // Check whether we can fast-forward merge the remote branch into the local branch
         // If "not" the environment has diverged.
@@ -1095,22 +1174,37 @@ impl ManagedEnvironment {
             })?;
 
         // update local environment branch, should be fast-forward and a noop if the branches didn't diverge
-        self.pull(force)?;
+        self.pull(flox, force)?;
 
         Ok(())
     }
 
-    pub fn pull(&mut self, force: bool) -> Result<PullResult, ManagedEnvironmentError> {
+    pub fn pull(
+        &mut self,
+        flox: &Flox,
+        force: bool,
+    ) -> Result<PullResult, ManagedEnvironmentError> {
         let sync_branch = remote_branch_name(&self.pointer);
         let project_branch = branch_name(&self.pointer, &self.path);
 
         // Fetch the remote branch into the local sync branch.
         // The sync branch is always a reset to the remote branch
         // and it's state should not be depended on.
-        self.floxmeta
+        match self
+            .floxmeta
             .git
             .fetch_ref("dynamicorigin", &format!("+{sync_branch}:{sync_branch}"))
-            .map_err(ManagedEnvironmentError::FetchUpdates)?;
+        {
+            Ok(_) => {},
+            Err(GitRemoteCommandError::RefNotFound(_)) => {
+                Err(ManagedEnvironmentError::UpstreamNotFound {
+                    env_ref: self.pointer.clone().into(),
+                    upstream: self.pointer.floxhub_url.to_string(),
+                    user: flox.floxhub_token.as_ref().map(|t| t.handle().to_string()),
+                })?
+            },
+            Err(e) => Err(ManagedEnvironmentError::FetchUpdates(e))?,
+        };
 
         // Check whether we can fast-forward the remote branch to the local branch,
         // if not the environment has diverged.

@@ -27,7 +27,6 @@ project_setup() {
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
-  export FLOX_FEATURES_USE_CATALOG=true
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
@@ -50,22 +49,6 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
-#
-@test "install requests with pip" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  "$FLOX_BIN" init
-  sed -i \
-    's/from = { type = "github", owner = "NixOS", repo = "nixpkgs" }/from = { type = "github", owner = "NixOS", repo = "nixpkgs", rev = "e8039594435c68eb4f780f3e9bf3972a7399c4b1" }/' \
-    "$PROJECT_DIR/.flox/env/manifest.toml"
-
-  run "$FLOX_BIN" install -i pip python310Packages.pip python3
-
-  assert_success
-  assert_output --partial "✅ 'pip' installed to environment"
-  assert_output --partial "✅ 'python3' installed to environment"
-
-  FLOX_SHELL=bash "$FLOX_BIN" activate -- bash "$TESTS_DIR/python/requests-with-pip.sh"
-}
 
 # bats test_tags=python:activate:poetry
 @test "flox activate works with poetry" {
@@ -117,60 +100,6 @@ teardown() {
   run "$FLOX_BIN" activate -- python -m project
   assert_success
   assert_line "<class 'numpy.ndarray'>"
-}
-
-# bats test_tags=init:python:auto-setup,init:python:auto-setup:bash
-@test "verify auto-setup Python venv activation: bash" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  OWNER="owner"
-  NAME="name"
-  echo "requests" > requirements.txt
-  [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init --auto-setup --name "$NAME"
-  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- type deactivate
-  assert_success
-  assert_line --partial "deactivate is a function"
-}
-
-# bats test_tags=init:python:auto-setup,init:python:auto-setup:fish
-@test "verify auto-setup Python venv activation: fish" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  OWNER="owner"
-  NAME="name"
-  echo "requests" > requirements.txt
-  [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init --auto-setup --name "$NAME"
-  FLOX_SHELL="fish" run "$FLOX_BIN" activate -- type deactivate
-  assert_success
-  assert_line --partial "deactivate is a function with definition"
-}
-
-# bats test_tags=init:python:auto-setup,init:python:auto-setup:tcsh
-@test "verify auto-setup Python venv activation: tcsh" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  OWNER="owner"
-  NAME="name"
-  echo "requests" > requirements.txt
-  [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init --auto-setup --name "$NAME"
-  FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- which deactivate
-  assert_success
-  assert_line --partial "aliased to test \$?_OLD_VIRTUAL_PATH != 0 && setenv PATH "
-  # ... and a bunch of other stuff ending with:
-  assert_line --partial " && unalias deactivate"
-}
-
-# bats test_tags=init:python:auto-setup,init:python:auto-setup:zsh
-@test "verify auto-setup Python venv activation: zsh" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  OWNER="owner"
-  NAME="name"
-  echo "requests" > requirements.txt
-  [ ! -e .flox ] || "$FLOX_BIN" delete -f
-  "$FLOX_BIN" init --auto-setup --name "$NAME"
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- type deactivate
-  assert_success
-  assert_line --partial "deactivate is a shell function"
 }
 
 # ---------------------------------------------------------------------------- #

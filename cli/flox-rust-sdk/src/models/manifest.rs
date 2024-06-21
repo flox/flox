@@ -32,7 +32,7 @@ pub const MANIFEST_SYSTEMS_KEY: &str = "systems";
 /// A wrapper around a [`toml_edit::DocumentMut`]
 /// that allows modifications of the raw manifest document,
 /// while preserving comments and user formatting.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RawManifest(toml_edit::DocumentMut);
 impl RawManifest {
     /// Creates a new [RawManifest] instance, populating its configuration from
@@ -344,7 +344,7 @@ pub struct TypedManifestCatalog {
     pub(super) profile: ManifestProfile,
     /// Options that control the behavior of the manifest.
     #[serde(default)]
-    pub(super) options: ManifestOptions,
+    pub options: ManifestOptions,
 }
 
 impl TypedManifestCatalog {
@@ -478,6 +478,7 @@ pub struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct ManifestPackageDescriptor {
     pub(crate) pkg_path: String,
     pub(crate) pkg_group: Option<String>,
@@ -515,6 +516,7 @@ pub struct ManifestVariables(BTreeMap<String, String>);
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct ManifestHook {
     /// A script that is run at activation time,
     /// in a flox provided bash shell
@@ -523,6 +525,7 @@ pub struct ManifestHook {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
 pub struct ManifestProfile {
     /// When defined, this hook is run by _all_ shells upon activation
     common: Option<String>,
@@ -539,9 +542,10 @@ pub struct ManifestProfile {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct ManifestOptions {
     /// A list of systems that each package is resolved for.
-    pub(super) systems: Option<Vec<System>>,
+    pub systems: Option<Vec<System>>,
     /// Options that control what types of packages are allowed.
     #[serde(default)]
     pub allow: Allows,
@@ -552,6 +556,7 @@ pub struct ManifestOptions {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
 pub struct Allows {
     /// Whether to allow packages that are marked as `unfree`
     pub unfree: Option<bool>,
@@ -565,6 +570,7 @@ pub struct Allows {
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct SemverOptions {
     /// Whether to allow pre-release versions when resolving
     #[serde(default)]
@@ -615,7 +621,7 @@ pub struct TypedManifestPkgdb {
     _toml: toml::Table,
 }
 
-/// An error encountered while installing packages.
+/// An error encountered while manipulating a manifest using toml_edit.
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum TomlEditError {
     /// The provided string couldn't be parsed into a valid TOML document
@@ -963,6 +969,25 @@ pub(super) mod test {
             {CATALOG_MANIFEST}
 
             unknown = 'field'
+        "};
+
+        let err = toml_edit::de::from_str::<TypedManifest>(&manifest)
+            .expect_err("manifest.toml should be invalid");
+
+        assert!(
+            err.message()
+                .starts_with("unknown field `unknown`, expected one of"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn catalog_manifest_rejects_unknown_nested_fields() {
+        let manifest = formatdoc! {"
+            {CATALOG_MANIFEST}
+
+            [options]
+            allow.unknown = true
         "};
 
         let err = toml_edit::de::from_str::<TypedManifest>(&manifest)

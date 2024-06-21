@@ -217,7 +217,7 @@ if [ $# -gt 0 ]; then
       if [ -n "$FLOX_NO_PROFILES" ]; then
         exec "$_flox_shell" "$@"
       else
-        exec "$_flox_shell" --init-command "source $FLOX_ENV/activate.d/fish" "$@"
+        exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $FLOX_ENV/activate.d/fish" "$@"
       fi
       ;;
     *tcsh)
@@ -275,7 +275,7 @@ if [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
       if [ -n "$FLOX_NO_PROFILES" ]; then
         exec "$_flox_shell"
       else
-        exec "$_flox_shell" --init-command "source $FLOX_ENV/activate.d/fish"
+        exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $FLOX_ENV/activate.d/fish"
       fi
       ;;
     *tcsh)

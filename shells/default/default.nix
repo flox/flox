@@ -14,6 +14,7 @@
   flox-pkgdb,
   flox-tests,
   ci ? false,
+  GENERATED_DATA ? ./../../test_data/generated,
 }: let
   # For use in GitHub Actions and local development.
   ciPackages =
@@ -65,6 +66,8 @@ in
         flox-pkgdb.devShellHook
         + flox-cli.devShellHook
         + pre-commit-check.shellHook;
+
+      inherit GENERATED_DATA;
     }
     // flox-pkgdb.devEnvs
     // flox-cli.devEnvs

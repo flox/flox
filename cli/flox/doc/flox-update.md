@@ -4,6 +4,8 @@ section: 1
 header: "Flox User Manuals"
 ...
 
+> **Warning:**
+> This command is **deprecated** and no longer supported
 
 # NAME
 
