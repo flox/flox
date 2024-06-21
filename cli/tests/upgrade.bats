@@ -157,6 +157,35 @@ teardown() {
   assert_output --partial "No packages need to be upgraded"
 }
 
+@test "catalog: page changes should not be considered an upgrade" {
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" \
+    "$FLOX_BIN" install curl hello
+  prev_lock_hash=$(jq --sort-keys --compact-output . "$LOCK_PATH" | sha256sum)
+
+  # Update the page and revision but keep the same derivations.
+  # This would fail to rebuild because the revs are faked.
+  BUMPED_REVS_RESPONE="curl_hello_bumped_revs.json"
+  jq '.[0][0].page |= (
+    (.page | .+ 123) as $newpage |
+    .page = $newpage |
+    .packages |= map(
+      (.rev | .[0:-8] + "deadbeef") as $newrev |
+      .rev_count = $newpage |
+      .rev = $newrev |
+      .locked_url |= sub("rev=.*"; "rev=" + $newrev)
+    ))' \
+    "$GENERATED_DATA/resolve/curl_hello.json" \
+    > "$BUMPED_REVS_RESPONE"
+  _FLOX_USE_CATALOG_MOCK="$BUMPED_REVS_RESPONE" \
+    run "$FLOX_BIN" upgrade
+  assert_success
+  assert_output --partial "No packages need to be upgraded"
+
+  curr_lock_hash=$(jq --sort-keys --compact-output . "$LOCK_PATH" | sha256sum)
+  assert_equal "$curr_lock_hash" "$prev_lock_hash"
+}
+
 @test "upgrade performs manifest migration" {
   NAME="name"
   FLOX_FEATURES_USE_CATALOG=false "$FLOX_BIN" init -n "$NAME"

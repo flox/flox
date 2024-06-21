@@ -720,7 +720,7 @@ impl CoreEnvironment<ReadOnly> {
             debug!("no groups or iids provided, unlocking all packages");
             None
         } else {
-            existing_lockfile.map(|mut lockfile| {
+            existing_lockfile.clone().map(|mut lockfile| {
                 lockfile.unlock_packages_by_group_or_iid(groups_or_iids);
                 lockfile
             })
@@ -759,7 +759,13 @@ impl CoreEnvironment<ReadOnly> {
             })
             .collect::<Vec<_>>();
 
-        Ok((upgraded_lockfile, package_diff))
+        let final_lockfile = if package_diff.is_empty() {
+            existing_lockfile.unwrap_or(upgraded_lockfile)
+        } else {
+            upgraded_lockfile
+        };
+
+        Ok((final_lockfile, package_diff))
     }
 
     /// Makes a temporary copy of the environment so modifications to the manifest
