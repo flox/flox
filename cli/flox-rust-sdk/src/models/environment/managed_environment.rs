@@ -906,6 +906,17 @@ impl ManagedEnvironment {
         Ok(local)
     }
 
+    /// Validate that the local manifest checkout matches the one in the current generation.
+    ///
+    /// Returns true if they match, false otherwise.
+    /// Manifests are compared byte-for-byte, such semantically equivalent modifications
+    /// such as whitespace changes are still detected.
+    ///
+    /// Note:
+    /// This is not a method on CoreEnvironment because its currently only relevant
+    /// in the context of a ManagedEnvironment.
+    /// A potential future version could provide more detailed comaparison/diff information
+    /// that may be more generally useful and see this method changed or moved.
     fn validate_checkout(
         local: &CoreEnvironment,
         remote: &CoreEnvironment,
