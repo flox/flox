@@ -95,6 +95,10 @@ pub enum ManagedEnvironmentError {
     #[error("couldn't create links directory: {0}")]
     CreateLinksDir(std::io::Error),
 
+    /// Error while creating or populating `.flox/env` from the current generation
+    #[error("failed copying environment directory to .flox")]
+    CreateLocalEnvironmentView(#[source] std::io::Error),
+
     #[error("floxmeta branch name was malformed: {0}")]
     BadBranchName(String),
     #[error("project wasn't found at path {path}: {err}")]
@@ -871,12 +875,18 @@ impl ManagedEnvironment {
         Ok(())
     }
 
+    /// Create or reset a local checkout of the latet generation.
+    ///
+    /// Copies the `env/` directory from the latest generation to the `.flox/` directory
+    /// and returns a [CoreEnvironment] for the `.flox/env`.
     fn local_checkout(&self, flox: &Flox) -> Result<CoreEnvironment, ManagedEnvironmentError> {
         if !self.path.join(ENV_DIR_NAME).exists() {
             debug!("creating environment directory");
             let latest_gen = self.get_current_generation(flox)?;
-            fs::create_dir_all(self.path.join(ENV_DIR_NAME)).unwrap();
-            copy_dir_recursive(&latest_gen.path(), &self.path.join(ENV_DIR_NAME), true).unwrap();
+            fs::create_dir_all(self.path.join(ENV_DIR_NAME))
+                .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
+            copy_dir_recursive(&latest_gen.path(), &self.path.join(ENV_DIR_NAME), true)
+                .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
         }
 
         let local = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
@@ -1368,8 +1378,9 @@ mod test {
         RegisteredEnv,
         RegistryEntry,
     };
-    use crate::models::environment::DOT_FLOX;
+    use crate::models::environment::{DOT_FLOX, MANIFEST_FILENAME};
     use crate::models::floxmeta::floxmeta_dir;
+    use crate::models::manifest::TypedManifestCatalog;
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::GitCommandProvider;
 
@@ -1912,6 +1923,81 @@ mod test {
         };
         ManagedEnvironment::ensure_branch("branch_2", &lock, &floxmeta).unwrap();
         assert_eq!(floxmeta.git.branch_hash("branch_2").unwrap(), hash_1);
+    }
+
+    /// Test
+    #[test]
+    fn test_local_checkout() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+
+        // create a mock floxmeta
+        let (test_pointer, _, _remote) = create_mock_remote(flox.temp_dir.join("remote"));
+        flox.floxhub = Floxhub::new(
+            flox.floxhub.base_url().clone(),
+            test_pointer.floxhub_git_url_override.clone(),
+        )
+        .unwrap();
+
+        let prepare_env = flox.temp_dir.join("prepare");
+        std::fs::create_dir_all(&prepare_env).unwrap();
+        fs::write(
+            prepare_env.join(MANIFEST_FILENAME),
+            serde_json::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+        )
+        .unwrap();
+
+        let managed_env = flox.temp_dir.join("managed");
+        std::fs::create_dir_all(managed_env.join(DOT_FLOX)).unwrap();
+
+        let managed_env = ManagedEnvironment::push_new_without_building(
+            &flox,
+            test_pointer.owner,
+            test_pointer.name,
+            false,
+            CanonicalPath::new(managed_env.join(DOT_FLOX)).unwrap(),
+            CoreEnvironment::new(prepare_env),
+        )
+        .unwrap();
+
+        // TODO: push may transitively call `local_checkout` at an earlier moment
+        let _ = managed_env.local_checkout(&flox).unwrap();
+
+        // check that local_checkout created files
+        assert!(managed_env.path.join(ENV_DIR_NAME).exists());
+        assert!(managed_env
+            .path
+            .join(ENV_DIR_NAME)
+            .join(MANIFEST_FILENAME)
+            .exists());
+
+        // check that local_checkout recreates `env` if deleted
+
+        fs::remove_dir_all(managed_env.path.join(ENV_DIR_NAME)).unwrap();
+
+        let _ = managed_env.local_checkout(&flox).unwrap();
+
+        // check that local_checkout created files
+        assert!(managed_env.path.join(ENV_DIR_NAME).exists());
+        assert!(managed_env
+            .path
+            .join(ENV_DIR_NAME)
+            .join(MANIFEST_FILENAME)
+            .exists());
+
+        // check that modifications in an existing `.flox/env` are _not_ discarded
+        let new_content = "edited manifest";
+        fs::write(
+            managed_env.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME),
+            new_content,
+        )
+        .unwrap();
+
+        let local_manifest = managed_env
+            .local_checkout(&flox)
+            .unwrap()
+            .manifest_content()
+            .unwrap();
+        assert_eq!(local_manifest, new_content);
     }
 
     #[test]
