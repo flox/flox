@@ -1857,16 +1857,16 @@ mod tests {
     fn migrate_script_skip_for_on_activate() {
         let contents = formatdoc! {r#"
             [hook]
-            script = "echo hello"
-            on-activate = "echo hello"
+            script = "echo foo"
+            on-activate = "echo bar"
             "#};
         let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
         let err = CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap_err();
         assert_eq!(raw_manifest.to_string(), formatdoc! {r#"
                 version = 1
                 [hook]
-                script = "echo hello"
-                on-activate = "echo hello"
+                script = "echo foo"
+                on-activate = "echo bar"
                 "#
         });
         if let CoreEnvironmentError::MigrateManifest(e) = err {
