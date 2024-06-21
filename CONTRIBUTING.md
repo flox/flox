@@ -293,35 +293,26 @@ When working on the test you would probably want to run them continuously on
 every change. In that case run the following:
 
 ```console
-$ nix develop --command 'just build';
-$ nix develop --command '
-    flox-tests --pkgdb "$PWD/pkgdb/bin/pkgdb"       \
-               --flox "$PWD/cli/target/debug/flox"  \
-               --watch;
-  ';
+$ just integ-tests --watch
 ```
 
 #### `bats` arguments
 You can pass arbitrary flags through to `bats` using a `--` separator.
 
 ```console
-$ nix develop --command 'just build';
-$ nix develop --command 'flox-tests --flox "$PWD/cli/target/debug/flox" -- -j 4';
+$ just integ-tests -- -j 4
 ```
 This example tells `bats` to run 4 jobs in parallel.
 
 #### Running subsets of tests
-You can specify which tests to run by passing arguments to either `flox-tests`
-or by directly passing arguments to `bats`.
+You can specify which tests to run by passing arguments.
 
 ##### Running a specific file
-In order to run a specific test file, pass the path to the file to `flox-tests`:
+In order to run a specific test file, pass the filename relative to the tests directory:
 ```console
-$ flox-tests --flox ./cli/target/debug/flox ./tests/run.bats;
-$ or, using the Justfile
-$ just integ-tests run.bats
+$ just integ-tests usage.bats
 ```
-This example will only run tests in the `tests/run.bats` file.
+This example will only run tests in the `cli/tests/usage.bats` file.
 
 
 ##### Running tagged tests
@@ -383,10 +374,7 @@ any time an environment is built, so there is overlap with `install`,
 In order to run tests with a specific tag, you'll pass the `--filter-tags`
 option to `bats`:
 ```console
-$ flox-tests --flox ./cli/target/debug/flox  \
-             -- --filter-tags activate;
-$ # or, using the Justfile
-$ just bats-tests --filter-tags activate
+$ just integ-tests -- --filter-tags activate
 ```
 This example will only run tests tagged with `activate`.
 You can use boolean logic and specify the flag multiple times to run specific
