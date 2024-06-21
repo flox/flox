@@ -337,7 +337,7 @@ jobs:
           echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
           rm ./result
 
-      - name: "Build Bats Tests (./#flox-tests)"
+      - name: "Build Bats Tests (./#flox-cli-tests)"
         run: |
           git clean -xfd
           nix build -L \
