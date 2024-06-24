@@ -100,6 +100,7 @@ impl Install {
                 Create an environment with 'flox init' or install to an environment found elsewhere with 'flox install {} --dir <PATH>'",
                 self.packages.join(" ")})
             },
+            Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
             Err(e) => Err(e)?,
         };
         let description = environment_description(&concrete_environment)?;

@@ -307,3 +307,18 @@ EOF
   assert_failure
   assert_output --partial "Environment not found in FloxHub."
 }
+
+# bats test_tags=remote,remote:not-found
+@test "edit --remote fails on a non existent environment" {
+  run "$FLOX_BIN" edit -r "$OWNER/i-dont-exist"
+  assert_failure
+  assert_output --partial "Environment not found in FloxHub."
+}
+
+
+# bats test_tags=remote,remote:not-found
+@test "install --remote fails on a non existent environment" {
+  run "$FLOX_BIN" install -r "$OWNER/i-dont-exist"
+  assert_failure
+  assert_output --partial "Environment not found in FloxHub."
+}
