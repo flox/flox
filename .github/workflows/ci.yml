@@ -149,6 +149,9 @@ jobs:
           RUST_BACKTRACE: 1
         run: nix develop -L --no-update-lock-file --command just impure-tests
 
+      # This differs from `nix-build-bats-tests` in that:
+      #   - a cargo-built debug binary is used, like you would in local development
+      #   - envrionment variables unskip some tests against live systems
       - name: "CLI Integration Tests"
         env:
           RUST_BACKTRACE: 1
