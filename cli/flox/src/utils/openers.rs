@@ -252,7 +252,8 @@ mod tests {
     fn test_get_parent_process_exe() {
         let path = get_parent_process_exe().expect("should find parent process");
 
-        assert_eq!(path.file_name().unwrap(), "cargo");
+        let parent = path.file_name().unwrap();
+        assert!(parent == "cargo" || parent == "cargo-nextest");
     }
 
     /// Test the detection of the shell from environment variables
