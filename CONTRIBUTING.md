@@ -319,7 +319,7 @@ In order to run a specific test file, pass the path to the file to `flox-tests`:
 ```console
 $ flox-tests --flox ./cli/target/debug/flox ./tests/run.bats;
 $ or, using the Justfile
-$ just bats-file ./tests/run.bats
+$ just integ-tests run.bats
 ```
 This example will only run tests in the `tests/run.bats` file.
 

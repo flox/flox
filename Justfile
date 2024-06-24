@@ -86,11 +86,6 @@ gen-data +mk_data_args="": build-data-gen
         --ld-floxlib "{{LD_FLOXLIB}}" \
         {{bats_args}}
 
-# Run a specific CLI integration test file by name (not path)
-@integ-file +bats_args="": build
-    flox-cli-tests --pkgdb "{{PKGDB_BIN}}" \
-     --flox "{{FLOX_BIN}}" --ld-floxlib "{{LD_FLOXLIB}}" {{bats_args}}
-
 # Run the CLI unit tests
 @unit-tests regex="": build
     pushd cli;                            \
