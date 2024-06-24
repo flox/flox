@@ -107,6 +107,14 @@ floxhub_setup() {
   export _FLOX_FLOXHUB_GIT_URL="file://$FLOX_FLOXHUB_PATH"
 }
 
+# Tidy up after calling floxhub_setup().
+floxhub_teardown() {
+  unset FLOX_FLOXHUB_TOKEN
+  unset FLOX_FLOXHUB_PATH
+  unset FLOXHUB_FLOXMETA_DIR
+  unset _FLOX_FLOXHUB_GIT_URL
+}
+
 # Isolate flox config, data, and cache from the potentially shared
 # xdg directories.
 # This is necessary as other wisemultiple tests contest for the same
@@ -169,6 +177,8 @@ common_file_teardown() {
 teardown_file() { common_file_teardown; }
 
 common_test_teardown() {
+  floxhub_teardown
+
   # Delete test tmpdir unless the user requests to preserve them.
   # XXX: We do not attempt to delete envs here.
   if [[ -z "${FLOX_TEST_KEEP_TMP:-}" ]]; then rm -rf "$BATS_TEST_TMPDIR"; fi
