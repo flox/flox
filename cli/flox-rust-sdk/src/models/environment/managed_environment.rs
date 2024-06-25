@@ -892,7 +892,7 @@ impl ManagedEnvironment {
         Ok(())
     }
 
-    /// Create or reset a local checkout of the current generation.
+    /// Create a local checkout of the current generation.
     ///
     /// Copies the `env/` directory from the current generation to the `.flox/` directory
     /// and returns a [CoreEnvironment] for the `.flox/env`.
