@@ -182,6 +182,7 @@ HEADERS        = $(call rwildcard,include,*.hh)
 SRCS           = $(call rwildcard,src,*.cc)
 test_SRCS      = $(sort $(wildcard tests/*.cc))
 ALL_SRCS       = $(SRCS) $(test_SRCS)
+ASSETS         = $(shell find src/buildenv/assets -type f)
 BINS           = bin/pkgdb
 ifeq (Linux,$(OS))
 LIBS           = lib/ld-floxlib.so
@@ -618,6 +619,9 @@ src/pkgdb/scrape-rules.o: src/pkgdb/rules.json.hh
 
 # Make all `.o' files depend on all `include/**/*.hh' files.
 $(ALL_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
+
+# Automatically pick up changes to embedded assets.
+src/buildenv/realise.o: $(ASSETS)
 
 
 # ---------------------------------------------------------------------------- #
