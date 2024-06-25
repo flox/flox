@@ -105,6 +105,9 @@ teardown() {
     x86_64-darwin)
       pull_system="x86_64-linux"
       ;;
+    aarch64-darwin)
+      pull_system="x86_64-linux"
+      ;;
     *)
       # we only run the above two systems consistently in CI
       skip "unsupported system: $NIX_SYSTEM"
