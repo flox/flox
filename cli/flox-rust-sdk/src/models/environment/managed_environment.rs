@@ -1187,6 +1187,15 @@ pub enum PullResult {
 }
 
 impl ManagedEnvironment {
+    /// Create a new [ManagedEnvironment] from a [PathEnvironment]
+    /// by pushing the contents of the original environment as a generation to floxhub.
+    ///
+    /// The environment is pushed to the `owner` specified
+    /// and will retain the name of the original path environment.
+    ///
+    /// By default, if an environment with the same name already exists in the owner's repository,
+    /// the push will fail, unless `force` is set to `true`.
+    ///
     /// If access to a remote repository requires authentication,
     /// the FloxHub token must be set in the flox instance.
     /// The caller is responsible for ensuring that the token is present and valid.
