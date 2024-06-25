@@ -865,8 +865,11 @@ impl ManagedEnvironment {
     /// If no changes exist, returns without further action.
     ///
     /// TODO: this should do a `build` before committing to a generation
-    pub fn sync_local(&self, flox: &Flox) -> Result<(), ManagedEnvironmentError> {
-        let mut local = self.local_checkout(flox)?;
+    pub fn create_generation_from_local_env(
+        &self,
+        flox: &Flox,
+    ) -> Result<(), ManagedEnvironmentError> {
+        let mut local = self.local_env_from_current_generation(flox)?;
 
         if Self::validate_checkout(&local, &self.get_current_generation(flox)?)? {
             debug!("local checkout and remote checkout equal, nothing to apply");
@@ -889,18 +892,25 @@ impl ManagedEnvironment {
         Ok(())
     }
 
-    /// Create a local checkout of the latet generation.
+    /// Create or reset a local checkout of the current generation.
     ///
-    /// Copies the `env/` directory from the latest generation to the `.flox/` directory
+    /// Copies the `env/` directory from the current generation to the `.flox/` directory
     /// and returns a [CoreEnvironment] for the `.flox/env`.
-    fn local_checkout(&self, flox: &Flox) -> Result<CoreEnvironment, ManagedEnvironmentError> {
+    fn local_env_from_current_generation(
+        &self,
+        flox: &Flox,
+    ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
         if !self.path.join(ENV_DIR_NAME).exists() {
             debug!("creating environment directory");
-            let latest_gen = self.get_current_generation(flox)?;
+            let current_generation = self.get_current_generation(flox)?;
             fs::create_dir_all(self.path.join(ENV_DIR_NAME))
                 .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
-            copy_dir_recursive(&latest_gen.path(), &self.path.join(ENV_DIR_NAME), true)
-                .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
+            copy_dir_recursive(
+                &current_generation.path(),
+                &self.path.join(ENV_DIR_NAME),
+                true,
+            )
+            .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
         }
 
         let local = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
@@ -1971,7 +1981,9 @@ mod test {
         // TODO: `local_checkout` may be called implicitly earlier in the process
         //       making this call redundant.
         //       revisit this when working on #1650
-        let _ = managed_env.local_checkout(&flox).unwrap();
+        let _ = managed_env
+            .local_env_from_current_generation(&flox)
+            .unwrap();
 
         // check that local_checkout created files
         assert!(managed_env.path.join(ENV_DIR_NAME).exists());
@@ -1984,7 +1996,9 @@ mod test {
         // dlete env dir to see wheter it is recreated
         fs::remove_dir_all(managed_env.path.join(ENV_DIR_NAME)).unwrap();
 
-        let _ = managed_env.local_checkout(&flox).unwrap();
+        let _ = managed_env
+            .local_env_from_current_generation(&flox)
+            .unwrap();
 
         // check that local_checkout created files
         assert!(managed_env.path.join(ENV_DIR_NAME).exists());
@@ -2010,7 +2024,9 @@ mod test {
         // TODO: `local_checkout` may be called implicitly earlier in the process
         //       making this call redundant.
         //       revisit this when working on #1650
-        let _ = managed_env.local_checkout(&flox).unwrap();
+        let _ = managed_env
+            .local_env_from_current_generation(&flox)
+            .unwrap();
 
         // check that modifications in an existing `.flox/env` are _not_ discarded
         let locally_edited_content = "edited manifest";
@@ -2021,7 +2037,7 @@ mod test {
         .unwrap();
 
         let local_manifest = managed_env
-            .local_checkout(&flox)
+            .local_env_from_current_generation(&flox)
             .unwrap()
             .manifest_content()
             .unwrap();
@@ -2042,7 +2058,9 @@ mod test {
         // TODO: `local_checkout` may be called implicitly earlier in the process
         //       making this call redundant.
         //       revisit this when working on #1650
-        let local_checkout = managed_env.local_checkout(&flox).unwrap();
+        let local_checkout = managed_env
+            .local_env_from_current_generation(&flox)
+            .unwrap();
         let generation_manifest = managed_env
             .get_current_generation(&flox)
             .unwrap()
@@ -2068,7 +2086,7 @@ mod test {
         );
 
         // check that after synching, the manifest is the same
-        managed_env.sync_local(&flox).unwrap();
+        managed_env.create_generation_from_local_env(&flox).unwrap();
 
         let generation_manifest = managed_env
             .get_current_generation(&flox)
