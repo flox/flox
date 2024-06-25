@@ -892,6 +892,38 @@ impl ManagedEnvironment {
         Ok(())
     }
 
+    /// Discards local changes in `.flox/env` and recreates the directory from the current generation.
+    ///
+    /// Returns the new CoreEnvironment for the `.flox/env` directory.
+    ///
+    /// TODO: Specific behavior for other files than the manifest should is undefined.
+    /// Currently the entire environment directory is **deleted and recreated**.
+    /// Any other files are lost.
+    pub fn reset_local_env_to_current_generation(
+        &self,
+        flox: &Flox,
+    ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
+        let current_generation = self.get_current_generation(flox)?;
+        let env_dir = self.path.join(ENV_DIR_NAME);
+
+        if let Err(e) = fs::remove_dir_all(&env_dir) {
+            return Err(ManagedEnvironmentError::DeleteEnvironment(env_dir, e));
+        }
+
+        fs::create_dir_all(&env_dir)
+            .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
+
+        copy_dir_recursive(
+            &current_generation.path(),
+            &self.path.join(ENV_DIR_NAME),
+            true,
+        )
+        .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
+
+        let local = CoreEnvironment::new(env_dir);
+        Ok(local)
+    }
+
     /// Create a local checkout of the current generation.
     ///
     /// Copies the `env/` directory from the current generation to the `.flox/` directory
@@ -1963,6 +1995,49 @@ mod test {
         };
         ManagedEnvironment::ensure_branch("branch_2", &lock, &floxmeta).unwrap();
         assert_eq!(floxmeta.git.branch_hash("branch_2").unwrap(), hash_1);
+    }
+
+    /// Test that the manifest content is reset to the current generation
+    ///
+    /// TODO: Specific behavior for other files than the manifest should is undefined
+    #[test]
+    fn reset_local_checkout_discards_local_changes() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+
+        let managed_env = test_helpers::mock_managed_environment(&flox, "original", owner);
+
+        let _ = managed_env
+            .local_env_from_current_generation(&flox)
+            .unwrap();
+
+        fs::write(
+            managed_env.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME),
+            "changed",
+        )
+        .unwrap();
+
+        {
+            // before reset
+            let contents =
+                fs::read_to_string(managed_env.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME))
+                    .unwrap();
+
+            assert_eq!(contents, "changed");
+        }
+
+        let _ = managed_env
+            .reset_local_env_to_current_generation(&flox)
+            .unwrap();
+
+        {
+            // after reset, the manifest should be the same as before
+            let contents =
+                fs::read_to_string(managed_env.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME))
+                    .unwrap();
+
+            assert_eq!(contents, "original");
+        }
     }
 
     /// `local_checkout` should create a `.flox/env` directory with the manifest.{toml,lock}
