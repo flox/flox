@@ -73,11 +73,6 @@ gen-data +mk_data_args="": build-data-gen
     make -C pkgdb -j 8 tests;
     make -C pkgdb check;
 
-# Run the end-to-end test suite
-@functional-tests +bats_args="": build
-    flox-tests --pkgdb "{{PKGDB_BIN}}" \
-     --flox "{{FLOX_BIN}}" --ld-floxlib "{{LD_FLOXLIB}}" {{bats_args}}
-
 # Run the CLI integration test suite
 @integ-tests +bats_args="": build
     flox-cli-tests \
@@ -85,11 +80,6 @@ gen-data +mk_data_args="": build-data-gen
         --flox "{{FLOX_BIN}}" \
         --ld-floxlib "{{LD_FLOXLIB}}" \
         {{bats_args}}
-
-# Run a specific CLI integration test file by name (not path)
-@integ-file +bats_args="": build
-    flox-cli-tests --pkgdb "{{PKGDB_BIN}}" \
-     --flox "{{FLOX_BIN}}" --ld-floxlib "{{LD_FLOXLIB}}" {{bats_args}}
 
 # Run the CLI unit tests
 @unit-tests regex="": build
@@ -103,7 +93,7 @@ gen-data +mk_data_args="": build-data-gen
 test-cli: impure-tests integ-tests
 
 # Run the entire test suite, including impure unit tests
-test-all: test-pkgdb impure-tests integ-tests functional-tests
+test-all: test-pkgdb impure-tests integ-tests
 
 
 # ---------------------------------------------------------------------------- #

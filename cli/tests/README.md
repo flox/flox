@@ -5,45 +5,9 @@ which transpiles to `bash` scripts.
 
 Additionally certain tests use `expect` to test interactive usage of the CLI.
 
-
 ## Running the Test Suite
 
-They are located in the `<flox>/tests` folder.
-To run them:
-
-```console
-$ flox develop flox --command 'cargo build';
-$ flox run '.#flox-tests' -- --flox ./target/debug/flox;
-```
-By default `flox` CLI is going to be picked from the environment.
-
-
-When working on the test you would probably want to run them continuously on
-every change. In that case run the following:
-
-```console
-$ flox develop flox --command 'cargo build';
-$ flox run '.#flox-tests' -- --flox ./target/debug/flox --watch;
-```
-
-
-You can pass arbitrary flags through to `bats` using a `--` separator - however
-bugs in the `flox` CLI parser require you to use `sh -c` to wrap the command.
-Failing to wrap will cause `flox` to "consume" the `--` rather than pass it
-through to the inner command:
-
-```console
-$ flox develop flox --command 'cargo build';
-$ flox run '.#flox-tests' --                            \
-  --flox ./target/debug/flox -- -j 4 ./tests/run.bats;
-```
-
-
-**Important** the option `--tests` must point to the `<flox>/tests/` directory
-root which is used to locate various resources within test environments.
-If you wish to explicitly name test files to be run, or subdirs of tests, use
-`flox-tests ... -- ./tests/foo.bats ./tests/subdir` as show in earlier examples.
-
+See [CONTRIBUTING](../../CONTRIBUTING.md).
 
 ## Test Suite Internals
 

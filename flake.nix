@@ -189,9 +189,6 @@
       flox-cli-tests =
         callPackage ./pkgs/flox-cli-tests {
         };
-
-      # Integration tests
-      flox-tests = callPackage ./pkgs/flox-tests {};
     };
 
     # Composes dependency overlays and the overlay defined here.
@@ -244,11 +241,6 @@
       pkgs = pkgsBase.extend (final: prev: {
         flox-cli-tests = prev.flox-cli-tests.override {
           PROJECT_TESTS_DIR = "/cli/tests";
-          PKGDB_BIN = null;
-          FLOX_BIN = null;
-        };
-        flox-tests = prev.flox-tests.override {
-          PROJECT_TESTS_DIR = "/tests";
           PKGDB_BIN = null;
           FLOX_BIN = null;
         };
