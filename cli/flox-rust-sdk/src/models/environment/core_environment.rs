@@ -91,7 +91,7 @@ impl<State> CoreEnvironment<State> {
     }
 
     /// Read the manifest file
-    fn manifest_content(&self) -> Result<String, CoreEnvironmentError> {
+    pub fn manifest_content(&self) -> Result<String, CoreEnvironmentError> {
         fs::read_to_string(self.manifest_path()).map_err(CoreEnvironmentError::OpenManifest)
     }
 

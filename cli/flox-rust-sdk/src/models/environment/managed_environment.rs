@@ -24,6 +24,7 @@ use super::{
     UpdateResult,
     CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
+    ENV_DIR_NAME,
     N_HASH_CHARS,
 };
 use crate::data::{CanonicalPath, Version};
@@ -37,6 +38,7 @@ use crate::models::env_registry::{
     EnvRegistry,
     EnvRegistryError,
 };
+use crate::models::environment::copy_dir_recursive;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
 use crate::models::lockfile::LockedManifest;
@@ -92,6 +94,18 @@ pub enum ManagedEnvironmentError {
     ReverseLink(std::io::Error),
     #[error("couldn't create links directory: {0}")]
     CreateLinksDir(std::io::Error),
+
+    /// Error while creating or populating `.flox/env` from the current generation
+    #[error("failed copying environment directory to .flox")]
+    CreateLocalEnvironmentView(#[source] std::io::Error),
+
+    /// Error reading the local manifest
+    #[error("failed to read local manifest")]
+    ReadLocalManifest(#[source] CoreEnvironmentError),
+
+    /// Error reading the generation manifest
+    #[error("failed to read generation manifest")]
+    ReadGenerationManifest(#[source] CoreEnvironmentError),
 
     #[error("floxmeta branch name was malformed: {0}")]
     BadBranchName(String),
@@ -610,12 +624,14 @@ impl ManagedEnvironment {
             &EnvironmentPointer::Managed(pointer.clone()),
         )?;
 
-        Ok(ManagedEnvironment {
+        let env = ManagedEnvironment {
             path: dot_flox_path,
             out_link,
             pointer,
             floxmeta,
-        })
+        };
+
+        Ok(env)
     }
 
     /// Ensure:
@@ -841,6 +857,122 @@ impl ManagedEnvironment {
         // don't link, the environment may be broken
 
         Ok(result)
+    }
+
+    /// Create a new generation from local changes,
+    /// and updates the generation lock.
+    ///
+    /// If no changes exist, returns without further action.
+    ///
+    /// TODO: this should do a `build` before committing to a generation
+    pub fn create_generation_from_local_env(
+        &self,
+        flox: &Flox,
+    ) -> Result<(), ManagedEnvironmentError> {
+        let mut local = self.local_env_from_current_generation(flox)?;
+
+        if Self::validate_checkout(&local, &self.get_current_generation(flox)?)? {
+            debug!("local checkout and remote checkout equal, nothing to apply");
+            return Ok(());
+        }
+
+        let mut generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+
+        generations
+            .add_generation(
+                &mut local,
+                "Synchronized manual changes to generation".to_string(),
+            )
+            .map_err(ManagedEnvironmentError::CommitGeneration)?;
+
+        self.lock_pointer()?;
+        Ok(())
+    }
+
+    /// Discards local changes in `.flox/env` and recreates the directory from the current generation.
+    ///
+    /// Returns the new CoreEnvironment for the `.flox/env` directory.
+    ///
+    /// TODO: Specific behavior for other files than the manifest should is undefined.
+    /// Currently the entire environment directory is **deleted and recreated**.
+    /// Any other files are lost.
+    pub fn reset_local_env_to_current_generation(
+        &self,
+        flox: &Flox,
+    ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
+        let current_generation = self.get_current_generation(flox)?;
+        let env_dir = self.path.join(ENV_DIR_NAME);
+
+        if let Err(e) = fs::remove_dir_all(&env_dir) {
+            return Err(ManagedEnvironmentError::DeleteEnvironment(env_dir, e));
+        }
+
+        fs::create_dir_all(&env_dir)
+            .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
+
+        copy_dir_recursive(
+            &current_generation.path(),
+            &self.path.join(ENV_DIR_NAME),
+            true,
+        )
+        .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
+
+        let local = CoreEnvironment::new(env_dir);
+        Ok(local)
+    }
+
+    /// Create a local checkout of the current generation.
+    ///
+    /// Copies the `env/` directory from the current generation to the `.flox/` directory
+    /// and returns a [CoreEnvironment] for the `.flox/env`.
+    fn local_env_from_current_generation(
+        &self,
+        flox: &Flox,
+    ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
+        if !self.path.join(ENV_DIR_NAME).exists() {
+            debug!("creating environment directory");
+            let current_generation = self.get_current_generation(flox)?;
+            fs::create_dir_all(self.path.join(ENV_DIR_NAME))
+                .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
+            copy_dir_recursive(
+                &current_generation.path(),
+                &self.path.join(ENV_DIR_NAME),
+                true,
+            )
+            .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
+        }
+
+        let local = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        Ok(local)
+    }
+
+    /// Validate that the local manifest checkout matches the one in the current generation.
+    ///
+    /// Returns true if they match, false otherwise.
+    /// Manifests are compared byte-for-byte, such semantically equivalent modifications
+    /// such as whitespace changes are still detected.
+    ///
+    /// Note:
+    /// This is not a method on CoreEnvironment because its currently only relevant
+    /// in the context of a ManagedEnvironment.
+    /// A potential future version could provide more detailed comaparison/diff information
+    /// that may be more generally useful and see this method changed or moved.
+    fn validate_checkout(
+        local: &CoreEnvironment,
+        remote: &CoreEnvironment,
+    ) -> Result<bool, ManagedEnvironmentError> {
+        let local_manifest_bytes = local
+            .manifest_content()
+            .map_err(ManagedEnvironmentError::ReadLocalManifest)?;
+
+        let remote_manifest_bytes = remote
+            .manifest_content()
+            .map_err(ManagedEnvironmentError::ReadGenerationManifest)?;
+
+        Ok(local_manifest_bytes == remote_manifest_bytes)
     }
 
     /// Lock the environment to the current revision
@@ -1303,10 +1435,11 @@ mod test {
     use std::time::Duration;
 
     use fslock::LockFile;
+    use indoc::indoc;
     use url::Url;
 
     use super::*;
-    use crate::flox::test_helpers::flox_instance;
+    use crate::flox::test_helpers::{flox_instance, flox_instance_with_global_lock_and_floxhub};
     use crate::models::env_registry::{
         env_registry_lock_path,
         env_registry_path,
@@ -1315,11 +1448,17 @@ mod test {
         RegisteredEnv,
         RegistryEntry,
     };
-    use crate::models::environment::DOT_FLOX;
+    use crate::models::environment::test_helpers::new_core_environment;
+    use crate::models::environment::{DOT_FLOX, MANIFEST_FILENAME};
     use crate::models::floxmeta::floxmeta_dir;
+    use crate::models::lockfile::test_helpers::fake_package;
+    use crate::models::manifest::TypedManifestCatalog;
     use crate::providers::git::tests::commit_file;
-    use crate::providers::git::{GitCommandProvider, GitProvider};
+    use crate::providers::git::GitCommandProvider;
 
+    /// Create a [ManagedPointer] for testing with mock owner and name data
+    /// as well as an override for the floxhub git url to fetch from local
+    /// git repositories.
     fn make_test_pointer(mock_floxhub_git_path: &Path) -> ManagedPointer {
         ManagedPointer {
             owner: EnvironmentOwner::from_str("owner").unwrap(),
@@ -1332,6 +1471,11 @@ mod test {
         }
     }
 
+    /// Create a .flox directory at dot_flox_path with a pointer
+    /// and optional generation lock.
+    ///
+    /// Mimics the state of a managed environment
+    /// without an existing view of the current generation.
     fn create_dot_flox(
         dot_flox_path: &Path,
         pointer: &ManagedPointer,
@@ -1347,12 +1491,25 @@ mod test {
             serde_json::to_string_pretty(&pointer).unwrap(),
         )
         .unwrap();
+
         if let Some(lock) = lock {
             let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
             fs::write(lock_path, serde_json::to_string_pretty(lock).unwrap()).unwrap();
         }
 
         CanonicalPath::new(dot_flox_path).unwrap()
+    }
+
+    /// Create an empty mock remote repository
+    fn create_mock_remote(path: impl AsRef<Path>) -> (ManagedPointer, PathBuf, GitCommandProvider) {
+        let test_pointer = make_test_pointer(path.as_ref());
+        let remote_path = path
+            .as_ref()
+            .join(test_pointer.owner.as_str())
+            .join("floxmeta");
+        fs::create_dir_all(&remote_path).unwrap();
+        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        (test_pointer, remote_path, remote)
     }
 
     /// Clone a git repo specified by remote_path into the floxmeta dir
@@ -1393,13 +1550,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1442,13 +1593,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1493,13 +1638,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1560,13 +1699,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1607,13 +1740,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1655,13 +1782,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1704,13 +1825,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1752,13 +1867,7 @@ mod test {
         let dot_flox_path = CanonicalPath::new(flox.temp_dir.join(DOT_FLOX)).unwrap();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let diverged_remote_branch = remote_branch_name(&test_pointer);
         remote.checkout(&diverged_remote_branch, true).unwrap();
@@ -1796,13 +1905,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1831,13 +1934,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1881,13 +1978,7 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -1904,6 +1995,255 @@ mod test {
         };
         ManagedEnvironment::ensure_branch("branch_2", &lock, &floxmeta).unwrap();
         assert_eq!(floxmeta.git.branch_hash("branch_2").unwrap(), hash_1);
+    }
+
+    /// Test that the manifest content is reset to the current generation
+    ///
+    /// TODO: Specific behavior for other files than the manifest should is undefined
+    #[test]
+    fn reset_local_checkout_discards_local_changes() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+
+        let managed_env = test_helpers::mock_managed_environment(&flox, "original", owner);
+
+        let _ = managed_env
+            .local_env_from_current_generation(&flox)
+            .unwrap();
+
+        fs::write(
+            managed_env.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME),
+            "changed",
+        )
+        .unwrap();
+
+        {
+            // before reset
+            let contents =
+                fs::read_to_string(managed_env.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME))
+                    .unwrap();
+
+            assert_eq!(contents, "changed");
+        }
+
+        let _ = managed_env
+            .reset_local_env_to_current_generation(&flox)
+            .unwrap();
+
+        {
+            // after reset, the manifest should be the same as before
+            let contents =
+                fs::read_to_string(managed_env.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME))
+                    .unwrap();
+
+            assert_eq!(contents, "original");
+        }
+    }
+
+    /// `local_checkout` should create a `.flox/env` directory with the manifest.{toml,lock}
+    /// from the generation.
+    #[test]
+    fn test_local_checkout_recreates_env_dir() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+
+        let managed_env = test_helpers::mock_managed_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+            owner,
+        );
+
+        // TODO: `local_checkout` may be called implicitly earlier in the process
+        //       making this call redundant.
+        //       revisit this when working on #1650
+        let _ = managed_env
+            .local_env_from_current_generation(&flox)
+            .unwrap();
+
+        // check that local_checkout created files
+        assert!(managed_env.path.join(ENV_DIR_NAME).exists());
+        assert!(managed_env
+            .path
+            .join(ENV_DIR_NAME)
+            .join(MANIFEST_FILENAME)
+            .exists());
+
+        // dlete env dir to see wheter it is recreated
+        fs::remove_dir_all(managed_env.path.join(ENV_DIR_NAME)).unwrap();
+
+        let _ = managed_env
+            .local_env_from_current_generation(&flox)
+            .unwrap();
+
+        // check that local_checkout created files
+        assert!(managed_env.path.join(ENV_DIR_NAME).exists());
+        assert!(managed_env
+            .path
+            .join(ENV_DIR_NAME)
+            .join(MANIFEST_FILENAME)
+            .exists());
+    }
+
+    /// Local checkout should not overwrite existing files
+    #[test]
+    fn test_local_checkout_keeps_local_modifications() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+
+        let managed_env = test_helpers::mock_managed_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+            owner,
+        );
+
+        // TODO: `local_checkout` may be called implicitly earlier in the process
+        //       making this call redundant.
+        //       revisit this when working on #1650
+        let _ = managed_env
+            .local_env_from_current_generation(&flox)
+            .unwrap();
+
+        // check that modifications in an existing `.flox/env` are _not_ discarded
+        let locally_edited_content = "edited manifest";
+        fs::write(
+            managed_env.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME),
+            locally_edited_content,
+        )
+        .unwrap();
+
+        let local_manifest = managed_env
+            .local_env_from_current_generation(&flox)
+            .unwrap()
+            .manifest_content()
+            .unwrap();
+        assert_eq!(local_manifest, locally_edited_content);
+    }
+
+    #[test]
+    fn test_sync_local() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+
+        let managed_env = test_helpers::mock_managed_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+            owner,
+        );
+
+        // TODO: `local_checkout` may be called implicitly earlier in the process
+        //       making this call redundant.
+        //       revisit this when working on #1650
+        let local_checkout = managed_env
+            .local_env_from_current_generation(&flox)
+            .unwrap();
+        let generation_manifest = managed_env
+            .get_current_generation(&flox)
+            .unwrap()
+            .manifest_content()
+            .unwrap();
+
+        assert_eq!(
+            local_checkout.manifest_content().unwrap(),
+            generation_manifest
+        );
+
+        fs::write(local_checkout.manifest_path(), indoc! {"
+            version = 1
+
+            # nothing else but certinainly different from before
+        "})
+        .unwrap();
+
+        // sanity check that before synching, the manifest is now different
+        assert_ne!(
+            local_checkout.manifest_content().unwrap(),
+            generation_manifest
+        );
+
+        // check that after synching, the manifest is the same
+        managed_env.create_generation_from_local_env(&flox).unwrap();
+
+        let generation_manifest = managed_env
+            .get_current_generation(&flox)
+            .unwrap()
+            .manifest_content()
+            .unwrap();
+
+        assert_eq!(
+            local_checkout.manifest_content().unwrap(),
+            generation_manifest
+        );
+    }
+
+    /// Validate should return true if the manifest in two environments is the same
+    #[test]
+    fn test_validate_local_same_manifest() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let manifest_a = TypedManifestCatalog::default();
+        let manifest_b = TypedManifestCatalog::default();
+
+        let env_a = new_core_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&manifest_a).unwrap(),
+        );
+        let env_b = new_core_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&manifest_b).unwrap(),
+        );
+
+        assert!(ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
+    }
+
+    /// Validate should return false if the manifest in two environments is different.
+    #[test]
+    fn test_validate_local_different_manifest() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let mut manifest_a = TypedManifestCatalog::default();
+        let manifest_b = TypedManifestCatalog::default();
+
+        let env_a = new_core_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&manifest_a).unwrap(),
+        );
+        let env_b = new_core_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&manifest_b).unwrap(),
+        );
+
+        let (iid, descriptor, _) = fake_package("package", None);
+        manifest_a.install.insert(iid, descriptor);
+
+        fs::write(
+            env_a.path().join(MANIFEST_FILENAME),
+            toml_edit::ser::to_string_pretty(&manifest_a).unwrap(),
+        )
+        .unwrap();
+
+        assert!(!ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
+    }
+
+    /// Validate that two environments with equivalent manifests fail validation
+    /// if the binary representationnof the manifest differs.
+    #[test]
+    fn test_validate_local_different_binary_content() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let manifest_a = TypedManifestCatalog::default();
+        let manifest_b = TypedManifestCatalog::default();
+
+        // Serialize the same manifest to two different environments
+        // once with pretty formatting and once without.
+        // Today the default manifest will serialize with different newlines
+        // which this test depends on.
+        let env_a = new_core_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&manifest_a).unwrap(),
+        );
+        let env_b = new_core_environment(&flox, &toml_edit::ser::to_string(&manifest_b).unwrap());
+
+        assert!(!ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
     }
 
     #[test]
@@ -1962,13 +2302,7 @@ mod test {
         std::fs::create_dir_all(&dot_flox_path).unwrap();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
@@ -2001,13 +2335,7 @@ mod test {
         std::fs::create_dir_all(&dot_flox_path).unwrap();
 
         // create a mock remote
-        let remote_base_path = flox.temp_dir.join("remote");
-        let test_pointer = make_test_pointer(&remote_base_path);
-        let remote_path = remote_base_path
-            .join(test_pointer.owner.as_str())
-            .join("floxmeta");
-        fs::create_dir_all(&remote_path).unwrap();
-        let remote = GitCommandProvider::init(&remote_path, false).unwrap();
+        let (test_pointer, remote_path, remote) = create_mock_remote(flox.temp_dir.join("remote"));
 
         let branch = remote_branch_name(&test_pointer);
         remote.checkout(&branch, true).unwrap();
