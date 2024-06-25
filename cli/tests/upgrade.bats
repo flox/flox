@@ -204,3 +204,13 @@ teardown() {
   assert_output --partial "Detected an old environment version. Attempting to migrate to version 1 and upgrade packages."
   assert_output --partial "⬆️  Migrated environment to version 1 and upgraded all packages for environment '$NAME'."
 }
+
+@test "catalog: package names and systems are deduped" {
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" \
+    "$FLOX_BIN" install hello
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" upgrade hello
+  assert_output --partial "Upgraded 'hello'"
+  assert_equal "${#lines[@]}" 1
+}
