@@ -26,7 +26,7 @@ use super::{
     MigrationError,
     UninitializedEnvironment,
 };
-use crate::commands::{ensure_floxhub_token, ConcreteEnvironment};
+use crate::commands::{ensure_floxhub_token, ConcreteEnvironment, EnvironmentSelectError};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
 use crate::utils::errors::{
@@ -65,10 +65,12 @@ impl Edit {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("edit");
 
-        let detected_environment = self
-            .environment
-            .detect_concrete_environment(&flox, "Edit")?;
-
+        let detected_environment = match self.environment.detect_concrete_environment(&flox, "Edit")
+        {
+            Ok(concrete_env) => concrete_env,
+            Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
+            Err(e) => Err(e)?,
+        };
         // Ensure the user is logged in for the following remote operations
         if let ConcreteEnvironment::Remote(_) = detected_environment {
             ensure_floxhub_token(&mut flox).await?;

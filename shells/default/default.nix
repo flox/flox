@@ -9,6 +9,7 @@
   pre-commit-check,
   shfmt,
   mitmproxy,
+  cargo-nextest,
   flox-cli,
   flox-cli-tests,
   flox-pkgdb,
@@ -40,6 +41,7 @@
       shfmt
       mitmproxy
       yq
+      cargo-nextest
     ];
 in
   mkShell (

@@ -189,9 +189,6 @@
       flox-cli-tests =
         callPackage ./pkgs/flox-cli-tests {
         };
-
-      # Other tests
-      flox-tests-pure = callPackage ./pkgs/flox-tests-pure {inputs = inputs;};
     };
 
     # Composes dependency overlays and the overlay defined here.
@@ -232,7 +229,6 @@
         flox-manpages
         flox
         pre-commit-check
-        flox-tests-pure
         ;
       default = pkgs.flox;
     });
