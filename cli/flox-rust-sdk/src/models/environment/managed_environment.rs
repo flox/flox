@@ -99,6 +99,9 @@ pub enum ManagedEnvironmentError {
     #[error("failed copying environment directory to .flox")]
     CreateLocalEnvironmentView(#[source] std::io::Error),
 
+    #[error("local checkout and remote checkout are out of sync")]
+    CheckoutOutOfSync,
+
     /// Error reading the local manifest
     #[error("failed to read local manifest")]
     ReadLocalManifest(#[source] CoreEnvironmentError),
@@ -247,12 +250,12 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let mut local_checkout = self.local_env_from_current_generation(flox).unwrap();
+        let mut local_checkout = self.local_env_from_current_generation(flox)?;
 
         if !Self::validate_checkout(&local_checkout, &remote)? {
-            panic!(
-                "local checkout and remote checkout are not equal, use '--force' or 'edit --apply'"
-            );
+            Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::CheckoutOutOfSync,
+            ))?
         }
 
         let metadata = format!("installed packages: {:?}", &packages);
@@ -281,12 +284,12 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let mut local_checkout = self.local_env_from_current_generation(flox).unwrap();
+        let mut local_checkout = self.local_env_from_current_generation(flox)?;
 
         if !Self::validate_checkout(&local_checkout, &remote)? {
-            panic!(
-                "local checkout and remote checkout are not equal, use '--force' or 'edit --apply'"
-            );
+            Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::CheckoutOutOfSync,
+            ))?
         }
 
         let metadata = format!("uninstalled packages: {:?}", &packages);
@@ -312,12 +315,12 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let mut local_checkout = self.local_env_from_current_generation(flox).unwrap();
+        let mut local_checkout = self.local_env_from_current_generation(flox)?;
 
         if !Self::validate_checkout(&local_checkout, &remote)? {
-            panic!(
-                "local checkout and remote checkout are not equal, use '--force' or 'edit --apply'"
-            );
+            Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::CheckoutOutOfSync,
+            ))?
         }
 
         let result = local_checkout.edit(flox, contents)?;
@@ -497,9 +500,18 @@ impl Environment for ManagedEnvironment {
             .generations()
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-        let mut temporary = generations
+
+        let remote = generations
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        let mut temporary = self.local_env_from_current_generation(flox)?;
+
+        if !Self::validate_checkout(&temporary, &remote)? {
+            Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::CheckoutOutOfSync,
+            ))?
+        }
 
         let metadata = match (
             migration_info.needs_manifest_migration,
@@ -1298,12 +1310,10 @@ impl ManagedEnvironment {
         {
             let remote = self.get_current_generation(flox)?;
 
-            let mut local_checkout = self.local_env_from_current_generation(flox).unwrap();
+            let mut local_checkout = self.local_env_from_current_generation(flox)?;
 
             if !Self::validate_checkout(&local_checkout, &remote)? {
-                panic!(
-                    "local checkout and remote checkout are not equal, use 'edit --apply' to apply updates first"
-                );
+                Err(ManagedEnvironmentError::CheckoutOutOfSync)?
             }
 
             // [sic] We do not _lock_ the environment here,
@@ -1358,11 +1368,35 @@ impl ManagedEnvironment {
         Ok(())
     }
 
+    /// Pull new generation data from floxhub
+    ///
+    /// Requires the local checkout to be synched with the current generation.
+    /// If the environment has diverged, the pull will fail.
+    ///
+    /// If `force == true`, the pull will proceed even if the environment has diverged.
     pub fn pull(
         &mut self,
         flox: &Flox,
         force: bool,
     ) -> Result<PullResult, ManagedEnvironmentError> {
+        // Check whether the local checkout is in sync with the current generation
+        // before potentially updating generations and resetting the local checkout.
+        {
+            let remote = self
+                .generations()
+                .writable(flox.temp_dir.clone())
+                .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
+                .get_current_generation()
+                .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+            let local_checkout = self.local_env_from_current_generation(flox)?;
+
+            // With `force` we pull even if the local checkout is out of sync.
+            if !force && !Self::validate_checkout(&local_checkout, &remote)? {
+                Err(ManagedEnvironmentError::CheckoutOutOfSync)?
+            }
+        }
+
         let sync_branch = remote_branch_name(&self.pointer);
         let project_branch = branch_name(&self.pointer, &self.path);
 
@@ -1418,6 +1452,7 @@ impl ManagedEnvironment {
 
         // update the pointer lockfile
         self.lock_pointer()?;
+        self.reset_local_env_to_current_generation(flox)?;
 
         Ok(PullResult::Updated)
     }

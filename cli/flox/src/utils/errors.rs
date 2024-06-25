@@ -14,7 +14,7 @@ use flox_rust_sdk::models::floxmeta::FloxMetaError;
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, ContextMsgError, PkgDbError};
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use log::{debug, trace};
 
 use crate::commands::{EnvironmentSelectError, MigrationError};
@@ -434,6 +434,12 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             Please ensure that you have read and write permissions
             to the environment directory in '.flox/env'.
         "},
+
+        ManagedEnvironmentError::CheckoutOutOfSync => indoc! {"
+            Your environment has changes that are not yet synced to a generation.
+            Use 'flox edit --reset' or 'flox edit --sync' after modifying '.flox/env/manifest.toml'
+        "}
+        .to_string(),
 
         ManagedEnvironmentError::ReadLocalManifest(_) => display_chain(err),
         ManagedEnvironmentError::ReadGenerationManifest(_) => display_chain(err),
