@@ -1397,8 +1397,7 @@ mod test {
     use url::Url;
 
     use super::*;
-    use crate::flox::test_helpers::flox_instance;
-    use crate::flox::Floxhub;
+    use crate::flox::test_helpers::{flox_instance, flox_instance_with_global_lock_and_floxhub};
     use crate::models::env_registry::{
         env_registry_lock_path,
         env_registry_path,
@@ -1407,6 +1406,7 @@ mod test {
         RegisteredEnv,
         RegistryEntry,
     };
+    use crate::models::environment::test_helpers::new_core_environment;
     use crate::models::environment::{DOT_FLOX, MANIFEST_FILENAME};
     use crate::models::floxmeta::floxmeta_dir;
     use crate::models::lockfile::test_helpers::fake_package;
@@ -1955,41 +1955,22 @@ mod test {
         assert_eq!(floxmeta.git.branch_hash("branch_2").unwrap(), hash_1);
     }
 
-    /// Test
+    /// `local_checkout` should create a `.flox/env` directory with the manifest.{toml,lock}
+    /// from the generation.
     #[test]
-    fn test_local_checkout() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
+    fn test_local_checkout_recreates_env_dir() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
 
-        // create a mock floxmeta
-        let (test_pointer, _, _remote) = create_mock_remote(flox.temp_dir.join("remote"));
-        flox.floxhub = Floxhub::new(
-            flox.floxhub.base_url().clone(),
-            test_pointer.floxhub_git_url_override.clone(),
-        )
-        .unwrap();
-
-        let prepare_env = flox.temp_dir.join("prepare");
-        std::fs::create_dir_all(&prepare_env).unwrap();
-        fs::write(
-            prepare_env.join(MANIFEST_FILENAME),
-            serde_json::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
-        )
-        .unwrap();
-
-        let managed_env = flox.temp_dir.join("managed");
-        std::fs::create_dir_all(managed_env.join(DOT_FLOX)).unwrap();
-
-        let managed_env = ManagedEnvironment::push_new_without_building(
+        let managed_env = test_helpers::mock_managed_environment(
             &flox,
-            test_pointer.owner,
-            test_pointer.name,
-            false,
-            CanonicalPath::new(managed_env.join(DOT_FLOX)).unwrap(),
-            CoreEnvironment::new(prepare_env),
-        )
-        .unwrap();
+            &toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+            owner,
+        );
 
-        // TODO: push may transitively call `local_checkout` at an earlier moment
+        // TODO: `local_checkout` may be called implicitly earlier in the process
+        //       making this call redundant.
+        //       revisit this when working on #1650
         let _ = managed_env.local_checkout(&flox).unwrap();
 
         // check that local_checkout created files
@@ -2000,8 +1981,7 @@ mod test {
             .join(MANIFEST_FILENAME)
             .exists());
 
-        // check that local_checkout recreates `env` if deleted
-
+        // dlete env dir to see wheter it is recreated
         fs::remove_dir_all(managed_env.path.join(ENV_DIR_NAME)).unwrap();
 
         let _ = managed_env.local_checkout(&flox).unwrap();
@@ -2013,12 +1993,30 @@ mod test {
             .join(ENV_DIR_NAME)
             .join(MANIFEST_FILENAME)
             .exists());
+    }
+
+    /// Local checkout should not overwrite existing files
+    #[test]
+    fn test_local_checkout_keeps_local_modifications() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+
+        let managed_env = test_helpers::mock_managed_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+            owner,
+        );
+
+        // TODO: `local_checkout` may be called implicitly earlier in the process
+        //       making this call redundant.
+        //       revisit this when working on #1650
+        let _ = managed_env.local_checkout(&flox).unwrap();
 
         // check that modifications in an existing `.flox/env` are _not_ discarded
-        let new_content = "edited manifest";
+        let locally_edited_content = "edited manifest";
         fs::write(
             managed_env.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME),
-            new_content,
+            locally_edited_content,
         )
         .unwrap();
 
@@ -2027,43 +2025,23 @@ mod test {
             .unwrap()
             .manifest_content()
             .unwrap();
-        assert_eq!(local_manifest, new_content);
+        assert_eq!(local_manifest, locally_edited_content);
     }
 
     #[test]
     fn test_sync_local() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
 
-        // create a mock floxmeta
-        let (test_pointer, _, _remote) = create_mock_remote(flox.temp_dir.join("remote"));
-        flox.floxhub = Floxhub::new(
-            flox.floxhub.base_url().clone(),
-            test_pointer.floxhub_git_url_override.clone(),
-        )
-        .unwrap();
-
-        let prepare_env = flox.temp_dir.join("prepare");
-        std::fs::create_dir_all(&prepare_env).unwrap();
-        fs::write(
-            prepare_env.join(MANIFEST_FILENAME),
-            serde_json::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
-        )
-        .unwrap();
-
-        let managed_env = flox.temp_dir.join("managed");
-        std::fs::create_dir_all(managed_env.join(DOT_FLOX)).unwrap();
-
-        let managed_env = ManagedEnvironment::push_new_without_building(
+        let managed_env = test_helpers::mock_managed_environment(
             &flox,
-            test_pointer.owner,
-            test_pointer.name,
-            false,
-            CanonicalPath::new(managed_env.join(DOT_FLOX)).unwrap(),
-            CoreEnvironment::new(prepare_env),
-        )
-        .unwrap();
+            &toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+            owner,
+        );
 
-        // TODO: push may transitively call `local_checkout` at an earlier moment
+        // TODO: `local_checkout` may be called implicitly earlier in the process
+        //       making this call redundant.
+        //       revisit this when working on #1650
         let local_checkout = managed_env.local_checkout(&flox).unwrap();
         let generation_manifest = managed_env
             .get_current_generation(&flox)
@@ -2079,7 +2057,7 @@ mod test {
         fs::write(local_checkout.manifest_path(), indoc! {"
             version = 1
 
-            # nothing else
+            # nothing else but certinainly different from before
         "})
         .unwrap();
 
@@ -2104,33 +2082,42 @@ mod test {
         );
     }
 
+    /// Validate should return true if the manifest in two environments is the same
     #[test]
-    fn test_validate_local_different_toml_content() {
-        let tempdir = tempfile::tempdir().unwrap();
+    fn test_validate_local_same_manifest() {
+        let (flox, _temp_dir_handle) = flox_instance();
 
-        let env_a = tempdir.path().join("env_a");
-        let env_b = tempdir.path().join("env_b");
-        fs::create_dir_all(&env_a).unwrap();
-        fs::create_dir_all(&env_b).unwrap();
+        let manifest_a = TypedManifestCatalog::default();
+        let manifest_b = TypedManifestCatalog::default();
 
-        let env_a = CoreEnvironment::new(env_a);
-        let env_b = CoreEnvironment::new(env_b);
+        let env_a = new_core_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&manifest_a).unwrap(),
+        );
+        let env_b = new_core_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&manifest_b).unwrap(),
+        );
+
+        assert!(ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
+    }
+
+    /// Validate should return false if the manifest in two environments is different.
+    #[test]
+    fn test_validate_local_different_manifest() {
+        let (flox, _temp_dir_handle) = flox_instance();
 
         let mut manifest_a = TypedManifestCatalog::default();
         let manifest_b = TypedManifestCatalog::default();
 
-        fs::write(
-            env_a.path().join(MANIFEST_FILENAME),
-            toml_edit::ser::to_string_pretty(&manifest_a).unwrap(),
-        )
-        .unwrap();
-        fs::write(
-            env_b.path().join(MANIFEST_FILENAME),
-            toml_edit::ser::to_string_pretty(&manifest_b).unwrap(),
-        )
-        .unwrap();
-
-        assert!(ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
+        let env_a = new_core_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&manifest_a).unwrap(),
+        );
+        let env_b = new_core_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&manifest_b).unwrap(),
+        );
 
         let (iid, descriptor, _) = fake_package("package", None);
         manifest_a.install.insert(iid, descriptor);
@@ -2144,30 +2131,24 @@ mod test {
         assert!(!ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
     }
 
+    /// Validate that two environments with equivalent manifests fail validation
+    /// if the binary representationnof the manifest differs.
     #[test]
     fn test_validate_local_different_binary_content() {
-        let tempdir = tempfile::tempdir().unwrap();
+        let (flox, _temp_dir_handle) = flox_instance();
 
-        let env_a = tempdir.path().join("env_a");
-        let env_b = tempdir.path().join("env_b");
-        fs::create_dir_all(&env_a).unwrap();
-        fs::create_dir_all(&env_b).unwrap();
+        let manifest_a = TypedManifestCatalog::default();
+        let manifest_b = TypedManifestCatalog::default();
 
-        let env_a = CoreEnvironment::new(env_a);
-        let env_b = CoreEnvironment::new(env_b);
-
-        let manifest = TypedManifestCatalog::default();
-
-        fs::write(
-            env_a.path().join(MANIFEST_FILENAME),
-            toml_edit::ser::to_string_pretty(&manifest).unwrap(),
-        )
-        .unwrap();
-        fs::write(
-            env_b.path().join(MANIFEST_FILENAME),
-            toml_edit::ser::to_string(&manifest).unwrap(),
-        )
-        .unwrap();
+        // Serialize the same manifest to two different environments
+        // once with pretty formatting and once without.
+        // Today the default manifest will serialize with different newlines
+        // which this test depends on.
+        let env_a = new_core_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&manifest_a).unwrap(),
+        );
+        let env_b = new_core_environment(&flox, &toml_edit::ser::to_string(&manifest_b).unwrap());
 
         assert!(!ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
     }
