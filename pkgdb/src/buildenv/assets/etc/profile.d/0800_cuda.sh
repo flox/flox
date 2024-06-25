@@ -31,7 +31,7 @@ activate_cuda(){
     "${fhs_root_prefix}/usr/local/lib64" \
     "${fhs_root_prefix}/usr/local/lib" \
     -name libcuda.so.1 \
-    -execdir pwd \; -quit 2>/dev/null)
+    -execdir pwd \; -quit 2>/dev/null || true)
 
   if [ -z "$SYSTEM_LIB_DIR" ]; then
     return 0
