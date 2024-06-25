@@ -10,6 +10,7 @@
   dash,
   bats,
   coreutils,
+  curl,
   entr,
   expect,
   findutils,
@@ -54,6 +55,7 @@
       dash
       batsWith
       coreutils
+      curl
       entr
       expect
       findutils
