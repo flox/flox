@@ -42,7 +42,7 @@ pub struct Edit {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    #[bpaf(external(edit_action), fallback(EditAction::EditManifest{file: None, apply: false}))]
+    #[bpaf(external(edit_action), fallback(EditAction::EditManifest{file: None}))]
     action: EditAction,
 }
 #[derive(Bpaf, Clone)]
@@ -51,14 +51,28 @@ pub enum EditAction {
         /// Replace environment manifest with that in <file>
         #[bpaf(long, short, argument("file"))]
         file: Option<PathBuf>,
-
-        apply: bool,
     },
 
     Rename {
         /// Rename the environment to <name>
         #[bpaf(long, short, argument("name"))]
         name: EnvironmentName,
+    },
+
+    Sync {
+        /// Create a new generation from the current local environment
+        ///
+        /// (Only available for managed environments)
+        #[bpaf(long, short)]
+        sync: (),
+    },
+
+    Reset {
+        /// Reset the environment to the current generation
+        ///
+        /// (Only available for managed environments)
+        #[bpaf(long, short)]
+        reset: (),
     },
 }
 
@@ -79,17 +93,10 @@ impl Edit {
         };
 
         match self.action {
-            EditAction::EditManifest { file, apply } => {
+            EditAction::EditManifest { file } => {
                 // TODO: differentiate between interactive edits and replacement
                 let span = tracing::info_span!("edit_file");
                 let _guard = span.enter();
-
-                if let ConcreteEnvironment::Managed(ref managed) = detected_environment {
-                    if apply {
-                        managed.create_generation_from_local_env(&flox).unwrap();
-                        return Ok(());
-                    }
-                }
 
                 let contents = Self::provided_manifest_contents(file)?;
 
@@ -130,6 +137,27 @@ impl Edit {
                     // todo: handle remote environments in the future
                     bail!("Cannot rename environments on FloxHub");
                 }
+            },
+
+            EditAction::Sync { .. } => {
+                let span = tracing::info_span!("sync");
+                let _guard = span.enter();
+                let ConcreteEnvironment::Managed(environment) = detected_environment else {
+                    bail!("Cannot sync local or remote environments.");
+                };
+                environment.create_generation_from_local_env(&flox)?;
+                message::updated("Environment successfully synced to a new generation.");
+            },
+
+            EditAction::Reset { .. } => {
+                let span = tracing::info_span!("reset");
+                let _guard = span.enter();
+                let ConcreteEnvironment::Managed(environment) = detected_environment else {
+                    bail!("Cannot sync local or remote environments.");
+                };
+
+                environment.reset_local_env_to_current_generation(&flox)?;
+                message::updated("Environment changes reset to current generation.");
             },
         }
 
