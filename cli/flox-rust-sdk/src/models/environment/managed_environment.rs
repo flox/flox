@@ -889,7 +889,7 @@ impl ManagedEnvironment {
         Ok(())
     }
 
-    /// Create or reset a local checkout of the latet generation.
+    /// Create a local checkout of the latet generation.
     ///
     /// Copies the `env/` directory from the latest generation to the `.flox/` directory
     /// and returns a [CoreEnvironment] for the `.flox/env`.

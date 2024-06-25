@@ -429,7 +429,7 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         ManagedEnvironmentError::CreateLinksDir(_) => display_chain(err),
 
         ManagedEnvironmentError::CreateLocalEnvironmentView(err) => formatdoc! {"
-            Failed to create reset the local environment from the current generation: {err}
+            Failed to create the local environment from the current generation: {err}
 
             Please ensure that you have read and write permissions
             to the environment directory in '.flox/env'.
