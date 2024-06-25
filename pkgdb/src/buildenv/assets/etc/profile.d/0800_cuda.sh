@@ -10,19 +10,28 @@ export _findutils="@findutils@"
 
 # Only run if _FLOX_ENV_CUDA_DETECTION is set
 activate_cuda(){
+  # Strip any trailing slash so that we can construct it later.
+  local fhs_root_prefix="${1%/:-}"
+
   if [[ "$_FLOX_ENV_CUDA_DETECTION" != 1 ]]; then
     return 0
   fi
 
-  if ! ( "$_findutils/bin/find" /dev -maxdepth 1 -iname 'nvidia*' -o -iname dxg | read -r ;); then
+  if ! ( "$_findutils/bin/find" "${fhs_root_prefix}/dev" -maxdepth 1 -iname 'nvidia*' -o -iname dxg | read -r ;); then
     return 0
   fi
 
   LIB_DIR="$("$_coreutils/bin/realpath" --no-symlinks "$FLOX_ENV/../../lib")"
   SYSTEM_LIB_DIR=$("$_findutils/bin/find" \
-	  /run/opengl-drivers /lib64 /lib /usr/lib64 /usr/lib /usr/local/lib64 /usr/local/lib \
-          -name libcuda.so.1 \
-	  -execdir pwd \; -quit 2>/dev/null )
+    "${fhs_root_prefix}/run/opengl-drivers" \
+    "${fhs_root_prefix}/lib64" \
+    "${fhs_root_prefix}/lib" \
+    "${fhs_root_prefix}/usr/lib64" \
+    "${fhs_root_prefix}/usr/lib" \
+    "${fhs_root_prefix}/usr/local/lib64" \
+    "${fhs_root_prefix}/usr/local/lib" \
+    -name libcuda.so.1 \
+    -execdir pwd \; -quit 2>/dev/null)
 
   if [ -z "$SYSTEM_LIB_DIR" ]; then
     return 0
@@ -39,7 +48,7 @@ activate_cuda(){
   export FLOX_ENV_LIB_DIRS="$FLOX_ENV_LIB_DIRS":"$LIB_DIR"
 }
 
-activate_cuda
+activate_cuda "/"
 
 # ---------------------------------------------------------------------------- #
 #
