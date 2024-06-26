@@ -19,6 +19,7 @@
   rustfmt ? rust-toolchain.rustfmt,
   targetPlatform,
   zlib,
+  process-compose,
 }: let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
 
@@ -62,6 +63,7 @@
         then "ld-floxlib.so"
         else "${flox-pkgdb}/lib/ld-floxlib.so";
       FLOX_ZDOTDIR = ../../pkgdb/src/buildenv/assets/activate.d/zdotdir;
+      PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
 
       # bundling of internally used nix scripts
       FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
@@ -195,7 +197,9 @@ in
           flox-pkgdb
           ;
 
-        ciPackages = [];
+        ciPackages = [
+          process-compose
+        ];
 
         devPackages = [
           rustfmt

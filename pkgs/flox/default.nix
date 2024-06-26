@@ -7,6 +7,7 @@
   flox-pkgdb,
   flox-cli,
   flox-manpages,
+  process-compose,
   SENTRY_DSN ? null,
   SENTRY_ENV ? null,
   FLOX_VERSION ? null,
@@ -35,6 +36,7 @@ in
         --set PKGDB_BIN       "${flox-pkgdb}/bin/pkgdb" \
         --set LD_FLOXLIB      "${flox-pkgdb}/lib/ld-floxlib.so" \
         --set FLOX_BIN        "${flox-cli}/bin/flox" \
+        --set PROCESS_COMPOSE_BIN "${process-compose}/bin/process-compose" \
         --set FLOX_VERSION    "${version}"
     '';
   }
