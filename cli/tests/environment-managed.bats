@@ -350,6 +350,7 @@ EOF
   refute_output "vim"
 }
 
+# bats test_tags=managed:xyz
 @test "sanity check upgrade works for managed environments" {
   # update shouldn't work for catalog: https://github.com/flox/flox/issues/1509
   export FLOX_FEATURES_USE_CATALOG=false
@@ -419,7 +420,8 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     "$FLOX_BIN" edit --sync
 
-  run "$FLOX_BIN" upgrade
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" upgrade
   assert_success
 }
 

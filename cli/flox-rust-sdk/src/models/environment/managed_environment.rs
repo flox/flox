@@ -351,10 +351,17 @@ impl Environment for ManagedEnvironment {
             .generations()
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-
-        let mut temporary = generations
+        let remote = generations
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        let mut temporary = self.local_env_from_current_generation(flox)?;
+
+        if !Self::validate_checkout(&temporary, &remote)? {
+            Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::CheckoutOutOfSync,
+            ))?
+        }
 
         let result = temporary.update(flox, inputs)?;
 
@@ -381,16 +388,24 @@ impl Environment for ManagedEnvironment {
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
-        let mut temporary = generations
+        let remote = generations
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let result = temporary.upgrade(flox, groups_or_iids)?;
+        let mut local_checkout = self.local_env_from_current_generation(flox)?;
+
+        if !Self::validate_checkout(&local_checkout, &remote)? {
+            Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::CheckoutOutOfSync,
+            ))?
+        }
+
+        let result = local_checkout.upgrade(flox, groups_or_iids)?;
 
         let metadata = format!("upgraded packages: {}", result.packages.join(", "));
 
         generations
-            .add_generation(&mut temporary, metadata)
+            .add_generation(&mut local_checkout, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         write_pointer_lockfile(
