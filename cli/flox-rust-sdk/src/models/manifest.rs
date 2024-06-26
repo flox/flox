@@ -5,12 +5,13 @@ use std::str::FromStr;
 use indoc::{formatdoc, indoc};
 use log::debug;
 use serde::de::Error;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::skip_serializing_none;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
 
 use super::environment::path_environment::InitCustomization;
 use crate::data::{System, Version};
+use crate::providers::services::SERVICES_ENV_VAR;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub(super) const DEFAULT_PRIORITY: usize = 5;
@@ -336,24 +337,45 @@ pub enum TypedManifest {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
 pub struct TypedManifestCatalog {
-    pub(super) version: Version<1>,
+    pub version: Version<1>,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
     pub install: ManifestInstall,
     /// Variables that are exported to the shell environment upon activation.
     #[serde(default)]
-    pub(super) vars: ManifestVariables,
+    pub vars: ManifestVariables,
     /// Hooks that are run at various times during the lifecycle of the manifest
     /// in a known shell environment.
     #[serde(default)]
-    pub(super) hook: ManifestHook,
+    pub hook: ManifestHook,
     /// Profile scripts that are run in the user's shell upon activation.
     #[serde(default)]
-    pub(super) profile: ManifestProfile,
+    pub profile: ManifestProfile,
     /// Options that control the behavior of the manifest.
     #[serde(default)]
     pub options: ManifestOptions,
+    /// Service definitions
+    #[serde(deserialize_with = "services_only_with_feature_flag")]
+    #[serde(default)]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub services: ManifestServices,
+}
+
+/// Only allow the manifest to deserialize a `services` section if the feature flag is present.
+///
+/// Note: generally it's a bad idea to look up feature flags outside of constructing the config
+///       at startup time, but we deserialize manifests in so many places that passing the config
+///       down to all of them isn't practical without a lot of refactoring.
+fn services_only_with_feature_flag<'de, D>(deserializer: D) -> Result<ManifestServices, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    if std::env::var(SERVICES_ENV_VAR).is_ok_and(|s| s.to_ascii_lowercase() == "true") {
+        Ok(ManifestServices(BTreeMap::deserialize(deserializer)?))
+    } else {
+        Err(D::Error::custom(ManifestError::ServicesNotEnabled))
+    }
 }
 
 impl TypedManifestCatalog {
@@ -519,6 +541,32 @@ impl ManifestPackageDescriptor {
     }
 }
 
+/// A map of service names to service definitions
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Default,
+    PartialEq,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ManifestServices(BTreeMap<String, ManifestServiceDescriptor>);
+
+/// The definition of a service in a manifest
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ManifestServiceDescriptor {
+    /// The command to run to start the service
+    pub command: String,
+    /// Service-specific environment variables
+    pub vars: Option<ManifestVariables>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestVariables(BTreeMap<String, String>);
@@ -621,6 +669,8 @@ pub enum ManifestError {
     PkgDbCall(#[source] std::io::Error),
     #[error("no package or group named '{0}' in the manifest")]
     PkgOrGroupNotFound(String),
+    #[error("cannot use this section without a feature flag")]
+    ServicesNotEnabled,
 }
 
 /// A subset of the manifest used to check what type of edits users make. We
@@ -976,6 +1026,7 @@ pub(super) mod test {
             hook: ManifestHook::default(),
             profile: ManifestProfile::default(),
             options: ManifestOptions::default(),
+            services: ManifestServices::default(),
         }
     }
 

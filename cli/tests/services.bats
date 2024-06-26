@@ -33,11 +33,13 @@ project_teardown() {
 setup() {
   common_test_setup
   setup_isolated_flox
+  project_setup
 
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 teardown() {
+  project_teardown
   common_test_teardown
 }
 
@@ -50,6 +52,22 @@ teardown() {
   "$FLOX_BIN" delete -f
   RUST_LOG=flox=debug FLOX_FEATURES_SERVICES=true run "$FLOX_BIN" init
   assert_output --partial "service management enabled"
+}
+
+@test "services in the manifest" {
+  "$FLOX_BIN" init
+  contents=$(
+  cat <<- EOF
+version = 1
+
+[services.foo]
+command = "bar"
+vars = { baz = "qux" }
+EOF
+  )
+  echo "$contents" > manifest.toml
+  FLOX_FEATURES_SERVICES=true run "$FLOX_BIN" edit -f manifest.toml
+  assert_success
 }
 
 @test "can call process-compose" {
