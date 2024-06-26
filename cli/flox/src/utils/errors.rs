@@ -549,6 +549,10 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         ManagedEnvironmentError::Build(core_environment_error) => {
             format_core_error(core_environment_error)
         },
+        ManagedEnvironmentError::Link(core_environment_error) => {
+            format_core_error(core_environment_error)
+        },
+
         ManagedEnvironmentError::Registry(_) => display_chain(err),
     }
 }

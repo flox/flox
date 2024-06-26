@@ -142,7 +142,7 @@ impl Edit {
             EditAction::Sync { .. } => {
                 let span = tracing::info_span!("sync");
                 let _guard = span.enter();
-                let ConcreteEnvironment::Managed(environment) = detected_environment else {
+                let ConcreteEnvironment::Managed(mut environment) = detected_environment else {
                     bail!("Cannot sync local or remote environments.");
                 };
                 environment.create_generation_from_local_env(&flox)?;

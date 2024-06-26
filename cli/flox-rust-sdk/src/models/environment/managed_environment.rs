@@ -164,6 +164,9 @@ pub enum ManagedEnvironmentError {
     #[error("could not build environment")]
     Build(#[source] CoreEnvironmentError),
 
+    #[error("could not link environment")]
+    Link(#[source] CoreEnvironmentError),
+
     #[error("could not read manifest")]
     ReadManifest(#[source] GenerationsError),
 
@@ -914,15 +917,31 @@ impl ManagedEnvironment {
     ///
     /// TODO: this should do a `build` before committing to a generation
     pub fn create_generation_from_local_env(
-        &self,
+        &mut self,
         flox: &Flox,
     ) -> Result<(), ManagedEnvironmentError> {
-        let mut local = self.local_env_from_current_generation(flox)?;
+        let mut local_checkout = self.local_env_from_current_generation(flox)?;
 
-        if Self::validate_checkout(&local, &self.get_current_generation(flox)?)? {
+        if Self::validate_checkout(&local_checkout, &self.get_current_generation(flox)?)? {
             debug!("local checkout and remote checkout equal, nothing to apply");
             return Ok(());
         }
+
+        // Ensure the environment is locked
+        // PathEnvironment may not have a lockfile or an outdated lockfile
+        // if the environment was modified primarily through editing the manifest manually.
+        local_checkout
+            .lock(flox)
+            .map_err(ManagedEnvironmentError::Lock)?;
+
+        // Ensure the created generation is valid
+        let store_path = local_checkout
+            .build(flox)
+            .map_err(ManagedEnvironmentError::Build)?;
+
+        local_checkout
+            .link(flox, &self.out_link, &Some(store_path))
+            .map_err(ManagedEnvironmentError::Link)?;
 
         let mut generations = self
             .generations()
@@ -931,7 +950,7 @@ impl ManagedEnvironment {
 
         generations
             .add_generation(
-                &mut local,
+                &mut local_checkout,
                 "Synchronized manual changes to generation".to_string(),
             )
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
@@ -968,8 +987,25 @@ impl ManagedEnvironment {
         )
         .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
 
-        let local = CoreEnvironment::new(env_dir);
-        Ok(local)
+        let mut local_checkout = CoreEnvironment::new(env_dir);
+
+        if !local_checkout.lockfile_path().exists() {
+            debug!("current gneratio does not have a lock file, locking...");
+
+            local_checkout
+                .lock(flox)
+                .map_err(ManagedEnvironmentError::Lock)?;
+        }
+        // Ensure the environment builds before we push it
+        let store_path = local_checkout
+            .build(flox)
+            .map_err(ManagedEnvironmentError::Build)?;
+
+        local_checkout
+            .link(flox, &self.out_link, &Some(store_path))
+            .map_err(ManagedEnvironmentError::Link)?;
+
+        Ok(local_checkout)
     }
 
     /// Create a local checkout of the current generation.
@@ -1543,7 +1579,9 @@ mod test {
     use crate::models::environment::{DOT_FLOX, MANIFEST_FILENAME};
     use crate::models::floxmeta::floxmeta_dir;
     use crate::models::lockfile::test_helpers::fake_package;
-    use crate::models::manifest::TypedManifestCatalog;
+    use crate::models::lockfile::LockedManifestCatalog;
+    use crate::models::manifest::{ManifestPackageDescriptor, TypedManifestCatalog};
+    use crate::providers::catalog::MockClient;
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::GitCommandProvider;
 
@@ -2094,9 +2132,14 @@ mod test {
     #[test]
     fn reset_local_checkout_discards_local_changes() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+        let (mut flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
 
-        let managed_env = test_helpers::mock_managed_environment(&flox, "original", owner);
+        flox.catalog_client = Some(MockClient::new(None::<&str>).unwrap().into());
+
+        let original_manifest =
+            toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap();
+
+        let managed_env = test_helpers::mock_managed_environment(&flox, &original_manifest, owner);
 
         let _ = managed_env
             .local_env_from_current_generation(&flox)
@@ -2127,7 +2170,7 @@ mod test {
                 fs::read_to_string(managed_env.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME))
                     .unwrap();
 
-            assert_eq!(contents, "original");
+            assert_eq!(contents, original_manifest);
         }
     }
 
@@ -2213,9 +2256,12 @@ mod test {
     #[test]
     fn test_sync_local() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+        let (mut flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
 
-        let managed_env = test_helpers::mock_managed_environment(
+        let client = MockClient::new(None::<&str>).unwrap();
+        flox.catalog_client = Some(client.into());
+
+        let mut managed_env = test_helpers::mock_managed_environment(
             &flox,
             &toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
             owner,
@@ -2264,6 +2310,69 @@ mod test {
             local_checkout.manifest_content().unwrap(),
             generation_manifest
         );
+    }
+
+    /// Test that a lockfile is created when a generation is created from a local environment
+    #[test]
+    fn create_generation_from_local_env_builds_and_locks() {
+        let owner = EnvironmentOwner::from_str("owner").unwrap();
+        let (mut flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+
+        let mut managed_env = test_helpers::mock_managed_environment(
+            &flox,
+            &toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+            owner,
+        );
+
+        let _ = managed_env
+            .local_env_from_current_generation(&flox)
+            .unwrap();
+
+        let client = MockClient::new(Some(
+            Path::new(std::env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join("test_data")
+                .join("generated")
+                .join("resolve")
+                .join("hello.json"),
+        ))
+        .unwrap();
+        flox.catalog_client = Some(client.into());
+
+        let mut new_manifest = TypedManifestCatalog::default();
+        new_manifest
+            .install
+            .insert("hello".to_string(), ManifestPackageDescriptor {
+                pkg_path: "hello".to_string(),
+                pkg_group: None,
+                priority: None,
+                version: None,
+                systems: None,
+            });
+
+        fs::write(
+            managed_env.manifest_path(&flox).unwrap(),
+            toml::ser::to_string_pretty(&new_manifest).unwrap(),
+        )
+        .unwrap();
+
+        managed_env.create_generation_from_local_env(&flox).unwrap();
+
+        assert!(managed_env.lockfile_path(&flox).unwrap().exists());
+
+        let lockfile_content =
+            fs::read_to_string(managed_env.lockfile_path(&flox).unwrap()).unwrap();
+        let lockfile: LockedManifestCatalog = serde_json::from_str(&lockfile_content).unwrap();
+
+        assert_eq!(lockfile.manifest, new_manifest);
+        assert_eq!(lockfile.packages.len(), 4); // 1 x 4 systems
+
+        let lockfile_in_generation_content =
+            fs::read_to_string(managed_env.lockfile_path(&flox).unwrap()).unwrap();
+        let lockfile_in_generation: LockedManifestCatalog =
+            serde_json::from_str(&lockfile_in_generation_content).unwrap();
+
+        assert_eq!(lockfile_in_generation, lockfile);
     }
 
     /// Validate should return true if the manifest in two environments is the same
