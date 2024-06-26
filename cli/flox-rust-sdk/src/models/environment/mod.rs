@@ -168,6 +168,9 @@ pub trait Environment: Send {
     /// to determine the current content of the manifest.
     fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError>;
 
+    /// Return the deserialized manifest
+    fn manifest(&self, flox: &Flox) -> Result<TypedManifest, EnvironmentError>;
+
     /// Return a path containing the built environment and its activation script.
     ///
     /// This should be a link to a store path so that it can be swapped
@@ -1014,7 +1017,7 @@ mod test {
         ));
         fs::write(environment.manifest_path(&flox).unwrap(), "").unwrap();
         assert!(matches!(
-            toml::from_str::<TypedManifest>(&environment.manifest_content(&flox).unwrap()).unwrap(),
+            environment.manifest(&flox).unwrap(),
             TypedManifest::Pkgdb(_),
         ));
         assert!(matches!(

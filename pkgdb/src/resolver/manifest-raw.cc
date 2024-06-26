@@ -310,6 +310,8 @@ from_json( const nlohmann::json & jfrom, Options & opts )
                 + value.dump() );
             }
         }
+      /* Not used within pkgdb */
+      else if ( key == "cuda-detection" ) { ; }
       else
         {
           throw InvalidManifestFileException(

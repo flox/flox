@@ -42,7 +42,7 @@ use crate::models::environment::copy_dir_recursive;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
 use crate::models::lockfile::LockedManifest;
-use crate::models::manifest::PackageToInstall;
+use crate::models::manifest::{PackageToInstall, TypedManifest};
 use crate::models::pkgdb::UpgradeResult;
 use crate::providers::git::{
     GitCommandBranchHashError,
@@ -387,6 +387,12 @@ impl Environment for ManagedEnvironment {
             .current_gen_manifest()
             .map_err(ManagedEnvironmentError::ReadManifest)?;
         Ok(manifest)
+    }
+
+    /// Return the deserialized manifest
+    fn manifest(&self, flox: &Flox) -> Result<TypedManifest, EnvironmentError> {
+        Ok(toml::from_str(&self.manifest_content(flox)?)
+            .map_err(CoreEnvironmentError::DeserializeManifest)?)
     }
 
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {

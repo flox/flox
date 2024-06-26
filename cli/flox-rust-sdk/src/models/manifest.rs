@@ -217,6 +217,14 @@ impl RawManifest {
             toml_edit::value(Array::from_iter(systems.iter().copied())),
         );
 
+        let cuda_detection_key = Key::new("cuda-detection");
+        options_table.insert(&cuda_detection_key, toml_edit::value(false));
+        if let Some((mut key, _)) = options_table.get_key_value_mut(&cuda_detection_key) {
+            key.leaf_decor_mut().set_prefix(indoc! {r#"
+            # Uncomment to disable CUDA detection.
+            # "#});
+        }
+
         manifest.insert(MANIFEST_OPTIONS_KEY, Item::Table(options_table));
 
         // Insert heading comment
@@ -552,6 +560,7 @@ pub struct ManifestOptions {
     /// Options that control how semver versions are resolved.
     #[serde(default)]
     pub semver: SemverOptions,
+    pub cuda_detection: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
@@ -1062,6 +1071,8 @@ pub(super) mod test {
             # manifest.toml(5) for a list of available options.
             [options]
             systems = []
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization, false);
@@ -1131,6 +1142,8 @@ pub(super) mod test {
             # manifest.toml(5) for a list of available options.
             [options]
             systems = []
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization, true);
@@ -1202,6 +1215,8 @@ pub(super) mod test {
             # manifest.toml(5) for a list of available options.
             [options]
             systems = []
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization, false);
@@ -1278,6 +1293,8 @@ pub(super) mod test {
             # manifest.toml(5) for a list of available options.
             [options]
             systems = ["x86_64-linux"]
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization, false);
@@ -1351,6 +1368,8 @@ pub(super) mod test {
             # manifest.toml(5) for a list of available options.
             [options]
             systems = ["x86_64-linux"]
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization, false);
