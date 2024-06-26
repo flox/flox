@@ -314,6 +314,7 @@ Options ::= {
   systems                   = null | [<STRING>, ...]
 , allow                     = null | Allows
 , semver                    = null | Semver
+, cuda-detection            = null | <BOOL>
 }
 
 Allows ::= {
@@ -358,6 +359,13 @@ Semver ::= {
     The default is `false`.
     Setting this value to `true` would allow a package version `4.2.0-pre`
     rather than `4.1.9`.
+
+`cuda-detection`
+:   Whether to detect CUDA libraries and provide them to the environment.
+    The default is `true`.
+    When enabled, Flox will detect if you have an Nvidia device and attempt to
+    locate `libcuda` in well-known paths. Then it will symlink the libraries
+    into `.flox/lib` and add that path to `FLOX_ENV_LIB_DIRS`.
 
 # SEE ALSO
 [`flox-init(1)`](./flox-init.md),
