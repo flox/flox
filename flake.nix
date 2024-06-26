@@ -18,6 +18,8 @@
   # drop once bear is no longer broken in a newer release
   inputs.nixpkgs-bear.url = "github:NixOS/nixpkgs/release-23.05";
 
+  inputs.nixpkgs-process-compose.url = "github:NixOS/nixpkgs/release-24.05";
+
   inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
   inputs.sqlite3pp.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -90,6 +92,11 @@
       inherit (inputs.nixpkgs-bear.legacyPackages.${prev.system}) bear;
     };
 
+    # Use a more recent version of process-compose
+    overlays.process-compose = final: prev: {
+      inherit (inputs.nixpkgs-process-compose.legacyPackages.${prev.system}) process-compose;
+    };
+
     # Aggregates all external dependency overlays before adding any of the
     # packages defined by this flake.
     overlays.deps = nixpkgs.lib.composeManyExtensions [
@@ -97,6 +104,7 @@
       overlays.semver
       overlays.nix
       overlays.bear
+      overlays.process-compose
       sqlite3pp.overlays.default
       fenix.overlays.default
     ];

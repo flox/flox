@@ -51,3 +51,9 @@ teardown() {
   RUST_LOG=flox=debug FLOX_FEATURES_SERVICES=true run "$FLOX_BIN" init
   assert_output --partial "service management enabled"
 }
+
+@test "can call process-compose" {
+  run "$PROCESS_COMPOSE_BIN" version
+  assert_success
+  assert_output --partial "v1.6.1"
+}
