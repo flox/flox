@@ -3,7 +3,7 @@
 # ============================================================================ #
 #
 # Test the managed environment feature of flox.
-# * Tests whether flox commands work as expected in a managed environment
+# * Tests whether "flox" commands work as expected in a managed environment
 # * Tests conversion of a local environments to managed environments
 #
 # ---------------------------------------------------------------------------- #
@@ -369,3 +369,154 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=managed,managed:local-edits-block:install
+@test "changes to the local environment block 'flox install'" {
+  make_empty_remote_env
+
+  tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.json" \
+    run "$FLOX_BIN" install vim
+  assert_failure
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" edit --sync
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.json" \
+    run "$FLOX_BIN" install vim
+  assert_success
+}
+
+# bats test_tags=managed,managed:local-edits-block:uninstall
+@test "changes to the local environment block 'flox uninstall'"  {
+  make_empty_remote_env
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.json" \
+    "$FLOX_BIN" install vim
+
+  tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
+
+  run "$FLOX_BIN" uninstall vim
+  assert_failure
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" edit --sync
+
+  run "$FLOX_BIN" uninstall vim
+  assert_success
+}
+
+# bats test_tags=managed,managed:local-edits-block:upgrade
+@test "changes to the local environment block 'flox upgrade'"  {
+  make_empty_remote_env
+
+  tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
+
+  run "$FLOX_BIN" upgrade
+  assert_failure
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" edit --sync
+
+  run "$FLOX_BIN" upgrade
+  assert_success
+}
+
+# bats test_tags=managed,managed:local-edits-block:edit
+@test "changes to the local environment block 'flox edit'"  {
+  make_empty_remote_env
+
+  tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
+
+  run "$FLOX_BIN" edit -f .flox/env/manifest.toml
+  assert_failure
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" edit --sync
+
+  run "$FLOX_BIN" edit -f .flox/env/manifest.toml
+  assert_success
+}
+
+# bats test_tags=managed,managed:local-edits-block:push
+@test "changes to the local environment block 'flox push'"  {
+  make_empty_remote_env
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.json" \
+    "$FLOX_BIN" install vim
+
+  tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
+
+  run "$FLOX_BIN" push
+  assert_failure
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" edit --sync
+
+  run "$FLOX_BIN" push
+  assert_success
+}
+
+# bats test_tags=managed,managed:local-edits-block:pull
+@test "changes to the local environment block 'flox pull'"  {
+  make_empty_remote_env
+
+  tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
+
+  run "$FLOX_BIN" pull
+  assert_failure
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" edit --reset
+
+  run "$FLOX_BIN" pull
+  assert_success
+}
+
+# bats test_tags=managed,managed:local-edits-block:pull-force
+@test "changes to the local environment are discarded with 'flox pull --force'" {
+  make_empty_remote_env
+
+  tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
+
+  run "$FLOX_BIN" pull
+  assert_failure
+
+  run "$FLOX_BIN" pull --force
+  assert_success
+
+  run tomlq '.install.hello' .flox/env/manifest.toml
+  assert_output 'null'
+}
+
+# bats test_tags=managed,managed:activates-local-edits
+@test "'flox activate' activates local edits" {
+  make_empty_remote_env
+
+  tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" activate -- hello
+
+  assert_success
+
+  # after resetting uses the original empty env
+  "$FLOX_BIN" edit --reset
+
+  run -127 "$FLOX_BIN" activate -- hello
+  assert_failure
+}
+
+# bats test_tags=managed,managed:edit-reset
+@test "'flox edit --reset' resets local edits" {
+  make_empty_remote_env
+
+  tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
+
+  # after resetting uses the original empty env
+  "$FLOX_BIN" edit --reset
+
+  run tomlq '.install.hello' .flox/env/manifest.toml
+  assert_output 'null'
+}
