@@ -13,6 +13,7 @@
   flox-cli,
   flox-cli-tests,
   flox-pkgdb,
+  flox-manpages,
   ci ? false,
   GENERATED_DATA ? ./../../test_data/generated,
 }: let
@@ -60,7 +61,10 @@ in
       shellHook =
         flox-pkgdb.devShellHook
         + flox-cli.devShellHook
-        + pre-commit-check.shellHook;
+        + pre-commit-check.shellHook
+        + ''
+          export MANPATH=${flox-manpages}/share/man:$MANPATH
+        '';
 
       inherit GENERATED_DATA;
     }

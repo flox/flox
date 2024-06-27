@@ -358,6 +358,12 @@ subsets of tests.
 See the [bats usage documentation](https://bats-core.readthedocs.io/en/stable/usage.html)
 for details.
 
+## Man Pages
+
+Unreleased changes to `man` pages are available from the `nix develop` shell but
+you will need to restart the shell or call `direnv reload` to pick up new
+changes.
+
 ## Rust Style Guidelines
 
 - In general, structs should derive `Clone` and `Debug`.
