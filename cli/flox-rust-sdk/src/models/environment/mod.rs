@@ -52,6 +52,7 @@ pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
+pub const PROCESS_COMPOSE_SOCKET_NAME: &str = "process_compose_socket";
 pub const LIB_DIR_NAME: &str = "lib";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
@@ -73,6 +74,7 @@ pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
+pub const FLOX_PROCESS_COMPOSE_SOCKET_VAR: &str = "_FLOX_PC_SOCKET";
 
 pub const N_HASH_CHARS: usize = 8;
 

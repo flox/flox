@@ -36,9 +36,11 @@ use super::{
     CACHE_DIR_NAME,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
+    FLOX_PROCESS_COMPOSE_SOCKET_VAR,
     GCROOTS_DIR_NAME,
     LIB_DIR_NAME,
     LOCKFILE_FILENAME,
+    PROCESS_COMPOSE_SOCKET_NAME,
 };
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
@@ -514,6 +516,18 @@ impl PathEnvironment {
         );
 
         Ok(manifest_modified_at >= out_link_modified_at || !self.out_link(&flox.system)?.exists())
+    }
+
+    /// Return the path where the process compose socket for an environment
+    /// should be created
+    ///
+    /// If `_FLOX_PC_SOCKET` is set, its value should be returned.
+    #[allow(unused)]
+    fn service_manager_socket_path(&self) -> Result<PathBuf, EnvironmentError> {
+        if let Ok(process_compose_socket) = std::env::var(FLOX_PROCESS_COMPOSE_SOCKET_VAR) {
+            return Ok(PathBuf::from(process_compose_socket));
+        }
+        Ok(self.cache_path()?.join(PROCESS_COMPOSE_SOCKET_NAME))
     }
 }
 

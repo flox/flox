@@ -25,7 +25,9 @@ use super::{
     CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
     ENV_DIR_NAME,
+    FLOX_PROCESS_COMPOSE_SOCKET_VAR,
     N_HASH_CHARS,
+    PROCESS_COMPOSE_SOCKET_NAME,
 };
 use crate::data::{CanonicalPath, Version};
 use crate::flox::{EnvironmentRef, Flox};
@@ -1023,6 +1025,18 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)
+    }
+
+    /// Return the path where the process compose socket for an environment
+    /// should be created
+    ///
+    /// If `_FLOX_PC_SOCKET` is set, its value should be returned.
+    #[allow(unused)]
+    fn service_manager_socket_path(&self) -> Result<PathBuf, EnvironmentError> {
+        if let Ok(process_compose_socket) = std::env::var(FLOX_PROCESS_COMPOSE_SOCKET_VAR) {
+            return Ok(PathBuf::from(process_compose_socket));
+        }
+        Ok(self.cache_path()?.join(PROCESS_COMPOSE_SOCKET_NAME))
     }
 }
 
