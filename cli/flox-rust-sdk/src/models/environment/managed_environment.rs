@@ -929,8 +929,8 @@ impl ManagedEnvironment {
     /// and updates the generation lock.
     ///
     /// If no changes exist, returns without further action.
-    ///
-    /// TODO: this should do a `build` before committing to a generation
+    /// Before creating a new generation, the local environment is locked and built,
+    /// to ensure the validity of the new generation.
     pub fn create_generation_from_local_env(
         &mut self,
         flox: &Flox,
@@ -976,7 +976,15 @@ impl ManagedEnvironment {
 
     /// Discards local changes in `.flox/env` and recreates the directory from the current generation.
     ///
-    /// Returns the new CoreEnvironment for the `.flox/env` directory.
+    /// Returns the new [CoreEnvironment] for the `.flox/env` directory.
+    /// Unlike [ManagedEnvironment::create_generation_from_local_env],
+    /// this method **does not** build the environment as previous generations
+    /// may fail to build, unrelated to the success of resetting the environment.
+    /// Pulling an environment for example may result in an invalid environment
+    /// e.g. because the manifest does not specify the current system,
+    /// resetting in that context should not fail either.
+    /// Like [ManagedEnvironment::pull], downtream commands should check that the environment builds
+    /// if applicable.
     ///
     /// TODO: Specific behavior for other files than the manifest should is undefined.
     /// Currently the entire environment directory is **deleted and recreated**.
@@ -1002,23 +1010,7 @@ impl ManagedEnvironment {
         )
         .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
 
-        let mut local_checkout = CoreEnvironment::new(env_dir);
-
-        if !local_checkout.lockfile_path().exists() {
-            debug!("current gneratio does not have a lock file, locking...");
-
-            local_checkout
-                .lock(flox)
-                .map_err(ManagedEnvironmentError::Lock)?;
-        }
-        // Ensure the environment builds before we push it
-        let store_path = local_checkout
-            .build(flox)
-            .map_err(ManagedEnvironmentError::Build)?;
-
-        local_checkout
-            .link(flox, &self.out_link, &Some(store_path))
-            .map_err(ManagedEnvironmentError::Link)?;
+        let local_checkout = CoreEnvironment::new(env_dir);
 
         Ok(local_checkout)
     }
