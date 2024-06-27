@@ -152,11 +152,19 @@ impl Edit {
             EditAction::Reset { .. } => {
                 let span = tracing::info_span!("reset");
                 let _guard = span.enter();
-                let ConcreteEnvironment::Managed(environment) = detected_environment else {
-                    bail!("Cannot sync local or remote environments.");
+                let ConcreteEnvironment::Managed(mut environment) = detected_environment else {
+                    bail!("Cannot reset local or remote environments.");
                 };
 
                 environment.reset_local_env_to_current_generation(&flox)?;
+
+                Dialog {
+                    message: "Building environment",
+                    help_message: None,
+                    typed: Spinner::new(|| environment.build(&flox)),
+                }
+                .spin()?;
+
                 message::updated("Environment changes reset to current generation.");
             },
         }

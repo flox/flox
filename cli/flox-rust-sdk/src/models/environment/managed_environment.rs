@@ -314,29 +314,23 @@ impl Environment for ManagedEnvironment {
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
-        let remote = generations
+        let mut remote = generations
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let mut local_checkout = self.local_env_from_current_generation(flox)?;
-
-        if !Self::validate_checkout(&local_checkout, &remote)? {
-            Err(EnvironmentError::ManagedEnvironment(
-                ManagedEnvironmentError::CheckoutOutOfSync,
-            ))?
-        }
-
-        let result = local_checkout.edit(flox, contents)?;
+        let result = remote.edit(flox, contents)?;
 
         if let EditResult::Success { store_path } | EditResult::ReActivateRequired { store_path } =
             &result
         {
             generations
-                .add_generation(&mut local_checkout, "manually edited".to_string())
+                .add_generation(&mut remote, "manually edited".to_string())
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
             self.lock_pointer()?;
-            local_checkout.link(flox, &self.out_link, store_path)?;
+            remote.link(flox, &self.out_link, store_path)?;
         }
+
+        self.reset_local_env_to_current_generation(flox)?;
 
         Ok(result)
     }

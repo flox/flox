@@ -426,18 +426,16 @@ EOF
 }
 
 # bats test_tags=managed,managed:local-edits-block:edit
-@test "changes to the local environment block 'flox edit'"  {
+@test "'flox edit' works despite local changes and commits them" {
   make_empty_remote_env
 
   tomlq -i -t '.install.hello."pkg-path" = "hello"' .flox/env/manifest.toml
 
-  run "$FLOX_BIN" edit -f .flox/env/manifest.toml
-  assert_failure
-
+  # simulate immediate save in a user editor
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
-    "$FLOX_BIN" edit --sync
+    run "$FLOX_BIN" edit -f  .flox/env/manifest.toml
 
-  run "$FLOX_BIN" edit -f .flox/env/manifest.toml
+
   assert_success
 }
 
