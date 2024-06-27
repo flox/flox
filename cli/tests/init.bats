@@ -89,6 +89,7 @@ Next:
   $ flox search <package>    <- Search for a package
   $ flox install <package>   <- Install a package into an environment
   $ flox activate            <- Enter the environment
+  $ flox edit                <- Add environment variables and shell hooks
 EOF
 
 }
