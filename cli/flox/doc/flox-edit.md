@@ -44,15 +44,17 @@ which replaces the contents of the manifest with those of the provided file.
 
 ## Sync the local manifest with the current generation.
 
-When unsing environments that were pushed or pulled from FloxHub,
-local changes to the manifest in `.flox/env/manifest.toml`
+When using environments that were pushed to or pulled from FloxHub,
+changes to the local manifest in `.flox/env/manifest.toml`
 will block the use of imperative environment commands
 `flox {install, uninstall, upgrade}`.
-In this case, a new generation has to be created from the local changes first
-or the local changes discarded.
-Run `flox edit --sync` to create a new generation,
-or `flox edit --reset` to discard local changes
-and reset to the current latest generation.
+In this case, a new generation has to be created from the local manifest first
+or the changes discarded.
+Run `flox edit --reset` to discard local changes
+and reset to the current latest generation,
+or `flox edit --sync` to create a new generation.
+`flox edit` will always create a new generation including prior changes
+to the local manifest.
 
 
 # OPTIONS
