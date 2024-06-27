@@ -179,7 +179,9 @@ pub trait Environment: Send {
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
 
     /// Return a path that environment hooks should use to store transient data.
-    fn cache_path(&self) -> Result<PathBuf, EnvironmentError>;
+    ///
+    /// The returned path will exist.
+    fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError>;
 
     /// Return a path that should be used as the project root for environment hooks.
     fn project_path(&self) -> Result<PathBuf, EnvironmentError>;
@@ -554,6 +556,9 @@ pub enum EnvironmentError {
 
     #[error(transparent)]
     LockedManifest(LockedManifestError),
+
+    #[error(transparent)]
+    Canonicalize(CanonicalizeError),
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -414,12 +414,12 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Returns .flox/cache
-    fn cache_path(&self) -> Result<PathBuf, EnvironmentError> {
+    fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError> {
         let cache_dir = self.path.join(CACHE_DIR_NAME);
         if !cache_dir.exists() {
             std::fs::create_dir_all(&cache_dir).map_err(EnvironmentError::CreateCacheDir)?;
         }
-        Ok(cache_dir)
+        CanonicalPath::new(cache_dir).map_err(EnvironmentError::Canonicalize)
     }
 
     /// Returns parent of .flox
