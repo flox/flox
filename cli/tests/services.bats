@@ -54,22 +54,6 @@ teardown() {
   assert_output --partial "service management enabled"
 }
 
-@test "services in the manifest" {
-  "$FLOX_BIN" init
-  contents=$(
-  cat <<- EOF
-version = 1
-
-[services.foo]
-command = "bar"
-vars = { baz = "qux" }
-EOF
-  )
-  echo "$contents" > manifest.toml
-  FLOX_FEATURES_SERVICES=true run "$FLOX_BIN" edit -f manifest.toml
-  assert_success
-}
-
 @test "can call process-compose" {
   run "$PROCESS_COMPOSE_BIN" version
   assert_success

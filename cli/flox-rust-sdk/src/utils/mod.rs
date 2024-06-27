@@ -175,3 +175,21 @@ pub fn proptest_chrono_strategy(
     (start.timestamp()..end.timestamp())
         .prop_map(|timestamp| chrono::Utc.timestamp_opt(timestamp, 0).unwrap())
 }
+
+/// Produces strings that only contain alphanumeric characters.
+///
+/// This is handy when you want to generate valid TOML keys without worrying about quoting
+/// or escaping.
+#[cfg(any(test, feature = "test"))]
+pub fn proptest_alphanum_string(
+    max_size: usize,
+) -> impl proptest::strategy::Strategy<Value = String> {
+    use proptest::prelude::*;
+
+    let ranges = vec!['a'..='z', 'A'..='Z', '0'..='9'];
+    prop::collection::vec(
+        proptest::char::ranges(std::borrow::Cow::Owned(ranges)),
+        1..max_size,
+    )
+    .prop_map(|v| v.into_iter().collect())
+}
