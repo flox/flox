@@ -33,11 +33,13 @@ project_teardown() {
 setup() {
   common_test_setup
   setup_isolated_flox
+  project_setup
 
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 teardown() {
+  project_teardown
   common_test_teardown
 }
 

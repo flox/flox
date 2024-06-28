@@ -4,6 +4,8 @@ use std::str::FromStr;
 
 use indoc::{formatdoc, indoc};
 use log::debug;
+#[cfg(test)]
+use proptest::prelude::*;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
@@ -11,6 +13,8 @@ use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Tab
 
 use super::environment::path_environment::InitCustomization;
 use crate::data::{System, Version};
+#[cfg(test)]
+use crate::utils::proptest_btree_map_alphanum_keys;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub(super) const DEFAULT_PRIORITY: usize = 5;
@@ -336,24 +340,28 @@ pub enum TypedManifest {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
 pub struct TypedManifestCatalog {
-    pub(super) version: Version<1>,
+    pub version: Version<1>,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
     pub install: ManifestInstall,
     /// Variables that are exported to the shell environment upon activation.
     #[serde(default)]
-    pub(super) vars: ManifestVariables,
+    pub vars: ManifestVariables,
     /// Hooks that are run at various times during the lifecycle of the manifest
     /// in a known shell environment.
     #[serde(default)]
-    pub(super) hook: ManifestHook,
+    pub hook: ManifestHook,
     /// Profile scripts that are run in the user's shell upon activation.
     #[serde(default)]
-    pub(super) profile: ManifestProfile,
+    pub profile: ManifestProfile,
     /// Options that control the behavior of the manifest.
     #[serde(default)]
     pub options: ManifestOptions,
+    /// Service definitions
+    #[serde(default)]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub services: ManifestServices,
 }
 
 impl TypedManifestCatalog {
@@ -482,7 +490,15 @@ fn pkg_belongs_to_non_empty_toplevel_group(
     derive_more::DerefMut,
 )]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
+pub struct ManifestInstall(
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest_btree_map_alphanum_keys::<ManifestPackageDescriptor>(10, 3)"
+        )
+    )]
+    BTreeMap<String, ManifestPackageDescriptor>,
+);
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -492,8 +508,15 @@ pub struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 pub struct ManifestPackageDescriptor {
     pub(crate) pkg_path: String,
     pub(crate) pkg_group: Option<String>,
+    #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10usize)"))]
     pub(crate) priority: Option<usize>,
     pub(crate) version: Option<String>,
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest::option::of(proptest::collection::vec(any::<System>(), 1..3))"
+        )
+    )]
     pub(crate) systems: Option<Vec<System>>,
 }
 
@@ -519,9 +542,49 @@ impl ManifestPackageDescriptor {
     }
 }
 
+/// A map of service names to service definitions
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Default,
+    PartialEq,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ManifestServices(
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
+        )
+    )]
+    BTreeMap<String, ManifestServiceDescriptor>,
+);
+
+/// The definition of a service in a manifest
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ManifestServiceDescriptor {
+    /// The command to run to start the service
+    pub command: String,
+    /// Service-specific environment variables
+    pub vars: Option<ManifestVariables>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestVariables(BTreeMap<String, String>);
+pub struct ManifestVariables(
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest_btree_map_alphanum_keys::<String>(10, 3)")
+    )]
+    BTreeMap<String, String>,
+);
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
@@ -558,6 +621,12 @@ pub struct ManifestProfile {
 #[serde(deny_unknown_fields)]
 pub struct ManifestOptions {
     /// A list of systems that each package is resolved for.
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest::option::of(proptest::collection::vec(any::<System>(), 1..4))"
+        )
+    )]
     pub systems: Option<Vec<System>>,
     /// Options that control what types of packages are allowed.
     #[serde(default)]
@@ -579,6 +648,10 @@ pub struct Allows {
     pub broken: Option<bool>,
     /// A list of license descriptors that are allowed
     #[serde(default)]
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest::collection::vec(any::<String>(), 0..3)")
+    )]
     pub licenses: Vec<String>,
 }
 
@@ -944,6 +1017,7 @@ pub fn add_system(toml: &str, system: &str) -> Result<DocumentMut, TomlEditError
 #[cfg(test)]
 pub(super) mod test {
     use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
 
     use super::*;
 
@@ -976,6 +1050,7 @@ pub(super) mod test {
             hook: ManifestHook::default(),
             profile: ManifestProfile::default(),
             options: ManifestOptions::default(),
+            services: ManifestServices::default(),
         }
     }
 
@@ -1546,5 +1621,14 @@ pub(super) mod test {
             .expect_err("missing closing quote should cause failure");
         PackageToInstall::from_str("@1.2.3").expect_err("missing attrpath should cause failure");
         PackageToInstall::from_str("foo@").expect_err("missing version should cause failure");
+    }
+
+    proptest! {
+        #[test]
+        fn manifest_round_trip(manifest in any::<TypedManifestCatalog>()) {
+            let toml = toml_edit::ser::to_string(&manifest).unwrap();
+            let parsed = toml_edit::de::from_str::<TypedManifestCatalog>(&toml).unwrap();
+            prop_assert_eq!(manifest, parsed);
+        }
     }
 }
