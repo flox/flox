@@ -1607,7 +1607,7 @@ pub enum MigrationError {
 /// If doing so requires an upgrade, prompt the user for whether to proceed.
 async fn maybe_migrate_environment_to_v1(
     flox: &Flox,
-    environment: &mut Box<dyn Environment>,
+    environment: &mut dyn Environment,
     description: &str,
 ) -> Result<(), MigrationError> {
     maybe_migrate_environment_to_v1_inner(
@@ -1624,7 +1624,7 @@ async fn maybe_migrate_environment_to_v1(
 /// If confirm_upgrade_future is None, the user can't be prompted to confirm an upgrade.
 async fn maybe_migrate_environment_to_v1_inner(
     flox: &Flox,
-    environment: &mut Box<dyn Environment>,
+    environment: &mut dyn Environment,
     description: &str,
     confirm_upgrade_future: Option<impl Future<Output = Result<bool>>>,
 ) -> Result<(), MigrationError> {
@@ -1977,7 +1977,7 @@ mod tests {
         // TODO: use None::<???> instead of false.then
         maybe_migrate_environment_to_v1_inner(
             &flox,
-            &mut environment,
+            &mut *environment,
             &description,
             false.then(|| confirm_migration_upgrade("")),
         )
@@ -2019,7 +2019,7 @@ mod tests {
 
         let err = maybe_migrate_environment_to_v1_inner(
             &flox,
-            &mut environment,
+            &mut *environment,
             &description,
             Some(async { Ok(false) }),
         )
@@ -2074,7 +2074,7 @@ mod tests {
 
         maybe_migrate_environment_to_v1_inner(
             &flox,
-            &mut environment,
+            &mut *environment,
             &description,
             Some(async { Ok(true) }),
         )
@@ -2124,7 +2124,7 @@ mod tests {
 
         let err = maybe_migrate_environment_to_v1_inner(
             &flox,
-            &mut environment,
+            &mut *environment,
             &description,
             Some(async { Ok(false) }),
         )
@@ -2167,7 +2167,7 @@ mod tests {
 
         let err = maybe_migrate_environment_to_v1_inner(
             &flox,
-            &mut environment,
+            &mut *environment,
             &description,
             Some(async { Ok(true) }),
         )

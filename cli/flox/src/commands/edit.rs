@@ -115,7 +115,7 @@ impl Edit {
 
                 Self::edit_manifest(
                     &flox,
-                    &mut environment,
+                    &mut *environment,
                     active_environment,
                     description,
                     contents,
@@ -176,7 +176,7 @@ impl Edit {
     // instead of just environment is a pain
     async fn edit_manifest(
         flox: &Flox,
-        environment: &mut Box<dyn Environment>,
+        environment: &mut dyn Environment,
         active_environment: UninitializedEnvironment,
         description: String,
         contents: Option<String>,
@@ -203,7 +203,7 @@ impl Edit {
                 .map_err(apply_doc_link_for_unsupported_packages)?,
             // If not provided with new manifest contents, let the user edit the file directly
             // via $EDITOR or $VISUAL (as long as `flox edit` was invoked interactively).
-            None => Self::interactive_edit(flox, environment.as_mut()).await?,
+            None => Self::interactive_edit(flox, environment).await?,
         };
 
         // outside the match to avoid rustfmt falling on its face
@@ -449,7 +449,7 @@ mod tests {
 
         let err = Edit::edit_manifest(
             &flox,
-            &mut environment,
+            &mut *environment,
             active_environment,
             description,
             Some(new_contents.to_string()),
@@ -490,7 +490,7 @@ mod tests {
 
         let err = Edit::edit_manifest(
             &flox,
-            &mut environment,
+            &mut *environment,
             active_environment,
             description,
             Some(new_contents.to_string()),
@@ -533,7 +533,7 @@ mod tests {
 
         Edit::edit_manifest(
             &flox,
-            &mut environment,
+            &mut *environment,
             active_environment,
             description,
             Some(new_contents.to_string()),
@@ -576,7 +576,7 @@ mod tests {
 
         Edit::edit_manifest(
             &flox,
-            &mut environment,
+            &mut *environment,
             active_environment,
             description,
             Some(new_contents.to_string()),

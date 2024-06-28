@@ -76,7 +76,7 @@ impl Uninstall {
 
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
-        maybe_migrate_environment_to_v1(&flox, &mut environment, &description).await?;
+        maybe_migrate_environment_to_v1(&flox, &mut *environment, &description).await?;
 
         let _ = Dialog {
             message: &format!("Uninstalling packages from environment {description}..."),
