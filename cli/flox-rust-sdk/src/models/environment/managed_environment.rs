@@ -419,17 +419,19 @@ impl Environment for ManagedEnvironment {
     }
 
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
-        let pointer_lock_path = self.path.join(GENERATION_LOCK_FILENAME);
+        let local_manifest_path = self
+            .local_env_from_current_generation(flox)?
+            .manifest_path();
 
-        let pointer_lock_modified_at = mtime_of(pointer_lock_path);
+        let local_manifest = mtime_of(local_manifest_path);
         let out_link_modified_at = mtime_of(&self.out_link);
 
         debug!(
-            "pointer_lock_modified_at: {pointer_lock_modified_at:?}
+            "local_manifest: {local_manifest:?}
             out_link_modified_at: {out_link_modified_at:?}"
         );
 
-        if pointer_lock_modified_at >= out_link_modified_at || !self.out_link.exists() {
+        if local_manifest >= out_link_modified_at || !self.out_link.exists() {
             self.build(flox)?;
         }
 
