@@ -279,9 +279,9 @@ impl Environment for RemoteEnvironment {
     ///
     /// Remote environments shouldn't have state of any kind, so this just
     /// returns a temporary directory.
-    fn cache_path(&self) -> Result<PathBuf, EnvironmentError> {
+    fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError> {
         let tempdir = TempDir::new().map_err(EnvironmentError::CreateTempDir)?;
-        Ok(tempdir.into_path())
+        CanonicalPath::new(tempdir.into_path()).map_err(EnvironmentError::Canonicalize)
     }
 
     fn project_path(&self) -> Result<PathBuf, EnvironmentError> {

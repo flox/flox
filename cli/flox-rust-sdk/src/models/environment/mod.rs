@@ -52,6 +52,7 @@ pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
+pub const SERVICES_SOCKET_NAME: &str = "services.sock";
 pub const LIB_DIR_NAME: &str = "lib";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
@@ -73,6 +74,7 @@ pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
+pub const FLOX_SERVICES_SOCKET_VAR: &str = "_FLOX_SERVICES_SOCKET";
 
 pub const N_HASH_CHARS: usize = 8;
 
@@ -179,7 +181,9 @@ pub trait Environment: Send {
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
 
     /// Return a path that environment hooks should use to store transient data.
-    fn cache_path(&self) -> Result<PathBuf, EnvironmentError>;
+    ///
+    /// The returned path will exist.
+    fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError>;
 
     /// Return a path that should be used as the project root for environment hooks.
     fn project_path(&self) -> Result<PathBuf, EnvironmentError>;
@@ -554,6 +558,9 @@ pub enum EnvironmentError {
 
     #[error(transparent)]
     LockedManifest(LockedManifestError),
+
+    #[error(transparent)]
+    Canonicalize(CanonicalizeError),
 }
 
 #[derive(Debug, thiserror::Error)]
