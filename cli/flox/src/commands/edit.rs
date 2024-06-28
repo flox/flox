@@ -104,6 +104,12 @@ impl Edit {
 
                 let contents = Self::provided_manifest_contents(file)?;
 
+                if let ConcreteEnvironment::Managed(ref environment) = detected_environment {
+                    if environment.has_local_changes(&flox)? && contents.is_none() {
+                        bail!(ManagedEnvironmentError::CheckoutOutOfSync)
+                    }
+                };
+
                 // TODO: we have various functionality spread across
                 // UninitializedEnvironment, ConcreteEnvironment, and
                 // Environment.

@@ -1084,6 +1084,26 @@ impl ManagedEnvironment {
         Ok(local_manifest_bytes == remote_manifest_bytes)
     }
 
+    /// Convenience method to check if the local environment has changes.
+    /// To be used by consumers to check
+    /// if the environment is in sync with its current generation
+    /// outside of the context of a specific operation.
+    /// E.g. `flox edit`.
+    pub fn has_local_changes(&self, flox: &Flox) -> Result<bool, ManagedEnvironmentError> {
+        let generations = self
+            .generations()
+            .writable(flox.temp_dir.clone())
+            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
+
+        let remote = generations
+            .get_current_generation()
+            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+
+        let local_checkout = self.local_env_from_current_generation(flox)?;
+
+        Ok(!Self::validate_checkout(&local_checkout, &remote)?)
+    }
+
     /// Lock the environment to the current revision
     fn lock_pointer(&self) -> Result<(), ManagedEnvironmentError> {
         let lock_path = self.path.join(GENERATION_LOCK_FILENAME);
