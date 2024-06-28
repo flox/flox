@@ -6,7 +6,7 @@
   runCommand,
   shellcheck,
 }:
-runCommand "flox-activate" {
+runCommand "flox-activation-scripts" {
   buildInputs = [bash coreutils gnused];
 } ''
   cp -R ${../../pkgdb/src/buildenv/assets} $out

@@ -10,7 +10,7 @@
   cacert,
   ccls,
   clang-tools_16,
-  flox-activate,
+  flox-activation-scripts,
   include-what-you-use,
   lcov,
   nix,
@@ -146,7 +146,7 @@ in
       configurePhase = ''
         runHook preConfigure;
         makeFlagsArray+=( "PREFIX=$out" );
-        makeFlagsArray+=( "ACTIVATE_PACKAGE_DIR=${flox-activate}" );
+        makeFlagsArray+=( "ACTIVATION_SCRIPTS_PACKAGE_DIR=${flox-activation-scripts}" );
         if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
           makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
         fi
