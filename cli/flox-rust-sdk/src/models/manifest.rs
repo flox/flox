@@ -14,7 +14,7 @@ use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Tab
 use super::environment::path_environment::InitCustomization;
 use crate::data::{System, Version};
 #[cfg(test)]
-use crate::utils::proptest_alphanum_string;
+use crate::utils::proptest_btree_map_alphanum_keys;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub(super) const DEFAULT_PRIORITY: usize = 5;
@@ -360,6 +360,7 @@ pub struct TypedManifestCatalog {
     pub options: ManifestOptions,
     /// Service definitions
     #[serde(default)]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub services: ManifestServices,
 }
 
@@ -493,7 +494,7 @@ pub struct ManifestInstall(
     #[cfg_attr(
         test,
         proptest(
-            strategy = "proptest::collection::btree_map(proptest_alphanum_string(10), any::<ManifestPackageDescriptor>(), 0..3)"
+            strategy = "proptest_btree_map_alphanum_keys::<ManifestPackageDescriptor>(10, 3)"
         )
     )]
     BTreeMap<String, ManifestPackageDescriptor>,
@@ -557,7 +558,7 @@ pub struct ManifestServices(
     #[cfg_attr(
         test,
         proptest(
-            strategy = "proptest::collection::btree_map(proptest_alphanum_string(10), any::<ManifestServiceDescriptor>(), 0..3)"
+            strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
         )
     )]
     BTreeMap<String, ManifestServiceDescriptor>,
@@ -580,9 +581,7 @@ pub struct ManifestServiceDescriptor {
 pub struct ManifestVariables(
     #[cfg_attr(
         test,
-        proptest(
-            strategy = "proptest::collection::btree_map(proptest_alphanum_string(10), any::<String>(), 0..3)"
-        )
+        proptest(strategy = "proptest_btree_map_alphanum_keys::<String>(10, 3)")
     )]
     BTreeMap<String, String>,
 );
@@ -695,8 +694,6 @@ pub enum ManifestError {
     PkgDbCall(#[source] std::io::Error),
     #[error("no package or group named '{0}' in the manifest")]
     PkgOrGroupNotFound(String),
-    #[error("cannot use this section without a feature flag")]
-    ServicesNotEnabled,
 }
 
 /// A subset of the manifest used to check what type of edits users make. We
@@ -1633,31 +1630,5 @@ pub(super) mod test {
             let parsed = toml_edit::de::from_str::<TypedManifestCatalog>(&toml).unwrap();
             prop_assert_eq!(manifest, parsed);
         }
-    }
-
-    #[test]
-    fn parses_services_section() {
-        let manifest_raw = indoc! {r#"
-        version = 1
-
-        [services.foo]
-        command = "start foo"
-        [services.foo.vars]
-        bar = "qux"
-        "#};
-        let TypedManifest::Catalog(parsed) =
-            toml_edit::de::from_str::<TypedManifest>(manifest_raw).unwrap()
-        else {
-            panic!("failed to parse manifest");
-        };
-        assert_eq!(
-            parsed
-                .services
-                .get("foo")
-                .and_then(|foo| foo.vars.as_ref())
-                .and_then(|vars| vars.0.get("bar"))
-                .unwrap(),
-            "qux"
-        );
     }
 }
