@@ -63,9 +63,6 @@
         path = ../../pkgdb/src/libexec/mkContainer.nix;
       };
 
-      # Used by `buildenv' to install the activation package.
-      ACTIVATE_PACKAGE_DIR = flox-activate;
-
       # Packages required for the (bash) activate script.
       FLOX_BASH_PKG = bash;
       FLOX_CACERT_PKG = cacert;
@@ -149,7 +146,7 @@ in
       configurePhase = ''
         runHook preConfigure;
         export PREFIX="$out";
-        echo "ACTIVATE_PACKAGE_DIR: $ACTIVATE_PACKAGE_DIR" >&2;
+        export ACTIVATE_PACKAGE_DIR="${flox-activate}";
         if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
           makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
         fi
