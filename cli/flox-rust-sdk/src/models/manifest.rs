@@ -6,6 +6,7 @@ use indoc::{formatdoc, indoc};
 use log::debug;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
 
 use super::environment::path_environment::InitCustomization;
@@ -483,6 +484,7 @@ fn pkg_belongs_to_non_empty_toplevel_group(
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
@@ -521,6 +523,7 @@ impl ManifestPackageDescriptor {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestVariables(BTreeMap<String, String>);
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
@@ -531,6 +534,7 @@ pub struct ManifestHook {
     on_activate: Option<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
@@ -547,6 +551,7 @@ pub struct ManifestProfile {
     tcsh: Option<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
@@ -563,6 +568,7 @@ pub struct ManifestOptions {
     pub cuda_detection: Option<bool>,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
@@ -576,6 +582,7 @@ pub struct Allows {
     pub licenses: Vec<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]

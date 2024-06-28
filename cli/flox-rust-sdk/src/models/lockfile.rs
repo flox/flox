@@ -3,6 +3,7 @@ use indent::{indent_all_by, indent_by};
 use indoc::formatdoc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_with::skip_serializing_none;
 
 pub type FlakeRef = Value;
 
@@ -159,6 +160,7 @@ pub struct LockedManifestCatalog {
     pub packages: Vec<LockedPackageCatalog>,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedPackageCatalog {
