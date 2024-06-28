@@ -145,8 +145,8 @@ in
 
       configurePhase = ''
         runHook preConfigure;
-        export PREFIX="$out";
-        export ACTIVATE_PACKAGE_DIR="${flox-activate}";
+        makeFlagsArray+=( "PREFIX=$out" );
+        makeFlagsArray+=( "ACTIVATE_PACKAGE_DIR=${flox-activate}" );
         if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
           makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
         fi
