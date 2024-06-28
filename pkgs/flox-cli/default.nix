@@ -2,6 +2,7 @@
   cacert,
   darwin,
   rust-toolchain,
+  flox-activate,
   flox-pkgdb,
   gitMinimal,
   glibcLocalesUtf8,
@@ -62,7 +63,7 @@
         if flox-pkgdb == null
         then "ld-floxlib.so"
         else "${flox-pkgdb}/lib/ld-floxlib.so";
-      FLOX_ZDOTDIR = ../../pkgdb/src/buildenv/assets/activate.d/zdotdir;
+      FLOX_ZDOTDIR = flox-activate + activate.d/zdotdir;
       PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
 
       # bundling of internally used nix scripts

@@ -153,8 +153,7 @@ VERSION := $(file < $(PKGDB_ROOT)/.version)
 # pkgs/flox-pkgdb/default.nix, but if working in a `nix develop' shell
 # then run `unset ACTIVATE_PACKAGE_DIR' to regenerate the package with
 # each build.
-ACTIVATE_PACKAGE_DIR ?= $(shell \
-  $(NIX) store add-path -n flox-activate src/buildenv/assets)
+ACTIVATE_PACKAGE_DIR ?= $(shell $(NIX) build --print-out-paths .#flox-activate)
 
 # The reference to CONTAINER_BUILDER_PATH in realise.cc requires that
 # libexec/mkContainer.nix be rendered as a single-file package in the

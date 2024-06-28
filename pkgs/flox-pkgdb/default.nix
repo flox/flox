@@ -10,6 +10,7 @@
   cacert,
   ccls,
   clang-tools_16,
+  flox-activate,
   include-what-you-use,
   lcov,
   nix,
@@ -63,39 +64,7 @@
       };
 
       # Used by `buildenv' to install the activation package.
-      ACTIVATE_PACKAGE_DIR =
-        runCommand "flox-activate" {
-          buildInputs = [bash coreutils gnused];
-        } ''
-          cp -R ${../../pkgdb/src/buildenv/assets} $out
-
-          substituteInPlace $out/activate \
-            --replace "@coreutils@" "${coreutils}" \
-            --replace "@gnused@" "${gnused}" \
-            --replace "@out@" "$out" \
-            --replace "/usr/bin/env bash" "${bash}/bin/bash"
-
-          substituteInPlace $out/activate.d/bash \
-            --replace "@gnused@" "${gnused}"
-          substituteInPlace $out/activate.d/fish \
-            --replace "@gnused@" "${gnused}"
-          substituteInPlace $out/activate.d/tcsh \
-            --replace "@gnused@" "${gnused}"
-          substituteInPlace $out/activate.d/zsh \
-            --replace "@gnused@" "${gnused}"
-
-          for i in $out/etc/profile.d/*; do
-            substituteInPlace $i --replace "@coreutils@" "${coreutils}"
-            substituteInPlace $i --replace "@gnused@" "${gnused}"
-            substituteInPlace $i --replace "@findutils@" "${findutils}"
-          done
-
-          ${shellcheck}/bin/shellcheck \
-            $out/activate \
-            $out/activate.d/bash \
-            $out/activate.d/set-prompt.bash \
-            $out/etc/profile.d/*
-        '';
+      ACTIVATE_PACKAGE_DIR = flox-activate;
 
       # Packages required for the (bash) activate script.
       FLOX_BASH_PKG = bash;

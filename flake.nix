@@ -175,6 +175,9 @@
 
       GENERATED_DATA = ./test_data/generated;
 
+      # Package activation scripts.
+      flox-activate = callPackage ./pkgs/flox-activate {};
+
       # Customized `gh' executable used for auth.
       flox-gh = callPackage ./pkgs/flox-gh {};
 
@@ -230,6 +233,7 @@
     in {
       inherit
         (pkgs)
+        flox-activate
         flox-gh
         flox-pkgdb
         flox-cli
