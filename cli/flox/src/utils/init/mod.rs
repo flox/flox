@@ -28,24 +28,22 @@ pub fn init_access_tokens(
 
     let gh_config_file = xdg::BaseDirectories::with_prefix("gh")?.get_config_file("hosts.yml");
     let gh_tokens: BTreeMap<String, String> = if gh_config_file.exists() {
-        serde_yaml::from_reader::<_, IndexMap<String, GhHost>>(std::fs::File::open(
-            &gh_config_file,
-        )?)
-        .context("Could not read `gh` config file")?
-        .into_iter()
-        .filter_map(|(host, v)| {
-            if v.oauth_token.is_none() {
-                debug!(
-                    indoc! {"
+        serde_yml::from_reader::<_, IndexMap<String, GhHost>>(std::fs::File::open(&gh_config_file)?)
+            .context("Could not read `gh` config file")?
+            .into_iter()
+            .filter_map(|(host, v)| {
+                if v.oauth_token.is_none() {
+                    debug!(
+                        indoc! {"
                     gh config ({gh_config_file:?}): {host}: no `oauth_token` specified
                 "},
-                    gh_config_file = gh_config_file,
-                    host = host
-                );
-            }
-            v.oauth_token.map(|token| (host, token))
-        })
-        .collect()
+                        gh_config_file = gh_config_file,
+                        host = host
+                    );
+                }
+                v.oauth_token.map(|token| (host, token))
+            })
+            .collect()
     } else {
         Default::default()
     };

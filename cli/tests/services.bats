@@ -59,3 +59,15 @@ teardown() {
   assert_success
   assert_output --partial "v1.6.1"
 }
+
+@test "process-compose can run generated config file" {
+  "$FLOX_BIN" init
+  export SOCKET_FILE="$PROJECT_DIR/pc.sock"
+  export CONFIG_FILE="$PROJECT_DIR/.flox/run/$NIX_TARGET_SYSTEM.test/service-config.yaml"
+  FLOX_FEATURES_SERVICES=true _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/python_http_server/python_http_server.json" \
+    run "$FLOX_BIN" edit -f "$GENERATED_DATA/envs/python_http_server/manifest.toml"
+  run bash "$INPUT_DATA/services/check_python_http_server.sh"
+  assert_success
+  unset SOCKET_FILE
+  unset CONFIG_FILE
+}

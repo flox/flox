@@ -52,6 +52,7 @@ use crate::models::pkgdb::{
     PKGDB_BIN,
 };
 use crate::providers::catalog::{self, ClientTrait};
+use crate::providers::services::{maybe_make_service_config_file, ServiceError};
 use crate::utils::CommandExt;
 
 pub struct ReadOnly {}
@@ -252,8 +253,20 @@ impl<State> CoreEnvironment<State> {
             lockfile_path.display()
         );
 
+        let service_config_path = if let LockedManifest::Catalog(ref lockfile) = lockfile {
+            tracing::debug!("building environment with service config");
+            maybe_make_service_config_file(flox, lockfile)?
+        } else {
+            None
+        };
+
         let store_path = lockfile
-            .build(Path::new(&*PKGDB_BIN), None, &None)
+            .build(
+                Path::new(&*PKGDB_BIN),
+                None,
+                &None,
+                service_config_path.as_ref().map(|c| c.path.as_ref()),
+            )
             .map_err(CoreEnvironmentError::LockedManifest)?;
 
         debug!(
@@ -341,6 +354,12 @@ impl<State> CoreEnvironment<State> {
             out_link_path.as_ref().display()
         );
 
+        let service_config_path = if let LockedManifest::Catalog(ref lockfile) = lockfile {
+            maybe_make_service_config_file(flox, lockfile)?
+        } else {
+            None
+        };
+
         // Note: when `store_path` is `Some`, `--store-path` is passed to `pkgdb buildenv`
         // which skips the build and only attempts to link the environment.
         lockfile
@@ -348,6 +367,7 @@ impl<State> CoreEnvironment<State> {
                 Path::new(&*PKGDB_BIN),
                 Some(out_link_path.as_ref()),
                 store_path,
+                service_config_path.as_ref().map(|c| c.path.as_ref()),
             )
             .map_err(CoreEnvironmentError::LockedManifest)?;
         Ok(())
@@ -1217,6 +1237,11 @@ pub enum CoreEnvironmentError {
         "Modifying version 0 manifests is no longer supported.\nSet 'version = 1' in the manifest."
     )]
     Version0NotSupported,
+
+    #[error(transparent)]
+    Services(#[from] ServiceError),
+    #[error("cannot use services with v0 manifests")]
+    ServicesWithV0,
 }
 
 impl CoreEnvironmentError {

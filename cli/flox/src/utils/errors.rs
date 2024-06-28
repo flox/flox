@@ -353,6 +353,10 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         },
         // User facing
         CoreEnvironmentError::Version0NotSupported => display_chain(err),
+        CoreEnvironmentError::Services(err) => display_chain(err),
+        CoreEnvironmentError::ServicesWithV0 => {
+            format_core_error(&CoreEnvironmentError::ServicesWithV0)
+        },
     }
 }
 

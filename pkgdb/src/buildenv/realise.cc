@@ -117,10 +117,27 @@ createEnvironmentStorePath(
   std::vector<RealisedPackage> & pkgs,
   nix::StorePathSet &            references,
   std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
-    originalPackage )
+                                     originalPackage,
+  const std::optional<std::string> & serviceConfigPath )
 {
   /* build the profile into a tempdir */
   auto tempDir = nix::createTempDir();
+  if ( serviceConfigPath.has_value() )
+    {
+      try
+        {
+          std::filesystem::copy_file( *serviceConfigPath,
+                                      std::filesystem::path( tempDir )
+                                        / "service-config.yaml",
+                                      std::filesystem::copy_options::none );
+        }
+      catch ( const std::filesystem::filesystem_error & e )
+        {
+          throw PackageBuildFailure(
+            "Failed to add service config to environment",
+            nix::filterANSIEscapes( e.what(), true ) );
+        }
+    }
   try
     {
       buildenv::buildEnvironment( tempDir, pkgs );
@@ -798,9 +815,10 @@ makeActivationScriptsPackageDir( nix::EvalState & state )
  * @return The store path of the environment.
  */
 nix::StorePath
-createFloxEnv( nix::ref<nix::EvalState> & state,
-               const nlohmann::json &     lockfileContent,
-               const System &             system )
+createFloxEnv( nix::ref<nix::EvalState> &         state,
+               const nlohmann::json &             lockfileContent,
+               const std::optional<std::string> & serviceConfigPath,
+               const System &                     system )
 {
   resolver::LockfileRaw lockfile;
   lockfile.load_from_content( lockfileContent );
@@ -843,7 +861,8 @@ createFloxEnv( nix::ref<nix::EvalState> & state,
   return createEnvironmentStorePath( *state,
                                      pkgs,
                                      references,
-                                     originalPackage );
+                                     originalPackage,
+                                     serviceConfigPath );
 }
 
 
