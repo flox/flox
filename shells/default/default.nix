@@ -9,11 +9,13 @@
   pre-commit-check,
   shfmt,
   mitmproxy,
+  cargo-nextest,
   flox-cli,
   flox-cli-tests,
   flox-pkgdb,
-  flox-tests,
+  flox-manpages,
   ci ? false,
+  GENERATED_DATA ? ./../../test_data/generated,
 }: let
   # For use in GitHub Actions and local development.
   ciPackages =
@@ -23,12 +25,6 @@
     ++ [
       (flox-cli-tests.override {
         PROJECT_TESTS_DIR = "/cli/tests";
-        PKGDB_BIN = null;
-        FLOX_BIN = null;
-        LD_FLOXLIB = null;
-      })
-      (flox-tests.override {
-        PROJECT_TESTS_DIR = "/tests";
         PKGDB_BIN = null;
         FLOX_BIN = null;
         LD_FLOXLIB = null;
@@ -46,6 +42,7 @@
       shfmt
       mitmproxy
       yq
+      cargo-nextest
     ];
 in
   mkShell (
@@ -64,7 +61,12 @@ in
       shellHook =
         flox-pkgdb.devShellHook
         + flox-cli.devShellHook
-        + pre-commit-check.shellHook;
+        + pre-commit-check.shellHook
+        + ''
+          export MANPATH=${flox-manpages}/share/man:$MANPATH
+        '';
+
+      inherit GENERATED_DATA;
     }
     // flox-pkgdb.devEnvs
     // flox-cli.devEnvs

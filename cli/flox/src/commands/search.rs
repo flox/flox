@@ -71,7 +71,7 @@ impl Search {
             config.flox.search_limit.or(DEFAULT_SEARCH_LIMIT)
         };
 
-        let results = if let Some(client) = flox.catalog_client {
+        let results = if let Some(client) = &flox.catalog_client {
             tracing::debug!("using catalog client for search");
             let parsed_search = match SearchTerm::from_arg(&self.search_term) {
                 SearchTerm::Clean(term) => term,
@@ -128,6 +128,8 @@ impl Search {
 
             let suggestion = DidYouMean::<SearchSuggestion>::new(
                 &self.search_term,
+                flox.catalog_client,
+                flox.system,
                 manifest,
                 global_manifest,
                 lockfile,

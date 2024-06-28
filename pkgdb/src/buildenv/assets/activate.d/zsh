@@ -1,5 +1,11 @@
 export _gnused="@gnused@"
 
+# Confirm _flox_activate_tracelevel is defined before proceeding.
+if [ -z "$_flox_activate_tracelevel" ]; then
+  echo 'WARNING (zsh): _flox_activate_tracelevel not defined .. defaulting to 0' >&2
+  export _flox_activate_tracelevel=0
+fi
+
 # Enable shell-specific profile script startup with verbosity 2.
 if [ "$_flox_activate_tracelevel" -ge 2 ]; then
   set -x

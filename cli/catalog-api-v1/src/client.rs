@@ -86,17 +86,7 @@ pub mod types {
     ///      "title": "Messages",
     ///      "type": "array",
     ///      "items": {
-    ///        "oneOf": [
-    ///          {
-    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral"
-    ///          },
-    ///          {
-    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
-    ///          },
-    ///          {
-    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
-    ///          }
-    ///        ]
+    ///        "$ref": "#/components/schemas/ResolutionMessageGeneral"
     ///      }
     ///    },
     ///    "packages": {
@@ -124,7 +114,7 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct CatalogPageInput {
         pub complete: bool,
-        pub messages: Vec<MessagesItem>,
+        pub messages: Vec<ResolutionMessageGeneral>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub packages: Option<Vec<ResolvedPackageDescriptor>>,
         pub page: i64,
@@ -179,17 +169,7 @@ pub mod types {
     ///      "title": "Messages",
     ///      "type": "array",
     ///      "items": {
-    ///        "oneOf": [
-    ///          {
-    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral"
-    ///          },
-    ///          {
-    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
-    ///          },
-    ///          {
-    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
-    ///          }
-    ///        ]
+    ///        "$ref": "#/components/schemas/ResolutionMessageGeneral"
     ///      }
     ///    },
     ///    "packages": {
@@ -217,7 +197,7 @@ pub mod types {
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct CatalogPageOutput {
         pub complete: bool,
-        pub messages: Vec<MessagesItem>,
+        pub messages: Vec<ResolutionMessageGeneral>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub packages: Option<Vec<ResolvedPackageDescriptor>>,
         pub page: i64,
@@ -520,53 +500,6 @@ pub mod types {
         type Error = self::error::ConversionError;
         fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
             value.parse()
-        }
-    }
-    ///MessagesItem
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "oneOf": [
-    ///    {
-    ///      "$ref": "#/components/schemas/ResolutionMessageGeneral"
-    ///    },
-    ///    {
-    ///      "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
-    ///    },
-    ///    {
-    ///      "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
-    ///    }
-    ///  ]
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    #[serde(untagged)]
-    pub enum MessagesItem {
-        MessageGeneral(ResolutionMessageGeneral),
-        AttrPathNotFound(ResolutionAttrPathNotFound),
-        ConstraintsTooTight(ResolutionConstraintsTooTight),
-    }
-    impl From<&MessagesItem> for MessagesItem {
-        fn from(value: &MessagesItem) -> Self {
-            value.clone()
-        }
-    }
-    impl From<ResolutionMessageGeneral> for MessagesItem {
-        fn from(value: ResolutionMessageGeneral) -> Self {
-            Self::MessageGeneral(value)
-        }
-    }
-    impl From<ResolutionAttrPathNotFound> for MessagesItem {
-        fn from(value: ResolutionAttrPathNotFound) -> Self {
-            Self::AttrPathNotFound(value)
-        }
-    }
-    impl From<ResolutionConstraintsTooTight> for MessagesItem {
-        fn from(value: ResolutionConstraintsTooTight) -> Self {
-            Self::ConstraintsTooTight(value)
         }
     }
     ///Output
@@ -1274,131 +1207,6 @@ pub mod types {
             value.clone()
         }
     }
-    ///ResolutionAttrPathNotFound
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "ResolutionAttrPathNotFound",
-    ///  "type": "object",
-    ///  "required": [
-    ///    "attr_path",
-    ///    "install_id",
-    ///    "valid_systems"
-    ///  ],
-    ///  "properties": {
-    ///    "attr_path": {
-    ///      "title": "Attr Path",
-    ///      "type": "string"
-    ///    },
-    ///    "context": {
-    ///      "title": "Context",
-    ///      "default": {},
-    ///      "type": [
-    ///        "object",
-    ///        "null"
-    ///      ],
-    ///      "additionalProperties": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "install_id": {
-    ///      "title": "Install Id",
-    ///      "type": "string"
-    ///    },
-    ///    "level": {
-    ///      "$ref": "#/components/schemas/MessageLevel"
-    ///    },
-    ///    "message": {
-    ///      "title": "Message",
-    ///      "default": "",
-    ///      "type": "string"
-    ///    },
-    ///    "type": {
-    ///      "$ref": "#/components/schemas/MessageType"
-    ///    },
-    ///    "valid_systems": {
-    ///      "title": "Valid Systems",
-    ///      "type": "array",
-    ///      "items": {
-    ///        "$ref": "#/components/schemas/SystemEnum"
-    ///      }
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ResolutionAttrPathNotFound {
-        pub attr_path: String,
-        #[serde(default = "defaults::resolution_attr_path_not_found_context")]
-        pub context: Option<std::collections::HashMap<String, String>>,
-        pub install_id: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub level: Option<MessageLevel>,
-        #[serde(default)]
-        pub message: String,
-        #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
-        pub type_: Option<MessageType>,
-        pub valid_systems: Vec<SystemEnum>,
-    }
-    impl From<&ResolutionAttrPathNotFound> for ResolutionAttrPathNotFound {
-        fn from(value: &ResolutionAttrPathNotFound) -> Self {
-            value.clone()
-        }
-    }
-    ///ResolutionConstraintsTooTight
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "ResolutionConstraintsTooTight",
-    ///  "type": "object",
-    ///  "properties": {
-    ///    "context": {
-    ///      "title": "Context",
-    ///      "default": {},
-    ///      "type": [
-    ///        "object",
-    ///        "null"
-    ///      ],
-    ///      "additionalProperties": {
-    ///        "type": "string"
-    ///      }
-    ///    },
-    ///    "level": {
-    ///      "$ref": "#/components/schemas/MessageLevel"
-    ///    },
-    ///    "message": {
-    ///      "title": "Message",
-    ///      "default": "",
-    ///      "type": "string"
-    ///    },
-    ///    "type": {
-    ///      "$ref": "#/components/schemas/MessageType"
-    ///    }
-    ///  }
-    ///}
-    /// ```
-    /// </details>
-    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-    pub struct ResolutionConstraintsTooTight {
-        #[serde(default = "defaults::resolution_constraints_too_tight_context")]
-        pub context: Option<std::collections::HashMap<String, String>>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub level: Option<MessageLevel>,
-        #[serde(default)]
-        pub message: String,
-        #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
-        pub type_: Option<MessageType>,
-    }
-    impl From<&ResolutionConstraintsTooTight> for ResolutionConstraintsTooTight {
-        fn from(value: &ResolutionConstraintsTooTight) -> Self {
-            value.clone()
-        }
-    }
     ///ResolutionMessageGeneral
     ///
     /// <details><summary>JSON schema</summary>
@@ -1407,14 +1215,16 @@ pub mod types {
     ///{
     ///  "title": "ResolutionMessageGeneral",
     ///  "type": "object",
+    ///  "required": [
+    ///    "context",
+    ///    "level",
+    ///    "message",
+    ///    "type"
+    ///  ],
     ///  "properties": {
     ///    "context": {
     ///      "title": "Context",
-    ///      "default": {},
-    ///      "type": [
-    ///        "object",
-    ///        "null"
-    ///      ],
+    ///      "type": "object",
     ///      "additionalProperties": {
     ///        "type": "string"
     ///      }
@@ -1424,7 +1234,6 @@ pub mod types {
     ///    },
     ///    "message": {
     ///      "title": "Message",
-    ///      "default": "",
     ///      "type": "string"
     ///    },
     ///    "type": {
@@ -1436,14 +1245,11 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ResolutionMessageGeneral {
-        #[serde(default = "defaults::resolution_message_general_context")]
-        pub context: Option<std::collections::HashMap<String, String>>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub level: Option<MessageLevel>,
-        #[serde(default)]
+        pub context: std::collections::HashMap<String, String>,
+        pub level: MessageLevel,
         pub message: String,
-        #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
-        pub type_: Option<MessageType>,
+        #[serde(rename = "type")]
+        pub type_: MessageType,
     }
     impl From<&ResolutionMessageGeneral> for ResolutionMessageGeneral {
         fn from(value: &ResolutionMessageGeneral) -> Self {
@@ -1653,17 +1459,7 @@ pub mod types {
     ///      "title": "Messages",
     ///      "type": "array",
     ///      "items": {
-    ///        "oneOf": [
-    ///          {
-    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral"
-    ///          },
-    ///          {
-    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
-    ///          },
-    ///          {
-    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
-    ///          }
-    ///        ]
+    ///        "$ref": "#/components/schemas/ResolutionMessageGeneral"
     ///      }
     ///    },
     ///    "name": {
@@ -1679,7 +1475,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ResolvedPackageGroupInput {
-        pub messages: Vec<MessagesItem>,
+        pub messages: Vec<ResolutionMessageGeneral>,
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub page: Option<CatalogPageInput>,
@@ -1727,17 +1523,7 @@ pub mod types {
     ///      "title": "Messages",
     ///      "type": "array",
     ///      "items": {
-    ///        "oneOf": [
-    ///          {
-    ///            "$ref": "#/components/schemas/ResolutionMessageGeneral"
-    ///          },
-    ///          {
-    ///            "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
-    ///          },
-    ///          {
-    ///            "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
-    ///          }
-    ///        ]
+    ///        "$ref": "#/components/schemas/ResolutionMessageGeneral"
     ///      }
     ///    },
     ///    "name": {
@@ -1753,7 +1539,7 @@ pub mod types {
     /// </details>
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     pub struct ResolvedPackageGroupOutput {
-        pub messages: Vec<MessagesItem>,
+        pub messages: Vec<ResolutionMessageGeneral>,
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub page: Option<CatalogPageOutput>,
@@ -2082,21 +1868,6 @@ pub mod types {
         }
         pub(super) fn package_descriptor_allow_unfree() -> Option<bool> {
             Some(true)
-        }
-        pub(super) fn resolution_attr_path_not_found_context() -> Option<
-            std::collections::HashMap<String, String>,
-        > {
-            Some([].into_iter().collect())
-        }
-        pub(super) fn resolution_constraints_too_tight_context() -> Option<
-            std::collections::HashMap<String, String>,
-        > {
-            Some([].into_iter().collect())
-        }
-        pub(super) fn resolution_message_general_context() -> Option<
-            std::collections::HashMap<String, String>,
-        > {
-            Some([].into_iter().collect())
         }
     }
 }

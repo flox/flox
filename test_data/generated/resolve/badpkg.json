@@ -1,0 +1,23 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "AttrPathNotFound": {
+            "attr_path": "badpkg",
+            "install_id": "badpkg",
+            "level": "error",
+            "msg": "The attr_path 'badpkg' is not found.",
+            "valid_systems": []
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ],
+  {
+    "count": 0,
+    "results": []
+  }
+]

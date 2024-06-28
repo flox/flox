@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::{env, fs, io};
 
 use log::debug;
@@ -14,8 +15,8 @@ use self::remote_environment::RemoteEnvironmentError;
 use super::container_builder::ContainerBuilder;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::{LockedManifest, LockedManifestPkgdb};
-use super::manifest::{ManifestError, PackageToInstall};
+use super::lockfile::{LockedManifest, LockedManifestError, LockedManifestPkgdb};
+use super::manifest::{ManifestError, PackageToInstall, RawManifest, TomlEditError, TypedManifest};
 use super::pkgdb::UpgradeResult;
 use crate::data::{CanonicalPath, CanonicalizeError, Version};
 use crate::flox::{Flox, Floxhub};
@@ -51,6 +52,8 @@ pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
+pub const SERVICES_SOCKET_NAME: &str = "services.sock";
+pub const LIB_DIR_NAME: &str = "lib";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 
@@ -71,6 +74,7 @@ pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
+pub const FLOX_SERVICES_SOCKET_VAR: &str = "_FLOX_SERVICES_SOCKET";
 
 pub const N_HASH_CHARS: usize = 8;
 
@@ -99,6 +103,24 @@ pub struct UninstallationAttempt {
     /// The store path of environment that was built to validate the uninstall.
     /// This is used as an optimization to skip builds that we've already done.
     pub store_path: Option<PathBuf>,
+}
+
+/// Stores information about which of the manifest and lockfile need to be
+/// migrated from v0 to v1
+///
+/// This struct should never be created if neither manifest nor lockfile need to
+/// be migrated.
+#[derive(Clone, Debug)]
+pub struct MigrationInfo {
+    /// The manifest is v0 and needs to be migrated to v1
+    needs_manifest_migration: bool,
+    /// The current lockfile is v0,
+    /// or the manifest is v0 and the lockfile is v1.
+    /// In either case, a migration requires changing the locked packages the
+    /// user already has.
+    pub needs_upgrade: bool,
+    // Lets us skip re-reading the file
+    raw_manifest: RawManifest,
 }
 
 pub trait Environment: Send {
@@ -148,6 +170,9 @@ pub trait Environment: Send {
     /// to determine the current content of the manifest.
     fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError>;
 
+    /// Return the deserialized manifest
+    fn manifest(&self, flox: &Flox) -> Result<TypedManifest, EnvironmentError>;
+
     /// Return a path containing the built environment and its activation script.
     ///
     /// This should be a link to a store path so that it can be swapped
@@ -156,7 +181,9 @@ pub trait Environment: Send {
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
 
     /// Return a path that environment hooks should use to store transient data.
-    fn cache_path(&self) -> Result<PathBuf, EnvironmentError>;
+    ///
+    /// The returned path will exist.
+    fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError>;
 
     /// Return a path that should be used as the project root for environment hooks.
     fn project_path(&self) -> Result<PathBuf, EnvironmentError>;
@@ -200,6 +227,70 @@ pub trait Environment: Send {
     fn delete_symlinks(&self) -> Result<bool, EnvironmentError> {
         Ok(false)
     }
+
+    /// Possible actions depending on (version of manifest, version of lockfile)
+    /// 0, None - manifest migration
+    /// 0, 0 - manifest migration, upgrade
+    /// 0, 1 - manifest migration, upgrade (unlikely state)
+    /// 1, None - None
+    /// 1, 0 - upgrade
+    /// 1, 1 - None
+    fn needs_migration_to_v1(
+        &self,
+        flox: &Flox,
+    ) -> Result<Option<MigrationInfo>, EnvironmentError> {
+        let raw_manifest = RawManifest::from_str(&self.manifest_content(flox)?).map_err(|e| {
+            EnvironmentError::Core(CoreEnvironmentError::ModifyToml(
+                TomlEditError::ParseManifest(e),
+            ))
+        })?;
+        let manifest = raw_manifest.to_typed().map_err(|e| {
+            EnvironmentError::Core(CoreEnvironmentError::ModifyToml(
+                TomlEditError::ParseManifest(e),
+            ))
+        })?;
+        let needs_manifest_migration = match manifest {
+            TypedManifest::Pkgdb(_) => true,
+            TypedManifest::Catalog(_) => false,
+        };
+
+        let lockfile_path = self.lockfile_path(flox)?;
+        let needs_upgrade = if let Ok(canonical_path) = CanonicalPath::new(lockfile_path) {
+            // v0 manifest with any lockfile needs to be upgraded.
+            // Having a v1 lockfile would be an unlikely state,
+            // but just treat it as needing an upgrade.
+            if needs_manifest_migration {
+                true
+            } else {
+                let lockfile = LockedManifest::read_from_file(&canonical_path)
+                    .map_err(EnvironmentError::LockedManifest)?;
+                match lockfile {
+                    LockedManifest::Pkgdb(_) => true,
+                    LockedManifest::Catalog(_) => false,
+                }
+            }
+        } else {
+            // No existing lockfile, so no upgrade
+            false
+        };
+
+        if !needs_manifest_migration && !needs_upgrade {
+            return Ok(None);
+        }
+
+        Ok(Some(MigrationInfo {
+            needs_manifest_migration,
+            needs_upgrade,
+            raw_manifest,
+        }))
+    }
+
+    /// This will lock
+    fn migrate_to_v1(
+        &mut self,
+        flox: &Flox,
+        migration_info: MigrationInfo,
+    ) -> Result<(), EnvironmentError>;
 }
 
 /// A pointer to an environment, either managed or path.
@@ -464,6 +555,12 @@ pub enum EnvironmentError {
 
     #[error("failed to access the environment registry")]
     Registry(#[from] EnvRegistryError),
+
+    #[error(transparent)]
+    LockedManifest(LockedManifestError),
+
+    #[error(transparent)]
+    Canonicalize(CanonicalizeError),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -617,9 +714,15 @@ mod test {
     use std::str::FromStr;
 
     use once_cell::sync::Lazy;
+    use path_environment::test_helpers::new_path_environment;
     use pretty_assertions::assert_eq;
 
     use super::*;
+    use crate::flox::test_helpers::{
+        flox_instance,
+        flox_instance_with_global_lock,
+        flox_instance_with_optional_floxhub_and_client,
+    };
     use crate::flox::DEFAULT_FLOXHUB_URL;
     use crate::providers::git::GitProvider;
 
@@ -870,5 +973,101 @@ mod test {
         let start_path = temp_dir.path().join("foo").join("bar");
         let found_environment = find_dot_flox(&start_path);
         assert!(found_environment.is_err());
+    }
+
+    /// When manifest is v0 and lockfile does not exist, we need manifest
+    /// migration but no upgrade
+    #[test]
+    fn needs_manifest_migration_0_none() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let environment = new_path_environment(&flox, "");
+        assert!(matches!(
+            environment.needs_migration_to_v1(&flox),
+            Ok(Some(MigrationInfo {
+                needs_manifest_migration: true,
+                needs_upgrade: false,
+                raw_manifest: _,
+            }))
+        ));
+    }
+
+    /// When manifest is v0 and lockfile is v0, we need manifest migration and
+    /// upgrade
+    #[test]
+    fn needs_manifest_migration_0_0() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let mut environment = new_path_environment(&flox, "");
+        environment.lock(&flox).unwrap();
+        assert!(matches!(
+            environment.needs_migration_to_v1(&flox),
+            Ok(Some(MigrationInfo {
+                needs_manifest_migration: true,
+                needs_upgrade: true,
+                raw_manifest: _,
+            }))
+        ));
+    }
+
+    /// When manifest is v0 and lockfile is v1, we need manifest migration and
+    /// upgrade
+    #[test]
+    fn needs_manifest_migration_0_1() {
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let mut environment = new_path_environment(&flox, "version = 1");
+        environment.lock(&flox).unwrap();
+        assert!(matches!(
+            LockedManifest::read_from_file(
+                &CanonicalPath::new(environment.lockfile_path(&flox).unwrap()).unwrap(),
+            )
+            .unwrap(),
+            LockedManifest::Catalog(_)
+        ));
+        fs::write(environment.manifest_path(&flox).unwrap(), "").unwrap();
+        assert!(matches!(
+            environment.manifest(&flox).unwrap(),
+            TypedManifest::Pkgdb(_),
+        ));
+        assert!(matches!(
+            environment.needs_migration_to_v1(&flox),
+            Ok(Some(MigrationInfo {
+                needs_manifest_migration: true,
+                needs_upgrade: true,
+                raw_manifest: _,
+            }))
+        ));
+    }
+
+    /// When manifest is v1 and there's no lockfile, don't do anything
+    #[test]
+    fn needs_manifest_migration_1_none() {
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let environment = new_path_environment(&flox, "version = 1");
+        assert!(environment.needs_migration_to_v1(&flox).unwrap().is_none());
+    }
+
+    /// When manifest is v1 and lockfile is v0, we need upgrade
+    #[test]
+    fn needs_manifest_migration_1_0() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let mut environment = new_path_environment(&flox, "");
+        environment.lock(&flox).unwrap();
+        fs::write(environment.manifest_path(&flox).unwrap(), "version = 1").unwrap();
+        assert!(matches!(
+            environment.needs_migration_to_v1(&flox),
+            Ok(Some(MigrationInfo {
+                needs_manifest_migration: false,
+                needs_upgrade: true,
+                raw_manifest: _,
+            }))
+        ));
+    }
+
+    /// When manifest is v1 and lockfile is v0, we need upgrade
+    #[test]
+    fn needs_manifest_migration_1_1() {
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let mut environment = new_path_environment(&flox, "version = 1");
+        environment.lock(&flox).unwrap();
+        assert!(environment.needs_migration_to_v1(&flox).unwrap().is_none());
     }
 }

@@ -392,17 +392,7 @@
           },
           "messages": {
             "items": {
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/ResolutionMessageGeneral"
-                },
-                {
-                  "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
-                },
-                {
-                  "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
-                }
-              ]
+              "$ref": "#/components/schemas/ResolutionMessageGeneral"
             },
             "type": "array",
             "title": "Messages"
@@ -460,17 +450,7 @@
           },
           "messages": {
             "items": {
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/ResolutionMessageGeneral"
-                },
-                {
-                  "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
-                },
-                {
-                  "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
-                }
-              ]
+              "$ref": "#/components/schemas/ResolutionMessageGeneral"
             },
             "type": "array",
             "title": "Messages"
@@ -1074,78 +1054,6 @@
         ],
         "title": "PackagesResult"
       },
-      "ResolutionAttrPathNotFound": {
-        "properties": {
-          "level": {
-            "$ref": "#/components/schemas/MessageLevel"
-          },
-          "type": {
-            "$ref": "#/components/schemas/MessageType"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "default": ""
-          },
-          "context": {
-            "title": "Context",
-            "default": {},
-            "nullable": true,
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          },
-          "install_id": {
-            "type": "string",
-            "title": "Install Id"
-          },
-          "attr_path": {
-            "type": "string",
-            "title": "Attr Path"
-          },
-          "valid_systems": {
-            "items": {
-              "$ref": "#/components/schemas/SystemEnum"
-            },
-            "type": "array",
-            "title": "Valid Systems"
-          }
-        },
-        "type": "object",
-        "required": [
-          "install_id",
-          "attr_path",
-          "valid_systems"
-        ],
-        "title": "ResolutionAttrPathNotFound"
-      },
-      "ResolutionConstraintsTooTight": {
-        "properties": {
-          "level": {
-            "$ref": "#/components/schemas/MessageLevel"
-          },
-          "type": {
-            "$ref": "#/components/schemas/MessageType"
-          },
-          "message": {
-            "type": "string",
-            "title": "Message",
-            "default": ""
-          },
-          "context": {
-            "title": "Context",
-            "default": {},
-            "nullable": true,
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          }
-        },
-        "type": "object",
-        "title": "ResolutionConstraintsTooTight"
-      },
       "ResolutionMessageGeneral": {
         "properties": {
           "level": {
@@ -1156,20 +1064,23 @@
           },
           "message": {
             "type": "string",
-            "title": "Message",
-            "default": ""
+            "title": "Message"
           },
           "context": {
-            "title": "Context",
-            "default": {},
-            "nullable": true,
             "additionalProperties": {
               "type": "string"
             },
-            "type": "object"
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",
+        "required": [
+          "level",
+          "type",
+          "message",
+          "context"
+        ],
         "title": "ResolutionMessageGeneral"
       },
       "ResolvedPackageDescriptor": {
@@ -1303,17 +1214,7 @@
           },
           "messages": {
             "items": {
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/ResolutionMessageGeneral"
-                },
-                {
-                  "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
-                },
-                {
-                  "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
-                }
-              ]
+              "$ref": "#/components/schemas/ResolutionMessageGeneral"
             },
             "type": "array",
             "title": "Messages"
@@ -1357,17 +1258,7 @@
           },
           "messages": {
             "items": {
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/ResolutionMessageGeneral"
-                },
-                {
-                  "$ref": "#/components/schemas/ResolutionAttrPathNotFound"
-                },
-                {
-                  "$ref": "#/components/schemas/ResolutionConstraintsTooTight"
-                }
-              ]
+              "$ref": "#/components/schemas/ResolutionMessageGeneral"
             },
             "type": "array",
             "title": "Messages"

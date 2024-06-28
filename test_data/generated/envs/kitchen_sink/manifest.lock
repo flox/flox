@@ -8,8 +8,7 @@
         "pkg-group": null,
         "priority": null,
         "version": null,
-        "systems": null,
-        "optional": false
+        "systems": null
       }
     },
     "vars": {
@@ -66,8 +65,7 @@
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
-      "priority": 5,
-      "optional": false
+      "priority": 5
     },
     {
       "attr_path": "hello",
@@ -97,8 +95,7 @@
       },
       "system": "aarch64-linux",
       "group": "toplevel",
-      "priority": 5,
-      "optional": false
+      "priority": 5
     },
     {
       "attr_path": "hello",
@@ -128,8 +125,7 @@
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
-      "priority": 5,
-      "optional": false
+      "priority": 5
     },
     {
       "attr_path": "hello",
@@ -159,8 +155,7 @@
       },
       "system": "x86_64-linux",
       "group": "toplevel",
-      "priority": 5,
-      "optional": false
+      "priority": 5
     }
   ]
 }

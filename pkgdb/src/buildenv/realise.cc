@@ -39,8 +39,8 @@ namespace flox::buildenv {
 
 /* -------------------------------------------------------------------------- */
 
-#ifndef ACTIVATE_PACKAGE_DIR
-#  error "ACTIVATE_PACKAGE_DIR must be set to the path of `activate.d'"
+#ifndef ACTIVATION_SCRIPTS_PACKAGE_DIR
+#  error "ACTIVATION_SCRIPTS_PACKAGE_DIR must be set"
 #endif
 
 #ifndef CONTAINER_BUILDER_PATH
@@ -136,7 +136,7 @@ createEnvironmentStorePath(
 
       throw PackageConflictException( nix::fmt(
         "'%s' conflicts with '%s'. Both packages provide the file '%s'"
-        "\n\nResolve by uninstalling one of the conflicting packages"
+        "\n\nResolve by uninstalling one of the conflicting packages "
         "or setting the priority of the preferred package to a value lower "
         "than '%d'",
         nameA,
@@ -597,7 +597,7 @@ addScriptToScriptsDir( const std::string &           scriptContents,
                        const std::filesystem::path & scriptsDir,
                        const std::string &           scriptName )
 {
-  /* Ensure that the "activate.d" subdirectory exists. */
+  /* Ensure that the activation scripts "activate.d" subdirectory exists. */
   std::filesystem::create_directories( scriptsDir / ACTIVATION_SUBDIR_NAME );
 
   /* Write the script to a temporary file. */
@@ -753,7 +753,8 @@ makeActivationScripts( nix::EvalState &              state,
                             buildenv::Priority() );
   auto            references = nix::StorePathSet();
   references.insert( activationStorePath );
-  references.insert( state.store->parseStorePath( ACTIVATE_PACKAGE_DIR ) );
+  references.insert(
+    state.store->parseStorePath( ACTIVATION_SCRIPTS_PACKAGE_DIR ) );
   references.insert( state.store->parseStorePath( FLOX_BASH_PKG ) );
   references.insert( state.store->parseStorePath( FLOX_CACERT_PKG ) );
 
@@ -769,14 +770,15 @@ makeActivationScripts( nix::EvalState &              state,
  * package.
  */
 static std::pair<buildenv::RealisedPackage, nix::StorePath>
-makeActivatePackageDir( nix::EvalState & state )
+makeActivationScriptsPackageDir( nix::EvalState & state )
 {
-  /* Insert profile.d scripts.
+  /* Insert activation scripts.
    * The store path is provided at compile time via the
-   * `ACTIVATE_PACKAGE_DIR' environment variable. */
-  debugLog(
-    nix::fmt( "adding 'activate.d' to store, path=%s", ACTIVATE_PACKAGE_DIR ) );
-  auto profileScriptsPath = state.store->parseStorePath( ACTIVATE_PACKAGE_DIR );
+   * `ACTIVATION_SCRIPTS_PACKAGE_DIR' environment variable. */
+  debugLog( nix::fmt( "adding activation scripts to store, path=%s",
+                      ACTIVATION_SCRIPTS_PACKAGE_DIR ) );
+  auto profileScriptsPath
+    = state.store->parseStorePath( ACTIVATION_SCRIPTS_PACKAGE_DIR );
   state.store->ensurePath( profileScriptsPath );
   RealisedPackage realised( state.store->printStorePath( profileScriptsPath ),
                             true,
@@ -833,7 +835,7 @@ createFloxEnv( nix::ref<nix::EvalState> & state,
 
 
   auto [profileScriptsPath, profileScriptsReference]
-    = makeActivatePackageDir( *state );
+    = makeActivationScriptsPackageDir( *state );
 
   pkgs.push_back( profileScriptsPath );
   references.insert( profileScriptsReference );

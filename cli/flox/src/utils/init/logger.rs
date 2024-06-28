@@ -101,7 +101,7 @@ pub fn create_registry_and_filter_reload_handle() -> (
         .event_format(tracing_subscriber::fmt::format())
         .with_filter(filter);
     let metrics_layer = MetricsLayer::new();
-    let sentry_layer = sentry::integrations::tracing::layer();
+    let sentry_layer = sentry::integrations::tracing::layer().enable_span_attributes();
     // Filtered layer must come first.
     // This appears to be the only way to avoid logs of the `flox_command` trace
     // which is processed by the `log_layer` irrepective of the filter applied to it.

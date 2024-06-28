@@ -105,8 +105,7 @@ project_teardown() {
 setup() {
   common_test_setup
   setup_isolated_flox # concurrent pkgdb database creation
-  export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 teardown() {
   project_teardown
@@ -221,7 +220,7 @@ EOF
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "catalog: bash: interactive activate puts package in path" {
   project_setup
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
@@ -245,7 +244,7 @@ EOF
 # bats test_tags=activate,activate:path,activate:path:fish
 @test "catalog: fish: interactive activate puts package in path" {
   project_setup
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
@@ -269,7 +268,7 @@ EOF
 # bats test_tags=activate,activate:path,activate:path:tcsh
 @test "catalog: tcsh: interactive activate puts package in path" {
   project_setup
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
@@ -282,7 +281,7 @@ EOF
 @test "zsh: interactive activate puts package in path" {
   export FLOX_FEATURES_USE_CATALOG=false
   project_setup
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
@@ -297,7 +296,7 @@ EOF
 # bats test_tags=activate,activate:path,activate:path:zsh
 @test "catalog: zsh: interactive activate puts package in path" {
   project_setup
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
   assert_success
   assert_output --partial "✅ 'hello' installed to environment"
@@ -528,6 +527,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       echo "sourcing hook.on-activate"
@@ -552,6 +552,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       echo "sourcing hook.on-activate"
@@ -578,6 +579,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       echo "sourcing hook.on-activate"
@@ -604,6 +606,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       echo "sourcing hook.on-activate"
@@ -630,6 +633,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [profile]
     bash = """
       echo "sourcing profile.bash"
@@ -654,6 +658,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [profile]
     fish = """
       echo "sourcing profile.fish"
@@ -677,6 +682,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [profile]
     tcsh = """
       echo "sourcing profile.tcsh"
@@ -699,6 +705,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [profile]
     zsh = """
       echo "sourcing profile.zsh"
@@ -931,7 +938,7 @@ EOF
   # hello is not on the path
   run -1 type hello
 
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install hello
   assert_success
 
@@ -971,7 +978,7 @@ EOF
   # hello is not on the path
   run -1 type hello
 
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install hello
   assert_success
 
@@ -1011,7 +1018,7 @@ EOF
   # hello is not on the path
   run -1 type hello
 
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install hello
   assert_success
 
@@ -1051,7 +1058,7 @@ EOF
   # hello is not on the path
   run -1 type hello
 
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install hello
   assert_success
 
@@ -1141,7 +1148,7 @@ EOF
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set vars
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   "$FLOX_BIN" install hello
 
   run bash -c 'eval "$($FLOX_BIN activate)"; type hello; echo $foo'
@@ -1187,7 +1194,7 @@ EOF
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set vars
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   "$FLOX_BIN" install hello
 
   run fish -c 'eval "$($FLOX_BIN activate)"; type hello; echo $foo'
@@ -1235,7 +1242,7 @@ EOF
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set vars
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   "$FLOX_BIN" install hello
 
   run tcsh -c 'eval "`$FLOX_BIN activate`"; echo hello is `which hello`; echo $foo'
@@ -1281,7 +1288,7 @@ EOF
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set vars
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   "$FLOX_BIN" install hello
 
   run zsh -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
@@ -1375,7 +1382,7 @@ EOF
   unset PIP_CONFIG_FILE
 
   # install python and pip
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python311Packages.pip.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python311Packages.pip.json"
   "$FLOX_BIN" install python311Packages.pip
 
   run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
@@ -1441,12 +1448,12 @@ EOF
   mkdir default
   pushd default > /dev/null || return
   "$FLOX_BIN" init
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.json"
   "$FLOX_BIN" install vim
   popd > /dev/null || return
 
   "$FLOX_BIN" init
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.json"
   "$FLOX_BIN" install emacs
 
   # sanity check that flox list lists the local environment
@@ -1605,6 +1612,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       unset foo
@@ -1629,6 +1637,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       unset foo
@@ -1658,6 +1667,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       unset foo
@@ -1687,6 +1697,7 @@ EOF
   project_setup
 
   MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
     [hook]
     on-activate = """
       unset foo
@@ -2008,8 +2019,8 @@ EOF
   project_setup
   FLOX_SHELL="bash" run $FLOX_BIN activate --dir "$PROJECT_DIR" -- env
   assert_success
-  refute_output "FLOX_SHELL="
-  refute_output "_flox_shell="
+  refute_output --partial "FLOX_SHELL="
+  refute_output --partial "_flox_shell="
 }
 
 # ---------------------------------------------------------------------------- #
@@ -2078,6 +2089,96 @@ EOF
   assert_equal "${lines[12]}" "Setting PATH from .zlogout"
   echo # leave a line between test outputs
 
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:nested_flox_activate_tracelevel
+@test "{bash,fish,tcsh,zsh}: confirm _flox_activate_tracelevel set in nested activation" {
+  project_setup
+
+  # The shell-specific flox init scripts finish by unsetting the
+  # _flox_activate_tracelevel environment variable, and this can
+  # cause problems for an "outer" interactive activation when there
+  # is an "inner" in-place activation happening by way of a "dotfile".
+
+  # Set up this test by creating dotfiles which perform an in-place
+  # activation, and then run an interactive activation of a second
+  # environment to confirm that _flox_activate_tracelevel is set
+  # for the outer activation.
+
+  # Each of the shell-specific dotfiles has also been updated to emit a
+  # warning if sourced without _flox_activate_tracelevel set in the
+  # environment, so we also assert that this warning is not present
+  # in any of the activation output.
+
+  # Start by adding logic to create semaphore files for all shells.
+  for i in "$HOME/.bashrc.extra" "$HOME/.config/fish/config.fish.extra" "$HOME/.tcshrc.extra" "$HOME/.zshrc.extra"; do
+    cat > "$i" <<EOF
+touch "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+test -n "\$_flox_activate_tracelevel" || touch "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+EOF
+  done
+
+  # Finish by appending shell-specific flox activation syntax.
+  for i in "$HOME/.bashrc.extra" "$HOME/.config/fish/config.fish.extra" "$HOME/.zshrc.extra"; do
+    echo "eval \"\$($FLOX_BIN activate --dir $PROJECT_DIR)\"" >> "$i"
+  done
+  echo "eval \"\`$FLOX_BIN activate --dir $PROJECT_DIR\`\"" >> "$HOME/.tcshrc.extra"
+
+  # Create a test environment.
+  _temp_env="$(mktemp -d)"
+  "$FLOX_BIN" init -d "$_temp_env"
+
+  # Activate the test environment from each shell, each of which will
+  # launch an interactive shell that sources the relevant dotfile.
+  echo "Testing bash"
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
+  assert_success
+  refute_output --partial "_flox_activate_tracelevel not defined"
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+  assert_success
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+  assert_failure
+  echo # leave a line between test outputs
+
+  echo "Testing fish"
+  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
+  assert_success
+  refute_output --partial "_flox_activate_tracelevel not defined"
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+  assert_success
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+  assert_failure
+  echo # leave a line between test outputs
+
+  echo "Testing tcsh"
+  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
+  assert_success
+  refute_output --partial "_flox_activate_tracelevel not defined"
+  cat "$HOME/.tcshrc.extra"
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+  assert_success
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+  assert_failure
+  echo # leave a line between test outputs
+
+  echo "Testing zsh"
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
+  assert_success
+  refute_output --partial "_flox_activate_tracelevel not defined"
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+  assert_success
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+  assert_failure
+  echo # leave a line between test outputs
+
+  rm -rf "$_temp_env"
+  rm \
+    "$HOME/.bashrc.extra" \
+    "$HOME/.tcshrc.extra" \
+    "$HOME/.config/fish/config.fish.extra" \
+    "$HOME/.zshrc.extra"
 }
 
 # ---------------------------------------------------------------------------- #

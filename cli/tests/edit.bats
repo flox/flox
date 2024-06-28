@@ -13,12 +13,10 @@ load test_support.bash
 
 setup_file() {
   common_file_setup
-  export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 teardown_file() {
-  unset FLOX_FEATURES_USE_CATALOG
   unset _FLOX_USE_CATALOG_MOCK
 }
 
@@ -84,11 +82,13 @@ check_manifest_updated() {
   "$FLOX_BIN" init
   cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
   cat << "EOF" > "$TMP_MANIFEST_PATH"
+version = 1
 [install]
 hello.pkg-path = "hello"
 EOF
 
-  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
   assert_output --partial "✅ Environment successfully updated."
 }
@@ -100,7 +100,8 @@ EOF
   NEW_MANIFEST_CONTENTS="$(cat "$EXTERNAL_MANIFEST_PATH")"
   "$FLOX_BIN" init
 
-  run "$FLOX_BIN" edit -f "$EXTERNAL_MANIFEST_PATH"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" edit -f "$EXTERNAL_MANIFEST_PATH"
   assert_success
 
   WRITTEN="$(cat "$MANIFEST_PATH")"
@@ -114,6 +115,7 @@ EOF
   NEW_MANIFEST_CONTENTS="$(cat "$EXTERNAL_MANIFEST_PATH")"
   "$FLOX_BIN" init
 
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run sh -c "cat ${EXTERNAL_MANIFEST_PATH} | ${FLOX_BIN} edit -f -"
   assert_success
   # Get the contents as they appear in the actual manifest after the operation
@@ -200,7 +202,8 @@ EOF
 @test "'flox edit' returns if it does not detect changes" {
   "$FLOX_BIN" init
 
-  run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" edit -f "$TESTS_DIR/edit/manifest.toml"
   assert_success
 
   # applying the same edit again should return early

@@ -1,3 +1,5 @@
+version = 1
+
 [hook]
 on-activate = """
     export HOOK_VAR="hookie"

@@ -128,6 +128,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-process-compose": {
+      "locked": {
+        "lastModified": 1719406840,
+        "narHash": "sha256-f28HAjj6t6Uioe6KavnYvTC63VzO8+leRqRSIZM9qUU=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "a67ad0452b1ecd013ed3c0e2d4a50cabca396db7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "release-24.05",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "nixpkgs-stable": {
       "locked": {
         "lastModified": 1685801374,
@@ -174,6 +190,7 @@
         "fenix": "fenix",
         "nixpkgs": "nixpkgs",
         "nixpkgs-bear": "nixpkgs-bear",
+        "nixpkgs-process-compose": "nixpkgs-process-compose",
         "pre-commit-hooks": "pre-commit-hooks",
         "sqlite3pp": "sqlite3pp"
       }

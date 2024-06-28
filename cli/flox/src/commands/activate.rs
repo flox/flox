@@ -24,6 +24,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
 };
 use flox_rust_sdk::models::lockfile::LockedManifestError;
+use flox_rust_sdk::models::manifest::TypedManifest;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
 use indexmap::IndexSet;
 use indoc::formatdoc;
@@ -77,6 +78,7 @@ impl Activate {
             Create an environment with 'flox init'"
                 })
             },
+            Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
             Err(e) => Err(e)?,
         };
 
@@ -242,6 +244,13 @@ impl Activate {
                     .expect("`bare_description` is infallible"),
             ),
         ]);
+
+        if let TypedManifest::Catalog(manifest) = environment.manifest(&flox)? {
+            // default to enabling CUDA
+            if manifest.options.cuda_detection != Some(false) {
+                exports.insert("_FLOX_ENV_CUDA_DETECTION", "1".to_string());
+            }
+        }
 
         exports.extend(default_nix_env_vars());
 

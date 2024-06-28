@@ -1,6 +1,4 @@
 [vars]
-FLOX_FEATURES_USE_CATALOG = "true"
-
 [resolve.empty]
 # Not actually a resolve response, just have to put it somewhere
 skip_if_output_exists = "empty.json"
@@ -11,6 +9,37 @@ post_cmd = '''
     main_output_dir="$(dirname $(dirname $RESPONSE_FILE))"
     mv empty.json "$main_output_dir/empty.json"
 '''
+
+[resolve.failed_resolution]
+pre_cmd = '''
+    flox init
+'''
+cmd = "flox install definitely-not-a-package"
+ignore_cmd_errors = true
+
+# Install a package that doesn't exist and that doesn't have suggestions
+[resolve.badpkg]
+pre_cmd = "flox init"
+cmd = "flox install badpkg"
+ignore_cmd_errors = true
+
+# Install multiple packages that don't exist
+[resolve.badpkg1_badpkg2]
+pre_cmd = "flox init"
+cmd = "flox install badpkg1 badpkg2"
+ignore_cmd_errors = true
+
+# Install a package that only exists on Linux
+[resolve.bpftrace]
+pre_cmd = "flox init"
+cmd = "flox install bpftrace"
+ignore_cmd_errors = true
+
+# Install multiple packages that only exist on Linux
+[resolve.bpftrace_systemd]
+pre_cmd = "flox init"
+cmd = "flox install bpftrace systemd"
+ignore_cmd_errors = true
 
 [resolve.curl_hello]
 pre_cmd = "flox init"
@@ -28,11 +57,48 @@ cmd = "flox install emacs vim"
 pre_cmd = "flox init"
 cmd = "flox install gzip"
 
+[resolve.glibc]
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux" ]' .flox/env/manifest.toml
+'''
+cmd = "flox install glibc"
+ignore_cmd_errors = true # build will fail on macos, thats fine
+
+[resolve.glibc_incompatible]
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux" ]' .flox/env/manifest.toml
+'''
+cmd = '''
+ tomlq --in-place --toml-output '.options.systems = [ "x86_64-linux", "aarch64-darwin" ]' .flox/env/manifest.toml
+ flox install glibc || true
+'''
+ignore_cmd_errors = true # build will fail on macos, thats fine
+
+[resolve.darwin_ps]
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin" ]' .flox/env/manifest.toml
+'''
+cmd = "flox install darwin.ps"
+ignore_cmd_errors = true # build will fail on linux, thats fine
+
+[resolve.darwin_ps_incompatible]
+pre_cmd = '''
+    flox init
+'''
+cmd = '''
+    tomlq --in-place --toml-output '.options.systems = [ "x86_64-darwin", "aarch64-linux" ]' .flox/env/manifest.toml
+    flox install darwin.ps
+'''
+ignore_cmd_errors = true # build will fail on linux, thats fine
+
 [resolve.hello]
 pre_cmd = "flox init"
 cmd = "flox install hello"
 
-[resolve.hello-unfree]
+[resolve.hello_unfree]
 pre_cmd = "flox init"
 cmd = "flox install hello-unfree"
 
@@ -51,6 +117,12 @@ pre_cmd = "flox init"
 ignore_cmd_errors = true
 cmd = "flox edit -f manifest.toml"
 
+# Attempts an install for a package that doesn't exist but that *does* have suggestions
+[resolve.node_suggestions]
+pre_cmd = "flox init"
+cmd = "flox install node"
+ignore_cmd_errors = true
+
 [resolve.old_hello]
 pre_cmd = "flox init"
 cmd = "flox install hello"
@@ -58,6 +130,19 @@ post_cmd = '''
     cat "$RESPONSE_FILE" | jq | sed 's/"derivation": .*$/"derivation": "\/nix\/store\/AAA-hello-2.12.1.drv",/g' > tmp.json
     mv tmp.json "$RESPONSE_FILE"
 '''
+
+# Install a specific version of Node that doesn't exist on x86_64-darwin
+# so we get "constraints too tight" as a resolution message
+[resolve.old_node]
+pre_cmd = "flox init"
+cmd = "flox install nodejs@14.16.1"
+ignore_cmd_errors = true
+
+# Try to install a package that doesn't exist, but that *does* have suggestions
+[resolve.package_suggestions]
+pre_cmd = "flox init"
+cmd = "flox install package"
+ignore_cmd_errors = true
 
 [resolve.python3]
 pre_cmd = "flox init"
@@ -102,6 +187,9 @@ post_cmd = '''
     cat "$RESPONSE_FILE" | jq '[{"count": 10, "results": .[0].results[:10]}]' > tmp.json
     mv tmp.json "$RESPONSE_FILE"
 '''
+
+[search.java_suggestions]
+cmd = "flox search java"
 
 [show.hello]
 cmd = "flox show hello"

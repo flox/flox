@@ -6,7 +6,7 @@ use std::process::Command;
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use log::debug;
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessRefreshKind, RefreshKind, System, UpdateKind};
 
 const OPENERS: &[&str] = &["xdg-open", "gnome-open", "kde-open"];
 
@@ -140,8 +140,9 @@ impl Shell {
 }
 
 fn get_parent_process_exe() -> Result<PathBuf> {
-    // todo: we can narrow down the amount of data collected by sysinfo, for now collect everything
-    let system = System::new_all();
+    let refresh_exe = ProcessRefreshKind::new().with_exe(UpdateKind::Always);
+    let refresh_procs = RefreshKind::new().with_processes(refresh_exe);
+    let system = System::new_with_specifics(refresh_procs);
 
     let parent_process = system
         .process(Pid::from_u32(std::os::unix::process::parent_id()))
@@ -252,7 +253,8 @@ mod tests {
     fn test_get_parent_process_exe() {
         let path = get_parent_process_exe().expect("should find parent process");
 
-        assert_eq!(path.file_name().unwrap(), "cargo");
+        let parent = path.file_name().unwrap();
+        assert!(parent == "cargo" || parent == "cargo-nextest");
     }
 
     /// Test the detection of the shell from environment variables

@@ -63,10 +63,12 @@ options.
 ## Install Options
 
 `-i`, `--id`
-:   The install ID of the package as it will appear in the manifest.
+:   The install ID of the package as it will appear in the manifest
 
 `<package>`
 :   The pkg-path of the package to install as shown by 'flox search'
+    Append `@<version>` to specify a version requirement
+
 
 ```{.include}
 ./include/environment-options.md

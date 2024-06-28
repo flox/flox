@@ -18,9 +18,20 @@ fi
 # bashrc in a parent process.
 if [ -f ~/.bashrc ] && [ -z "$_flox_already_sourcing_bashrc" ]
 then
+  # Save and restore the current tracelevel in the event that sourcing
+  # bashrc launches an inner nested activation which unsets it.
+  _save_flox_activate_tracelevel="$_flox_activate_tracelevel"
   export _flox_already_sourcing_bashrc=1
   source ~/.bashrc
   unset _flox_already_sourcing_bashrc
+  export _flox_activate_tracelevel="$_save_flox_activate_tracelevel"
+fi
+
+# The above .bashrc may have performed a nested activation, so confirm
+# _flox_activate_tracelevel is defined before proceeding.
+if [ -z "$_flox_activate_tracelevel" ]; then
+  echo 'WARNING (bash): _flox_activate_tracelevel not defined .. defaulting to 0' >&2
+  export _flox_activate_tracelevel=0
 fi
 
 # Restore environment variables set in the previous bash initialization.

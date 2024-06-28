@@ -10,10 +10,14 @@ use flox_rust_sdk::models::environment::{
     UpgradeError,
     ENVIRONMENT_POINTER_FILENAME,
 };
+use flox_rust_sdk::models::floxmeta::FloxMetaError;
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, ContextMsgError, PkgDbError};
+use flox_rust_sdk::providers::git::GitRemoteCommandError;
 use indoc::formatdoc;
 use log::{debug, trace};
+
+use crate::commands::{EnvironmentSelectError, MigrationError};
 
 /// Convert to an error variant that directs the user to the docs if the provided error is
 /// due to a package not being supported on the current system.
@@ -234,10 +238,34 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         // todo: enrich with path
         // raised during edit
         CoreEnvironmentError::DeserializeManifest(err) => formatdoc! {
-            "Failed to parse manifest: {err}
+            "Failed to parse manifest:
 
-            Please ensure that '.flox/env/manifest.toml' is a valid TOML file.
-        "},
+            {err}
+        ",
+            // The message adds a newline at the end,
+            // trim to make the error look better
+            err = err.message().trim()
+        },
+        CoreEnvironmentError::MigrateManifest(err) => formatdoc! {
+            "Could not automatically migrate manifest to version 1:
+
+            {err}
+
+            Use 'flox edit' to resolve errors and then try again.
+        ",
+            // The message adds a newline at the end,
+            // trim to make the error look better
+            err = err.message().trim()
+        },
+        CoreEnvironmentError::LockForMigration(err) => formatdoc! {
+            "Failed to create version 1 lock:
+
+            {err}
+
+            Use 'flox edit' to resolve errors and then try again.
+        ",
+            err = format_core_error(err)
+        },
         CoreEnvironmentError::MakeSandbox(_) => display_chain(err),
         // witin transaction, user should not see this and likely can't do anything about it
         CoreEnvironmentError::WriteLockfile(_) => display_chain(err),
@@ -323,6 +351,8 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
                     $ flox upgrade
             "},
         },
+        // User facing
+        CoreEnvironmentError::Version0NotSupported => display_chain(err),
     }
 }
 
@@ -398,6 +428,16 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         ManagedEnvironmentError::ReverseLink(_) => display_chain(err),
         ManagedEnvironmentError::CreateLinksDir(_) => display_chain(err),
 
+        ManagedEnvironmentError::CreateLocalEnvironmentView(err) => formatdoc! {"
+            Failed to create the local environment from the current generation: {err}
+
+            Please ensure that you have read and write permissions
+            to the environment directory in '.flox/env'.
+        "},
+
+        ManagedEnvironmentError::ReadLocalManifest(_) => display_chain(err),
+        ManagedEnvironmentError::ReadGenerationManifest(_) => display_chain(err),
+
         ManagedEnvironmentError::BadBranchName(_) => display_chain(err),
 
         // currently unused
@@ -436,8 +476,26 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             Please check the spelling of the remote environment
             and make sure that you have access to it.
         "},
-        // todo: mark as bug?
-        ManagedEnvironmentError::UpstreamNotFound(_, _) => display_chain(err),
+        ManagedEnvironmentError::UpstreamNotFound {
+            env_ref,
+            upstream: _,
+            user,
+        } => {
+            let by_current_user = user
+                .as_ref()
+                .map(|u| u == env_ref.owner().as_str())
+                .unwrap_or_default();
+            let message = "Environment not found in FloxHub.";
+            if by_current_user {
+                formatdoc! {"
+                    {message}
+
+                    You can run 'flox push' to push the environment back to FloxHub.
+                "}
+            } else {
+                message.to_string()
+            }
+        },
         // acces denied is catched early as ManagedEnvironmentError::AccessDenied
         ManagedEnvironmentError::Push(_) => display_chain(err),
         ManagedEnvironmentError::DeleteBranch(_) => display_chain(err),
@@ -505,12 +563,23 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
             Please ensure that you have write permissions to FLOX_CACHE_DIR/remote.
         "},
 
+        RemoteEnvironmentError::ResetManagedEnvironment(ManagedEnvironmentError::FetchUpdates(
+            GitRemoteCommandError::RefNotFound(_),
+        ))
+        | RemoteEnvironmentError::GetLatestVersion(FloxMetaError::CloneBranch(
+            GitRemoteCommandError::AccessDenied,
+        ))
+        | RemoteEnvironmentError::GetLatestVersion(FloxMetaError::CloneBranch(
+            GitRemoteCommandError::RefNotFound(_),
+        )) => formatdoc! {"
+            Environment not found in FloxHub.
+            "},
+
         RemoteEnvironmentError::ResetManagedEnvironment(err) => formatdoc! {"
             Failed to reset remote environment to latest upstream version:
 
             {err}
             ", err = format_managed_error(err)},
-
         RemoteEnvironmentError::GetLatestVersion(err) => formatdoc! {"
             Failed to get latest version of remote environment: {err}
 
@@ -539,6 +608,32 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
         RemoteEnvironmentError::ReadInternalOutLink(_) => display_chain(err),
         RemoteEnvironmentError::DeleteOldOutLink(_) => display_chain(err),
         RemoteEnvironmentError::WriteNewOutlink(_) => display_chain(err),
+    }
+}
+
+pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
+    trace!("formatting environment_select_error: {err:?}");
+
+    match err {
+        EnvironmentSelectError::Environment(err) => format_error(err),
+        EnvironmentSelectError::EnvNotFoundInCurrentDirectory => formatdoc! {"
+            Did not find an environment in the current directory.
+        "},
+        EnvironmentSelectError::Anyhow(err) => err
+            .chain()
+            .skip(1)
+            .fold(err.to_string(), |acc, cause| format!("{}: {}", acc, cause)),
+    }
+}
+
+pub fn format_migration_error(err: &MigrationError) -> String {
+    trace!("formatting migration_error: {err:?}");
+
+    match err {
+        MigrationError::Environment(err) | MigrationError::ConfirmedUpgradeFailed(err) => {
+            format_error(err)
+        },
+        _ => display_chain(err),
     }
 }
 

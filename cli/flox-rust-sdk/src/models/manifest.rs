@@ -4,12 +4,17 @@ use std::str::FromStr;
 
 use indoc::{formatdoc, indoc};
 use log::debug;
+#[cfg(test)]
+use proptest::prelude::*;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
 
 use super::environment::path_environment::InitCustomization;
 use crate::data::{System, Version};
+#[cfg(test)]
+use crate::utils::proptest_btree_map_alphanum_keys;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
 pub(super) const DEFAULT_PRIORITY: usize = 5;
@@ -32,7 +37,7 @@ pub const MANIFEST_SYSTEMS_KEY: &str = "systems";
 /// A wrapper around a [`toml_edit::DocumentMut`]
 /// that allows modifications of the raw manifest document,
 /// while preserving comments and user formatting.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RawManifest(toml_edit::DocumentMut);
 impl RawManifest {
     /// Creates a new [RawManifest] instance, populating its configuration from
@@ -217,6 +222,14 @@ impl RawManifest {
             toml_edit::value(Array::from_iter(systems.iter().copied())),
         );
 
+        let cuda_detection_key = Key::new("cuda-detection");
+        options_table.insert(&cuda_detection_key, toml_edit::value(false));
+        if let Some((mut key, _)) = options_table.get_key_value_mut(&cuda_detection_key) {
+            key.leaf_decor_mut().set_prefix(indoc! {r#"
+            # Uncomment to disable CUDA detection.
+            # "#});
+        }
+
         manifest.insert(MANIFEST_OPTIONS_KEY, Item::Table(options_table));
 
         // Insert heading comment
@@ -327,24 +340,28 @@ pub enum TypedManifest {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
 pub struct TypedManifestCatalog {
-    pub(super) version: Version<1>,
+    pub version: Version<1>,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
-    pub(super) install: ManifestInstall,
+    pub install: ManifestInstall,
     /// Variables that are exported to the shell environment upon activation.
     #[serde(default)]
-    pub(super) vars: ManifestVariables,
+    pub vars: ManifestVariables,
     /// Hooks that are run at various times during the lifecycle of the manifest
     /// in a known shell environment.
     #[serde(default)]
-    pub(super) hook: ManifestHook,
+    pub hook: ManifestHook,
     /// Profile scripts that are run in the user's shell upon activation.
     #[serde(default)]
-    pub(super) profile: ManifestProfile,
+    pub profile: ManifestProfile,
     /// Options that control the behavior of the manifest.
     #[serde(default)]
-    pub(super) options: ManifestOptions,
+    pub options: ManifestOptions,
+    /// Service definitions
+    #[serde(default)]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub services: ManifestServices,
 }
 
 impl TypedManifestCatalog {
@@ -473,19 +490,34 @@ fn pkg_belongs_to_non_empty_toplevel_group(
     derive_more::DerefMut,
 )]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestInstall(BTreeMap<String, ManifestPackageDescriptor>);
+pub struct ManifestInstall(
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest_btree_map_alphanum_keys::<ManifestPackageDescriptor>(10, 3)"
+        )
+    )]
+    BTreeMap<String, ManifestPackageDescriptor>,
+);
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct ManifestPackageDescriptor {
     pub(crate) pkg_path: String,
     pub(crate) pkg_group: Option<String>,
+    #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10usize)"))]
     pub(crate) priority: Option<usize>,
     pub(crate) version: Option<String>,
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest::option::of(proptest::collection::vec(any::<System>(), 1..3))"
+        )
+    )]
     pub(crate) systems: Option<Vec<System>>,
-    #[serde(default)]
-    pub(crate) optional: bool,
 }
 
 impl ManifestPackageDescriptor {
@@ -502,33 +534,73 @@ impl ManifestPackageDescriptor {
             pkg_path,
             pkg_group,
             version,
-            optional,
             systems: _,
             priority: _,
         } = self;
 
-        pkg_path != &other.pkg_path
-            || pkg_group != &other.pkg_group
-            || version != &other.version
-            || optional != &other.optional
+        pkg_path != &other.pkg_path || pkg_group != &other.pkg_group || version != &other.version
     }
+}
+
+/// A map of service names to service definitions
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Default,
+    PartialEq,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ManifestServices(
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
+        )
+    )]
+    BTreeMap<String, ManifestServiceDescriptor>,
+);
+
+/// The definition of a service in a manifest
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ManifestServiceDescriptor {
+    /// The command to run to start the service
+    pub command: String,
+    /// Service-specific environment variables
+    pub vars: Option<ManifestVariables>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestVariables(BTreeMap<String, String>);
+pub struct ManifestVariables(
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest_btree_map_alphanum_keys::<String>(10, 3)")
+    )]
+    BTreeMap<String, String>,
+);
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct ManifestHook {
     /// A script that is run at activation time,
     /// in a flox provided bash shell
     on_activate: Option<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
 pub struct ManifestProfile {
     /// When defined, this hook is run by _all_ shells upon activation
     common: Option<String>,
@@ -542,22 +614,33 @@ pub struct ManifestProfile {
     tcsh: Option<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct ManifestOptions {
     /// A list of systems that each package is resolved for.
-    pub(super) systems: Option<Vec<System>>,
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest::option::of(proptest::collection::vec(any::<System>(), 1..4))"
+        )
+    )]
+    pub systems: Option<Vec<System>>,
     /// Options that control what types of packages are allowed.
     #[serde(default)]
     pub allow: Allows,
     /// Options that control how semver versions are resolved.
     #[serde(default)]
     pub semver: SemverOptions,
+    pub cuda_detection: Option<bool>,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(deny_unknown_fields)]
 pub struct Allows {
     /// Whether to allow packages that are marked as `unfree`
     pub unfree: Option<bool>,
@@ -565,12 +648,18 @@ pub struct Allows {
     pub broken: Option<bool>,
     /// A list of license descriptors that are allowed
     #[serde(default)]
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest::collection::vec(any::<String>(), 0..3)")
+    )]
     pub licenses: Vec<String>,
 }
 
+#[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct SemverOptions {
     /// Whether to allow pre-release versions when resolving
     #[serde(default)]
@@ -616,15 +705,12 @@ pub enum ManifestError {
 pub struct TypedManifestPkgdb {
     pub vars: Option<toml::Table>,
     pub hook: Option<toml::Table>,
+    pub profile: Option<toml::Table>,
     #[serde(flatten)]
     _toml: toml::Table,
 }
 
-/// An alias to the Pkgdb backed Maifest Schema for backwards compatibility.
-/// TODO: remove this as part of <https://github.com/flox/flox/issues/1320>
-pub type Manifest = TypedManifestPkgdb;
-
-/// An error encountered while installing packages.
+/// An error encountered while manipulating a manifest using toml_edit.
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum TomlEditError {
     /// The provided string couldn't be parsed into a valid TOML document
@@ -931,6 +1017,7 @@ pub fn add_system(toml: &str, system: &str) -> Result<DocumentMut, TomlEditError
 #[cfg(test)]
 pub(super) mod test {
     use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
 
     use super::*;
 
@@ -963,6 +1050,7 @@ pub(super) mod test {
             hook: ManifestHook::default(),
             profile: ManifestProfile::default(),
             options: ManifestOptions::default(),
+            services: ManifestServices::default(),
         }
     }
 
@@ -972,6 +1060,25 @@ pub(super) mod test {
             {CATALOG_MANIFEST}
 
             unknown = 'field'
+        "};
+
+        let err = toml_edit::de::from_str::<TypedManifest>(&manifest)
+            .expect_err("manifest.toml should be invalid");
+
+        assert!(
+            err.message()
+                .starts_with("unknown field `unknown`, expected one of"),
+            "unexpected error message: {err}",
+        );
+    }
+
+    #[test]
+    fn catalog_manifest_rejects_unknown_nested_fields() {
+        let manifest = formatdoc! {"
+            {CATALOG_MANIFEST}
+
+            [options]
+            allow.unknown = true
         "};
 
         let err = toml_edit::de::from_str::<TypedManifest>(&manifest)
@@ -1046,6 +1153,8 @@ pub(super) mod test {
             # manifest.toml(5) for a list of available options.
             [options]
             systems = []
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization, false);
@@ -1115,6 +1224,8 @@ pub(super) mod test {
             # manifest.toml(5) for a list of available options.
             [options]
             systems = []
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization, true);
@@ -1186,6 +1297,8 @@ pub(super) mod test {
             # manifest.toml(5) for a list of available options.
             [options]
             systems = []
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization, false);
@@ -1262,6 +1375,8 @@ pub(super) mod test {
             # manifest.toml(5) for a list of available options.
             [options]
             systems = ["x86_64-linux"]
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization, false);
@@ -1335,6 +1450,8 @@ pub(super) mod test {
             # manifest.toml(5) for a list of available options.
             [options]
             systems = ["x86_64-linux"]
+            # Uncomment to disable CUDA detection.
+            # cuda-detection = false
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization, false);
@@ -1504,5 +1621,14 @@ pub(super) mod test {
             .expect_err("missing closing quote should cause failure");
         PackageToInstall::from_str("@1.2.3").expect_err("missing attrpath should cause failure");
         PackageToInstall::from_str("foo@").expect_err("missing version should cause failure");
+    }
+
+    proptest! {
+        #[test]
+        fn manifest_round_trip(manifest in any::<TypedManifestCatalog>()) {
+            let toml = toml_edit::ser::to_string(&manifest).unwrap();
+            let parsed = toml_edit::de::from_str::<TypedManifestCatalog>(&toml).unwrap();
+            prop_assert_eq!(manifest, parsed);
+        }
     }
 }
