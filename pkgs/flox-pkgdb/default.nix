@@ -10,6 +10,7 @@
   cacert,
   ccls,
   clang-tools_16,
+  flox-activation-scripts,
   include-what-you-use,
   lcov,
   nix,
@@ -61,41 +62,6 @@
         name = "mkContainer.nix";
         path = ../../pkgdb/src/libexec/mkContainer.nix;
       };
-
-      # Used by `buildenv' to install the activation package.
-      ACTIVATE_PACKAGE_DIR =
-        runCommand "flox-activate" {
-          buildInputs = [bash coreutils gnused];
-        } ''
-          cp -R ${../../pkgdb/src/buildenv/assets} $out
-
-          substituteInPlace $out/activate \
-            --replace "@coreutils@" "${coreutils}" \
-            --replace "@gnused@" "${gnused}" \
-            --replace "@out@" "$out" \
-            --replace "/usr/bin/env bash" "${bash}/bin/bash"
-
-          substituteInPlace $out/activate.d/bash \
-            --replace "@gnused@" "${gnused}"
-          substituteInPlace $out/activate.d/fish \
-            --replace "@gnused@" "${gnused}"
-          substituteInPlace $out/activate.d/tcsh \
-            --replace "@gnused@" "${gnused}"
-          substituteInPlace $out/activate.d/zsh \
-            --replace "@gnused@" "${gnused}"
-
-          for i in $out/etc/profile.d/*; do
-            substituteInPlace $i --replace "@coreutils@" "${coreutils}"
-            substituteInPlace $i --replace "@gnused@" "${gnused}"
-            substituteInPlace $i --replace "@findutils@" "${findutils}"
-          done
-
-          ${shellcheck}/bin/shellcheck \
-            $out/activate \
-            $out/activate.d/bash \
-            $out/activate.d/set-prompt.bash \
-            $out/etc/profile.d/*
-        '';
 
       # Packages required for the (bash) activate script.
       FLOX_BASH_PKG = bash;
@@ -179,8 +145,8 @@ in
 
       configurePhase = ''
         runHook preConfigure;
-        export PREFIX="$out";
-        echo "ACTIVATE_PACKAGE_DIR: $ACTIVATE_PACKAGE_DIR" >&2;
+        makeFlagsArray+=( "PREFIX=$out" );
+        makeFlagsArray+=( "ACTIVATION_SCRIPTS_PACKAGE_DIR=${flox-activation-scripts}" );
         if [[ "''${enableParallelBuilding:-1}" = 1 ]]; then
           makeFlagsArray+=( "-j''${NIX_BUILD_CORES:?}" );
         fi
