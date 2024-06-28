@@ -640,8 +640,22 @@ pub fn format_migration_error(err: &MigrationError) -> String {
     trace!("formatting migration_error: {err:?}");
 
     match err {
+        MigrationError::ConfirmedUpgradeFailed(EnvironmentError::ManagedEnvironment(
+            ManagedEnvironmentError::CheckoutOutOfSync,
+        )) => formatdoc! {"
+            Cannot automatically migrate environment:
+            The environment has changes that are not yet synced to a generation.
+
+            Migrate the environment manually by setting 'version = 1'
+            in the manifest file or reset the local manifest to the current generation using
+
+                $ flox edit --reset
+        "},
         MigrationError::Environment(err) | MigrationError::ConfirmedUpgradeFailed(err) => {
-            format_error(err)
+            formatdoc! {"
+                Failed to migrate environment:
+                {err}
+            ", err = format_error(err).trim_end()}
         },
         _ => display_chain(err),
     }

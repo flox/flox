@@ -7,6 +7,10 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::{EnvironmentName, Flox};
+use flox_rust_sdk::models::environment::managed_environment::{
+    ManagedEnvironmentError,
+    SyncToGenerationResult,
+};
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     EditResult,
@@ -31,8 +35,8 @@ use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
 use crate::utils::errors::{
     apply_doc_link_for_unsupported_packages,
-    display_chain,
     format_core_error,
+    format_migration_error,
 };
 use crate::utils::message;
 
@@ -142,11 +146,20 @@ impl Edit {
             EditAction::Sync { .. } => {
                 let span = tracing::info_span!("sync");
                 let _guard = span.enter();
+                let description = environment_description(&detected_environment)?;
                 let ConcreteEnvironment::Managed(mut environment) = detected_environment else {
                     bail!("Cannot sync local or remote environments.");
                 };
-                environment.create_generation_from_local_env(&flox)?;
-                message::updated("Environment successfully synced to a new generation.");
+
+                maybe_migrate_environment_to_v1(&flox, &mut environment, &description).await?;
+
+                let sync_result = environment.create_generation_from_local_env(&flox)?;
+                match sync_result {
+                    SyncToGenerationResult::UpToDate => message::plain("No local changes to sync."),
+                    SyncToGenerationResult::Synced => {
+                        message::updated("Environment successfully synced to a new generation.")
+                    },
+                }
             },
 
             EditAction::Reset { .. } => {
@@ -184,10 +197,13 @@ impl Edit {
         match maybe_migrate_environment_to_v1(flox, environment, &description).await {
             Ok(_) => (),
             e @ Err(MigrationError::MigrationCancelled) => e?,
+
+            e @ Err(MigrationError::ConfirmedUpgradeFailed(
+                EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::CheckoutOutOfSync),
+            )) => e?,
             // If the user said they wanted an upgrade and it failed, print why but don't fail
-            Err(MigrationError::ConfirmedUpgradeFailed(environment_error)) => {
-                // TODO: this could probably benefit from some newlines
-                message::warning(display_chain(&environment_error));
+            Err(e @ MigrationError::ConfirmedUpgradeFailed(_)) => {
+                message::warning(format_migration_error(&e));
             },
             // Swallow other migration errors because edit is the only way to fix them.
             // Don't print anything if there's an error, because the editor will

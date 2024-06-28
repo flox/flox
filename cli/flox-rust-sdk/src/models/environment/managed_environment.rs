@@ -314,20 +314,28 @@ impl Environment for ManagedEnvironment {
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
-        let mut remote = generations
+        let remote = generations
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let result = remote.edit(flox, contents)?;
+        let mut local_checkout = self.local_env_from_current_generation(flox)?;
+
+        if !Self::validate_checkout(&local_checkout, &remote)? {
+            Err(EnvironmentError::ManagedEnvironment(
+                ManagedEnvironmentError::CheckoutOutOfSync,
+            ))?
+        }
+
+        let result = local_checkout.edit(flox, contents)?;
 
         if let EditResult::Success { store_path } | EditResult::ReActivateRequired { store_path } =
             &result
         {
             generations
-                .add_generation(&mut remote, "manually edited".to_string())
+                .add_generation(&mut local_checkout, "manually edited".to_string())
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
             self.lock_pointer()?;
-            remote.link(flox, &self.out_link, store_path)?;
+            local_checkout.link(flox, &self.out_link, store_path)?;
         }
 
         self.reset_local_env_to_current_generation(flox)?;
@@ -521,7 +529,8 @@ impl Environment for ManagedEnvironment {
 
         let mut temporary = self.local_env_from_current_generation(flox)?;
 
-        if !Self::validate_checkout(&temporary, &remote)? {
+        if !Self::validate_checkout(&temporary, &remote)? && migration_info.needs_manifest_migration
+        {
             Err(EnvironmentError::ManagedEnvironment(
                 ManagedEnvironmentError::CheckoutOutOfSync,
             ))?
@@ -834,6 +843,15 @@ impl ManagedEnvironment {
     }
 }
 
+/// Result of creating a generation from local changes with
+/// [ManagedEnvironment::create_generation_from_local_env]
+pub enum SyncToGenerationResult {
+    /// The environment was already up to date
+    UpToDate,
+    /// The environment was successfully synced to the generation
+    Synced,
+}
+
 /// Utility instance methods
 impl ManagedEnvironment {
     /// Edit the environment without checking that it builds
@@ -924,18 +942,22 @@ impl ManagedEnvironment {
     /// Create a new generation from local changes,
     /// and updates the generation lock.
     ///
-    /// If no changes exist, returns without further action.
+    /// If the environment was already up to date,
+    /// [ManagedEnvironment::create_generation_from_local_env] should return successfully.
+    /// In that case the result is [SyncToGenerationResult::UpToDate] to signal
+    /// that no changes were made.
     /// Before creating a new generation, the local environment is locked and built,
     /// to ensure the validity of the new generation.
+    /// Unless an error occurs, [SyncToGenerationResult::Synced] is returned.
     pub fn create_generation_from_local_env(
         &mut self,
         flox: &Flox,
-    ) -> Result<(), ManagedEnvironmentError> {
+    ) -> Result<SyncToGenerationResult, ManagedEnvironmentError> {
         let mut local_checkout = self.local_env_from_current_generation(flox)?;
 
         if Self::validate_checkout(&local_checkout, &self.get_current_generation(flox)?)? {
             debug!("local checkout and remote checkout equal, nothing to apply");
-            return Ok(());
+            return Ok(SyncToGenerationResult::UpToDate);
         }
 
         // Ensure the environment is locked
@@ -967,7 +989,7 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
 
         self.lock_pointer()?;
-        Ok(())
+        Ok(SyncToGenerationResult::Synced)
     }
 
     /// Discards local changes in `.flox/env` and recreates the directory from the current generation.
