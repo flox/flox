@@ -433,7 +433,7 @@ EOF
 
   # simulate immediate save in a user editor
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
-    run "$FLOX_BIN" edit -f  .flox/env/manifest.toml
+    run "$FLOX_BIN" edit -f .flox/env/manifest.toml
 
 
   assert_success
