@@ -165,7 +165,11 @@ jobs:
     timeout-minutes: 120
 
     outputs:
-      closure-size: ${{ steps.closure.outputs.closure-size }}
+      closure-size-x86_64-linux:   ${{ steps.closure.outputs.closure-size-x86_64-linux }}
+      closure-size-aarch64-linux:  ${{ steps.closure.outputs.closure-size-aarch64-linux }}
+      closure-size-x86_64-darwin:  ${{ steps.closure.outputs.closure-size-x86_64-darwin }}
+      closure-size-aarch64-darwin: ${{ steps.closure.outputs.closure-size-aarch64-darwin }}
+      flox-version:                ${{ steps.version.outputs.flox-version }}
 
     strategy:
       fail-fast: false
@@ -179,6 +183,9 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
+        # needed for git describe to work
+        with:
+          fetch-depth: 0
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -192,6 +199,7 @@ jobs:
           TAILSCALE_URL:          "${{    vars.MANAGED_TAILSCALE_URL }}"
           TAILSCALE_AUTH_KEY:     "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
           REMOTE_BUILDERS:        "${{    vars.MANAGED_REMOTE_BUILDERS }}"
+          SYSTEM:                 "${{ matrix.system }}"
 
       - name: "Build"
         id: "build"
@@ -214,14 +222,26 @@ jobs:
             fi
           done
 
-      - name: "Get closure size (x86_64-linux)"
-        if: ${{ matrix.system == 'x86_64-linux' }}
+      - name: "Get closure size"
         id: "closure"
         run: |
-          git clean -xfd .
-          nix build --no-update-lock-file '.#flox'
-          CLOSURE_SIZE=$(nix path-info -r --json '.#flox' | jq '[.[].narSize]|add')
-          echo "closure-size=$CLOSURE_SIZE" >> "$GITHUB_OUTPUT"
+          NIX="nix --accept-flake-config --experimental-features 'nix-command flakes'"
+          CLOSURE_SIZE=$(
+            ssh github@$REMOTE_SERVER \
+              -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
+                "$NIX build github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox &&" \
+                "$NIX path-info -r --json ./result" \
+            | jq '[.[].narSize]|add'
+          )
+          echo "closure-size-${{ matrix.system }}=$CLOSURE_SIZE" >> "$GITHUB_OUTPUT"
+
+      - name: "Get Flox version"
+        id: "version"
+        run: |
+            FLOX_VERSION="${FLOX_VERSION:=$(git describe)}"
+            FLOX_VERSION="${FLOX_VERSION:1}"
+            echo "flox-version=$FLOX_VERSION" >> $GITHUB_OUTPUT
+
 
   trigger-flox-installers-workflow:
     name: "Build installers"
@@ -254,7 +274,11 @@ jobs:
         run: |
           jq -n \
             --arg "flox_installers_workflow_id" "${{ steps.trigger-workflow.outputs.workflow_id }}" \
-            --arg "flox_closure_size" "${{ needs.nix-build.outputs.closure-size }}" \
+            --arg "flox_closure_size-x86_64-linux" "${{ needs.nix-build.outputs.closure-size-x86_64-linux }}" \
+            --arg "flox_closure_size-aarch64-linux" "${{ needs.nix-build.outputs.closure-size-aarch64-linux }}" \
+            --arg "flox_closure_size-x86_64-darwin" "${{ needs.nix-build.outputs.closure-size-x86_64-darwin }}" \
+            --arg "flox_closure_size-aarch64-darwin" "${{ needs.nix-build.outputs.closure-size-aarch64-darwin }}" \
+            --arg "flox_version" "${{ needs.nix-build.outputs.flox-version }}" \
             '$ARGS.named' > shipit.json
           cat shipit.json | jq
 
