@@ -178,9 +178,6 @@
       # Package activation scripts.
       flox-activation-scripts = callPackage ./pkgs/flox-activation-scripts {};
 
-      # Customized `gh' executable used for auth.
-      flox-gh = callPackage ./pkgs/flox-gh {};
-
       # Package Database Utilities: scrape, search, and resolve.
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
 
@@ -234,7 +231,6 @@
       inherit
         (pkgs)
         flox-activation-scripts
-        flox-gh
         flox-pkgdb
         flox-cli
         flox-cli-tests
