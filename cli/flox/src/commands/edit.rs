@@ -85,12 +85,12 @@ impl Edit {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("edit");
 
-        let detected_environment = match self.environment.detect_concrete_environment(&flox, "Edit")
-        {
-            Ok(concrete_env) => concrete_env,
-            Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
-            Err(e) => Err(e)?,
-        };
+        let mut detected_environment =
+            match self.environment.detect_concrete_environment(&flox, "Edit") {
+                Ok(concrete_env) => concrete_env,
+                Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
+                Err(e) => Err(e)?,
+            };
         // Ensure the user is logged in for the following remote operations
         if let ConcreteEnvironment::Remote(_) = detected_environment {
             ensure_floxhub_token(&mut flox).await?;
@@ -104,33 +104,7 @@ impl Edit {
 
                 let contents = Self::provided_manifest_contents(file)?;
 
-                if let ConcreteEnvironment::Managed(ref environment) = detected_environment {
-                    if environment.has_local_changes(&flox)? && contents.is_none() {
-                        bail!(ManagedEnvironmentError::CheckoutOutOfSync)
-                    }
-                };
-
-                // TODO: we have various functionality spread across
-                // UninitializedEnvironment, ConcreteEnvironment, and
-                // Environment.
-                // UninitializedEnvironment is used to compare to what
-                // environments are active.
-                // description can't currently be derived from an Environment
-                // but is used for messages.
-                // Environment is what we'll actually use to perform the edit.
-                let active_environment =
-                    UninitializedEnvironment::from_concrete_environment(&detected_environment)?;
-                let description = environment_description(&detected_environment)?;
-                let mut environment = detected_environment.into_dyn_environment();
-
-                Self::edit_manifest(
-                    &flox,
-                    &mut *environment,
-                    active_environment,
-                    description,
-                    contents,
-                )
-                .await?
+                Self::edit_manifest(&flox, &mut detected_environment, contents).await?
             },
             EditAction::Rename { name } => {
                 // TODO: we could migrate environment to v1 if we wanted to
@@ -195,11 +169,28 @@ impl Edit {
     // instead of just environment is a pain
     async fn edit_manifest(
         flox: &Flox,
-        environment: &mut dyn Environment,
-        active_environment: UninitializedEnvironment,
-        description: String,
+        environment: &mut ConcreteEnvironment,
         contents: Option<String>,
     ) -> Result<()> {
+        // TODO: we have various functionality spread across
+        // UninitializedEnvironment, ConcreteEnvironment, and
+        // Environment.
+        // UninitializedEnvironment is used to compare to what
+        // environments are active.
+        // description can't currently be derived from an Environment
+        // but is used for messages.
+        // Environment is what we'll actually use to perform the edit.
+        let active_environment = UninitializedEnvironment::from_concrete_environment(environment)?;
+        let description = environment_description(environment)?;
+
+        if let ConcreteEnvironment::Managed(ref environment) = environment {
+            if environment.has_local_changes(flox)? && contents.is_none() {
+                bail!(ManagedEnvironmentError::CheckoutOutOfSync)
+            }
+        };
+
+        let environment = environment.dyn_environment_ref_mut();
+
         match maybe_migrate_environment_to_v1(flox, environment, &description).await {
             Ok(_) => (),
             e @ Err(MigrationError::MigrationCancelled) => e?,
@@ -384,7 +375,10 @@ impl Edit {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
+    use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
     use flox_rust_sdk::models::environment::test_helpers::MANIFEST_V0_FIELDS;
     use flox_rust_sdk::models::lockfile::LockedManifestError;
@@ -455,22 +449,15 @@ mod tests {
     #[tokio::test]
     async fn migration_successful_migration_unsuccessful_edit() {
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
-        let concrete_environment = ConcreteEnvironment::Path(new_path_environment(&flox, ""));
+        let mut concrete_environment = ConcreteEnvironment::Path(new_path_environment(&flox, ""));
         let new_contents = indoc! {r#"
             [options]
             allow.broken = false
             "#};
 
-        let active_environment =
-            UninitializedEnvironment::from_concrete_environment(&concrete_environment).unwrap();
-        let description = environment_description(&concrete_environment).unwrap();
-        let mut environment = concrete_environment.into_dyn_environment();
-
         let err = Edit::edit_manifest(
             &flox,
-            &mut *environment,
-            active_environment,
-            description,
+            &mut concrete_environment,
             Some(new_contents.to_string()),
         )
         .await
@@ -483,7 +470,10 @@ mod tests {
             EnvironmentError::Core(CoreEnvironmentError::Version0NotSupported)
         ));
 
-        let actual_contents = environment.manifest_content(&flox).unwrap();
+        let actual_contents = concrete_environment
+            .into_dyn_environment()
+            .manifest_content(&flox)
+            .unwrap();
         assert_eq!(actual_contents, "version = 1\n");
     }
 
@@ -494,13 +484,8 @@ mod tests {
     async fn migration_unsuccessful_migration_unsuccessful_edit() {
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
 
-        let concrete_environment =
+        let mut concrete_environment =
             ConcreteEnvironment::Path(new_path_environment(&flox, MANIFEST_V0_FIELDS));
-
-        let active_environment =
-            UninitializedEnvironment::from_concrete_environment(&concrete_environment).unwrap();
-        let description = environment_description(&concrete_environment).unwrap();
-        let mut environment = concrete_environment.into_dyn_environment();
 
         let new_contents = indoc! {r#"
             [options]
@@ -509,9 +494,7 @@ mod tests {
 
         let err = Edit::edit_manifest(
             &flox,
-            &mut *environment,
-            active_environment,
-            description,
+            &mut concrete_environment,
             Some(new_contents.to_string()),
         )
         .await
@@ -524,7 +507,10 @@ mod tests {
             EnvironmentError::Core(CoreEnvironmentError::Version0NotSupported)
         ));
 
-        let actual_contents = environment.manifest_content(&flox).unwrap();
+        let actual_contents = concrete_environment
+            .into_dyn_environment()
+            .manifest_content(&flox)
+            .unwrap();
         assert!(!actual_contents.contains("version = 1"));
     }
 
@@ -535,13 +521,8 @@ mod tests {
     async fn migration_unsuccessful_migration_successful_edit() {
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
 
-        let concrete_environment =
+        let mut concrete_environment =
             ConcreteEnvironment::Path(new_path_environment(&flox, MANIFEST_V0_FIELDS));
-
-        let active_environment =
-            UninitializedEnvironment::from_concrete_environment(&concrete_environment).unwrap();
-        let description = environment_description(&concrete_environment).unwrap();
-        let mut environment = concrete_environment.into_dyn_environment();
 
         let new_contents = indoc! {r#"
             version = 1
@@ -552,9 +533,7 @@ mod tests {
 
         Edit::edit_manifest(
             &flox,
-            &mut *environment,
-            active_environment,
-            description,
+            &mut concrete_environment,
             Some(new_contents.to_string()),
         )
         .await
@@ -563,7 +542,10 @@ mod tests {
         // TODO: would be nice to make an assertion about
         // `Failed to migrate environment to version 1` being printed.
 
-        let actual_contents = environment.manifest_content(&flox).unwrap();
+        let actual_contents = concrete_environment
+            .dyn_environment_ref_mut()
+            .manifest_content(&flox)
+            .unwrap();
         assert!(actual_contents.contains("version = 1"));
     }
 
@@ -578,13 +560,8 @@ mod tests {
             allow.broken = false
             "#};
 
-        let concrete_environment =
+        let mut concrete_environment =
             ConcreteEnvironment::Path(new_path_environment(&flox, old_contents));
-
-        let active_environment =
-            UninitializedEnvironment::from_concrete_environment(&concrete_environment).unwrap();
-        let description = environment_description(&concrete_environment).unwrap();
-        let mut environment = concrete_environment.into_dyn_environment();
 
         let new_contents = indoc! {r#"
             version = 1
@@ -595,15 +572,81 @@ mod tests {
 
         Edit::edit_manifest(
             &flox,
-            &mut *environment,
-            active_environment,
-            description,
+            &mut concrete_environment,
             Some(new_contents.to_string()),
         )
         .await
         .unwrap();
 
-        let actual_contents = environment.manifest_content(&flox).unwrap();
+        let actual_contents = concrete_environment
+            .into_dyn_environment()
+            .manifest_content(&flox)
+            .unwrap();
         assert!(actual_contents.contains("version = 1"));
+    }
+
+    /// If no no manifest file or contents are provided,
+    /// edits should be blocked if the local checkout is out of sync.
+    #[tokio::test]
+    async fn edit_requires_sync_checkout() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let old_contents = indoc! {r#"
+            version = 1
+        "#};
+
+        let new_contents = indoc! {r#"
+            version = 1
+
+            [vars]
+            foo = "bar"
+        "#};
+
+        let environment = mock_managed_environment(&flox, old_contents, owner);
+
+        // edit the local manifest
+        fs::write(environment.manifest_path(&flox).unwrap(), new_contents).unwrap();
+
+        let err = Edit::edit_manifest(&flox, &mut ConcreteEnvironment::Managed(environment), None)
+            .await
+            .expect_err("edit should fail");
+
+        let err = err
+            .downcast::<ManagedEnvironmentError>()
+            .expect("should be a ManagedEnvironmentError");
+
+        assert!(matches!(err, ManagedEnvironmentError::CheckoutOutOfSync));
+    }
+
+    /// If a manifest file or contents are provided, edit succeeds despite local changes.
+    #[tokio::test]
+    async fn edit_with_file_ignores_local_changes() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let old_contents = indoc! {r#"
+            version = 1
+        "#};
+
+        let new_contents = indoc! {r#"
+            version = 1
+
+            [vars]
+            foo = "bar"
+        "#};
+
+        let environment = mock_managed_environment(&flox, old_contents, owner);
+
+        // edit the local manifest
+        fs::write(environment.manifest_path(&flox).unwrap(), new_contents).unwrap();
+
+        Edit::edit_manifest(
+            &flox,
+            &mut ConcreteEnvironment::Managed(environment),
+            Some(new_contents.to_string()),
+        )
+        .await
+        .expect("edit should succeed");
     }
 }
