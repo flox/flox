@@ -1021,7 +1021,8 @@ impl ManagedEnvironment {
         Ok(local_checkout)
     }
 
-    /// Create a local checkout of the current generation.
+    /// Return a [CoreEnvironment] for an existing local checkout
+    /// or create one from the current generation.
     ///
     /// Copies the `env/` directory from the current generation to the `.flox/` directory
     /// and returns a [CoreEnvironment] for the `.flox/env`.
