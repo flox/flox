@@ -140,31 +140,32 @@ fn main() -> ExitCode {
                 return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;
             }
 
-            if let Some(e) = e.downcast_ref::<EnvironmentError>() {
-                message::error(format_error(e));
+            let message = e
+                .downcast_ref::<EnvironmentError>()
+                .map(format_error)
+                .or_else(|| {
+                    e.downcast_ref::<ManagedEnvironmentError>()
+                        .map(format_managed_error)
+                })
+                .or_else(|| {
+                    e.downcast_ref::<RemoteEnvironmentError>()
+                        .map(format_remote_error)
+                })
+                .or_else(|| {
+                    e.downcast_ref::<EnvironmentSelectError>()
+                        .map(format_environment_select_error)
+                })
+                .or_else(|| {
+                    e.downcast_ref::<MigrationError>()
+                        .map(format_migration_error)
+                });
+
+            if let Some(message) = message {
+                message::error(message);
                 return ExitCode::from(1);
             }
 
-            if let Some(e) = e.downcast_ref::<ManagedEnvironmentError>() {
-                message::error(format_managed_error(e));
-                return ExitCode::from(1);
-            }
-
-            if let Some(e) = e.downcast_ref::<RemoteEnvironmentError>() {
-                message::error(format_remote_error(e));
-                return ExitCode::from(1);
-            }
-
-            if let Some(e) = e.downcast_ref::<EnvironmentSelectError>() {
-                message::error(format_environment_select_error(e));
-                return ExitCode::from(1);
-            }
-
-            if let Some(e) = e.downcast_ref::<MigrationError>() {
-                message::error(format_migration_error(e));
-                return ExitCode::from(1);
-            }
-
+            // unknown errors are printed with an error trace
             let err_str = e
                 .chain()
                 .skip(1)
