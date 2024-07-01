@@ -23,7 +23,8 @@ echo "socket_file: $SOCKET_FILE" >&3
 echo "config_file: $CONFIG_FILE" >&3
 
 # Start the server
-"$PROCESS_COMPOSE_BIN" up -f "$CONFIG_FILE" --tui=false -u "$SOCKET_FILE" >&3 2>&1 &
+# https://bats-core.readthedocs.io/en/stable/writing-tests.html#file-descriptor-3-read-this-if-bats-hangs
+"$PROCESS_COMPOSE_BIN" up -f "$CONFIG_FILE" --tui=false -u "$SOCKET_FILE" 3>&- 2>&1 &
 
 # there's a race condition here, the socket file may not exist until the server is up
 echo "sleeping" >&3
