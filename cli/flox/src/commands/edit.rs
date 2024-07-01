@@ -208,7 +208,7 @@ impl Edit {
             // open too fast for the user to see it.
             Err(_) => (),
             // Note: ManagedEnvironmentError::CheckoutOutOfSync case is unreachable here,
-            // because its handled above for clarity.
+            // because it's handled above for clarity.
         };
 
         let active_environment = UninitializedEnvironment::from_concrete_environment(environment)?;
