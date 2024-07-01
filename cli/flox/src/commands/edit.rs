@@ -204,9 +204,6 @@ impl Edit {
             Ok(_) => (),
             e @ Err(MigrationError::MigrationCancelled) => e?,
 
-            e @ Err(MigrationError::ConfirmedUpgradeFailed(
-                EnvironmentError::ManagedEnvironment(ManagedEnvironmentError::CheckoutOutOfSync),
-            )) => e?,
             // If the user said they wanted an upgrade and it failed, print why but don't fail
             Err(e @ MigrationError::ConfirmedUpgradeFailed(_)) => {
                 message::warning(format_migration_error(&e));
