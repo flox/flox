@@ -5,7 +5,6 @@ use anyhow::{anyhow, bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::{CoreEnvironmentError, Environment, EnvironmentError};
 use flox_rust_sdk::models::lockfile::{
     LockedManifest,
@@ -109,12 +108,6 @@ impl Install {
         // Ensure the user is logged in for the following remote operations
         if let ConcreteEnvironment::Remote(_) = concrete_environment {
             ensure_floxhub_token(&mut flox).await?;
-        };
-
-        if let ConcreteEnvironment::Managed(ref environment) = concrete_environment {
-            if environment.has_local_changes(&flox)? {
-                bail!(ManagedEnvironmentError::CheckoutOutOfSync)
-            }
         };
 
         maybe_migrate_environment_to_v1(&flox, &mut concrete_environment).await?;
