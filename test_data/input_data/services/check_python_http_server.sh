@@ -32,8 +32,7 @@ timeout 2s bash -c "while [ ! -e \"$SOCKET_FILE\" ]; do sleep 0.1; done"
 echo "checking socket" >&3
 [ -a "$SOCKET_FILE" ]
 echo "checking server" >&3
-curl_output=$(curl -I -s localhost:7890)
-[ "$(echo "$curl_output" | head -n 1)" == "HTTP/1.0 200 OK" ]
+curl --head --fail --silent localhost:7890 >&3
 echo "checking process-compose" >&3
 status_output=$("$PROCESS_COMPOSE_BIN" process list -o json -u "$SOCKET_FILE")
 status=$(echo "$status_output" | jq -r -c '.[0].status')
