@@ -640,7 +640,10 @@ pub fn format_migration_error(err: &MigrationError) -> String {
     trace!("formatting migration_error: {err:?}");
 
     match err {
-        MigrationError::ConfirmedUpgradeFailed(EnvironmentError::ManagedEnvironment(
+        MigrationError::Environment(EnvironmentError::ManagedEnvironment(
+            ManagedEnvironmentError::CheckoutOutOfSync,
+        ))
+        | MigrationError::ConfirmedUpgradeFailed(EnvironmentError::ManagedEnvironment(
             ManagedEnvironmentError::CheckoutOutOfSync,
         )) => formatdoc! {"
             Cannot automatically migrate environment:

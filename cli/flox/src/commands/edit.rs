@@ -23,7 +23,6 @@ use tracing::instrument;
 
 use super::{
     activated_environments,
-    environment_description,
     environment_select,
     maybe_migrate_environment_to_v1,
     EnvironmentSelect,
@@ -126,12 +125,9 @@ impl Edit {
             EditAction::Sync { .. } => {
                 let span = tracing::info_span!("sync");
                 let _guard = span.enter();
-                let description = environment_description(&detected_environment)?;
                 let ConcreteEnvironment::Managed(mut environment) = detected_environment else {
                     bail!("Cannot sync local or remote environments.");
                 };
-
-                maybe_migrate_environment_to_v1(&flox, &mut environment, &description).await?;
 
                 let sync_result = environment.create_generation_from_local_env(&flox)?;
                 match sync_result {
@@ -180,8 +176,6 @@ impl Edit {
         // description can't currently be derived from an Environment
         // but is used for messages.
         // Environment is what we'll actually use to perform the edit.
-        let active_environment = UninitializedEnvironment::from_concrete_environment(environment)?;
-        let description = environment_description(environment)?;
 
         if let ConcreteEnvironment::Managed(ref environment) = environment {
             if environment.has_local_changes(flox)? && contents.is_none() {
@@ -189,13 +183,23 @@ impl Edit {
             }
         };
 
-        let environment = environment.dyn_environment_ref_mut();
-
-        match maybe_migrate_environment_to_v1(flox, environment, &description).await {
+        match maybe_migrate_environment_to_v1(flox, environment).await {
             Ok(_) => (),
             e @ Err(MigrationError::MigrationCancelled) => e?,
 
             // If the user said they wanted an upgrade and it failed, print why but don't fail
+            // [CoreEnvironmentError::LockForMigration] and [CoreEnvironmentError::MigrateManifest]
+            // are handled separately to avoid suggesting the use of `flox edit` within `flox edit`.
+            Err(MigrationError::ConfirmedUpgradeFailed(EnvironmentError::Core(
+                CoreEnvironmentError::LockForMigration(err),
+            ))) => {
+                message::warning(format_core_error(&err));
+            },
+            Err(MigrationError::ConfirmedUpgradeFailed(EnvironmentError::Core(
+                CoreEnvironmentError::MigrateManifest(err),
+            ))) => {
+                message::warning(err.to_string());
+            },
             Err(e @ MigrationError::ConfirmedUpgradeFailed(_)) => {
                 message::warning(format_migration_error(&e));
             },
@@ -203,7 +207,12 @@ impl Edit {
             // Don't print anything if there's an error, because the editor will
             // open too fast for the user to see it.
             Err(_) => (),
+            // Note: ManagedEnvironmentError::CheckoutOutOfSync case is unreachable here,
+            // because its handled above for clarity.
         };
+
+        let active_environment = UninitializedEnvironment::from_concrete_environment(environment)?;
+        let environment = environment.dyn_environment_ref_mut();
 
         let result = match contents {
             // If provided with the contents of a manifest file, either via a path to a file or via
