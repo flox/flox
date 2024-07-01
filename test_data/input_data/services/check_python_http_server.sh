@@ -2,13 +2,6 @@
 
 set -eo pipefail
 
-function wait_for_socket() {
-    local socket_file="$1"
-    while [ ! -e "$socket_file" ]; do
-        sleep 0.1
-    done
-}
-
 function cleanup() {
     echo "shutting down" >&3
     "$PROCESS_COMPOSE_BIN" down -u "$SOCKET_FILE"
@@ -32,9 +25,8 @@ echo "config_file: $CONFIG_FILE" >&3
 "$PROCESS_COMPOSE_BIN" up -f "$CONFIG_FILE" --tui=false -u "$SOCKET_FILE" 3>&- 2>&1 &
 trap cleanup EXIT
 
-# there's a race condition here, the socket file may not exist until the server is up
-echo "sleeping" >&3
-sleep 1
+echo "waiting for socket" >&3
+timeout 2s bash -c "while [ ! -e \"$SOCKET_FILE\" ]; do sleep 0.1; done"
 
 # Check if everything is up and running
 echo "checking socket" >&3
