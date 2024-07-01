@@ -9,6 +9,11 @@ function wait_for_socket() {
     done
 }
 
+function cleanup() {
+    echo "shutting down" >&3
+    "$PROCESS_COMPOSE_BIN" down -u "$SOCKET_FILE"
+}
+
 echo "activating" >&3
 eval $("$FLOX_BIN" activate)
 CONFIG_FILE="$FLOX_ENV/service-config.yaml"
@@ -25,6 +30,7 @@ echo "config_file: $CONFIG_FILE" >&3
 # Start the server
 # https://bats-core.readthedocs.io/en/stable/writing-tests.html#file-descriptor-3-read-this-if-bats-hangs
 "$PROCESS_COMPOSE_BIN" up -f "$CONFIG_FILE" --tui=false -u "$SOCKET_FILE" 3>&- 2>&1 &
+trap cleanup EXIT
 
 # there's a race condition here, the socket file may not exist until the server is up
 echo "sleeping" >&3
@@ -41,5 +47,3 @@ status_output=$("$PROCESS_COMPOSE_BIN" process list -o json -u "$SOCKET_FILE")
 status=$(echo "$status_output" | jq -r -c '.[0].status')
 pid=$(echo "$status_output" | jq -r -c '.[0].pid')
 [ "$status" == "Running" ]
-echo "shutting down" >&3
-"$PROCESS_COMPOSE_BIN" down -u "$SOCKET_FILE"
