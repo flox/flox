@@ -168,15 +168,6 @@ impl Edit {
         environment: &mut ConcreteEnvironment,
         contents: Option<String>,
     ) -> Result<()> {
-        // TODO: we have various functionality spread across
-        // UninitializedEnvironment, ConcreteEnvironment, and
-        // Environment.
-        // UninitializedEnvironment is used to compare to what
-        // environments are active.
-        // description can't currently be derived from an Environment
-        // but is used for messages.
-        // Environment is what we'll actually use to perform the edit.
-
         if let ConcreteEnvironment::Managed(ref environment) = environment {
             if environment.has_local_changes(flox)? && contents.is_none() {
                 bail!(ManagedEnvironmentError::CheckoutOutOfSync)
