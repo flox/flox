@@ -328,8 +328,6 @@ impl Environment for ManagedEnvironment {
             local_checkout.link(flox, &self.out_link, store_path)?;
         }
 
-        self.reset_local_env_to_current_generation(flox)?;
-
         Ok(result)
     }
 
