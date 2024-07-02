@@ -9,7 +9,7 @@
 runCommand "flox-activation-scripts" {
   buildInputs = [bash coreutils gnused];
 } ''
-  cp -R ${./assets} $out
+  cp -R ${../../assets/activation-scripts} $out
 
   substituteInPlace $out/activate \
     --replace "@coreutils@" "${coreutils}" \
