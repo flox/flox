@@ -63,8 +63,9 @@ teardown() {
 @test "process-compose can run generated config file" {
   export FLOX_FEATURES_SERVICES=true
   "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/python_http_server/python_http_server.json" \
-    run "$FLOX_BIN" edit -f "$GENERATED_DATA/envs/python_http_server/manifest.toml"
-  run bash "$INPUT_DATA/services/check_python_http_server.sh"
+  manifest_file="$GENERATED_DATA/envs/touch_file_service/manifest.toml"
+  run "$FLOX_BIN" edit -f "$manifest_file"
+  assert_success
+  run bash "$INPUT_DATA/services/check_touch_file_service.sh"
   assert_success
 }

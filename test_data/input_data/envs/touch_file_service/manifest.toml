@@ -1,0 +1,4 @@
+version = 1
+
+[services.touch_file]
+command = "touch hello.txt"

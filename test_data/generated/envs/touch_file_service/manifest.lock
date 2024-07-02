@@ -1,0 +1,23 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {},
+    "vars": {},
+    "hook": {},
+    "profile": {},
+    "options": {
+      "allow": {
+        "licenses": []
+      },
+      "semver": {}
+    },
+    "services": {
+      "touch_file": {
+        "command": "touch hello.txt",
+        "vars": null
+      }
+    }
+  },
+  "packages": []
+}

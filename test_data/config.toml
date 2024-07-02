@@ -297,6 +297,7 @@ post_cmd = '''
     mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
 '''
 
+# Starts a Python HTTP server, for use with services
 [envs.python_http_server]
 skip_if_output_exists = "envs/python_http_server"
 files = ["envs/python_http_server/manifest.toml"]
@@ -309,4 +310,18 @@ post_cmd = '''
     cp manifest.toml "$env_dir/manifest.toml"
     cp .flox/env/manifest.lock "$env_dir/manifest.lock"
     mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
+'''
+
+# A trivial service that just creates a file
+[envs.touch_file_service]
+skip_if_output_exists = "envs/touch_file_service"
+files = ["envs/touch_file_service/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/touch_file_service"
+    mkdir -p "$env_dir"
+    cp manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
 '''
