@@ -11,15 +11,11 @@
   inputs,
   installShellFiles,
   lib,
-  libgit2,
-  libssh2,
   nix,
-  openssl,
   pkg-config,
   pkgsFor,
   rustfmt ? rust-toolchain.rustfmt,
   targetPlatform,
-  zlib,
   process-compose,
 }: let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
@@ -119,19 +115,15 @@
 
     # runtime dependencies of the dependent crates
     buildInputs =
-      [
-        openssl.dev # octokit -> hyper -> ssl
-        zlib # git2
-        libssh2 # git2
-        libgit2 # git2
-      ]
+      []
       ++ lib.optional hostPlatform.isDarwin [
-        darwin.apple_sdk.frameworks.Security # git2 (and others)
+        darwin.libiconv
+        # darwin.apple_sdk.frameworks.Security # git2 (and others)
         darwin.apple_sdk.frameworks.SystemConfiguration
       ];
 
     nativeBuildInputs = [
-      pkg-config # for openssl
+      pkg-config
     ];
 
     inherit (envs) LIBSSH2_SYS_USE_PKG_CONFIG;
