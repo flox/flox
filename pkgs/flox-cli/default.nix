@@ -1,4 +1,5 @@
 {
+  bashInteractive,
   cacert,
   darwin,
   rust-toolchain,
@@ -65,6 +66,9 @@
         else "${flox-pkgdb}/lib/ld-floxlib.so";
       FLOX_ZDOTDIR = flox-activation-scripts + activate.d/zdotdir;
       PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
+      # [sic] nix handles `BASH_` variables specially,
+      # so we need to use a different name.
+      INTERACTIVE_BASH_BIN = "${bashInteractive}/bin/bash";
 
       # bundling of internally used nix scripts
       FLOX_RESOLVER_SRC = builtins.path {path = ../../resolver;};
