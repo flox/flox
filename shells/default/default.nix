@@ -27,7 +27,6 @@
         PROJECT_TESTS_DIR = "/cli/tests";
         PKGDB_BIN = null;
         FLOX_BIN = null;
-        LD_FLOXLIB = null;
       })
     ];
 

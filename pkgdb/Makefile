@@ -1,8 +1,8 @@
 # ============================================================================ #
 #
 # Target/Task Highlights:
-#   - most (default)        Build binaries, libs, and generated files
-#   - all                   Build binaries, libs, tests, and generated files
+#   - most (default)        Build binaries, and generated files
+#   - all                   Build binaries, tests, and generated files
 #
 #   - bin                   Build binaries
 #   - tests                 Build test executables and resources
@@ -65,7 +65,6 @@ REPO_ROOT    := $(patsubst %/,%,$(dir $(MAKEFILE_DIR)))
 
 PREFIX ?= $(PKGDB_ROOT)/build
 BINDIR ?= $(PREFIX)/bin
-LIBDIR ?= $(PREFIX)/lib
 
 
 # ---------------------------------------------------------------------------- #
@@ -183,18 +182,12 @@ SRCS           = $(call rwildcard,src,*.cc)
 test_SRCS      = $(sort $(wildcard tests/*.cc))
 ALL_SRCS       = $(SRCS) $(test_SRCS)
 BINS           = bin/pkgdb
-ifeq (Linux,$(OS))
-LIBS           = lib/ld-floxlib.so
-else
-LIBS           =
-endif  # ifeq (Linux,$(OS))
 TEST_UTILS     = $(addprefix tests/,is_sqlite3 search-params)
 TESTS          = $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
 TEST_DATA      =
 ALL_BINS       = $(TESTS) $(TEST_UTILS) $(BINS)
-ALL_LIBS       = $(LIBS)
 CLEANDIRS      =
-CLEANFILES     = $(ALL_SRCS:.cc=.o) $(ALL_BINS) $(ALL_LIBS)
+CLEANFILES     = $(ALL_SRCS:.cc=.o) $(ALL_BINS)
 FULLCLEANDIRS  =
 FULLCLEANFILES =
 
@@ -408,10 +401,10 @@ fullclean: clean
 # Install Targets
 # ---------------
 
-.PHONY: install install-bin install-lib
+.PHONY: install install-bin
 
-#: Install binaries, libraries, and include files
-install: install-bin install-lib
+#: Install binaries and include files
+install: install-bin
 
 $(BINDIR)/%: bin/%
 	$(MKDIR_P) $(@D);
@@ -419,13 +412,6 @@ $(BINDIR)/%: bin/%
 
 #: Install binaries
 install-bin: $(addprefix $(BINDIR)/,$(patsubst bin/%,%,$(BINS)))
-
-$(LIBDIR)/%: lib/%
-	$(MKDIR_P) $(@D);
-	if $(TEST) -f $<; then $(CP) -- "$<" "$@"; fi
-
-#: Install libraries
-install-lib: $(addprefix $(LIBDIR)/,$(patsubst lib/%,%,$(LIBS)))
 
 
 # ---------------------------------------------------------------------------- #
@@ -635,11 +621,6 @@ $(BINS): %: $(SRCS:.cc=.o)
 	$(MKDIR_P) $(@D);
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;
 
-lib/ld-floxlib.so: src/ld-floxlib.c
-	$(MKDIR_P) $(@D);
-	$(CC) -shared -fPIC $< -o $@;
-	patchelf --remove-rpath $@;
-
 
 # ---------------------------------------------------------------------------- #
 
@@ -658,17 +639,14 @@ $(TESTS) $(TEST_UTILS): tests/%: tests/%.o tests/test.hh
 #: Build binaries
 bin: $(BINS)
 
-#: Build libs
-lib: $(ALL_LIBS)
-
 #: Build test executables and resources
 tests: $(TESTS) $(TEST_UTILS)
 
-#: Build binaries, tests, libs, and generated `.gitignore' files
-all: bin lib tests ignores
+#: Build binaries, tests, and generated `.gitignore' files
+all: bin tests ignores
 
-#: Build binaries, libs, and generated `.gitignore' files
-most: bin lib ignores
+#: Build binaries, and generated `.gitignore' files
+most: bin ignores
 
 
 # ---------------------------------------------------------------------------- #

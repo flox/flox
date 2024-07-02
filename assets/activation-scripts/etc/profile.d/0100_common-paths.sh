@@ -64,6 +64,7 @@ if [ -n "${FLOX_ENV_LIB_DIRS:-}" ]; then
   case "$($_coreutils/bin/uname -s)" in
     Linux*)
       # N.B. ld-floxlib.so makes use of FLOX_ENV_LIB_DIRS directly.
+      LD_FLOXLIB="${LD_FLOXLIB:-@ld-floxlib@}"
       if [ -z "${FLOX_NOSET_LD_AUDIT:-}" ] && [ -e "$LD_FLOXLIB" ]; then
         LD_AUDIT="$LD_FLOXLIB"
         export LD_AUDIT
