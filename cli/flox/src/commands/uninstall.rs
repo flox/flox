@@ -44,7 +44,7 @@ impl Uninstall {
             self.packages.as_slice().join(", "),
             self.environment
         );
-        let concrete_environment = match self
+        let mut concrete_environment = match self
             .environment
             .detect_concrete_environment(&flox, "Uninstall from")
         {
@@ -74,9 +74,10 @@ impl Uninstall {
             ensure_floxhub_token(&mut flox).await?;
         };
 
+        maybe_migrate_environment_to_v1(&flox, &mut concrete_environment).await?;
+
         let description = environment_description(&concrete_environment)?;
         let mut environment = concrete_environment.into_dyn_environment();
-        maybe_migrate_environment_to_v1(&flox, &mut environment, &description).await?;
 
         let _ = Dialog {
             message: &format!("Uninstalling packages from environment {description}..."),

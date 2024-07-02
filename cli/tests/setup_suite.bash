@@ -71,28 +71,6 @@ git_reals_setup() {
 
 # ---------------------------------------------------------------------------- #
 
-# Prime the flox-gh authentication to use the test credential.
-floxtest_gitforge_setup() {
-  if [[ -n ${__FT_RAN_FLOXTEST_GITFORGE_SETUP-} ]]; then return 0; fi
-  xdg_tmp_setup
-  flox_vars_setup
-  # Create fake flox-gh auth token data recognised as test user on flox
-  # gitforge. This obviously won't be recognised as a valid token by the
-  # GitHub API, but that's OK because we've hard-coded this identity both
-  # in flox-gh and on our gitforge proxy.
-  mkdir -p $FLOX_CONFIG_DIR/gh
-  cat > $FLOX_CONFIG_DIR/gh/hosts.yml << EOF
-github.com:
-    oauth_token: flox_testOAuthToken
-    user: floxtest
-    git_protocol: https
-EOF
-  chmod 600 $FLOX_CONFIG_DIR/gh/hosts.yml
-  export __FT_RAN_FLOXTEST_GITFORGE_SETUP=:
-}
-
-# ---------------------------------------------------------------------------- #
-
 print_var() { eval echo "  $1: \$$1"; }
 
 # Backup environment variables pointing to "real" system and users paths.
@@ -444,7 +422,6 @@ common_suite_setup() {
   flox_cli_vars_setup
   # Generate configs and auth.
   ssh_key_setup
-  floxtest_gitforge_setup
   # TODO: fix gpg setup and re-enable along with `gpgsign.bats' tests.
   #gpg_key_setup;
   gitconfig_setup

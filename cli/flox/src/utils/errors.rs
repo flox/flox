@@ -14,7 +14,7 @@ use flox_rust_sdk::models::floxmeta::FloxMetaError;
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, ContextMsgError, PkgDbError};
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use log::{debug, trace};
 
 use crate::commands::{EnvironmentSelectError, MigrationError};
@@ -439,6 +439,12 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
             to the environment directory in '.flox/env'.
         "},
 
+        ManagedEnvironmentError::CheckoutOutOfSync => indoc! {"
+            Your environment has changes that are not yet synced to a generation.
+            Use 'flox edit --reset' or 'flox edit --sync' after modifying '.flox/env/manifest.toml'
+        "}
+        .to_string(),
+
         ManagedEnvironmentError::ReadLocalManifest(_) => display_chain(err),
         ManagedEnvironmentError::ReadGenerationManifest(_) => display_chain(err),
 
@@ -547,6 +553,10 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         ManagedEnvironmentError::Build(core_environment_error) => {
             format_core_error(core_environment_error)
         },
+        ManagedEnvironmentError::Link(core_environment_error) => {
+            format_core_error(core_environment_error)
+        },
+
         ManagedEnvironmentError::Registry(_) => display_chain(err),
     }
 }
@@ -635,8 +645,25 @@ pub fn format_migration_error(err: &MigrationError) -> String {
     trace!("formatting migration_error: {err:?}");
 
     match err {
+        MigrationError::Environment(EnvironmentError::ManagedEnvironment(
+            ManagedEnvironmentError::CheckoutOutOfSync,
+        ))
+        | MigrationError::ConfirmedUpgradeFailed(EnvironmentError::ManagedEnvironment(
+            ManagedEnvironmentError::CheckoutOutOfSync,
+        )) => formatdoc! {"
+            Cannot automatically migrate environment:
+            The environment has changes that are not yet synced to a generation.
+
+            Migrate the environment manually by setting 'version = 1'
+            in the manifest file or reset the local manifest to the current generation using
+
+                $ flox edit --reset
+        "},
         MigrationError::Environment(err) | MigrationError::ConfirmedUpgradeFailed(err) => {
-            format_error(err)
+            formatdoc! {"
+                Failed to migrate environment:
+                {err}
+            ", err = format_error(err).trim_end()}
         },
         _ => display_chain(err),
     }

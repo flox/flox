@@ -14,12 +14,13 @@ flox-edit - edit the declarative environment configuration
 ```
 flox [<general options>] edit
      [-d=<path> | -r=<owner/name>]
-     [[-f=<file>] | -n=<name>]
+     [[-f=<file>] | -n=<name> | --sync | --reset]
 ```
 
 # DESCRIPTION
 
-Transactionally edit the environment manifest.
+## Transactionally edit the environment manifest.
+
 By default invokes an editor with a copy of the local manifest for the user to
 interactively edit.
 The editor is found by querying `$EDITOR`, `$VISUAL`,
@@ -41,6 +42,21 @@ which renames a local environment but does not rebuild it.
 The environment can be edited non-interactively via the `-f` flag,
 which replaces the contents of the manifest with those of the provided file.
 
+## Sync the local manifest with the current generation.
+
+When using environments that were pushed to or pulled from FloxHub,
+changes to the local manifest in `.flox/env/manifest.toml`
+will block the use of imperative environment commands
+`flox {install, uninstall, upgrade}`.
+In this case, a new generation has to be created from the local manifest first
+or the changes discarded.
+Run `flox edit --reset` to discard local changes
+and reset to the current latest generation,
+or `flox edit --sync` to create a new generation.
+`flox edit` will always create a new generation including prior changes
+to the local manifest.
+
+
 # OPTIONS
 
 ## Edit Options
@@ -52,6 +68,14 @@ which replaces the contents of the manifest with those of the provided file.
 `-n`, `--name`
 :   Rename the environment to `<name>`.
     Only works for local environments.
+
+`-s`, `--sync`
+:   Create a new generation from the current local environment
+    (Only available for managed environments)
+
+`-r`, `--reset`
+:   Reset the environment to the current generation
+    (Only available for managed environments)
 
 ```{.include}
 ./include/environment-options.md
