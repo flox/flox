@@ -38,7 +38,6 @@
   PROJECT_TESTS_DIR ? ./../../cli/tests,
   NIX_BIN ? "${nix}/bin/nix",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
-  LD_FLOXLIB ? "${flox-pkgdb}/lib/ld-floxlib.so",
   FLOX_BIN ? "${flox-cli}/bin/flox",
 }: let
   batsWith = bats.withLibraries (p: [
@@ -148,11 +147,6 @@ in
       else "export PKGDB_BIN='${PKGDB_BIN}';"
     }
     ${
-      if LD_FLOXLIB == null
-      then "export LD_FLOXLIB='ld-floxlib.so';"
-      else "export LD_FLOXLIB='${LD_FLOXLIB}';"
-    }
-    ${
       if FLOX_BIN == null
       then "export FLOX_BIN='flox';"
       else "export FLOX_BIN='${FLOX_BIN}';"
@@ -171,7 +165,6 @@ in
     Available options:
         -F, --flox          Path to flox binary (Default: $FLOX_BIN)
         -P, --pkgdb         Path to pkgdb binary (Default: $PKGDB_BIN)
-        -L, --ld-floxlib    Path to ld-floxlib.so (Default: $LD_FLOXLIB)
         -N, --nix           Path to nix binary (Default: $NIX_BIN)
         -T, --tests         Path to folder of tests (Default: $PROJECT_TESTS_DIR)
         -W, --watch         Run tests in a continuous watch mode
@@ -187,7 +180,6 @@ in
       case "$1" in
         -[fF]|--flox)         export FLOX_BIN="''${2?}"; shift; ;;
         -[pP]|--pkgdb)        export PKGDB_BIN="''${2?}"; shift; ;;
-        -[lL]|--ld-floxlib)   export LD_FLOXLIB="''${2?}"; shift; ;;
         -[nN]|--nix)          export NIX_BIN="''${2?}"; shift; ;;
         -[tT]|--tests)        export TESTS_DIR="''${2?}"; shift; ;;
         -[wW]|--watch)        WATCH=:; ;;
@@ -228,7 +220,6 @@ in
       echo "  FLOX_BIN:                 $FLOX_BIN";
       echo "  PKGDB_BIN:                $PKGDB_BIN";
       echo "  NIX_BIN:                  $NIX_BIN";
-      echo "  LD_FLOXLIB:               $LD_FLOXLIB";
       echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
       echo "  GENERATED_DATA:            $GENERATED_DATA";
       echo "  bats                      ${batsWith}/bin/bats";
@@ -238,7 +229,7 @@ in
 
     # Run basts either via entr or just a single run
     if [[ -n "''${WATCH:-}" ]]; then
-      find "$TESTS_DIR" "$NIX_BIN" "$PKGDB_BIN" "$LD_FLOXLIB" "$FLOX_BIN"    \
+      find "$TESTS_DIR" "$NIX_BIN" "$PKGDB_BIN" "$FLOX_BIN"    \
         |${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
     else
       exec -a "$0" ${batsWith}/bin/bats "''${_BATS_ARGS[@]}"    \

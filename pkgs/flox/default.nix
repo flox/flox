@@ -34,7 +34,6 @@ in
         ${lib.optionalString (SENTRY_DSN != null) "--set FLOX_SENTRY_DSN \"${SENTRY_DSN}\" "} \
         ${lib.optionalString (SENTRY_ENV != null) "--set FLOX_SENTRY_ENV \"${SENTRY_ENV}\" "} \
         --set PKGDB_BIN       "${flox-pkgdb}/bin/pkgdb" \
-        --set LD_FLOXLIB      "${flox-pkgdb}/lib/ld-floxlib.so" \
         --set FLOX_BIN        "${flox-cli}/bin/flox" \
         --set PROCESS_COMPOSE_BIN "${process-compose}/bin/process-compose" \
         --set FLOX_VERSION    "${version}"

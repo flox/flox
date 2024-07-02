@@ -218,7 +218,6 @@ in
             REPO_ROOT="$( git rev-parse --show-toplevel; )";
             PATH="$REPO_ROOT/pkgdb/bin:$PATH";
             PKGDB_BIN="$REPO_ROOT/pkgdb/bin/pkgdb";
-            LD_FLOXLIB="$REPO_ROOT/pkgdb/lib/ld-floxlib.so";
             PKGDB_SEARCH_PARAMS_BIN="$REPO_ROOT/pkgdb/tests/search-params";
             PKGDB_IS_SQLITE3_BIN="$REPO_ROOT/pkgdb/tests/is_sqlite3";
           fi
