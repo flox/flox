@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -eo pipefail
+set -euo pipefail
 
 function cleanup() {
     echo "shutting down"
@@ -10,14 +10,14 @@ function cleanup() {
 echo "activating"
 eval $("$FLOX_BIN" activate)
 CONFIG_FILE="$FLOX_ENV/service-config.yaml"
-SOCKET_FILE="$PWD/service.sock"
+SOCKET_FILE="${_FLOX_SERVICES_SOCKET}"
 
 echo "checking python"
 which python3
 python3 --version
 
 echo "work_dir: $PWD"
-echo "socket_file: $SOCKET_FILE"
+echo "socket_file: ${_FLOX_SERVICES_SOCKET}"
 echo "config_file: $CONFIG_FILE"
 
 # Start the server
