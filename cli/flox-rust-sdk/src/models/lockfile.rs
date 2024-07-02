@@ -92,6 +92,7 @@ impl LockedManifest {
         pkgdb: &Path,
         gcroot_out_link_path: Option<&Path>,
         store_path: &Option<PathBuf>,
+        service_config_path: Option<&Path>,
     ) -> Result<PathBuf, LockedManifestError> {
         let mut pkgdb_cmd = Command::new(pkgdb);
         pkgdb_cmd.arg("buildenv").arg(&self.to_string());
@@ -101,6 +102,10 @@ impl LockedManifest {
             if let Some(store_path) = store_path {
                 pkgdb_cmd.args(["--store-path", &store_path.to_string_lossy()]);
             }
+        }
+
+        if let Some(service_config_path) = service_config_path {
+            pkgdb_cmd.args(["--service-config", &service_config_path.to_string_lossy()]);
         }
 
         debug!("building environment with command: {}", pkgdb_cmd.display());

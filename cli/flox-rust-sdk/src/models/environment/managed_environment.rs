@@ -25,7 +25,6 @@ use super::{
     CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
     ENV_DIR_NAME,
-    FLOX_SERVICES_SOCKET_VAR,
     N_HASH_CHARS,
     SERVICES_SOCKET_NAME,
 };
@@ -551,6 +550,12 @@ impl Environment for ManagedEnvironment {
         temporary.link(flox, &self.out_link, &Some(store_path))?;
 
         Ok(())
+    }
+
+    /// Return the path where the process compose socket for an environment
+    /// should be created
+    fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError> {
+        Ok(self.cache_path()?.join(SERVICES_SOCKET_NAME))
     }
 }
 
@@ -1143,18 +1148,6 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)
-    }
-
-    /// Return the path where the process compose socket for an environment
-    /// should be created
-    ///
-    /// If `_FLOX_SERVICES_SOCKET` is set, its value should be returned.
-    #[allow(unused)]
-    fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError> {
-        if let Ok(process_compose_socket) = std::env::var(FLOX_SERVICES_SOCKET_VAR) {
-            return Ok(PathBuf::from(process_compose_socket));
-        }
-        Ok(self.cache_path()?.join(SERVICES_SOCKET_NAME))
     }
 }
 

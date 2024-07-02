@@ -353,6 +353,10 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         },
         // User facing
         CoreEnvironmentError::Version0NotSupported => display_chain(err),
+        CoreEnvironmentError::Services(err) => display_chain(err),
+        CoreEnvironmentError::ServicesWithV0 => {
+            format_core_error(&CoreEnvironmentError::ServicesWithV0)
+        },
     }
 }
 
@@ -618,6 +622,7 @@ pub fn format_remote_error(err: &RemoteEnvironmentError) -> String {
         RemoteEnvironmentError::ReadInternalOutLink(_) => display_chain(err),
         RemoteEnvironmentError::DeleteOldOutLink(_) => display_chain(err),
         RemoteEnvironmentError::WriteNewOutlink(_) => display_chain(err),
+        RemoteEnvironmentError::ServicesUnsupported => display_chain(err),
     }
 }
 

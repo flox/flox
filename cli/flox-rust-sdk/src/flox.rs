@@ -54,9 +54,19 @@ pub struct Flox {
     pub floxhub_token: Option<FloxhubToken>,
 
     pub catalog_client: Option<catalog::Client>,
+
+    /// Feature flags
+    pub features: Features,
 }
 
 impl Flox {}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct Features {
+    /// Whether to enable services
+    #[serde(default)]
+    pub services: bool,
+}
 
 pub static DEFAULT_FLOXHUB_URL: Lazy<Url> =
     Lazy::new(|| Url::parse("https://hub.flox.dev").unwrap());
@@ -314,6 +324,7 @@ pub mod test_helpers {
             } else {
                 None
             },
+            features: Default::default(),
         };
 
         init_global_manifest(&global_manifest_path(&flox)).unwrap();

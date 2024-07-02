@@ -31,7 +31,7 @@ semver.workspace = true
 regex.workspace = true
 sentry = { workspace = true, features = ["anyhow", "tracing", "debug-logs"] }
 serde_json.workspace = true
-serde_yaml.workspace = true
+serde_yml.workspace = true
 serde.workspace = true
 shell-escape.workspace = true
 supports-color.workspace = true

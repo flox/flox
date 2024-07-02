@@ -69,6 +69,12 @@ BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
     .nargs( 1 )
     .action( [&]( const std::string & str ) { this->system = str; } );
 
+  this->parser.add_argument( "--service-config" )
+    .help( "path to service configuration file" )
+    .metavar( "SERVICE-CONFIG" )
+    .action( [&]( const std::string & str )
+             { this->serviceConfigPath = str; } );
+
   this->parser.add_argument( "--container", "-c" )
     .help( "build a container builder script" )
     .nargs( 0 )
@@ -113,7 +119,10 @@ BuildEnvCommand::run()
 
   debugLog( "building environment" );
 
-  auto storePath = createFloxEnv( state, this->lockfileContent, system );
+  auto storePath = createFloxEnv( state,
+                                  this->lockfileContent,
+                                  this->serviceConfigPath,
+                                  system );
 
   debugLog( "built environment: " + store->printStorePath( storePath ) );
 

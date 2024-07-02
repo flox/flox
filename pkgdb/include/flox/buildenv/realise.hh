@@ -325,9 +325,10 @@ getRealisedPackages( nix::ref<nix::EvalState> &         state,
  * @return `StorePath` to the environment.
  */
 nix::StorePath
-createFloxEnv( nix::ref<nix::EvalState> & state,
-               const nlohmann::json &     lockfile,
-               const System &             system );
+createFloxEnv( nix::ref<nix::EvalState> &         state,
+               const nlohmann::json &             lockfile,
+               const std::optional<std::string> & serviceConfigPath,
+               const System &                     system );
 
 
 /* -------------------------------------------------------------------------- */
@@ -349,7 +350,8 @@ createEnvironmentStorePath(
   nix::EvalState &               state,
   nix::StorePathSet &            references,
   std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
-    originalPackage );
+                                     originalPackage,
+  const std::optional<std::string> & serviceConfigPath );
 
 
 /* -------------------------------------------------------------------------- */

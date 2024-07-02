@@ -561,7 +561,7 @@ pub struct ManifestServices(
             strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
         )
     )]
-    BTreeMap<String, ManifestServiceDescriptor>,
+    pub(crate) BTreeMap<String, ManifestServiceDescriptor>,
 );
 
 /// The definition of a service in a manifest
@@ -583,7 +583,7 @@ pub struct ManifestVariables(
         test,
         proptest(strategy = "proptest_btree_map_alphanum_keys::<String>(10, 3)")
     )]
-    BTreeMap<String, String>,
+    pub(crate) BTreeMap<String, String>,
 );
 
 #[skip_serializing_none]
