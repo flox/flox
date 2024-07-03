@@ -14,10 +14,7 @@ load test_support.bash
 
 setup_file() {
   common_file_setup
-  if [ -z "${TESTING_FLOX_CATALOG_URL:-}" ]; then
-    skip "TESTING_FLOX_CATALOG_URL is not set"
-  fi
-  export FLOX_CATALOG_URL="$TESTING_FLOX_CATALOG_URL"
+  export FLOX_CATALOG_URL="https://flox-catalog.preview.flox.dev"
 }
 
 teardown_file() {
