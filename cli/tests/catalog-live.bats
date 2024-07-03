@@ -14,10 +14,7 @@ load test_support.bash
 
 setup_file() {
   common_file_setup
-  if [ -z "${TESTING_FLOX_CATALOG_URL:-}" ]; then
-    skip "TESTING_FLOX_CATALOG_URL is not set"
-  fi
-  export FLOX_CATALOG_URL="$TESTING_FLOX_CATALOG_URL"
+  export FLOX_CATALOG_URL="https://flox-catalog.preview.flox.dev"
 }
 
 teardown_file() {
@@ -32,7 +29,7 @@ teardown_file() {
   run "$FLOX_BIN" search hello -vvv
   assert_output --partial "using catalog client for search"
   assert_output --partial "hello"
-  assert_output --partial "A program that produces a familiar, friendly greeting"
+  assert_output --partial "a familiar, friendly greeting"
 }
 
 @test "'flox show' works with catalog server" {
