@@ -2289,4 +2289,46 @@ mod tests {
             ))
         ));
     }
+
+    /// [maybe_migrate_environment_to_v1] succeeds
+    /// even if a managed environment has local changes when no migration is needed
+    #[tokio::test]
+    async fn maybe_migrate_managed_environment_blocked_only_if_migration_needed() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), false);
+
+        let mut environment = ConcreteEnvironment::Managed(mock_managed_environment(
+            &flox,
+            &formatdoc! {"
+                # before
+                version = 1
+            "},
+            owner,
+        ));
+
+        // modify the lockfile
+        {
+            let manifest_path = environment
+                .dyn_environment_ref_mut()
+                .manifest_path(&flox)
+                .unwrap();
+
+            fs::write(manifest_path, formatdoc! {"
+                # after
+                version = 1
+            "})
+            .unwrap();
+        }
+
+        maybe_migrate_environment_to_v1_inner(
+            &flox,
+            &mut environment,
+            Some(async { unreachable!() }),
+        )
+        .await
+        .expect(
+            "maybe_migrate_environment_to_v1_inner _should not_ fail, since no migration is needed",
+        );
+    }
 }
