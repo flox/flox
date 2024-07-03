@@ -52,7 +52,6 @@ pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
-pub const SERVICES_SOCKET_NAME: &str = "services.sock";
 pub const LIB_DIR_NAME: &str = "lib";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
@@ -563,6 +562,9 @@ pub enum EnvironmentError {
 
     #[error(transparent)]
     Canonicalize(CanonicalizeError),
+
+    #[error("could not detect XDG_RUNTIME_DIR")]
+    DetectRuntimeDir(#[source] xdg::BaseDirectoriesError),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -711,9 +713,39 @@ pub fn path_hash(p: &impl AsRef<Path>) -> String {
     chars.to_string()
 }
 
+/// Return a path to the services socket given a unique identifier
+///
+/// Socket paths cannot exceed 104 characters on macOS
+/// - TMPDIR will often have a long path, e.g.
+///   /var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.vfDA8u
+/// - /var/run is not writeable
+/// So we use /tmp
+///
+/// On Linux use XDG_RUNTIME_DIR per
+/// https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+/// If unset, fallback to /tmp
+fn services_socket_path(id: &str) -> Result<PathBuf, EnvironmentError> {
+    #[cfg(target_os = "macos")]
+    let canonicalized =
+        CanonicalPath::new(PathBuf::from("/tmp")).map_err(EnvironmentError::Canonicalize)?;
+
+    #[cfg(target_os = "linux")]
+    let canonicalized = {
+        let directory = xdg::BaseDirectories::new()
+            .map_err(EnvironmentError::DetectRuntimeDir)?
+            .get_runtime_directory()
+            .unwrap_or(&PathBuf::from("/tmp"));
+        // Canonicalize so we error early if the path doesn't exist
+        CanonicalPath::new(directory).map_err(EnvironmentError::Canonicalize)?
+    };
+
+    Ok(canonicalized.join(format!("flox.{}.sock", id)))
+}
+
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
+    use std::time::Duration;
 
     use once_cell::sync::Lazy;
     use path_environment::test_helpers::new_path_environment;
@@ -727,6 +759,7 @@ mod test {
     };
     use crate::flox::DEFAULT_FLOXHUB_URL;
     use crate::providers::git::GitProvider;
+    use crate::providers::services;
 
     const MANAGED_ENV_JSON: &'_ str = r#"{
         "name": "name",
@@ -1071,5 +1104,38 @@ mod test {
         let mut environment = new_path_environment(&flox, "version = 1");
         environment.lock(&flox).unwrap();
         assert!(environment.needs_migration_to_v1(&flox).unwrap().is_none());
+    }
+
+    #[test]
+    fn stable_path_hash() {
+        // Ensure that running the path_hash function gives you the same results
+        // with the same input e.g. doesn't depend on time, etc
+        let (_flox, tmp_dir) = flox_instance();
+        let path = tmp_dir.path().join("foo");
+        std::fs::File::create(&path).unwrap();
+        let path = CanonicalPath::new(path).unwrap();
+
+        let hash1 = path_hash(&path);
+        std::thread::sleep(Duration::from_millis(1_000));
+        let hash2 = path_hash(&path);
+        assert_eq!(hash1, hash2);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn services_socket_path_respects_xdg_runtime_dir() {
+        let socket_path = temp_env::with_var("XDG_RUNTIME_DIR", Some("/run/user/1001"), || {
+            services_socket_path("1")
+        })
+        .unwrap();
+        assert_eq!(socket_path, PathBuf::from("/run/user/1001/flox.1.sock"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn services_socket_path_falls_back_to_tmp() {
+        let socket_path =
+            temp_env::with_var("XDG_RUNTIME_DIR", None, || services_socket_path("1")).unwrap();
+        assert_eq!(socket_path, PathBuf::from("/tmp/flox.1.sock"));
     }
 }

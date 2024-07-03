@@ -38,6 +38,7 @@ tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
 walkdir.workspace = true
+xdg.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true

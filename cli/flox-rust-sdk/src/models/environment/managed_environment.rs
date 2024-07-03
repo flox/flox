@@ -11,6 +11,7 @@ use super::path_environment::PathEnvironment;
 use super::{
     gcroots_dir,
     path_hash,
+    services_socket_path,
     CanonicalizeError,
     CoreEnvironmentError,
     EditResult,
@@ -26,7 +27,6 @@ use super::{
     ENVIRONMENT_POINTER_FILENAME,
     ENV_DIR_NAME,
     N_HASH_CHARS,
-    SERVICES_SOCKET_NAME,
 };
 use crate::data::{CanonicalPath, Version};
 use crate::flox::{EnvironmentRef, Flox};
@@ -555,15 +555,15 @@ impl Environment for ManagedEnvironment {
     /// Return the path where the process compose socket for an environment
     /// should be created
     fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError> {
-        Ok(self.cache_path()?.join(SERVICES_SOCKET_NAME))
+        services_socket_path(&self.path_hash())
     }
 }
 
 /// Constructors and related functions
 impl ManagedEnvironment {
-    /// Returns a unique identifier for the location of the project.
-    fn encode(path: &CanonicalPath) -> String {
-        path_hash(path)
+    /// Returns a unique identifier for the location of the environment.
+    fn path_hash(&self) -> String {
+        path_hash(&self.path)
     }
 
     /// Returns the path to an environment given the branch name in the floxmeta repository.
@@ -1243,11 +1243,7 @@ fn write_pointer_lockfile(
 /// `dot_flox_path` does _not_ need to be passed in its canonicalized form;
 /// [`ManagedEnvironment::encode`] will canonicalize the path if necessary.
 fn branch_name(pointer: &ManagedPointer, dot_flox_path: &CanonicalPath) -> String {
-    format!(
-        "{}.{}",
-        pointer.name,
-        ManagedEnvironment::encode(dot_flox_path)
-    )
+    format!("{}.{}", pointer.name, path_hash(dot_flox_path))
 }
 
 /// The original branch name of an environment that is used to sync an environment with the hub
@@ -1606,7 +1602,6 @@ pub mod test_helpers {
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
-    use std::time::Duration;
 
     use fslock::LockFile;
     use indoc::indoc;
@@ -2491,21 +2486,6 @@ mod test {
         let env_b = new_core_environment(&flox, &toml_edit::ser::to_string(&manifest_b).unwrap());
 
         assert!(!ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
-    }
-
-    #[test]
-    fn stable_encode_name() {
-        // Ensure that running the encode function gives you the same results
-        // with the same input e.g. doesn't depend on time, etc
-        let (_flox, tmp_dir) = flox_instance();
-        let path = tmp_dir.path().join("foo");
-        std::fs::File::create(&path).unwrap();
-        let path = CanonicalPath::new(path).unwrap();
-
-        let encode1 = ManagedEnvironment::encode(&path);
-        std::thread::sleep(Duration::from_millis(1_000));
-        let encode2 = ManagedEnvironment::encode(&path);
-        assert_eq!(encode1, encode2);
     }
 
     #[test]
