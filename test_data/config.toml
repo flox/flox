@@ -163,7 +163,7 @@ cmd = "flox install rubyPackages_3_2.rails"
 [resolve.tabula]
 pre_cmd = "flox init"
 cmd = "flox install tabula"
-ignore_cmd_errors = true # tabula is unfree
+ignore_cmd_errors = true # tabula is broken
 
 # resolve.tabula_allowed is likely redundant and at least for the time being
 # generates the same JSON as resolve.tabula.
