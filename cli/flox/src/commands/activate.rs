@@ -31,6 +31,7 @@ use indexmap::IndexSet;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::{debug, warn};
+use once_cell::sync::Lazy;
 
 use super::{
     activated_environments,
@@ -44,6 +45,12 @@ use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::openers::Shell;
 use crate::utils::{default_nix_env_vars, message};
 use crate::{subcommand_metric, utils};
+
+pub static INTERACTIVE_BASH_BIN: Lazy<PathBuf> = Lazy::new(|| {
+    PathBuf::from(
+        env::var("INTERACTIVE_BASH_BIN").unwrap_or(env!("INTERACTIVE_BASH_BIN").to_string()),
+    )
+});
 
 /// When called with no arguments 'flox activate' will look for a '.flox' directory
 /// in the current directory. Calling 'flox activate' in your home directory will
@@ -279,7 +286,7 @@ impl Activate {
             return Ok(());
         }
 
-        let shell = Self::detect_shell_for_subshell()?;
+        let shell = Self::detect_shell_for_subshell();
         // These functions will only return if exec fails
         if !self.run_args.is_empty() {
             Self::activate_command(self.run_args, shell, exports, activation_path)
@@ -581,8 +588,35 @@ impl Activate {
     ///
     /// Used to determine shell for
     /// `flox activate` and `flox activate -- CMD`
-    fn detect_shell_for_subshell() -> Result<Shell> {
-        Shell::detect_from_env("FLOX_SHELL").or_else(|_| Shell::detect_from_env("SHELL"))
+    ///
+    /// Returns the first shell found in the following order:
+    /// 1. FLOX_SHELL environment variable
+    /// 2. SHELL environment variable
+    /// 3. Parent process shell
+    /// 4. Default to bash bundled with flox
+    fn detect_shell_for_subshell() -> Shell {
+        Self::detect_shell_for_subshell_with(Shell::detect_from_parent_process)
+    }
+
+    /// Utility method for testing implementing the logic of shell detection
+    /// for subshells, generically over a parent shell detection function.
+    fn detect_shell_for_subshell_with(parent_shell_fn: impl Fn() -> Result<Shell>) -> Shell {
+        Shell::detect_from_env("FLOX_SHELL")
+            .or_else(|err| {
+                debug!("Failed to detect shell from FLOX_SHELL: {err}");
+                Shell::detect_from_env("SHELL")
+            })
+            .or_else(|err| {
+                debug!("Failed to detect shell from SHELL: {err}");
+                parent_shell_fn()
+            })
+            .unwrap_or_else(|err| {
+                debug!("Failed to detect shell from parent process: {err}");
+                warn!(
+                    "Failed to detect shell from environment or parent process. Defaulting to bash"
+                );
+                Shell::Bash(INTERACTIVE_BASH_BIN.clone())
+            })
     }
 
     /// Detect the shell to use for in-place activation
@@ -672,18 +706,23 @@ mod tests {
     #[test]
     fn test_detect_shell_for_subshell() {
         temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_SET], || {
-            let shell = Activate::detect_shell_for_subshell().unwrap();
+            let shell = Activate::detect_shell_for_subshell_with(|| unreachable!());
             assert_eq!(shell, Shell::Bash("/shell/bash".into()));
         });
 
         temp_env::with_vars([FLOX_SHELL_SET, SHELL_SET], || {
-            let shell = Activate::detect_shell_for_subshell().unwrap();
+            let shell = Activate::detect_shell_for_subshell_with(|| unreachable!());
             assert_eq!(shell, Shell::Bash("/flox_shell/bash".into()));
         });
 
         temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_UNSET], || {
-            let shell = Activate::detect_shell_for_subshell();
-            assert!(shell.is_err());
+            let shell = Activate::detect_shell_for_subshell_with(PARENT_DETECTED);
+            assert_eq!(shell, Shell::Bash("/parent/bash".into()));
+        });
+
+        temp_env::with_vars([FLOX_SHELL_UNSET, SHELL_UNSET], || {
+            let shell = Activate::detect_shell_for_subshell_with(PARENT_UNDETECTED);
+            assert_eq!(shell, Shell::Bash(INTERACTIVE_BASH_BIN.clone()));
         });
     }
 
