@@ -148,12 +148,15 @@ endif  # ifndef TOOLCHAIN
 VERSION := $(file < $(PKGDB_ROOT)/.version)
 
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
-# WARNING: the flox-activation-scripts package is normally created from
-# within pkgs/flox-pkgdb/default.nix, but if working in a `nix develop'
-# shell then run `unset ACTIVATION_SCRIPTS_PACKAGE_DIR' to regenerate
-# the package with each build.
-ACTIVATION_SCRIPTS_PACKAGE_DIR ?= \
-  $(shell $(NIX) build --print-out-paths .#flox-activation-scripts)
+ifndef ACTIVATION_SCRIPTS_PACKAGE_DIR
+  # Must use the ":=" operator to populate $(.SHELLSTATUS) which is why
+  # we only enter this section of code if the variable is not defined.
+  ACTIVATION_SCRIPTS_PACKAGE_DIR := \
+    $(shell $(NIX) build --print-out-paths .#flox-activation-scripts)
+  ifneq ($(.SHELLSTATUS),0)
+    $(error failed to build .#flox-activation-scripts)
+  endif
+endif
 
 # The reference to CONTAINER_BUILDER_PATH in realise.cc requires that
 # libexec/mkContainer.nix be rendered as a single-file package in the
