@@ -595,9 +595,50 @@ impl ManifestPackageDescriptor {
         }
     }
 
+    #[must_use]
+    pub fn unwrap_catalog_descriptor(self) -> Option<ManifestPackageDescriptorCatalog> {
+        match self {
+            ManifestPackageDescriptor::Catalog(descriptor) => Some(descriptor),
+            _ => None,
+        }
+    }
+
+    #[must_use]
     pub fn as_catalog_descriptor_ref(&self) -> Option<&ManifestPackageDescriptorCatalog> {
         match self {
             ManifestPackageDescriptor::Catalog(descriptor) => Some(descriptor),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn unwrap_flake_descriptor(self) -> Option<ManifestPackageDescriptorFlake> {
+        match self {
+            ManifestPackageDescriptor::FlakeRef(descriptor) => Some(descriptor),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_flake_descriptor_ref(&self) -> Option<&ManifestPackageDescriptorFlake> {
+        match self {
+            ManifestPackageDescriptor::FlakeRef(descriptor) => Some(descriptor),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn unwrap_store_path_descriptor(self) -> Option<ManifestPackageDescriptorStorePath> {
+        match self {
+            ManifestPackageDescriptor::StorePath(descriptor) => Some(descriptor),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn as_store_path_descriptor_ref(&self) -> Option<&ManifestPackageDescriptorStorePath> {
+        match self {
+            ManifestPackageDescriptor::StorePath(descriptor) => Some(descriptor),
             _ => None,
         }
     }

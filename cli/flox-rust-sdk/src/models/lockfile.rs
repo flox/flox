@@ -736,14 +736,14 @@ impl LockedManifestCatalog {
                     Some(ManifestPackageDescriptor::Catalog(descriptor)) => {
                         Some(LockedPackageCatalog::from_parts(resolved_pkg, descriptor))
                     },
-                    Some(ManifestPackageDescriptor::FlakeRef{..}) => {
+                    Some(ManifestPackageDescriptor::FlakeRef { .. }) => {
                         debug!(
                             "flake descriptor '{}' not expected to be resolved by catalog",
                             resolved_pkg.install_id
                         );
                         None
                     },
-                    Some(ManifestPackageDescriptor::StorePath{..}) => {
+                    Some(ManifestPackageDescriptor::StorePath { .. }) => {
                         debug!(
                             "store path descriptor '{}' not expected to be resolved by catalog",
                             resolved_pkg.install_id
@@ -2035,14 +2035,12 @@ pub(crate) mod tests {
                 .unwrap()
                 .collect::<Vec<_>>();
 
-        let ManifestPackageDescriptor::Catalog(descriptor) = manifest
+        let descriptor = manifest
             .install
             .get(&groups[0].page.as_ref().unwrap().packages.as_ref().unwrap()[0].install_id)
-            .unwrap()
-            .clone()
-        else {
-            panic!("Expected a catalog descriptor");
-        };
+            .and_then(ManifestPackageDescriptor::as_catalog_descriptor_ref)
+            .expect("expected a catalog descriptor")
+            .clone();
 
         assert_eq!(locked_packages.len(), 1);
         assert_eq!(
@@ -2245,12 +2243,10 @@ pub(crate) mod tests {
     fn drop_packages_for_removed_systems() {
         let (foo_iid, foo_descriptor_one_system, foo_locked) = fake_package("foo", Some("group1"));
 
-        let systems =
-            if let ManifestPackageDescriptor::Catalog(descriptor) = &foo_descriptor_one_system {
-                &descriptor.systems
-            } else {
-                panic!("Expected a catalog descriptor");
-            };
+        let systems = &foo_descriptor_one_system
+            .as_catalog_descriptor_ref()
+            .expect("expected a catalog descriptor")
+            .systems;
 
         assert_eq!(
             systems,
@@ -2603,17 +2599,15 @@ pub(crate) mod tests {
             packages: vec![foo_locked.clone(), bar_locked.clone(), baz_locked.clone()],
         };
 
-        let foo_pkg_path = if let ManifestPackageDescriptor::Catalog(descriptor) = foo_descriptor {
-            descriptor.pkg_path
-        } else {
-            panic!("Expected a catalog descriptor");
-        };
+        let foo_pkg_path = foo_descriptor
+            .unwrap_catalog_descriptor()
+            .expect("expected catalog descriptor")
+            .pkg_path;
 
-        let bar_pkg_path = if let ManifestPackageDescriptor::Catalog(descriptor) = bar_descriptor {
-            descriptor.pkg_path
-        } else {
-            panic!("Expected a catalog descriptor");
-        };
+        let bar_pkg_path = bar_descriptor
+            .unwrap_catalog_descriptor()
+            .expect("expected a catalog descriptor")
+            .pkg_path;
 
         let actual = locked.list_packages(&SystemEnum::Aarch64Darwin.to_string());
         let expected = [
