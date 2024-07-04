@@ -43,8 +43,7 @@ setup() {
   setup_isolated_flox
   project_setup
   floxhub_setup owner
-  export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 teardown() {
@@ -93,7 +92,7 @@ function make_empty_remote_env() {
 
 # bats test_tags=hermetic,remote,remote:outlink
 @test "catalog: r0: building a remote environment creates outlink" {
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
 
   run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
@@ -104,21 +103,7 @@ function make_empty_remote_env() {
 
 # bats test_tags=install,remote,remote:install
 @test "m1: install a package to a remote environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  make_empty_remote_env
-
-  run "$FLOX_BIN" install hello --remote "$OWNER/test"
-  assert_success
-  assert_output --partial "environment '$OWNER/test' (remote)" # managed env output
-
-  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
-  assert_success
-  assert_output "hello"
-}
-
-# bats test_tags=install,remote,remote:install
-@test "catalog: m1: install a package to a remote environment" {
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
 
   run "$FLOX_BIN" install hello --remote "$OWNER/test"
@@ -132,22 +117,7 @@ function make_empty_remote_env() {
 
 # bats test_tags=uninstall,remote,remote:uninstall
 @test "m2: uninstall a package from a remote environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  make_empty_remote_env
-
-  "$FLOX_BIN" install emacs vim --remote "$OWNER/test"
-
-  run "$FLOX_BIN" uninstall vim --remote "$OWNER/test"
-  assert_success
-
-  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
-  assert_success
-  assert_output "emacs"
-}
-
-# bats test_tags=uninstall,remote,remote:uninstall
-@test "catalog: m2: uninstall a package from a remote environment" {
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs_vim.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs_vim.json"
   make_empty_remote_env
 
   "$FLOX_BIN" install emacs vim --remote "$OWNER/test"
@@ -183,7 +153,7 @@ EOF
 
 # bats test_tags=edit,remote,remote:edit
 @test "catalog: m3: edit a package from a managed environment" {
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
 
   TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
@@ -219,7 +189,7 @@ EOF
 
 # bats test_tags=remote,activate,remote:activate
 @test "catalog: m9: activate works in remote environment" {
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
   "$FLOX_BIN" install hello --remote "$OWNER/test"
 
@@ -307,21 +277,6 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "sanity check upgrade works for remote environments" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    make_empty_remote_env
-
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" install hello --remote "$OWNER/test"
-
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
-    "$FLOX_BIN" update --remote "$OWNER/test"
-
-  run "$FLOX_BIN" upgrade --remote "$OWNER/test"
-  assert_output --partial "Upgraded 'hello'"
-}
-
-@test "catalog: sanity check upgrade works for remote environments" {
   skip "will be fixed by https://github.com/flox/flox/issues/1485"
 
   _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
@@ -345,3 +300,25 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=remote,remote:not-found
+@test "activate --remote fails on a non existent environment" {
+  run "$FLOX_BIN" activate -r "$OWNER/i-dont-exist"
+  assert_failure
+  assert_output --partial "Environment not found in FloxHub."
+}
+
+# bats test_tags=remote,remote:not-found
+@test "edit --remote fails on a non existent environment" {
+  run "$FLOX_BIN" edit -r "$OWNER/i-dont-exist"
+  assert_failure
+  assert_output --partial "Environment not found in FloxHub."
+}
+
+
+# bats test_tags=remote,remote:not-found
+@test "install --remote fails on a non existent environment" {
+  run "$FLOX_BIN" install -r "$OWNER/i-dont-exist"
+  assert_failure
+  assert_output --partial "Environment not found in FloxHub."
+}

@@ -18,6 +18,8 @@
   # drop once bear is no longer broken in a newer release
   inputs.nixpkgs-bear.url = "github:NixOS/nixpkgs/release-23.05";
 
+  inputs.nixpkgs-process-compose.url = "github:NixOS/nixpkgs/release-24.05";
+
   inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
   inputs.sqlite3pp.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -90,6 +92,11 @@
       inherit (inputs.nixpkgs-bear.legacyPackages.${prev.system}) bear;
     };
 
+    # Use a more recent version of process-compose
+    overlays.process-compose = final: prev: {
+      inherit (inputs.nixpkgs-process-compose.legacyPackages.${prev.system}) process-compose;
+    };
+
     # Aggregates all external dependency overlays before adding any of the
     # packages defined by this flake.
     overlays.deps = nixpkgs.lib.composeManyExtensions [
@@ -97,6 +104,7 @@
       overlays.semver
       overlays.nix
       overlays.bear
+      overlays.process-compose
       sqlite3pp.overlays.default
       fenix.overlays.default
     ];
@@ -167,8 +175,8 @@
 
       GENERATED_DATA = ./test_data/generated;
 
-      # Customized `gh' executable used for auth.
-      flox-gh = callPackage ./pkgs/flox-gh {};
+      # Package activation scripts.
+      flox-activation-scripts = callPackage ./pkgs/flox-activation-scripts {};
 
       # Package Database Utilities: scrape, search, and resolve.
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
@@ -189,10 +197,6 @@
       flox-cli-tests =
         callPackage ./pkgs/flox-cli-tests {
         };
-
-      # Integration tests
-      flox-tests = callPackage ./pkgs/flox-tests {};
-      flox-tests-pure = callPackage ./pkgs/flox-tests-pure {inputs = inputs;};
     };
 
     # Composes dependency overlays and the overlay defined here.
@@ -226,14 +230,13 @@
     in {
       inherit
         (pkgs)
-        flox-gh
+        flox-activation-scripts
         flox-pkgdb
         flox-cli
         flox-cli-tests
         flox-manpages
         flox
         pre-commit-check
-        flox-tests-pure
         ;
       default = pkgs.flox;
     });
@@ -246,11 +249,6 @@
       pkgs = pkgsBase.extend (final: prev: {
         flox-cli-tests = prev.flox-cli-tests.override {
           PROJECT_TESTS_DIR = "/cli/tests";
-          PKGDB_BIN = null;
-          FLOX_BIN = null;
-        };
-        flox-tests = prev.flox-tests.override {
-          PROJECT_TESTS_DIR = "/tests";
           PKGDB_BIN = null;
           FLOX_BIN = null;
         };

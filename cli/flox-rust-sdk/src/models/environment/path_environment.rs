@@ -29,14 +29,18 @@ use super::{
     EnvironmentError,
     EnvironmentPointer,
     InstallationAttempt,
+    MigrationInfo,
     PathPointer,
     UninstallationAttempt,
     UpdateResult,
     CACHE_DIR_NAME,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
+    FLOX_SERVICES_SOCKET_VAR,
     GCROOTS_DIR_NAME,
+    LIB_DIR_NAME,
     LOCKFILE_FILENAME,
+    SERVICES_SOCKET_NAME,
 };
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
@@ -45,7 +49,7 @@ use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::LockedManifest;
-use crate::models::manifest::{PackageToInstall, RawManifest};
+use crate::models::manifest::{PackageToInstall, RawManifest, TypedManifest};
 use crate::models::pkgdb::UpgradeResult;
 use crate::utils::mtime_of;
 
@@ -272,6 +276,12 @@ impl Environment for PathEnvironment {
         fs::read_to_string(self.manifest_path(flox)?).map_err(EnvironmentError::ReadManifest)
     }
 
+    /// Return the deserialized manifest
+    fn manifest(&self, _flox: &Flox) -> Result<TypedManifest, EnvironmentError> {
+        let env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        env_view.manifest().map_err(EnvironmentError::Core)
+    }
+
     /// Returns the environment name
     fn name(&self) -> EnvironmentName {
         self.pointer.name.clone()
@@ -300,12 +310,12 @@ impl Environment for PathEnvironment {
     }
 
     /// Returns .flox/cache
-    fn cache_path(&self) -> Result<PathBuf, EnvironmentError> {
+    fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError> {
         let cache_dir = self.path.join(CACHE_DIR_NAME);
         if !cache_dir.exists() {
             std::fs::create_dir_all(&cache_dir).map_err(EnvironmentError::CreateCacheDir)?;
         }
-        Ok(cache_dir)
+        CanonicalPath::new(cache_dir).map_err(EnvironmentError::Canonicalize)
     }
 
     /// Returns parent path of .flox
@@ -331,6 +341,17 @@ impl Environment for PathEnvironment {
     /// Path to the lockfile. The path may not exist.
     fn lockfile_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         Ok(self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME))
+    }
+
+    fn migrate_to_v1(
+        &mut self,
+        flox: &Flox,
+        migration_info: MigrationInfo,
+    ) -> Result<(), EnvironmentError> {
+        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
+        let store_path = env_view.migrate_to_v1(flox, migration_info)?;
+        env_view.link(flox, self.out_link(&flox.system)?, &Some(store_path))?;
+        Ok(())
     }
 }
 
@@ -460,6 +481,7 @@ impl PathEnvironment {
         fs::write(dot_flox_path.join(".gitignore"), formatdoc! {"
             {GCROOTS_DIR_NAME}/
             {CACHE_DIR_NAME}/
+            {LIB_DIR_NAME}/
             "})
         .map_err(EnvironmentError::WriteGitignore)?;
 
@@ -494,6 +516,18 @@ impl PathEnvironment {
         );
 
         Ok(manifest_modified_at >= out_link_modified_at || !self.out_link(&flox.system)?.exists())
+    }
+
+    /// Return the path where the process compose socket for an environment
+    /// should be created
+    ///
+    /// If `_FLOX_SERVICES_SOCKET` is set, its value should be returned.
+    #[allow(unused)]
+    fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError> {
+        if let Ok(process_compose_socket) = std::env::var(FLOX_SERVICES_SOCKET_VAR) {
+            return Ok(PathBuf::from(process_compose_socket));
+        }
+        Ok(self.cache_path()?.join(SERVICES_SOCKET_NAME))
     }
 }
 

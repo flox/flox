@@ -14,12 +14,10 @@ load test_support.bash
 
 setup_file() {
   common_file_setup
-  export FLOX_FEATURES_USE_CATALOG=true
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 
 teardown_file() {
-  unset FLOX_FEATURES_USE_CATALOG
   unset _FLOX_USE_CATALOG_MOCK
 }
 
@@ -89,7 +87,7 @@ EOF
   run "$FLOX_BIN" --help
   assert_output --partial - << EOF
 Additional Commands. Use "flox COMMAND --help" for more info
-    auth, config, envs, update, upgrade
+    auth, config, envs, upgrade
 EOF
 }
 

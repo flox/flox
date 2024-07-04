@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use bpaf::{Args, Parser};
-use commands::{FloxArgs, FloxCli, Prefix, Version};
+use commands::{EnvironmentSelectError, FloxArgs, FloxCli, MigrationError, Prefix, Version};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
@@ -13,7 +13,13 @@ use log::{debug, warn};
 use utils::init::{init_logger, init_sentry};
 use utils::{message, populate_default_nix_env_vars};
 
-use crate::utils::errors::{format_error, format_managed_error, format_remote_error};
+use crate::utils::errors::{
+    format_environment_select_error,
+    format_error,
+    format_managed_error,
+    format_migration_error,
+    format_remote_error,
+};
 use crate::utils::metrics::Hub;
 
 mod build;
@@ -27,6 +33,11 @@ async fn run(args: FloxArgs) -> Result<()> {
     set_parent_process_id();
     populate_default_nix_env_vars();
     let config = config::Config::parse()?;
+    if let Some(features) = config.features.as_ref() {
+        if features.services {
+            tracing::debug!("service management enabled");
+        }
+    }
     let uuid = utils::metrics::read_metrics_uuid(&config)
         .map(|u| Some(u.to_string()))
         .unwrap_or(None);
@@ -124,29 +135,37 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::from(0),
 
         Err(e) => {
-            // todo: figure out how to deal with context, properly
-            debug!("{:#}", e);
-
             // Do not print any error if caused by wrapped flox (sh)
             if e.is::<FloxShellErrorCode>() {
                 return e.downcast_ref::<FloxShellErrorCode>().unwrap().0;
             }
 
-            if let Some(e) = e.downcast_ref::<EnvironmentError>() {
-                message::error(format_error(e));
+            let message = e
+                .downcast_ref::<EnvironmentError>()
+                .map(format_error)
+                .or_else(|| {
+                    e.downcast_ref::<ManagedEnvironmentError>()
+                        .map(format_managed_error)
+                })
+                .or_else(|| {
+                    e.downcast_ref::<RemoteEnvironmentError>()
+                        .map(format_remote_error)
+                })
+                .or_else(|| {
+                    e.downcast_ref::<EnvironmentSelectError>()
+                        .map(format_environment_select_error)
+                })
+                .or_else(|| {
+                    e.downcast_ref::<MigrationError>()
+                        .map(format_migration_error)
+                });
+
+            if let Some(message) = message {
+                message::error(message);
                 return ExitCode::from(1);
             }
 
-            if let Some(e) = e.downcast_ref::<ManagedEnvironmentError>() {
-                message::error(format_managed_error(e));
-                return ExitCode::from(1);
-            }
-
-            if let Some(e) = e.downcast_ref::<RemoteEnvironmentError>() {
-                message::error(format_remote_error(e));
-                return ExitCode::from(1);
-            }
-
+            // unknown errors are printed with an error trace
             let err_str = e
                 .chain()
                 .skip(1)

@@ -15,6 +15,7 @@ use super::{
     EnvironmentError,
     InstallationAttempt,
     ManagedPointer,
+    MigrationInfo,
     UninstallationAttempt,
     UpdateResult,
     DOT_FLOX,
@@ -26,7 +27,7 @@ use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
 use crate::models::lockfile::LockedManifest;
-use crate::models::manifest::PackageToInstall;
+use crate::models::manifest::{PackageToInstall, TypedManifest};
 use crate::models::pkgdb::UpgradeResult;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
@@ -107,7 +108,7 @@ impl RemoteEnvironment {
         // (force) Pull latest changes of the environment from upstream.
         // remote environments stay in sync with upstream without providing a local staging state.
         inner
-            .pull(true)
+            .pull(flox, true)
             .map_err(RemoteEnvironmentError::ResetManagedEnvironment)?;
 
         let out_link = path.join(GCROOTS_DIR_NAME);
@@ -264,6 +265,11 @@ impl Environment for RemoteEnvironment {
         self.inner.manifest_content(flox)
     }
 
+    /// Return the deserialized manifest
+    fn manifest(&self, flox: &Flox) -> Result<TypedManifest, EnvironmentError> {
+        self.inner.manifest(flox)
+    }
+
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         Self::update_out_link(flox, &self.out_link, &mut self.inner)?;
         Ok(self.out_link.clone())
@@ -273,9 +279,9 @@ impl Environment for RemoteEnvironment {
     ///
     /// Remote environments shouldn't have state of any kind, so this just
     /// returns a temporary directory.
-    fn cache_path(&self) -> Result<PathBuf, EnvironmentError> {
+    fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError> {
         let tempdir = TempDir::new().map_err(EnvironmentError::CreateTempDir)?;
-        Ok(tempdir.into_path())
+        CanonicalPath::new(tempdir.into_path()).map_err(EnvironmentError::Canonicalize)
     }
 
     fn project_path(&self) -> Result<PathBuf, EnvironmentError> {
@@ -308,5 +314,19 @@ impl Environment for RemoteEnvironment {
     /// When extended to delete upstream environments, this will be more useful.
     fn delete(self, flox: &Flox) -> Result<(), EnvironmentError> {
         self.inner.delete(flox)
+    }
+
+    fn migrate_to_v1(
+        &mut self,
+        flox: &Flox,
+        migration_info: MigrationInfo,
+    ) -> Result<(), EnvironmentError> {
+        self.inner.migrate_to_v1(flox, migration_info)?;
+        self.inner
+            .push(flox, false)
+            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
+            .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
+
+        Ok(())
     }
 }

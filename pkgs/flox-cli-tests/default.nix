@@ -10,6 +10,7 @@
   dash,
   bats,
   coreutils,
+  curl,
   entr,
   expect,
   findutils,
@@ -30,6 +31,7 @@
   unixtools,
   which,
   writeShellScriptBin,
+  process-compose,
   GENERATED_DATA ? ./../../test_data/generated,
   INPUT_DATA ? ./../../test_data/input_data,
   PROJECT_NAME ? "flox-cli-tests",
@@ -54,6 +56,7 @@
       dash
       batsWith
       coreutils
+      curl
       entr
       expect
       findutils
@@ -69,6 +72,7 @@
       unixtools.util-linux
       which
       yq
+      process-compose
     ]
     # TODO: this hack is not going to be needed once we test against sutff on system
     ++ lib.optional stdenv.isDarwin (
@@ -153,6 +157,7 @@ in
       then "export FLOX_BIN='flox';"
       else "export FLOX_BIN='${FLOX_BIN}';"
     }
+    export PROCESS_COMPOSE_BIN='${process-compose}/bin/process-compose';
 
     usage() {
           cat << EOF

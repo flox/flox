@@ -149,12 +149,12 @@ endif  # ifndef TOOLCHAIN
 VERSION := $(file < $(PKGDB_ROOT)/.version)
 
 # Files used by `pkgdb buildenv' need to be added to the `nix' store.
-# WARNING: the flox-activate package is normally created from within
-# pkgs/flox-pkgdb/default.nix, but if working in a `nix develop' shell
-# then run `unset ACTIVATE_PACKAGE_DIR' to regenerate the package with
-# each build.
-ACTIVATE_PACKAGE_DIR ?= $(shell \
-  $(NIX) store add-path -n flox-activate src/buildenv/assets)
+# WARNING: the flox-activation-scripts package is normally created from
+# within pkgs/flox-pkgdb/default.nix, but if working in a `nix develop'
+# shell then run `unset ACTIVATION_SCRIPTS_PACKAGE_DIR' to regenerate
+# the package with each build.
+ACTIVATION_SCRIPTS_PACKAGE_DIR ?= \
+  $(shell $(NIX) build --print-out-paths .#flox-activation-scripts)
 
 # The reference to CONTAINER_BUILDER_PATH in realise.cc requires that
 # libexec/mkContainer.nix be rendered as a single-file package in the
@@ -364,7 +364,7 @@ endif # ifeq (Linux,$(OS))
 # ------------------------
 
 src/buildenv/realise.o: CXXFLAGS +=               \
-	'-DACTIVATE_PACKAGE_DIR="$(ACTIVATE_PACKAGE_DIR)"'
+	'-DACTIVATION_SCRIPTS_PACKAGE_DIR="$(ACTIVATION_SCRIPTS_PACKAGE_DIR)"'
 
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DCONTAINER_BUILDER_PATH="$(CONTAINER_BUILDER_PATH)"'
@@ -618,6 +618,13 @@ src/pkgdb/scrape-rules.o: src/pkgdb/rules.json.hh
 
 # Make all `.o' files depend on all `include/**/*.hh' files.
 $(ALL_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
+
+# Automatically pick up changes to embedded assets.
+src/buildenv/realise.o: \
+  $(if $(shell \
+    strings src/buildenv/realise.o 2>/dev/null | \
+      grep $(ACTIVATION_SCRIPTS_PACKAGE_DIR) \
+  ),,FORCE)
 
 
 # ---------------------------------------------------------------------------- #

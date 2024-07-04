@@ -1,0 +1,22 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "AttrPathNotFound": {
+            "attr_path": "darwin.ps",
+            "install_id": "ps",
+            "level": "error",
+            "msg": "The attr_path darwin.ps is not found for some systems, valid systems are (aarch64-darwin,x86_64-darwin).",
+            "valid_systems": [
+              "aarch64-darwin",
+              "x86_64-darwin"
+            ]
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ]
+]

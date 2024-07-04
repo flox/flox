@@ -33,9 +33,7 @@ setup() {
   setup_isolated_flox
   project_setup
   floxhub_setup "owner"
-  make_dummy_env "owner" "name"
 
-  export FLOX_FEATURES_USE_CATALOG=true
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 
   export UNSUPPORTED_SYSTEM_PROMPT="The environment you are trying to pull is not yet compatible with your system ($NIX_SYSTEM)."
@@ -144,9 +142,14 @@ function add_incompatible_package() {
   package=
   # replace linux with darwin or darwin with linux
   if [ -z "${NIX_SYSTEM##*-linux}" ]; then
-    package='["darwin", "ps"]'
+    package='"darwin.ps"'
+    export INCOMPATIBLE_MOCK_RESPONSE_FIRST_TIME="$GENERATED_DATA/resolve/darwin_ps.json"
+    export INCOMPATIBLE_MOCK_RESPONSE_SECOND_TIME="$GENERATED_DATA/resolve/darwin_ps_incompatible.json"
+
   elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
-    package='["glibc"]'
+    package='"glibc"'
+    export INCOMPATIBLE_MOCK_RESPONSE_FIRST_TIME="$GENERATED_DATA/resolve/glibc.json"
+    export INCOMPATIBLE_MOCK_RESPONSE_SECOND_TIME="$GENERATED_DATA/resolve/glibc_incompatible.json"
   else
     echo "unknown system: '$NIX_SYSTEM'"
     exit 1
@@ -156,6 +159,7 @@ function add_incompatible_package() {
   pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
   git checkout "$ENV_NAME"
   tomlq --in-place --toml-output ".install.extra.\"pkg-path\" = $package" 2/env/manifest.toml
+
   git add .
   git \
     -c "user.name=test" \
@@ -178,7 +182,7 @@ function add_insecure_package() {
   git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
   pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
   git checkout "$ENV_NAME"
-  tomlq --in-place --toml-output '.install.extra."pkg-path" = ["python2"]' 2/env/manifest.toml
+  tomlq --in-place --toml-output '.install.extra."pkg-path" = "python2"' 2/env/manifest.toml
   git add .
   git \
     -c "user.name=test" \
@@ -193,6 +197,7 @@ function add_insecure_package() {
 # ---------------------------------------------------------------------------- #
 # bats test_tags=pull,pull:logged-out
 @test "l1: pull login: running flox pull without login succeeds" {
+  make_dummy_env "owner" "name"
   unset FLOX_FLOXHUB_TOKEN # logout, effectively
 
   run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
@@ -202,6 +207,8 @@ function add_insecure_package() {
 # bats test_tags=pull:l2,pull:l2:a,pull:l4
 @test "l2.a/l4: flox pull accepts a floxhub namespace/environment, creates .flox if it does not exist" {
   export FLOX_FEATURES_USE_CATALOG=false
+
+  make_dummy_env "owner" "name"
 
   run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   assert_success
@@ -214,6 +221,8 @@ function add_insecure_package() {
 # bats test_tags=pull:l2,pull:l2:b
 @test "l2.b: flox pull with --remote fails if an env is already present" {
   export FLOX_FEATURES_USE_CATALOG=false
+
+  make_dummy_env "owner" "name"
 
   "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
 
@@ -228,6 +237,8 @@ function add_insecure_package() {
 @test "l2.c: flox pull with --remote and --dir pulls into the specified directory" {
   export FLOX_FEATURES_USE_CATALOG=false
 
+  make_dummy_env "owner" "name"
+
   run "$FLOX_BIN" pull --remote owner/name --dir ./inner
   assert_success
   assert [ -e "inner/.flox/env.json" ]
@@ -239,6 +250,8 @@ function add_insecure_package() {
 # bats test_tags=pull:l3,pull:l3:a
 @test "l3.a: pulling without namespace/environment" {
   export FLOX_FEATURES_USE_CATALOG=false
+
+  make_dummy_env "owner" "name"
 
   "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
   LOCKED_BEFORE=$(cat .flox/env.lock | jq -r '.rev')
@@ -256,6 +269,8 @@ function add_insecure_package() {
 # bats test_tags=pull:l3,pull:l3:b
 @test "l3.b: pulling without namespace/environment respects --dir" {
   export FLOX_FEATURES_USE_CATALOG=false
+
+  make_dummy_env "owner" "name"
 
   "$FLOX_BIN" pull --remote owner/name --dir ./inner # dummy remote as we are not actually pulling anything
   LOCKED_BEFORE=$(cat ./inner/.flox/env.lock | jq -r '.rev')
@@ -276,8 +291,9 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l6,pull:l6:a
 @test "l6.a: pulling the same remote environment in multiple directories creates unique copies of the environment" {
-
   export FLOX_FEATURES_USE_CATALOG=false
+
+  make_dummy_env "owner" "name"
 
   mkdir first second
 
@@ -319,6 +335,7 @@ function add_insecure_package() {
 @test "pull environment inside the same environment without the '--force' flag" {
   export FLOX_FEATURES_USE_CATALOG=false
 
+  make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
 
   run "$FLOX_BIN" pull --remote owner/name
@@ -332,6 +349,7 @@ function add_insecure_package() {
 @test "pull environment inside the same environment with '--force' flag" {
   export FLOX_FEATURES_USE_CATALOG=false
 
+  make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
 
   run "$FLOX_BIN" pull --remote owner/name
@@ -348,8 +366,8 @@ function add_insecure_package() {
 @test "pull unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
   export FLOX_FEATURES_USE_CATALOG=false
 
+  make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
-
   make_incompatible "owner" "name"
   add_incompatible_package "owner" "name"
 
@@ -368,6 +386,7 @@ function add_insecure_package() {
 @test "activate incompatible environment fails gracefully" {
   export FLOX_FEATURES_USE_CATALOG=false
 
+  make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
 
@@ -384,6 +403,7 @@ function add_insecure_package() {
 @test "pull environment with package not available for the current platform fails" {
   export FLOX_FEATURES_USE_CATALOG=false
 
+  make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
   add_incompatible_package "owner" "name"
 
@@ -401,6 +421,7 @@ function add_insecure_package() {
 @test "pull environment with insecure package fails to evaluate" {
   export FLOX_FEATURES_USE_CATALOG=false
 
+  make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
   add_insecure_package "owner" "name"
 
@@ -417,6 +438,8 @@ function add_insecure_package() {
 @test "pull up-to-date env returns info message" {
   export FLOX_FEATURES_USE_CATALOG=false
 
+  make_dummy_env "owner" "name"
+
   # pull a fresh environment
   "$FLOX_BIN" pull --remote owner/name
   # pull it again, and expect an info message
@@ -430,6 +453,7 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l2,pull:l2:a,pull:l4
 @test "catalog: l2.a/l4: flox pull accepts a floxhub namespace/environment, creates .flox if it does not exist" {
+  make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
@@ -445,6 +469,8 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l2,pull:l2:b
 @test "catalog: l2.b: flox pull with --remote fails if an env is already present" {
+  make_dummy_env "owner" "name"
+
   # dummy environment has no packages to resolve
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 
@@ -456,6 +482,8 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l2,pull:l2:c
 @test "catalog: l2.c: flox pull with --remote and --dir pulls into the specified directory" {
+  make_dummy_env "owner" "name"
+
   # dummy environment has no packages to resolve
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 
@@ -469,6 +497,7 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l3,pull:l3:a
 @test "catalog: l3.a: pulling without namespace/environment" {
+  make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
@@ -490,6 +519,7 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l3,pull:l3:b
 @test "catalog: l3.b: pulling without namespace/environment respects --dir" {
+  make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
@@ -510,6 +540,8 @@ function add_insecure_package() {
 
 # bats test_tags=pull:l6,pull:l6:a
 @test "catalog: l6.a: pulling the same remote environment in multiple directories creates unique copies of the environment" {
+  make_dummy_env "owner" "name"
+
   mkdir first second
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json" \
@@ -540,6 +572,7 @@ function add_insecure_package() {
 
 # bats test_tags=pull:twice:no-force
 @test "catalog: pull environment inside the same environment without the '--force' flag" {
+  make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/gzip.json" \
@@ -553,6 +586,7 @@ function add_insecure_package() {
 
 # bats test_tags=pull:twice:force
 @test "catalog: pull environment inside the same environment with '--force' flag" {
+  make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/gzip.json" \
@@ -566,23 +600,33 @@ function add_insecure_package() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=pull:unsupported:warning
+# bats test_tags=pull:catalog:unsupported:warning
 # An environment that is not compatible with the current ssystem
 # due to the current system missing <system> in `option.systems`
 # AND a package that is indeed not able to be built for the current system
 # should show a warning, but otherwise succeed to pull
 @test "catalog: pull unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
-
+  make_dummy_env "owner" "name"
   remove_extra_systems "owner" "name"
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
   add_incompatible_package "owner" "name"
 
-  run "$FLOX_BIN" pull --remote owner/name
+  # add_incompatible_package does not _lock_ the environment,
+  # therefore pull will resolve the package.
+  _FLOX_USE_CATALOG_MOCK="$INCOMPATIBLE_MOCK_RESPONSE_FIRST_TIME" \
+    run "$FLOX_BIN" pull --remote owner/name
   assert_failure
   assert_line --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
 
-  run "$FLOX_BIN" pull --remote owner/name --force
+  # combine output of calling resolve before and after adding the system
+  jq -s add \
+    "$INCOMPATIBLE_MOCK_RESPONSE_FIRST_TIME" \
+    "$INCOMPATIBLE_MOCK_RESPONSE_SECOND_TIME" \
+    >"./twice.json"
+
+  _FLOX_USE_CATALOG_MOCK="./twice.json" \
+    run "$FLOX_BIN" pull --remote owner/name --force
   assert_success
   assert_line --partial "Modified the manifest to include your system but could not build."
 
@@ -596,6 +640,7 @@ function add_insecure_package() {
 # activating an incompatible environment should fail gracefully
 @test "catalog: activate incompatible environment fails gracefully" {
 
+  make_dummy_env "owner" "name"
   remove_extra_systems "owner" "name"
   update_dummy_env "owner" "name"
   make_incompatible "owner" "name"
@@ -603,34 +648,6 @@ function add_insecure_package() {
   run "$FLOX_BIN" activate --remote owner/name --trust
   assert_failure
   assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
-}
-
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=pull:unsupported-package
-# pulling an environment with a package that is not available for the current platform
-# should fail with an error
-@test "catalog: pull environment with package not available for the current platform fails" {
-  update_dummy_env "owner" "name"
-  add_incompatible_package "owner" "name"
-
-  run "$FLOX_BIN" pull --remote owner/name
-
-  assert_failure
-  assert_line --partial "package 'extra' is not available for this system ('$NIX_SYSTEM')"
-}
-
-# bats test_tags=pull:eval-failure
-# pulling an environment with a package that fails to evaluate
-# should fail with an error
-@test "catalog: pull environment with insecure package fails to evaluate" {
-  update_dummy_env "owner" "name"
-  add_insecure_package "owner" "name"
-
-  run "$FLOX_BIN" pull --remote owner/name
-
-  assert_failure
-  assert_line --partial "package 'extra' failed to evaluate:"
 }
 
 # ---------------------------------------------------------------------------- #
