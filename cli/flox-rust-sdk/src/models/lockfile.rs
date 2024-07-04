@@ -542,6 +542,10 @@ impl LockedManifestCatalog {
     /// These packages are used to constrain the resolution.
     /// If a package in `manifest` does not have a corresponding package in `seed_lockfile`,
     /// that package will be unconstrained, allowing a first install.
+    ///
+    /// As package groups only apply to catalog descriptors,
+    /// this function **ignores other [ManifestPackageDescriptor] variants**.
+    /// Those are expected to be locked separately.
     fn collect_package_groups(
         manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
@@ -565,7 +569,12 @@ impl LockedManifestCatalog {
             Some(manifest.options.allow.licenses.clone())
         };
 
-        for (install_id, manifest_descriptor) in manifest.install.catalog_descriptors_ref() {
+        for (install_id, manifest_descriptor) in manifest.install.iter() {
+            // package groups are only relevant to catalog descriptors
+            let Some(manifest_descriptor) = manifest_descriptor.as_catalog_descriptor_ref() else {
+                continue;
+            };
+
             let resolved_descriptor_base = PackageDescriptor {
                 install_id: install_id.clone(),
                 attr_path: manifest_descriptor.pkg_path.clone(),

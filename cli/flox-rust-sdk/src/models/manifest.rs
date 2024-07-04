@@ -553,20 +553,6 @@ pub struct ManifestInstall(
     BTreeMap<String, ManifestPackageDescriptor>,
 );
 
-impl ManifestInstall {
-    pub fn catalog_descriptors_ref(
-        &self,
-    ) -> impl Iterator<Item = (&String, &ManifestPackageDescriptorCatalog)> {
-        self.iter().filter_map(|(id, desc)| match desc {
-            ManifestPackageDescriptor::Catalog(desc) => Some((id, desc)),
-            _ => {
-                debug!("skipping non-catalog descriptor for '{}'", id);
-                None
-            },
-        })
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 // todo: this can make the error messages less clear and might call for a custom (de)serialize impl
