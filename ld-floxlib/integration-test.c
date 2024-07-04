@@ -4,7 +4,6 @@
  * Loads library function as defined with TEST_FUNCTION macro.
  */
 
-#include <stdio.h>
 extern unsigned int TEST_FUNCTION( unsigned int rc );
 
 int
