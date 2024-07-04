@@ -22,7 +22,7 @@ pub static PROCESS_COMPOSE_BIN: Lazy<String> = Lazy::new(|| {
 #[derive(Debug, thiserror::Error)]
 pub enum ServiceError {
     #[error("failed to generate service config")]
-    GenerateConfig(#[source] serde_yml::Error),
+    GenerateConfig(#[source] serde_yaml::Error),
     #[error("failed to write service config")]
     WriteConfig(#[source] std::io::Error),
 }
@@ -84,7 +84,7 @@ pub fn write_process_compose_config(
     config: &ProcessComposeConfig,
     path: impl AsRef<Path>,
 ) -> Result<(), ServiceError> {
-    let contents = serde_yml::to_string(&config).map_err(ServiceError::GenerateConfig)?;
+    let contents = serde_yaml::to_string(&config).map_err(ServiceError::GenerateConfig)?;
     std::fs::write(path, contents).map_err(ServiceError::WriteConfig)?;
     Ok(())
 }
@@ -155,7 +155,7 @@ mod tests {
             let path = process_compose_config_write_location().unwrap();
             write_process_compose_config(&config, &path.path).unwrap();
             let contents = std::fs::read_to_string(&path.path).unwrap();
-            let deserialized: ProcessComposeConfig = serde_yml::from_str(&contents).unwrap();
+            let deserialized: ProcessComposeConfig = serde_yaml::from_str(&contents).unwrap();
             prop_assert_eq!(config, deserialized);
         }
     }
