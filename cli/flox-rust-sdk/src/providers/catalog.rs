@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
@@ -43,7 +44,7 @@ pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
 static GENERATED_DATA: Lazy<PathBuf> =
     Lazy::new(|| PathBuf::from(std::env::var("GENERATED_DATA").unwrap()));
 
-const RESPONSE_PAGE_SIZE: NonZeroU32 = unsafe { NonZeroU32::new_unchecked(10) };
+const RESPONSE_PAGE_SIZE: NonZeroU32 = unsafe { NonZeroU32::new_unchecked(1000) };
 
 type ResolvedGroups = Vec<ResolvedPackageGroup>;
 
@@ -357,6 +358,13 @@ impl ClientTrait for CatalogClient {
             .try_into()
             .map_err(CatalogClientError::UnsupportedSystem)?;
 
+        // If the limit is less than a full page, only retrieve that many results
+        let page_size = min(
+            limit
+                .map(Into::<NonZeroU32>::into)
+                .unwrap_or(RESPONSE_PAGE_SIZE),
+            RESPONSE_PAGE_SIZE,
+        );
         let stream = make_depaging_stream(
             |page_number, page_size| async move {
                 let response = self
@@ -386,7 +394,7 @@ impl ClientTrait for CatalogClient {
                         .collect::<Result<Vec<_>, _>>()?,
                 ))
             },
-            RESPONSE_PAGE_SIZE,
+            page_size,
         );
 
         let (count, results) = collect_search_results(stream, limit).await?;
