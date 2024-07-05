@@ -145,9 +145,9 @@ mod tests {
 
     use super::*;
     use crate::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
-    use crate::flox::{EnvironmentName, EnvironmentOwner};
-    use crate::models::environment::path_environment::{InitCustomization, PathEnvironment};
-    use crate::models::environment::{Environment, PathPointer};
+    use crate::flox::EnvironmentOwner;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment;
+    use crate::models::environment::Environment;
 
     proptest! {
         #[test]
@@ -162,46 +162,31 @@ mod tests {
 
     #[test]
     fn built_environments_generate_service_config() {
-        let (mut flox, workspace_dir) = flox_instance_with_optional_floxhub_and_client(
+        let (mut flox, _dir) = flox_instance_with_optional_floxhub_and_client(
             Some(&EnvironmentOwner::from_str("owner").unwrap()),
             true,
         );
         flox.features.services = true;
-        let temp_dir = tempfile::tempdir().unwrap();
-        let pointer = PathPointer::new(EnvironmentName::from_str("services_env").unwrap());
-        let customization = InitCustomization::default();
-        let mut env = PathEnvironment::init(
-            pointer,
-            workspace_dir.path(),
-            temp_dir.path(),
-            &flox.system,
-            &customization,
-            &flox,
-        )
-        .unwrap();
 
-        // Write out a manifest with a services section
+        // Manifest with a services section
         let contents = indoc! {r#"
         version = 1
 
         [services.foo]
         command = "start foo"
         "#};
-        std::fs::write(
-            workspace_dir.path().join(".flox/env/manifest.toml"),
-            contents,
-        )
-        .unwrap();
+        let mut env = new_path_environment(&flox, contents);
 
         // Build the environment and verify that the config file exists
         temp_env::with_var_unset(SERVICES_TEMP_CONFIG_PATH_VAR, || {
             env.build(&flox).unwrap();
         });
-        let config_path = format!(
-            "{}/.flox/run/{}.services_env/{SERVICE_CONFIG_FILENAME}",
-            &workspace_dir.path().display(),
-            &flox.system
-        );
-        assert!(PathBuf::from(config_path).exists());
+        let system_dot_name = format!("{}.{}", &flox.system, &env.name());
+        let config_path = &env
+            .path
+            .join("run")
+            .join(system_dot_name)
+            .join(SERVICE_CONFIG_FILENAME);
+        assert!(config_path.exists());
     }
 }
