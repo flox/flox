@@ -59,3 +59,13 @@ teardown() {
   assert_success
   assert_output --partial "v1.6.1"
 }
+
+@test "process-compose can run generated config file" {
+  export FLOX_FEATURES_SERVICES=true
+  "$FLOX_BIN" init
+  manifest_file="${TESTS_DIR}/services/touch_file/manifest.toml"
+  run "$FLOX_BIN" edit -f "$manifest_file"
+  assert_success
+  run bash "${TESTS_DIR}/services/touch_file/check.sh"
+  assert_success
+}

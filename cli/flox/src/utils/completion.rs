@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use flox_rust_sdk::flox::{Flox, Floxhub, DEFAULT_FLOXHUB_URL};
+use flox_rust_sdk::flox::{Features, Flox, Floxhub, DEFAULT_FLOXHUB_URL};
 use log::debug;
 use tempfile::TempDir;
 
@@ -63,6 +63,13 @@ impl FloxCompletionExt for Flox {
             floxhub_token: None,
             floxhub: Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None)?,
             catalog_client,
+            features: config
+                .features
+                .as_ref()
+                .map(|f| Features {
+                    services: f.services,
+                })
+                .unwrap_or_default(),
         })
     }
 }

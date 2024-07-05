@@ -291,6 +291,8 @@ pub trait Environment: Send {
         flox: &Flox,
         migration_info: MigrationInfo,
     ) -> Result<(), EnvironmentError>;
+
+    fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError>;
 }
 
 /// A pointer to an environment, either managed or path.

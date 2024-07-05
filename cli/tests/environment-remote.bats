@@ -322,3 +322,30 @@ EOF
   assert_failure
   assert_output --partial "Environment not found in FloxHub."
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=remote,remote:services
+@test "services: not currently supported for remote environments" {
+  export FLOX_FEATURES_SERVICES=true
+
+  floxhub_setup "flox"
+  OWNER=flox make_empty_remote_env
+
+  TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
+
+  cat << "EOF" >> "$TMP_MANIFEST_PATH"
+version = 1
+
+[services.hello]
+command = "hello"
+EOF
+
+  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH" --remote "$OWNER/test"
+  assert_success
+  assert_output --partial "✅ Environment successfully updated."
+
+  run "$FLOX_BIN" activate --remote "flox/test" -- true
+  assert_failure
+  assert_output --partial "❌ ERROR: services are not currently supported for remote environments"
+}

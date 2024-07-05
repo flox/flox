@@ -22,6 +22,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_ENV_PROJECT_VAR,
     FLOX_ENV_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
+    FLOX_SERVICES_SOCKET_VAR,
 };
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::manifest::TypedManifest;
@@ -256,6 +257,16 @@ impl Activate {
             // default to enabling CUDA
             if manifest.options.cuda_detection != Some(false) {
                 exports.insert("_FLOX_ENV_CUDA_DETECTION", "1".to_string());
+            }
+
+            if flox.features.services && !manifest.services.is_empty() {
+                exports.insert(
+                    FLOX_SERVICES_SOCKET_VAR,
+                    environment
+                        .services_socket_path()?
+                        .to_string_lossy()
+                        .to_string(),
+                );
             }
         }
 
