@@ -41,8 +41,14 @@ impl Delete {
             bail!("{message}")
         }
 
+        let message = if let EnvironmentSelect::Unspecified = self.environment {
+            format!("You are about to delete your environment {description}. Are you sure?")
+        } else {
+            "Are you sure?".to_string()
+        };
+
         let confirm = Dialog {
-            message: "Are you sure?",
+            message: &message,
             help_message: Some("Use `-f` to force deletion"),
             typed: Confirm {
                 default: Some(false),
