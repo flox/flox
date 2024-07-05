@@ -79,7 +79,7 @@ impl From<ManifestServices> for ProcessComposeConfig {
 }
 
 // generate the config string
-// write it out to either the env var location or a temp file
+// write it out to the path
 pub fn write_process_compose_config(
     config: &ProcessComposeConfig,
     path: impl AsRef<Path>,
