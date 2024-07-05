@@ -1373,6 +1373,7 @@ mod tests {
     use crate::models::lockfile::ResolutionFailures;
     use crate::models::manifest::{RawManifest, DEFAULT_GROUP_NAME};
     use crate::models::{lockfile, manifest};
+    use crate::providers::services::{SERVICES_TEMP_CONFIG_PATH_VAR, SERVICE_CONFIG_FILENAME};
 
     /// Create a CoreEnvironment with an empty manifest
     ///
@@ -1513,6 +1514,29 @@ mod tests {
         let result = env_view.build(&flox).unwrap_err();
 
         assert!(result.is_incompatible_package_error());
+    }
+
+    #[test]
+    fn built_environments_generate_service_config() {
+        let (mut flox, _dir) = flox_instance_with_optional_floxhub_and_client(None, true);
+        flox.features.services = true;
+
+        // Manifest with a services section
+        let contents = indoc! {r#"
+        version = 1
+
+        [services.foo]
+        command = "start foo"
+        "#};
+
+        let mut env = new_core_environment(&flox, contents);
+        env.lock(&flox).unwrap();
+
+        // Build the environment and verify that the config file exists
+        let store_path =
+            temp_env::with_var_unset(SERVICES_TEMP_CONFIG_PATH_VAR, || env.build(&flox).unwrap());
+        let config_path = store_path.join(SERVICE_CONFIG_FILENAME);
+        assert!(config_path.exists());
     }
 
     /// Installing hello with edit returns EditResult::Success

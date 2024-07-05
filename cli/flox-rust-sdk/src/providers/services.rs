@@ -138,16 +138,9 @@ pub fn maybe_make_service_config_file(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use indoc::indoc;
     use proptest::prelude::*;
 
     use super::*;
-    use crate::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
-    use crate::flox::EnvironmentOwner;
-    use crate::models::environment::path_environment::test_helpers::new_path_environment;
-    use crate::models::environment::Environment;
 
     proptest! {
         #[test]
@@ -158,35 +151,5 @@ mod tests {
             let deserialized: ProcessComposeConfig = serde_yaml::from_str(&contents).unwrap();
             prop_assert_eq!(config, deserialized);
         }
-    }
-
-    #[test]
-    fn built_environments_generate_service_config() {
-        let (mut flox, _dir) = flox_instance_with_optional_floxhub_and_client(
-            Some(&EnvironmentOwner::from_str("owner").unwrap()),
-            true,
-        );
-        flox.features.services = true;
-
-        // Manifest with a services section
-        let contents = indoc! {r#"
-        version = 1
-
-        [services.foo]
-        command = "start foo"
-        "#};
-        let mut env = new_path_environment(&flox, contents);
-
-        // Build the environment and verify that the config file exists
-        temp_env::with_var_unset(SERVICES_TEMP_CONFIG_PATH_VAR, || {
-            env.build(&flox).unwrap();
-        });
-        let system_dot_name = format!("{}.{}", &flox.system, &env.name());
-        let config_path = &env
-            .path
-            .join("run")
-            .join(system_dot_name)
-            .join(SERVICE_CONFIG_FILENAME);
-        assert!(config_path.exists());
     }
 }
