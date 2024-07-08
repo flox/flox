@@ -147,9 +147,10 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 # With '--container' produces a script that can be used to build a container.
-# bats test_tags=buildenv:container
+# bats test_tags=buildenv:container,bats:focus
 @test "Environment builds container" {
-  run "$PKGDB_BIN" buildenv "$LOCKFILES/single-package/manifest.lock" \
+  run --separate-stderr \
+    "$PKGDB_BIN" buildenv "$LOCKFILES/single-package/manifest.lock" \
     --container
   assert_success
   store_path=$(echo "$output" | jq -er '.store_path')
