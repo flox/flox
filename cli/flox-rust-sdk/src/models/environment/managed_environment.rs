@@ -554,8 +554,8 @@ impl Environment for ManagedEnvironment {
 
     /// Return the path where the process compose socket for an environment
     /// should be created
-    fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError> {
-        services_socket_path(&self.path_hash())
+    fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+        services_socket_path(&self.path_hash(), flox)
     }
 }
 

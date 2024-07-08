@@ -291,7 +291,7 @@ pub trait Environment: Send {
         migration_info: MigrationInfo,
     ) -> Result<(), EnvironmentError>;
 
-    fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError>;
+    fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
 }
 
 /// A pointer to an environment, either managed or path.
@@ -565,6 +565,12 @@ pub enum EnvironmentError {
 
     #[error("could not detect XDG_RUNTIME_DIR")]
     DetectRuntimeDir(#[source] xdg::BaseDirectoriesError),
+
+    #[error("could not create services socket directory")]
+    CreateServicesSocketDirectory(#[source] std::io::Error),
+
+    #[error("path for services socket is too long: {0}")]
+    ServicesSocketPathTooLong(PathBuf),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -724,22 +730,43 @@ pub fn path_hash(p: &impl AsRef<Path>) -> String {
 /// On Linux use XDG_RUNTIME_DIR per
 /// https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 /// If unset, fallback to /tmp
-fn services_socket_path(id: &str) -> Result<PathBuf, EnvironmentError> {
+fn services_socket_path(id: &str, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
     #[cfg(target_os = "macos")]
-    let canonicalized =
-        CanonicalPath::new(PathBuf::from("/tmp")).map_err(EnvironmentError::Canonicalize)?;
+    let runtime_dir = None;
+    #[cfg(target_os = "macos")]
+    let max_length = 104;
 
     #[cfg(target_os = "linux")]
-    let canonicalized = {
-        let directory = xdg::BaseDirectories::new()
-            .map_err(EnvironmentError::DetectRuntimeDir)?
-            .get_runtime_directory()
-            .unwrap_or(&PathBuf::from("/tmp"));
-        // Canonicalize so we error early if the path doesn't exist
-        CanonicalPath::new(directory).map_err(EnvironmentError::Canonicalize)?
+    let runtime_dir = {
+        let base_directories =
+            xdg::BaseDirectories::new().map_err(EnvironmentError::DetectRuntimeDir)?;
+        base_directories.get_runtime_directory().ok().cloned()
     };
+    #[cfg(target_os = "linux")]
+    // 108 minus a null character
+    let max_length = 107;
 
-    Ok(canonicalized.join(format!("flox.{}.sock", id)))
+    let directory = match runtime_dir {
+        Some(dir) => dir,
+        None => {
+            let fallback = flox.cache_dir.join("run");
+            // We don't want to error if the directory already exists,
+            // so use create_dir_all.
+            std::fs::create_dir_all(&fallback)
+                .map_err(EnvironmentError::CreateServicesSocketDirectory)?;
+            fallback
+        },
+    };
+    // Canonicalize so we error early if the path doesn't exist
+    let canonicalized = CanonicalPath::new(directory).map_err(EnvironmentError::Canonicalize)?;
+
+    let socket_path = canonicalized.join(format!("flox.{}.sock", id));
+
+    if socket_path.as_os_str().len() > max_length {
+        return Err(EnvironmentError::ServicesSocketPathTooLong(socket_path));
+    }
+
+    Ok(socket_path)
 }
 
 #[cfg(test)]
@@ -759,7 +786,6 @@ mod test {
     };
     use crate::flox::DEFAULT_FLOXHUB_URL;
     use crate::providers::git::GitProvider;
-    use crate::providers::services;
 
     const MANAGED_ENV_JSON: &'_ str = r#"{
         "name": "name",
@@ -1124,18 +1150,68 @@ mod test {
     #[cfg(target_os = "linux")]
     #[test]
     fn services_socket_path_respects_xdg_runtime_dir() {
-        let socket_path = temp_env::with_var("XDG_RUNTIME_DIR", Some("/run/user/1001"), || {
-            services_socket_path("1")
+        let (flox, _temp_dir_handle) = flox_instance();
+        // In reality XDG_RUNTIME_DIR would be something like `/run/user/1001`,
+        // but that won't necessarily exist where this unit test is run.
+        // We can't use /tmp because xdg::BaseDirectories errors if the
+        // directory has the wrong ownership.
+        let runtime_dir = dirs::home_dir().unwrap();
+        let socket_path = temp_env::with_var("XDG_RUNTIME_DIR", Some(&runtime_dir), || {
+            services_socket_path("1", &flox)
         })
         .unwrap();
-        assert_eq!(socket_path, PathBuf::from("/run/user/1001/flox.1.sock"));
+        assert_eq!(socket_path, runtime_dir.join("flox.1.sock"));
     }
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn services_socket_path_falls_back_to_tmp() {
-        let socket_path =
-            temp_env::with_var("XDG_RUNTIME_DIR", None, || services_socket_path("1")).unwrap();
-        assert_eq!(socket_path, PathBuf::from("/tmp/flox.1.sock"));
+    fn services_socket_path_falls_back_to_flox_cache() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let socket_path = temp_env::with_var("XDG_RUNTIME_DIR", None::<String>, || {
+            services_socket_path("1", &flox)
+        })
+        .unwrap();
+        assert_eq!(socket_path, flox.cache_dir.join("run/flox.1.sock"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn services_socket_path_errors_if_too_long() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.cache_dir = flox.cache_dir.join("X".repeat(100));
+        let err = temp_env::with_var("XDG_RUNTIME_DIR", None::<String>, || {
+            services_socket_path("1", &flox)
+        })
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            EnvironmentError::ServicesSocketPathTooLong(_)
+        ));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn services_socket_path_uses_flox_cache() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let socket_path = services_socket_path("1", &flox).unwrap();
+        assert_eq!(
+            socket_path,
+            flox.cache_dir
+                .canonicalize()
+                .unwrap()
+                .join("run/flox.1.sock")
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn services_socket_path_errors_if_too_long() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.cache_dir = flox.cache_dir.join("X".repeat(100));
+        let err = services_socket_path("1", &flox).unwrap_err();
+        assert!(matches!(
+            err,
+            EnvironmentError::ServicesSocketPathTooLong(_)
+        ));
     }
 }

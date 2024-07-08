@@ -333,7 +333,7 @@ impl Environment for RemoteEnvironment {
         Ok(())
     }
 
-    fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError> {
+    fn services_socket_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         Err(EnvironmentError::RemoteEnvironment(
             RemoteEnvironmentError::ServicesUnsupported,
         ))

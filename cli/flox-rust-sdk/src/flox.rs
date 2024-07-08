@@ -284,7 +284,9 @@ pub mod test_helpers {
         owner: Option<&EnvironmentOwner>,
         use_client: bool,
     ) -> (Flox, TempDir) {
-        let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
+        // Use /tmp instead of std::env::temp_dir since we store sockets in cache_dir,
+        // and std::env::temp_dir may return a path that is too long.
+        let tempdir_handle = tempfile::tempdir_in(PathBuf::from("/tmp")).unwrap();
 
         let cache_dir = tempdir_handle.path().join("caches");
         let data_dir = tempdir_handle.path().join(".local/share/flox");

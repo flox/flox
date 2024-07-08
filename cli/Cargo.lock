@@ -1096,6 +1096,7 @@ dependencies = [
  "catalog-api-v1",
  "chrono",
  "derive_more",
+ "dirs",
  "enum_dispatch",
  "fslock",
  "futures",
