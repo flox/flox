@@ -342,20 +342,12 @@ impl<State> CoreEnvironment<State> {
 
     /// Create a new out-link for the environment at the given path with a
     /// store-path obtained from [Self::build].
-    ///
-    /// Like [Self::build], this requires the environment to be locked.
-    /// This method will _not_ create or update the lockfile.
-    ///
-    /// Errors if the environment is not locked.
     pub fn link(
         &mut self,
         flox: &Flox,
         out_link_path: impl AsRef<Path>,
         store_path: impl AsRef<Path>,
     ) -> Result<(), CoreEnvironmentError> {
-        let lockfile_path = CanonicalPath::new(self.lockfile_path())
-            .map_err(CoreEnvironmentError::BadLockfilePath)?;
-
         debug!(
             "linking environment: system={}, lockfilePath={}, outLinkPath={}",
             &flox.system,
@@ -365,8 +357,7 @@ impl<State> CoreEnvironment<State> {
 
         let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
         pkgdb_cmd
-            .arg("buildenv")
-            .arg(lockfile_path)
+            .arg("linkenv")
             .args(["--out-link", &out_link_path.as_ref().to_string_lossy()])
             .args(["--store-path", &store_path.as_ref().to_string_lossy()]);
         debug!("linking environment with command: {}", pkgdb_cmd.display());

@@ -69,50 +69,49 @@ setup_file() {
 # bats test_tags=single,binaries
 @test "Built environment contains binaries" {
   run "$PKGDB_BIN" buildenv \
-    "$LOCKFILES/single-package/manifest.lock" \
-    --out-link "$BATS_TEST_TMPDIR/env"
+    "$LOCKFILES/single-package/manifest.lock"
   assert_success
-  assert "$TEST" -x "$BATS_TEST_TMPDIR/env/bin/vim"
+  store_path=$(echo "$output" | jq -er '.store_path')
+  assert "$TEST" -x "${store_path}/bin/vim"
 }
 
 # bats test_tags=single,activate-files
 @test "Built environment contains activate files" {
   run "$PKGDB_BIN" buildenv \
-    "$LOCKFILES/single-package/manifest.lock" \
-    --out-link "$BATS_TEST_TMPDIR/env"
+    "$LOCKFILES/single-package/manifest.lock"
   assert_success
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate.d/bash"
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate.d/zsh"
-  assert "$TEST" -d "$BATS_TEST_TMPDIR/env/etc/profile.d"
+  store_path=$(echo "$output" | jq -er '.store_path')
+  assert "$TEST" -f "${store_path}/activate.d/bash"
+  assert "$TEST" -f "${store_path}/activate.d/zsh"
+  assert "$TEST" -d "${store_path}/etc/profile.d"
 }
 
 # --------------------------------------------------------------------------- #
 
 # bats test_tags=hook,script
 @test "Built environment includes hook script" {
-  run "$PKGDB_BIN" buildenv "$LOCKFILES/hook-script/manifest.lock" \
-    --out-link "$BATS_TEST_TMPDIR/env"
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/hook-script/manifest.lock"
   assert_success
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate.d/hook-script"
-  run "$CAT" "$BATS_TEST_TMPDIR/env/activate.d/hook-script"
+  store_path=$(echo "$output" | jq -er '.store_path')
+  assert "$TEST" -f "${store_path}/activate.d/hook-script"
+  run "$CAT" "${store_path}/activate.d/hook-script"
   assert_output "script"
 }
 
 # ---------------------------------------------------------------------------- #
 
 @test "Built environment includes 'on-activate' script" {
-  run "$PKGDB_BIN" buildenv "$LOCKFILES/on-activate/manifest.lock" \
-    --out-link "$BATS_TEST_TMPDIR/env"
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/on-activate/manifest.lock"
   assert_success
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate.d/hook-on-activate"
+  store_path=$(echo "$output" | jq -er '.store_path')
+  assert "$TEST" -f "${store_path}/activate.d/hook-on-activate"
 }
 
 # --------------------------------------------------------------------------- #
 
 # bats test_tags=conflict,detect
 @test "Detects conflicting packages" {
-  run "$PKGDB_BIN" buildenv "$LOCKFILES/conflict/manifest.lock" \
-    --out-link "$BATS_TEST_TMPDIR/env"
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/conflict/manifest.lock"
   assert_failure
   assert_output --regexp "'vim.*' conflicts with 'vim.*'"
 }
@@ -120,8 +119,7 @@ setup_file() {
 # bats test_tags=conflict,resolve
 @test "Allows to resolve conflicting with priority" {
   run "$PKGDB_BIN" buildenv \
-    "$LOCKFILES/conflict-resolved/manifest.lock" \
-    --out-link "$BATS_TEST_TMPDIR/env"
+    "$LOCKFILES/conflict-resolved/manifest.lock"
   assert_success
 }
 
@@ -136,12 +134,12 @@ setup_file() {
 # should be escaped and printed as  \'baz  (literally)
 # bats test_tags=buildenv:vars
 @test "Environment escapes variables" {
-  run "$PKGDB_BIN" buildenv "$LOCKFILES/vars_escape/manifest.lock" \
-    --out-link "$BATS_TEST_TMPDIR/env"
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/vars_escape/manifest.lock"
   assert_success
+  store_path=$(echo "$output" | jq -er '.store_path')
 
-  assert "$TEST" -f "$BATS_TEST_TMPDIR/env/activate.d/envrc"
-  run "$CAT" "$BATS_TEST_TMPDIR/env/activate.d/envrc"
+  assert "$TEST" -f "${store_path}/activate.d/envrc"
+  run "$CAT" "${store_path}/activate.d/envrc"
   assert_line "export singlequotes=''\''bar'\'''"
   assert_line "export singlequoteescaped='\'\''baz'"
 }
@@ -152,12 +150,13 @@ setup_file() {
 # bats test_tags=buildenv:container
 @test "Environment builds container" {
   run "$PKGDB_BIN" buildenv "$LOCKFILES/single-package/manifest.lock" \
-    --container \
-    --out-link "$BATS_TEST_TMPDIR/container-builder"
+    --container
   assert_success
+  store_path=$(echo "$output" | jq -er '.store_path')
 
   # Run the container builder script.
-  run bash -c '"$BATS_TEST_TMPDIR/container-builder" > "$BATS_TEST_TMPDIR/container"'
+  export store_path
+  run bash -c '"$store_path" > "$BATS_TEST_TMPDIR/container"'
   assert_success
 
   # Check that the container is a tar archive.
