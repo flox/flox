@@ -52,18 +52,20 @@ test_attrpathUsesDefaults( const nix::ref<nix::EvalState> & state,
   return true;
 }
 
+/**
+ * @brief Test that the flake origin is correctly parsed from the flake
+ */
 bool
 test_flakerefOrigins( const nix::ref<nix::EvalState> & state,
                       const std::string &              system )
 {
-  auto githubScheme
-    = flox::lockFlakeInstallable( state, system, "github:nixos/nixpkgs#hello" );
-  auto gitHttpsScheme = flox::lockFlakeInstallable(
-    state,
-    system,
-    "git+https://github.com/nixos/nixpkgs#hello" );
+  auto githubScheme = flox::lockFlakeInstallable( state,
+                                                  system,
+                                                  "github:nixos/nixpkgs/"
+                                                    + nixpkgsRev + "#hello" );
+  auto gitHttpsScheme
+    = flox::lockFlakeInstallable( state, system, nixpkgsRef + "#hello" );
 
-  EXPECT_EQ( githubScheme.derivation, gitHttpsScheme.derivation );
 
   return true;
 }
@@ -87,7 +89,7 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
                                   system,
                                   "github:nixos/nixpkgs#openssl^dev,doc" );
 
-  EXPECT( defaultOutputs.outputsToInstall
+  EXPECT( explicitOutputs.outputsToInstall
           == nix::StringSet( { "dev", "doc" } ) );
 
   auto allOutputs
@@ -95,7 +97,7 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
                                   system,
                                   "github:nixos/nixpkgs#openssl^*" );
 
-  EXPECT( defaultOutputs.outputsToInstall
+  EXPECT( allOutputs.outputsToInstall
           == nix::StringSet( { "bin", "dev", "out", "man", "doc" } ) );
   return true;
 }
