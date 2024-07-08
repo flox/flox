@@ -197,6 +197,9 @@
       flox-cli-tests =
         callPackage ./pkgs/flox-cli-tests {
         };
+
+      # (Linux-only) LD_AUDIT library for using dynamic libraries in Flox envs.
+      ld-floxlib = callPackage ./pkgs/ld-floxlib {};
     };
 
     # Composes dependency overlays and the overlay defined here.
@@ -236,6 +239,7 @@
         flox-cli-tests
         flox-manpages
         flox
+        ld-floxlib
         pre-commit-check
         ;
       default = pkgs.flox;
