@@ -1,5 +1,5 @@
 use std::cmp::min;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::future::ready;
@@ -731,6 +731,19 @@ pub struct MsgConstraintsTooTight {
     pub msg: String,
 }
 
+/// The content of a generic message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsgUnknown {
+    /// The original message type string
+    pub msg_type: String,
+    /// The log level of the message
+    pub level: Option<MessageLevel>,
+    /// The actual message
+    pub msg: String,
+    /// The delivered `context`
+    pub context: HashMap<String, String>,
+}
+
 /// The kinds of resolution messages we can receive
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResolutionMessage {
@@ -743,6 +756,8 @@ pub enum ResolutionMessage {
     /// which could mean that all the version constraints can't be satisfied by
     /// a single page.
     ConstraintsTooTight(MsgConstraintsTooTight),
+    /// An unknown (likely new) message.
+    Unknown(MsgUnknown),
 }
 
 impl ResolutionMessage {
@@ -751,6 +766,7 @@ impl ResolutionMessage {
             ResolutionMessage::General(msg) => msg.msg.clone(),
             ResolutionMessage::AttrPathNotFound(msg) => msg.msg.clone(),
             ResolutionMessage::ConstraintsTooTight(msg) => msg.msg.clone(),
+            ResolutionMessage::Unknown(msg) => msg.msg.clone(),
         }
     }
 }
@@ -811,6 +827,12 @@ impl From<ResolutionMessageGeneral> for ResolutionMessage {
                     msg: r_msg.message,
                 })
             },
+            MessageType::Unknown(message_type) => ResolutionMessage::Unknown(MsgUnknown {
+                msg_type: message_type,
+                level: Some(r_msg.level),
+                msg: r_msg.message,
+                context: r_msg.context,
+            }),
         }
     }
 }

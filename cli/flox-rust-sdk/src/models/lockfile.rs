@@ -249,6 +249,11 @@ pub enum ResolutionFailure {
         fallback_msg: String,
         group: String,
     },
+    UnknownServiceMessage {
+        level: String,
+        msg: String,
+        context: HashMap<String, String>,
+    },
     FallbackMessage {
         msg: String,
     },
@@ -320,6 +325,17 @@ fn format_single_resolution_failure(failure: &ResolutionFailure, is_one_of_many:
             Use 'flox edit' to adjust version constraints in the [install] section,
             or isolate dependencies in a new group with '<pkg>.pkg-group = \"newgroup\"'", base_msg};
             indent_by(extra_indent, msg)
+        },
+        ResolutionFailure::UnknownServiceMessage {
+            level: _,
+            msg,
+            context: _,
+        } => {
+            if is_one_of_many {
+                indent_by(2, msg.to_string())
+            } else {
+                msg.to_string()
+            }
         },
         ResolutionFailure::FallbackMessage { msg } => {
             if is_one_of_many {
@@ -760,6 +776,27 @@ impl LockedManifestCatalog {
                         let failure = ResolutionFailure::ConstraintsTooTight {
                             fallback_msg: inner.msg.clone(),
                             group: group.name.clone(),
+                        };
+                        failures.push(failure);
+                    },
+                    catalog::ResolutionMessage::Unknown(inner) => {
+                        tracing::debug!(kind = "unknown", "handling resolution message");
+                        // If we have a level and it's not an error, skip this message
+                        if let Some(level) = inner.level {
+                            if level != MessageLevel::Error {
+                                tracing::debug!(
+                                    level = level.to_string(),
+                                    msg = inner.msg,
+                                    "non-error resolution message"
+                                );
+                                continue;
+                            }
+                        }
+                        // If we don't have a level, I guess we have to treat it like an error
+                        let failure = ResolutionFailure::UnknownServiceMessage {
+                            msg: inner.msg.clone(),
+                            level: inner.level.unwrap_or(MessageLevel::Trace).to_string(),
+                            context: inner.context.clone(),
                         };
                         failures.push(failure);
                     },
