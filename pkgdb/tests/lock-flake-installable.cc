@@ -49,6 +49,9 @@ test_attrpathUsesDefaults( const nix::ref<nix::EvalState> & state,
   EXPECT_EQ( nlohmann::json( lockedExplicit ),
              nlohmann::json( lockedImplicit ) );
 
+  EXPECT_EQ( lockedImplicit.lockedAttrPath,
+             "legacyPackages." + system + ".hello" );
+
   return true;
 }
 
@@ -66,6 +69,23 @@ test_flakerefOrigins( const nix::ref<nix::EvalState> & state,
   auto gitHttpsScheme
     = flox::lockFlakeInstallable( state, system, nixpkgsRef + "#hello" );
 
+
+  return true;
+}
+
+/**
+ * @brief Test that the flake origin is correctly parsed from the flake
+ */
+bool
+test_locksUrl( const nix::ref<nix::EvalState> & state,
+               const std::string &              system )
+{
+  auto unlockedUrl = "github:nixos/nixpkgs#hello";
+  auto lockedInstallable
+    = flox::lockFlakeInstallable( state, system, unlockedUrl );
+
+
+  EXPECT( nix::parseFlakeRef( lockedInstallable.lockedUrl ).input.isLocked() );
 
   return true;
 }
