@@ -113,7 +113,7 @@ pub struct UninstallationAttempt {
 #[derive(Clone, Debug)]
 pub struct MigrationInfo {
     /// The manifest is v0 and needs to be migrated to v1
-    needs_manifest_migration: bool,
+    pub needs_manifest_migration: bool,
     /// The current lockfile is v0,
     /// or the manifest is v0 and the lockfile is v1.
     /// In either case, a migration requires changing the locked packages the
@@ -291,6 +291,8 @@ pub trait Environment: Send {
         flox: &Flox,
         migration_info: MigrationInfo,
     ) -> Result<(), EnvironmentError>;
+
+    fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError>;
 }
 
 /// A pointer to an environment, either managed or path.

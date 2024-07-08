@@ -25,7 +25,6 @@ use super::{
     CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
     ENV_DIR_NAME,
-    FLOX_SERVICES_SOCKET_VAR,
     N_HASH_CHARS,
     SERVICES_SOCKET_NAME,
 };
@@ -206,7 +205,7 @@ impl GenerationLock {
 
 impl Environment for ManagedEnvironment {
     fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError> {
-        let mut local_checkout = self.local_env_from_current_generation(flox)?;
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
         local_checkout.lock(flox)?;
         let store_path = local_checkout.build(flox)?;
@@ -255,7 +254,7 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let mut local_checkout = self.local_env_from_current_generation(flox)?;
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
         if !Self::validate_checkout(&local_checkout, &remote)? {
             Err(EnvironmentError::ManagedEnvironment(
@@ -289,7 +288,7 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let mut local_checkout = self.local_env_from_current_generation(flox)?;
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
         if !Self::validate_checkout(&local_checkout, &remote)? {
             Err(EnvironmentError::ManagedEnvironment(
@@ -316,7 +315,7 @@ impl Environment for ManagedEnvironment {
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
-        let mut local_checkout = self.local_env_from_current_generation(flox)?;
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
         let result = local_checkout.edit(flox, contents)?;
 
@@ -347,7 +346,7 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let mut temporary = self.local_env_from_current_generation(flox)?;
+        let mut temporary = self.local_env_or_copy_current_generation(flox)?;
 
         if !Self::validate_checkout(&temporary, &remote)? {
             Err(EnvironmentError::ManagedEnvironment(
@@ -384,7 +383,7 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let mut local_checkout = self.local_env_from_current_generation(flox)?;
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
         if !Self::validate_checkout(&local_checkout, &remote)? {
             Err(EnvironmentError::ManagedEnvironment(
@@ -411,7 +410,7 @@ impl Environment for ManagedEnvironment {
 
     /// Extract the current content of the manifest
     fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError> {
-        let local_checkout = self.local_env_from_current_generation(flox)?;
+        let local_checkout = self.local_env_or_copy_current_generation(flox)?;
         let manifest = local_checkout.manifest_content()?;
         Ok(manifest)
     }
@@ -424,7 +423,7 @@ impl Environment for ManagedEnvironment {
 
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         let local_manifest_path = self
-            .local_env_from_current_generation(flox)?
+            .local_env_or_copy_current_generation(flox)?
             .manifest_path();
 
         let local_manifest = mtime_of(local_manifest_path);
@@ -468,7 +467,7 @@ impl Environment for ManagedEnvironment {
     /// Path will not share a common prefix with the path returned by [`ManagedEnvironment::lockfile_path`]
     fn manifest_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         let path = self
-            .local_env_from_current_generation(flox)?
+            .local_env_or_copy_current_generation(flox)?
             .manifest_path();
         Ok(path)
     }
@@ -478,7 +477,7 @@ impl Environment for ManagedEnvironment {
     /// Path will not share a common prefix with the path returned by [`ManagedEnvironment::manifest_path`]
     fn lockfile_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         let path = self
-            .local_env_from_current_generation(flox)?
+            .local_env_or_copy_current_generation(flox)?
             .lockfile_path();
         Ok(path)
     }
@@ -523,7 +522,7 @@ impl Environment for ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let mut temporary = self.local_env_from_current_generation(flox)?;
+        let mut temporary = self.local_env_or_copy_current_generation(flox)?;
 
         if !Self::validate_checkout(&temporary, &remote)? && migration_info.needs_manifest_migration
         {
@@ -551,6 +550,12 @@ impl Environment for ManagedEnvironment {
         temporary.link(flox, &self.out_link, &Some(store_path))?;
 
         Ok(())
+    }
+
+    /// Return the path where the process compose socket for an environment
+    /// should be created
+    fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError> {
+        Ok(self.cache_path()?.join(SERVICES_SOCKET_NAME))
     }
 }
 
@@ -868,7 +873,7 @@ impl ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let mut temporary = self.local_env_from_current_generation(flox)?;
+        let mut temporary = self.local_env_or_copy_current_generation(flox)?;
 
         if !Self::validate_checkout(&temporary, &remote)? {
             Err(EnvironmentError::ManagedEnvironment(
@@ -913,7 +918,7 @@ impl ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let mut temporary = self.local_env_from_current_generation(flox)?;
+        let mut temporary = self.local_env_or_copy_current_generation(flox)?;
 
         if !Self::validate_checkout(&temporary, &remote)? {
             Err(EnvironmentError::ManagedEnvironment(
@@ -949,7 +954,7 @@ impl ManagedEnvironment {
         &mut self,
         flox: &Flox,
     ) -> Result<SyncToGenerationResult, ManagedEnvironmentError> {
-        let mut local_checkout = self.local_env_from_current_generation(flox)?;
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
         if Self::validate_checkout(&local_checkout, &self.get_current_generation(flox)?)? {
             debug!("local checkout and remote checkout equal, nothing to apply");
@@ -1034,7 +1039,7 @@ impl ManagedEnvironment {
     ///
     /// Copies the `env/` directory from the current generation to the `.flox/` directory
     /// and returns a [CoreEnvironment] for the `.flox/env`.
-    fn local_env_from_current_generation(
+    fn local_env_or_copy_current_generation(
         &self,
         flox: &Flox,
     ) -> Result<CoreEnvironment, ManagedEnvironmentError> {
@@ -1096,7 +1101,7 @@ impl ManagedEnvironment {
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-        let local_checkout = self.local_env_from_current_generation(flox)?;
+        let local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
         Ok(!Self::validate_checkout(&local_checkout, &remote)?)
     }
@@ -1143,18 +1148,6 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?
             .get_current_generation()
             .map_err(ManagedEnvironmentError::CreateGenerationFiles)
-    }
-
-    /// Return the path where the process compose socket for an environment
-    /// should be created
-    ///
-    /// If `_FLOX_SERVICES_SOCKET` is set, its value should be returned.
-    #[allow(unused)]
-    fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError> {
-        if let Ok(process_compose_socket) = std::env::var(FLOX_SERVICES_SOCKET_VAR) {
-            return Ok(PathBuf::from(process_compose_socket));
-        }
-        Ok(self.cache_path()?.join(SERVICES_SOCKET_NAME))
     }
 }
 
@@ -1409,7 +1402,7 @@ impl ManagedEnvironment {
         {
             let remote = self.get_current_generation(flox)?;
 
-            let mut local_checkout = self.local_env_from_current_generation(flox)?;
+            let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
             if !Self::validate_checkout(&local_checkout, &remote)? {
                 Err(ManagedEnvironmentError::CheckoutOutOfSync)?
@@ -1488,7 +1481,7 @@ impl ManagedEnvironment {
                 .get_current_generation()
                 .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
 
-            let local_checkout = self.local_env_from_current_generation(flox)?;
+            let local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
             // With `force` we pull even if the local checkout is out of sync.
             if !force && !Self::validate_checkout(&local_checkout, &remote)? {
@@ -2196,7 +2189,7 @@ mod test {
         let managed_env = test_helpers::mock_managed_environment(&flox, &original_manifest, owner);
 
         let _ = managed_env
-            .local_env_from_current_generation(&flox)
+            .local_env_or_copy_current_generation(&flox)
             .unwrap();
 
         fs::write(
@@ -2245,7 +2238,7 @@ mod test {
         //       making this call redundant.
         //       revisit this when working on #1650
         let _ = managed_env
-            .local_env_from_current_generation(&flox)
+            .local_env_or_copy_current_generation(&flox)
             .unwrap();
 
         // check that local_checkout created files
@@ -2260,7 +2253,7 @@ mod test {
         fs::remove_dir_all(managed_env.path.join(ENV_DIR_NAME)).unwrap();
 
         let _ = managed_env
-            .local_env_from_current_generation(&flox)
+            .local_env_or_copy_current_generation(&flox)
             .unwrap();
 
         // check that local_checkout created files
@@ -2288,7 +2281,7 @@ mod test {
         //       making this call redundant.
         //       revisit this when working on #1650
         let _ = managed_env
-            .local_env_from_current_generation(&flox)
+            .local_env_or_copy_current_generation(&flox)
             .unwrap();
 
         // check that modifications in an existing `.flox/env` are _not_ discarded
@@ -2300,7 +2293,7 @@ mod test {
         .unwrap();
 
         let local_manifest = managed_env
-            .local_env_from_current_generation(&flox)
+            .local_env_or_copy_current_generation(&flox)
             .unwrap()
             .manifest_content()
             .unwrap();
@@ -2325,7 +2318,7 @@ mod test {
         //       making this call redundant.
         //       revisit this when working on #1650
         let local_checkout = managed_env
-            .local_env_from_current_generation(&flox)
+            .local_env_or_copy_current_generation(&flox)
             .unwrap();
         let generation_manifest = managed_env
             .get_current_generation(&flox)
@@ -2379,7 +2372,7 @@ mod test {
         );
 
         let _ = managed_env
-            .local_env_from_current_generation(&flox)
+            .local_env_or_copy_current_generation(&flox)
             .unwrap();
 
         let client = MockClient::new(Some(

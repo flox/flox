@@ -244,11 +244,28 @@ teardown() {
 }
 
 @test "'flox install' warns about broken packages" {
-  skip "waiting for broken packages to be added to catalog"
   "$FLOX_BIN" init
-  run "$FLOX_BIN" install TODO
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/tabula.json" \
+    run "$FLOX_BIN" install tabula
+  assert_failure
+  assert_line --partial "The package 'tabula' is marked as broken"
+}
+
+@test "'flox install' can build a broken package when allowed" {
+  "$FLOX_BIN" init
+  MANIFEST_CONTENT="$(cat << "EOF"
+    version = 1
+    [options]
+    allow.broken = true
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/tabula_allowed.json" \
+    run "$FLOX_BIN" install tabula
   assert_success
-  assert_line --partial "The package 'TODO' is marked as broken, it may not behave as expected during runtime"
+  assert_line --partial "The package 'tabula' is marked as broken, it may not behave as expected during runtime"
+  assert_line --partial "✅ 'tabula' installed to environment"
 }
 
 @test "resolution message: single package not found, without curation" {

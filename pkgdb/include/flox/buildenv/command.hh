@@ -38,6 +38,7 @@ private:
   std::optional<std::string> outLink;
   std::optional<System>      system;
   std::optional<std::string> storePath;
+  std::optional<std::string> serviceConfigPath;
   bool                       buildContainer;
 
 

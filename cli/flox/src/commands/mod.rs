@@ -29,6 +29,7 @@ use flox_rust_sdk::flox::{
     EnvironmentName,
     EnvironmentOwner,
     EnvironmentRef,
+    Features,
     Flox,
     Floxhub,
     FloxhubToken,
@@ -320,6 +321,13 @@ impl FloxArgs {
         };
 
         let catalog_client = init_catalog_client(&config)?;
+        let features = config
+            .features
+            .as_ref()
+            .map(|f| Features {
+                services: f.services,
+            })
+            .unwrap_or_default();
 
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
@@ -333,6 +341,7 @@ impl FloxArgs {
             floxhub_token,
             floxhub,
             catalog_client,
+            features,
         };
 
         // in debug mode keep the tempdir to reproduce nix commands
@@ -1627,29 +1636,36 @@ async fn maybe_migrate_environment_to_v1(
 /// If confirm_upgrade_future is None, the user can't be prompted to confirm an upgrade.
 async fn maybe_migrate_environment_to_v1_inner(
     flox: &Flox,
-    environment: &mut ConcreteEnvironment,
+    concrete_environment: &mut ConcreteEnvironment,
     confirm_upgrade_future: Option<impl Future<Output = Result<bool>>>,
 ) -> Result<(), MigrationError> {
-    if let ConcreteEnvironment::Managed(ref environment) = environment {
-        if environment
-            .has_local_changes(flox)
-            .map_err(EnvironmentError::ManagedEnvironment)?
-        {
-            Err(EnvironmentError::ManagedEnvironment(
-                ManagedEnvironmentError::CheckoutOutOfSync,
-            ))?;
-        }
-    }
-
-    let description = environment_description(environment)?;
-    let environment = environment.dyn_environment_ref_mut();
+    let description = environment_description(concrete_environment)?;
 
     if flox.catalog_client.is_none() {
         return Ok(());
     }
     // The user answered the prompt to upgrade the environment
     let mut confirmed_upgrade = false;
-    if let Some(migration_info) = environment.needs_migration_to_v1(flox)? {
+    if let Some(migration_info) = concrete_environment
+        .dyn_environment_ref_mut()
+        .needs_migration_to_v1(flox)?
+    {
+        // If the migration requires changes to a manifest, check if the environment is in sync
+        // before asking whether to migrate
+        // (which would subsequently fail due to changes in the manifest).
+        if migration_info.needs_manifest_migration {
+            if let ConcreteEnvironment::Managed(ref environment) = concrete_environment {
+                if environment
+                    .has_local_changes(flox)
+                    .map_err(EnvironmentError::ManagedEnvironment)?
+                {
+                    Err(EnvironmentError::ManagedEnvironment(
+                        ManagedEnvironmentError::CheckoutOutOfSync,
+                    ))?;
+                }
+            }
+        }
+
         if migration_info.needs_upgrade {
             // We could be a bit more sophisticated and check if there are packages installed.
             // But we'll be re-writing the lock, so call it an upgrade.
@@ -1673,7 +1689,11 @@ async fn maybe_migrate_environment_to_v1_inner(
         let result = Dialog {
             message: "Migrating to version 1.",
             help_message: None,
-            typed: Spinner::new(|| environment.migrate_to_v1(flox, migration_info)),
+            typed: Spinner::new(|| {
+                concrete_environment
+                    .dyn_environment_ref_mut()
+                    .migrate_to_v1(flox, migration_info)
+            }),
         }
         .spin();
 
@@ -2238,7 +2258,7 @@ mod tests {
     async fn maybe_migrate_managed_environment_blocked() {
         let owner = "owner".parse().unwrap();
         let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), false);
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
 
         let mut environment = ConcreteEnvironment::Managed(mock_managed_environment(
             &flox,
@@ -2277,5 +2297,47 @@ mod tests {
                 ManagedEnvironmentError::CheckoutOutOfSync
             ))
         ));
+    }
+
+    /// [maybe_migrate_environment_to_v1] succeeds
+    /// even if a managed environment has local changes when no migration is needed
+    #[tokio::test]
+    async fn maybe_migrate_managed_environment_blocked_only_if_migration_needed() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), false);
+
+        let mut environment = ConcreteEnvironment::Managed(mock_managed_environment(
+            &flox,
+            &formatdoc! {"
+                # before
+                version = 1
+            "},
+            owner,
+        ));
+
+        // modify the lockfile
+        {
+            let manifest_path = environment
+                .dyn_environment_ref_mut()
+                .manifest_path(&flox)
+                .unwrap();
+
+            fs::write(manifest_path, formatdoc! {"
+                # after
+                version = 1
+            "})
+            .unwrap();
+        }
+
+        maybe_migrate_environment_to_v1_inner(
+            &flox,
+            &mut environment,
+            Some(async { unreachable!() }),
+        )
+        .await
+        .expect(
+            "maybe_migrate_environment_to_v1_inner _should not_ fail, since no migration is needed",
+        );
     }
 }

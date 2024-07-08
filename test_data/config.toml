@@ -160,6 +160,22 @@ cmd = "flox install python311Packages.pip"
 pre_cmd = "flox init"
 cmd = "flox install rubyPackages_3_2.rails"
 
+[resolve.tabula]
+pre_cmd = "flox init"
+cmd = "flox install tabula"
+ignore_cmd_errors = true # tabula is broken
+
+# resolve.tabula_allowed is likely redundant and at least for the time being
+# generates the same JSON as resolve.tabula.
+# But broken is included in the resolution request,
+# so include it here in case the server changes behavior.
+[resolve.tabula_allowed]
+pre_cmd = '''
+    flox init
+    tomlq --in-place --toml-output '.options.allow.broken = true' .flox/env/manifest.toml
+'''
+cmd = "flox install tabula"
+
 [resolve.webmention_ripgrep_rails]
 pre_cmd = "flox init"
 cmd = "flox install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails"
