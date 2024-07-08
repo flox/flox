@@ -97,6 +97,7 @@ parseInstallable( const std::string & installableStr )
  */
 static nix::InstallableFlake
 locateInstallable( const nix::ref<nix::EvalState> & state,
+                   const std::string &              system,
                    nix::FlakeRef                    flakeRef,
                    const std::string                fragment,
                    const nix::ExtendedOutputsSpec   extendedOutputsSpec )
@@ -111,12 +112,12 @@ locateInstallable( const nix::ref<nix::EvalState> & state,
         std::move( fragment ),
         std::move( extendedOutputsSpec ),
         nix::Strings {
-          "packages." + nix::settings.thisSystem.get() + ".default",
-          "legacyPackages." + nix::settings.thisSystem.get() + ".default",
+          "packages." + system + ".default",
+          "legacyPackages." + system + ".default",
         },
         nix::Strings {
-          "packages." + nix::settings.thisSystem.get() + ".",
-          "legacyPackages." + nix::settings.thisSystem.get() + ".",
+          "packages." + system + ".",
+          "legacyPackages." + system + ".",
         },
         nix::flake::LockFlags {
           .recreateLockFile = false,
@@ -155,8 +156,11 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
                       extendedOutputsSpec.to_string() ) );
 
 
-  auto installable
-    = locateInstallable( state, flakeRef, fragment, extendedOutputsSpec );
+  auto installable = locateInstallable( state,
+                                        system,
+                                        flakeRef,
+                                        fragment,
+                                        extendedOutputsSpec );
 
   debugLog(
     nix::fmt( "locked installable: '%s'", installable.what().c_str() ) );

@@ -148,7 +148,7 @@ main( int argc, char * argv[] )
   RUN_TEST( attrpathUsesDefaults, state, system );
   RUN_TEST( flakerefOrigins, state, system );
   RUN_TEST( locksUrl, state, system );
-  RUN_TEST( explicitOutputs, state, "x86_64-linux" );
+  RUN_TEST( explicitOutputs, state, system );
 
 
   return exitCode;
