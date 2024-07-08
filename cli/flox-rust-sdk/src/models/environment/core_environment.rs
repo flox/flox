@@ -249,12 +249,6 @@ impl<State> CoreEnvironment<State> {
         let lockfile = LockedManifest::read_from_file(&lockfile_path)
             .map_err(CoreEnvironmentError::LockedManifest)?;
 
-        debug!(
-            "building environment: system={}, lockfilePath={}",
-            &flox.system,
-            lockfile_path.display()
-        );
-
         let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
         pkgdb_cmd.arg("buildenv").arg(lockfile_path);
 
@@ -264,14 +258,12 @@ impl<State> CoreEnvironment<State> {
             None
         };
         if let Some(service_config_path) = &service_config_path {
-            tracing::debug!("building environment with service config");
             pkgdb_cmd.args([
                 "--service-config",
                 &service_config_path.path.to_string_lossy(),
             ]);
         }
 
-        debug!("building environment with command: {}", pkgdb_cmd.display());
         let result: BuildEnvResult =
             serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?)
                 .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
@@ -306,7 +298,7 @@ impl<State> CoreEnvironment<State> {
     /// and because it doesn't modify the manifest.
     pub fn build_container(
         &mut self,
-        flox: &Flox,
+        _flox: &Flox,
     ) -> Result<ContainerBuilder, CoreEnvironmentError> {
         if std::env::consts::OS != "linux" {
             return Err(CoreEnvironmentError::ContainerizeUnsupportedSystem(
@@ -323,14 +315,6 @@ impl<State> CoreEnvironment<State> {
             .arg("--container")
             .arg(lockfile_path);
 
-        debug!(
-            "building container: system={}, lockfilePath={}",
-            &flox.system,
-            self.lockfile_path().display()
-        );
-
-        debug!("building container with command: {}", pkgdb_cmd.display());
-
         let result: BuildEnvResult =
             serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?)
                 .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
@@ -344,23 +328,15 @@ impl<State> CoreEnvironment<State> {
     /// store-path obtained from [Self::build].
     pub fn link(
         &mut self,
-        flox: &Flox,
+        _flox: &Flox,
         out_link_path: impl AsRef<Path>,
         store_path: impl AsRef<Path>,
     ) -> Result<(), CoreEnvironmentError> {
-        debug!(
-            "linking environment: system={}, lockfilePath={}, outLinkPath={}",
-            &flox.system,
-            lockfile_path.display(),
-            out_link_path.as_ref().display()
-        );
-
         let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
         pkgdb_cmd
             .arg("linkenv")
             .args(["--out-link", &out_link_path.as_ref().to_string_lossy()])
             .args(["--store-path", &store_path.as_ref().to_string_lossy()]);
-        debug!("linking environment with command: {}", pkgdb_cmd.display());
 
         serde_json::from_value::<BuildEnvResult>(
             call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?,

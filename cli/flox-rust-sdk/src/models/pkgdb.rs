@@ -11,6 +11,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use super::lockfile::{FlakeRef, LockedManifestPkgdb};
+use crate::utils::CommandExt;
 
 // This is the `PKGDB` path that we actually use.
 // This is set once and prefers the `PKGDB` env variable, but will use
@@ -103,6 +104,7 @@ pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
     // pkgdb with an explicit PATH of our making.
     //
     // It really shouldn't be necessary to append $PATH, so we won't.
+    debug!("calling pkgdb: {}", pkgdb_cmd.display());
     let pkgdb_path = Path::new(&*GIT_PKG_BIN);
     let mut proc = pkgdb_cmd
         .env("PATH", pkgdb_path)
