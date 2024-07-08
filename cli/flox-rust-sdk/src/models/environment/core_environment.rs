@@ -265,7 +265,7 @@ impl<State> CoreEnvironment<State> {
                 Path::new(&*PKGDB_BIN),
                 None,
                 &None,
-                service_config_path.as_ref().map(|c| c.path.as_ref()),
+                service_config_path.as_ref().map(|c| c.as_ref()),
             )
             .map_err(CoreEnvironmentError::LockedManifest)?;
 
@@ -367,7 +367,7 @@ impl<State> CoreEnvironment<State> {
                 Path::new(&*PKGDB_BIN),
                 Some(out_link_path.as_ref()),
                 store_path,
-                service_config_path.as_ref().map(|c| c.path.as_ref()),
+                service_config_path.as_ref().map(|c| c.as_ref()),
             )
             .map_err(CoreEnvironmentError::LockedManifest)?;
         Ok(())
