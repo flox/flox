@@ -71,7 +71,28 @@ struct LockedInstallable
   std::optional<std::string>         license;
   std::optional<bool>                broken;
   std::optional<bool>                unfree;
+
+  [[nodiscard]] bool
+  operator==( const LockedInstallable & other ) const
+  {
+    return lockedUrl == other.lockedUrl
+           && flakeDescription == other.flakeDescription
+           && lockedAttrPath == other.lockedAttrPath
+           && derivation == other.derivation && outputs == other.outputs
+           && outputsToInstall == other.outputsToInstall
+           && system == other.system && name == other.name
+           && pname == other.pname && version == other.version
+           && description == other.description && license == other.license
+           && broken == other.broken && unfree == other.unfree;
+  }
+
+  [[nodiscard]] bool
+  operator!=( const LockedInstallable & other ) const
+  {
+    return ! ( ( *this ) == other );
+  }
 };
+
 
 void
 to_json( nlohmann::json & jto, const LockedInstallable & from );

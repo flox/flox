@@ -49,8 +49,9 @@ LockCommand::run()
 {
   auto state = this->getState();
 
-  auto lockedInstallable
-    = lockFlakeInstallable( this->getState(), this->installable, this->system );
+  auto lockedInstallable = lockFlakeInstallable( this->getState(),
+                                                 this->system,
+                                                 this->installable );
 
   printf( "%s\n", nlohmann::json( lockedInstallable ).dump( 2 ).c_str() );
 
@@ -59,8 +60,8 @@ LockCommand::run()
 
 LockedInstallable
 lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
-                      const std::string &              installableStr,
-                      const std::string &              system )
+                      const std::string &              system,
+                      const std::string &              installableStr )
 {
   debugLog( nix::fmt( "original installable: %s", installableStr ) );
 
