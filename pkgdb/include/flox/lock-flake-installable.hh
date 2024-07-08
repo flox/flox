@@ -24,9 +24,7 @@ namespace flox {
 /* -------------------------------------------------------------------------- */
 
 /** @brief Lock a falke installble for flox */
-class LockCommand
-  : public flox::command::FlakeInstallableMixin
-  , flox::NixState
+class LockCommand : flox::NixState
 {
 
 private:
@@ -77,6 +75,11 @@ struct LockedInstallable
 
 void
 to_json( nlohmann::json & jto, const LockedInstallable & from );
+
+LockedInstallable
+lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
+                      const std::string &              installableStr,
+                      const std::string &              system );
 
 }  // namespace flox
 

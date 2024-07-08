@@ -49,11 +49,24 @@ LockCommand::run()
 {
   auto state = this->getState();
 
-  debugLog( nix::fmt( "original installable: %s", this->installable ) );
+  auto lockedInstallable
+    = lockFlakeInstallable( this->getState(), this->installable, this->system );
+
+  printf( "%s\n", nlohmann::json( lockedInstallable ).dump( 2 ).c_str() );
+
+  return EXIT_SUCCESS;
+};
+
+LockedInstallable
+lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
+                      const std::string &              installableStr,
+                      const std::string &              system )
+{
+  debugLog( nix::fmt( "original installable: %s", installableStr ) );
 
 
   std::tuple<nix::FlakeRef, std::string_view, nix::ExtendedOutputsSpec> parsed
-    = nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec( this->installable );
+    = nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec( installableStr );
 
   nix::FlakeRef            flakeRef            = std::get<0>( parsed );
   std::string_view         fragment            = std::get<1>( parsed );
@@ -81,14 +94,15 @@ LockCommand::run()
     fragment,
     extendedOutputsSpec,
     nix::Strings {
-      "packages." + this->system + ".default",
-      "legacyPackages." + this->system + ".default",
+      "packages." + system + ".default",
+      "legacyPackages." + system + ".default",
     },
     nix::Strings {
-      "packages." + this->system + ".",
-      "legacyPackages." + this->system + ".",
+      "packages." + system + ".",
+      "legacyPackages." + system + ".",
     },
     lockFlags );
+
   debugLog(
     nix::fmt( "locked installable: '%s'", installable->what().c_str() ) );
 
@@ -121,7 +135,12 @@ LockCommand::run()
   {
     auto derivationCursor
       = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "drvPath" ) );
-    if ( ! derivationCursor ) { return EXIT_FAILURE; }
+    if ( ! derivationCursor )
+      {
+        throw nix::Error( "could not find '%s.%s' in derivation",
+                          lockedAttrPath,
+                          "drvPath" );
+      }
     derivation = ( *derivationCursor )->getStringWithContext().first;
   }
 
@@ -131,14 +150,24 @@ LockCommand::run()
   {
     auto maybe_outputs_cursor
       = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "outputs" ) );
-    if ( ! maybe_outputs_cursor ) { return EXIT_FAILURE; }
+    if ( ! maybe_outputs_cursor )
+      {
+        throw nix::Error( "could not find '%s.%s' in derivation",
+                          lockedAttrPath,
+                          "outputs" );
+      }
     outputNames = ( *maybe_outputs_cursor )->getListOfStrings();
 
     for ( auto output : outputNames )
       {
         auto outputCursor = cursor->findAlongAttrPath(
           nix::parseAttrPath( *state, output + ".outPath" ) );
-        if ( ! outputCursor ) { return EXIT_FAILURE; }
+        if ( ! outputCursor )
+          {
+            throw nix::Error( "could not find '%s.%s' in derivation",
+                              lockedAttrPath,
+                              output + ".outPath" );
+          }
         auto outputValue = ( *outputCursor )->getStringWithContext();
         outputs[output]  = outputValue.first;
       }
@@ -194,20 +223,18 @@ LockCommand::run()
       outputSpec.raw() );
   }
 
-  // Store the current system
-  std::string system;
-  {
-    system = this->system;
-  }
-
-
   // Read `name` field - field is impliend by the derivation
   std::string name;
   {
     auto nameCursor
       = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "name" ) );
 
-    if ( ! nameCursor ) { return EXIT_FAILURE; }
+    if ( ! nameCursor )
+      {
+        throw nix::Error( "could not find '%s.%s' in derivation",
+                          lockedAttrPath,
+                          "name" );
+      }
     name = ( *nameCursor )->getString();
   }
 
@@ -280,11 +307,9 @@ LockCommand::run()
     .unfree           = unfree,
   };
 
+  return lockedInstallable;
+}
 
-  printf( "%s\n", nlohmann::json( lockedInstallable ).dump( 2 ).c_str() );
-
-  return EXIT_SUCCESS;
-};
 
 void
 to_json( nlohmann::json & jto, const LockedInstallable & from )
