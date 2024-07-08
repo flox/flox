@@ -133,7 +133,7 @@ main( int argc, char * argv[] )
   int exitCode = EXIT_SUCCESS;
 #define RUN_TEST( ... ) _RUN_TEST( exitCode, __VA_ARGS__ )
 
-  nix::verbosity = nix::lvlWarn;
+  nix::verbosity = nix::lvlDebug;
   if ( ( 1 < argc ) && ( std::string_view( argv[1] ) == "-v" ) )  // NOLINT
     {
       nix::verbosity = nix::lvlDebug;
@@ -147,7 +147,8 @@ main( int argc, char * argv[] )
 
   RUN_TEST( attrpathUsesDefaults, state, system );
   RUN_TEST( flakerefOrigins, state, system );
-  RUN_TEST( explicitOutputs, state, system );
+  RUN_TEST( locksUrl, state, system );
+  RUN_TEST( explicitOutputs, state, "x86_64-linux" );
 
 
   return exitCode;
