@@ -18,8 +18,6 @@ use toml_edit::{DocumentMut, Item, Key, Table, TableLike};
 use url::Url;
 use xdg::BaseDirectories;
 
-use self::features::Features;
-
 /// Name of flox managed directories (config, data, cache)
 const FLOX_DIR_NAME: &str = "flox";
 const FLOX_CONFIG_DIR_VAR: &str = "FLOX_CONFIG_DIR";
@@ -35,8 +33,9 @@ pub struct Config {
     #[serde(default)]
     pub nix: Option<NixConfig>,
 
+    // You should prefer to use `Flox` over `Config` where available.
     #[serde(default)]
-    pub features: Option<Features>,
+    pub features: Option<flox_rust_sdk::flox::Features>,
 }
 
 // TODO: move to flox_sdk?
@@ -108,8 +107,6 @@ pub enum EnvironmentPromptConfig {
 pub struct NixConfig {
     pub access_tokens: HashMap<String, String>,
 }
-
-pub mod features;
 
 /// Error returned by [`Config::get()`]
 #[derive(Debug, Error)]

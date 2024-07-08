@@ -96,6 +96,7 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
             Some(environment.manifest_path(flox)?.try_into()?),
             global_manifest_path(flox).try_into()?,
             lockfile,
+            flox.features.search_strategy.clone(),
         )?;
 
         let (results, _) = Dialog {
@@ -221,6 +222,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         manifest: Option<PathOrJson>,
         global_manifest: PathOrJson,
         lockfile: PathOrJson,
+        search_strategy: flox_rust_sdk::models::search::SearchStrategy,
     ) -> Result<SearchResults> {
         let search_params = construct_search_params(
             term,
@@ -228,6 +230,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
             manifest,
             global_manifest,
             lockfile,
+            search_strategy,
         )?;
 
         let (results, _) = Dialog {
@@ -273,6 +276,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         manifest: Option<PathOrJson>,
         global_manifest: PathOrJson,
         lockfile: PathOrJson,
+        search_strategy: flox_rust_sdk::models::search::SearchStrategy,
     ) -> Self {
         let curated = Self::suggest_curated_package(term);
 
@@ -285,7 +289,13 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
             let res = if let Some(ref client) = catalog_client {
                 Self::suggest_searched_packages_catalog(client, curated, system)
             } else {
-                Self::suggest_searched_packages_pkgdb(curated, manifest, global_manifest, lockfile)
+                Self::suggest_searched_packages_pkgdb(
+                    curated,
+                    manifest,
+                    global_manifest,
+                    lockfile,
+                    search_strategy,
+                )
             };
             match res {
                 Ok(results) => results,

@@ -36,7 +36,6 @@ use toml_edit::{DocumentMut, Formatted, Item, Table, Value};
 use tracing::instrument;
 
 use crate::commands::{environment_description, ConcreteEnvironment};
-use crate::config::features::Features;
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
@@ -659,7 +658,7 @@ async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<Provided
         );
         let query = Query::new(
             package.to_string().as_ref(),
-            Features::parse()?.search_strategy,
+            flox.features.search_strategy.clone(),
             NonZeroU8::new(1),
             false,
         )?;
