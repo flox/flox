@@ -264,7 +264,7 @@ impl<State> CoreEnvironment<State> {
             .build(
                 Path::new(&*PKGDB_BIN),
                 None,
-                &None,
+                None,
                 service_config_path.as_ref().map(|c| c.path.as_ref()),
             )
             .map_err(CoreEnvironmentError::LockedManifest)?;
@@ -323,24 +323,18 @@ impl<State> CoreEnvironment<State> {
         Ok(builder)
     }
 
-    /// Create a new out-link for the environment at the given path.
-    /// Optionally a store path to the built environment can be provided,
-    /// to avoid building the environment again.
-    /// Such a store path can be obtained e.g. from [Self::build].
-    ///
-    /// Builds the environment if necessary.
+    /// Create a new out-link for the environment at the given path with a
+    /// store-path obtained from [Self::build].
     ///
     /// Like [Self::build], this requires the environment to be locked.
     /// This method will _not_ create or update the lockfile.
     ///
-    /// Errors if the environment  is not locked or cannot be built.
-    ///
-    /// TODO: should we always build implicitly?
+    /// Errors if the environment is not locked.
     pub fn link(
         &mut self,
         flox: &Flox,
         out_link_path: impl AsRef<Path>,
-        store_path: &Option<PathBuf>,
+        store_path: impl AsRef<Path>,
     ) -> Result<(), CoreEnvironmentError> {
         let lockfile_path = CanonicalPath::new(self.lockfile_path())
             .map_err(CoreEnvironmentError::BadLockfilePath)?;
@@ -354,20 +348,14 @@ impl<State> CoreEnvironment<State> {
             out_link_path.as_ref().display()
         );
 
-        let service_config_path = if let LockedManifest::Catalog(ref lockfile) = lockfile {
-            maybe_make_service_config_file(flox, lockfile)?
-        } else {
-            None
-        };
-
         // Note: when `store_path` is `Some`, `--store-path` is passed to `pkgdb buildenv`
         // which skips the build and only attempts to link the environment.
         lockfile
             .build(
                 Path::new(&*PKGDB_BIN),
                 Some(out_link_path.as_ref()),
-                store_path,
-                service_config_path.as_ref().map(|c| c.path.as_ref()),
+                Some(store_path.as_ref()),
+                None,
             )
             .map_err(CoreEnvironmentError::LockedManifest)?;
         Ok(())
@@ -1743,9 +1731,13 @@ mod tests {
         let mut env_view = CoreEnvironment::new(&env_path);
 
         env_view.lock(&flox).expect("locking should succeed");
-        env_view.build(&flox).expect("build should succeed");
+        let store_path = env_view.build(&flox).expect("build should succeed");
         env_view
-            .link(&flox, env_path.path().with_extension("out-link"), &None)
+            .link(
+                &flox,
+                env_path.path().with_extension("out-link"),
+                &store_path,
+            )
             .expect("link should succeed");
 
         // very rudimentary check that the environment manifest built correctly

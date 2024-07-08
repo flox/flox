@@ -91,7 +91,7 @@ impl LockedManifest {
         &self,
         pkgdb: &Path,
         gcroot_out_link_path: Option<&Path>,
-        store_path: &Option<PathBuf>,
+        store_path: Option<&Path>,
         service_config_path: Option<&Path>,
     ) -> Result<PathBuf, LockedManifestError> {
         let mut pkgdb_cmd = Command::new(pkgdb);
