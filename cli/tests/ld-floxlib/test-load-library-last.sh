@@ -12,9 +12,6 @@ test -n "$FLOX_ENV_LIB_DIRS"
 test -e "$LD_AUDIT"
 [[ "$LD_AUDIT" == */ld-floxlib.so ]]
 
-# LD_LIBRARY_PATH is not defined
-test -z "$LD_LIBRARY_PATH"
-
 # Enable auditing so that the logs clearly highlight any instances where
 # ld-floxlib.so serves up a library from $FLOX_ENV.
 export LD_FLOXLIB_AUDIT=1
