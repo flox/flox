@@ -49,9 +49,8 @@ LockCommand::run()
 {
   auto state = this->getState();
 
-  auto lockedInstallable = lockFlakeInstallable( this->getState(),
-                                                 this->system,
-                                                 this->installable );
+  auto lockedInstallable
+    = lockFlakeInstallable( this->getState(), this->system, this->installable );
 
   printf( "%s\n", nlohmann::json( lockedInstallable ).dump( 2 ).c_str() );
 
@@ -66,11 +65,11 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   debugLog( nix::fmt( "original installable: %s", installableStr ) );
 
 
-  std::tuple<nix::FlakeRef, std::string_view, nix::ExtendedOutputsSpec> parsed
+  std::tuple<nix::FlakeRef, std::string, nix::ExtendedOutputsSpec> parsed
     = nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec( installableStr );
 
   nix::FlakeRef            flakeRef            = std::get<0>( parsed );
-  std::string_view         fragment            = std::get<1>( parsed );
+  std::string              fragment            = std::get<1>( parsed );
   nix::ExtendedOutputsSpec extendedOutputsSpec = std::get<2>( parsed );
 
   debugLog(
