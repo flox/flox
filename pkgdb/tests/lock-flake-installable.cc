@@ -116,6 +116,8 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
     = flox::lockFlakeInstallable( state,
                                   system,
                                   "github:nixos/nixpkgs#openssl^*" );
+  debugLog( "allOutputs.outputsToInstall: "
+            + nlohmann::json( allOutputs.outputsToInstall ).dump() );
 
   EXPECT( allOutputs.outputsToInstall
           == nix::StringSet( { "bin", "dev", "out", "man", "doc" } ) );

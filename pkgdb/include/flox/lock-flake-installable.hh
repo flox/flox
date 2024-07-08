@@ -102,6 +102,19 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
                       const std::string &              installableStr,
                       const std::string &              system );
 
+
+/**
+ * @class flox::LockFlakeInstallableException
+ * @brief An exception thrown when locking a flake installble to a
+ * @a flox::LockedInstallable.
+ *
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( LockFlakeInstallableException,
+                       EC_NIX_LOCK_FLAKE,
+                       "Failed to lock flake installable" )
+/** @} */
+
 }  // namespace flox
 
 

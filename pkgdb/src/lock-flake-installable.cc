@@ -57,6 +57,84 @@ LockCommand::run()
   return EXIT_SUCCESS;
 };
 
+/**
+ * @brief Parse the installable string into a flake reference, fragment and
+ * extended outputs spec.
+ * @param state The nix evaluation state
+ * @param installableStr The installable string
+ * @return A tuple containing the flake reference, fragment and extended outputs
+ * @throws LockFlakeInstallableException if the installable string could not be
+ * parsed
+ */
+static std::tuple<nix::FlakeRef, std::string, nix::ExtendedOutputsSpec>
+parseInstallable( const std::string & installableStr )
+{
+  try
+    {
+      return nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec(
+        installableStr );
+    }
+  catch ( const nix::Error & e )
+    {
+      throw LockFlakeInstallableException( "could not parse flake installable",
+                                           e.what() );
+    }
+}
+
+/**
+ * @brief Locate the installable in the flake and return a locked installable.
+ * Locks the referenced flake if necessary, but does not apply updates
+ * or writes any local state.
+ * @param state The nix evaluation state
+ * @param flakeRef The flake reference
+ * @param fragment The attrpath fragment e.g. everything right of the `#` in a
+ * flake installable (excluding output specifiers)
+ * @param extendedOutputsSpec The outputs specified with `^<outputs>` in a flake
+ * installable
+ * @return A locked @a nix::InstallableFlake
+ * @throws @a LockFlakeInstallableException if the installable could not be
+ * located or the flakeref could not be locked
+ */
+static nix::InstallableFlake
+locateInstallable( const nix::ref<nix::EvalState> & state,
+                   nix::FlakeRef                    flakeRef,
+                   const std::string                fragment,
+                   const nix::ExtendedOutputsSpec   extendedOutputsSpec )
+{
+
+  try
+    {
+      nix::InstallableFlake installable = nix::InstallableFlake(
+        static_cast<nix::SourceExprCommand *>( nullptr ),
+        state,
+        std::move( flakeRef ),
+        std::move( fragment ),
+        std::move( extendedOutputsSpec ),
+        nix::Strings {
+          "packages." + nix::settings.thisSystem.get() + ".default",
+          "legacyPackages." + nix::settings.thisSystem.get() + ".default",
+        },
+        nix::Strings {
+          "packages." + nix::settings.thisSystem.get() + ".",
+          "legacyPackages." + nix::settings.thisSystem.get() + ".",
+        },
+        nix::flake::LockFlags {
+          .recreateLockFile = false,
+          .updateLockFile   = false,
+          .writeLockFile    = false,
+          .allowUnlocked    = true,
+          .commitLockFile   = false,
+        } );
+
+      return installable;
+    }
+  catch ( const nix::Error & e )
+    {
+      throw LockFlakeInstallableException( "could not locate flake installable",
+                                           e.what() );
+    }
+}
+
 LockedInstallable
 lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
                       const std::string &              system,
@@ -64,9 +142,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 {
   debugLog( nix::fmt( "original installable: %s", installableStr ) );
 
-
-  std::tuple<nix::FlakeRef, std::string, nix::ExtendedOutputsSpec> parsed
-    = nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec( installableStr );
+  auto parsed = parseInstallable( installableStr );
 
   nix::FlakeRef            flakeRef            = std::get<0>( parsed );
   std::string              fragment            = std::get<1>( parsed );
@@ -78,56 +154,35 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   debugLog( nix::fmt( "original extendedOutputsSpec: '%s'",
                       extendedOutputsSpec.to_string() ) );
 
-  auto lockFlags = nix::flake::LockFlags {
-    .recreateLockFile = false,
-    .updateLockFile   = false,
-    .writeLockFile    = false,
-    .allowUnlocked    = true,
-    .commitLockFile   = false,
-  };
 
-
-  auto installable = nix::make_ref<nix::InstallableFlake>(
-    static_cast<nix::SourceExprCommand *>( nullptr ),
-    state,
-    std::move( flakeRef ),
-    fragment,
-    extendedOutputsSpec,
-    nix::Strings {
-      "packages." + system + ".default",
-      "legacyPackages." + system + ".default",
-    },
-    nix::Strings {
-      "packages." + system + ".",
-      "legacyPackages." + system + ".",
-    },
-    lockFlags );
+  auto installable
+    = locateInstallable( state, flakeRef, fragment, extendedOutputsSpec );
 
   debugLog(
-    nix::fmt( "locked installable: '%s'", installable->what().c_str() ) );
+    nix::fmt( "locked installable: '%s'", installable.what().c_str() ) );
 
 
-  auto lockedUrl = installable->getLockedFlake()->flake.lockedRef.to_string();
+  auto lockedUrl = installable.getLockedFlake()->flake.lockedRef.to_string();
   debugLog( nix::fmt( "locked url: '%s'", lockedUrl ) );
 
-  auto flakeDescription = installable->getLockedFlake()->flake.description;
+  auto flakeDescription = installable.getLockedFlake()->flake.description;
 
-  auto cursor = installable->getCursor( *state );
+  auto cursor = installable.getCursor( *state );
 
   auto lockedAttrPath = cursor->getAttrPathStr();
   debugLog( nix::fmt( "locked attr path: '%s'", lockedAttrPath ) );
 
   debugLog( nix::fmt( "locked outputs: '%s'",
-                      installable->extendedOutputsSpec.to_string() ) );
+                      installable.extendedOutputsSpec.to_string() ) );
 
   // check if the output is a derivation (not a just a store path)
   if ( ! cursor->isDerivation() )
     {
       auto v = cursor->forceValue();
-      throw nix::Error(
+      throw LockFlakeInstallableException( nix::fmt(
         "expected flake output attribute '%s' to be a derivation but found %s",
         lockedAttrPath,
-        nix::showType( v ) );
+        nix::showType( v ) ) );
     }
 
   // read the drv path
@@ -137,9 +192,10 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
       = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "drvPath" ) );
     if ( ! derivationCursor )
       {
-        throw nix::Error( "could not find '%s.%s' in derivation",
-                          lockedAttrPath,
-                          "drvPath" );
+        throw LockFlakeInstallableException(
+          nix::fmt( "could not find '%s.%s' in derivation",
+                    lockedAttrPath,
+                    "drvPath" ) );
       }
     derivation = ( *derivationCursor )->getStringWithContext().first;
   }
@@ -152,9 +208,10 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
       = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "outputs" ) );
     if ( ! maybe_outputs_cursor )
       {
-        throw nix::Error( "could not find '%s.%s' in derivation",
-                          lockedAttrPath,
-                          "outputs" );
+        throw LockFlakeInstallableException(
+          nix::fmt( "could not find '%s.%s' in derivation",
+                    lockedAttrPath,
+                    "outputs" ) );
       }
     outputNames = ( *maybe_outputs_cursor )->getListOfStrings();
 
@@ -164,9 +221,10 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
           nix::parseAttrPath( *state, output + ".outPath" ) );
         if ( ! outputCursor )
           {
-            throw nix::Error( "could not find '%s.%s' in derivation",
-                              lockedAttrPath,
-                              output + ".outPath" );
+            throw LockFlakeInstallableException(
+              nix::fmt( "could not find '%s.%s' in derivation",
+                        lockedAttrPath,
+                        output + ".outPath" ) );
           }
         auto outputValue = ( *outputCursor )->getStringWithContext();
         outputs[output]  = outputValue.first;
@@ -231,9 +289,10 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 
     if ( ! nameCursor )
       {
-        throw nix::Error( "could not find '%s.%s' in derivation",
-                          lockedAttrPath,
-                          "name" );
+        throw LockFlakeInstallableException(
+          nix::fmt( "could not find '%s.%s' in derivation",
+                    lockedAttrPath,
+                    "name" ) );
       }
     name = ( *nameCursor )->getString();
   }
