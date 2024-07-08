@@ -57,10 +57,6 @@
         if flox-pkgdb == null
         then "pkgdb"
         else "${flox-pkgdb}/bin/pkgdb";
-      LD_FLOXLIB =
-        if flox-pkgdb == null
-        then "ld-floxlib.so"
-        else "${flox-pkgdb}/lib/ld-floxlib.so";
       FLOX_ZDOTDIR = flox-activation-scripts + activate.d/zdotdir;
       PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
       # [sic] nix handles `BASH_` variables specially,
