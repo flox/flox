@@ -147,7 +147,7 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 # With '--container' produces a script that can be used to build a container.
-# bats test_tags=buildenv:container,bats:focus
+# bats test_tags=buildenv:container
 @test "Environment builds container" {
   run --separate-stderr \
     "$PKGDB_BIN" buildenv "$LOCKFILES/single-package/manifest.lock" \
