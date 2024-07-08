@@ -19,7 +19,6 @@ use flox_rust_sdk::models::environment::{
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
 };
-use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::manifest;
 use indoc::formatdoc;
 use log::debug;
@@ -29,7 +28,7 @@ use tracing::instrument;
 use super::{open_path, ConcreteEnvironment};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select, Spinner};
-use crate::utils::errors::{display_chain, format_locked_manifest_error};
+use crate::utils::errors::{display_chain, format_core_error};
 use crate::utils::message;
 
 #[derive(Debug, Clone, Bpaf)]
@@ -424,17 +423,15 @@ impl Pull {
                     },
                 };
             },
-            Err(EnvironmentError::Core(
-                ref core_err @ CoreEnvironmentError::LockedManifest(
-                    ref builder_error @ LockedManifestError::BuildEnv(_),
-                ),
-            )) if core_err.is_incompatible_package_error() => {
+            Err(EnvironmentError::Core(ref core_err @ CoreEnvironmentError::BuildEnv(_)))
+                if core_err.is_incompatible_package_error() =>
+            {
                 debug!(
                     "environment contains package incompatible with the current system: {err}",
                     err = display_chain(core_err)
                 );
 
-                let pkgdb_error = format_locked_manifest_error(builder_error);
+                let pkgdb_error = format_core_error(core_err);
 
                 if !force && query_functions.is_none() {
                     fs::remove_dir_all(dot_flox_path)
@@ -621,27 +618,23 @@ mod tests {
     use super::*;
 
     fn incompatible_system_result() -> Result<(), EnvironmentError> {
-        Err(EnvironmentError::Core(
-            CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
-                CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
-                    category_message: "category_message".to_string(),
-                    context_message: None,
-                }),
-            )),
-        ))
+        Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
+            CallPkgDbError::PkgDbError(PkgDbError {
+                exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
+                category_message: "category_message".to_string(),
+                context_message: None,
+            }),
+        )))
     }
 
     fn incompatible_package_result() -> Result<(), EnvironmentError> {
-        Err(EnvironmentError::Core(
-            CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
-                CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: PACKAGE_BUILD_FAILURE,
-                    category_message: "category_message".to_string(),
-                    context_message: None,
-                }),
-            )),
-        ))
+        Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
+            CallPkgDbError::PkgDbError(PkgDbError {
+                exit_code: PACKAGE_BUILD_FAILURE,
+                category_message: "category_message".to_string(),
+                context_message: None,
+            }),
+        )))
     }
 
     #[test]

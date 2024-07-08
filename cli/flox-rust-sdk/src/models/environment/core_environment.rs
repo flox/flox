@@ -23,7 +23,7 @@ use super::{
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
-use crate::models::environment::{call_pkgdb, global_manifest_path};
+use crate::models::environment::global_manifest_path;
 use crate::models::lockfile::{
     LockedManifest,
     LockedManifestCatalog,
@@ -44,7 +44,9 @@ use crate::models::manifest::{
     MANIFEST_VERSION_KEY,
 };
 use crate::models::pkgdb::{
+    call_pkgdb,
     error_codes,
+    BuildEnvResult,
     CallPkgDbError,
     PkgDbError,
     UpgradeResult,
@@ -253,22 +255,28 @@ impl<State> CoreEnvironment<State> {
             lockfile_path.display()
         );
 
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd.arg("buildenv").arg(lockfile_path);
+
         let service_config_path = if let LockedManifest::Catalog(ref lockfile) = lockfile {
-            tracing::debug!("building environment with service config");
             maybe_make_service_config_file(flox, lockfile)?
         } else {
             None
         };
+        if let Some(service_config_path) = &service_config_path {
+            tracing::debug!("building environment with service config");
+            pkgdb_cmd.args([
+                "--service-config",
+                &service_config_path.path.to_string_lossy(),
+            ]);
+        }
 
-        let store_path = lockfile
-            .build(
-                Path::new(&*PKGDB_BIN),
-                None,
-                None,
-                service_config_path.as_ref().map(|c| c.path.as_ref()),
-            )
-            .map_err(CoreEnvironmentError::LockedManifest)?;
+        debug!("building environment with command: {}", pkgdb_cmd.display());
+        let result: BuildEnvResult =
+            serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?)
+                .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
 
+        let store_path = PathBuf::from(result.store_path);
         debug!(
             "built locked environment, store path={}",
             store_path.display()
@@ -292,13 +300,10 @@ impl<State> CoreEnvironment<State> {
     /// Until then, this function will error with [CoreEnvironmentError::ContainerizeUnsupportedSystem]
     /// if the environment is not linux.
     ///
-    /// [Self::lock]s if necessary.
+    /// Errors if the environment is not locked.
     ///
-    /// Technically this does write to disk as a side effect (i.e. by locking).
     /// It's included in the [ReadOnly] struct for ergonomic reasons
     /// and because it doesn't modify the manifest.
-    ///
-    /// todo: should we always write the lockfile to disk?
     pub fn build_container(
         &mut self,
         flox: &Flox,
@@ -309,7 +314,14 @@ impl<State> CoreEnvironment<State> {
             ));
         }
 
-        let lockfile = self.lock(flox)?;
+        let lockfile_path = CanonicalPath::new(self.lockfile_path())
+            .map_err(CoreEnvironmentError::BadLockfilePath)?;
+
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd
+            .arg("buildenv")
+            .arg("--container")
+            .arg(lockfile_path);
 
         debug!(
             "building container: system={}, lockfilePath={}",
@@ -317,10 +329,15 @@ impl<State> CoreEnvironment<State> {
             self.lockfile_path().display()
         );
 
-        let builder = lockfile
-            .build_container(Path::new(&*PKGDB_BIN))
-            .map_err(CoreEnvironmentError::LockedManifest)?;
-        Ok(builder)
+        debug!("building container with command: {}", pkgdb_cmd.display());
+
+        let result: BuildEnvResult =
+            serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?)
+                .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
+
+        let store_path = PathBuf::from(result.store_path);
+
+        Ok(ContainerBuilder::new(store_path))
     }
 
     /// Create a new out-link for the environment at the given path with a
@@ -338,8 +355,6 @@ impl<State> CoreEnvironment<State> {
     ) -> Result<(), CoreEnvironmentError> {
         let lockfile_path = CanonicalPath::new(self.lockfile_path())
             .map_err(CoreEnvironmentError::BadLockfilePath)?;
-        let lockfile = LockedManifest::read_from_file(&lockfile_path)
-            .map_err(CoreEnvironmentError::LockedManifest)?;
 
         debug!(
             "linking environment: system={}, lockfilePath={}, outLinkPath={}",
@@ -348,16 +363,19 @@ impl<State> CoreEnvironment<State> {
             out_link_path.as_ref().display()
         );
 
-        // Note: when `store_path` is `Some`, `--store-path` is passed to `pkgdb buildenv`
-        // which skips the build and only attempts to link the environment.
-        lockfile
-            .build(
-                Path::new(&*PKGDB_BIN),
-                Some(out_link_path.as_ref()),
-                Some(store_path.as_ref()),
-                None,
-            )
-            .map_err(CoreEnvironmentError::LockedManifest)?;
+        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
+        pkgdb_cmd
+            .arg("buildenv")
+            .arg(lockfile_path)
+            .args(["--out-link", &out_link_path.as_ref().to_string_lossy()])
+            .args(["--store-path", &store_path.as_ref().to_string_lossy()]);
+        debug!("linking environment with command: {}", pkgdb_cmd.display());
+
+        serde_json::from_value::<BuildEnvResult>(
+            call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?,
+        )
+        .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
+
         Ok(())
     }
 }
@@ -1208,6 +1226,19 @@ pub enum CoreEnvironmentError {
     UpgradeFailedCatalog(#[source] UpgradeError),
     // endregion
 
+    // region: pkgdb builds
+    #[error("failed to build environment")]
+    BuildEnv(#[source] CallPkgDbError),
+    #[error("failed to parse buildenv output")]
+    ParseBuildEnvOutput(#[source] serde_json::Error),
+    #[error("package is unsupported for this sytem")]
+    UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
+    #[error("failed to build container builder")]
+    CallContainerBuilder(#[source] std::io::Error),
+    #[error("failed to write container builder to sink")]
+    WriteContainer(#[source] std::io::Error),
+    // endregion
+
     // endregion
     #[error("unsupported system to build container: {0}")]
     ContainerizeUnsupportedSystem(String),
@@ -1236,12 +1267,10 @@ impl CoreEnvironmentError {
     pub fn is_incompatible_system_error(&self) -> bool {
         let is_pkgdb_incompatible_system_error = matches!(
             self,
-            CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
-                CallPkgDbError::PkgDbError(PkgDbError {
-                    exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
-                    ..
-                })
-            ))
+            CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+                exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
+                ..
+            }))
         );
         let is_catalog_incompatible_system_error = matches!(
             self,
@@ -1271,9 +1300,10 @@ impl CoreEnvironmentError {
     /// Otherwise return None.
     pub fn pkgdb_exit_code(&self) -> Option<&u64> {
         match self {
-            CoreEnvironmentError::LockedManifest(LockedManifestError::BuildEnv(
-                CallPkgDbError::PkgDbError(PkgDbError { exit_code, .. }),
-            )) => Some(exit_code),
+            CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+                exit_code,
+                ..
+            })) => Some(exit_code),
             _ => None,
         }
     }
