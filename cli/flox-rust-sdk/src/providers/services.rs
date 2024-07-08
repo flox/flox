@@ -90,10 +90,8 @@ pub fn write_process_compose_config(
     Ok(())
 }
 
-/// Determines the location to write the `process-compose` config file
-pub fn process_compose_config_write_location(
-    temp_dir: impl AsRef<Path>,
-) -> Result<PathBuf, ServiceError> {
+/// Determines the location to write the service config file
+pub fn service_config_write_location(temp_dir: impl AsRef<Path>) -> Result<PathBuf, ServiceError> {
     if let Ok(path) = env::var(SERVICES_TEMP_CONFIG_PATH_VAR) {
         return Ok(PathBuf::from(path));
     }
@@ -111,7 +109,7 @@ pub fn maybe_make_service_config_file(
     lockfile: &LockedManifestCatalog,
 ) -> Result<Option<PathBuf>, ServiceError> {
     let service_config_path = if flox.features.services {
-        let config_path = process_compose_config_write_location(&flox.temp_dir)?;
+        let config_path = service_config_write_location(&flox.temp_dir)?;
         write_process_compose_config(&lockfile.manifest.services.clone().into(), &config_path)?;
         tracing::debug!(path = traceable_path(&config_path), "wrote service config");
         Some(config_path)
@@ -132,7 +130,7 @@ mod tests {
         #[test]
         fn test_process_compose_config_roundtrip(config: ProcessComposeConfig) {
             let temp_dir = TempDir::new().unwrap();
-            let path = process_compose_config_write_location(&temp_dir).unwrap();
+            let path = service_config_write_location(&temp_dir).unwrap();
             write_process_compose_config(&config, &path).unwrap();
             let contents = std::fs::read_to_string(&path).unwrap();
             let deserialized: ProcessComposeConfig = serde_yaml::from_str(&contents).unwrap();
