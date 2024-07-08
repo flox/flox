@@ -77,7 +77,7 @@ parseInstallable( const std::string & installableStr )
   catch ( const nix::Error & e )
     {
       throw LockFlakeInstallableException( "could not parse flake installable",
-                                           e.what() );
+                                           e.info().msg.str() );
     }
 }
 
@@ -131,7 +131,7 @@ locateInstallable( const nix::ref<nix::EvalState> & state,
   catch ( const nix::Error & e )
     {
       throw LockFlakeInstallableException( "could not locate flake installable",
-                                           e.what() );
+                                           e.info().msg.str() );
     }
 }
 
