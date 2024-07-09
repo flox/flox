@@ -746,6 +746,8 @@ fn services_socket_path(id: &str, flox: &Flox) -> Result<PathBuf, EnvironmentErr
     // 108 minus a null character
     let max_length = 107;
 
+    println!("runtime_dir: {:?}", runtime_dir);
+
     let directory = match runtime_dir {
         Some(dir) => dir,
         None => {
@@ -1159,7 +1161,19 @@ mod test {
         // We can't use /tmp because xdg::BaseDirectories errors if the
         // directory has the wrong ownership.
         let runtime_dir = dirs::home_dir().unwrap();
+        println!("XDG_RUNTIME_DIR: {:?}", env::var("XDG_RUNTIME_DIR"));
+        println!(
+            "{:?}",
+            xdg::BaseDirectories::new()
+                .and_then(|base_directories| base_directories.get_runtime_directory().cloned())
+        );
         let socket_path = temp_env::with_var("XDG_RUNTIME_DIR", Some(&runtime_dir), || {
+            println!("XDG_RUNTIME_DIR: {:?}", env::var("XDG_RUNTIME_DIR"));
+            println!(
+                "{:?}",
+                xdg::BaseDirectories::new()
+                    .and_then(|base_directories| base_directories.get_runtime_directory().cloned())
+            );
             services_socket_path("1", &flox)
         })
         .unwrap();
