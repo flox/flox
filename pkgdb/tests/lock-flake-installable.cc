@@ -1,8 +1,8 @@
 /* ========================================================================== *
  *
- *  @file realise.cc
+ *  @file lock-flake-installable.cc
  *
- *  @brief Tests for `buildenv::realise` functionality.
+ *  @brief Tests for `lock-flake-installable` functionality.
  *
  * -------------------------------------------------------------------------- */
 

@@ -1,8 +1,8 @@
 /* ========================================================================== *
  *
- * @file flox/eval.hh
+ * @file flox/lock-flake-installable.hh
  *
- * @brief Executable command helpers, argument parsers, etc.
+ * @brief Executable command helper and `flox::lockFlakeInstallable`.
  *
  *
  * -------------------------------------------------------------------------- */
