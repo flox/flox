@@ -12,6 +12,7 @@ use flox_rust_sdk::models::search::{
     SearchParams,
     SearchResult,
     SearchResults,
+    SearchStrategy,
     ShowError,
 };
 use flox_rust_sdk::providers::catalog::{ClientTrait, VersionsError};
@@ -101,7 +102,7 @@ fn construct_show_params(
     manifest: Option<PathOrJson>,
     global_manifest: PathOrJson,
     lockfile: PathOrJson,
-    search_strategy: flox_rust_sdk::models::search::SearchStrategy,
+    search_strategy: SearchStrategy,
 ) -> Result<SearchParams> {
     let parts = search_term
         .split(SEARCH_INPUT_SEPARATOR)

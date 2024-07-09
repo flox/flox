@@ -6,7 +6,7 @@ use anyhow::Result;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{global_manifest_path, Environment};
 use flox_rust_sdk::models::lockfile::LockedManifestPkgdb;
-use flox_rust_sdk::models::search::{do_search, PathOrJson, SearchResults};
+use flox_rust_sdk::models::search::{do_search, PathOrJson, SearchResults, SearchStrategy};
 use flox_rust_sdk::providers::catalog::{Client, ClientTrait};
 use log::debug;
 
@@ -222,7 +222,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         manifest: Option<PathOrJson>,
         global_manifest: PathOrJson,
         lockfile: PathOrJson,
-        search_strategy: flox_rust_sdk::models::search::SearchStrategy,
+        search_strategy: SearchStrategy,
     ) -> Result<SearchResults> {
         let search_params = construct_search_params(
             term,
@@ -276,7 +276,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         manifest: Option<PathOrJson>,
         global_manifest: PathOrJson,
         lockfile: PathOrJson,
-        search_strategy: flox_rust_sdk::models::search::SearchStrategy,
+        search_strategy: SearchStrategy,
     ) -> Self {
         let curated = Self::suggest_curated_package(term);
 

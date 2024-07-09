@@ -15,6 +15,7 @@ use flox_rust_sdk::models::search::{
     SearchParams,
     SearchResult,
     SearchResults,
+    SearchStrategy,
 };
 use log::debug;
 
@@ -87,7 +88,7 @@ pub(crate) fn construct_search_params(
     manifest: Option<PathOrJson>,
     global_manifest: PathOrJson,
     lockfile: PathOrJson,
-    search_strategy: flox_rust_sdk::models::search::SearchStrategy,
+    search_strategy: SearchStrategy,
 ) -> Result<SearchParams> {
     let query = Query::new(search_term, search_strategy, results_limit, true)?;
     let params = SearchParams {
