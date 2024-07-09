@@ -66,6 +66,39 @@ teardown() {
   manifest_file="${TESTS_DIR}/services/touch_file/manifest.toml"
   run "$FLOX_BIN" edit -f "$manifest_file"
   assert_success
-  run bash "${TESTS_DIR}/services/touch_file/check.sh"
+  run bash "${TESTS_DIR}/services/touch_file/check_service_ran.sh"
   assert_success
+}
+
+@test "'flox activate' with feature flag does not start services" {
+  export FLOX_FEATURES_SERVICES=true
+  "$FLOX_BIN" init
+  manifest_file="${TESTS_DIR}/services/touch_file/manifest.toml"
+  run "$FLOX_BIN" edit -f "$manifest_file"
+  assert_success
+  "$FLOX_BIN" activate -- true
+  run [ -e hello.txt ]
+  assert_failure
+}
+
+@test "'flox activate -s' starts services" {
+  export FLOX_FEATURES_SERVICES=true
+  "$FLOX_BIN" init
+  manifest_file="${TESTS_DIR}/services/touch_file/manifest.toml"
+  run "$FLOX_BIN" edit -f "$manifest_file"
+  assert_success
+  run bash "${TESTS_DIR}/services/touch_file/check_activation_starts_services.sh"
+  assert_success
+}
+
+@test "'flox activate -s' error without feature flag" {
+  export FLOX_FEATURES_SERVICES=false
+  "$FLOX_BIN" init
+  manifest_file="${TESTS_DIR}/services/touch_file/manifest.toml"
+  run "$FLOX_BIN" edit -f "$manifest_file"
+  assert_success
+  unset output
+  run "$FLOX_BIN" activate -s
+  assert_failure
+  assert_output --partial "Services are not enabled in this environment"
 }

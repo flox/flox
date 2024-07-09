@@ -50,6 +50,7 @@ pub static INTERACTIVE_BASH_BIN: Lazy<PathBuf> = Lazy::new(|| {
         env::var("INTERACTIVE_BASH_BIN").unwrap_or(env!("INTERACTIVE_BASH_BIN").to_string()),
     )
 });
+pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 
 /// When called with no arguments 'flox activate' will look for a '.flox' directory
 /// in the current directory. Calling 'flox activate' in your home directory will
@@ -68,6 +69,10 @@ pub struct Activate {
     #[bpaf(long("print-script"), short, hide)]
     print_script: bool,
 
+    /// Whether to start services when activating the environment
+    #[bpaf(long, short, hide)]
+    start_services: bool,
+
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
     run_args: Vec<String>,
@@ -76,6 +81,9 @@ pub struct Activate {
 impl Activate {
     pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
+        if !flox.features.services && self.start_services {
+            bail!("Services are not enabled in this environment");
+        }
         let mut concrete_environment = match self.environment.to_concrete_environment(&flox) {
             Ok(concrete_environment) => concrete_environment,
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
@@ -259,6 +267,11 @@ impl Activate {
             }
 
             if flox.features.services && !manifest.services.is_empty() {
+                tracing::debug!(start = self.start_services, "setting service variables");
+                exports.insert(
+                    FLOX_ACTIVATE_START_SERVICES_VAR,
+                    self.start_services.to_string(),
+                );
                 exports.insert(
                     FLOX_SERVICES_SOCKET_VAR,
                     environment

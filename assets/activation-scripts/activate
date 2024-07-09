@@ -2,6 +2,7 @@
 # shellcheck shell=bash disable=SC1090,SC1091
 export _coreutils="@coreutils@"
 export _gnused="@gnused@"
+export _process_compose="@process-compose@"
 export _zdotdir="@out@/activate.d/zdotdir"
 export _tcsh_home="@out@/activate.d/tcsh_home"
 
@@ -191,6 +192,12 @@ else
   eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' "$_del_env")"
   eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_add_env")"
 
+fi
+
+# Start services before the shell or command is invoked
+if [ "$FLOX_ACTIVATE_START_SERVICES" == "true" ]; then
+  config_file="$FLOX_ENV/service-config.yaml"
+  "$_process_compose" up -f "$config_file" -u "$_FLOX_SERVICES_SOCKET" --tui=false >/dev/null 2>&1 &
 fi
 
 # From this point on the activation process depends on the mode:

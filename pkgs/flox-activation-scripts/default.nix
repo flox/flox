@@ -7,6 +7,7 @@
   runCommand,
   shellcheck,
   stdenv,
+  process-compose,
 }: let
   ld-floxlib_so =
     if stdenv.isLinux
@@ -22,6 +23,7 @@ in
       --replace "@coreutils@" "${coreutils}" \
       --replace "@gnused@" "${gnused}" \
       --replace "@out@" "$out" \
+      --replace "@process-compose@" "${process-compose}/bin/process-compose" \
       --replace "/usr/bin/env bash" "${bash}/bin/bash"
 
     substituteInPlace $out/activate.d/bash \
