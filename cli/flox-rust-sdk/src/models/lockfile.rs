@@ -741,32 +741,9 @@ impl LockedManifestCatalog {
             })
             .flatten()
             .filter_map(|resolved_pkg| {
-                match manifest.pkg_descriptor_with_id(&resolved_pkg.install_id) {
-                    Some(ManifestPackageDescriptor::Catalog(descriptor)) => {
-                        Some(LockedPackageCatalog::from_parts(resolved_pkg, descriptor))
-                    },
-                    Some(ManifestPackageDescriptor::FlakeRef { .. }) => {
-                        debug!(
-                            "flake descriptor '{}' not expected to be resolved by catalog",
-                            resolved_pkg.install_id
-                        );
-                        None
-                    },
-                    Some(ManifestPackageDescriptor::StorePath { .. }) => {
-                        debug!(
-                            "store path descriptor '{}' not expected to be resolved by catalog",
-                            resolved_pkg.install_id
-                        );
-                        None
-                    },
-                    None => {
-                        debug!(
-                            "'{}' is not in the manifest, skipping",
-                            resolved_pkg.install_id
-                        );
-                        None
-                    },
-                }
+                manifest
+                    .catalog_pkg_descriptor_with_id(&resolved_pkg.install_id)
+                    .map(|descriptor| LockedPackageCatalog::from_parts(resolved_pkg, descriptor))
             });
         Ok(locked_pkg_iter)
     }
