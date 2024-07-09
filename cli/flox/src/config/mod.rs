@@ -33,7 +33,11 @@ pub struct Config {
     #[serde(default)]
     pub nix: Option<NixConfig>,
 
-    // You should prefer to use `Flox` over `Config` where available.
+    /// Feature flags are set from config but more commonly controlled by
+    /// `FLOX_FEATURES_` environment variables.
+    ///
+    /// Accessing from `flox_rust_sdk::flox::Flox.features` should be prefered
+    /// over `flox::config::Config.features` if both are available.
     #[serde(default)]
     pub features: Option<flox_rust_sdk::flox::Features>,
 }
