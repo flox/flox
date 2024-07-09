@@ -559,8 +559,8 @@ pub struct ManifestInstall(
 #[serde(untagged)]
 pub enum ManifestPackageDescriptor {
     Catalog(ManifestPackageDescriptorCatalog),
-    FlakeRef(ManifestPackageDescriptorFlake),      // todo
-    StorePath(ManifestPackageDescriptorStorePath), // todo
+    FlakeRef(ManifestPackageDescriptorFlake),
+    // TODO: StorePath(ManifestPackageDescriptorStorePath),
 }
 
 impl ManifestPackageDescriptor {
@@ -575,7 +575,7 @@ impl ManifestPackageDescriptor {
         use ManifestPackageDescriptor::*;
         match (self, other) {
             (Catalog(this), Catalog(other)) => this.invalidates_existing_resolution(other),
-            (StorePath { .. }, StorePath { .. }) => todo!(),
+            (FlakeRef(this), FlakeRef(other)) => this != other,
             // different types of descriptors are always different
             _ => true,
         }
@@ -609,22 +609,6 @@ impl ManifestPackageDescriptor {
     pub fn as_flake_descriptor_ref(&self) -> Option<&ManifestPackageDescriptorFlake> {
         match self {
             ManifestPackageDescriptor::FlakeRef(descriptor) => Some(descriptor),
-            _ => None,
-        }
-    }
-
-    #[must_use]
-    pub fn unwrap_store_path_descriptor(self) -> Option<ManifestPackageDescriptorStorePath> {
-        match self {
-            ManifestPackageDescriptor::StorePath(descriptor) => Some(descriptor),
-            _ => None,
-        }
-    }
-
-    #[must_use]
-    pub fn as_store_path_descriptor_ref(&self) -> Option<&ManifestPackageDescriptorStorePath> {
-        match self {
-            ManifestPackageDescriptor::StorePath(descriptor) => Some(descriptor),
             _ => None,
         }
     }
