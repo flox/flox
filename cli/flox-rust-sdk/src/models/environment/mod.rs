@@ -771,6 +771,8 @@ fn services_socket_path(id: &str, flox: &Flox) -> Result<PathBuf, EnvironmentErr
 
 #[cfg(test)]
 mod test {
+    #[cfg(target_os = "linux")]
+    use std::os::unix::fs::PermissionsExt;
     use std::str::FromStr;
     use std::time::Duration;
 
@@ -1153,9 +1155,14 @@ mod test {
         let (flox, _temp_dir_handle) = flox_instance();
         // In reality XDG_RUNTIME_DIR would be something like `/run/user/1001`,
         // but that won't necessarily exist where this unit test is run.
-        // We can't use /tmp because xdg::BaseDirectories errors if the
-        // directory has the wrong ownership.
-        let runtime_dir = dirs::home_dir().unwrap();
+        // We need a directory with group and others rights 00 otherwise
+        // xdg::BaseDirectories errors.
+        // And it needs to result in a path shorter than 107 characters.
+        let tempdir = tempfile::Builder::new()
+            .permissions(std::fs::Permissions::from_mode(0o700))
+            .tempdir_in("/tmp")
+            .unwrap();
+        let runtime_dir = tempdir.path();
         let socket_path = temp_env::with_var("XDG_RUNTIME_DIR", Some(&runtime_dir), || {
             services_socket_path("1", &flox)
         })
