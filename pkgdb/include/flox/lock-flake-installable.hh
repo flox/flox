@@ -99,6 +99,13 @@ struct LockedInstallable
 void
 to_json( nlohmann::json & jto, const LockedInstallable & from );
 
+/**
+ * @brief Lock a flake installable, and evaluate critical metadata.
+ * @param state The nix evaluation state
+ * @param system The system to lock the flake installable for. Used to determine
+ * the package system if not specified by the installable
+ * @param installableStr The flake installable to lock
+ */
 LockedInstallable
 lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
                       const std::string &              installableStr,
