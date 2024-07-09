@@ -777,6 +777,8 @@ mod test {
     use once_cell::sync::Lazy;
     use path_environment::test_helpers::new_path_environment;
     use pretty_assertions::assert_eq;
+    #[cfg(target_os = "linux")]
+    use serial_test::serial;
 
     use super::*;
     use crate::flox::test_helpers::{
@@ -1149,6 +1151,7 @@ mod test {
 
     #[cfg(target_os = "linux")]
     #[test]
+    #[serial]
     fn services_socket_path_respects_xdg_runtime_dir() {
         let (flox, _temp_dir_handle) = flox_instance();
         // In reality XDG_RUNTIME_DIR would be something like `/run/user/1001`,
@@ -1165,6 +1168,7 @@ mod test {
 
     #[cfg(target_os = "linux")]
     #[test]
+    #[serial]
     fn services_socket_path_falls_back_to_flox_cache() {
         let (flox, _temp_dir_handle) = flox_instance();
         let socket_path = temp_env::with_var("XDG_RUNTIME_DIR", None::<String>, || {
@@ -1176,6 +1180,7 @@ mod test {
 
     #[cfg(target_os = "linux")]
     #[test]
+    #[serial]
     fn services_socket_path_errors_if_too_long() {
         let (mut flox, _temp_dir_handle) = flox_instance();
         flox.cache_dir = flox.cache_dir.join("X".repeat(100));
