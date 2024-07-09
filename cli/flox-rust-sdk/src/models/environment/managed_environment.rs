@@ -215,25 +215,13 @@ impl Environment for ManagedEnvironment {
     }
 
     fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
-        let generations = self
-            .generations()
-            .writable(flox.temp_dir.clone())
-            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-        let mut temporary = generations
-            .get_current_generation()
-            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+        let mut temporary = self.local_env_or_copy_current_generation(flox)?;
 
         Ok(temporary.lock(flox)?)
     }
 
     fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError> {
-        let generations = self
-            .generations()
-            .writable(flox.temp_dir.clone())
-            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-        let mut temporary = generations
-            .get_current_generation()
-            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+        let mut temporary = self.local_env_or_copy_current_generation(flox)?;
 
         let builder = temporary.build_container(flox)?;
         Ok(builder)

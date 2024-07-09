@@ -258,10 +258,7 @@ impl<State> CoreEnvironment<State> {
             None
         };
         if let Some(service_config_path) = &service_config_path {
-            pkgdb_cmd.args([
-                "--service-config",
-                &service_config_path.path.to_string_lossy(),
-            ]);
+            pkgdb_cmd.args(["--service-config", &service_config_path.to_string_lossy()]);
         }
 
         let result: BuildEnvResult =

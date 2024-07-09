@@ -6,6 +6,7 @@ use once_cell::sync::Lazy;
 #[cfg(test)]
 use proptest::prelude::*;
 use serde::{Deserialize, Serialize};
+use tempfile::NamedTempFile;
 
 use crate::flox::Flox;
 use crate::models::lockfile::LockedManifestCatalog;
@@ -89,46 +90,28 @@ pub fn write_process_compose_config(
     Ok(())
 }
 
-/// A container for the path to the `process-compose` config file
-///
-/// This is necessary in the situation where the config file is written to a temporary location
-/// and we need to keep the destructor from deleting the temp directory before we're done with it.
-#[derive(Debug)]
-pub struct ConfigPath {
-    pub path: PathBuf,
-    _tempdir: Option<tempfile::TempDir>,
-}
-
-/// Determines the location to write the `process-compose` config file
-pub fn process_compose_config_write_location() -> Result<ConfigPath, ServiceError> {
+/// Determines the location to write the service config file
+pub fn service_config_write_location(temp_dir: impl AsRef<Path>) -> Result<PathBuf, ServiceError> {
     if let Ok(path) = env::var(SERVICES_TEMP_CONFIG_PATH_VAR) {
-        return Ok(ConfigPath {
-            path: PathBuf::from(path),
-            _tempdir: None,
-        });
+        return Ok(PathBuf::from(path));
     }
-    let temp_dir = tempfile::tempdir().map_err(ServiceError::WriteConfig)?;
-    let path = temp_dir.path().join("process-compose.yaml");
-    Ok(ConfigPath {
-        path,
-        _tempdir: Some(temp_dir),
-    })
+
+    let file = NamedTempFile::new_in(temp_dir).map_err(ServiceError::WriteConfig)?;
+    let (_, path) = file
+        .keep()
+        .map_err(|e| ServiceError::WriteConfig(e.error))?;
+
+    Ok(path)
 }
 
 pub fn maybe_make_service_config_file(
     flox: &Flox,
     lockfile: &LockedManifestCatalog,
-) -> Result<Option<ConfigPath>, ServiceError> {
+) -> Result<Option<PathBuf>, ServiceError> {
     let service_config_path = if flox.features.services {
-        let config_path = process_compose_config_write_location()?;
-        write_process_compose_config(
-            &lockfile.manifest.services.clone().into(),
-            &config_path.path,
-        )?;
-        tracing::debug!(
-            path = traceable_path(&config_path.path),
-            "wrote service config"
-        );
+        let config_path = service_config_write_location(&flox.temp_dir)?;
+        write_process_compose_config(&lockfile.manifest.services.clone().into(), &config_path)?;
+        tracing::debug!(path = traceable_path(&config_path), "wrote service config");
         Some(config_path)
     } else {
         None
@@ -139,15 +122,17 @@ pub fn maybe_make_service_config_file(
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
+    use tempfile::TempDir;
 
     use super::*;
 
     proptest! {
         #[test]
         fn test_process_compose_config_roundtrip(config: ProcessComposeConfig) {
-            let path = process_compose_config_write_location().unwrap();
-            write_process_compose_config(&config, &path.path).unwrap();
-            let contents = std::fs::read_to_string(&path.path).unwrap();
+            let temp_dir = TempDir::new().unwrap();
+            let path = service_config_write_location(&temp_dir).unwrap();
+            write_process_compose_config(&config, &path).unwrap();
+            let contents = std::fs::read_to_string(&path).unwrap();
             let deserialized: ProcessComposeConfig = serde_yaml::from_str(&contents).unwrap();
             prop_assert_eq!(config, deserialized);
         }
