@@ -721,16 +721,14 @@ impl LockedManifestCatalog {
                 match res_msg {
                     catalog::ResolutionMessage::General(inner) => {
                         tracing::debug!(kind = "general", "handling resolution message");
-                        // If we have a level and it's not an error, skip this message
-                        if let Some(level) = inner.level {
-                            if level != MessageLevel::Error {
-                                tracing::debug!(
-                                    level = level.to_string(),
-                                    msg = inner.msg,
-                                    "non-error resolution message"
-                                );
-                                continue;
-                            }
+                        // If it's not an error, skip this message
+                        if inner.level != MessageLevel::Error {
+                            tracing::debug!(
+                                level = inner.level.to_string(),
+                                msg = inner.msg,
+                                "non-error resolution message"
+                            );
+                            continue;
                         }
                         // If we don't have a level, I guess we have to treat it like an error
                         tracing::debug!("pushing fallback message");
@@ -760,18 +758,15 @@ impl LockedManifestCatalog {
                             kind = "constraints_too_tight",
                             "handling resolution message"
                         );
-                        // If we have a level and it's not an error, skip this message
-                        if let Some(level) = inner.level {
-                            if level != MessageLevel::Error {
-                                tracing::debug!(
-                                    level = level.to_string(),
-                                    msg = inner.msg,
-                                    "non-error resolution message"
-                                );
-                                continue;
-                            }
+                        // If it's not an error, skip this message
+                        if inner.level != MessageLevel::Error {
+                            tracing::debug!(
+                                level = inner.level.to_string(),
+                                msg = inner.msg,
+                                "non-error resolution message"
+                            );
+                            continue;
                         }
-                        // If we don't have a level, I guess we have to treat it like an error
                         tracing::debug!("pushing fallback message");
                         let failure = ResolutionFailure::ConstraintsTooTight {
                             fallback_msg: inner.msg.clone(),
@@ -780,22 +775,22 @@ impl LockedManifestCatalog {
                         failures.push(failure);
                     },
                     catalog::ResolutionMessage::Unknown(inner) => {
-                        tracing::debug!(kind = "unknown", "handling resolution message");
-                        // If we have a level and it's not an error, skip this message
-                        if let Some(level) = inner.level {
-                            if level != MessageLevel::Error {
-                                tracing::debug!(
-                                    level = level.to_string(),
-                                    msg = inner.msg,
-                                    "non-error resolution message"
-                                );
-                                continue;
-                            }
+                        tracing::debug!(
+                            kind = "unknown",
+                            level = inner.level.to_string(),
+                            msg = inner.msg,
+                            msg_type = inner.msg_type,
+                            context = serde_json::to_string(&inner.context).unwrap(),
+                            "handling unknown resolution message"
+                        );
+                        // If it's not an error, skip this message
+                        if inner.level != MessageLevel::Error {
+                            continue;
                         }
                         // If we don't have a level, I guess we have to treat it like an error
                         let failure = ResolutionFailure::UnknownServiceMessage {
                             msg: inner.msg.clone(),
-                            level: inner.level.unwrap_or(MessageLevel::Trace).to_string(),
+                            level: inner.level.to_string(),
                             context: inner.context.clone(),
                         };
                         failures.push(failure);
@@ -812,15 +807,13 @@ impl LockedManifestCatalog {
         manifest: &TypedManifestCatalog,
     ) -> Option<ResolutionFailure> {
         // If we have a level and it's not an error, skip this message
-        if let Some(level) = r_msg.level {
-            if level != MessageLevel::Error {
-                tracing::debug!(
-                    level = level.to_string(),
-                    msg = r_msg.msg,
-                    "non-error resolution message"
-                );
-                return None;
-            }
+        if r_msg.level != MessageLevel::Error {
+            tracing::debug!(
+                level = r_msg.level.to_string(),
+                msg = r_msg.msg,
+                "non-error resolution message"
+            );
+            return None;
         }
         if r_msg.valid_systems.is_empty() {
             tracing::debug!(
