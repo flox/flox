@@ -22,23 +22,21 @@ use crate::commands::{EnvironmentSelectError, MigrationError};
 /// Convert to an error variant that directs the user to the docs if the provided error is
 /// due to a package not being supported on the current system.
 pub fn apply_doc_link_for_unsupported_packages(err: EnvironmentError) -> EnvironmentError {
-    if let EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
-        LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+    if let EnvironmentError::Core(CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(
+        PkgDbError {
             exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
             category_message,
             context_message,
-        })),
-    )) = err
+        },
+    ))) = err
     {
         debug!("incompatible package, directing user to docs");
-        EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
-            LockedManifestError::UnsupportedPackageWithDocLink(CallPkgDbError::PkgDbError(
-                PkgDbError {
-                    exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-                    category_message,
-                    context_message,
-                },
-            )),
+        EnvironmentError::Core(CoreEnvironmentError::UnsupportedPackageWithDocLink(
+            CallPkgDbError::PkgDbError(PkgDbError {
+                exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+                category_message,
+                context_message,
+            }),
         ))
     } else {
         // Not the type of error we're concerned with, just pass it through
@@ -321,7 +319,92 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         // internal error, a bug if this happens to users!
         CoreEnvironmentError::BadLockfilePath(_) => display_chain(err),
 
-        // todo: should be in LockedManifesterror
+        // catch package eval and build errors
+        CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code,
+            context_message:
+                Some(ContextMsgError {
+                    message,
+                    caught: Some(caught),
+                }),
+            ..
+        })) if [
+            error_codes::PACKAGE_EVAL_FAILURE,
+            error_codes::PACKAGE_BUILD_FAILURE,
+        ]
+        .contains(exit_code) =>
+        {
+            format!("{message}: {caught}")
+        },
+
+        CoreEnvironmentError::CallContainerBuilder(_) => formatdoc! {"
+            Failed to call container builder.
+
+            Successfully created a container builder for you environment,
+            but failed to call it.
+        "},
+
+        // todo: enrich with path
+        CoreEnvironmentError::WriteContainer(err) => formatdoc! {"
+            Failed to write container: {err}
+
+            Please ensure that you have write permissions to
+            the destination file.
+        "},
+
+        // this is a BUG
+        CoreEnvironmentError::ParseBuildEnvOutput(_) => display_chain(err),
+
+        // catch package conflict error:
+        // https://github.com/flox/flox/issues/857
+        CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: error_codes::BUILDENV_CONFLICT,
+            context_message: Some(ContextMsgError { message, .. }),
+            ..
+        })) => message.to_string(),
+        CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+            exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+            context_message: Some(ContextMsgError { message, .. }),
+            ..
+        })) => message.into(),
+        // We manually construct this error variant in cases where we want to add a link to the docs,
+        // otherwise it's the same as the basic PACKAGE_EVAL_INCOMPATIBLE_SYSTEM error.
+        CoreEnvironmentError::UnsupportedPackageWithDocLink(CallPkgDbError::PkgDbError(
+            PkgDbError {
+                exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
+                context_message,
+                ..
+            },
+        )) => {
+            if let Some(ctx_msg) = context_message {
+                formatdoc! {"
+                {}
+
+                For more on managing system-specific packages, visit the documentation:
+                https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+            ", ctx_msg}
+            } else {
+                // In this context it's an error to encounter an error (heh) where the context message is missing,
+                // but a vague error message is preferable to panicking.
+                formatdoc! {"
+                    This package is not available for this system
+
+                    For more on managing system-specific packages, visit the documentation:
+                    https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+                "}
+            }
+        },
+        // Since we manually construct the UnsupportedPackageWithDocLink variant we should *never* encounter
+        // a situation in which it contains the wrong kind of error. That said, we need some kind of error
+        // in case we've screwed up.
+        CoreEnvironmentError::UnsupportedPackageWithDocLink(_) => {
+            // Could probably do with a better error message
+            "encountered an internal error".into()
+        },
+        CoreEnvironmentError::BuildEnv(pkgdb_error) => {
+            format_pkgdb_error(pkgdb_error, err, "Failed to build environment.")
+        },
+
         CoreEnvironmentError::UpgradeFailedPkgDb(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to upgrade environment.")
         },
@@ -672,23 +755,6 @@ pub fn format_migration_error(err: &MigrationError) -> String {
 pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
     trace!("formatting locked_manifest_error: {err:?}");
     match err {
-        LockedManifestError::CallContainerBuilder(_) => formatdoc! {"
-            Failed to call container builder.
-
-            Successfully created a container builder for you environment,
-            but failed to call it.
-        "},
-
-        // todo: enrich with path
-        LockedManifestError::WriteContainer(err) => formatdoc! {"
-            Failed to write container: {err}
-
-            Please ensure that you have write permissions to
-            the destination file.
-        "},
-
-        // this is a BUG
-        LockedManifestError::ParseBuildEnvOutput(_) => display_chain(err),
         // this is likely a BUG, since we ensure that the lockfile exists in all cases
         LockedManifestError::BadLockfilePath(canonicalize_error) => formatdoc! {"
             Bad lockfile path: {canonicalize_error}
@@ -755,72 +821,6 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
             format_pkgdb_error(pkgdb_error, err, "Failed to lock environment manifest.")
         },
 
-        // catch package conflict error:
-        // https://github.com/flox/flox/issues/857
-        LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: error_codes::BUILDENV_CONFLICT,
-            context_message: Some(ContextMsgError { message, .. }),
-            ..
-        })) => message.to_string(),
-        LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-            context_message: Some(ContextMsgError { message, .. }),
-            ..
-        })) => message.into(),
-        // We manually construct this error variant in cases where we want to add a link to the docs,
-        // otherwise it's the same as the basic PACKAGE_EVAL_INCOMPATIBLE_SYSTEM error.
-        LockedManifestError::UnsupportedPackageWithDocLink(CallPkgDbError::PkgDbError(
-            PkgDbError {
-                exit_code: error_codes::PACKAGE_EVAL_INCOMPATIBLE_SYSTEM,
-                context_message,
-                ..
-            },
-        )) => {
-            if let Some(ctx_msg) = context_message {
-                formatdoc! {"
-                {}
-
-                For more on managing system-specific packages, visit the documentation:
-                https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
-            ", ctx_msg}
-            } else {
-                // In this context it's an error to encounter an error (heh) where the context message is missing,
-                // but a vague error message is preferable to panicking.
-                formatdoc! {"
-                    This package is not available for this system
-
-                    For more on managing system-specific packages, visit the documentation:
-                    https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
-                "}
-            }
-        },
-        // Since we manually construct the UnsupportedPackageWithDocLink variant we should *never* encounter
-        // a situation in which it contains the wrong kind of error. That said, we need some kind of error
-        // in case we've screwed up.
-        LockedManifestError::UnsupportedPackageWithDocLink(_) => {
-            // Could probably do with a better error message
-            "encountered an internal error".into()
-        },
-        // catch package eval and build errors
-        LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code,
-            context_message:
-                Some(ContextMsgError {
-                    message,
-                    caught: Some(caught),
-                }),
-            ..
-        })) if [
-            error_codes::PACKAGE_EVAL_FAILURE,
-            error_codes::PACKAGE_BUILD_FAILURE,
-        ]
-        .contains(exit_code) =>
-        {
-            format!("{message}: {caught}")
-        },
-        LockedManifestError::BuildEnv(pkgdb_error) => {
-            format_pkgdb_error(pkgdb_error, err, "Failed to build environment.")
-        },
         LockedManifestError::UpdateFailed(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to update environment.")
         },

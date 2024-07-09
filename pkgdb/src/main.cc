@@ -24,6 +24,7 @@
 #include "flox/core/command.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/eval.hh"
+#include "flox/linkenv/command.hh"
 #include "flox/parse/command.hh"
 #include "flox/pkgdb/command.hh"
 #include "flox/pkgdb/metrics.hh"
@@ -128,6 +129,9 @@ run( int argc, char * argv[] )
   flox::buildenv::BuildEnvCommand cmdBuildEnv;
   prog.add_subparser( cmdBuildEnv.getParser() );
 
+  flox::linkenv::LinkEnvCommand cmdLinkEnv;
+  prog.add_subparser( cmdLinkEnv.getParser() );
+
 
   /* Parse Args */
   try
@@ -156,6 +160,7 @@ run( int argc, char * argv[] )
   if ( prog.is_subcommand_used( "repl" ) ) { return cmdRepl.run(); }
   if ( prog.is_subcommand_used( "eval" ) ) { return cmdEval.run(); }
   if ( prog.is_subcommand_used( "buildenv" ) ) { return cmdBuildEnv.run(); }
+  if ( prog.is_subcommand_used( "linkenv" ) ) { return cmdLinkEnv.run(); }
 
   // TODO: better error for this,
   // likely only occurs if we add a new command without handling it (?)
