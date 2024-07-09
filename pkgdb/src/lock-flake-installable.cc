@@ -119,13 +119,7 @@ locateInstallable( const nix::ref<nix::EvalState> & state,
           "packages." + system + ".",
           "legacyPackages." + system + ".",
         },
-        nix::flake::LockFlags {
-          .recreateLockFile = false,
-          .updateLockFile   = false,
-          .writeLockFile    = false,
-          .allowUnlocked    = true,
-          .commitLockFile   = false,
-        } );
+        lockFlags );
 
       return installable;
     }
@@ -156,12 +150,17 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
                       extendedOutputsSpec.to_string() ) );
 
   auto lockFlags = nix::flake::LockFlags {
-    .recreateLockFile = false,
-    .updateLockFile   = false,
-    .writeLockFile    = false,
-    .useRegistries    = false,
-    .allowUnlocked    = true,
-    .commitLockFile   = false,
+    .recreateLockFile      = false,
+    .updateLockFile        = false,
+    .writeLockFile         = false,
+    .useRegistries         = false,
+    .applyNixConfig        = false,
+    .allowUnlocked         = true,
+    .commitLockFile        = false,
+    .referenceLockFilePath = std::nullopt,
+    .outputLockFilePath    = std::nullopt,
+    .inputOverrides        = std::map<nix::flake::InputPath, nix::FlakeRef> {},
+    .inputUpdates          = std::set<nix::flake::InputPath> {}
   };
 
   auto installable = locateInstallable( state,
