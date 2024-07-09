@@ -40,6 +40,22 @@ declare -r _flox_shell="${FLOX_SHELL:-$SHELL}"
 # Unset FLOX_SHELL to detect the parent shell anew with each flox invocation.
 unset FLOX_SHELL
 
+# Bail if the shell is unsupported.
+case "$_flox_shell" in
+  *bash)
+    ;;
+  *fish)
+    ;;
+  *tcsh)
+    ;;
+  *zsh)
+    ;;
+  *)
+    echo "Unsupported shell: $_flox_shell" >&2
+    exit 1
+    ;;
+esac
+
 # Set all other variables derived from FLOX_ENV. We previously did this
 # from within the rust CLI but we've moved it to this top-level activation
 # script so that it can be invoked without using the flox CLI, e.g. as
