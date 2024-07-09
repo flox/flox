@@ -209,31 +209,19 @@ impl Environment for ManagedEnvironment {
 
         local_checkout.lock(flox)?;
         let store_path = local_checkout.build(flox)?;
-        local_checkout.link(flox, &self.out_link, &Some(store_path))?;
+        local_checkout.link(flox, &self.out_link, &store_path)?;
 
         Ok(())
     }
 
     fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
-        let generations = self
-            .generations()
-            .writable(flox.temp_dir.clone())
-            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-        let mut temporary = generations
-            .get_current_generation()
-            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+        let mut temporary = self.local_env_or_copy_current_generation(flox)?;
 
         Ok(temporary.lock(flox)?)
     }
 
     fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError> {
-        let generations = self
-            .generations()
-            .writable(flox.temp_dir.clone())
-            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-        let mut temporary = generations
-            .get_current_generation()
-            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
+        let mut temporary = self.local_env_or_copy_current_generation(flox)?;
 
         let builder = temporary.build_container(flox)?;
         Ok(builder)
@@ -269,7 +257,9 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut local_checkout, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        local_checkout.link(flox, &self.out_link, &result.store_path)?;
+        if let Some(ref store_path) = &result.store_path {
+            local_checkout.link(flox, &self.out_link, store_path)?;
+        }
 
         Ok(result)
     }
@@ -303,7 +293,9 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut local_checkout, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        local_checkout.link(flox, &self.out_link, &result.store_path)?;
+        if let Some(ref store_path) = &result.store_path {
+            local_checkout.link(flox, &self.out_link, store_path)?;
+        }
 
         Ok(result)
     }
@@ -319,14 +311,14 @@ impl Environment for ManagedEnvironment {
 
         let result = local_checkout.edit(flox, contents)?;
 
-        if let EditResult::Success { store_path } | EditResult::ReActivateRequired { store_path } =
-            &result
-        {
+        if result != EditResult::Unchanged {
             generations
                 .add_generation(&mut local_checkout, "manually edited".to_string())
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
             self.lock_pointer()?;
-            local_checkout.link(flox, &self.out_link, store_path)?;
+            if let Some(ref store_path) = result.store_path() {
+                local_checkout.link(flox, &self.out_link, store_path)?;
+            }
         }
 
         Ok(result)
@@ -363,7 +355,9 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata)
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link, &result.store_path)?;
+        if let Some(ref store_path) = result.store_path {
+            temporary.link(flox, &self.out_link, store_path)?;
+        }
 
         Ok(result)
     }
@@ -547,7 +541,7 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata.to_string())
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link, &Some(store_path))?;
+        temporary.link(flox, &self.out_link, &store_path)?;
 
         Ok(())
     }
@@ -974,7 +968,7 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::Build)?;
 
         local_checkout
-            .link(flox, &self.out_link, &Some(store_path))
+            .link(flox, &self.out_link, &store_path)
             .map_err(ManagedEnvironmentError::Link)?;
 
         let mut generations = self

@@ -12,13 +12,13 @@ use flox_rust_sdk::models::search::{
     SearchParams,
     SearchResult,
     SearchResults,
+    SearchStrategy,
     ShowError,
 };
 use flox_rust_sdk::providers::catalog::{ClientTrait, VersionsError};
 use log::debug;
 use tracing::instrument;
 
-use crate::config::features::Features;
 use crate::subcommand_metric;
 use crate::utils::search::{manifest_and_lockfile, DEFAULT_DESCRIPTION, SEARCH_INPUT_SEPARATOR};
 
@@ -73,6 +73,7 @@ impl Show {
                 manifest.map(|p| p.try_into()).transpose()?,
                 global_manifest_path(&flox).try_into()?,
                 PathOrJson::Path(lockfile),
+                flox.features.search_strategy,
             )?;
 
             let (search_results, exit_status) = do_search(&search_params)?;
@@ -101,6 +102,7 @@ fn construct_show_params(
     manifest: Option<PathOrJson>,
     global_manifest: PathOrJson,
     lockfile: PathOrJson,
+    search_strategy: SearchStrategy,
 ) -> Result<SearchParams> {
     let parts = search_term
         .split(SEARCH_INPUT_SEPARATOR)
@@ -114,7 +116,7 @@ fn construct_show_params(
 
     let query = Query::new(
         package_name.as_ref().unwrap(), // We already know it's Some(_)
-        Features::parse()?.search_strategy,
+        search_strategy,
         None,
         false,
     )?;

@@ -6,7 +6,7 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
-use flox_rust_sdk::flox::EnvironmentRef;
+use flox_rust_sdk::flox::{EnvironmentRef, Features};
 use flox_rust_sdk::models::search::SearchLimit;
 use itertools::{Either, Itertools};
 use log::{debug, trace};
@@ -17,8 +17,6 @@ use thiserror::Error;
 use toml_edit::{DocumentMut, Item, Key, Table, TableLike};
 use url::Url;
 use xdg::BaseDirectories;
-
-use self::features::Features;
 
 /// Name of flox managed directories (config, data, cache)
 const FLOX_DIR_NAME: &str = "flox";
@@ -35,6 +33,11 @@ pub struct Config {
     #[serde(default)]
     pub nix: Option<NixConfig>,
 
+    /// Feature flags are set from config but more commonly controlled by
+    /// `FLOX_FEATURES_` environment variables.
+    ///
+    /// Accessing from `flox_rust_sdk::flox::Flox.features` should be prefered
+    /// over `flox::config::Config.features` if both are available.
     #[serde(default)]
     pub features: Option<Features>,
 }
@@ -108,8 +111,6 @@ pub enum EnvironmentPromptConfig {
 pub struct NixConfig {
     pub access_tokens: HashMap<String, String>,
 }
-
-pub mod features;
 
 /// Error returned by [`Config::get()`]
 #[derive(Debug, Error)]

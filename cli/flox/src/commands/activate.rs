@@ -24,7 +24,6 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
     FLOX_SERVICES_SOCKET_VAR,
 };
-use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::manifest::TypedManifest;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
 use indexmap::IndexSet;
@@ -118,11 +117,11 @@ impl Activate {
         };
 
         let activation_path = match activation_path_result {
-            Err(EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
-                LockedManifestError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+            Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
+                CallPkgDbError::PkgDbError(PkgDbError {
                     exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
                     ..
-                })),
+                }),
             ))) => {
                 let mut message = format!(
                     "This environment is not yet compatible with your system ({system}).",

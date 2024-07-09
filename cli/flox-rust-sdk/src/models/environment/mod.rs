@@ -20,7 +20,6 @@ use super::manifest::{ManifestError, PackageToInstall, RawManifest, TomlEditErro
 use super::pkgdb::UpgradeResult;
 use crate::data::{CanonicalPath, CanonicalizeError, Version};
 use crate::flox::{Flox, Floxhub};
-use crate::models::pkgdb::call_pkgdb;
 use crate::providers::git::{
     GitCommandDiscoverError,
     GitCommandProvider,

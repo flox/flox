@@ -24,6 +24,7 @@
 #include "flox/core/command.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/eval.hh"
+#include "flox/linkenv/command.hh"
 #include "flox/lock-flake-installable.hh"
 #include "flox/parse/command.hh"
 #include "flox/pkgdb/command.hh"
@@ -132,6 +133,9 @@ run( int argc, char * argv[] )
   flox::LockCommand cmdLock;
   prog.add_subparser( cmdLock.getParser() );
 
+  flox::linkenv::LinkEnvCommand cmdLinkEnv;
+  prog.add_subparser( cmdLinkEnv.getParser() );
+
   /* Parse Args */
   try
     {
@@ -163,7 +167,11 @@ run( int argc, char * argv[] )
     {
       return cmdLock.run();
     }
-
+  if ( prog.is_subcommand_used( cmdLinkEnv.getParser() ) )
+    {
+      return cmdLinkEnv.run();
+    }
+  
   // TODO: better error for this,
   // likely only occurs if we add a new command without handling it (?)
   throw flox::FloxException( "unrecognized command" );

@@ -17,7 +17,6 @@ use std::str::FromStr;
 use log::debug;
 use thiserror::Error;
 
-use super::container_builder::ContainerBuilder;
 use super::environment::UpdateResult;
 use super::manifest::{
     Allows,
@@ -30,7 +29,7 @@ use super::pkgdb::CallPkgDbError;
 use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
 use crate::flox::Flox;
 use crate::models::environment::{global_manifest_lockfile_path, global_manifest_path};
-use crate::models::pkgdb::{call_pkgdb, BuildEnvResult, PKGDB_BIN};
+use crate::models::pkgdb::{call_pkgdb, PKGDB_BIN};
 use crate::providers::catalog::{
     self,
     CatalogPage,
@@ -83,65 +82,6 @@ impl<'de> Deserialize<'de> for LockedManifest {
 }
 
 impl LockedManifest {
-    /// Build a locked manifest
-    ///
-    /// If a gcroot_out_link_path is provided,
-    /// the environment will be linked to that path and a gcroot will be created
-    pub fn build(
-        &self,
-        pkgdb: &Path,
-        gcroot_out_link_path: Option<&Path>,
-        store_path: &Option<PathBuf>,
-        service_config_path: Option<&Path>,
-    ) -> Result<PathBuf, LockedManifestError> {
-        let mut pkgdb_cmd = Command::new(pkgdb);
-        pkgdb_cmd.arg("buildenv").arg(&self.to_string());
-
-        if let Some(gcroot_out_link_path) = gcroot_out_link_path {
-            pkgdb_cmd.args(["--out-link", &gcroot_out_link_path.to_string_lossy()]);
-            if let Some(store_path) = store_path {
-                pkgdb_cmd.args(["--store-path", &store_path.to_string_lossy()]);
-            }
-        }
-
-        if let Some(service_config_path) = service_config_path {
-            pkgdb_cmd.args(["--service-config", &service_config_path.to_string_lossy()]);
-        }
-
-        debug!("building environment with command: {}", pkgdb_cmd.display());
-
-        let result: BuildEnvResult =
-            serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::BuildEnv)?)
-                .map_err(LockedManifestError::ParseBuildEnvOutput)?;
-
-        Ok(PathBuf::from(result.store_path))
-    }
-
-    /// Build a container image from a locked manifest
-    /// and write it to a provided sink.
-    ///
-    /// The sink can be e.g. a [File](std::fs::File), [Stdout](std::io::Stdout),
-    /// or an internal buffer.
-    pub fn build_container(&self, pkgdb: &Path) -> Result<ContainerBuilder, LockedManifestError> {
-        let mut pkgdb_cmd = Command::new(pkgdb);
-        pkgdb_cmd
-            .arg("buildenv")
-            .arg("--container")
-            .arg(&self.to_string());
-
-        debug!(
-            "building container builder with command: {}",
-            pkgdb_cmd.display()
-        );
-        let result: BuildEnvResult =
-            serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::BuildEnv)?)
-                .map_err(LockedManifestError::ParseBuildEnvOutput)?;
-
-        let container_builder_path = PathBuf::from(result.store_path);
-
-        Ok(ContainerBuilder::new(container_builder_path))
-    }
-
     pub fn read_from_file(path: &CanonicalPath) -> Result<Self, LockedManifestError> {
         let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
         serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
@@ -1220,18 +1160,8 @@ pub enum LockedManifestError {
     LockManifest(#[source] CallPkgDbError),
     #[error("failed to check lockfile")]
     CheckLockfile(#[source] CallPkgDbError),
-    #[error("failed to build environment")]
-    BuildEnv(#[source] CallPkgDbError),
     #[error("failed to parse check warnings")]
     ParseCheckWarnings(#[source] serde_json::Error),
-    #[error("package is unsupported for this sytem")]
-    UnsupportedPackageWithDocLink(#[source] CallPkgDbError),
-    #[error("failed to build container builder")]
-    CallContainerBuilder(#[source] std::io::Error),
-    #[error("failed to write container builder to sink")]
-    WriteContainer(#[source] std::io::Error),
-    #[error("failed to parse buildenv output")]
-    ParseBuildEnvOutput(#[source] serde_json::Error),
     #[error("failed to update environment")]
     UpdateFailed(#[source] CallPkgDbError),
     #[error(transparent)]
