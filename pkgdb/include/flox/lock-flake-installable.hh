@@ -63,7 +63,8 @@ struct LockedInstallable
   std::string                        derivation;
   std::map<std::string, std::string> outputs;
   std::set<std::string>              outputsToInstall;
-  std::string                        system;
+  std::string                        packageSystem;
+  std::string                        lockedSystem;
   std::string                        name;
   std::optional<std::string>         pname;
   std::optional<std::string>         version;
@@ -80,7 +81,8 @@ struct LockedInstallable
            && lockedAttrPath == other.lockedAttrPath
            && derivation == other.derivation && outputs == other.outputs
            && outputsToInstall == other.outputsToInstall
-           && system == other.system && name == other.name
+           && packageSystem == other.packageSystem
+           && lockedSystem == other.lockedSystem && name == other.name
            && pname == other.pname && version == other.version
            && description == other.description && license == other.license
            && broken == other.broken && unfree == other.unfree;

@@ -285,6 +285,21 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
       outputSpec.raw() );
   }
 
+  std::string systemAttribute;
+  {
+    auto systemCursor
+      = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "system" ) );
+
+    if ( ! systemCursor )
+      {
+        throw LockFlakeInstallableException(
+          nix::fmt( "could not find '%s.%s' in derivation",
+                    lockedAttrPath,
+                    "system" ) );
+      }
+    systemAttribute = ( *systemCursor )->getString();
+  }
+
   // Read `name` field - field is impliend by the derivation
   std::string name;
   {
@@ -360,7 +375,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     .derivation       = derivation,
     .outputs          = outputs,
     .outputsToInstall = outputsToInstall,
-    .system           = system,
+    .packageSystem    = systemAttribute,
+    .lockedSystem     = system,
     .name             = name,
     .pname            = pname,
     .version          = version,
@@ -384,7 +400,8 @@ to_json( nlohmann::json & jto, const LockedInstallable & from )
     { "derivation", from.derivation },
     { "outputs", from.outputs },
     { "outputs-to-install", from.outputsToInstall },
-    { "system", from.system },
+    { "package-system", from.packageSystem },
+    { "locked-system", from.lockedSystem },
     { "name", from.name },
     { "pname", from.pname },
     { "version", from.version },
