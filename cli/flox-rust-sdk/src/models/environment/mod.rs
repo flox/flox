@@ -725,23 +725,24 @@ pub fn path_hash(p: &impl AsRef<Path>) -> String {
 /// - TMPDIR will often have a long path, e.g.
 ///   /var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.vfDA8u
 /// - /var/run is not writeable
-/// So we use /tmp
+/// So we use `flox.cache_dir.join("run")` which is typically
+/// `~/.cache/flox/run`
 ///
 /// On Linux use XDG_RUNTIME_DIR per
 /// https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
-/// If unset, fallback to /tmp
+/// If unset, fallback to cache_dir like for macOS.
 fn services_socket_path(id: &str, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
     #[cfg(target_os = "macos")]
     let runtime_dir = None;
-    #[cfg(target_os = "macos")]
-    let max_length = 104;
-
     #[cfg(target_os = "linux")]
     let runtime_dir = {
         let base_directories =
             xdg::BaseDirectories::new().map_err(EnvironmentError::DetectRuntimeDir)?;
         base_directories.get_runtime_directory().ok().cloned()
     };
+
+    #[cfg(target_os = "macos")]
+    let max_length = 104;
     #[cfg(target_os = "linux")]
     // 108 minus a null character
     let max_length = 107;
