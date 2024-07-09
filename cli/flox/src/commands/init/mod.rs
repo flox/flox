@@ -658,7 +658,7 @@ async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<Provided
         );
         let query = Query::new(
             package.to_string().as_ref(),
-            flox.features.search_strategy.clone(),
+            flox.features.search_strategy,
             NonZeroU8::new(1),
             false,
         )?;

@@ -121,7 +121,7 @@ impl std::fmt::Display for PathOrJson {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, Default, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum SearchStrategy {
     Match,

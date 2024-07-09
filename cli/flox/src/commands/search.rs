@@ -104,7 +104,7 @@ impl Search {
                 manifest.clone(),
                 global_manifest.clone(),
                 lockfile.clone(),
-                flox.features.search_strategy.clone(),
+                flox.features.search_strategy,
             )?;
 
             let (results, exit_status) = Dialog {

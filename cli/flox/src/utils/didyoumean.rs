@@ -96,7 +96,7 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
             Some(environment.manifest_path(flox)?.try_into()?),
             global_manifest_path(flox).try_into()?,
             lockfile,
-            flox.features.search_strategy.clone(),
+            flox.features.search_strategy,
         )?;
 
         let (results, _) = Dialog {
