@@ -152,7 +152,7 @@ impl Config {
             initialized = INSTANCE.get().is_some()
         );
 
-        fn read_raw_cofig() -> Result<HierarchicalConfig> {
+        fn read_raw_config() -> Result<HierarchicalConfig> {
             let flox_dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
 
             let cache_dir = flox_dirs.get_cache_home();
@@ -229,14 +229,14 @@ impl Config {
             // If we are initializing the config for the first time,
             // we don't need to reload right after
             reload = false;
-            let config = read_raw_cofig()?;
+            let config = read_raw_config()?;
 
             Ok::<_, anyhow::Error>(Mutex::new(config))
         })?;
 
         let mut config_guard = instance.lock().expect("config mutex poisoned");
         if reload {
-            *config_guard = read_raw_cofig()?;
+            *config_guard = read_raw_config()?;
         }
 
         return Ok(config_guard.deref().clone());

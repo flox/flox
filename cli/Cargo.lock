@@ -1128,6 +1128,7 @@ dependencies = [
  "url",
  "uuid",
  "walkdir",
+ "xdg",
 ]
 
 [[package]]

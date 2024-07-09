@@ -262,7 +262,7 @@ impl Activate {
                 exports.insert(
                     FLOX_SERVICES_SOCKET_VAR,
                     environment
-                        .services_socket_path()?
+                        .services_socket_path(&flox)?
                         .to_string_lossy()
                         .to_string(),
                 );

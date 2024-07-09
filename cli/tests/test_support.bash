@@ -126,7 +126,12 @@ floxhub_setup() {
 setup_isolated_flox() {
   export FLOX_CONFIG_DIR="${BATS_TEST_TMPDIR?}/flox-config"
   export FLOX_DATA_DIR="${BATS_TEST_TMPDIR?}/flox-data"
-  export FLOX_CACHE_DIR="${BATS_TEST_TMPDIR?}/flox-cache"
+  # Don't use BATS_TEST_TMPDIR since we store sockets in FLOX_CACHE_DIR,
+  # and BATS_TEST_TMPDIR will likely be too long.
+  # Create within the existing FLOX_CACHE_DIR so this gets cleaned up by
+  # `common_suite_teardown`.
+  FLOX_CACHE_DIR="$(mktemp -d -p "$FLOX_CACHE_DIR")"
+  export FLOX_CACHE_DIR
   export GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_DIR/global-manifest.lock"
 }
 

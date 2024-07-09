@@ -360,11 +360,14 @@ pkgdb_vars_setup() {
 # This helper should be run after setting `FLOX_TEST_HOME'.
 flox_vars_setup() {
   xdg_vars_setup
-  export FLOX_CACHE_HOME="$XDG_CACHE_HOME/flox"
+  # We store sockets in FLOX_CACHE_DIR,
+  # so create cache in /tmp since TMPDIR may result in too long of a path.
+  FLOX_CACHE_DIR="$(mktemp -d /tmp/flox.tests.XXXXXX)"
+  export FLOX_CACHE_DIR
   export FLOX_CONFIG_DIR="$XDG_CONFIG_HOME/flox"
   export FLOX_DATA_HOME="$XDG_DATA_HOME/flox"
   export FLOX_STATE_HOME="$XDG_STATE_HOME/flox"
-  export FLOX_META="$FLOX_CACHE_HOME/meta"
+  export FLOX_META="$FLOX_CACHE_DIR/meta"
   export FLOX_ENVIRONMENTS="$FLOX_DATA_HOME/environments"
   export USER="flox-test"
   export HOME="${FLOX_TEST_HOME:-$HOME}"
@@ -436,7 +439,7 @@ common_suite_setup() {
     print_var XDG_CONFIG_HOME
     print_var XDG_DATA_HOME
     print_var XDG_STATE_HOME
-    print_var FLOX_CACHE_HOME
+    print_var FLOX_CACHE_DIR
     print_var FLOX_CONFIG_DIR
     print_var FLOX_DATA_HOME
     print_var FLOX_STATE_HOME
@@ -467,6 +470,7 @@ common_suite_teardown() {
   if [[ -z ${FLOX_TEST_KEEP_TMP-} ]]; then
     rm -rf "$BATS_SUITE_TMPDIR"
   fi
+  rm -rf "$FLOX_CACHE_DIR"
   # Our agent was useful, but it's time for them to retire.
   # We force true in case we are tearing down when an agent never launched.
   eval "$(ssh-agent -k 2> /dev/null || echo ':')"

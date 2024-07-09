@@ -51,7 +51,6 @@ pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
-pub const SERVICES_SOCKET_NAME: &str = "services.sock";
 pub const LIB_DIR_NAME: &str = "lib";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
@@ -291,7 +290,7 @@ pub trait Environment: Send {
         migration_info: MigrationInfo,
     ) -> Result<(), EnvironmentError>;
 
-    fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError>;
+    fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
 }
 
 /// A pointer to an environment, either managed or path.
@@ -562,6 +561,15 @@ pub enum EnvironmentError {
 
     #[error(transparent)]
     Canonicalize(CanonicalizeError),
+
+    #[error("could not detect XDG_RUNTIME_DIR")]
+    DetectRuntimeDir(#[source] xdg::BaseDirectoriesError),
+
+    #[error("could not create services socket directory")]
+    CreateServicesSocketDirectory(#[source] std::io::Error),
+
+    #[error("path for services socket is too long: {0}")]
+    ServicesSocketPathTooLong(PathBuf),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -710,9 +718,63 @@ pub fn path_hash(p: &impl AsRef<Path>) -> String {
     chars.to_string()
 }
 
+/// Return a path to the services socket given a unique identifier
+///
+/// Socket paths cannot exceed 104 characters on macOS
+/// - TMPDIR will often have a long path, e.g.
+///   /var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.vfDA8u
+/// - /var/run is not writeable
+/// So we use `flox.cache_dir.join("run")` which is typically
+/// `~/.cache/flox/run`
+///
+/// On Linux use XDG_RUNTIME_DIR per
+/// https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+/// If unset, fallback to cache_dir like for macOS.
+fn services_socket_path(id: &str, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+    #[cfg(target_os = "macos")]
+    let runtime_dir = None;
+    #[cfg(target_os = "linux")]
+    let runtime_dir = {
+        let base_directories =
+            xdg::BaseDirectories::new().map_err(EnvironmentError::DetectRuntimeDir)?;
+        base_directories.get_runtime_directory().ok().cloned()
+    };
+
+    #[cfg(target_os = "macos")]
+    let max_length = 104;
+    #[cfg(target_os = "linux")]
+    // 108 minus a null character
+    let max_length = 107;
+
+    let directory = match runtime_dir {
+        Some(dir) => dir,
+        None => {
+            let fallback = flox.cache_dir.join("run");
+            // We don't want to error if the directory already exists,
+            // so use create_dir_all.
+            std::fs::create_dir_all(&fallback)
+                .map_err(EnvironmentError::CreateServicesSocketDirectory)?;
+            fallback
+        },
+    };
+    // Canonicalize so we error early if the path doesn't exist
+    let canonicalized = CanonicalPath::new(directory).map_err(EnvironmentError::Canonicalize)?;
+
+    let socket_path = canonicalized.join(format!("flox.{}.sock", id));
+
+    if socket_path.as_os_str().len() > max_length {
+        return Err(EnvironmentError::ServicesSocketPathTooLong(socket_path));
+    }
+
+    Ok(socket_path)
+}
+
 #[cfg(test)]
 mod test {
+    #[cfg(target_os = "linux")]
+    use std::os::unix::fs::PermissionsExt;
     use std::str::FromStr;
+    use std::time::Duration;
 
     use once_cell::sync::Lazy;
     use path_environment::test_helpers::new_path_environment;
@@ -1070,5 +1132,93 @@ mod test {
         let mut environment = new_path_environment(&flox, "version = 1");
         environment.lock(&flox).unwrap();
         assert!(environment.needs_migration_to_v1(&flox).unwrap().is_none());
+    }
+
+    #[test]
+    fn stable_path_hash() {
+        // Ensure that running the path_hash function gives you the same results
+        // with the same input e.g. doesn't depend on time, etc
+        let (_flox, tmp_dir) = flox_instance();
+        let path = tmp_dir.path().join("foo");
+        std::fs::File::create(&path).unwrap();
+        let path = CanonicalPath::new(path).unwrap();
+
+        let hash1 = path_hash(&path);
+        std::thread::sleep(Duration::from_millis(1_000));
+        let hash2 = path_hash(&path);
+        assert_eq!(hash1, hash2);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn services_socket_path_respects_xdg_runtime_dir() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        // In reality XDG_RUNTIME_DIR would be something like `/run/user/1001`,
+        // but that won't necessarily exist where this unit test is run.
+        // We need a directory with group and others rights 00 otherwise
+        // xdg::BaseDirectories errors.
+        // And it needs to result in a path shorter than 107 characters.
+        let tempdir = tempfile::Builder::new()
+            .permissions(std::fs::Permissions::from_mode(0o700))
+            .tempdir_in("/tmp")
+            .unwrap();
+        let runtime_dir = tempdir.path();
+        let socket_path = temp_env::with_var("XDG_RUNTIME_DIR", Some(&runtime_dir), || {
+            services_socket_path("1", &flox)
+        })
+        .unwrap();
+        assert_eq!(socket_path, runtime_dir.join("flox.1.sock"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn services_socket_path_falls_back_to_flox_cache() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let socket_path = temp_env::with_var("XDG_RUNTIME_DIR", None::<String>, || {
+            services_socket_path("1", &flox)
+        })
+        .unwrap();
+        assert_eq!(socket_path, flox.cache_dir.join("run/flox.1.sock"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn services_socket_path_errors_if_too_long() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.cache_dir = flox.cache_dir.join("X".repeat(100));
+        let err = temp_env::with_var("XDG_RUNTIME_DIR", None::<String>, || {
+            services_socket_path("1", &flox)
+        })
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            EnvironmentError::ServicesSocketPathTooLong(_)
+        ));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn services_socket_path_uses_flox_cache() {
+        let (flox, _temp_dir_handle) = flox_instance();
+        let socket_path = services_socket_path("1", &flox).unwrap();
+        assert_eq!(
+            socket_path,
+            flox.cache_dir
+                .canonicalize()
+                .unwrap()
+                .join("run/flox.1.sock")
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn services_socket_path_errors_if_too_long() {
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        flox.cache_dir = flox.cache_dir.join("X".repeat(100));
+        let err = services_socket_path("1", &flox).unwrap_err();
+        assert!(matches!(
+            err,
+            EnvironmentError::ServicesSocketPathTooLong(_)
+        ));
     }
 }

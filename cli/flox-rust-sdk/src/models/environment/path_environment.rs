@@ -23,6 +23,8 @@ use log::debug;
 
 use super::core_environment::CoreEnvironment;
 use super::{
+    path_hash,
+    services_socket_path,
     DotFlox,
     EditResult,
     Environment,
@@ -39,7 +41,6 @@ use super::{
     GCROOTS_DIR_NAME,
     LIB_DIR_NAME,
     LOCKFILE_FILENAME,
-    SERVICES_SOCKET_NAME,
 };
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
@@ -167,6 +168,11 @@ impl PathEnvironment {
             .map_err(EnvironmentError::WriteEnvJson)?;
 
         Ok(())
+    }
+
+    /// Returns a unique identifier for the location of the environment.
+    fn path_hash(&self) -> String {
+        path_hash(&self.path)
     }
 }
 
@@ -365,8 +371,8 @@ impl Environment for PathEnvironment {
 
     /// Return the path where the process compose socket for an environment
     /// should be created
-    fn services_socket_path(&self) -> Result<PathBuf, EnvironmentError> {
-        Ok(self.cache_path()?.join(SERVICES_SOCKET_NAME))
+    fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+        services_socket_path(&self.path_hash(), flox)
     }
 }
 

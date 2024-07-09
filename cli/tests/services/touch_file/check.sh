@@ -3,7 +3,7 @@
 set -eo pipefail
 
 echo "activating"
-eval $("$FLOX_BIN" activate)
+eval "$("$FLOX_BIN" activate)"
 CONFIG_FILE="$FLOX_ENV/service-config.yaml"
 SOCKET_FILE="${_FLOX_SERVICES_SOCKET}"
 
