@@ -98,19 +98,19 @@ parseInstallable( const std::string & installableStr )
 static nix::InstallableFlake
 locateInstallable( const nix::ref<nix::EvalState> & state,
                    const std::string &              system,
-                   nix::FlakeRef                    flakeRef,
-                   const std::string                fragment,
-                   const nix::ExtendedOutputsSpec   extendedOutputsSpec )
+                   nix::FlakeRef &                  flakeRef,
+                   const std::string &              fragment,
+                   const nix::ExtendedOutputsSpec & extendedOutputsSpec,
+                   const nix::flake::LockFlags &    lockFlags )
 {
-
   try
     {
       nix::InstallableFlake installable = nix::InstallableFlake(
         static_cast<nix::SourceExprCommand *>( nullptr ),
         state,
         std::move( flakeRef ),
-        std::move( fragment ),
-        std::move( extendedOutputsSpec ),
+        fragment,
+        extendedOutputsSpec,
         nix::Strings {
           "packages." + system + ".default",
           "legacyPackages." + system + ".default",
@@ -155,12 +155,21 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   debugLog( nix::fmt( "original extendedOutputsSpec: '%s'",
                       extendedOutputsSpec.to_string() ) );
 
+  auto lockFlags = nix::flake::LockFlags {
+    .recreateLockFile = false,
+    .updateLockFile   = false,
+    .writeLockFile    = false,
+    .useRegistries    = false,
+    .allowUnlocked    = true,
+    .commitLockFile   = false,
+  };
 
   auto installable = locateInstallable( state,
                                         system,
                                         flakeRef,
                                         fragment,
-                                        extendedOutputsSpec );
+                                        extendedOutputsSpec,
+                                        lockFlags );
 
   debugLog(
     nix::fmt( "locked installable: '%s'", installable.what().c_str() ) );
