@@ -6,7 +6,7 @@ use std::{env, fs};
 
 use anyhow::{Context, Result};
 use config::{Config as HierarchicalConfig, Environment};
-use flox_rust_sdk::flox::EnvironmentRef;
+use flox_rust_sdk::flox::{EnvironmentRef, Features};
 use flox_rust_sdk::models::search::SearchLimit;
 use itertools::{Either, Itertools};
 use log::{debug, trace};
@@ -39,7 +39,7 @@ pub struct Config {
     /// Accessing from `flox_rust_sdk::flox::Flox.features` should be prefered
     /// over `flox::config::Config.features` if both are available.
     #[serde(default)]
-    pub features: Option<flox_rust_sdk::flox::Features>,
+    pub features: Option<Features>,
 }
 
 // TODO: move to flox_sdk?
