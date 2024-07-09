@@ -602,13 +602,14 @@ impl UpdateNotification {
     ///
     /// Timeout after TRAILING_NETWORK_CALL_TIMEOUT
     async fn get_latest_version(sentry_env: &str) -> Result<String, UpdateNotificationError> {
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(TRAILING_NETWORK_CALL_TIMEOUT)
+            .build()
+            .map_err(UpdateNotificationError::Network)?;
 
-        let request = client
-            .get(format!(
-                "https://downloads.flox.dev/by-env/{sentry_env}/LATEST_VERSION",
-            ))
-            .timeout(TRAILING_NETWORK_CALL_TIMEOUT);
+        let request = client.get(format!(
+            "https://downloads.flox.dev/by-env/{sentry_env}/LATEST_VERSION",
+        ));
 
         let response = request.send().await.map_err(|e| {
             // We'll want to ignore errors if network is non-existent or slow

@@ -465,13 +465,14 @@ impl Connection for AWSDatalakeConnection {
         debug!("Sending metrics to {}", &self.endpoint_url);
         debug!("Metrics: {events:#}");
 
-        reqwest::blocking::Client::new()
+        reqwest::blocking::Client::builder()
+            .timeout(self.timeout)
+            .build()?
             .put(&self.endpoint_url)
             .header("content-type", "application/json")
             .header("x-api-key", &self.api_key)
             .header("user-agent", format!("flox-cli/{}", &*FLOX_VERSION))
             .json(&events)
-            .timeout(self.timeout)
             .send()?;
         Ok(())
     }
