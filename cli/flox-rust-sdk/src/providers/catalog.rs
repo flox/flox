@@ -1024,9 +1024,55 @@ mod tests {
     use pollster::FutureExt;
     use proptest::collection::vec;
     use proptest::prelude::*;
+    use serde_json::json;
     use tempfile::NamedTempFile;
 
     use super::*;
+
+    #[tokio::test]
+    async fn resolve_response_with_new_message_type() {
+        // let expected_agent = format!("flox-cli/{}", &*FLOX_VERSION);
+        let user_message = "User consumable Message";
+        let user_message_type = "willnevereverexist_ihope";
+        let json_response = json!(
+        {
+        "items": [
+            {
+            "messages": [
+                {
+                    "type": user_message_type,
+                    "level": "error",
+                    "message": user_message,
+                    "context": {},
+                }
+            ],
+            "name": "group",
+            "page": null,
+            } ]
+        });
+        let resolve_req = vec![PackageGroup {
+            name: "group".to_string(),
+            descriptors: vec![],
+        }];
+
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|_when, then| {
+            then.status(200).json_body(json_response);
+        });
+
+        let client = CatalogClient::new(&server.base_url());
+        let res = client.resolve(resolve_req).await.unwrap();
+        match &res[0].msgs[0] {
+            ResolutionMessage::Unknown(msg_struct) => {
+                assert!(msg_struct.msg == user_message);
+                assert!(msg_struct.msg_type == user_message_type);
+            },
+            _ => {
+                assert!(false)
+            },
+        };
+        mock.assert();
+    }
 
     #[tokio::test]
     async fn user_agent_set_on_all_requests() {
