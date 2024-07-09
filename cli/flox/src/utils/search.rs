@@ -15,11 +15,11 @@ use flox_rust_sdk::models::search::{
     SearchParams,
     SearchResult,
     SearchResults,
+    SearchStrategy,
 };
 use log::debug;
 
 use crate::commands::{detect_environment, UninitializedEnvironment};
-use crate::config::features::Features;
 
 pub const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 pub const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
@@ -88,13 +88,9 @@ pub(crate) fn construct_search_params(
     manifest: Option<PathOrJson>,
     global_manifest: PathOrJson,
     lockfile: PathOrJson,
+    search_strategy: SearchStrategy,
 ) -> Result<SearchParams> {
-    let query = Query::new(
-        search_term,
-        Features::parse()?.search_strategy,
-        results_limit,
-        true,
-    )?;
+    let query = Query::new(search_term, search_strategy, results_limit, true)?;
     let params = SearchParams {
         manifest,
         global_manifest,

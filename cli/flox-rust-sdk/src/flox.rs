@@ -9,6 +9,7 @@ use thiserror::Error;
 use url::Url;
 
 pub use crate::models::environment_ref::{self, *};
+use crate::models::search::SearchStrategy;
 use crate::providers::catalog;
 
 pub static FLOX_VERSION: Lazy<String> =
@@ -63,9 +64,23 @@ impl Flox {}
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Features {
+    /// Which matching logic to use when searching for packages
+    #[serde(default)]
+    pub search_strategy: SearchStrategy,
+    #[serde(default)]
+    pub use_catalog: UseCatalog,
     /// Whether to enable services
     #[serde(default)]
     pub services: bool,
+}
+
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, derive_more::Deref)]
+pub struct UseCatalog(bool);
+
+impl Default for UseCatalog {
+    fn default() -> Self {
+        UseCatalog(true)
+    }
 }
 
 pub static DEFAULT_FLOXHUB_URL: Lazy<Url> =

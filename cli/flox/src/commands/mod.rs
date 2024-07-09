@@ -29,7 +29,6 @@ use flox_rust_sdk::flox::{
     EnvironmentName,
     EnvironmentOwner,
     EnvironmentRef,
-    Features,
     Flox,
     Floxhub,
     FloxhubToken,
@@ -321,13 +320,6 @@ impl FloxArgs {
         };
 
         let catalog_client = init_catalog_client(&config)?;
-        let features = config
-            .features
-            .as_ref()
-            .map(|f| Features {
-                services: f.services,
-            })
-            .unwrap_or_default();
 
         let flox = Flox {
             cache_dir: config.flox.cache_dir.clone(),
@@ -341,7 +333,7 @@ impl FloxArgs {
             floxhub_token,
             floxhub,
             catalog_client,
-            features,
+            features: config.features.clone().unwrap_or_default(),
         };
 
         // in debug mode keep the tempdir to reproduce nix commands
