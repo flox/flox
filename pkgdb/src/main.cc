@@ -130,7 +130,7 @@ run( int argc, char * argv[] )
   flox::buildenv::BuildEnvCommand cmdBuildEnv;
   prog.add_subparser( cmdBuildEnv.getParser() );
 
-  flox::LockCommand cmdLock;
+  flox::LockFlakeInstallableCommand cmdLock;
   prog.add_subparser( cmdLock.getParser() );
 
   flox::linkenv::LinkEnvCommand cmdLinkEnv;

@@ -24,7 +24,7 @@ namespace flox {
 /* -------------------------------------------------------------------------- */
 
 /** @brief Lock a flake installable for flox */
-class LockCommand : flox::NixState
+class LockFlakeInstallableCommand : flox::NixState
 {
 
 private:
@@ -36,7 +36,7 @@ private:
 
 public:
 
-  LockCommand();
+  LockFlakeInstallableCommand();
 
   [[nodiscard]] command::VerboseParser &
   getParser()

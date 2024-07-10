@@ -23,7 +23,8 @@ namespace flox {
 
 /* -------------------------------------------------------------------------- */
 
-LockCommand::LockCommand() : parser( "lock-flake-installable" )
+LockFlakeInstallableCommand::LockFlakeInstallableCommand()
+  : parser( "lock-flake-installable" )
 {
   this->parser.add_description(
     "Lock a flake installable and return its lock data as json" );
@@ -45,7 +46,7 @@ LockCommand::LockCommand() : parser( "lock-flake-installable" )
 /* -------------------------------------------------------------------------- */
 
 int
-LockCommand::run()
+LockFlakeInstallableCommand::run()
 {
   auto state = this->getState();
 
