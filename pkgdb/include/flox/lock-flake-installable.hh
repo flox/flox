@@ -23,7 +23,7 @@ namespace flox {
 
 /* -------------------------------------------------------------------------- */
 
-/** @brief Lock a falke installble for flox */
+/** @brief Lock a flake installable for flox */
 class LockCommand : flox::NixState
 {
 

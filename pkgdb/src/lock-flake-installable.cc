@@ -308,7 +308,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     systemAttribute = ( *systemCursor )->getString();
   }
 
-  // Read `name` field - field is impliend by the derivation
+  // Read `name` field - field is implied by the derivation
   std::string name;
   {
     auto nameCursor
