@@ -15,7 +15,6 @@ use crate::models::manifest::ManifestServices;
 use crate::utils::traceable_path;
 
 pub const SERVICES_ENV_VAR: &str = "FLOX_FEATURES_SERVICES";
-pub const SERVICES_TEMP_CONFIG_PATH_VAR: &str = "_FLOX_SERVICES_CONFIG_PATH";
 pub const SERVICE_CONFIG_FILENAME: &str = "service-config.yaml";
 pub static PROCESS_COMPOSE_BIN: Lazy<String> = Lazy::new(|| {
     env::var("PROCESS_COMPOSE_BIN").unwrap_or(env!("PROCESS_COMPOSE_BIN").to_string())
@@ -99,10 +98,6 @@ pub fn write_process_compose_config(
 
 /// Determines the location to write the service config file
 pub fn service_config_write_location(temp_dir: impl AsRef<Path>) -> Result<PathBuf, ServiceError> {
-    if let Ok(path) = env::var(SERVICES_TEMP_CONFIG_PATH_VAR) {
-        return Ok(PathBuf::from(path));
-    }
-
     let file = NamedTempFile::new_in(temp_dir).map_err(ServiceError::WriteConfig)?;
     let (_, path) = file
         .keep()

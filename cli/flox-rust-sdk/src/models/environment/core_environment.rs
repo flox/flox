@@ -1355,7 +1355,7 @@ mod tests {
     use crate::models::lockfile::ResolutionFailures;
     use crate::models::manifest::{RawManifest, DEFAULT_GROUP_NAME};
     use crate::models::{lockfile, manifest};
-    use crate::providers::services::{SERVICES_TEMP_CONFIG_PATH_VAR, SERVICE_CONFIG_FILENAME};
+    use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
     /// Create a CoreEnvironment with an empty manifest
     ///
@@ -1515,8 +1515,7 @@ mod tests {
         env.lock(&flox).unwrap();
 
         // Build the environment and verify that the config file exists
-        let store_path =
-            temp_env::with_var_unset(SERVICES_TEMP_CONFIG_PATH_VAR, || env.build(&flox).unwrap());
+        let store_path = env.build(&flox).unwrap();
         let config_path = store_path.join(SERVICE_CONFIG_FILENAME);
         assert!(config_path.exists());
     }
