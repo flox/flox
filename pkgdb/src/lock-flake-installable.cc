@@ -106,6 +106,13 @@ locateInstallable( const nix::ref<nix::EvalState> & state,
   try
     {
       nix::InstallableFlake installable = nix::InstallableFlake(
+        // The `cmd` argument is only used in nix to raise an error
+        // if `--arg` was used in the same command.
+        // The argument is never stored on the `InstallableFlake` struct
+        // or referenced outside of the constructor.
+        // We can safely pass a nullptr here, as the constructor performs a null
+        // check before dereferencing the arguement:
+        // <https://github.com/NixOS/nix/blob/509be0e77aacd8afcf419526620994cbbbe3708a/src/libcmd/installable-flake.cc#L86-L87>
         static_cast<nix::SourceExprCommand *>( nullptr ),
         state,
         std::move( flakeRef ),
