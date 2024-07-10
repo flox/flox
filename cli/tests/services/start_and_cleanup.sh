@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 set -euo pipefail
 
 export PC_SOCKET_PATH="${_FLOX_SERVICES_SOCKET}"

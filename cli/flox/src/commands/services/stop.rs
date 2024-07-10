@@ -31,7 +31,7 @@ impl Stop {
             .into_dyn_environment();
         let socket = env.services_socket_path(&flox)?;
 
-        stop_services(&socket, self.names)?;
+        stop_services(socket, &self.names)?;
 
         message::updated("Stop! In the name of love");
 

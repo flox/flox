@@ -28,7 +28,7 @@ pub enum ServiceError {
     GenerateConfig(#[source] serde_yaml::Error),
     #[error("failed to write service config")]
     WriteConfig(#[source] std::io::Error),
-    #[error("services are disabled by the feature flag")]
+    #[error("services are not enabled")]
     FeatureFlagDisabled,
     #[error("services have not been started in this activation")]
     NotInActivation,
@@ -187,8 +187,8 @@ struct ProcessState {
 struct ProcessStates(Vec<ProcessState>);
 
 impl ProcessStates {
-    fn read(socket: &Path) -> Result<ProcessStates, std::io::Error> {
-        let mut cmd = base_process_compose_command(socket);
+    fn read(socket: impl AsRef<Path>) -> Result<ProcessStates, std::io::Error> {
+        let mut cmd = base_process_compose_command(socket.as_ref());
         let output = cmd.arg("list").args(["--output", "json"]).output()?;
         let mut processes: ProcessStates = serde_json::from_slice(&output.stdout)?;
         processes
@@ -209,27 +209,34 @@ impl ProcessStates {
 
 /// Constructs a base `process-compose process` command to which additional
 /// arguments can be appended.
-fn base_process_compose_command(socket: &Path) -> Command {
+fn base_process_compose_command(socket: impl AsRef<Path>) -> Command {
     let path = Path::new(&*PROCESS_COMPOSE_BIN);
     let mut cmd = Command::new(path);
     cmd.env("PATH", path)
-        .args(["--unix-socket", &socket.to_string_lossy().as_ref()])
+        .arg("--unix-socket")
+        .arg(socket.as_ref().to_string_lossy().as_ref())
         .arg("process");
 
     cmd
 }
 
 /// Stop service(s).
-pub fn stop_services(socket: &Path, names: Vec<String>) -> Result<(), ServiceError> {
+pub fn stop_services(
+    socket: impl AsRef<Path>,
+    names: &[impl AsRef<str>],
+) -> Result<(), ServiceError> {
     let names = if names.is_empty() {
-        ProcessStates::read(socket)
+        ProcessStates::read(&socket)
             .map_err(ServiceError::ProcessComposeCmd)?
             .get_running_names()
     } else {
         names
+            .iter()
+            .map(|name| name.as_ref().to_string())
+            .collect::<Vec<_>>()
     };
 
-    tracing::debug!("stopping services: {}", names.join(","));
+    tracing::debug!(names = names.join(","), "stopping services");
 
     // TODO: Better output and error handling.
     let mut cmd = base_process_compose_command(socket);
@@ -237,9 +244,7 @@ pub fn stop_services(socket: &Path, names: Vec<String>) -> Result<(), ServiceErr
         .args(names)
         .stderr(Stdio::piped())
         .stdout(Stdio::piped())
-        .spawn()
-        .map_err(ServiceError::ProcessComposeCmd)?
-        .wait()
+        .output()
         .map_err(ServiceError::ProcessComposeCmd)?;
 
     Ok(())

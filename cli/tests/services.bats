@@ -99,7 +99,7 @@ EOF
 @test "stop: can't be used without feature flag" {
   run "$FLOX_BIN" services stop
   assert_failure
-  assert_output "❌ ERROR: services are disabled by the feature flag"
+  assert_output "❌ ERROR: services are not enabled"
 }
 
 # bats test_tags=services,services:stop
