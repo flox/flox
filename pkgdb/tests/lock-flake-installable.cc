@@ -133,7 +133,7 @@ main( int argc, char * argv[] )
   int exitCode = EXIT_SUCCESS;
 #define RUN_TEST( ... ) _RUN_TEST( exitCode, __VA_ARGS__ )
 
-  nix::verbosity = nix::lvlDebug;
+  nix::verbosity = nix::lvlWarn;
   if ( ( 1 < argc ) && ( std::string_view( argv[1] ) == "-v" ) )  // NOLINT
     {
       nix::verbosity = nix::lvlDebug;
