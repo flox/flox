@@ -1031,7 +1031,6 @@ mod tests {
 
     #[tokio::test]
     async fn resolve_response_with_new_message_type() {
-        // let expected_agent = format!("flox-cli/{}", &*FLOX_VERSION);
         let user_message = "User consumable Message";
         let user_message_type = "willnevereverexist_ihope";
         let json_response = json!(
@@ -1068,7 +1067,7 @@ mod tests {
                 assert!(msg_struct.msg_type == user_message_type);
             },
             _ => {
-                assert!(false)
+                panic!();
             },
         };
         mock.assert();
