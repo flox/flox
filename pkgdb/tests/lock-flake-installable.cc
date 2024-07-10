@@ -177,8 +177,7 @@ test_systemAttributes( const nix::ref<nix::EvalState> & state )
   auto systemSpecifiedInAttrpath = flox::lockFlakeInstallable(
     state,
     "aarch64-linux",
-    "github:nixos/nixpkgs#legacyPackages.aarch64-darwin.hello" );
-
+    localTestFlake + "#packages.aarch64-darwin.hello" );
 
   EXPECT_EQ( systemSpecifiedInAttrpath.packageSystem, "aarch64-darwin" );
   EXPECT_EQ( systemSpecifiedInAttrpath.lockedSystem, "aarch64-linux" );
@@ -186,6 +185,68 @@ test_systemAttributes( const nix::ref<nix::EvalState> & state )
   return true;
 }
 
+
+bool
+test_licenseString( const nix::ref<nix::EvalState> & state,
+                    const std::string &              system )
+{
+  auto licenseString
+    = flox::lockFlakeInstallable( state,
+                                  system,
+                                  localTestFlake + "#licenseString" );
+
+  EXPECT( licenseString.licenses.has_value() );
+  EXPECT_EQ( nlohmann::json( licenseString.licenses.value() ),
+             nlohmann::json( { "Unlicense" } ) );
+
+  return true;
+}
+
+bool
+test_licenseAttrs( const nix::ref<nix::EvalState> & state,
+                   const std::string &              system )
+{
+  auto licenseAttrs
+    = flox::lockFlakeInstallable( state,
+                                  system,
+                                  localTestFlake + "#licenseAttrs" );
+
+  EXPECT( licenseAttrs.licenses.has_value() );
+  EXPECT_EQ( nlohmann::json( licenseAttrs.licenses.value() ),
+             nlohmann::json( { "Unlicense" } ) );
+
+  return true;
+}
+
+bool
+test_licenseListOfAttrs( const nix::ref<nix::EvalState> & state,
+                         const std::string &              system )
+{
+  auto licenseListOfAttrs
+    = flox::lockFlakeInstallable( state,
+                                  system,
+                                  localTestFlake + "#licenseListOfAttrs" );
+
+  EXPECT( licenseListOfAttrs.licenses.has_value() );
+  EXPECT_EQ( nlohmann::json( licenseListOfAttrs.licenses.value() ),
+             nlohmann::json( { "Unlicense", "MIT" } ) );
+
+  return true;
+}
+
+bool
+test_licenseNoLicense( const nix::ref<nix::EvalState> & state,
+                       const std::string &              system )
+{
+  auto noLicense
+    = flox::lockFlakeInstallable( state,
+                                  system,
+                                  localTestFlake + "#licenseNoLicense" );
+
+  EXPECT( ! noLicense.licenses.has_value() );
+
+  return true;
+}
 
 /* -------------------------------------------------------------------------- */
 
@@ -213,7 +274,10 @@ main( int argc, char * argv[] )
   RUN_TEST( explicitOutputs, state, system );
   RUN_TEST( resolvesToDefaultPackage, state, system );
   RUN_TEST( systemAttributes, state );
-
+  RUN_TEST( licenseString, state, system );
+  RUN_TEST( licenseAttrs, state, system );
+  RUN_TEST( licenseListOfAttrs, state, system );
+  RUN_TEST( licenseNoLicense, state, system );
 
   return exitCode;
 }

@@ -28,29 +28,33 @@
 
         # a simple derivation without any special attributes
         hello = pkgs.runCommand "hello" {} ''
-          echo "Hello, world!" > $out
+          touch $out
         '';
 
         licenseString =
           pkgs.runCommand "licenseString" {
-            meta.license = "unlicense";
+            meta.license = "Unlicense";
           } ''
-            unlicense >> $out
+            touch >> $out
           '';
 
         licenseAttrs =
           pkgs.runCommand "licenseAttrs" {
             meta.license = pkgs.lib.licenses.unlicense;
           } ''
-            unlicense >> $out
+            touch >> $out
           '';
 
         licenseListOfAttrs =
           pkgs.runCommand "licenseListOfAttrs" {
             meta.license = [pkgs.lib.licenses.unlicense pkgs.lib.licenses.mit];
           } ''
-            unlicense >> $out
+            touch $out
           '';
+
+        licenseNoLicense = pkgs.runCommand "licenseNoLicense" {} ''
+          touch $out
+        '';
 
         multipleOutputs =
           pkgs.runCommand "multipleOutputs" {

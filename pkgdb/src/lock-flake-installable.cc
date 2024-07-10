@@ -112,6 +112,37 @@ getDerivationCursor( const nix::ref<nix::EvalState> & state,
     }
 }
 
+/**
+ * @brief Read a license string or id from a nix value.
+ * @note The license can be either a string or an attribute set with a `spdxId`
+ * if `<nixpkgs>.lib.licenses.<license>` is used.
+ * @param state The nix evaluation state
+ * @param licenseValue The value to read the license from
+ * @return The license string or id if found or `std::nullopt` otherwise
+ */
+static std::optional<std::string>
+readLicenseStringOrId( const nix::ref<nix::EvalState> & state,
+                       nix::Value *                     licenseValue )
+{
+  if ( licenseValue->type() == nix::ValueType::nString )
+    {
+      return std::string( licenseValue->str() );
+    }
+  else if ( licenseValue->type() == nix::ValueType::nAttrs )
+    {
+      auto licenseIdValue
+        = licenseValue->attrs->find( state->symbols.create( "spdxId" ) );
+
+      if ( licenseIdValue != licenseValue->attrs->end()
+           && licenseIdValue->value->type() == nix::ValueType::nString )
+        {
+          return std::string( licenseIdValue->value->str() );
+        };
+    }
+
+  return std::nullopt;
+}
+
 LockedInstallable
 lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
                       const std::string &              system,
@@ -354,9 +385,33 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
       }
   }
 
-  std::optional<std::string> license;
+  std::optional<std::vector<std::string>> licenses;
   {
-    // todo
+    auto licenseCursor = cursor->findAlongAttrPath(
+      nix::parseAttrPath( *state, "meta.license" ) );
+
+    if ( licenseCursor )
+      {
+        auto licenseValue = ( *licenseCursor )->forceValue();
+        std::vector<std::string> licenseStrings;
+        if ( licenseValue.isList() )
+          {
+            for ( auto licenseValueInner : licenseValue.listItems() )
+              {
+                if ( auto licenseString
+                     = readLicenseStringOrId( state, licenseValueInner ) )
+                  {
+                    licenseStrings.push_back( *licenseString );
+                  }
+              }
+          }
+        else if ( auto licenseString
+                  = readLicenseStringOrId( state, &licenseValue ) )
+          {
+            licenseStrings.push_back( *licenseString );
+          }
+        if ( ! licenseStrings.empty() ) { licenses = licenseStrings; }
+      }
   }
 
   std::optional<bool> broken;
@@ -391,7 +446,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     .pname                     = pname,
     .version                   = version,
     .description               = description,
-    .license                   = license,
+    .licenses                  = licenses,
     .broken                    = broken,
     .unfree                    = unfree,
   };
@@ -418,7 +473,7 @@ to_json( nlohmann::json & jto, const LockedInstallable & from )
     { "pname", from.pname },
     { "version", from.version },
     { "description", from.description },
-    { "license", from.license },
+    { "licenses", from.licenses },
     { "broken", from.broken },
     { "unfree", from.unfree },
   };

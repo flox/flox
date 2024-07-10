@@ -57,23 +57,23 @@ public:
 
 struct LockedInstallable
 {
-  std::string                          lockedUrl;
-  std::optional<std::string>           flakeDescription;
-  std::string                          lockedFlakeAttrPath;
-  std::string                          derivation;
-  std::map<std::string, std::string>   outputs;
-  std::vector<std::string>             outputNames;
-  std::optional<std::set<std::string>> outputsToInstall;
-  std::optional<std::set<std::string>> requestedOutputsToInstall;
-  std::string                          packageSystem;
-  std::string                          lockedSystem;
-  std::string                          name;
-  std::optional<std::string>           pname;
-  std::optional<std::string>           version;
-  std::optional<std::string>           description;
-  std::optional<std::string>           license;
-  std::optional<bool>                  broken;
-  std::optional<bool>                  unfree;
+  std::string                             lockedUrl;
+  std::optional<std::string>              flakeDescription;
+  std::string                             lockedFlakeAttrPath;
+  std::string                             derivation;
+  std::map<std::string, std::string>      outputs;
+  std::vector<std::string>                outputNames;
+  std::optional<std::set<std::string>>    outputsToInstall;
+  std::optional<std::set<std::string>>    requestedOutputsToInstall;
+  std::string                             packageSystem;
+  std::string                             lockedSystem;
+  std::string                             name;
+  std::optional<std::string>              pname;
+  std::optional<std::string>              version;
+  std::optional<std::string>              description;
+  std::optional<std::vector<std::string>> licenses;
+  std::optional<bool>                     broken;
+  std::optional<bool>                     unfree;
 
   [[nodiscard]] bool
   operator==( const LockedInstallable & other ) const
@@ -88,7 +88,7 @@ struct LockedInstallable
            && packageSystem == other.packageSystem
            && lockedSystem == other.lockedSystem && name == other.name
            && pname == other.pname && version == other.version
-           && description == other.description && license == other.license
+           && description == other.description && licenses == other.licenses
            && broken == other.broken && unfree == other.unfree;
   }
 
