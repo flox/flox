@@ -203,9 +203,7 @@ EOF
 
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/start_and_cleanup.sh"
-    # TODO: Replace process-compose stop call.
-    # "$FLOX_BIN" services stop one
-    "$PROCESS_COMPOSE_BIN" process stop one
+    "$FLOX_BIN" services stop one
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
 )

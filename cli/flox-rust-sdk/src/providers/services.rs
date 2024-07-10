@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use once_cell::sync::Lazy;
 #[cfg(test)]
@@ -30,6 +31,8 @@ pub enum ServiceError {
     FeatureFlagDisabled,
     #[error("services have not been started in this activation")]
     NotInActivation,
+    #[error("there was a problem calling the service manager")]
+    ProcessComposeCmd(#[source] std::io::Error),
 }
 
 /// The deserialized representation of a `process-compose` config file.
@@ -121,6 +124,36 @@ pub fn maybe_make_service_config_file(
         None
     };
     Ok(service_config_path)
+}
+
+/// Constructs a base `process-compose process` command to which additional
+/// arguments can be appended.
+fn base_process_compose_command(socket: PathBuf) -> Command {
+    let path = Path::new(&*PROCESS_COMPOSE_BIN);
+    let mut cmd = Command::new(path);
+    cmd.env("PATH", path)
+        .args(["--unix-socket", &socket.to_string_lossy().as_ref()])
+        .arg("process");
+
+    cmd
+}
+
+/// Stop service(s).
+pub fn stop_services(socket: PathBuf, names: Vec<String>) -> Result<(), ServiceError> {
+    tracing::debug!("stopping services: {}", names.join(","));
+
+    // TODO: Better output and error handling.
+    let mut cmd = base_process_compose_command(socket);
+    cmd.arg("stop")
+        .args(names)
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(ServiceError::ProcessComposeCmd)?
+        .wait()
+        .map_err(ServiceError::ProcessComposeCmd)?;
+
+    Ok(())
 }
 
 #[cfg(test)]
