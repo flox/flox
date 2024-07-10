@@ -96,7 +96,7 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
 {
 
   auto defaultOutputs
-    = flox::lockFlakeInstallable( state, system, "github:nixos/nixpkgs#nix" );
+    = flox::lockFlakeInstallable( state, system, "github:nixos/nixpkgs#rustc" );
 
   // Default outputs of openssl are `bin` and `man`
   EXPECT_EQ( nlohmann::json( defaultOutputs.outputsToInstall ),
@@ -105,22 +105,27 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
   auto explicitOutputs
     = flox::lockFlakeInstallable( state,
                                   system,
-                                  "github:nixos/nixpkgs#nix^dev,doc" );
+                                  "github:nixos/nixpkgs#rustc^man,doc" );
 
   EXPECT_EQ( nlohmann::json( explicitOutputs.outputsToInstall ),
-             nlohmann::json( nix::StringSet( { "dev", "doc" } ) ) );
+             nlohmann::json( nix::StringSet( { "man", "doc" } ) ) );
 
   auto allOutputs
-    = flox::lockFlakeInstallable( state, system, "github:nixos/nixpkgs#nix^*" );
+    = flox::lockFlakeInstallable( state,
+                                  system,
+                                  "github:nixos/nixpkgs#rustc^*" );
 
 
-  EXPECT_EQ(
-    nlohmann::json( allOutputs.outputsToInstall ),
-    nlohmann::json( nix::StringSet( { "out", "dev", "man", "doc" } ) ) );
+  EXPECT_EQ( nlohmann::json( allOutputs.outputsToInstall ),
+             nlohmann::json( nix::StringSet( { "out", "man", "doc" } ) ) );
 
   return true;
 }
 
+
+bool
+test_resolvesToDefaultPackage()
+{}
 
 /* -------------------------------------------------------------------------- */
 
