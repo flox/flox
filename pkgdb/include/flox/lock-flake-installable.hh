@@ -62,6 +62,7 @@ struct LockedInstallable
   std::string                          lockedFlakeAttrPath;
   std::string                          derivation;
   std::map<std::string, std::string>   outputs;
+  std::vector<std::string>             outputNames;
   std::optional<std::set<std::string>> outputsToInstall;
   std::optional<std::set<std::string>> requestedOutputsToInstall;
   std::string                          packageSystem;
@@ -81,6 +82,7 @@ struct LockedInstallable
            && flakeDescription == other.flakeDescription
            && lockedFlakeAttrPath == other.lockedFlakeAttrPath
            && derivation == other.derivation && outputs == other.outputs
+           && outputNames == other.outputNames
            && outputsToInstall == other.outputsToInstall
            && requestedOutputsToInstall == other.requestedOutputsToInstall
            && packageSystem == other.packageSystem

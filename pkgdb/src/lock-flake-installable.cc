@@ -245,12 +245,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
       }
   }
 
-  // determine outputs to install in the following order:
-  // 1. extendedOutputsSpec (`<installable>^out,man`, `<installable>^*`))
-  // 2. `meta.outputsToInstall` field
-  // 3. first output in the `outputs` field
+  // try read `meta.outputsToInstall` field
   std::optional<std::set<std::string>> outputsToInstall;
-
   {
     std::set<std::string> outputsToInstallFound;
     auto metaOutputsToInstallCursor = cursor->findAlongAttrPath(
@@ -267,6 +263,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
       }
   }
 
+  // the requested outputs to install by means of the extended outputs spec
+  // i.e. `#^<outputs>` in the flake installable
   std::optional<std::set<std::string>> requestedOutputs;
   {
     requestedOutputs = std::visit(
@@ -384,6 +382,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     .lockedFlakeAttrPath       = lockedAttrPath,
     .derivation                = derivation,
     .outputs                   = outputs,
+    .outputNames               = outputNames,
     .outputsToInstall          = outputsToInstall,
     .requestedOutputsToInstall = requestedOutputs,
     .packageSystem             = systemAttribute,
@@ -410,6 +409,7 @@ to_json( nlohmann::json & jto, const LockedInstallable & from )
     { "locked-flake-attr-path", from.lockedFlakeAttrPath },
     { "derivation", from.derivation },
     { "outputs", from.outputs },
+    { "outputNames", from.outputNames },
     { "outputs-to-install", from.outputsToInstall },
     { "requested-outputs-to-install", from.requestedOutputsToInstall },
     { "package-system", from.packageSystem },
