@@ -258,6 +258,21 @@ but this behavior may change.
 It is best to write hooks defensively, assuming the user is using the
 environment from any directory on their machine.
 
+**Helper Functions**
+
+The `on-activate` hook is pre-loaded with a growing number of functions
+to help with environment initialization:
+
+* `flox_portgrab()`
+
+    Usage:
+
+      SERVER_PORT=$(flox_portgrab)
+
+    Allocates and releases an ephemeral TCP port that is
+    guaranteed to be available for immediate reuse.
+
+
 ### `script` - DEPRECATED
 This field was deprecated in favor of the `profile` section.
 

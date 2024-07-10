@@ -21,6 +21,9 @@ export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
 # --turbo: invoke commands directly without involving userShell
 # --noprofile: do not source `[profile]` scripts
 
+# Source helper functions
+. "@out@/activate.d/helper-functions.bash"
+
 # Set FLOX_ENV as the path by which all flox scripts can make reference to
 # the environment to which they belong. Use this to define the path to the
 # activation scripts directory.
