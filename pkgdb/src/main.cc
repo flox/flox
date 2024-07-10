@@ -171,7 +171,7 @@ run( int argc, char * argv[] )
     {
       return cmdLinkEnv.run();
     }
-  
+
   // TODO: better error for this,
   // likely only occurs if we add a new command without handling it (?)
   throw flox::FloxException( "unrecognized command" );
