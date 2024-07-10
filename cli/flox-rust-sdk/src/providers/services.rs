@@ -6,7 +6,8 @@ use std::process::{Command, Stdio};
 use once_cell::sync::Lazy;
 #[cfg(test)]
 use proptest::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::NamedTempFile;
 
 use crate::flox::Flox;
@@ -14,6 +15,7 @@ use crate::models::lockfile::LockedManifestCatalog;
 use crate::models::manifest::ManifestServices;
 use crate::utils::traceable_path;
 
+const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
 pub const SERVICES_ENV_VAR: &str = "FLOX_FEATURES_SERVICES";
 pub const SERVICE_CONFIG_FILENAME: &str = "service-config.yaml";
 pub static PROCESS_COMPOSE_BIN: Lazy<String> = Lazy::new(|| {
@@ -35,7 +37,7 @@ pub enum ServiceError {
 }
 
 /// The deserialized representation of a `process-compose` config file.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ProcessComposeConfig {
     #[cfg_attr(
@@ -67,6 +69,13 @@ fn arbitrary_process_config_environment(
     ))
 }
 
+fn generate_never_exit_process() -> ProcessConfig {
+    ProcessConfig {
+        command: String::from("sleep infinity"),
+        vars: None,
+    }
+}
+
 impl From<ManifestServices> for ProcessComposeConfig {
     fn from(services: ManifestServices) -> Self {
         let processes = services
@@ -82,6 +91,44 @@ impl From<ManifestServices> for ProcessComposeConfig {
             })
             .collect();
         ProcessComposeConfig { processes }
+    }
+}
+
+impl Serialize for ProcessComposeConfig {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut processes = self.processes.clone();
+        // Inject an extra process to prevent `process-compose` from exiting when all services are stopped.
+        processes.insert(
+            PROCESS_NEVER_EXIT_NAME.to_string(),
+            generate_never_exit_process(),
+        );
+
+        let mut state = serializer.serialize_struct("ProcessComposeConfig", 1)?;
+        state.serialize_field("processes", &processes)?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for ProcessComposeConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Inner {
+            processes: BTreeMap<String, ProcessConfig>,
+        }
+
+        let mut inner = Inner::deserialize(deserializer)?;
+        // Remove our extra process when reading back a config.
+        inner.processes.remove(PROCESS_NEVER_EXIT_NAME);
+
+        Ok(ProcessComposeConfig {
+            processes: inner.processes,
+        })
     }
 }
 
@@ -153,6 +200,7 @@ pub fn stop_services(socket: PathBuf, names: Vec<String>) -> Result<(), ServiceE
 
 #[cfg(test)]
 mod tests {
+    use indoc::indoc;
     use proptest::prelude::*;
     use tempfile::TempDir;
 
@@ -168,5 +216,24 @@ mod tests {
             let deserialized: ProcessComposeConfig = serde_yaml::from_str(&contents).unwrap();
             prop_assert_eq!(config, deserialized);
         }
+    }
+
+    #[test]
+    fn test_process_compose_config_injects_never_sleep_process() {
+        // This is complimentary to the round-trip test above which doesn't see the injected process.
+        let config_in = ProcessComposeConfig {
+            processes: BTreeMap::from([("foo".to_string(), ProcessConfig {
+                command: String::from("bar"),
+                vars: None,
+            })]),
+        };
+        let config_out = serde_yaml::to_string(&config_in).unwrap();
+        assert_eq!(config_out, indoc! { "
+            processes:
+              flox_never_exit:
+                command: sleep infinity
+              foo:
+                command: bar
+        "})
     }
 }

@@ -69,31 +69,15 @@ setup_sleeping_services() {
 @test "process-compose can run generated config file" {
   export FLOX_FEATURES_SERVICES=true
   "$FLOX_BIN" init
-  manifest_file="${TESTS_DIR}/services/touch_file/manifest.toml"
-  run "$FLOX_BIN" edit -f "$manifest_file"
+  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
   assert_success
-  run bash "${TESTS_DIR}/services/touch_file/check_service_ran.sh"
-  assert_success
-}
-
-@test "'flox activate' with feature flag does not start services" {
-  export FLOX_FEATURES_SERVICES=true
-  "$FLOX_BIN" init
-  manifest_file="${TESTS_DIR}/services/touch_file/manifest.toml"
-  run "$FLOX_BIN" edit -f "$manifest_file"
-  assert_success
-  "$FLOX_BIN" activate -- true
-  run [ -e hello.txt ]
-  assert_failure
-}
-
-@test "'flox activate -s' starts services" {
-  export FLOX_FEATURES_SERVICES=true
-  "$FLOX_BIN" init
-  manifest_file="${TESTS_DIR}/services/touch_file/manifest.toml"
-  run "$FLOX_BIN" edit -f "$manifest_file"
-  assert_success
-  run bash "${TESTS_DIR}/services/touch_file/check_activation_starts_services.sh"
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+    echo "looking for file"
+    [ -e hello.txt ]
+    echo "found it"
+EOF
+)
   assert_success
 }
 
@@ -214,16 +198,12 @@ EOF
 
 # bats test_tags=services,services:stop
 @test "stop: stops multiple services" {
-  skip "process-compose exits with last service"
-
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/start_and_cleanup.sh"
-    # TODO: Replace process-compose stop call.
-    # "$FLOX_BIN" services stop one two
-    "$PROCESS_COMPOSE_BIN" process stop one two
+    "$FLOX_BIN" services stop one two
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
 )
