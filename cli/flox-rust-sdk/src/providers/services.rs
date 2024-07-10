@@ -26,6 +26,8 @@ pub enum ServiceError {
     GenerateConfig(#[source] serde_yaml::Error),
     #[error("failed to write service config")]
     WriteConfig(#[source] std::io::Error),
+    #[error("services are disabled by the feature flag")]
+    FeatureFlagDisabled,
 }
 
 /// The deserialized representation of a `process-compose` config file.

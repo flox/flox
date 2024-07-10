@@ -113,8 +113,6 @@ setup_sleeping_services() {
 
 # bats test_tags=services,services:stop
 @test "stop: can't be used without feature flag" {
-  skip "TODO"
-
   run "$FLOX_BIN" services stop
   assert_failure
   assert_output "❌ ERROR: services are disabled by the feature flag"
