@@ -120,8 +120,6 @@ setup_sleeping_services() {
 
 # bats test_tags=services,services:stop
 @test "stop: can't be used outside an activation that has services" {
-  skip "TODO"
-
   export FLOX_FEATURES_SERVICES=true
   run "$FLOX_BIN" services stop
   assert_failure

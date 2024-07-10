@@ -1,6 +1,9 @@
+use std::env;
+
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::FLOX_SERVICES_SOCKET_VAR;
 use flox_rust_sdk::providers::services::ServiceError;
 use tracing::instrument;
 
@@ -19,6 +22,13 @@ impl ServicesCommands {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         if !flox.features.services {
             return Err(ServiceError::FeatureFlagDisabled.into());
+        }
+
+        if env::var(FLOX_SERVICES_SOCKET_VAR)
+            .unwrap_or_default()
+            .is_empty()
+        {
+            return Err(ServiceError::NotInActivation.into());
         }
 
         match self {

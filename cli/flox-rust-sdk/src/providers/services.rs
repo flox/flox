@@ -28,6 +28,8 @@ pub enum ServiceError {
     WriteConfig(#[source] std::io::Error),
     #[error("services are disabled by the feature flag")]
     FeatureFlagDisabled,
+    #[error("services have not been started in this activation")]
+    NotInActivation,
 }
 
 /// The deserialized representation of a `process-compose` config file.
