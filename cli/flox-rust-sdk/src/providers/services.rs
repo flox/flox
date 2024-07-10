@@ -6,6 +6,7 @@ use std::process::{Command, Stdio};
 use once_cell::sync::Lazy;
 #[cfg(test)]
 use proptest::prelude::*;
+use regex_lite::Regex;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::NamedTempFile;
@@ -34,6 +35,8 @@ pub enum ServiceError {
     NotInActivation,
     #[error("there was a problem calling the service manager")]
     ProcessComposeCmd(#[source] std::io::Error),
+    #[error(transparent)]
+    LoggedError(#[from] LoggedError),
 }
 
 /// The deserialized representation of a `process-compose` config file.
@@ -240,14 +243,87 @@ pub fn stop_services(
 
     // TODO: Better output and error handling.
     let mut cmd = base_process_compose_command(socket);
-    cmd.arg("stop")
+    let output = cmd
+        .arg("stop")
         .args(names)
         .stderr(Stdio::piped())
         .stdout(Stdio::piped())
         .output()
         .map_err(ServiceError::ProcessComposeCmd)?;
 
-    Ok(())
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let logged_error: LoggedError = extract_err_msgs(&stderr)
+            .ok_or(ServiceError::ProcessComposeCmd(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                stderr.clone(),
+            )))?
+            .into();
+        Err(ServiceError::LoggedError(logged_error))
+    }
+}
+
+/// Error message extracted from process-compose logs
+#[derive(Debug, Clone)]
+pub struct ProcessComposeLogContents {
+    pub err_msg: String,
+    pub cause_msg: String,
+}
+
+/// The types of errors that are logged by process-compose
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+pub enum LoggedError {
+    #[error("couldn't connect to service manager")]
+    SocketDoesntExist,
+    #[error("service '{0}' is not running")]
+    ServiceNotRunning(String),
+    #[error("unknown error: {0}")]
+    Other(String),
+}
+
+/// Extracts an error message from the process-compose output if one exists.
+///
+/// Error messages appear in logs as:
+/// <timestamp> FTL <err> error="<cause>"
+fn extract_err_msgs(output: impl AsRef<str>) -> Option<ProcessComposeLogContents> {
+    let output = output.as_ref();
+    let err_msg_index = output.find("FTL")?;
+    let cause_msg_index = output.find("error=")?;
+    let len = output.len();
+    let err_msg = output[err_msg_index..cause_msg_index].trim();
+    let offset = 8; // 'error="' is 7 characters long
+    let cause_msg = output[cause_msg_index + offset..len].trim();
+    Some(ProcessComposeLogContents {
+        err_msg: err_msg.to_string(),
+        cause_msg: cause_msg.to_string(),
+    })
+}
+
+impl From<ProcessComposeLogContents> for LoggedError {
+    fn from(contents: ProcessComposeLogContents) -> Self {
+        // Unwrapping is safe here, the regex is a constant
+        let regex = Regex::new(r"process ([a-zA-Z0-9_-]+) is not running")
+            .expect("failed to compile regex");
+        if let Some(captures) = regex.captures(&contents.cause_msg) {
+            LoggedError::ServiceNotRunning(
+                // Unwrapping is safe here, the regex guarantees that this capture group exists
+                captures
+                    .get(1)
+                    .expect("failed to extract capture group")
+                    .as_str()
+                    .to_string(),
+            )
+        } else if contents
+            .cause_msg
+            .contains("connect: no such file or directory")
+        {
+            LoggedError::SocketDoesntExist
+        } else {
+            LoggedError::Other(contents.cause_msg)
+        }
+    }
 }
 
 #[cfg(test)]

@@ -95,14 +95,14 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=services,services:stop
+# bats test_tags=services:stop
 @test "stop: can't be used without feature flag" {
   run "$FLOX_BIN" services stop
   assert_failure
   assert_output "❌ ERROR: services are not enabled"
 }
 
-# bats test_tags=services,services:stop
+# bats test_tags=services:stop
 @test "stop: can't be used outside an activation that has services" {
   export FLOX_FEATURES_SERVICES=true
   run "$FLOX_BIN" services stop
@@ -110,57 +110,50 @@ EOF
   assert_output "❌ ERROR: services have not been started in this activation"
 }
 
-# bats test_tags=services,services:stop
+# bats test_tags=services:stop
 @test "stop: errors if a service doesn't exist" {
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/start_and_cleanup.sh"
-    # TODO: Replace process-compose stop call.
-    # "$FLOX_BIN" services stop invalid
-    "$PROCESS_COMPOSE_BIN" process stop invalid
+    "$FLOX_BIN" services stop invalid
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
 )
   assert_failure
-  assert_output --partial "invalid is not running"
+  assert_output --partial "❌ ERROR: service 'invalid' is not running"
 }
 
-# bats test_tags=services,services:stop
+# bats test_tags=services:stop
 @test "stop: errors if one of multiple services don't exist" {
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/start_and_cleanup.sh"
-    # TODO: Replace process-compose stop call.
-    # "$FLOX_BIN" services stop one invalid
-    "$PROCESS_COMPOSE_BIN" process stop one invalid
+    "$FLOX_BIN" services stop one invalid
 EOF
 )
   assert_failure
-  assert_output --partial "invalid is not running"
+  assert_output --partial "❌ ERROR: service 'invalid' is not running"
 }
 
-# bats test_tags=services,services:stop
+# bats test_tags=services:stop
 @test "stop: errors if service socket isn't responding" {
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     export _FLOX_SERVICES_SOCKET=invalid
-    # TODO: Replace process-compose stop call.
-    # "$FLOX_BIN" services stop one invalid
-    export PC_SOCKET_PATH="${_FLOX_SERVICES_SOCKET}"
-    "$PROCESS_COMPOSE_BIN" process stop one
+    "$FLOX_BIN" services stop one invalid
 EOF
 )
   assert_failure
-  assert_output --partial "connect: no such file or directory"
+  assert_output "❌ ERROR: couldn't connect to service manager"
 }
 
-# bats test_tags=services,services:stop
+# bats test_tags=services:stop
 @test "stop: stops all services" {
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
@@ -176,7 +169,7 @@ EOF
   assert_output --regexp " +two +default +Completed +"
 }
 
-# bats test_tags=services,services:stop
+# bats test_tags=services:stop
 @test "stop: stops a single service" {
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
@@ -192,7 +185,7 @@ EOF
   assert_output --regexp " +two +default +Running +"
 }
 
-# bats test_tags=services,services:stop
+# bats test_tags=services:stop
 @test "stop: stops multiple services" {
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
@@ -208,21 +201,18 @@ EOF
   assert_output --regexp " +two +default +Completed +"
 }
 
-# bats test_tags=services,services:stop
+# bats test_tags=services:stop
 @test "stop: errors if service is already stopped" {
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/start_and_cleanup.sh"
-    # TODO: Replace process-compose stop call.
-    # "$FLOX_BIN" services stop one
-    # "$FLOX_BIN" services stop one
-    "$PROCESS_COMPOSE_BIN" process stop one
-    "$PROCESS_COMPOSE_BIN" process stop one
+    "$FLOX_BIN" services stop one
+    "$FLOX_BIN" services stop one
 EOF
 )
   # TODO: assert_success
   assert_failure
-  assert_output --partial "one is not running"
+  assert_output --partial "❌ ERROR: service 'one' is not running"
 }
