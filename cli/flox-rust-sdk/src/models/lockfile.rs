@@ -1305,6 +1305,7 @@ pub(crate) mod tests {
     use std::vec;
 
     use catalog::test_helpers::resolved_pkg_group_with_dummy_package;
+    use catalog::{MsgUnknown, ResolutionMessage};
     use catalog_api_v1::types::Output;
     use indoc::indoc;
     use once_cell::sync::Lazy;
@@ -1426,6 +1427,19 @@ pub(crate) mod tests {
         }
     });
 
+    static TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG: Lazy<Vec<ResolvedPackageGroup>> =
+        Lazy::new(|| {
+            vec![ResolvedPackageGroup {
+                page: None,
+                name: "group".to_string(),
+                msgs: vec![ResolutionMessage::Unknown(MsgUnknown {
+                    level: MessageLevel::Error,
+                    msg_type: "new_type".to_string(),
+                    msg: "User consumable message".to_string(),
+                    context: HashMap::new(),
+                })],
+            }]
+        });
     static TEST_RESOLUTION_PARAMS: Lazy<Vec<PackageGroup>> = Lazy::new(|| {
         vec![PackageGroup {
             name: "group".to_string(),
@@ -2053,6 +2067,37 @@ pub(crate) mod tests {
         seed.unlock_packages_by_group_or_iid(&["not in here".to_string()]);
 
         assert_eq!(seed.packages, expected,);
+    }
+
+    #[tokio::test]
+    async fn test_locking_unknown_message() {
+        let manifest = &*TEST_TYPED_MANIFEST;
+
+        let mut client = catalog::MockClient::new(None::<String>).unwrap();
+        let response = TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG.clone();
+        let response_msg: ResolutionMessage =
+            response.first().unwrap().msgs.first().unwrap().clone();
+        client.push_resolve_response(response);
+
+        let locked_manifest = LockedManifestCatalog::lock_manifest(manifest, None, &client).await;
+        match locked_manifest {
+            Ok(_) => panic!(),
+            Err(LockedManifestError::ResolutionFailed(res_failures)) => {
+                assert_eq!(res_failures.0.len(), 1);
+                match &res_failures.0[0] {
+                    ResolutionFailure::UnknownServiceMessage {
+                        level,
+                        msg,
+                        context: _,
+                    } => {
+                        assert_eq!(msg, &response_msg.msg());
+                        assert_eq!(level, "error");
+                    },
+                    _ => panic!(),
+                }
+            },
+            _ => panic!(),
+        }
     }
 
     #[tokio::test]
