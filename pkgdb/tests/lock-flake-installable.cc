@@ -31,6 +31,13 @@ unsupportedPackage( const std::string & system )
     }
 }
 
+/**
+ * paths are relative to the test runner which in this case is the makefile in
+ * the pkgdb root
+ */
+const std::string localTestFlake
+  = std::filesystem::absolute( "./tests/data/lock-flake-installable" ).string();
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -41,16 +48,16 @@ test_attrpathUsesDefaults( const nix::ref<nix::EvalState> & state,
   auto lockedExplicit = flox::lockFlakeInstallable(
     state,
     system,
-    "github:nixos/nixpkgs#legacyPackages." + system + ".hello" );
+    localTestFlake + "#packages." + system + ".hello" );
 
   auto lockedImplicit
-    = flox::lockFlakeInstallable( state, system, "github:nixos/nixpkgs#hello" );
+    = flox::lockFlakeInstallable( state, system, localTestFlake + "#hello" );
 
   EXPECT_EQ( nlohmann::json( lockedExplicit ),
              nlohmann::json( lockedImplicit ) );
 
   EXPECT_EQ( lockedImplicit.lockedFlakeAttrPath,
-             "legacyPackages." + system + ".hello" );
+             "packages." + system + ".hello" );
 
   return true;
 }
@@ -62,12 +69,22 @@ bool
 test_flakerefOrigins( const nix::ref<nix::EvalState> & state,
                       const std::string &              system )
 {
-  auto githubScheme = flox::lockFlakeInstallable( state,
-                                                  system,
-                                                  "github:nixos/nixpkgs/"
-                                                    + nixpkgsRev + "#hello" );
+  auto githubScheme = flox::lockFlakeInstallable(
+    state,
+    system,
+    "github:nixos/nixpkgs/6861ef7707a56725769594aaa725518cbe65f628#hello" );
   auto gitHttpsScheme
-    = flox::lockFlakeInstallable( state, system, nixpkgsRef + "#hello" );
+    = flox::lockFlakeInstallable( state,
+                                  system,
+                                  "git+https://github.com/flox/flox" );
+
+  auto gitFileScheme
+    = flox::lockFlakeInstallable( state,
+                                  system,
+                                  "path:" + localTestFlake + "#hello" );
+
+  auto gitFileSchemeImplied
+    = flox::lockFlakeInstallable( state, system, localTestFlake + "#hello" );
 
 
   return true;
@@ -80,10 +97,9 @@ bool
 test_locksUrl( const nix::ref<nix::EvalState> & state,
                const std::string &              system )
 {
-  auto unlockedUrl = "github:nixos/nixpkgs#hello";
+  auto unlockedUrl = localTestFlake + "#hello";
   auto lockedInstallable
     = flox::lockFlakeInstallable( state, system, unlockedUrl );
-
 
   EXPECT( nix::parseFlakeRef( lockedInstallable.lockedUrl ).input.isLocked() );
 
@@ -96,7 +112,9 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
 {
 
   auto defaultOutputs
-    = flox::lockFlakeInstallable( state, system, "github:nixos/nixpkgs#rustc" );
+    = flox::lockFlakeInstallable( state,
+                                  system,
+                                  localTestFlake + "#multipleOutputs" );
 
   // Default outputs of openssl are `bin` and `man`
   EXPECT_EQ( nlohmann::json( defaultOutputs.outputsToInstall ),
@@ -107,19 +125,19 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
   auto explicitOutputs
     = flox::lockFlakeInstallable( state,
                                   system,
-                                  "github:nixos/nixpkgs#rustc^man,doc" );
+                                  localTestFlake + "#multipleOutputs^man,dev" );
 
   EXPECT_EQ( nlohmann::json( explicitOutputs.requestedOutputsToInstall ),
-             nlohmann::json( nix::StringSet( { "man", "doc" } ) ) );
+             nlohmann::json( nix::StringSet( { "man", "dev" } ) ) );
 
   auto allOutputs
     = flox::lockFlakeInstallable( state,
                                   system,
-                                  "github:nixos/nixpkgs#rustc^*" );
+                                  localTestFlake + "#multipleOutputs^*" );
 
 
   EXPECT_EQ( nlohmann::json( allOutputs.requestedOutputsToInstall ),
-             nlohmann::json( nix::StringSet( { "out", "man", "doc" } ) ) );
+             nlohmann::json( nix::StringSet( { "out", "man", "dev" } ) ) );
 
   return true;
 }
@@ -133,18 +151,41 @@ test_resolvesToDefaultPackage( const nix::ref<nix::EvalState> & state,
                                const std::string &              system )
 {
   auto defaultPackage
-    = flox::lockFlakeInstallable( state, system, "github:flox/flox" );
+    = flox::lockFlakeInstallable( state, system, localTestFlake );
 
   auto explicitPackage = flox::lockFlakeInstallable(
     state,
     system,
-    "github:flox/flox#packages." + system + ".default" );
+    localTestFlake + "#packages." + system + ".default" );
 
   EXPECT_EQ( nlohmann::json( defaultPackage ),
              nlohmann::json( explicitPackage ) );
 
   return true;
 }
+
+/**
+ * @brief Test that the default package is resolved correctly if no attrpath is
+ * provided
+ */
+bool
+test_systemAttributes( const nix::ref<nix::EvalState> & state )
+{
+
+  // Test that the system is correctly determined from the attrpath,
+  // and locking system is also present in lock
+  auto systemSpecifiedInAttrpath = flox::lockFlakeInstallable(
+    state,
+    "aarch64-linux",
+    "github:nixos/nixpkgs#legacyPackages.aarch64-darwin.hello" );
+
+
+  EXPECT_EQ( systemSpecifiedInAttrpath.packageSystem, "aarch64-darwin" );
+  EXPECT_EQ( systemSpecifiedInAttrpath.lockedSystem, "aarch64-linux" );
+
+  return true;
+}
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -171,6 +212,7 @@ main( int argc, char * argv[] )
   RUN_TEST( locksUrl, state, system );
   RUN_TEST( explicitOutputs, state, system );
   RUN_TEST( resolvesToDefaultPackage, state, system );
+  RUN_TEST( systemAttributes, state );
 
 
   return exitCode;
