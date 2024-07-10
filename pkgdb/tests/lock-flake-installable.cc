@@ -122,10 +122,25 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
   return true;
 }
 
-
+/**
+ * @brief Test that the default package is resolved correctly if no attrpath is
+ * provided
+ */
 bool
-test_resolvesToDefaultPackage()
-{}
+test_resolvesToDefaultPackage( const nix::ref<nix::EvalState> & state,
+                               const std::string &              system )
+{
+  auto defaultPackage
+    = flox::lockFlakeInstallable( state, system, "github:flox/flox" );
+
+  auto explicitPackage = flox::lockFlakeInstallable(
+    state,
+    system,
+    "github:flox/flox#packages." + system + ".default" );
+
+  EXPECT_EQ( nlohmann::json( defaultPackage ),
+             nlohmann::json( explicitPackage ) );
+}
 
 /* -------------------------------------------------------------------------- */
 
@@ -151,6 +166,7 @@ main( int argc, char * argv[] )
   RUN_TEST( flakerefOrigins, state, system );
   RUN_TEST( locksUrl, state, system );
   RUN_TEST( explicitOutputs, state, system );
+  RUN_TEST( resolvesToDefaultPackage, state, system );
 
 
   return exitCode;
