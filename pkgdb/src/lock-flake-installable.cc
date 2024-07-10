@@ -398,8 +398,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
           {
             for ( auto licenseValueInner : licenseValue.listItems() )
               {
-                if ( auto licenseString
-                     = readLicenseStringOrId( state, licenseValueInner ) )
+                state->forceValueDeep( *licenseValueInner );
+                if ( auto licenseString = readLicenseStringOrId( state,licenseValueInner ) )
                   {
                     licenseStrings.push_back( *licenseString );
                   }
