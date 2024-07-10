@@ -168,9 +168,48 @@ pub fn maybe_make_service_config_file(
     Ok(service_config_path)
 }
 
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+struct ProcessState {
+    name: String,
+    namespace: String,
+    status: String,
+    system_time: String,
+    age: i32,
+    is_ready: String,
+    restarts: i32,
+    exit_code: i32,
+    pid: i32,
+    #[serde(rename = "IsRunning")]
+    is_running: bool,
+}
+
+#[derive(Deserialize, Debug, Clone, PartialEq)]
+struct ProcessStates(Vec<ProcessState>);
+
+impl ProcessStates {
+    fn read(socket: &Path) -> Result<ProcessStates, std::io::Error> {
+        let mut cmd = base_process_compose_command(socket);
+        let output = cmd.arg("list").args(["--output", "json"]).output()?;
+        let mut processes: ProcessStates = serde_json::from_slice(&output.stdout)?;
+        processes
+            .0
+            .retain(|state| state.name != PROCESS_NEVER_EXIT_NAME);
+
+        Ok(processes)
+    }
+
+    fn get_running_names(&self) -> Vec<String> {
+        self.0
+            .iter()
+            .filter(|state| state.is_running)
+            .map(|state| state.name.clone())
+            .collect()
+    }
+}
+
 /// Constructs a base `process-compose process` command to which additional
 /// arguments can be appended.
-fn base_process_compose_command(socket: PathBuf) -> Command {
+fn base_process_compose_command(socket: &Path) -> Command {
     let path = Path::new(&*PROCESS_COMPOSE_BIN);
     let mut cmd = Command::new(path);
     cmd.env("PATH", path)
@@ -181,7 +220,15 @@ fn base_process_compose_command(socket: PathBuf) -> Command {
 }
 
 /// Stop service(s).
-pub fn stop_services(socket: PathBuf, names: Vec<String>) -> Result<(), ServiceError> {
+pub fn stop_services(socket: &Path, names: Vec<String>) -> Result<(), ServiceError> {
+    let names = if names.is_empty() {
+        ProcessStates::read(socket)
+            .map_err(ServiceError::ProcessComposeCmd)?
+            .get_running_names()
+    } else {
+        names
+    };
+
     tracing::debug!("stopping services: {}", names.join(","));
 
     // TODO: Better output and error handling.
