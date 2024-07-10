@@ -399,7 +399,8 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
             for ( auto licenseValueInner : licenseValue.listItems() )
               {
                 state->forceValueDeep( *licenseValueInner );
-                if ( auto licenseString = readLicenseStringOrId( state,licenseValueInner ) )
+                if ( auto licenseString
+                     = readLicenseStringOrId( state, licenseValueInner ) )
                   {
                     licenseStrings.push_back( *licenseString );
                   }
@@ -416,16 +417,16 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 
   std::optional<bool> broken;
   {
-    auto brokenCursor
-      = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "broken" ) );
+    auto brokenCursor = cursor->findAlongAttrPath(
+      nix::parseAttrPath( *state, "meta.broken" ) );
 
     if ( brokenCursor ) { broken = ( *brokenCursor )->getBool(); }
   }
 
   std::optional<bool> unfree;
   {
-    auto unfreeCursor
-      = cursor->findAlongAttrPath( nix::parseAttrPath( *state, "unfree" ) );
+    auto unfreeCursor = cursor->findAlongAttrPath(
+      nix::parseAttrPath( *state, "meta.unfree" ) );
 
     if ( unfreeCursor ) { unfree = ( *unfreeCursor )->getBool(); }
   }

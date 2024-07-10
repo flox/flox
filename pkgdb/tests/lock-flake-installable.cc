@@ -248,6 +248,83 @@ test_licenseNoLicense( const nix::ref<nix::EvalState> & state,
   return true;
 }
 
+bool
+test_description( const nix::ref<nix::EvalState> & state,
+                  const std::string &              system )
+{
+  auto noDescription
+    = flox::lockFlakeInstallable( state, system, localTestFlake + "#hello" );
+
+  EXPECT( ! noDescription.description.has_value() );
+
+
+  auto description
+    = flox::lockFlakeInstallable( state,
+                                  system,
+                                  localTestFlake + "#withDescription" );
+
+  EXPECT( description.description.has_value() );
+  EXPECT_EQ( description.description.value(), "A package with a description" );
+
+  return true;
+}
+
+bool
+test_names( const nix::ref<nix::EvalState> & state, const std::string & system )
+{
+  auto named
+    = flox::lockFlakeInstallable( state, system, localTestFlake + "#names" );
+
+  EXPECT_EQ( named.pname.value(), "hello" );
+  EXPECT_EQ( named.name, "explicit-name" );
+
+  return true;
+}
+
+bool
+test_version( const nix::ref<nix::EvalState> & state,
+              const std::string &              system )
+{
+  auto nonVersioned
+    = flox::lockFlakeInstallable( state, system, localTestFlake + "#hello" );
+
+  EXPECT( ! nonVersioned.version.has_value() );
+
+  auto versioned = flox::lockFlakeInstallable( state,
+                                               system,
+                                               localTestFlake + "#versioned" );
+
+  EXPECT_EQ( versioned.version.value(), "1.0" );
+
+  return true;
+}
+
+bool
+test_broken( const nix::ref<nix::EvalState> & state,
+             const std::string &              system )
+{
+  auto broken
+    = flox::lockFlakeInstallable( state, system, localTestFlake + "#broken" );
+
+  // with broken = true, the package does not even evaluate
+  EXPECT_EQ( broken.broken.value(), false );
+
+  return true;
+}
+
+bool
+test_unfree( const nix::ref<nix::EvalState> & state,
+             const std::string &              system )
+{
+  auto unfree
+    = flox::lockFlakeInstallable( state, system, localTestFlake + "#unfree" );
+
+  // with unfree = true, the package does not even evaluate
+  EXPECT_EQ( unfree.unfree.value(), false );
+
+  return true;
+}
+
 /* -------------------------------------------------------------------------- */
 
 int
@@ -278,6 +355,11 @@ main( int argc, char * argv[] )
   RUN_TEST( licenseAttrs, state, system );
   RUN_TEST( licenseListOfAttrs, state, system );
   RUN_TEST( licenseNoLicense, state, system );
+  RUN_TEST( description, state, system );
+  RUN_TEST( names, state, system );
+  RUN_TEST( version, state, system );
+  RUN_TEST( broken, state, system );
+  RUN_TEST( unfree, state, system );
 
   return exitCode;
 }

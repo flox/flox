@@ -65,6 +65,43 @@
             touch $man
             touch $dev
           '';
+
+        withDescription =
+          pkgs.runCommand "withDescrioption" {
+            meta.description = "A package with a description";
+          } ''
+            touch $out
+          '';
+
+        names =
+          pkgs.runCommand "explicit-name" {
+            pname = "hello";
+          } ''
+            touch $out
+          '';
+
+        versioned =
+          pkgs.runCommand "explicit-name" {
+            version = "1.0";
+          } ''
+            touch $out
+          '';
+
+        # with broken = true, the package does not even evaluate
+        broken =
+          pkgs.runCommand "broken" {
+            meta.broken = false;
+          } ''
+            exit 1
+          '';
+
+        # with unfree = true, the package does not even evaluate
+        unfree =
+          pkgs.runCommand "unfree" {
+            meta.unfree = false;
+          } ''
+            touch $out
+          '';
       }
     );
   };
