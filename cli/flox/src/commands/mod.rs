@@ -11,6 +11,7 @@ mod list;
 mod pull;
 mod push;
 mod search;
+mod services;
 mod show;
 mod uninstall;
 mod update;
@@ -725,6 +726,9 @@ enum LocalDevelopmentCommands {
         footer("Run 'man flox-delete' for more details.")
     )]
     Delete(#[bpaf(external(delete::delete))] delete::Delete),
+    /// Interact with services
+    #[bpaf(command, hide)]
+    Services(#[bpaf(external(services::services_commands))] services::ServicesCommands),
 }
 
 impl LocalDevelopmentCommands {
@@ -739,6 +743,7 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::Search(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Show(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Delete(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Services(args) => args.handle(flox).await?,
         }
         Ok(())
     }
