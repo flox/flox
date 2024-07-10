@@ -464,7 +464,7 @@ to_json( nlohmann::json & jto, const LockedInstallable & from )
     { "locked-flake-attr-path", from.lockedFlakeAttrPath },
     { "derivation", from.derivation },
     { "outputs", from.outputs },
-    { "outputNames", from.outputNames },
+    { "output-names", from.outputNames },
     { "outputs-to-install", from.outputsToInstall },
     { "requested-outputs-to-install", from.requestedOutputsToInstall },
     { "package-system", from.packageSystem },
