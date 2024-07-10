@@ -382,6 +382,27 @@ pub trait Connection: Debug + Any + Send + Sync {
     fn into_any(self: Box<Self>) -> Box<dyn Any>;
 }
 
+/// Builds a reqwest client that defaults timeout to TRAILING_NETWORK_CALL_TIMEOUT
+/// and enables in-process hickory_dns on Darwin builds to avoid slow DNS behavior
+/// from Darwin libc's getaddrinfo()
+pub fn build_trailing_reqwest_client() -> Result<reqwest::Client, reqwest::Error> {
+    reqwest::Client::builder()
+        .hickory_dns(cfg!(target_os = "macos") || cfg!(target_os = "ios"))
+        .timeout(TRAILING_NETWORK_CALL_TIMEOUT)
+        .build()
+}
+
+/// Builds a blocking reqwest client that defaults timeout to TRAILING_NETWORK_CALL_TIMEOUT
+/// and enables in-process hickory_dns on Darwin builds to avoid slow DNS behavior
+/// from Darwin libc's getaddrinfo()
+pub fn build_blocking_trailing_reqwest_client() -> Result<reqwest::blocking::Client, reqwest::Error>
+{
+    reqwest::blocking::Client::builder()
+        .hickory_dns(cfg!(target_os = "macos") || cfg!(target_os = "ios"))
+        .timeout(TRAILING_NETWORK_CALL_TIMEOUT)
+        .build()
+}
+
 /// Connection to the AWS Datalake backend
 #[derive(Debug)]
 pub struct AWSDatalakeConnection {
@@ -465,9 +486,7 @@ impl Connection for AWSDatalakeConnection {
         debug!("Sending metrics to {}", &self.endpoint_url);
         debug!("Metrics: {events:#}");
 
-        reqwest::blocking::Client::builder()
-            .timeout(self.timeout)
-            .build()?
+        build_blocking_trailing_reqwest_client()?
             .put(&self.endpoint_url)
             .header("content-type", "application/json")
             .header("x-api-key", &self.api_key)

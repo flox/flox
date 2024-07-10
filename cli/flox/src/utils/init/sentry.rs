@@ -1,7 +1,12 @@
+use std::sync::Arc;
+
 use anyhow::anyhow;
 use flox_rust_sdk::flox::FLOX_SENTRY_ENV;
 use log::{debug, warn};
-use sentry::{ClientInitGuard, IntoDsn};
+use sentry::transports::ReqwestHttpTransport;
+use sentry::{ClientInitGuard, ClientOptions, IntoDsn, Transport, TransportFactory};
+
+use crate::utils::metrics::build_trailing_reqwest_client;
 
 pub fn init_sentry() -> Option<ClientInitGuard> {
     let Ok(sentry_dsn) = std::env::var("FLOX_SENTRY_DSN") else {
@@ -56,8 +61,22 @@ pub fn init_sentry() -> Option<ClientInitGuard> {
         // https://docs.sentry.io/platforms/rust/performance/
         traces_sample_rate: 1.0,
 
+        transport: Some(Arc::new(TrailingReqwestTransportFactory)),
+
         ..Default::default()
     });
 
     Some(sentry)
+}
+
+#[derive(Clone)]
+struct TrailingReqwestTransportFactory;
+
+impl TransportFactory for TrailingReqwestTransportFactory {
+    fn create_transport(&self, options: &ClientOptions) -> Arc<dyn Transport> {
+        Arc::new(ReqwestHttpTransport::with_client(
+            options,
+            build_trailing_reqwest_client().unwrap(),
+        ))
+    }
 }

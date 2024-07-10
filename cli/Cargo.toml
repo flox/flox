@@ -37,9 +37,9 @@ pollster = "0.3.0"
 progenitor-client = "0.6"
 proptest = "1.5.0"
 proptest-derive = "0.4.0"
-reqwest = { version = "0.11", features = ["json", "blocking"] }
+reqwest = { version = "0.11", features = ["json", "blocking", "hickory-dns"] }
 semver = "1.0.23"
-sentry = { version = "0.32.3", features = ["test"] }
+sentry = { version = "=0.32.2", features = ["test"] }  # note: =0.32.2 pins to reqwest 0.11 so we can pass client options
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
 serde_with = "3.8.3"

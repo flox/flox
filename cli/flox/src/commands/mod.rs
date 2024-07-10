@@ -79,8 +79,14 @@ use crate::utils::init::{
     init_uuid,
     telemetry_opt_out_needs_migration,
 };
-use crate::utils::metrics::{AWSDatalakeConnection, Client, Hub, METRICS_UUID_FILE_NAME};
-use crate::utils::{message, TRAILING_NETWORK_CALL_TIMEOUT};
+use crate::utils::message;
+use crate::utils::metrics::{
+    build_trailing_reqwest_client,
+    AWSDatalakeConnection,
+    Client,
+    Hub,
+    METRICS_UUID_FILE_NAME,
+};
 
 // Relative to flox executable
 const DEFAULT_UPDATE_INSTRUCTIONS: &str =
@@ -602,10 +608,7 @@ impl UpdateNotification {
     ///
     /// Timeout after TRAILING_NETWORK_CALL_TIMEOUT
     async fn get_latest_version(sentry_env: &str) -> Result<String, UpdateNotificationError> {
-        let client = reqwest::Client::builder()
-            .timeout(TRAILING_NETWORK_CALL_TIMEOUT)
-            .build()
-            .map_err(UpdateNotificationError::Network)?;
+        let client = build_trailing_reqwest_client().map_err(UpdateNotificationError::Network)?;
 
         let request = client.get(format!(
             "https://downloads.flox.dev/by-env/{sentry_env}/LATEST_VERSION",
