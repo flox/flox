@@ -177,11 +177,11 @@ struct ProcessState {
     namespace: String,
     status: String,
     system_time: String,
-    age: i32,
+    age: u64,
     is_ready: String,
-    restarts: i32,
+    restarts: u64,
     exit_code: i32,
-    pid: i32,
+    pid: u64,
     #[serde(rename = "IsRunning")]
     is_running: bool,
 }
