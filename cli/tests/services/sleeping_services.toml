@@ -1,0 +1,7 @@
+version = 1
+
+[services.one]
+command = "sleep infinity"
+
+[services.two]
+command = "sleep infinity"

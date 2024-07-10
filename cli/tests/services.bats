@@ -43,6 +43,13 @@ teardown() {
   common_test_teardown
 }
 
+setup_sleeping_services() {
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/sleeping_services.toml"
+  assert_success
+}
+
 # ---------------------------------------------------------------------------- #
 
 @test "feature flag works" {
@@ -101,4 +108,152 @@ teardown() {
   run "$FLOX_BIN" activate -s
   assert_failure
   assert_output --partial "Services are not enabled in this environment"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=services,services:stop
+@test "stop: can't be used without feature flag" {
+  skip "TODO"
+
+  run "$FLOX_BIN" services stop
+  assert_failure
+  assert_output "❌ ERROR: services are disabled by the feature flag"
+}
+
+# bats test_tags=services,services:stop
+@test "stop: can't be used outside an activation that has services" {
+  skip "TODO"
+
+  export FLOX_FEATURES_SERVICES=true
+  run "$FLOX_BIN" services stop
+  assert_failure
+  assert_output "❌ ERROR: services have not been started in this activation"
+}
+
+# bats test_tags=services,services:stop
+@test "stop: errors if a service doesn't exist" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+    # TODO: Replace process-compose stop call.
+    # "$FLOX_BIN" services stop invalid
+    "$PROCESS_COMPOSE_BIN" process stop invalid
+    "$PROCESS_COMPOSE_BIN" process list --output wide
+EOF
+)
+  assert_failure
+  assert_output --partial "invalid is not running"
+}
+
+# bats test_tags=services,services:stop
+@test "stop: errors if one of multiple services don't exist" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+    # TODO: Replace process-compose stop call.
+    # "$FLOX_BIN" services stop one invalid
+    "$PROCESS_COMPOSE_BIN" process stop one invalid
+EOF
+)
+  assert_failure
+  assert_output --partial "invalid is not running"
+}
+
+# bats test_tags=services,services:stop
+@test "stop: errors if service socket isn't responding" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    export _FLOX_SERVICES_SOCKET=invalid
+    # TODO: Replace process-compose stop call.
+    # "$FLOX_BIN" services stop one invalid
+    export PC_SOCKET_PATH="${_FLOX_SERVICES_SOCKET}"
+    "$PROCESS_COMPOSE_BIN" process stop one
+EOF
+)
+  assert_failure
+  assert_output --partial "connect: no such file or directory"
+}
+
+# bats test_tags=services,services:stop
+@test "stop: stops all services" {
+  skip "process-compose exits with last service"
+
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+    # TODO: Replace process-compose stop call.
+    # "$FLOX_BIN" services stop
+    "$PROCESS_COMPOSE_BIN" process stop one two
+    "$PROCESS_COMPOSE_BIN" process list --output wide
+EOF
+)
+  assert_success
+  assert_output --regexp " +one +default +Completed +"
+  assert_output --regexp " +two +default +Completed +"
+}
+
+# bats test_tags=services,services:stop
+@test "stop: stops a single service" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+    # TODO: Replace process-compose stop call.
+    # "$FLOX_BIN" services stop one
+    "$PROCESS_COMPOSE_BIN" process stop one
+    "$PROCESS_COMPOSE_BIN" process list --output wide
+EOF
+)
+  assert_success
+  assert_output --regexp " +one +default +Completed +"
+  assert_output --regexp " +two +default +Running +"
+}
+
+# bats test_tags=services,services:stop
+@test "stop: stops multiple services" {
+  skip "process-compose exits with last service"
+
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+    # TODO: Replace process-compose stop call.
+    # "$FLOX_BIN" services stop one two
+    "$PROCESS_COMPOSE_BIN" process stop one two
+    "$PROCESS_COMPOSE_BIN" process list --output wide
+EOF
+)
+  assert_success
+  assert_output --regexp " +one +default +Completed +"
+  assert_output --regexp " +two +default +Completed +"
+}
+
+# bats test_tags=services,services:stop
+@test "stop: errors if service is already stopped" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+    # TODO: Replace process-compose stop call.
+    # "$FLOX_BIN" services stop one
+    # "$FLOX_BIN" services stop one
+    "$PROCESS_COMPOSE_BIN" process stop one
+    "$PROCESS_COMPOSE_BIN" process stop one
+EOF
+)
+  # TODO: assert_success
+  assert_failure
+  assert_output --partial "one is not running"
 }
