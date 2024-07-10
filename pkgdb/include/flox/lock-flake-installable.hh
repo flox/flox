@@ -57,30 +57,32 @@ public:
 
 struct LockedInstallable
 {
-  std::string                        lockedUrl;
-  std::optional<std::string>         flakeDescription;
-  std::string                        lockedAttrPath;
-  std::string                        derivation;
-  std::map<std::string, std::string> outputs;
-  std::set<std::string>              outputsToInstall;
-  std::string                        packageSystem;
-  std::string                        lockedSystem;
-  std::string                        name;
-  std::optional<std::string>         pname;
-  std::optional<std::string>         version;
-  std::optional<std::string>         description;
-  std::optional<std::string>         license;
-  std::optional<bool>                broken;
-  std::optional<bool>                unfree;
+  std::string                          lockedUrl;
+  std::optional<std::string>           flakeDescription;
+  std::string                          lockedFlakeAttrPath;
+  std::string                          derivation;
+  std::map<std::string, std::string>   outputs;
+  std::optional<std::set<std::string>> outputsToInstall;
+  std::optional<std::set<std::string>> requestedOutputsToInstall;
+  std::string                          packageSystem;
+  std::string                          lockedSystem;
+  std::string                          name;
+  std::optional<std::string>           pname;
+  std::optional<std::string>           version;
+  std::optional<std::string>           description;
+  std::optional<std::string>           license;
+  std::optional<bool>                  broken;
+  std::optional<bool>                  unfree;
 
   [[nodiscard]] bool
   operator==( const LockedInstallable & other ) const
   {
     return lockedUrl == other.lockedUrl
            && flakeDescription == other.flakeDescription
-           && lockedAttrPath == other.lockedAttrPath
+           && lockedFlakeAttrPath == other.lockedFlakeAttrPath
            && derivation == other.derivation && outputs == other.outputs
            && outputsToInstall == other.outputsToInstall
+           && requestedOutputsToInstall == other.requestedOutputsToInstall
            && packageSystem == other.packageSystem
            && lockedSystem == other.lockedSystem && name == other.name
            && pname == other.pname && version == other.version

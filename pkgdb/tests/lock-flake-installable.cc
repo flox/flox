@@ -49,7 +49,7 @@ test_attrpathUsesDefaults( const nix::ref<nix::EvalState> & state,
   EXPECT_EQ( nlohmann::json( lockedExplicit ),
              nlohmann::json( lockedImplicit ) );
 
-  EXPECT_EQ( lockedImplicit.lockedAttrPath,
+  EXPECT_EQ( lockedImplicit.lockedFlakeAttrPath,
              "legacyPackages." + system + ".hello" );
 
   return true;
@@ -102,12 +102,14 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
   EXPECT_EQ( nlohmann::json( defaultOutputs.outputsToInstall ),
              nlohmann::json( nix::StringSet( { "out", "man" } ) ) );
 
+  EXPECT( ! defaultOutputs.requestedOutputsToInstall.has_value() )
+
   auto explicitOutputs
     = flox::lockFlakeInstallable( state,
                                   system,
                                   "github:nixos/nixpkgs#rustc^man,doc" );
 
-  EXPECT_EQ( nlohmann::json( explicitOutputs.outputsToInstall ),
+  EXPECT_EQ( nlohmann::json( explicitOutputs.requestedOutputsToInstall ),
              nlohmann::json( nix::StringSet( { "man", "doc" } ) ) );
 
   auto allOutputs
@@ -116,7 +118,7 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
                                   "github:nixos/nixpkgs#rustc^*" );
 
 
-  EXPECT_EQ( nlohmann::json( allOutputs.outputsToInstall ),
+  EXPECT_EQ( nlohmann::json( allOutputs.requestedOutputsToInstall ),
              nlohmann::json( nix::StringSet( { "out", "man", "doc" } ) ) );
 
   return true;
@@ -140,6 +142,8 @@ test_resolvesToDefaultPackage( const nix::ref<nix::EvalState> & state,
 
   EXPECT_EQ( nlohmann::json( defaultPackage ),
              nlohmann::json( explicitPackage ) );
+
+  return true;
 }
 
 /* -------------------------------------------------------------------------- */

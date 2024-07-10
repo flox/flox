@@ -249,50 +249,50 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   // 1. extendedOutputsSpec (`<installable>^out,man`, `<installable>^*`))
   // 2. `meta.outputsToInstall` field
   // 3. first output in the `outputs` field
-  std::set<std::string> outputsToInstall;
-  {
-    auto outputSpec = std::visit(
-      overloaded {
-        [&]( const nix::ExtendedOutputsSpec::Default & ) -> nix::OutputsSpec
-        {
-          std::set<std::string> outputsToInstall;
-          auto metaOutputsToInstallCursor = cursor->findAlongAttrPath(
-            nix::parseAttrPath( *state, "meta.outputsToInstall" ) );
-          if ( metaOutputsToInstallCursor )
-            {
-              for ( auto output :
-                    ( *metaOutputsToInstallCursor )->getListOfStrings() )
-                {
-                  outputsToInstall.insert( output );
-                }
-            }
-          else if ( ! outputNames.empty() )
-            {
-              outputsToInstall.insert( outputNames.front() );
-            }
+  std::optional<std::set<std::string>> outputsToInstall;
 
-          // this seems to be the default in a few nix places
-          // could also dropt this, since reaching this point means
-          // that the package has no outputs?!
-          if ( outputsToInstall.empty() ) { outputsToInstall.insert( "out" ); }
-          return nix::OutputsSpec::Names { std::move( outputsToInstall ) };
+  {
+    std::set<std::string> outputsToInstallFound;
+    auto metaOutputsToInstallCursor = cursor->findAlongAttrPath(
+      nix::parseAttrPath( *state, "meta.outputsToInstall" ) );
+    if ( metaOutputsToInstallCursor )
+      {
+        for ( auto output :
+              ( *metaOutputsToInstallCursor )->getListOfStrings() )
+          {
+            outputsToInstallFound.insert( output );
+          }
+
+        outputsToInstall = outputsToInstallFound;
+      }
+  }
+
+  std::optional<std::set<std::string>> requestedOutputs;
+  {
+    requestedOutputs = std::visit(
+      overloaded {
+        [&]( const nix::ExtendedOutputsSpec::Default & )
+          -> std::optional<std::set<std::string>> { return std::nullopt; },
+        [&]( const nix::ExtendedOutputsSpec::Explicit & e )
+          -> std::optional<std::set<std::string>>
+        {
+          return std::visit(
+            overloaded {
+              [&]( const nix::OutputsSpec::Names & n ) -> std::set<std::string>
+              { return n; },
+              [&]( const nix::OutputsSpec::All & ) -> std::set<std::string>
+              {
+                std::set<std::string> outputNamesSet;
+                for ( auto output : outputNames )
+                  {
+                    outputNamesSet.insert( output );
+                  }
+                return outputNamesSet;
+              } },
+            e.raw() );
         },
-        [&]( const nix::ExtendedOutputsSpec::Explicit & e ) -> nix::OutputsSpec
-        { return e; },
       },
       extendedOutputsSpec.raw() );
-
-    outputsToInstall = std::visit(
-      overloaded {
-        [&]( const nix::OutputsSpec::Names & n ) -> std::set<std::string>
-        { return n; },
-        [&]( const nix::OutputsSpec::All & ) -> std::set<std::string>
-        {
-          std::set<std::string> outputNamesSet;
-          for ( auto output : outputNames ) { outputNamesSet.insert( output ); }
-          return outputNamesSet;
-        } },
-      outputSpec.raw() );
   }
 
   std::string systemAttribute;
@@ -379,21 +379,22 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 
 
   LockedInstallable lockedInstallable = {
-    .lockedUrl        = lockedUrl,
-    .flakeDescription = flakeDescription,
-    .lockedAttrPath   = lockedAttrPath,
-    .derivation       = derivation,
-    .outputs          = outputs,
-    .outputsToInstall = outputsToInstall,
-    .packageSystem    = systemAttribute,
-    .lockedSystem     = system,
-    .name             = name,
-    .pname            = pname,
-    .version          = version,
-    .description      = description,
-    .license          = license,
-    .broken           = broken,
-    .unfree           = unfree,
+    .lockedUrl                 = lockedUrl,
+    .flakeDescription          = flakeDescription,
+    .lockedFlakeAttrPath       = lockedAttrPath,
+    .derivation                = derivation,
+    .outputs                   = outputs,
+    .outputsToInstall          = outputsToInstall,
+    .requestedOutputsToInstall = requestedOutputs,
+    .packageSystem             = systemAttribute,
+    .lockedSystem              = system,
+    .name                      = name,
+    .pname                     = pname,
+    .version                   = version,
+    .description               = description,
+    .license                   = license,
+    .broken                    = broken,
+    .unfree                    = unfree,
   };
 
   return lockedInstallable;
@@ -406,10 +407,11 @@ to_json( nlohmann::json & jto, const LockedInstallable & from )
   jto = nlohmann::json {
     { "locked-url", from.lockedUrl },
     { "flake-description", from.flakeDescription },
-    { "locked-attr-path", from.lockedAttrPath },
+    { "locked-flake-attr-path", from.lockedFlakeAttrPath },
     { "derivation", from.derivation },
     { "outputs", from.outputs },
     { "outputs-to-install", from.outputsToInstall },
+    { "requested-outputs-to-install", from.requestedOutputsToInstall },
     { "package-system", from.packageSystem },
     { "locked-system", from.lockedSystem },
     { "name", from.name },
