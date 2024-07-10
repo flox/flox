@@ -84,7 +84,7 @@ EOF
 @test "'flox activate -s' error without feature flag" {
   export FLOX_FEATURES_SERVICES=false
   "$FLOX_BIN" init
-  manifest_file="${TESTS_DIR}/services/touch_file/manifest.toml"
+  manifest_file="${TESTS_DIR}/services/touch_file.toml"
   run "$FLOX_BIN" edit -f "$manifest_file"
   assert_success
   unset output
