@@ -13,7 +13,6 @@ load test_support.bash
 # ---------------------------------------------------------------------------- #
 
 # Helpers for project based tests
-# Note in this file, these aren't added to setup() and teardown()
 
 project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
