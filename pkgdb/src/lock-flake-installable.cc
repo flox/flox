@@ -96,48 +96,18 @@ parseInstallable( const std::string & installableStr )
  * @throws @a LockFlakeInstallableException if the installable could not be
  * located or the flakeref could not be locked
  */
-static nix::InstallableFlake
-locateInstallable( const nix::ref<nix::EvalState> & state,
-                   const std::string &              system,
-                   nix::FlakeRef &                  flakeRef,
-                   const std::string &              fragment,
-                   const nix::ExtendedOutputsSpec & extendedOutputsSpec,
-                   const nix::flake::LockFlags &    lockFlags )
+static flox::Cursor
+getDerivationCursor( const nix::ref<nix::EvalState> & state,
+                     nix::InstallableFlake &          installable )
 {
   try
     {
-      nix::InstallableFlake installable = nix::InstallableFlake(
-        // The `cmd` argument is only used in nix to raise an error
-        // if `--arg` was used in the same command.
-        // The argument is never stored on the `InstallableFlake` struct
-        // or referenced outside of the constructor.
-        // We can safely pass a nullptr here, as the constructor performs a null
-        // check before dereferencing the arguement:
-        // <https://github.com/NixOS/nix/blob/509be0e77aacd8afcf419526620994cbbbe3708a/src/libcmd/installable-flake.cc#L86-L87>
-        static_cast<nix::SourceExprCommand *>( nullptr ),
-        state,
-        std::move( flakeRef ),
-        fragment,
-        extendedOutputsSpec,
-        // Defaults from nix:
-        // <https://github.com/NixOS/nix/blob/142e566adbce587a5ed97d1648a26352f0608ec5/src/libcmd/installables.cc#L231>
-        nix::Strings {
-          "packages." + system + ".default",
-          "defaultPackage." + system,
-        },
-        // Defaults from nix:
-        // <https://github.com/NixOS/nix/blob/142e566adbce587a5ed97d1648a26352f0608ec5/src/libcmd/installables.cc#L236>
-        nix::Strings {
-          "packages." + system + ".",
-          "legacyPackages." + system + ".",
-        },
-        lockFlags );
-
-      return installable;
+      auto cursor = installable.getCursor( *state );
+      return cursor;
     }
   catch ( const nix::Error & e )
     {
-      throw LockFlakeInstallableException( "could not locate flake installable",
+      throw LockFlakeInstallableException( "could not find installable",
                                            e.info().msg.str() );
     }
 }
@@ -175,12 +145,32 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     .inputUpdates          = std::set<nix::flake::InputPath> {}
   };
 
-  auto installable = locateInstallable( state,
-                                        system,
-                                        flakeRef,
-                                        fragment,
-                                        extendedOutputsSpec,
-                                        lockFlags );
+  nix::InstallableFlake installable = nix::InstallableFlake(
+    // The `cmd` argument is only used in nix to raise an error
+    // if `--arg` was used in the same command.
+    // The argument is never stored on the `InstallableFlake` struct
+    // or referenced outside of the constructor.
+    // We can safely pass a nullptr here, as the constructor performs a null
+    // check before dereferencing the arguement:
+    // <https://github.com/NixOS/nix/blob/509be0e77aacd8afcf419526620994cbbbe3708a/src/libcmd/installable-flake.cc#L86-L87>
+    static_cast<nix::SourceExprCommand *>( nullptr ),
+    state,
+    std::move( flakeRef ),
+    fragment,
+    extendedOutputsSpec,
+    // Defaults from nix:
+    // <https://github.com/NixOS/nix/blob/142e566adbce587a5ed97d1648a26352f0608ec5/src/libcmd/installables.cc#L231>
+    nix::Strings {
+      "packages." + system + ".default",
+      "defaultPackage." + system,
+    },
+    // Defaults from nix:
+    // <https://github.com/NixOS/nix/blob/142e566adbce587a5ed97d1648a26352f0608ec5/src/libcmd/installables.cc#L236>
+    nix::Strings {
+      "packages." + system + ".",
+      "legacyPackages." + system + ".",
+    },
+    lockFlags );
 
   debugLog(
     nix::fmt( "locked installable: '%s'", installable.what().c_str() ) );
@@ -191,7 +181,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 
   auto flakeDescription = installable.getLockedFlake()->flake.description;
 
-  auto cursor = installable.getCursor( *state );
+  auto cursor = getDerivationCursor( state, installable );
 
   auto lockedAttrPath = cursor->getAttrPathStr();
   debugLog( nix::fmt( "locked attr path: '%s'", lockedAttrPath ) );
