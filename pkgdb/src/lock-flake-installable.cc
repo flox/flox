@@ -111,10 +111,14 @@ locateInstallable( const nix::ref<nix::EvalState> & state,
         std::move( flakeRef ),
         fragment,
         extendedOutputsSpec,
+        // Defaults from nix:
+        // <https://github.com/NixOS/nix/blob/142e566adbce587a5ed97d1648a26352f0608ec5/src/libcmd/installables.cc#L231>
         nix::Strings {
           "packages." + system + ".default",
-          "legacyPackages." + system + ".default",
+          "defaultPackage." + system,
         },
+        // Defaults from nix:
+        // <https://github.com/NixOS/nix/blob/142e566adbce587a5ed97d1648a26352f0608ec5/src/libcmd/installables.cc#L236>
         nix::Strings {
           "packages." + system + ".",
           "legacyPackages." + system + ".",
