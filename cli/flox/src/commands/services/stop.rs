@@ -19,7 +19,6 @@ pub struct Stop {
 }
 
 impl Stop {
-    // TODO: are these nested services->stop?
     #[instrument(name = "stop", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         // TODO: include spaces?
