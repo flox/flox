@@ -7,6 +7,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "flox/buildenv/realise.hh"
+#include "flox/buildenv/buildenv-lockfile.hh"
 #include "flox/core/util.hh"
 #include "flox/resolver/environment.hh"
 #include "flox/resolver/manifest.hh"
@@ -50,8 +51,8 @@ unsupportedPackage( const std::string & system )
 
 /* -------------------------------------------------------------------------- */
 
-/* Create lockfile from a manifest with profile and hook sections */
-flox::resolver::Lockfile
+/* Create a BuildenvLockfile with profile and hook sections in the manifest */
+flox::buildenv::BuildenvLockfile
 testLockfile()
 {
   std::string                 json         = R"({
@@ -69,9 +70,11 @@ testLockfile()
   nlohmann::json              manifestJson = nlohmann::json::parse( json );
   flox::resolver::ManifestRaw manifestRaw;
   from_json( manifestJson, manifestRaw );
-  flox::resolver::EnvironmentManifest manifest( manifestRaw );
-  flox::resolver::Environment         env( manifest );
-  return env.createLockfile();
+  flox::buildenv::BuildenvLockfile lockfile = flox::buildenv::BuildenvLockfile {
+    .manifest = manifestRaw,
+    .packages = {},
+  };
+  return lockfile;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -151,12 +154,10 @@ test_unsupportedSystemExceptionForUnsupportedPackage(
 /* -------------------------------------------------------------------------- */
 
 bool
-test_scriptsAreAddedToScriptsDir( nix::ref<nix::EvalState> & state,
-                                  flox::resolver::Lockfile & lockfile )
+test_scriptsAreAddedToScriptsDir( nix::ref<nix::EvalState> &         state,
+                                  flox::buildenv::BuildenvLockfile & lockfile )
 {
-  auto output
-    = flox::buildenv::makeActivationScripts( *state,
-                                             lockfile.getLockfileRaw() );
+  auto output     = flox::buildenv::makeActivationScripts( *state, lockfile );
   auto scriptsDir = std::filesystem::path( output.first.path )
                     / flox::buildenv::ACTIVATION_SUBDIR_NAME;
   std::vector<std::string> scripts

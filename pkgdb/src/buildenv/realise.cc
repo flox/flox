@@ -163,45 +163,6 @@ createEnvironmentStorePath(
   return addDirToStore( state, tempDir, references );
 }
 
-/* -------------------------------------------------------------------------- */
-
-/**
- * @brief Extract locked packages from the lockfile for the given system.
- * @throws @a SystemNotSupportedByLockfile exception if the lockfile does not
- *         specify packages for the given system.
- * @param lockfile Lockfile to extract packages from.
- * @param system System to extract packages for.
- * @return List of locked packages for the given system paired with their id.
- */
-static std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
-getLockedPackages( const resolver::LockfileRaw & lockfile,
-                   const System &                system )
-{
-  auto systems = lockfile.manifest.getSystems();
-  if ( std::find( systems.begin(), systems.end(), system ) == systems.end() )
-    {
-      throw SystemNotSupportedByLockfile(
-        "'" + system + "' not supported by this environment" );
-    }
-
-  /* Extract all packages */
-  std::vector<std::pair<std::string, resolver::LockedPackageRaw>>
-    locked_packages;
-
-  traceLog( "getting locked packages" );
-  auto packages = lockfile.packages.find( system );
-  /* The lockfile may not have any packages for this system */
-  if ( packages == lockfile.packages.end() ) { return locked_packages; }
-
-  for ( auto const & package : packages->second )
-    {
-      if ( ! package.second.has_value() ) { continue; }
-      auto const & locked_package = package.second.value();
-      locked_packages.emplace_back( package.first, locked_package );
-    }
-
-  return locked_packages;
-}
 
 /* -------------------------------------------------------------------------- */
 
@@ -424,14 +385,7 @@ evalCacheCursorForInput( nix::ref<nix::EvalState> &             state,
                          const flox::resolver::LockedInputRaw & input,
                          const flox::AttrPath &                 attrPath )
 {
-
-  /**
-   * Ensure the input is fetched with `flox-nixpkgs`.
-   * Currently, the 'flox-nixpkgs' fetcher requires the original input to be
-   * a rev or ref of `github:nixos/nixpkgs` or `github:flox/nixpkgs`.
-   */
-  auto floxNixpkgsAttrs = flox::githubAttrsToFloxNixpkgsAttrs( input.attrs );
-  auto packageInputRef  = nix::FlakeRef::fromAttrs( floxNixpkgsAttrs );
+  auto packageInputRef = nix::FlakeRef::fromAttrs( input.attrs );
 
   auto packageFlake = nix::flake::lockFlake( *state,
                                              packageInputRef,
@@ -486,8 +440,7 @@ outpathsForPackageOutputs( nix::ref<nix::EvalState> &              state,
 std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
 collectRealisedOutputs(
   nix::ref<nix::EvalState> &                     state,
-  const std::string &                            packageName,
-  const flox::resolver::LockedPackageRaw &       lockedPackage,
+  const BuildenvLockedPackage &                  lockedPackage,
   const std::string &                            parentOutpath,
   std::unordered_map<std::string, std::string> & outputsToOutpaths )
 {
@@ -495,8 +448,9 @@ collectRealisedOutputs(
   auto internalPriority = 0;
   for ( const auto & [name, outpathStr] : outputsToOutpaths )
     {
-      debugLog(
-        nix::fmt( "processing output '%s' of '%s'", name, packageName ) );
+      debugLog( nix::fmt( "processing output '%s' of '%s'",
+                          name,
+                          lockedPackage.installId ) );
       auto outpathForOutput = state->store->parseStorePath( outpathStr );
       buildenv::RealisedPackage pkg(
         state->store->printStorePath( outpathForOutput ),
@@ -513,10 +467,9 @@ collectRealisedOutputs(
 /* -------------------------------------------------------------------------- */
 
 std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
-getRealisedOutputs( nix::ref<nix::EvalState> &         state,
-                    const std::string &                packageName,
-                    const resolver::LockedPackageRaw & lockedPackage,
-                    const System &                     system )
+getRealisedOutputs( nix::ref<nix::EvalState> &    state,
+                    const BuildenvLockedPackage & lockedPackage,
+                    const System &                system )
 {
   debugLog( nix::fmt( "getting cursor for %s", lockedPackage.attrPath[0] ) );
   auto timeEvalStart = std::chrono::high_resolution_clock::now();
@@ -532,8 +485,10 @@ getRealisedOutputs( nix::ref<nix::EvalState> &         state,
    * */
 
   // uses the cached value
-  auto parentOutpath
-    = tryEvaluatePackageOutPath( state, packageName, system, cursor );
+  auto parentOutpath = tryEvaluatePackageOutPath( state,
+                                                  lockedPackage.installId,
+                                                  system,
+                                                  cursor );
 
   // auto parentOutpath
   // = tryEvalPath( state, packageName, system, cursor, isUnfree, "outPath" );
@@ -543,11 +498,10 @@ getRealisedOutputs( nix::ref<nix::EvalState> &         state,
    * Note that the "out" output is the same as the package's outPath.
    */
   auto outputsToOutpaths
-    = outpathsForPackageOutputs( state, packageName, cursor );
+    = outpathsForPackageOutputs( state, lockedPackage.installId, cursor );
 
 
   auto pkgs        = collectRealisedOutputs( state,
-                                      packageName,
                                       lockedPackage,
                                       parentOutpath,
                                       outputsToOutpaths );
@@ -582,8 +536,8 @@ getRealisedOutputs( nix::ref<nix::EvalState> &         state,
         }
       catch ( const nix::Error & e )
         {
-          throw PackageBuildFailure( "Failed to build package '" + packageName
-                                       + "'",
+          throw PackageBuildFailure( "Failed to build package '"
+                                       + lockedPackage.installId + "'",
                                      nix::filterANSIEscapes( e.what(), true ) );
         }
     }
@@ -598,7 +552,7 @@ getRealisedOutputs( nix::ref<nix::EvalState> &         state,
     timeBuildEnd - timeEvalEnd );
   auto timeTotal = timeEval + timeBuild;
   debugLog( nix::fmt( "times for package %s: eval=%dus, build=%dus, total=%dus",
-                      packageName,
+                      lockedPackage.installId,
                       timeEval.count(),
                       timeBuild.count(),
                       timeTotal.count() ) );
@@ -651,8 +605,8 @@ activationScriptEnvironmentPath( const std::string & scriptName )
 /* -------------------------------------------------------------------------- */
 
 std::pair<buildenv::RealisedPackage, nix::StorePathSet>
-makeActivationScripts( nix::EvalState &              state,
-                       const resolver::LockfileRaw & lockfile )
+makeActivationScripts( nix::EvalState &         state,
+                       const BuildenvLockfile & lockfile )
 {
   std::vector<nix::StorePath> activationScripts;
   auto tempDir = std::filesystem::path( nix::createTempDir() );
@@ -819,27 +773,33 @@ createFloxEnv( nix::ref<nix::EvalState> &         state,
                const std::optional<std::string> & serviceConfigPath,
                const System &                     system )
 {
-  resolver::LockfileRaw lockfile;
+  BuildenvLockfile lockfile = BuildenvLockfile();
   lockfile.load_from_content( lockfileContent );
 
-  auto locked_packages = getLockedPackages( lockfile, system );
+  // Check this system is supported
+  auto systems = lockfile.manifest.getSystems();
+  if ( std::find( systems.begin(), systems.end(), system ) == systems.end() )
+    {
+      throw SystemNotSupportedByLockfile(
+        "'" + system + "' not supported by this environment" );
+    }
+
 
   /* Extract derivations */
   nix::StorePathSet                     references;
   std::vector<RealisedPackage>          pkgs;
   std::map<nix::StorePath, std::string> storePathsToInstallIds;
 
-  for ( auto const & [pId, package] : locked_packages )
+  for ( auto const & package : lockfile.packages )
     {
-
-      auto realised = getRealisedOutputs( state, pId, package, system );
-      for ( auto [realisedPackage, output] : realised )
+      auto realised = getRealisedOutputs( state, package, system );
+      for ( auto [realisedPackage, storePath] : realised )
         {
           pkgs.push_back( realisedPackage );
-          references.insert( output );
+          references.insert( storePath );
           storePathsToInstallIds.insert( {
-            output,
-            pId,
+            storePath,
+            package.installId,
           } );
         }
     }

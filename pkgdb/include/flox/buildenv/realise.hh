@@ -17,6 +17,7 @@
 #include <nix/eval.hh>
 #include <nix/store-api.hh>
 
+#include "flox/buildenv/buildenv-lockfile.hh"
 #include "flox/buildenv/buildenv.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/resolver/lockfile.hh"
@@ -382,8 +383,8 @@ createContainerBuilder( nix::EvalState &       state,
  * scripts.
  */
 std::pair<buildenv::RealisedPackage, nix::StorePathSet>
-makeActivationScripts( nix::EvalState &              state,
-                       const resolver::LockfileRaw & lockfile );
+makeActivationScripts( nix::EvalState &         state,
+                       const BuildenvLockfile & lockfile );
 
 
 /* -------------------------------------------------------------------------- */
