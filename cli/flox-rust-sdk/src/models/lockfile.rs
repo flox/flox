@@ -102,14 +102,68 @@ pub struct LockedManifestCatalog {
     pub version: Version<1>,
     /// original manifest that was locked
     pub manifest: TypedManifestCatalog,
-    /// locked pacakges
+    /// locked packages
     pub packages: Vec<LockedPackage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, derive_more::From)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub enum LockedPackage {
+    Catalog(LockedPackageCatalog),
+    Flake(LockedPackageFlake),
+}
+
+impl LockedPackage {
+    pub(crate) fn as_catalog_package_ref(&self) -> Option<&LockedPackageCatalog> {
+        match self {
+            LockedPackage::Catalog(pkg) => Some(pkg),
+            _ => None,
+        }
+    }
+
+    pub fn install_id(&self) -> &str {
+        match self {
+            LockedPackage::Catalog(pkg) => &pkg.install_id,
+            LockedPackage::Flake(pkg) => &pkg.locked_url,
+        }
+    }
+
+    pub(crate) fn system(&self) -> &System {
+        match self {
+            LockedPackage::Catalog(pkg) => &pkg.system,
+            LockedPackage::Flake(_) => todo!(),
+        }
+    }
+
+    fn licenses(&self) -> Option<Vec<&str>> {
+        match self {
+            LockedPackage::Catalog(pkg) => pkg
+                .license
+                .as_deref()
+                .map(|l| l.split_ascii_whitespace().collect()),
+            LockedPackage::Flake(_) => None,
+        }
+    }
+
+    pub fn broken(&self) -> Option<bool> {
+        match self {
+            LockedPackage::Catalog(pkg) => pkg.broken,
+            LockedPackage::Flake(_) => None,
+        }
+    }
+
+    pub fn unfree(&self) -> Option<bool> {
+        match self {
+            LockedPackage::Catalog(pkg) => pkg.unfree,
+            LockedPackage::Flake(_) => None,
+        }
+    }
 }
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct LockedPackage {
+pub struct LockedPackageCatalog {
     // region: original fields from the service
     // These fields are copied from the generated struct.
     pub attr_path: String,
@@ -144,7 +198,14 @@ pub struct LockedPackage {
     // endregion
 }
 
-impl LockedPackage {
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct LockedPackageFlake {
+    locked_url: String,
+}
+
+impl LockedPackageCatalog {
     /// Construct a [LockedPackageCatalog] from a [ManifestPackageDescriptor],
     /// the resolved [catalog::PackageResolutionInfo], and corresponding [System].
     ///
@@ -188,7 +249,7 @@ impl LockedPackage {
             .unwrap_or(DEFAULT_GROUP_NAME)
             .to_string();
 
-        LockedPackage {
+        LockedPackageCatalog {
             attr_path,
             broken,
             derivation,
@@ -364,20 +425,23 @@ impl LockedManifestCatalog {
     pub fn list_packages(&self, system: &System) -> Vec<InstalledPackage> {
         self.packages
             .iter()
-            .filter(|package| &package.system == system)
+            .filter(|package| package.system() == system)
             .cloned()
-            .map(|package| InstalledPackage {
-                install_id: package.install_id,
-                rel_path: package.attr_path,
-                info: PackageInfo {
-                    description: package.description,
-                    broken: package.broken,
-                    license: package.license,
-                    pname: package.pname,
-                    unfree: package.unfree,
-                    version: Some(package.version),
+            .map(|package| match package {
+                LockedPackage::Catalog(pkg) => InstalledPackage {
+                    install_id: pkg.install_id,
+                    rel_path: pkg.attr_path,
+                    info: PackageInfo {
+                        description: pkg.description,
+                        broken: pkg.broken,
+                        license: pkg.license,
+                        pname: pkg.pname,
+                        unfree: pkg.unfree,
+                        version: Some(pkg.version),
+                    },
+                    priority: Some(pkg.priority),
                 },
-                priority: Some(package.priority),
+                LockedPackage::Flake(_) => todo!(),
             })
             .collect()
     }
@@ -416,7 +480,9 @@ impl LockedManifestCatalog {
 
         // unpack locked packages from response
         let locked_packages: Vec<LockedPackage> =
-            Self::locked_packages_from_resolution(manifest, resolved)?.collect();
+            Self::locked_packages_from_resolution(manifest, resolved)?
+                .map(Into::into)
+                .collect();
 
         // The server should be checking this,
         // but double check
@@ -439,11 +505,14 @@ impl LockedManifestCatalog {
     ) -> Result<(), LockedManifestError> {
         if !allow.licenses.is_empty() {
             for package in locked_packages {
-                if let Some(license) = &package.license {
-                    if !allow.licenses.contains(license) {
+                let Some(licenses) = package.licenses() else {
+                    continue;
+                };
+                for license in licenses {
+                    if !allow.licenses.iter().any(|allowed| allowed == license) {
                         return Err(LockedManifestError::LicenseNotAllowed(
-                            package.install_id.clone(),
-                            license.clone(),
+                            package.install_id().to_string(),
+                            license.to_string(),
                         ));
                     }
                 }
@@ -454,9 +523,9 @@ impl LockedManifestCatalog {
         if !allow.broken.unwrap_or(false) {
             for package in locked_packages {
                 // Assume a package isn't broken
-                if package.broken.unwrap_or(false) {
+                if package.broken().unwrap_or(false) {
                     return Err(LockedManifestError::BrokenNotAllowed(
-                        package.install_id.clone(),
+                        package.install_id().to_owned(),
                     ));
                 }
             }
@@ -466,9 +535,9 @@ impl LockedManifestCatalog {
         if !allow.unfree.unwrap_or(true) {
             for package in locked_packages {
                 // Assume a package isn't unfree
-                if package.unfree.unwrap_or(false) {
+                if package.unfree().unwrap_or(false) {
                     return Err(LockedManifestError::UnfreeNotAllowed(
-                        package.install_id.clone(),
+                        package.install_id().to_owned(),
                     ));
                 }
             }
@@ -480,13 +549,13 @@ impl LockedManifestCatalog {
     /// Lockfile -> { (install_id, system): (package_descriptor, locked_package) }
     fn make_seed_mapping(
         seed: &LockedManifestCatalog,
-    ) -> HashMap<(&String, &System), (&ManifestPackageDescriptor, &LockedPackage)> {
+    ) -> HashMap<(&str, &str), (&ManifestPackageDescriptor, &LockedPackage)> {
         seed.packages
             .iter()
             .filter_map(|locked| {
-                let system = &locked.system;
-                let install_id = &locked.install_id;
-                let descriptor = seed.manifest.install.get(&locked.install_id)?;
+                let system = locked.system().as_str();
+                let install_id = locked.install_id();
+                let descriptor = seed.manifest.install.get(locked.install_id())?;
                 Some(((install_id, system), (descriptor, locked)))
             })
             .collect()
@@ -593,14 +662,19 @@ impl LockedManifestCatalog {
                 // If the package was just added to the manifest, it will be missing in the seed,
                 // which is derived from the _previous_ lockfile.
                 // In this case, the derivation will be None, and the package will be unconstrained.
+                //
                 // If the package was already locked, but the descriptor has changed in a way
                 // that invalidates the existing resolution, the derivation will be None.
+                //
+                // If the package was locked from a flake installable before
+                // it needs to be re-resolved with the catalog, so the derivation will be None.
                 let locked_derivation = seed_locked_packages
                     .get(&(install_id, &system.to_string()))
                     .filter(|(descriptor, _)| {
                         !descriptor.invalidates_existing_resolution(&manifest_descriptor.into())
                     })
-                    .map(|(_, locked_package)| locked_package.derivation.clone());
+                    .and_then(|(_, locked_package)| locked_package.as_catalog_package_ref())
+                    .map(|locked_package| locked_package.derivation.clone());
 
                 let mut resolved_descriptor = resolved_descriptor_base.clone();
 
@@ -661,7 +735,7 @@ impl LockedManifestCatalog {
     fn locked_packages_from_resolution<'manifest>(
         manifest: &'manifest TypedManifestCatalog,
         groups: impl IntoIterator<Item = ResolvedPackageGroup> + 'manifest,
-    ) -> Result<impl Iterator<Item = LockedPackage> + 'manifest, LockedManifestError> {
+    ) -> Result<impl Iterator<Item = LockedPackageCatalog> + 'manifest, LockedManifestError> {
         let groups = groups.into_iter().collect::<Vec<_>>();
         let failed_group_indices = Self::detect_failed_resolutions(&groups);
         let failures = if failed_group_indices.is_empty() {
@@ -704,7 +778,7 @@ impl LockedManifestCatalog {
             .filter_map(|resolved_pkg| {
                 manifest
                     .catalog_pkg_descriptor_with_id(&resolved_pkg.install_id)
-                    .map(|descriptor| LockedPackage::from_parts(resolved_pkg, descriptor))
+                    .map(|descriptor| LockedPackageCatalog::from_parts(resolved_pkg, descriptor))
             });
         Ok(locked_pkg_iter)
     }
@@ -906,13 +980,20 @@ impl LockedManifestCatalog {
     ///
     /// This is used to create a seed lockfile to upgrade a subset of packages,
     /// as packages that are not in the seed lockfile will be re-resolved unconstrained.
-    pub(crate) fn unlock_packages_by_group_or_iid(
-        &mut self,
-        groups_or_iids: &[String],
-    ) -> &mut Self {
+    pub(crate) fn unlock_packages_by_group_or_iid(&mut self, groups_or_iids: &[&str]) -> &mut Self {
         self.packages.retain(|package| {
-            !groups_or_iids.contains(&package.install_id)
-                && !groups_or_iids.contains(&package.group)
+            if !groups_or_iids.contains(&package.install_id()) {
+                return false;
+            }
+
+            if let Some(group) = package
+                .as_catalog_package_ref()
+                .map(|pkg| pkg.group.as_str())
+            {
+                return groups_or_iids.contains(&group);
+            }
+
+            true
         });
 
         self
@@ -1257,10 +1338,10 @@ pub struct LockfileCheckWarning {
 pub mod test_helpers {
     use super::*;
 
-    pub fn fake_package(
+    pub fn fake_catalog_package_lock<P: From<LockedPackageCatalog>>(
         name: &str,
         group: Option<&str>,
-    ) -> (String, ManifestPackageDescriptor, LockedPackage) {
+    ) -> (String, ManifestPackageDescriptor, P) {
         let install_id = format!("{}_install_id", name);
 
         let descriptor = ManifestPackageDescriptorCatalog {
@@ -1272,7 +1353,7 @@ pub mod test_helpers {
         }
         .into();
 
-        let locked = LockedPackage {
+        let locked = LockedPackageCatalog {
             attr_path: name.to_string(),
             broken: None,
             derivation: "derivation".to_string(),
@@ -1299,7 +1380,7 @@ pub mod test_helpers {
             group: group.unwrap_or(DEFAULT_GROUP_NAME).to_string(),
             priority: 5,
         };
-        (install_id, descriptor, locked)
+        (install_id, descriptor, locked.into())
     }
 }
 
@@ -1314,7 +1395,7 @@ pub(crate) mod tests {
     use indoc::indoc;
     use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
-    use test_helpers::fake_package;
+    use test_helpers::fake_catalog_package_lock;
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
@@ -1506,7 +1587,7 @@ pub(crate) mod tests {
         LockedManifest::Catalog(LockedManifestCatalog {
             version: Version::<1>,
             manifest: TEST_TYPED_MANIFEST.clone(),
-            packages: vec![LockedPackage {
+            packages: vec![LockedPackageCatalog {
                 attr_path: "hello".to_string(),
                 broken: Some(false),
                 derivation: "derivation".to_string(),
@@ -1535,7 +1616,8 @@ pub(crate) mod tests {
                 system: SystemEnum::Aarch64Darwin.to_string(),
                 group: "group".to_string(),
                 priority: 5,
-            }],
+            }
+            .into()],
         })
     });
 
@@ -1837,7 +1919,8 @@ pub(crate) mod tests {
     /// 1) If the package is unchanged, it should not be re-resolved.
     #[test]
     fn make_params_seeded_unchanged() {
-        let (foo_before_iid, foo_before_descriptor, foo_before_locked) = fake_package("foo", None);
+        let (foo_before_iid, foo_before_descriptor, foo_before_locked) =
+            fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         let mut manifest_before = manifest::test::empty_catalog_manifest();
         manifest_before
             .install
@@ -1846,7 +1929,7 @@ pub(crate) mod tests {
         let seed = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest_before.clone(),
-            packages: vec![foo_before_locked.clone()],
+            packages: vec![foo_before_locked.clone().into()],
         };
 
         // ---------------------------------------------------------------------
@@ -1868,7 +1951,8 @@ pub(crate) mod tests {
     ///    Here, the package path is changed.
     #[test]
     fn make_params_seeded_unlock_if_invalidated() {
-        let (foo_before_iid, foo_before_descriptor, foo_before_locked) = fake_package("foo", None);
+        let (foo_before_iid, foo_before_descriptor, foo_before_locked) =
+            fake_catalog_package_lock("foo", None);
         let mut manifest_before = manifest::test::empty_catalog_manifest();
         manifest_before
             .install
@@ -1877,12 +1961,13 @@ pub(crate) mod tests {
         let seed = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest_before.clone(),
-            packages: vec![foo_before_locked.clone()],
+            packages: vec![foo_before_locked],
         };
 
         // ---------------------------------------------------------------------
 
-        let (foo_after_iid, mut foo_after_descriptor, _) = fake_package("foo", None);
+        let (foo_after_iid, mut foo_after_descriptor, _) =
+            fake_catalog_package_lock::<LockedPackage>("foo", None);
 
         if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = foo_after_descriptor {
             descriptor.pkg_path = "bar".to_string();
@@ -1913,7 +1998,8 @@ pub(crate) mod tests {
     ///    Here, the priority is changed.
     #[test]
     fn make_params_seeded_changed_no_invalidation() {
-        let (foo_before_iid, foo_before_descriptor, foo_before_locked) = fake_package("foo", None);
+        let (foo_before_iid, foo_before_descriptor, foo_before_locked) =
+            fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         let mut manifest_before = manifest::test::empty_catalog_manifest();
         manifest_before
             .install
@@ -1922,12 +2008,13 @@ pub(crate) mod tests {
         let seed = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest_before.clone(),
-            packages: vec![foo_before_locked.clone()],
+            packages: vec![foo_before_locked.clone().into()],
         };
 
         // ---------------------------------------------------------------------
 
-        let (foo_after_iid, mut foo_after_descriptor, _) = fake_package("foo", None);
+        let (foo_after_iid, mut foo_after_descriptor, _) =
+            fake_catalog_package_lock::<LockedPackage>("foo", None);
         if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = foo_after_descriptor {
             descriptor.priority = Some(10);
         } else {
@@ -2009,8 +2096,8 @@ pub(crate) mod tests {
 
         assert_eq!(locked_packages.len(), 1);
         assert_eq!(
-            &locked_packages[0],
-            &LockedPackage::from_parts(
+            locked_packages[0],
+            LockedPackageCatalog::from_parts(
                 groups[0].page.as_ref().unwrap().packages.as_ref().unwrap()[0].clone(),
                 descriptor,
             )
@@ -2021,17 +2108,18 @@ pub(crate) mod tests {
     #[test]
     fn unlock_by_iid() {
         let mut manifest = manifest::test::empty_catalog_manifest();
-        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", None);
-        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", None);
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
+        let (bar_iid, bar_descriptor, bar_locked) =
+            fake_catalog_package_lock::<LockedPackage>("bar", None);
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
         manifest.install.insert(bar_iid.clone(), bar_descriptor);
         let mut lockfile = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest.clone(),
-            packages: vec![foo_locked.clone(), bar_locked.clone()],
+            packages: vec![foo_locked, bar_locked.clone()],
         };
 
-        lockfile.unlock_packages_by_group_or_iid(&[foo_iid.clone()]);
+        lockfile.unlock_packages_by_group_or_iid(&[&foo_iid.clone()]);
 
         assert_eq!(lockfile.packages, vec![bar_locked]);
     }
@@ -2040,17 +2128,17 @@ pub(crate) mod tests {
     #[test]
     fn unlock_by_group() {
         let mut manifest = manifest::test::empty_catalog_manifest();
-        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", Some("group"));
-        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", Some("group"));
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", Some("group"));
+        let (bar_iid, bar_descriptor, bar_locked) = fake_catalog_package_lock("bar", Some("group"));
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
         manifest.install.insert(bar_iid.clone(), bar_descriptor);
         let mut lockfile = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest.clone(),
-            packages: vec![foo_locked.clone(), bar_locked.clone()],
+            packages: vec![foo_locked, bar_locked],
         };
 
-        lockfile.unlock_packages_by_group_or_iid(&["group".to_string()]);
+        lockfile.unlock_packages_by_group_or_iid(&["group"]);
 
         assert_eq!(lockfile.packages, vec![]);
     }
@@ -2060,17 +2148,19 @@ pub(crate) mod tests {
     #[test]
     fn unlock_by_iid_and_group() {
         let mut manifest = manifest::test::empty_catalog_manifest();
-        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", Some("foo_install_id"));
-        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", Some("foo_install_id"));
+        let (foo_iid, foo_descriptor, foo_locked) =
+            fake_catalog_package_lock("foo", Some("foo_install_id"));
+        let (bar_iid, bar_descriptor, bar_locked) =
+            fake_catalog_package_lock("bar", Some("foo_install_id"));
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
         manifest.install.insert(bar_iid.clone(), bar_descriptor);
         let mut lockfile = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest.clone(),
-            packages: vec![foo_locked.clone(), bar_locked.clone()],
+            packages: vec![foo_locked, bar_locked],
         };
 
-        lockfile.unlock_packages_by_group_or_iid(&[foo_iid.clone()]);
+        lockfile.unlock_packages_by_group_or_iid(&[&foo_iid]);
 
         assert_eq!(lockfile.packages, vec![]);
     }
@@ -2084,7 +2174,7 @@ pub(crate) mod tests {
         // If the package is not in the seed, the lockfile should be unchanged
         let expected = seed.packages.clone();
 
-        seed.unlock_packages_by_group_or_iid(&["not in here".to_string()]);
+        seed.unlock_packages_by_group_or_iid(&["not in here"]);
 
         assert_eq!(seed.packages, expected,);
     }
@@ -2169,10 +2259,14 @@ pub(crate) mod tests {
 
     #[test]
     fn test_split_out_fully_locked_packages() {
-        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", Some("group1"));
-        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", Some("group1"));
-        let (baz_iid, baz_descriptor, baz_locked) = fake_package("baz", Some("group2"));
-        let (yeet_iid, yeet_descriptor, _) = fake_package("yeet", Some("group2"));
+        let (foo_iid, foo_descriptor, foo_locked) =
+            fake_catalog_package_lock::<LockedPackage>("foo", Some("group1"));
+        let (bar_iid, bar_descriptor, bar_locked) =
+            fake_catalog_package_lock::<LockedPackage>("bar", Some("group1"));
+        let (baz_iid, baz_descriptor, baz_locked) =
+            fake_catalog_package_lock::<LockedPackageCatalog>("baz", Some("group2"));
+        let (yeet_iid, yeet_descriptor, _) =
+            fake_catalog_package_lock::<LockedPackage>("yeet", Some("group2"));
 
         let mut manifest = manifest::test::empty_catalog_manifest();
         manifest.install.insert(foo_iid, foo_descriptor.clone());
@@ -2184,7 +2278,11 @@ pub(crate) mod tests {
         let locked = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest.clone(),
-            packages: vec![foo_locked.clone(), bar_locked.clone(), baz_locked.clone()],
+            packages: vec![
+                foo_locked.clone(),
+                bar_locked.clone(),
+                baz_locked.clone().into(),
+            ],
         };
 
         manifest
@@ -2234,7 +2332,8 @@ pub(crate) mod tests {
     /// locking the same package for fewer systems should drop the extra systems
     #[test]
     fn drop_packages_for_removed_systems() {
-        let (foo_iid, foo_descriptor_one_system, foo_locked) = fake_package("foo", Some("group1"));
+        let (foo_iid, foo_descriptor_one_system, foo_locked) =
+            fake_catalog_package_lock::<LockedPackageCatalog>("foo", Some("group1"));
 
         let systems = &foo_descriptor_one_system
             .as_catalog_descriptor_ref()
@@ -2259,7 +2358,7 @@ pub(crate) mod tests {
             panic!("Expected a catalog descriptor");
         };
 
-        let foo_locked_second_system = LockedPackage {
+        let foo_locked_second_system = LockedPackageCatalog {
             system: SystemEnum::Aarch64Linux.to_string(),
             ..foo_locked.clone()
         };
@@ -2272,7 +2371,10 @@ pub(crate) mod tests {
         let locked = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest.clone(),
-            packages: vec![foo_locked.clone(), foo_locked_second_system.clone()],
+            packages: vec![
+                foo_locked.clone().into(),
+                foo_locked_second_system.clone().into(),
+            ],
         };
 
         manifest
@@ -2294,7 +2396,7 @@ pub(crate) mod tests {
         let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
             LockedManifestCatalog::split_fully_locked_groups(groups, Some(&locked));
 
-        assert_eq!(fully_locked, vec![foo_locked]);
+        assert_eq!(fully_locked, vec![foo_locked.into()]);
         assert_eq!(to_resolve, vec![]);
     }
 
@@ -2303,7 +2405,8 @@ pub(crate) mod tests {
     /// of already installed systems
     #[test]
     fn invalidate_group_if_system_added() {
-        let (foo_iid, foo_descriptor_one_system, foo_locked) = fake_package("foo", Some("group1"));
+        let (foo_iid, foo_descriptor_one_system, foo_locked) =
+            fake_catalog_package_lock("foo", Some("group1"));
 
         // `fake_package` sets the system to [`Aarch64Darwin`]
         let mut foo_descriptor_two_systems = foo_descriptor_one_system.clone();
@@ -2325,7 +2428,7 @@ pub(crate) mod tests {
         let locked = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest.clone(),
-            packages: vec![foo_locked.clone()],
+            packages: vec![foo_locked],
         };
 
         manifest
@@ -2362,7 +2465,8 @@ pub(crate) mod tests {
     async fn lock_manifest_catches_not_allowed_package() {
         // Create a manifest and lockfile with an unfree package foo.
         // Don't set `options.allow.unfree`
-        let (foo_iid, foo_descriptor_one_system, mut foo_locked) = fake_package("foo", None);
+        let (foo_iid, foo_descriptor_one_system, mut foo_locked) =
+            fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.unfree = Some(true);
         let mut manifest = empty_catalog_manifest();
         manifest
@@ -2372,7 +2476,7 @@ pub(crate) mod tests {
         let locked = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest.clone(),
-            packages: vec![foo_locked.clone()],
+            packages: vec![foo_locked.into()],
         };
 
         // Set `options.allow.unfree = false` in the manifest, but not the lockfile
@@ -2392,7 +2496,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn lock_manifest_catches_not_allowed_package_from_server() {
         // Create a manifest with a package foo and `options.allow.unfree = false`
-        let (foo_iid, foo_descriptor_one_system, _) = fake_package("foo", Some("toplevel"));
+        let (foo_iid, foo_descriptor_one_system, _) =
+            fake_catalog_package_lock::<LockedPackage>("foo", Some("toplevel"));
         let mut manifest = empty_catalog_manifest();
         manifest
             .install
@@ -2430,11 +2535,11 @@ pub(crate) mod tests {
     /// when it finds a disallowed license
     #[test]
     fn check_packages_are_allowed_disallowed_license() {
-        let (_, _, mut foo_locked) = fake_package("foo", None);
+        let (_, _, mut foo_locked) = fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.license = Some("disallowed".to_string());
 
         assert!(matches!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked.into()], &Allows {
                 unfree: None,
                 broken: None,
                 licenses: vec!["allowed".to_string()]
@@ -2447,28 +2552,29 @@ pub(crate) mod tests {
     /// a package's license is allowed
     #[test]
     fn check_packages_are_allowed_allowed_license() {
-        let (_, _, mut foo_locked) = fake_package("foo", None);
+        let (_, _, mut foo_locked) = fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.license = Some("allowed".to_string());
 
-        assert!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+        assert!(LockedManifestCatalog::check_packages_are_allowed(
+            &vec![foo_locked.into()],
+            &Allows {
                 unfree: None,
                 broken: None,
                 licenses: vec!["allowed".to_string()]
-            })
-            .is_ok()
-        );
+            }
+        )
+        .is_ok());
     }
 
     /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
     /// when a package is broken even if `allow.broken` is unset
     #[test]
     fn check_packages_are_allowed_broken_default() {
-        let (_, _, mut foo_locked) = fake_package("foo", None);
+        let (_, _, mut foo_locked) = fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.broken = Some(true);
 
         assert!(matches!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked.into()], &Allows {
                 unfree: None,
                 broken: None,
                 licenses: vec![]
@@ -2481,28 +2587,29 @@ pub(crate) mod tests {
     /// broken package when `allow.broken = true`
     #[test]
     fn check_packages_are_allowed_broken_true() {
-        let (_, _, mut foo_locked) = fake_package("foo", None);
+        let (_, _, mut foo_locked) = fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.broken = Some(true);
 
-        assert!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+        assert!(LockedManifestCatalog::check_packages_are_allowed(
+            &vec![foo_locked.into()],
+            &Allows {
                 unfree: None,
                 broken: Some(true),
                 licenses: vec![]
-            })
-            .is_ok()
-        );
+            }
+        )
+        .is_ok());
     }
 
     /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
     /// when a package is broken and `allow.broken = false`
     #[test]
     fn check_packages_are_allowed_broken_false() {
-        let (_, _, mut foo_locked) = fake_package("foo", None);
+        let (_, _, mut foo_locked) = fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.broken = Some(true);
 
         assert!(matches!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked.into()], &Allows {
                 unfree: None,
                 broken: Some(false),
                 licenses: vec![]
@@ -2515,45 +2622,47 @@ pub(crate) mod tests {
     /// an unfree package when `allow.unfree` is unset
     #[test]
     fn check_packages_are_allowed_unfree_default() {
-        let (_, _, mut foo_locked) = fake_package("foo", None);
+        let (_, _, mut foo_locked) = fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.unfree = Some(true);
 
-        assert!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+        assert!(LockedManifestCatalog::check_packages_are_allowed(
+            &vec![foo_locked.into()],
+            &Allows {
                 unfree: None,
                 broken: None,
                 licenses: vec![]
-            })
-            .is_ok()
-        );
+            }
+        )
+        .is_ok());
     }
 
     /// [LockedManifestCatalog::check_packages_are_allowed] does not error for a
     /// an unfree package when `allow.unfree = true`
     #[test]
     fn check_packages_are_allowed_unfree_true() {
-        let (_, _, mut foo_locked) = fake_package("foo", None);
+        let (_, _, mut foo_locked) = fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.unfree = Some(true);
 
-        assert!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+        assert!(LockedManifestCatalog::check_packages_are_allowed(
+            &vec![foo_locked.into()],
+            &Allows {
                 unfree: Some(true),
                 broken: None,
                 licenses: vec![]
-            })
-            .is_ok()
-        );
+            }
+        )
+        .is_ok());
     }
 
     /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
     /// when a package is unfree and `allow.unfree = false`
     #[test]
     fn check_packages_are_allowed_unfree_false() {
-        let (_, _, mut foo_locked) = fake_package("foo", None);
+        let (_, _, mut foo_locked) = fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.unfree = Some(true);
 
         assert!(matches!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked.into()], &Allows {
                 unfree: Some(false),
                 broken: None,
                 licenses: vec![]
@@ -2564,9 +2673,12 @@ pub(crate) mod tests {
 
     #[test]
     fn test_list_packages() {
-        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", Some("group1"));
-        let (bar_iid, bar_descriptor, bar_locked) = fake_package("bar", Some("group1"));
-        let (baz_iid, mut baz_descriptor, mut baz_locked) = fake_package("baz", Some("group2"));
+        let (foo_iid, foo_descriptor, foo_locked) =
+            fake_catalog_package_lock::<LockedPackageCatalog>("foo", Some("group1"));
+        let (bar_iid, bar_descriptor, bar_locked) =
+            fake_catalog_package_lock::<LockedPackageCatalog>("bar", Some("group1"));
+        let (baz_iid, mut baz_descriptor, mut baz_locked) =
+            fake_catalog_package_lock::<LockedPackageCatalog>("baz", Some("group2"));
 
         if let ManifestPackageDescriptor::Catalog(ref mut descriptor) = baz_descriptor {
             descriptor.systems = Some(vec![SystemEnum::Aarch64Linux.to_string()]);
@@ -2589,7 +2701,11 @@ pub(crate) mod tests {
         let locked = LockedManifestCatalog {
             version: Version::<1>,
             manifest,
-            packages: vec![foo_locked.clone(), bar_locked.clone(), baz_locked.clone()],
+            packages: vec![
+                foo_locked.clone().into(),
+                bar_locked.clone().into(),
+                baz_locked.clone().into(),
+            ],
         };
 
         let foo_pkg_path = foo_descriptor

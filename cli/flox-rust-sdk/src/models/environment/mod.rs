@@ -159,7 +159,7 @@ pub trait Environment: Send {
     fn upgrade(
         &mut self,
         flox: &Flox,
-        groups_or_iids: &[String],
+        groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError>;
 
     /// Extract the current content of the manifest
