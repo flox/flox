@@ -1616,7 +1616,7 @@ mod test {
     use crate::models::floxmeta::floxmeta_dir;
     use crate::models::lockfile::test_helpers::fake_package;
     use crate::models::lockfile::LockedManifestCatalog;
-    use crate::models::manifest::{ManifestPackageDescriptor, TypedManifestCatalog};
+    use crate::models::manifest::{ManifestPackageDescriptorCatalog, TypedManifestCatalog};
     use crate::providers::catalog::MockClient;
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::GitCommandProvider;
@@ -2376,15 +2376,17 @@ mod test {
         flox.catalog_client = Some(client.into());
 
         let mut new_manifest = TypedManifestCatalog::default();
-        new_manifest
-            .install
-            .insert("hello".to_string(), ManifestPackageDescriptor {
+        new_manifest.install.insert(
+            "hello".to_string(),
+            ManifestPackageDescriptorCatalog {
                 pkg_path: "hello".to_string(),
                 pkg_group: None,
                 priority: None,
                 version: None,
                 systems: None,
-            });
+            }
+            .into(),
+        );
 
         fs::write(
             managed_env.manifest_path(&flox).unwrap(),
