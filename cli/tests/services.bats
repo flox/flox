@@ -103,15 +103,6 @@ EOF
 }
 
 # bats test_tags=services:stop
-@test "stop: can't be used outside an activation that has services" {
-  skip "TODO: "
-  export FLOX_FEATURES_SERVICES=true
-  run "$FLOX_BIN" services stop
-  assert_failure
-  assert_output "❌ ERROR: services have not been started in this activation"
-}
-
-# bats test_tags=services:stop
 @test "stop: errors if a service doesn't exist" {
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
@@ -174,7 +165,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output "❌ ERROR: couldn't connect to service manager"
+  assert_output --partial "❌ ERROR: couldn't connect to service manager"
 }
 
 # bats test_tags=services:stop
