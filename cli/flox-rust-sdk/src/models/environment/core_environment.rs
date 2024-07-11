@@ -29,7 +29,7 @@ use crate::models::lockfile::{
     LockedManifestCatalog,
     LockedManifestError,
     LockedManifestPkgdb,
-    LockedPackageCatalog,
+    LockedPackage,
     ResolutionFailure,
 };
 use crate::models::manifest::{
@@ -667,7 +667,7 @@ impl CoreEnvironment<ReadOnly> {
     ) -> Result<
         (
             LockedManifestCatalog,
-            Vec<(LockedPackageCatalog, LockedPackageCatalog)>,
+            Vec<(LockedPackage, LockedPackage)>,
         ),
         CoreEnvironmentError,
     > {

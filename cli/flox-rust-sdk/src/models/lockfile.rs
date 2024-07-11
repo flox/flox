@@ -103,13 +103,13 @@ pub struct LockedManifestCatalog {
     /// original manifest that was locked
     pub manifest: TypedManifestCatalog,
     /// locked pacakges
-    pub packages: Vec<LockedPackageCatalog>,
+    pub packages: Vec<LockedPackage>,
 }
 
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct LockedPackageCatalog {
+pub struct LockedPackage {
     // region: original fields from the service
     // These fields are copied from the generated struct.
     pub attr_path: String,
@@ -144,7 +144,7 @@ pub struct LockedPackageCatalog {
     // endregion
 }
 
-impl LockedPackageCatalog {
+impl LockedPackage {
     /// Construct a [LockedPackageCatalog] from a [ManifestPackageDescriptor],
     /// the resolved [catalog::PackageResolutionInfo], and corresponding [System].
     ///
@@ -188,7 +188,7 @@ impl LockedPackageCatalog {
             .unwrap_or(DEFAULT_GROUP_NAME)
             .to_string();
 
-        LockedPackageCatalog {
+        LockedPackage {
             attr_path,
             broken,
             derivation,
@@ -415,7 +415,7 @@ impl LockedManifestCatalog {
             .map_err(LockedManifestError::CatalogResolve)?;
 
         // unpack locked packages from response
-        let locked_packages: Vec<LockedPackageCatalog> =
+        let locked_packages: Vec<LockedPackage> =
             Self::locked_packages_from_resolution(manifest, resolved)?.collect();
 
         // The server should be checking this,
@@ -434,7 +434,7 @@ impl LockedManifestCatalog {
     /// Given locked packages and manifest options allows, verify that the
     /// locked packages are allowed.
     fn check_packages_are_allowed(
-        locked_packages: &[LockedPackageCatalog],
+        locked_packages: &[LockedPackage],
         allow: &Allows,
     ) -> Result<(), LockedManifestError> {
         if !allow.licenses.is_empty() {
@@ -480,7 +480,7 @@ impl LockedManifestCatalog {
     /// Lockfile -> { (install_id, system): (package_descriptor, locked_package) }
     fn make_seed_mapping(
         seed: &LockedManifestCatalog,
-    ) -> HashMap<(&String, &System), (&ManifestPackageDescriptor, &LockedPackageCatalog)> {
+    ) -> HashMap<(&String, &System), (&ManifestPackageDescriptor, &LockedPackage)> {
         seed.packages
             .iter()
             .filter_map(|locked| {
@@ -620,7 +620,7 @@ impl LockedManifestCatalog {
     fn split_fully_locked_groups(
         groups: impl IntoIterator<Item = PackageGroup>,
         seed_lockfile: Option<&LockedManifestCatalog>,
-    ) -> (Vec<LockedPackageCatalog>, Vec<PackageGroup>) {
+    ) -> (Vec<LockedPackage>, Vec<PackageGroup>) {
         let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
 
         let (already_locked_groups, groups_to_lock): (Vec<_>, Vec<_>) =
@@ -661,7 +661,7 @@ impl LockedManifestCatalog {
     fn locked_packages_from_resolution<'manifest>(
         manifest: &'manifest TypedManifestCatalog,
         groups: impl IntoIterator<Item = ResolvedPackageGroup> + 'manifest,
-    ) -> Result<impl Iterator<Item = LockedPackageCatalog> + 'manifest, LockedManifestError> {
+    ) -> Result<impl Iterator<Item = LockedPackage> + 'manifest, LockedManifestError> {
         let groups = groups.into_iter().collect::<Vec<_>>();
         let failed_group_indices = Self::detect_failed_resolutions(&groups);
         let failures = if failed_group_indices.is_empty() {
@@ -704,7 +704,7 @@ impl LockedManifestCatalog {
             .filter_map(|resolved_pkg| {
                 manifest
                     .catalog_pkg_descriptor_with_id(&resolved_pkg.install_id)
-                    .map(|descriptor| LockedPackageCatalog::from_parts(resolved_pkg, descriptor))
+                    .map(|descriptor| LockedPackage::from_parts(resolved_pkg, descriptor))
             });
         Ok(locked_pkg_iter)
     }
@@ -1260,7 +1260,7 @@ pub mod test_helpers {
     pub fn fake_package(
         name: &str,
         group: Option<&str>,
-    ) -> (String, ManifestPackageDescriptor, LockedPackageCatalog) {
+    ) -> (String, ManifestPackageDescriptor, LockedPackage) {
         let install_id = format!("{}_install_id", name);
 
         let descriptor = ManifestPackageDescriptorCatalog {
@@ -1272,7 +1272,7 @@ pub mod test_helpers {
         }
         .into();
 
-        let locked = LockedPackageCatalog {
+        let locked = LockedPackage {
             attr_path: name.to_string(),
             broken: None,
             derivation: "derivation".to_string(),
@@ -1506,7 +1506,7 @@ pub(crate) mod tests {
         LockedManifest::Catalog(LockedManifestCatalog {
             version: Version::<1>,
             manifest: TEST_TYPED_MANIFEST.clone(),
-            packages: vec![LockedPackageCatalog {
+            packages: vec![LockedPackage {
                 attr_path: "hello".to_string(),
                 broken: Some(false),
                 derivation: "derivation".to_string(),
@@ -2010,7 +2010,7 @@ pub(crate) mod tests {
         assert_eq!(locked_packages.len(), 1);
         assert_eq!(
             &locked_packages[0],
-            &LockedPackageCatalog::from_parts(
+            &LockedPackage::from_parts(
                 groups[0].page.as_ref().unwrap().packages.as_ref().unwrap()[0].clone(),
                 descriptor,
             )
@@ -2259,7 +2259,7 @@ pub(crate) mod tests {
             panic!("Expected a catalog descriptor");
         };
 
-        let foo_locked_second_system = LockedPackageCatalog {
+        let foo_locked_second_system = LockedPackage {
             system: SystemEnum::Aarch64Linux.to_string(),
             ..foo_locked.clone()
         };

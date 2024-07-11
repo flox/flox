@@ -10,7 +10,7 @@ use flox_rust_sdk::models::lockfile::{
     LockedManifest,
     LockedManifestError,
     LockedManifestPkgdb,
-    LockedPackageCatalog,
+    LockedPackage,
     ResolutionFailure,
     ResolutionFailures,
 };
@@ -283,7 +283,7 @@ impl Install {
 
     /// Generate warnings to print to the user about unfree and broken packages.
     fn generate_warnings(
-        locked_packages: &[LockedPackageCatalog],
+        locked_packages: &[LockedPackage],
         packages_to_install: &[PackageToInstall],
     ) -> Vec<String> {
         let mut warnings = vec![];
@@ -326,7 +326,7 @@ impl Install {
 #[cfg(test)]
 mod tests {
     use flox_rust_sdk::models::lockfile::test_helpers::fake_package;
-    use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
+    use flox_rust_sdk::models::lockfile::LockedPackage;
     use flox_rust_sdk::models::manifest::PackageToInstall;
     use flox_rust_sdk::providers::catalog::SystemEnum;
 
@@ -373,7 +373,7 @@ mod tests {
         foo_locked.unfree = Some(true);
 
         // TODO: fake_package shouldn't hardcode system?
-        let foo_locked_second_system = LockedPackageCatalog {
+        let foo_locked_second_system = LockedPackage {
             system: SystemEnum::Aarch64Linux.to_string(),
             ..foo_locked.clone()
         };
@@ -421,7 +421,7 @@ mod tests {
         foo_locked.broken = Some(true);
 
         // TODO: fake_package shouldn't hardcode system?
-        let foo_locked_second_system = LockedPackageCatalog {
+        let foo_locked_second_system = LockedPackage {
             system: SystemEnum::Aarch64Linux.to_string(),
             ..foo_locked.clone()
         };
