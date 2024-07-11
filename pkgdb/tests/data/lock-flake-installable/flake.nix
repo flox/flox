@@ -35,14 +35,14 @@
           pkgs.runCommand "licenseString" {
             meta.license = "Unlicense";
           } ''
-            touch >> $out
+            touch $out
           '';
 
         licenseAttrs =
           pkgs.runCommand "licenseAttrs" {
             meta.license = pkgs.lib.licenses.unlicense;
           } ''
-            touch >> $out
+            touch $out
           '';
 
         licenseListOfAttrs =
