@@ -25,6 +25,7 @@
 #include "flox/core/exceptions.hh"
 #include "flox/eval.hh"
 #include "flox/linkenv/command.hh"
+#include "flox/lock-flake-installable.hh"
 #include "flox/parse/command.hh"
 #include "flox/pkgdb/command.hh"
 #include "flox/pkgdb/metrics.hh"
@@ -129,9 +130,11 @@ run( int argc, char * argv[] )
   flox::buildenv::BuildEnvCommand cmdBuildEnv;
   prog.add_subparser( cmdBuildEnv.getParser() );
 
+  flox::LockFlakeInstallableCommand cmdLock;
+  prog.add_subparser( cmdLock.getParser() );
+
   flox::linkenv::LinkEnvCommand cmdLinkEnv;
   prog.add_subparser( cmdLinkEnv.getParser() );
-
 
   /* Parse Args */
   try
@@ -160,7 +163,14 @@ run( int argc, char * argv[] )
   if ( prog.is_subcommand_used( "repl" ) ) { return cmdRepl.run(); }
   if ( prog.is_subcommand_used( "eval" ) ) { return cmdEval.run(); }
   if ( prog.is_subcommand_used( "buildenv" ) ) { return cmdBuildEnv.run(); }
-  if ( prog.is_subcommand_used( "linkenv" ) ) { return cmdLinkEnv.run(); }
+  if ( prog.is_subcommand_used( cmdLock.getParser() ) )
+    {
+      return cmdLock.run();
+    }
+  if ( prog.is_subcommand_used( cmdLinkEnv.getParser() ) )
+    {
+      return cmdLinkEnv.run();
+    }
 
   // TODO: better error for this,
   // likely only occurs if we add a new command without handling it (?)
