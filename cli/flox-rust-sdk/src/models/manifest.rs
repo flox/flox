@@ -556,7 +556,11 @@ pub struct ManifestInstall(
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 // todo: this can make the error messages less clear and might call for a custom (de)serialize impl
-#[serde(untagged)]
+#[serde(
+    untagged,
+    expecting = "Expected either a catalog package descriptor or flake installable.
+See https://flox.dev/docs/concepts/manifest/#package-descriptors for more information."
+)]
 pub enum ManifestPackageDescriptor {
     Catalog(ManifestPackageDescriptorCatalog),
     FlakeRef(ManifestPackageDescriptorFlake),
