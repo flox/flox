@@ -52,6 +52,13 @@
             touch $out
           '';
 
+        licenseMixedList =
+          pkgs.runCommand "licenseMixedList" {
+            meta.license = ["UnlicenseString" pkgs.lib.licenses.mit];
+          } ''
+            touch $out
+          '';
+
         licenseNoLicense = pkgs.runCommand "licenseNoLicense" {} ''
           touch $out
         '';

@@ -63,7 +63,8 @@ test_attrpathUsesDefaults( const nix::ref<nix::EvalState> & state,
 }
 
 /**
- * @brief Test that the flake origin is correctly parsed from the flake
+ * @brief Test `lockFlakeInstallable` accepts different types of flake
+ * references
  */
 bool
 test_flakerefOrigins( const nix::ref<nix::EvalState> & state,
@@ -116,7 +117,6 @@ test_explicitOutputs( const nix::ref<nix::EvalState> & state,
                                   system,
                                   localTestFlake + "#multipleOutputs" );
 
-  // Default outputs of openssl are `bin` and `man`
   EXPECT_EQ( nlohmann::json( defaultOutputs.outputsToInstall ),
              nlohmann::json( nix::StringSet( { "out", "man" } ) ) );
 
@@ -165,8 +165,8 @@ test_resolvesToDefaultPackage( const nix::ref<nix::EvalState> & state,
 }
 
 /**
- * @brief Test that the default package is resolved correctly if no attrpath is
- * provided
+ * @brief Test the system attributes are correctly determined from the attrpath
+ * and the requested system.
  */
 bool
 test_systemAttributes( const nix::ref<nix::EvalState> & state )
@@ -185,7 +185,7 @@ test_systemAttributes( const nix::ref<nix::EvalState> & state )
   return true;
 }
 
-
+// Test that the license is correctly determined if `meta.license` is a string
 bool
 test_licenseString( const nix::ref<nix::EvalState> & state,
                     const std::string &              system )
@@ -202,6 +202,7 @@ test_licenseString( const nix::ref<nix::EvalState> & state,
   return true;
 }
 
+// Test that the license is correctly determined if `meta.license` is an attrset
 bool
 test_licenseAttrs( const nix::ref<nix::EvalState> & state,
                    const std::string &              system )
@@ -218,6 +219,8 @@ test_licenseAttrs( const nix::ref<nix::EvalState> & state,
   return true;
 }
 
+// Test that the license is correctly determined if `meta.license` is a list of
+// attrsets
 bool
 test_licenseListOfAttrs( const nix::ref<nix::EvalState> & state,
                          const std::string &              system )
@@ -234,6 +237,26 @@ test_licenseListOfAttrs( const nix::ref<nix::EvalState> & state,
   return true;
 }
 
+// Test that the license is correctly determined if `meta.license` is a mixed
+// list of attrsets and strings
+bool
+test_licenseMixedList( const nix::ref<nix::EvalState> & state,
+                       const std::string &              system )
+{
+  auto licenseMixedList
+    = flox::lockFlakeInstallable( state,
+                                  system,
+                                  localTestFlake + "#licenseMixedList" );
+
+  EXPECT( licenseMixedList.licenses.has_value() );
+  EXPECT_EQ( nlohmann::json( licenseMixedList.licenses.value() ),
+             nlohmann::json( { "UnlicenseString", "MIT" } ) );
+
+  return true;
+}
+
+// Test that the license is correctly determined as absent if `meta.license` is
+// not present
 bool
 test_licenseNoLicense( const nix::ref<nix::EvalState> & state,
                        const std::string &              system )
@@ -354,6 +377,7 @@ main( int argc, char * argv[] )
   RUN_TEST( licenseString, state, system );
   RUN_TEST( licenseAttrs, state, system );
   RUN_TEST( licenseListOfAttrs, state, system );
+  RUN_TEST( licenseMixedList, state, system );
   RUN_TEST( licenseNoLicense, state, system );
   RUN_TEST( description, state, system );
   RUN_TEST( names, state, system );
