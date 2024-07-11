@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::services::stop_services;
+use flox_rust_sdk::providers::services::{stop_services, ProcessStates};
 use tracing::instrument;
 
 use crate::commands::{environment_select, EnvironmentSelect};
@@ -31,9 +31,18 @@ impl Stop {
             .into_dyn_environment();
         let socket = env.services_socket_path(&flox)?;
 
-        stop_services(socket, &self.names)?;
+        let names = if self.names.is_empty() {
+            tracing::debug!("no service names provided");
+            ProcessStates::read(&socket)?.get_running_names()
+        } else {
+            self.names.iter().map(String::from).collect::<Vec<_>>()
+        };
 
-        message::updated("Stop! In the name of love");
+        stop_services(socket, &names)?;
+
+        for name in names.iter() {
+            message::service_stopped(name);
+        }
 
         Ok(())
     }

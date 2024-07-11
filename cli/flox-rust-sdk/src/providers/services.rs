@@ -202,10 +202,10 @@ struct ProcessState {
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
-struct ProcessStates(Vec<ProcessState>);
+pub struct ProcessStates(Vec<ProcessState>);
 
 impl ProcessStates {
-    fn read(socket: impl AsRef<Path>) -> Result<ProcessStates, ServiceError> {
+    pub fn read(socket: impl AsRef<Path>) -> Result<ProcessStates, ServiceError> {
         let mut cmd = base_process_compose_command(socket.as_ref());
         let output = cmd
             .arg("list")
@@ -226,7 +226,7 @@ impl ProcessStates {
         Ok(processes)
     }
 
-    fn get_running_names(&self) -> Vec<String> {
+    pub fn get_running_names(&self) -> Vec<String> {
         self.0
             .iter()
             .filter(|state| state.is_running)
@@ -254,15 +254,7 @@ pub fn stop_services(
     socket: impl AsRef<Path>,
     names: &[impl AsRef<str>],
 ) -> Result<(), ServiceError> {
-    let names = if names.is_empty() {
-        ProcessStates::read(&socket)?.get_running_names()
-    } else {
-        names
-            .iter()
-            .map(|name| name.as_ref().to_string())
-            .collect::<Vec<_>>()
-    };
-
+    let names = names.iter().map(|name| name.as_ref()).collect::<Vec<_>>();
     tracing::debug!(names = names.join(","), "stopping services");
 
     let mut cmd = base_process_compose_command(socket);
