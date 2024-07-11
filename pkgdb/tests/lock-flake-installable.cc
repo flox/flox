@@ -17,20 +17,6 @@
 
 /* -------------------------------------------------------------------------- */
 
-std::string
-unsupportedPackage( const std::string & system )
-{
-  if ( system == "aarch64-darwin" ) { return "glibc"; }
-  else if ( system == "x86_64-darwin" ) { return "glibc"; }
-  else if ( system == "aarch64-linux" ) { return "spacebar"; }
-  else if ( system == "x86_64-linux" ) { return "spacebar"; }
-  else
-    {
-      // Should be unreachable
-      return "wat?";
-    }
-}
-
 /**
  * paths are relative to the test runner which in this case is the makefile in
  * the pkgdb root
