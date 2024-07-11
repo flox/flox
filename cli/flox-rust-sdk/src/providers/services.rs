@@ -37,6 +37,21 @@ pub enum ServiceError {
     ProcessComposeCmd(#[source] std::io::Error),
     #[error(transparent)]
     LoggedError(#[from] LoggedError),
+    #[error("failed to parse service manager output")]
+    ParseOutput(#[source] serde_json::Error),
+}
+
+impl ServiceError {
+    pub fn from_output(output: impl AsRef<str>) -> Self {
+        extract_err_msgs(&output)
+            .map(|msgs| LoggedError::from(msgs).into())
+            .unwrap_or_else(|| {
+                ServiceError::ProcessComposeCmd(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    output.as_ref().to_string(),
+                ))
+            })
+    }
 }
 
 /// The deserialized representation of a `process-compose` config file.
@@ -190,10 +205,20 @@ struct ProcessState {
 struct ProcessStates(Vec<ProcessState>);
 
 impl ProcessStates {
-    fn read(socket: impl AsRef<Path>) -> Result<ProcessStates, std::io::Error> {
+    fn read(socket: impl AsRef<Path>) -> Result<ProcessStates, ServiceError> {
         let mut cmd = base_process_compose_command(socket.as_ref());
-        let output = cmd.arg("list").args(["--output", "json"]).output()?;
-        let mut processes: ProcessStates = serde_json::from_slice(&output.stdout)?;
+        let output = cmd
+            .arg("list")
+            .args(["--output", "json"])
+            .output()
+            .map_err(ServiceError::ProcessComposeCmd)?;
+        if !output.status.success() {
+            return Err(ServiceError::from_output(String::from_utf8_lossy(
+                &output.stderr,
+            )));
+        }
+        let mut processes: ProcessStates =
+            serde_json::from_slice(&output.stdout).map_err(ServiceError::ParseOutput)?;
         processes
             .0
             .retain(|state| state.name != PROCESS_NEVER_EXIT_NAME);
@@ -216,6 +241,7 @@ fn base_process_compose_command(socket: impl AsRef<Path>) -> Command {
     let path = Path::new(&*PROCESS_COMPOSE_BIN);
     let mut cmd = Command::new(path);
     cmd.env("PATH", path)
+        .env("NO_COLOR", "1") // apparently it doesn't do this automatically even though it's not connected to a tty...
         .arg("--unix-socket")
         .arg(socket.as_ref().to_string_lossy().as_ref())
         .arg("process");
@@ -229,9 +255,7 @@ pub fn stop_services(
     names: &[impl AsRef<str>],
 ) -> Result<(), ServiceError> {
     let names = if names.is_empty() {
-        ProcessStates::read(&socket)
-            .map_err(ServiceError::ProcessComposeCmd)?
-            .get_running_names()
+        ProcessStates::read(&socket)?.get_running_names()
     } else {
         names
             .iter()
@@ -241,7 +265,6 @@ pub fn stop_services(
 
     tracing::debug!(names = names.join(","), "stopping services");
 
-    // TODO: Better output and error handling.
     let mut cmd = base_process_compose_command(socket);
     let output = cmd
         .arg("stop")
@@ -252,16 +275,12 @@ pub fn stop_services(
         .map_err(ServiceError::ProcessComposeCmd)?;
 
     if output.status.success() {
+        tracing::debug!("services stopped");
         Ok(())
     } else {
+        tracing::debug!("stopping services failed");
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let logged_error: LoggedError = extract_err_msgs(&stderr)
-            .ok_or(ServiceError::ProcessComposeCmd(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                stderr.clone(),
-            )))?
-            .into();
-        Err(ServiceError::LoggedError(logged_error))
+        Err(ServiceError::from_output(stderr))
     }
 }
 
@@ -289,16 +308,24 @@ pub enum LoggedError {
 /// <timestamp> FTL <err> error="<cause>"
 fn extract_err_msgs(output: impl AsRef<str>) -> Option<ProcessComposeLogContents> {
     let output = output.as_ref();
-    let err_msg_index = output.find("FTL")?;
-    let cause_msg_index = output.find("error=")?;
-    let len = output.len();
-    let err_msg = output[err_msg_index..cause_msg_index].trim();
-    let offset = 8; // 'error="' is 7 characters long
-    let cause_msg = output[cause_msg_index + offset..len].trim();
-    Some(ProcessComposeLogContents {
-        err_msg: err_msg.to_string(),
-        cause_msg: cause_msg.to_string(),
-    })
+    // Unwrapping is safe here because the regex is a constant
+    let regex = Regex::new(r#"FTL (.+) error="(.+)""#).expect("failed to compile regex");
+    if let Some(captures) = regex.captures(output) {
+        return Some(ProcessComposeLogContents {
+            // Unwrapping is safe here, the regex guarantees that these capture groups exist
+            err_msg: captures
+                .get(1)
+                .expect("missing first log capture group")
+                .as_str()
+                .to_string(),
+            cause_msg: captures
+                .get(2)
+                .expect("missing second log capture group")
+                .as_str()
+                .to_string(),
+        });
+    }
+    None
 }
 
 impl From<ProcessComposeLogContents> for LoggedError {
