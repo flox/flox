@@ -118,7 +118,6 @@ EOF
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/start_and_cleanup.sh"
     "$FLOX_BIN" services stop invalid
-    "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
 )
   assert_failure
@@ -126,17 +125,41 @@ EOF
 }
 
 # bats test_tags=services:stop
-@test "stop: errors if one of multiple services don't exist" {
+@test "stop: errors after stopping one service if subsequent service doesn't exist" {
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    exit_code=0
     source "${TESTS_DIR}/services/start_and_cleanup.sh"
-    "$FLOX_BIN" services stop one invalid
+    "$FLOX_BIN" services stop one invalid || exit_code=$?
+    "$PROCESS_COMPOSE_BIN" process list --output wide
+    exit $exit_code
 EOF
 )
   assert_failure
   assert_output --partial "❌ ERROR: service 'invalid' is not running"
+  assert_output --regexp " +one +default +Completed +"
+  assert_output --regexp " +two +default +Running +"
+}
+
+# bats test_tags=services:stop
+@test "stop: errors without stopping any services if preceeding service doesn't exist" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    exit_code=0
+    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+    "$FLOX_BIN" services stop invalid one || exit_code=$?
+    "$PROCESS_COMPOSE_BIN" process list --output wide
+    exit $exit_code
+EOF
+)
+  assert_failure
+  assert_output --partial "❌ ERROR: service 'invalid' is not running"
+  assert_output --regexp " +one +default +Running +"
+  assert_output --regexp " +two +default +Running +"
 }
 
 # bats test_tags=services:stop
