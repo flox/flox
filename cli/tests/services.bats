@@ -173,7 +173,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: couldn't connect to service manager"
+  assert_output "❌ ERROR: couldn't connect to service manager"
 }
 
 # bats test_tags=services:stop
