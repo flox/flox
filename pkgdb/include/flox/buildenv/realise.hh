@@ -260,7 +260,8 @@ outpathsForPackageOutputs( nix::ref<nix::EvalState> &              state,
 /* -------------------------------------------------------------------------- */
 
 /**
- * @brief Collects a list of packages that should be built for the environment.
+ * @brief Given a map containing all of a package's outputs to install,
+ *        collect a list of those outputs as `RealisedPackage`s.
  * @param state A nix evaluator.
  * @param packageName The name of the package whose outputs are being processed.
  * @param lockedPackage The locked package from the lockfile.
@@ -271,7 +272,7 @@ outpathsForPackageOutputs( nix::ref<nix::EvalState> &              state,
  * @return The list of packages generated from the locked package.
  */
 std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
-collectRealisedPackages(
+collectRealisedOutputs(
   nix::ref<nix::EvalState> &                     state,
   const std::string &                            packageName,
   const flox::resolver::LockedPackageRaw &       lockedPackage,
@@ -300,8 +301,8 @@ ensurePackageIsAllowed( nix::ref<nix::EvalState> &              state,
 /* -------------------------------------------------------------------------- */
 
 /**
- * @brief Collects and builds a list of packages from a locked package in the
- * lockfile.
+ * @brief Collects and builds a list of realised outputs from a locked package
+ * in the lockfile.
  * @param state A nix evaluator.
  * @param packageName The name of the package whose outputs are being processed.
  * @param lockedPackage The locked package from the lockfile.
@@ -309,10 +310,10 @@ ensurePackageIsAllowed( nix::ref<nix::EvalState> &              state,
  * @return The list of packages generated from the locked package.
  */
 std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
-getRealisedPackages( nix::ref<nix::EvalState> &         state,
-                     const std::string &                packageName,
-                     const resolver::LockedPackageRaw & lockedPackage,
-                     const System &                     system );
+getRealisedOutputs( nix::ref<nix::EvalState> &         state,
+                    const std::string &                packageName,
+                    const resolver::LockedPackageRaw & lockedPackage,
+                    const System &                     system );
 
 
 /* -------------------------------------------------------------------------- */
@@ -340,8 +341,8 @@ createFloxEnv( nix::ref<nix::EvalState> &         state,
  *             - outputs of packages declared in the environment manifest
  *             - flox specific packages (activation scripts, profile.d, etc.)
  * @param references Set of store paths that the environment depends on.
- * @param originalPackage Map of store paths to the locked package definition
- *                        that provided them.
+ * @param storePathsToInstallIds Map of store paths to the install ids that
+ *        provided them.
  * @return The combined store path of the environment.
  */
 const nix::StorePath &
@@ -350,7 +351,7 @@ createEnvironmentStorePath(
   nix::EvalState &               state,
   nix::StorePathSet &            references,
   std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
-                                     originalPackage,
+                                     storePathsToInstallIds,
   const std::optional<std::string> & serviceConfigPath );
 
 

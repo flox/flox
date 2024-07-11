@@ -113,12 +113,11 @@ addDirToStore( nix::EvalState &    state,
 
 nix::StorePath
 createEnvironmentStorePath(
-  nix::EvalState &               state,
-  std::vector<RealisedPackage> & pkgs,
-  nix::StorePathSet &            references,
-  std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>> &
-                                     originalPackage,
-  const std::optional<std::string> & serviceConfigPath )
+  nix::EvalState &                        state,
+  std::vector<RealisedPackage> &          pkgs,
+  nix::StorePathSet &                     references,
+  std::map<nix::StorePath, std::string> & storePathsToInstallIds,
+  const std::optional<std::string> &      serviceConfigPath )
 {
   /* build the profile into a tempdir */
   auto tempDir = nix::createTempDir();
@@ -147,8 +146,8 @@ createEnvironmentStorePath(
       auto [storePathA, filePath] = state.store->toStorePath( err.fileA );
       auto [storePathB, _]        = state.store->toStorePath( err.fileB );
 
-      auto [nameA, packageA] = originalPackage.at( storePathA );
-      auto [nameB, packageB] = originalPackage.at( storePathB );
+      auto nameA = storePathsToInstallIds.at( storePathA );
+      auto nameB = storePathsToInstallIds.at( storePathB );
 
 
       throw PackageConflictException( nix::fmt(
@@ -485,7 +484,7 @@ outpathsForPackageOutputs( nix::ref<nix::EvalState> &              state,
 /* -------------------------------------------------------------------------- */
 
 std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
-collectRealisedPackages(
+collectRealisedOutputs(
   nix::ref<nix::EvalState> &                     state,
   const std::string &                            packageName,
   const flox::resolver::LockedPackageRaw &       lockedPackage,
@@ -514,10 +513,10 @@ collectRealisedPackages(
 /* -------------------------------------------------------------------------- */
 
 std::vector<std::pair<buildenv::RealisedPackage, nix::StorePath>>
-getRealisedPackages( nix::ref<nix::EvalState> &         state,
-                     const std::string &                packageName,
-                     const resolver::LockedPackageRaw & lockedPackage,
-                     const System &                     system )
+getRealisedOutputs( nix::ref<nix::EvalState> &         state,
+                    const std::string &                packageName,
+                    const resolver::LockedPackageRaw & lockedPackage,
+                    const System &                     system )
 {
   debugLog( nix::fmt( "getting cursor for %s", lockedPackage.attrPath[0] ) );
   auto timeEvalStart = std::chrono::high_resolution_clock::now();
@@ -547,11 +546,11 @@ getRealisedPackages( nix::ref<nix::EvalState> &         state,
     = outpathsForPackageOutputs( state, packageName, cursor );
 
 
-  auto pkgs        = collectRealisedPackages( state,
-                                       packageName,
-                                       lockedPackage,
-                                       parentOutpath,
-                                       outputsToOutpaths );
+  auto pkgs        = collectRealisedOutputs( state,
+                                      packageName,
+                                      lockedPackage,
+                                      parentOutpath,
+                                      outputsToOutpaths );
   auto timeEvalEnd = std::chrono::high_resolution_clock::now();
 
   bool allValid = true;
@@ -826,24 +825,26 @@ createFloxEnv( nix::ref<nix::EvalState> &         state,
   auto locked_packages = getLockedPackages( lockfile, system );
 
   /* Extract derivations */
-  nix::StorePathSet            references;
-  std::vector<RealisedPackage> pkgs;
-  std::map<nix::StorePath, std::pair<std::string, resolver::LockedPackageRaw>>
-    originalPackage;
+  nix::StorePathSet                     references;
+  std::vector<RealisedPackage>          pkgs;
+  std::map<nix::StorePath, std::string> storePathsToInstallIds;
 
   for ( auto const & [pId, package] : locked_packages )
     {
 
-      auto realised = getRealisedPackages( state, pId, package, system );
+      auto realised = getRealisedOutputs( state, pId, package, system );
       for ( auto [realisedPackage, output] : realised )
         {
           pkgs.push_back( realisedPackage );
           references.insert( output );
-          originalPackage.insert( { output, { pId, package } } );
+          storePathsToInstallIds.insert( {
+            output,
+            pId,
+          } );
         }
     }
 
-  // Add activation scripts to the environment
+  // Add the environment's activation scripts to the environment
   auto [activationScriptPackage, activationScriptReferences]
     = makeActivationScripts( *state, lockfile );
 
@@ -852,6 +853,7 @@ createFloxEnv( nix::ref<nix::EvalState> &         state,
                      activationScriptReferences.end() );
 
 
+  // Add the scripts with our activation logic to  the environment
   auto [profileScriptsPath, profileScriptsReference]
     = makeActivationScriptsPackageDir( *state );
 
@@ -861,7 +863,7 @@ createFloxEnv( nix::ref<nix::EvalState> &         state,
   return createEnvironmentStorePath( *state,
                                      pkgs,
                                      references,
-                                     originalPackage,
+                                     storePathsToInstallIds,
                                      serviceConfigPath );
 }
 
