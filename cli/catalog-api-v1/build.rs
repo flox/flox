@@ -23,6 +23,11 @@ fn main() {
 fn generate_client(spec: &OpenAPI) -> String {
     let mut settings = progenitor::GenerationSettings::default();
     settings.with_derive("PartialEq");
+    settings.with_replacement(
+        "MessageType",
+        "crate::error::MessageType",
+        ["Default".parse().unwrap()].into_iter(),
+    );
     let mut generator = progenitor::Generator::new(&settings);
     let tokens = generator.generate_tokens(spec).unwrap();
     let ast = syn::parse2(tokens).unwrap();

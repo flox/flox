@@ -1,5 +1,5 @@
 use std::cmp::min;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::future::ready;
@@ -702,7 +702,7 @@ impl TryFrom<PackageGroup> for api_types::PackageGroup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MsgGeneral {
     /// The log level of the message
-    pub level: Option<MessageLevel>,
+    pub level: MessageLevel,
     /// The actual message
     pub msg: String,
 }
@@ -711,7 +711,7 @@ pub struct MsgGeneral {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MsgAttrPathNotFound {
     /// The log level of the message
-    pub level: Option<MessageLevel>,
+    pub level: MessageLevel,
     /// The actual message
     pub msg: String,
     /// The requested attribute path
@@ -726,9 +726,22 @@ pub struct MsgAttrPathNotFound {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MsgConstraintsTooTight {
     /// The log level of the message
-    pub level: Option<MessageLevel>,
+    pub level: MessageLevel,
     /// The actual message
     pub msg: String,
+}
+
+/// The content of a generic message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsgUnknown {
+    /// The original message type string
+    pub msg_type: String,
+    /// The log level of the message
+    pub level: MessageLevel,
+    /// The actual message
+    pub msg: String,
+    /// The delivered `context`
+    pub context: HashMap<String, String>,
 }
 
 /// The kinds of resolution messages we can receive
@@ -743,6 +756,8 @@ pub enum ResolutionMessage {
     /// which could mean that all the version constraints can't be satisfied by
     /// a single page.
     ConstraintsTooTight(MsgConstraintsTooTight),
+    /// A (yet) unknown message type.
+    Unknown(MsgUnknown),
 }
 
 impl ResolutionMessage {
@@ -751,6 +766,7 @@ impl ResolutionMessage {
             ResolutionMessage::General(msg) => msg.msg.clone(),
             ResolutionMessage::AttrPathNotFound(msg) => msg.msg.clone(),
             ResolutionMessage::ConstraintsTooTight(msg) => msg.msg.clone(),
+            ResolutionMessage::Unknown(msg) => msg.msg.clone(),
         }
     }
 }
@@ -759,16 +775,14 @@ impl From<ResolutionMessageGeneral> for ResolutionMessage {
     fn from(r_msg: ResolutionMessageGeneral) -> Self {
         match r_msg.type_ {
             MessageType::General => ResolutionMessage::General(MsgGeneral {
-                level: Some(r_msg.level),
+                level: r_msg.level,
                 msg: r_msg.message,
             }),
             MessageType::ResolutionTrace => ResolutionMessage::General(MsgGeneral {
-                level: Some(MessageLevel::Trace),
+                level: MessageLevel::Trace,
                 msg: r_msg.message,
             }),
             MessageType::AttrPathNotFound => {
-                let level = r_msg.level;
-                let msg = r_msg.message;
                 // Should always be present for this type of message, but that's not enforced
                 // by the type system
                 let attr_path = r_msg
@@ -798,8 +812,8 @@ impl From<ResolutionMessageGeneral> for ResolutionMessage {
                     .map(|s| s.to_string())
                     .unwrap_or("default_install_id".to_string());
                 ResolutionMessage::AttrPathNotFound(MsgAttrPathNotFound {
-                    level: Some(level),
-                    msg,
+                    level: r_msg.level,
+                    msg: r_msg.message,
                     attr_path: attr_path.to_string(),
                     install_id,
                     valid_systems,
@@ -807,10 +821,16 @@ impl From<ResolutionMessageGeneral> for ResolutionMessage {
             },
             MessageType::ConstraintsTooTight => {
                 ResolutionMessage::ConstraintsTooTight(MsgConstraintsTooTight {
-                    level: Some(r_msg.level),
+                    level: r_msg.level,
                     msg: r_msg.message,
                 })
             },
+            MessageType::Unknown(message_type) => ResolutionMessage::Unknown(MsgUnknown {
+                msg_type: message_type,
+                level: r_msg.level,
+                msg: r_msg.message,
+                context: r_msg.context,
+            }),
         }
     }
 }
@@ -1004,9 +1024,54 @@ mod tests {
     use pollster::FutureExt;
     use proptest::collection::vec;
     use proptest::prelude::*;
+    use serde_json::json;
     use tempfile::NamedTempFile;
 
     use super::*;
+
+    #[tokio::test]
+    async fn resolve_response_with_new_message_type() {
+        let user_message = "User consumable Message";
+        let user_message_type = "willnevereverexist_ihope";
+        let json_response = json!(
+        {
+        "items": [
+            {
+            "messages": [
+                {
+                    "type": user_message_type,
+                    "level": "error",
+                    "message": user_message,
+                    "context": {},
+                }
+            ],
+            "name": "group",
+            "page": null,
+            } ]
+        });
+        let resolve_req = vec![PackageGroup {
+            name: "group".to_string(),
+            descriptors: vec![],
+        }];
+
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|_when, then| {
+            then.status(200).json_body(json_response);
+        });
+
+        let client = CatalogClient::new(&server.base_url());
+        let res = client.resolve(resolve_req).await.unwrap();
+        match &res[0].msgs[0] {
+            ResolutionMessage::Unknown(msg_struct) => {
+                assert!(msg_struct.msg == user_message);
+                assert!(msg_struct.msg_type == user_message_type);
+            },
+            _ => {
+                panic!();
+            },
+        };
+        mock.assert();
+    }
 
     #[tokio::test]
     async fn user_agent_set_on_all_requests() {

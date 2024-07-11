@@ -418,90 +418,6 @@ pub mod types {
             value.parse()
         }
     }
-    ///MessageType
-    ///
-    /// <details><summary>JSON schema</summary>
-    ///
-    /// ```json
-    ///{
-    ///  "title": "MessageType",
-    ///  "type": "string",
-    ///  "enum": [
-    ///    "general",
-    ///    "resolution_trace",
-    ///    "attr_path_not_found",
-    ///    "constraints_too_tight"
-    ///  ]
-    ///}
-    /// ```
-    /// </details>
-    #[derive(
-        Clone,
-        Copy,
-        Debug,
-        Deserialize,
-        Eq,
-        Hash,
-        Ord,
-        PartialEq,
-        PartialOrd,
-        Serialize
-    )]
-    pub enum MessageType {
-        #[serde(rename = "general")]
-        General,
-        #[serde(rename = "resolution_trace")]
-        ResolutionTrace,
-        #[serde(rename = "attr_path_not_found")]
-        AttrPathNotFound,
-        #[serde(rename = "constraints_too_tight")]
-        ConstraintsTooTight,
-    }
-    impl From<&MessageType> for MessageType {
-        fn from(value: &MessageType) -> Self {
-            value.clone()
-        }
-    }
-    impl ToString for MessageType {
-        fn to_string(&self) -> String {
-            match *self {
-                Self::General => "general".to_string(),
-                Self::ResolutionTrace => "resolution_trace".to_string(),
-                Self::AttrPathNotFound => "attr_path_not_found".to_string(),
-                Self::ConstraintsTooTight => "constraints_too_tight".to_string(),
-            }
-        }
-    }
-    impl std::str::FromStr for MessageType {
-        type Err = self::error::ConversionError;
-        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
-            match value {
-                "general" => Ok(Self::General),
-                "resolution_trace" => Ok(Self::ResolutionTrace),
-                "attr_path_not_found" => Ok(Self::AttrPathNotFound),
-                "constraints_too_tight" => Ok(Self::ConstraintsTooTight),
-                _ => Err("invalid value".into()),
-            }
-        }
-    }
-    impl std::convert::TryFrom<&str> for MessageType {
-        type Error = self::error::ConversionError;
-        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl std::convert::TryFrom<&String> for MessageType {
-        type Error = self::error::ConversionError;
-        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
-    impl std::convert::TryFrom<String> for MessageType {
-        type Error = self::error::ConversionError;
-        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
-            value.parse()
-        }
-    }
     ///Output
     ///
     /// <details><summary>JSON schema</summary>
@@ -1249,7 +1165,7 @@ pub mod types {
         pub level: MessageLevel,
         pub message: String,
         #[serde(rename = "type")]
-        pub type_: MessageType,
+        pub type_: crate::error::MessageType,
     }
     impl From<&ResolutionMessageGeneral> for ResolutionMessageGeneral {
         fn from(value: &ResolutionMessageGeneral) -> Self {

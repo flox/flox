@@ -250,6 +250,11 @@ pub enum ResolutionFailure {
         fallback_msg: String,
         group: String,
     },
+    UnknownServiceMessage {
+        level: String,
+        msg: String,
+        context: HashMap<String, String>,
+    },
     FallbackMessage {
         msg: String,
     },
@@ -321,6 +326,17 @@ fn format_single_resolution_failure(failure: &ResolutionFailure, is_one_of_many:
             Use 'flox edit' to adjust version constraints in the [install] section,
             or isolate dependencies in a new group with '<pkg>.pkg-group = \"newgroup\"'", base_msg};
             indent_by(extra_indent, msg)
+        },
+        ResolutionFailure::UnknownServiceMessage {
+            level: _,
+            msg,
+            context: _,
+        } => {
+            if is_one_of_many {
+                indent_by(2, msg.to_string())
+            } else {
+                msg.to_string()
+            }
         },
         ResolutionFailure::FallbackMessage { msg } => {
             if is_one_of_many {
@@ -708,16 +724,14 @@ impl LockedManifestCatalog {
                 match res_msg {
                     catalog::ResolutionMessage::General(inner) => {
                         tracing::debug!(kind = "general", "handling resolution message");
-                        // If we have a level and it's not an error, skip this message
-                        if let Some(level) = inner.level {
-                            if level != MessageLevel::Error {
-                                tracing::debug!(
-                                    level = level.to_string(),
-                                    msg = inner.msg,
-                                    "non-error resolution message"
-                                );
-                                continue;
-                            }
+                        // If it's not an error, skip this message
+                        if inner.level != MessageLevel::Error {
+                            tracing::debug!(
+                                level = inner.level.to_string(),
+                                msg = inner.msg,
+                                "non-error resolution message"
+                            );
+                            continue;
                         }
                         // If we don't have a level, I guess we have to treat it like an error
                         tracing::debug!("pushing fallback message");
@@ -747,22 +761,40 @@ impl LockedManifestCatalog {
                             kind = "constraints_too_tight",
                             "handling resolution message"
                         );
-                        // If we have a level and it's not an error, skip this message
-                        if let Some(level) = inner.level {
-                            if level != MessageLevel::Error {
-                                tracing::debug!(
-                                    level = level.to_string(),
-                                    msg = inner.msg,
-                                    "non-error resolution message"
-                                );
-                                continue;
-                            }
+                        // If it's not an error, skip this message
+                        if inner.level != MessageLevel::Error {
+                            tracing::debug!(
+                                level = inner.level.to_string(),
+                                msg = inner.msg,
+                                "non-error resolution message"
+                            );
+                            continue;
                         }
-                        // If we don't have a level, I guess we have to treat it like an error
                         tracing::debug!("pushing fallback message");
                         let failure = ResolutionFailure::ConstraintsTooTight {
                             fallback_msg: inner.msg.clone(),
                             group: group.name.clone(),
+                        };
+                        failures.push(failure);
+                    },
+                    catalog::ResolutionMessage::Unknown(inner) => {
+                        tracing::debug!(
+                            kind = "unknown",
+                            level = inner.level.to_string(),
+                            msg = inner.msg,
+                            msg_type = inner.msg_type,
+                            context = serde_json::to_string(&inner.context).unwrap(),
+                            "handling unknown resolution message"
+                        );
+                        // If it's not an error, skip this message
+                        if inner.level != MessageLevel::Error {
+                            continue;
+                        }
+                        // If we don't have a level, I guess we have to treat it like an error
+                        let failure = ResolutionFailure::UnknownServiceMessage {
+                            msg: inner.msg.clone(),
+                            level: inner.level.to_string(),
+                            context: inner.context.clone(),
                         };
                         failures.push(failure);
                     },
@@ -778,15 +810,13 @@ impl LockedManifestCatalog {
         manifest: &TypedManifestCatalog,
     ) -> Option<ResolutionFailure> {
         // If we have a level and it's not an error, skip this message
-        if let Some(level) = r_msg.level {
-            if level != MessageLevel::Error {
-                tracing::debug!(
-                    level = level.to_string(),
-                    msg = r_msg.msg,
-                    "non-error resolution message"
-                );
-                return None;
-            }
+        if r_msg.level != MessageLevel::Error {
+            tracing::debug!(
+                level = r_msg.level.to_string(),
+                msg = r_msg.msg,
+                "non-error resolution message"
+            );
+            return None;
         }
         if r_msg.valid_systems.is_empty() {
             tracing::debug!(
@@ -1279,6 +1309,7 @@ pub(crate) mod tests {
     use std::vec;
 
     use catalog::test_helpers::resolved_pkg_group_with_dummy_package;
+    use catalog::{MsgUnknown, ResolutionMessage};
     use catalog_api_v1::types::Output;
     use indoc::indoc;
     use once_cell::sync::Lazy;
@@ -1400,6 +1431,19 @@ pub(crate) mod tests {
         }
     });
 
+    static TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG: Lazy<Vec<ResolvedPackageGroup>> =
+        Lazy::new(|| {
+            vec![ResolvedPackageGroup {
+                page: None,
+                name: "group".to_string(),
+                msgs: vec![ResolutionMessage::Unknown(MsgUnknown {
+                    level: MessageLevel::Error,
+                    msg_type: "new_type".to_string(),
+                    msg: "User consumable message".to_string(),
+                    context: HashMap::new(),
+                })],
+            }]
+        });
     static TEST_RESOLUTION_PARAMS: Lazy<Vec<PackageGroup>> = Lazy::new(|| {
         vec![PackageGroup {
             name: "group".to_string(),
@@ -2043,6 +2087,34 @@ pub(crate) mod tests {
         seed.unlock_packages_by_group_or_iid(&["not in here".to_string()]);
 
         assert_eq!(seed.packages, expected,);
+    }
+
+    #[tokio::test]
+    async fn test_locking_unknown_message() {
+        let manifest = &*TEST_TYPED_MANIFEST;
+
+        let mut client = catalog::MockClient::new(None::<String>).unwrap();
+        let response = TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG.clone();
+        let response_msg: ResolutionMessage =
+            response.first().unwrap().msgs.first().unwrap().clone();
+        client.push_resolve_response(response);
+
+        let locked_manifest = LockedManifestCatalog::lock_manifest(manifest, None, &client).await;
+        if let Err(LockedManifestError::ResolutionFailed(res_failures)) = locked_manifest {
+            if let [ResolutionFailure::UnknownServiceMessage {
+                level,
+                msg,
+                context: _,
+            }] = res_failures.0.as_slice()
+            {
+                assert_eq!(msg, &response_msg.msg());
+                assert_eq!(level, "error");
+            } else {
+                panic!();
+            }
+        } else {
+            panic!();
+        }
     }
 
     #[tokio::test]
