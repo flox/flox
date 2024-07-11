@@ -2080,23 +2080,20 @@ pub(crate) mod tests {
         client.push_resolve_response(response);
 
         let locked_manifest = LockedManifestCatalog::lock_manifest(manifest, None, &client).await;
-        match locked_manifest {
-            Ok(_) => panic!(),
-            Err(LockedManifestError::ResolutionFailed(res_failures)) => {
-                assert_eq!(res_failures.0.len(), 1);
-                match &res_failures.0[0] {
-                    ResolutionFailure::UnknownServiceMessage {
-                        level,
-                        msg,
-                        context: _,
-                    } => {
-                        assert_eq!(msg, &response_msg.msg());
-                        assert_eq!(level, "error");
-                    },
-                    _ => panic!(),
-                }
-            },
-            _ => panic!(),
+        if let Err(LockedManifestError::ResolutionFailed(res_failures)) = locked_manifest {
+            if let [ResolutionFailure::UnknownServiceMessage {
+                level,
+                msg,
+                context: _,
+            }] = res_failures.0.as_slice()
+            {
+                assert_eq!(msg, &response_msg.msg());
+                assert_eq!(level, "error");
+            } else {
+                panic!();
+            }
+        } else {
+            panic!();
         }
     }
 
