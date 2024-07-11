@@ -232,10 +232,11 @@ EOF
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/start_and_cleanup.sh"
     "$FLOX_BIN" services stop one
+    "$PROCESS_COMPOSE_BIN" process list --output wide
     "$FLOX_BIN" services stop one
 EOF
 )
-  # TODO: assert_success
   assert_failure
+  assert_output --regexp " +one +default +Completed +"
   assert_output --partial "❌ ERROR: service 'one' is not running"
 }
