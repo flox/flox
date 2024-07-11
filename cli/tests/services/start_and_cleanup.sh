@@ -7,7 +7,9 @@ SERVICE_CONFIG="${FLOX_ENV}/service-config.yaml"
 
 function cleanup() {
     echo "Shutting down process-compose"
-    "$PROCESS_COMPOSE_BIN" down
+    # Need to allow for errors in the shutdown process:
+    # https://github.com/F1bonacc1/process-compose/issues/197
+    "$PROCESS_COMPOSE_BIN" down || true
 }
 
 # TODO: Replace when we have `flox activate --start-services`.
