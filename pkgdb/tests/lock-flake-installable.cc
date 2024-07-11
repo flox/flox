@@ -70,10 +70,10 @@ bool
 test_flakerefOrigins( const nix::ref<nix::EvalState> & state,
                       const std::string &              system )
 {
-  auto githubScheme = flox::lockFlakeInstallable(
-    state,
-    system,
-    "github:nixos/nixpkgs/6861ef7707a56725769594aaa725518cbe65f628#hello" );
+  auto githubScheme = flox::lockFlakeInstallable( state,
+                                                  system,
+                                                  "github:nixos/nixpkgs/"
+                                                    + nixpkgsRev + "#hello" );
   auto gitHttpsScheme
     = flox::lockFlakeInstallable( state,
                                   system,
