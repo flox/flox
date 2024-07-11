@@ -374,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_compose_config_injects_never_sleep_process() {
+    fn test_process_compose_config_injects_never_exit_process() {
         // This is complimentary to the round-trip test above which doesn't see the injected process.
         let config_in = ProcessComposeConfig {
             processes: BTreeMap::from([("foo".to_string(), ProcessConfig {
