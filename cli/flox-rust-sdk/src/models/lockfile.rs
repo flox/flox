@@ -504,7 +504,7 @@ impl LockedManifestCatalog {
         manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
         client: &impl catalog::ClientTrait,
-        flake_locking: &impl InstallableLocker,
+        installable_locker: &impl InstallableLocker,
     ) -> Result<LockedManifestCatalog, LockedManifestError> {
         let catalog_groups = Self::collect_package_groups(manifest, seed_lockfile)?;
         let (already_locked_packages, groups_to_lock) =
@@ -541,7 +541,7 @@ impl LockedManifestCatalog {
                 .collect();
 
         let locked_installables =
-            Self::lock_flake_installables(flake_locking, installables_to_lock)?
+            Self::lock_flake_installables(installable_locker, installables_to_lock)?
                 .map(Into::into)
                 .collect();
 

@@ -55,7 +55,7 @@ pub struct Flox {
     pub floxhub_token: Option<FloxhubToken>,
 
     pub catalog_client: Option<catalog::Client>,
-    pub flake_locking: flox_cpp_utils::InstallableLockerImpl,
+    pub installable_locker: flox_cpp_utils::InstallableLockerImpl,
 
     /// Feature flags
     pub features: Features,
@@ -342,7 +342,7 @@ pub mod test_helpers {
             } else {
                 None
             },
-            flake_locking: Default::default(),
+            installable_locker: Default::default(),
             features: Default::default(),
         };
 

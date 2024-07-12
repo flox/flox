@@ -132,7 +132,7 @@ impl<State> CoreEnvironment<State> {
                 tracing::debug!("using catalog client to lock");
                 LockedManifest::Catalog(self.lock_with_catalog_client(
                     client,
-                    &flox.flake_locking,
+                    &flox.installable_locker,
                     *manifest,
                 )?)
             },
@@ -200,7 +200,7 @@ impl<State> CoreEnvironment<State> {
     fn lock_with_catalog_client(
         &self,
         client: &catalog::Client,
-        flake_locking: &impl InstallableLocker,
+        installable_locker: &impl InstallableLocker,
         manifest: TypedManifestCatalog,
     ) -> Result<LockedManifestCatalog, CoreEnvironmentError> {
         let existing_lockfile = 'lockfile: {
@@ -225,7 +225,7 @@ impl<State> CoreEnvironment<State> {
             &manifest,
             existing_lockfile.as_ref(),
             client,
-            flake_locking,
+            installable_locker,
         )
         .block_on()
         .map_err(CoreEnvironmentError::LockedManifest)
@@ -550,7 +550,7 @@ impl CoreEnvironment<ReadOnly> {
 
                 let (lockfile, upgraded) = self.upgrade_with_catalog_client(
                     client,
-                    &flox.flake_locking,
+                    &flox.installable_locker,
                     groups_or_iids,
                     &catalog,
                 )?;
