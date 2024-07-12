@@ -792,15 +792,19 @@ createFloxEnv( nix::ref<nix::EvalState> &         state,
 
   for ( auto const & package : lockfile.packages )
     {
-      auto realised = getRealisedOutputs( state, package, system );
-      for ( auto [realisedPackage, storePath] : realised )
+      // Skip any packages not for this system
+      if ( package.system == system )
         {
-          pkgs.push_back( realisedPackage );
-          references.insert( storePath );
-          storePathsToInstallIds.insert( {
-            storePath,
-            package.installId,
-          } );
+          auto realised = getRealisedOutputs( state, package, system );
+          for ( auto [realisedPackage, storePath] : realised )
+            {
+              pkgs.push_back( realisedPackage );
+              references.insert( storePath );
+              storePathsToInstallIds.insert( {
+                storePath,
+                package.installId,
+              } );
+            }
         }
     }
 
