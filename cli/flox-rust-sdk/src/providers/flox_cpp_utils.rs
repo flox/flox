@@ -32,34 +32,35 @@ pub enum FlakeInstallableError {
 /// Rust representation of the output of `pkgdb lock-flake-installable`
 /// This is a direct translation of the definition in
 /// `<flox>/pkgdb/include/flox/lock-flake-installable.hh`
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct LockedInstallable {
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct LockedInstallable {
     /// locked url of the flakeref component of the installable
-    locked_url: String,
-    flake_description: Option<String>,
-    locked_flake_attr_path: String,
-    derivation: String,
+    pub(crate) locked_url: String,
+    pub(crate) flake_description: Option<String>,
+    pub(crate) locked_flake_attr_path: String,
+    pub(crate) derivation: String,
     /// Map of output names to their paths
     /// The values are expected to be nix store paths
-    outputs: BTreeMap<String, String>,
+    pub(crate) outputs: BTreeMap<String, String>,
     /// List of output names in the original order
-    output_names: Vec<String>,
+    pub(crate) output_names: Vec<String>,
     /// List of output names to install as defined by the package
-    outputs_to_install: Option<Vec<String>>,
+    pub(crate) outputs_to_install: Option<Vec<String>>,
     /// List of output names to install as requested by the user
-    requested_outputs_to_install: Option<Vec<String>>,
+    pub(crate) requested_outputs_to_install: Option<Vec<String>>,
     /// System as defined by the package
-    package_system: String,
+    pub(crate) package_system: String,
     /// System as defined by the specified target system
-    locked_system: String,
-    name: String,
-    pname: Option<String>,
-    version: Option<String>,
-    description: Option<String>,
-    licenses: Option<Vec<String>>,
-    broken: Option<bool>,
-    unfree: Option<bool>,
+    pub(crate) locked_system: String,
+    pub(crate) name: String,
+    pub(crate) pname: Option<String>,
+    pub(crate) version: Option<String>,
+    pub(crate) description: Option<String>,
+    pub(crate) licenses: Option<Vec<String>>,
+    pub(crate) broken: Option<bool>,
+    pub(crate) unfree: Option<bool>,
 }
 
 /// Required functionality to lock a flake installable

@@ -39,6 +39,7 @@ use crate::providers::catalog::{
     PackageGroup,
     ResolvedPackageGroup,
 };
+use crate::providers::flox_cpp_utils::LockedInstallable;
 use crate::utils::CommandExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -124,14 +125,14 @@ impl LockedPackage {
     pub fn install_id(&self) -> &str {
         match self {
             LockedPackage::Catalog(pkg) => &pkg.install_id,
-            LockedPackage::Flake(pkg) => &pkg.locked_url,
+            LockedPackage::Flake(pkg) => &pkg.install_id,
         }
     }
 
     pub(crate) fn system(&self) -> &System {
         match self {
             LockedPackage::Catalog(pkg) => &pkg.system,
-            LockedPackage::Flake(_) => todo!(),
+            LockedPackage::Flake(pkg) => &pkg.locked_installable.locked_system,
         }
     }
 
@@ -141,21 +142,25 @@ impl LockedPackage {
                 .license
                 .as_deref()
                 .map(|l| l.split_ascii_whitespace().collect()),
-            LockedPackage::Flake(_) => None,
+            LockedPackage::Flake(pkg) => pkg
+                .locked_installable
+                .licenses
+                .as_ref()
+                .map(|l| l.iter().map(String::as_str).collect()),
         }
     }
 
     pub fn broken(&self) -> Option<bool> {
         match self {
             LockedPackage::Catalog(pkg) => pkg.broken,
-            LockedPackage::Flake(_) => None,
+            LockedPackage::Flake(pkg) => pkg.locked_installable.broken,
         }
     }
 
     pub fn unfree(&self) -> Option<bool> {
         match self {
             LockedPackage::Catalog(pkg) => pkg.unfree,
-            LockedPackage::Flake(_) => None,
+            LockedPackage::Flake(pkg) => pkg.locked_installable.unfree,
         }
     }
 }
@@ -196,13 +201,6 @@ pub struct LockedPackageCatalog {
     pub group: String,
     pub priority: usize,
     // endregion
-}
-
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct LockedPackageFlake {
-    locked_url: String,
 }
 
 impl LockedPackageCatalog {
@@ -271,6 +269,33 @@ impl LockedPackageCatalog {
             system: system.to_string(),
             priority,
             group,
+        }
+    }
+}
+
+
+#[skip_serializing_none]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct LockedPackageFlake {
+    install_id: String,
+    /// Unaltered lock information as returned by `pkgdb lock-flake-installable`.
+    /// In this case we completely own the data format in this repo
+    /// and so far have to do no conversion.
+    /// If this changes in the future, we can add a conversion layer here
+    /// similar to [LockedPackageCatalog::from_parts].
+    #[serde(flatten)]
+    locked_installable: LockedInstallable,
+}
+
+impl LockedPackageFlake {
+    /// Construct a [LockedPackageFlake] from an [LockedInstallable] and an install_id.
+    /// In the future, we may want to pass the original descriptor here as well,
+    /// similar to [LockedPackageCatalog::from_parts].
+    pub fn from_parts(install_id: String, locked_installable: LockedInstallable) -> Self {
+        LockedPackageFlake {
+            install_id,
+            locked_installable,
         }
     }
 }
