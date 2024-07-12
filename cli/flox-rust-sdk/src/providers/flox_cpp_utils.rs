@@ -162,6 +162,7 @@ impl LockFlakeInstallableMock {
         Self::default()
     }
 
+    #[allow(unused)]
     fn push(&self, result: Result<LockedInstallable, FlakeInstallableError>) {
         self.lock_flake_installable
             .lock()
@@ -169,6 +170,7 @@ impl LockFlakeInstallableMock {
             .push_back(result);
     }
 
+    #[allow(unused)]
     fn set(
         &self,
         results: impl IntoIterator<Item = Result<LockedInstallable, FlakeInstallableError>>,
