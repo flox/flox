@@ -1111,6 +1111,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "proptest-derive",
+ "regex",
  "reqwest 0.11.27",
  "serde",
  "serde_json",

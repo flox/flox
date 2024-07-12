@@ -37,3 +37,7 @@ pub(crate) fn package_installed(pkg: &PackageToInstall, environment_description:
         pkg.id
     ));
 }
+
+pub(crate) fn service_stopped(service_name: &str) {
+    updated(format!("Service '{}' stopped", service_name));
+}
