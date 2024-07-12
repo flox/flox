@@ -1,6 +1,7 @@
 use catalog_api_v1::types::{MessageLevel, SystemEnum};
 use indent::{indent_all_by, indent_by};
 use indoc::formatdoc;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::skip_serializing_none;
@@ -41,6 +42,15 @@ use crate::providers::catalog::{
 };
 use crate::providers::flox_cpp_utils::LockedInstallable;
 use crate::utils::CommandExt;
+
+static DEFAULT_SYSTEMS_STR: Lazy<[String; 4]> = Lazy::new(|| {
+    [
+        "aarch64-darwin".to_string(),
+        "aarch64-linux".to_string(),
+        "x86_64-darwin".to_string(),
+        "x86_64-linux".to_string(),
+    ]
+});
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Input {
@@ -601,6 +611,12 @@ impl LockedManifestCatalog {
     /// As package groups only apply to catalog descriptors,
     /// this function **ignores other [ManifestPackageDescriptor] variants**.
     /// Those are expected to be locked separately.
+    ///
+    /// Greenkeeping: this function seem to return a [Result]
+    /// only due to parsing [System] strings to [SystemEnum].
+    /// If we restricted systems earlier with a common `System` type,
+    /// fallible conversions like that would be unnecessary,
+    /// or would be pushed higher up.
     fn collect_package_groups(
         manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
@@ -610,12 +626,6 @@ impl LockedManifestCatalog {
         // Using a btree map to ensure consistent ordering
         let mut map = BTreeMap::new();
 
-        let default_systems = [
-            "aarch64-darwin".to_string(),
-            "aarch64-linux".to_string(),
-            "x86_64-darwin".to_string(),
-            "x86_64-linux".to_string(),
-        ];
         let manifest_systems = manifest.options.systems.as_deref();
 
         let maybe_licenses = if manifest.options.allow.licenses.is_empty() {
@@ -655,7 +665,7 @@ impl LockedManifestCatalog {
                     });
 
             let systems = {
-                let available_systems = manifest_systems.unwrap_or(&default_systems);
+                let available_systems = manifest_systems.unwrap_or(&*DEFAULT_SYSTEMS_STR);
 
                 let package_systems = manifest_descriptor.systems.as_deref();
 
@@ -674,7 +684,7 @@ impl LockedManifestCatalog {
 
                 package_systems
                     .or(manifest_systems)
-                    .unwrap_or(&default_systems)
+                    .unwrap_or(&*DEFAULT_SYSTEMS_STR)
                     .iter()
                     .map(|s| {
                         SystemEnum::from_str(s)
@@ -950,14 +960,10 @@ impl LockedManifestCatalog {
         r_msg: &MsgAttrPathNotFound,
         manifest: &TypedManifestCatalog,
     ) -> Option<(HashSet<System>, HashSet<System>)> {
-        let default_systems = [
-            "aarch64-darwin".to_string(),
-            "aarch64-linux".to_string(),
-            "x86_64-darwin".to_string(),
-            "x86_64-linux".to_string(),
-        ]
-        .into_iter()
-        .collect::<HashSet<_>>();
+        let default_systems = DEFAULT_SYSTEMS_STR
+            .clone()
+            .into_iter()
+            .collect::<HashSet<_>>();
         let valid_systems = r_msg
             .valid_systems
             .clone()
