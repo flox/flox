@@ -71,9 +71,9 @@ pub struct LockedInstallable {
 /// The trait is implemented by the [`Pkgdb`] struct which is the canonical implementation
 /// using the `pkgdb lock-flake-installable` command.
 ///
-/// The trait is also implemented by the [`LockFlakeInstallableMock`] struct which is used for testing.
+/// The trait is also implemented by the [`InstallableLockerMock`] struct which is used for testing.
 #[enum_dispatch]
-pub trait LockFlakeInstallableTrait {
+pub trait InstallableLocker {
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,
@@ -82,19 +82,19 @@ pub trait LockFlakeInstallableTrait {
 }
 
 #[derive(Debug)]
-#[enum_dispatch(LockFlakeInstallableTrait)]
-pub enum LockFlakeInstallable {
+#[enum_dispatch(InstallableLocker)]
+pub enum InstallableLockerImpl {
     Pkgdb(Pkgdb),
-    Mock(LockFlakeInstallableMock),
+    Mock(InstallableLockerMock),
 }
 
-impl Default for LockFlakeInstallable {
+impl Default for InstallableLockerImpl {
     fn default() -> Self {
-        LockFlakeInstallable::Pkgdb(Pkgdb::default())
+        InstallableLockerImpl::Pkgdb(Pkgdb::default())
     }
 }
 /// A wrapper for (eventually) various `pkgdb` commands
-/// Currently only implements [LockFlakeInstallableTrait] through
+/// Currently only implements [InstallableLocker] through
 /// `pkgdb lock-flake-installable`.
 #[derive(Debug)]
 pub struct Pkgdb {
@@ -115,7 +115,7 @@ impl Default for Pkgdb {
     }
 }
 
-impl LockFlakeInstallableTrait for Pkgdb {
+impl InstallableLocker for Pkgdb {
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,
@@ -151,19 +151,19 @@ impl LockFlakeInstallableTrait for Pkgdb {
     }
 }
 
-/// Mock implementation of [`LockFlakeInstallableTrait`] for testing.
+/// Mock implementation of [`InstallableLocker`] for testing.
 #[derive(Debug, Default)]
-pub struct LockFlakeInstallableMock {
+pub struct InstallableLockerMock {
     lock_flake_installable: Arc<Mutex<VecDeque<Result<LockedInstallable, FlakeInstallableError>>>>,
 }
 
-impl LockFlakeInstallableMock {
+impl InstallableLockerMock {
     pub fn new() -> Self {
         Self::default()
     }
 
     #[allow(unused)]
-    fn push(&self, result: Result<LockedInstallable, FlakeInstallableError>) {
+    fn push_lock_result(&self, result: Result<LockedInstallable, FlakeInstallableError>) {
         self.lock_flake_installable
             .lock()
             .unwrap()
@@ -171,7 +171,7 @@ impl LockFlakeInstallableMock {
     }
 
     #[allow(unused)]
-    fn set(
+    fn set_lock_results(
         &self,
         results: impl IntoIterator<Item = Result<LockedInstallable, FlakeInstallableError>>,
     ) {
@@ -181,7 +181,7 @@ impl LockFlakeInstallableMock {
     }
 }
 
-impl LockFlakeInstallableTrait for LockFlakeInstallableMock {
+impl InstallableLocker for InstallableLockerMock {
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,

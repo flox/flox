@@ -42,7 +42,7 @@ use crate::providers::catalog::{
     PackageGroup,
     ResolvedPackageGroup,
 };
-use crate::providers::flox_cpp_utils::{LockFlakeInstallableTrait, LockedInstallable};
+use crate::providers::flox_cpp_utils::{InstallableLocker, LockedInstallable};
 use crate::utils::CommandExt;
 
 static DEFAULT_SYSTEMS_STR: Lazy<[String; 4]> = Lazy::new(|| {
@@ -503,7 +503,7 @@ impl LockedManifestCatalog {
         manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
         client: &impl catalog::ClientTrait,
-        flake_locking: &impl LockFlakeInstallableTrait,
+        flake_locking: &impl InstallableLocker,
     ) -> Result<LockedManifestCatalog, LockedManifestError> {
         let catalog_groups = Self::collect_package_groups(manifest, seed_lockfile)?;
         let (already_locked_packages, groups_to_lock) =
@@ -1111,17 +1111,17 @@ impl LockedManifestCatalog {
     /// Errors are collected into [ResolutionFailures] and returned as a single error.
     ///
     /// This is the eequivalent to
-    /// [catalog::ClientTrait::resolve] >>= [Self::locked_packages_from_resolution]
+    /// [catalog::ClientTrait::resolve] and passing the result to [Self::locked_packages_from_resolution]
     /// in the context of flake installables.
     /// At this point flake installables are resolved sequentially.
     /// In further iterations we may want to resolve them in parallel,
-    /// either here, through a method of [LockFlakeInstallableTrait],
+    /// either here, through a method of [InstallableLocker],
     /// or the underlying `pkgdb lock-flake-installable` command itself.
     ///
     /// Todo: [ResolutionFailures] may be caught downstream and used to provide suggestions.
     ///       Those suggestions are invalid for the flake installables case.
     fn lock_flake_installables<'locking>(
-        locking: &'locking impl LockFlakeInstallableTrait,
+        locking: &'locking impl InstallableLocker,
         installables: impl IntoIterator<Item = FlakeInstallableToLock> + 'locking,
     ) -> Result<impl Iterator<Item = LockedPackageFlake> + 'locking, LockedManifestError> {
         let (ok, errs): (Vec<_>, Vec<_>) = installables
@@ -1572,7 +1572,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::models::manifest::test::empty_catalog_manifest;
     use crate::models::manifest::{self, RawManifest, TypedManifest};
-    use crate::providers::flox_cpp_utils::{LockFlakeInstallable, LockFlakeInstallableMock};
+    use crate::providers::flox_cpp_utils::{InstallableLockerImpl, InstallableLockerMock};
 
     /// Validate that the parser for the locked manifest can handle null values
     /// for the `version`, `license`, and `description` fields.
@@ -2365,7 +2365,7 @@ pub(crate) mod tests {
             manifest,
             None,
             &client,
-            &LockFlakeInstallableMock::new(),
+            &InstallableLockerMock::new(),
         )
         .await;
         if let Err(LockedManifestError::ResolutionFailed(res_failures)) = locked_manifest {
@@ -2396,7 +2396,7 @@ pub(crate) mod tests {
             manifest,
             None,
             &client,
-            &LockFlakeInstallableMock::new(),
+            &InstallableLockerMock::new(),
         )
         .await
         .unwrap();
@@ -2671,7 +2671,7 @@ pub(crate) mod tests {
                 &manifest,
                 Some(&locked),
                 &client,
-                &LockFlakeInstallableMock::new()
+                &InstallableLockerMock::new()
             )
             .await
             .unwrap_err(),
@@ -2716,7 +2716,7 @@ pub(crate) mod tests {
                 &manifest,
                 None,
                 &client,
-                &LockFlakeInstallableMock::new()
+                &InstallableLockerMock::new()
             )
             .await
             .unwrap_err(),

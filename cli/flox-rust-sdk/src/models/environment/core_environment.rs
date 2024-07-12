@@ -54,7 +54,7 @@ use crate::models::pkgdb::{
     PKGDB_BIN,
 };
 use crate::providers::catalog::{self, ClientTrait};
-use crate::providers::flox_cpp_utils::LockFlakeInstallableTrait;
+use crate::providers::flox_cpp_utils::InstallableLocker;
 use crate::providers::services::{maybe_make_service_config_file, ServiceError};
 use crate::utils::CommandExt;
 
@@ -200,7 +200,7 @@ impl<State> CoreEnvironment<State> {
     fn lock_with_catalog_client(
         &self,
         client: &catalog::Client,
-        flake_locking: &impl LockFlakeInstallableTrait,
+        flake_locking: &impl InstallableLocker,
         manifest: TypedManifestCatalog,
     ) -> Result<LockedManifestCatalog, CoreEnvironmentError> {
         let existing_lockfile = 'lockfile: {
@@ -677,7 +677,7 @@ impl CoreEnvironment<ReadOnly> {
     fn upgrade_with_catalog_client(
         &mut self,
         client: &impl ClientTrait,
-        flake_locking: &impl LockFlakeInstallableTrait,
+        flake_locking: &impl InstallableLocker,
         groups_or_iids: &[&str],
         manifest: &TypedManifestCatalog,
     ) -> Result<(LockedManifestCatalog, Vec<(LockedPackage, LockedPackage)>), CoreEnvironmentError>
@@ -1376,7 +1376,7 @@ mod tests {
     use crate::models::lockfile::ResolutionFailures;
     use crate::models::manifest::{RawManifest, DEFAULT_GROUP_NAME};
     use crate::models::{lockfile, manifest};
-    use crate::providers::flox_cpp_utils::LockFlakeInstallableMock;
+    use crate::providers::flox_cpp_utils::InstallableLockerMock;
     use crate::providers::services::{SERVICES_TEMP_CONFIG_PATH_VAR, SERVICE_CONFIG_FILENAME};
 
     /// Create a CoreEnvironment with an empty manifest
@@ -1675,7 +1675,7 @@ mod tests {
         let (_, upgraded_packages) = env_view
             .upgrade_with_catalog_client(
                 &mock_client,
-                &LockFlakeInstallableMock::new(),
+                &InstallableLockerMock::new(),
                 &[],
                 &manifest,
             )
