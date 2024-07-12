@@ -477,8 +477,8 @@ impl LockedManifestCatalog {
             .iter()
             .filter(|package| package.system() == system)
             .cloned()
-            .map(|package| match package {
-                LockedPackage::Catalog(pkg) => InstalledPackage {
+            .filter_map(|package| match package {
+                LockedPackage::Catalog(pkg) => Some(InstalledPackage {
                     install_id: pkg.install_id,
                     rel_path: pkg.attr_path,
                     info: PackageInfo {
@@ -490,8 +490,8 @@ impl LockedManifestCatalog {
                         version: Some(pkg.version),
                     },
                     priority: Some(pkg.priority),
-                },
-                LockedPackage::Flake(_) => todo!(),
+                }),
+                LockedPackage::Flake(_) => None,
             })
             .collect()
     }
