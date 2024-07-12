@@ -21,8 +21,7 @@ pub struct Stop {
 impl Stop {
     #[instrument(name = "stop", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        // TODO: include spaces?
-        subcommand_metric!("services stop");
+        subcommand_metric!("services::stop");
 
         let env = self
             .environment
