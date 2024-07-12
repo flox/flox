@@ -180,6 +180,8 @@ EOF
 EOF
 )
   assert_success
+  assert_output --partial "✅ Service 'one' stopped"
+  assert_output --partial "✅ Service 'two' stopped"
   assert_output --regexp " +one +default +Completed +"
   assert_output --regexp " +two +default +Completed +"
 }
@@ -196,6 +198,7 @@ EOF
 EOF
 )
   assert_success
+  assert_output --partial "✅ Service 'one' stopped"
   assert_output --regexp " +one +default +Completed +"
   assert_output --regexp " +two +default +Running +"
 }
@@ -212,6 +215,8 @@ EOF
 EOF
 )
   assert_success
+  assert_output --partial "✅ Service 'one' stopped"
+  assert_output --partial "✅ Service 'two' stopped"
   assert_output --regexp " +one +default +Completed +"
   assert_output --regexp " +two +default +Completed +"
 }
@@ -231,31 +236,4 @@ EOF
   assert_failure
   assert_output --regexp " +one +default +Completed +"
   assert_output --partial "❌ ERROR: service 'one' is not running"
-}
-
-@test "stop: confirmation that specific service was stopped" {
-  export FLOX_FEATURES_SERVICES=true
-  setup_sleeping_services
-
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/start_and_cleanup.sh"
-    "$FLOX_BIN" services stop one
-EOF
-)
-  assert_success
-  assert_output --partial "✅ Service 'one' stopped"
-}
-
-@test "stop: confirmation that all services were stopped" {
-  export FLOX_FEATURES_SERVICES=true
-  setup_sleeping_services
-
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/start_and_cleanup.sh"
-    "$FLOX_BIN" services stop
-EOF
-)
-  assert_success
-  assert_output --partial "✅ Service 'one' stopped"
-  assert_output --partial "✅ Service 'two' stopped"
 }
