@@ -31,7 +31,7 @@ impl Stop {
 
         let names = if self.names.is_empty() {
             tracing::debug!("no service names provided");
-            ProcessStates::read(&socket)?.get_running_names()
+            ProcessStates::read(&socket)?.running_process_names()
         } else {
             self.names.iter().map(String::from).collect::<Vec<_>>()
         };

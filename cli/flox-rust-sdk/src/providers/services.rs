@@ -1,3 +1,10 @@
+//! Service management for Flox.
+//!
+//! We use `process-compose` as a backend to manage services.
+//!
+//! Note that `process-compose` terminates when all services are stopped. To prevent this, we inject
+//! a dummy service (`flox_never_exit`) that sleeps indefinitely.
+
 use std::collections::BTreeMap;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -6,7 +13,7 @@ use std::process::{Command, Stdio};
 use once_cell::sync::Lazy;
 #[cfg(test)]
 use proptest::prelude::*;
-use regex_lite::Regex;
+use regex::Regex;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::NamedTempFile;
@@ -35,14 +42,19 @@ pub enum ServiceError {
     NotInActivation,
     #[error("there was a problem calling the service manager")]
     ProcessComposeCmd(#[source] std::io::Error),
+    /// This variant is specifically for errors that are logged by process-compose as opposed to
+    /// errors that may be encountered calling process-compose or interpreting its output.
     #[error(transparent)]
     LoggedError(#[from] LoggedError),
     #[error("failed to parse service manager output")]
     ParseOutput(#[source] serde_json::Error),
+    #[error("environment doesn't have any running services")]
+    NoRunningServices,
 }
 
 impl ServiceError {
-    pub fn from_output(output: impl AsRef<str>) -> Self {
+    /// Constructs a `ServiceError` from the output of an unsuccessful `process-compose` command.
+    pub fn from_process_compose_log(output: impl AsRef<str>) -> Self {
         extract_err_msgs(&output)
             .map(|msgs| LoggedError::from(msgs).into())
             .unwrap_or_else(|| {
@@ -186,6 +198,7 @@ pub fn maybe_make_service_config_file(
     Ok(service_config_path)
 }
 
+/// The parsed output of `process-compose process list` for a single process.
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 struct ProcessState {
     name: String,
@@ -205,6 +218,9 @@ struct ProcessState {
 pub struct ProcessStates(Vec<ProcessState>);
 
 impl ProcessStates {
+    /// Query the status of all processes using `process-compose process list`.
+    ///
+    /// Note that this strips out our `flox_never_exit` process.
     pub fn read(socket: impl AsRef<Path>) -> Result<ProcessStates, ServiceError> {
         let mut cmd = base_process_compose_command(socket.as_ref());
         let output = cmd
@@ -213,9 +229,9 @@ impl ProcessStates {
             .output()
             .map_err(ServiceError::ProcessComposeCmd)?;
         if !output.status.success() {
-            return Err(ServiceError::from_output(String::from_utf8_lossy(
-                &output.stderr,
-            )));
+            return Err(ServiceError::from_process_compose_log(
+                String::from_utf8_lossy(&output.stderr),
+            ));
         }
         let mut processes: ProcessStates =
             serde_json::from_slice(&output.stdout).map_err(ServiceError::ParseOutput)?;
@@ -226,7 +242,8 @@ impl ProcessStates {
         Ok(processes)
     }
 
-    pub fn get_running_names(&self) -> Vec<String> {
+    /// Get the names of processes that are currently running.
+    pub fn running_process_names(&self) -> Vec<String> {
         self.0
             .iter()
             .filter(|state| state.is_running)
@@ -249,7 +266,7 @@ fn base_process_compose_command(socket: impl AsRef<Path>) -> Command {
     cmd
 }
 
-/// Stop service(s).
+/// Stop service(s) using `process-compose process stop`.
 pub fn stop_services(
     socket: impl AsRef<Path>,
     names: &[impl AsRef<str>],
@@ -272,18 +289,23 @@ pub fn stop_services(
     } else {
         tracing::debug!("stopping services failed");
         let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(ServiceError::from_output(stderr))
+        Err(ServiceError::from_process_compose_log(stderr))
     }
 }
 
-/// Error message extracted from process-compose logs
+/// Strings extracted from a process-compose error log.
+///
+/// This is just raw data intended to be interpreted into a specific kind of error
+/// from process-compose.
 #[derive(Debug, Clone)]
 pub struct ProcessComposeLogContents {
     pub err_msg: String,
     pub cause_msg: String,
 }
 
-/// The types of errors that are logged by process-compose
+/// The types of errors that are logged by process-compose.
+///
+/// These are errors formed by interpreting strings extracted from process-compose logs.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum LoggedError {
     #[error("couldn't connect to service manager")]
