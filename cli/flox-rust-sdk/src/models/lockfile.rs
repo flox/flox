@@ -312,6 +312,7 @@ impl LockedPackageFlake {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
 struct FlakeInstallableToLock {
     install_id: String,
     descriptor: ManifestPackageDescriptorFlake,
