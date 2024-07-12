@@ -121,6 +121,7 @@ pub struct LockedManifestCatalog {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, derive_more::From)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(untagged)]
 pub enum LockedPackage {
     Catalog(LockedPackageCatalog),
     Flake(LockedPackageFlake),
