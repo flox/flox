@@ -10,7 +10,7 @@ use url::Url;
 
 pub use crate::models::environment_ref::{self, *};
 use crate::models::search::SearchStrategy;
-use crate::providers::catalog;
+use crate::providers::{catalog, flox_cpp_utils};
 
 pub static FLOX_VERSION: Lazy<String> =
     Lazy::new(|| std::env::var("FLOX_VERSION").unwrap_or(env!("FLOX_VERSION").to_string()));
@@ -55,6 +55,7 @@ pub struct Flox {
     pub floxhub_token: Option<FloxhubToken>,
 
     pub catalog_client: Option<catalog::Client>,
+    pub flake_locking: flox_cpp_utils::LockFlakeInstallable,
 
     /// Feature flags
     pub features: Features,
@@ -341,6 +342,7 @@ pub mod test_helpers {
             } else {
                 None
             },
+            flake_locking: Default::default(),
             features: Default::default(),
         };
 

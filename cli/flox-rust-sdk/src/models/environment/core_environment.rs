@@ -54,6 +54,7 @@ use crate::models::pkgdb::{
     PKGDB_BIN,
 };
 use crate::providers::catalog::{self, ClientTrait};
+use crate::providers::flox_cpp_utils::LockFlakeInstallableTrait;
 use crate::providers::services::{maybe_make_service_config_file, ServiceError};
 use crate::utils::CommandExt;
 
@@ -129,7 +130,11 @@ impl<State> CoreEnvironment<State> {
                     return Err(CoreEnvironmentError::CatalogClientMissing);
                 };
                 tracing::debug!("using catalog client to lock");
-                LockedManifest::Catalog(self.lock_with_catalog_client(client, *manifest)?)
+                LockedManifest::Catalog(self.lock_with_catalog_client(
+                    client,
+                    &flox.flake_locking,
+                    *manifest,
+                )?)
             },
         };
 
@@ -195,6 +200,7 @@ impl<State> CoreEnvironment<State> {
     fn lock_with_catalog_client(
         &self,
         client: &catalog::Client,
+        flake_locking: &impl LockFlakeInstallableTrait,
         manifest: TypedManifestCatalog,
     ) -> Result<LockedManifestCatalog, CoreEnvironmentError> {
         let existing_lockfile = 'lockfile: {
@@ -215,9 +221,14 @@ impl<State> CoreEnvironment<State> {
             }
         };
 
-        LockedManifestCatalog::lock_manifest(&manifest, existing_lockfile.as_ref(), client)
-            .block_on()
-            .map_err(CoreEnvironmentError::LockedManifest)
+        LockedManifestCatalog::lock_manifest(
+            &manifest,
+            existing_lockfile.as_ref(),
+            client,
+            flake_locking,
+        )
+        .block_on()
+        .map_err(CoreEnvironmentError::LockedManifest)
     }
 
     /// Build the environment.
@@ -537,8 +548,12 @@ impl CoreEnvironment<ReadOnly> {
                     .as_ref()
                     .ok_or(CoreEnvironmentError::CatalogClientMissing)?;
 
-                let (lockfile, upgraded) =
-                    self.upgrade_with_catalog_client(client, groups_or_iids, &catalog)?;
+                let (lockfile, upgraded) = self.upgrade_with_catalog_client(
+                    client,
+                    &flox.flake_locking,
+                    groups_or_iids,
+                    &catalog,
+                )?;
 
                 let upgraded = {
                     let mut install_ids = upgraded
@@ -662,6 +677,7 @@ impl CoreEnvironment<ReadOnly> {
     fn upgrade_with_catalog_client(
         &mut self,
         client: &impl ClientTrait,
+        flake_locking: &impl LockFlakeInstallableTrait,
         groups_or_iids: &[&str],
         manifest: &TypedManifestCatalog,
     ) -> Result<(LockedManifestCatalog, Vec<(LockedPackage, LockedPackage)>), CoreEnvironmentError>
@@ -713,10 +729,14 @@ impl CoreEnvironment<ReadOnly> {
             })
         };
 
-        let upgraded_lockfile =
-            LockedManifestCatalog::lock_manifest(manifest, seed_lockfile.as_ref(), client)
-                .block_on()
-                .map_err(CoreEnvironmentError::LockedManifest)?;
+        let upgraded_lockfile = LockedManifestCatalog::lock_manifest(
+            manifest,
+            seed_lockfile.as_ref(),
+            client,
+            flake_locking,
+        )
+        .block_on()
+        .map_err(CoreEnvironmentError::LockedManifest)?;
 
         let pkgs_after_upgrade = {
             let mut pkgs_by_id = BTreeMap::new();
@@ -1356,6 +1376,7 @@ mod tests {
     use crate::models::lockfile::ResolutionFailures;
     use crate::models::manifest::{RawManifest, DEFAULT_GROUP_NAME};
     use crate::models::{lockfile, manifest};
+    use crate::providers::flox_cpp_utils::LockFlakeInstallableMock;
     use crate::providers::services::{SERVICES_TEMP_CONFIG_PATH_VAR, SERVICE_CONFIG_FILENAME};
 
     /// Create a CoreEnvironment with an empty manifest
@@ -1652,7 +1673,12 @@ mod tests {
         }]);
 
         let (_, upgraded_packages) = env_view
-            .upgrade_with_catalog_client(&mock_client, &[], &manifest)
+            .upgrade_with_catalog_client(
+                &mock_client,
+                &LockFlakeInstallableMock::new(),
+                &[],
+                &manifest,
+            )
             .unwrap();
 
         assert!(upgraded_packages.len() == 1);

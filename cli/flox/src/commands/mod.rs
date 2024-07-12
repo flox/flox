@@ -333,6 +333,7 @@ impl FloxArgs {
             floxhub_token,
             floxhub,
             catalog_client,
+            flake_locking: Default::default(),
             features: config.features.clone().unwrap_or_default(),
         };
 

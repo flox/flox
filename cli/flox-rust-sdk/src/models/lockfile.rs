@@ -1,6 +1,7 @@
 use catalog_api_v1::types::{MessageLevel, SystemEnum};
 use indent::{indent_all_by, indent_by};
 use indoc::formatdoc;
+use itertools::{Either, Itertools};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -23,6 +24,7 @@ use super::manifest::{
     Allows,
     ManifestPackageDescriptor,
     ManifestPackageDescriptorCatalog,
+    ManifestPackageDescriptorFlake,
     TypedManifestCatalog,
     DEFAULT_GROUP_NAME,
     DEFAULT_PRIORITY,
@@ -40,7 +42,7 @@ use crate::providers::catalog::{
     PackageGroup,
     ResolvedPackageGroup,
 };
-use crate::providers::flox_cpp_utils::LockedInstallable;
+use crate::providers::flox_cpp_utils::{LockFlakeInstallableTrait, LockedInstallable};
 use crate::utils::CommandExt;
 
 static DEFAULT_SYSTEMS_STR: Lazy<[String; 4]> = Lazy::new(|| {
@@ -283,7 +285,6 @@ impl LockedPackageCatalog {
     }
 }
 
-
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -310,6 +311,12 @@ impl LockedPackageFlake {
     }
 }
 
+struct FlakeInstallableToLock {
+    install_id: String,
+    descriptor: ManifestPackageDescriptorFlake,
+    system: System,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LockedGroup {
     /// name of the group
@@ -328,6 +335,12 @@ struct LockedGroup {
 /// All the resolution failures for a single resolution request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResolutionFailures(pub Vec<ResolutionFailure>);
+
+impl FromIterator<ResolutionFailure> for ResolutionFailures {
+    fn from_iter<T: IntoIterator<Item = ResolutionFailure>>(iter: T) -> Self {
+        ResolutionFailures(iter.into_iter().collect())
+    }
+}
 
 /// Data relevant for formatting a resolution failure
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -359,7 +372,7 @@ pub enum ResolutionFailure {
 // Convenience for when you just have a single message
 impl From<ResolutionFailure> for ResolutionFailures {
     fn from(value: ResolutionFailure) -> Self {
-        ResolutionFailures(vec![value])
+        ResolutionFailures::from_iter([value])
     }
 }
 
@@ -489,14 +502,20 @@ impl LockedManifestCatalog {
         manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
         client: &impl catalog::ClientTrait,
+        flake_locking: &impl LockFlakeInstallableTrait,
     ) -> Result<LockedManifestCatalog, LockedManifestError> {
-        let groups = Self::collect_package_groups(manifest, seed_lockfile)?;
+        let catalog_groups = Self::collect_package_groups(manifest, seed_lockfile)?;
         let (already_locked_packages, groups_to_lock) =
-            Self::split_fully_locked_groups(groups, seed_lockfile);
+            Self::split_fully_locked_groups(catalog_groups, seed_lockfile);
+
+        let flake_installables = Self::collect_flake_installables(manifest);
+        let (already_locked_installables, installables_to_lock) =
+            Self::split_locked_flake_installables(flake_installables, seed_lockfile);
 
         // The manifest could have been edited since locking packages,
         // in which case there may be packages that aren't allowed.
         Self::check_packages_are_allowed(&already_locked_packages, &manifest.options.allow)?;
+        Self::check_packages_are_allowed(&already_locked_installables, &manifest.options.allow)?;
 
         if groups_to_lock.is_empty() {
             debug!("All packages are already locked, skipping resolution");
@@ -519,6 +538,11 @@ impl LockedManifestCatalog {
                 .map(Into::into)
                 .collect();
 
+        let locked_installables =
+            Self::lock_flake_installables(flake_locking, installables_to_lock)?
+                .map(Into::into)
+                .collect();
+
         // The server should be checking this,
         // but double check
         Self::check_packages_are_allowed(&locked_packages, &manifest.options.allow)?;
@@ -526,7 +550,13 @@ impl LockedManifestCatalog {
         let lockfile = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest.clone(),
-            packages: [already_locked_packages, locked_packages].concat(),
+            packages: [
+                already_locked_packages,
+                locked_packages,
+                already_locked_installables,
+                locked_installables,
+            ]
+            .concat(),
         };
 
         Ok(lockfile)
@@ -596,10 +626,10 @@ impl LockedManifestCatalog {
             .collect()
     }
 
-    /// Creates package groups from a flat map of install descriptors
+    /// Creates package groups from a flat map of (catalog) install descriptors
     ///
-    /// A group is created for each unique combination of (descriptor.package_group ｘ descriptor.systems).
-    /// If descriptor.systems is None, a group with default_system is created for each package_group.
+    /// A group is created for each unique combination of (`descriptor.package_group` ｘ `descriptor.systems``).
+    /// If descriptor.systems is [None], a group with `default_system` is created for each `package_group`.
     /// Each group contains a list of package descriptors that belong to that group.
     ///
     /// `seed_lockfile` is used to provide existing derivations for packages that are already locked,
@@ -1541,6 +1571,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::models::manifest::test::empty_catalog_manifest;
     use crate::models::manifest::{self, RawManifest, TypedManifest};
+    use crate::providers::flox_cpp_utils::{LockFlakeInstallable, LockFlakeInstallableMock};
 
     /// Validate that the parser for the locked manifest can handle null values
     /// for the `version`, `license`, and `description` fields.
@@ -2329,7 +2360,13 @@ pub(crate) mod tests {
             response.first().unwrap().msgs.first().unwrap().clone();
         client.push_resolve_response(response);
 
-        let locked_manifest = LockedManifestCatalog::lock_manifest(manifest, None, &client).await;
+        let locked_manifest = LockedManifestCatalog::lock_manifest(
+            manifest,
+            None,
+            &client,
+            &LockFlakeInstallableMock::new(),
+        )
+        .await;
         if let Err(LockedManifestError::ResolutionFailed(res_failures)) = locked_manifest {
             if let [ResolutionFailure::UnknownServiceMessage {
                 level,
@@ -2354,9 +2391,14 @@ pub(crate) mod tests {
         let mut client = catalog::MockClient::new(None::<String>).unwrap();
         client.push_resolve_response(TEST_RESOLUTION_RESPONSE.clone());
 
-        let locked_manifest = LockedManifestCatalog::lock_manifest(manifest, None, &client)
-            .await
-            .unwrap();
+        let locked_manifest = LockedManifestCatalog::lock_manifest(
+            manifest,
+            None,
+            &client,
+            &LockFlakeInstallableMock::new(),
+        )
+        .await
+        .unwrap();
         assert_eq!(
             &LockedManifest::Catalog(locked_manifest),
             &*TEST_LOCKED_MANIFEST
@@ -2624,9 +2666,14 @@ pub(crate) mod tests {
 
         let client = catalog::MockClient::new(None::<String>).unwrap();
         assert!(matches!(
-            LockedManifestCatalog::lock_manifest(&manifest, Some(&locked), &client)
-                .await
-                .unwrap_err(),
+            LockedManifestCatalog::lock_manifest(
+                &manifest,
+                Some(&locked),
+                &client,
+                &LockFlakeInstallableMock::new()
+            )
+            .await
+            .unwrap_err(),
             LockedManifestError::UnfreeNotAllowed { .. }
         ));
     }
@@ -2664,9 +2711,14 @@ pub(crate) mod tests {
             .unfree = Some(true);
         client.push_resolve_response(vec![resolved_group]);
         assert!(matches!(
-            LockedManifestCatalog::lock_manifest(&manifest, None, &client)
-                .await
-                .unwrap_err(),
+            LockedManifestCatalog::lock_manifest(
+                &manifest,
+                None,
+                &client,
+                &LockFlakeInstallableMock::new()
+            )
+            .await
+            .unwrap_err(),
             LockedManifestError::UnfreeNotAllowed { .. }
         ));
     }
