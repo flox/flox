@@ -630,6 +630,18 @@ impl From<ManifestPackageDescriptorCatalog> for ManifestPackageDescriptor {
     }
 }
 
+impl From<&ManifestPackageDescriptorFlake> for ManifestPackageDescriptor {
+    fn from(val: &ManifestPackageDescriptorFlake) -> Self {
+        ManifestPackageDescriptor::FlakeRef(val.clone())
+    }
+}
+
+impl From<ManifestPackageDescriptorFlake> for ManifestPackageDescriptor {
+    fn from(val: ManifestPackageDescriptorFlake) -> Self {
+        ManifestPackageDescriptor::FlakeRef(val)
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -678,7 +690,7 @@ impl ManifestPackageDescriptorCatalog {
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
 pub struct ManifestPackageDescriptorFlake {
-    flake: String,
+    pub(crate) flake: String,
 }
 
 #[skip_serializing_none]

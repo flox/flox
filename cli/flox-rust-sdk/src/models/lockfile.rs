@@ -1007,6 +1007,115 @@ impl LockedManifestCatalog {
             .collect::<Vec<_>>()
     }
 
+    fn collect_flake_installables(
+        manifest: &TypedManifestCatalog,
+    ) -> impl Iterator<Item = FlakeInstallableToLock> {
+        let mut flake_installables = Vec::new();
+
+        for (install_id, manifest_descriptor) in manifest.install.iter() {
+            let manifest_descriptor = match manifest_descriptor {
+                ManifestPackageDescriptor::FlakeRef(f) => f,
+                _ => continue,
+            };
+
+            let systems = manifest
+                .options
+                .systems
+                .as_deref()
+                .unwrap_or(&*DEFAULT_SYSTEMS_STR);
+
+            for system in systems {
+                flake_installables.push(FlakeInstallableToLock {
+                    install_id: install_id.clone(),
+                    descriptor: manifest_descriptor.clone(),
+                    system: system.to_owned(),
+                });
+            }
+        }
+
+        flake_installables.into_iter()
+    }
+
+    fn split_locked_flake_installables(
+        installables: impl IntoIterator<Item = FlakeInstallableToLock>,
+        seed_lockfile: Option<&LockedManifestCatalog>,
+    ) -> (Vec<LockedPackage>, Vec<FlakeInstallableToLock>) {
+        // todo: consider computing once and passing a reference to the consumer functions.
+        //       we now compute this 3 times during a single lock operation
+        let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
+
+        let by_id = installables.into_iter().group_by(|i| i.install_id.clone());
+
+        let (already_locked, to_lock): (Vec<Vec<LockedPackage>>, Vec<Vec<FlakeInstallableToLock>>) =
+            by_id.into_iter().partition_map(|(_, group)| {
+                let unlocked = group.collect::<Vec<_>>();
+                let mut locked = Vec::new();
+
+                for installable in unlocked.iter() {
+                    let Some((locked_descriptor, in_lockfile @ LockedPackage::Flake(_))) =
+                        seed_locked_packages
+                            .get(&(installable.install_id.as_str(), &installable.system))
+                    else {
+                        return Either::Right(unlocked);
+                    };
+
+                    if ManifestPackageDescriptor::from(installable.descriptor.clone())
+                        .invalidates_existing_resolution(locked_descriptor)
+                    {
+                        return Either::Right(unlocked);
+                    }
+
+                    locked.push((*in_lockfile).to_owned());
+                }
+                Either::Left(locked)
+            });
+
+        let already_locked = already_locked.into_iter().flatten().collect();
+        let to_lock = to_lock.into_iter().flatten().collect();
+
+        (already_locked, to_lock)
+    }
+
+    /// Lock a set of flake installables and return the locked packages.
+    /// Errors are collected into [ResolutionFailures] and returned as a single error.
+    ///
+    /// This is the eequivalent to
+    /// [catalog::ClientTrait::resolve] >>= [Self::locked_packages_from_resolution]
+    /// in the context of flake installables.
+    /// At this point flake installables are resolved sequentially.
+    /// In further iterations we may want to resolve them in parallel,
+    /// either here, through a method of [LockFlakeInstallableTrait],
+    /// or the underlying `pkgdb lock-flake-installable` command itself.
+    ///
+    /// Todo: [ResolutionFailures] may be caught downstream and used to provide suggestions.
+    ///       Those suggestions are invalid for the flake installables case.
+    fn lock_flake_installables<'locking>(
+        locking: &'locking impl LockFlakeInstallableTrait,
+        installables: impl IntoIterator<Item = FlakeInstallableToLock> + 'locking,
+    ) -> Result<impl Iterator<Item = LockedPackageFlake> + 'locking, LockedManifestError> {
+        let (ok, errs): (Vec<_>, Vec<_>) = installables
+            .into_iter()
+            .map(|installable| {
+                locking
+                    .lock_flake_installable(&installable.descriptor.flake, &installable.system)
+                    .map(|locked_installable| {
+                        LockedPackageFlake::from_parts(installable.install_id, locked_installable)
+                    })
+            })
+            .partition_result();
+
+        if errs.is_empty() {
+            Ok(ok.into_iter())
+        } else {
+            let resolution_failures = errs
+                .into_iter()
+                .map(|e| ResolutionFailure::FallbackMessage { msg: e.to_string() })
+                .collect();
+
+            Err(LockedManifestError::ResolutionFailed(resolution_failures))
+        }
+    }
+
     /// Filter out packages from the locked manifest by install_id or group
     ///
     /// This is used to create a seed lockfile to upgrade a subset of packages,
