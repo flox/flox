@@ -20,7 +20,7 @@ use flox_rust_sdk::models::lockfile::{
     LockedManifestPkgdb,
     TypedLockedManifestPkgdb,
 };
-use flox_rust_sdk::models::manifest::{insert_packages, PackageToInstall};
+use flox_rust_sdk::models::manifest::{insert_packages, CatalogPackage, PackageToInstall};
 use flox_rust_sdk::models::pkgdb::scrape_input;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
 use flox_rust_sdk::providers::catalog::{
@@ -197,7 +197,7 @@ impl Init {
         if let Some(packages) = customization.packages {
             let description = environment_description(&ConcreteEnvironment::Path(env))?;
             for package in packages {
-                message::package_installed(&package, &description);
+                message::package_installed(&PackageToInstall::Catalog(package), &description);
             }
         }
         message::plain(formatdoc! {"
@@ -249,7 +249,7 @@ impl Init {
         let mut custom_profile_tcsh_scripts: Vec<String> = vec![];
         let mut custom_profile_zsh_scripts: Vec<String> = vec![];
         // Deduplicate packages with a set
-        let mut packages_set = HashSet::<PackageToInstall>::new();
+        let mut packages_set = HashSet::<CatalogPackage>::new();
         for customization in customizations {
             if let Some(packages) = customization.packages {
                 packages_set.extend(packages)
@@ -329,7 +329,7 @@ impl Init {
         });
 
         let packages = (!packages_set.is_empty())
-            .then(|| packages_set.into_iter().collect::<Vec<PackageToInstall>>());
+            .then(|| packages_set.into_iter().collect::<Vec<CatalogPackage>>());
 
         InitCustomization {
             hook_on_activate: custom_hook_on_activate,
@@ -354,7 +354,11 @@ trait InitHook {
 /// [InitCustomization], and return it as a string.
 fn format_customization(customization: &InitCustomization) -> Result<String> {
     let mut toml = if let Some(packages) = &customization.packages {
-        let with_packages = insert_packages("", packages)?;
+        let packages = packages
+            .iter()
+            .map(|p| PackageToInstall::Catalog(p.clone()))
+            .collect::<Vec<_>>();
+        let with_packages = insert_packages("", &packages)?;
         with_packages.new_toml.unwrap_or(DocumentMut::new())
     } else {
         DocumentMut::new()
@@ -507,9 +511,9 @@ impl TryFrom<SearchResult> for ProvidedPackage {
     }
 }
 
-impl From<ProvidedPackage> for PackageToInstall {
+impl From<ProvidedPackage> for CatalogPackage {
     fn from(value: ProvidedPackage) -> Self {
-        PackageToInstall {
+        CatalogPackage {
             id: value.name,
             pkg_path: value.rel_path.into(),
 
@@ -803,12 +807,12 @@ mod tests {
                 profile_tcsh: Some("profile_tcsh1".to_string()),
                 profile_zsh: Some("profile_zsh1".to_string()),
                 packages: Some(vec![
-                    PackageToInstall {
+                    CatalogPackage {
                         id: "pip".to_string(),
                         pkg_path: "python311Packages.pip".to_string(),
                         version: None,
                     },
-                    PackageToInstall {
+                    CatalogPackage {
                         id: "package2".to_string(),
                         pkg_path: "path2".to_string(),
                         version: None,
@@ -823,12 +827,12 @@ mod tests {
                 profile_tcsh: Some("profile_tcsh2".to_string()),
                 profile_zsh: Some("profile_zsh2".to_string()),
                 packages: Some(vec![
-                    PackageToInstall {
+                    CatalogPackage {
                         id: "pip".to_string(),
                         pkg_path: "python311Packages.pip".to_string(),
                         version: None,
                     },
-                    PackageToInstall {
+                    CatalogPackage {
                         id: "package1".to_string(),
                         pkg_path: "path1".to_string(),
                         version: None,
@@ -912,17 +916,17 @@ mod tests {
                 .to_string()
             ),
             packages: Some(vec![
-                PackageToInstall {
+                CatalogPackage {
                     id: "package1".to_string(),
                     pkg_path: "path1".to_string(),
                     version: None,
                 },
-                PackageToInstall {
+                CatalogPackage {
                     id: "package2".to_string(),
                     pkg_path: "path2".to_string(),
                     version: None,
                 },
-                PackageToInstall {
+                CatalogPackage {
                     id: "pip".to_string(),
                     pkg_path: "python311Packages.pip".to_string(),
                     version: None,

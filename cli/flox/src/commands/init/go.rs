@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
-use flox_rust_sdk::models::manifest::PackageToInstall;
+use flox_rust_sdk::models::manifest::CatalogPackage;
 use flox_rust_sdk::utils::traceable_path;
 use indoc::{formatdoc, indoc};
 use tracing::debug;
@@ -146,7 +146,7 @@ impl InitHook for Go {
             profile_fish: None,
             profile_tcsh: None,
             profile_zsh: None,
-            packages: Some(vec![PackageToInstall {
+            packages: Some(vec![CatalogPackage {
                 id: "go".to_string(),
                 pkg_path: "go".to_string(),
                 version: go_version,
