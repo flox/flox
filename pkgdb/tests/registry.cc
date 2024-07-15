@@ -24,7 +24,7 @@
 bool
 test_FloxFlakeInputRegistry0()
 {
-  std::ifstream     regFile( GENERATED_DATA "/registry/registry0.json" );
+  std::ifstream     regFile( TEST_DATA_DIR "/registry/registry0.json" );
   nlohmann::json    json = nlohmann::json::parse( regFile ).at( "registry" );
   flox::RegistryRaw regRaw;
   json.get_to( regRaw );
@@ -49,7 +49,7 @@ test_FloxFlakeInputRegistry0()
 bool
 test_EnvironmentManifest_getRegistryRaw0()
 {
-  flox::resolver::EnvironmentManifest manifest( GENERATED_DATA
+  flox::resolver::EnvironmentManifest manifest( TEST_DATA_DIR
                                                 "/registry/registry0.json" );
   (void) manifest.getRegistryRaw();
 
@@ -105,7 +105,7 @@ test_EnvironmentManifest_NoIndirectRefs0()
   try
     {
       flox::resolver::EnvironmentManifest manifest(
-        GENERATED_DATA "/registry/registry1.json" );
+        TEST_DATA_DIR "/registry/registry1.json" );
       (void) manifest.getRegistryRaw();
       return false;
     }
