@@ -1932,8 +1932,26 @@ pub(super) mod test {
     }
 
     #[test]
-    fn inferring_id_fails_with_malformed_flakeref() {
-        let url = Url::parse("github:flox").unwrap();
+    fn infers_id_from_attrpath() {
+        let url = Url::parse("github:flox/flox#floxtastic").unwrap();
+        let inferred = infer_flake_install_id(&url).unwrap();
+        assert_eq!(inferred, "floxtastic");
+    }
+
+    #[test]
+    fn infers_id_from_attrpath_if_outputs_provided() {
+        let url = Url::parse("github:flox/flox#floxtastic^out,man").unwrap();
+        let inferred = infer_flake_install_id(&url).unwrap();
+        assert_eq!(inferred, "floxtastic");
+
+        let url = Url::parse("github:flox/flox#floxtastic^*").unwrap();
+        let inferred = infer_flake_install_id(&url).unwrap();
+        assert_eq!(inferred, "floxtastic");
+    }
+
+    #[test]
+    fn inferring_id_from_path_if_only_outputs_provided() {
+        let url = Url::parse("github:flox/flox#^*").unwrap();
         let inferred = infer_flake_install_id(&url);
         assert_eq!(inferred.unwrap(), "flox");
     }
