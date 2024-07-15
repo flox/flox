@@ -135,6 +135,9 @@ buildenvPackageFromV1Descriptor( const nlohmann::json &  jfrom,
   pkg.installId = installId;
   pkg.system    = system;
 
+  // Catalog packages don't come from a flake context so only have attr-path.
+  // Flake packages will always have locked-flake-attr-path.
+  // For now, use this to differentiate between the two.
   if ( jfrom.contains( "locked-flake-attr-path" ) )
     {
       LockedInstallable lockedInstallable = LockedInstallable();
