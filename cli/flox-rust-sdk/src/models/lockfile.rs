@@ -162,6 +162,13 @@ impl LockedPackage {
             LockedPackage::Flake(pkg) => pkg.locked_installable.unfree,
         }
     }
+
+    pub fn derivation(&self) -> &str {
+        match self {
+            LockedPackage::Catalog(pkg) => &pkg.derivation,
+            LockedPackage::Flake(pkg) => &pkg.locked_installable.derivation,
+        }
+    }
 }
 
 #[skip_serializing_none]
@@ -1177,11 +1184,8 @@ impl LockedManifestCatalog {
                     return false;
                 }
 
-                if let Some(group) = package
-                    .as_catalog_package_ref()
-                    .map(|pkg| pkg.group.as_str())
-                {
-                    return !groups_or_iids.contains(&group);
+                if let Some(catalog_package) = package.as_catalog_package_ref() {
+                    return !groups_or_iids.contains(&catalog_package.group.as_str());
                 }
 
                 true

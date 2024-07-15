@@ -197,6 +197,17 @@ get_system_other_than_current() {
   esac
   echo "$extra_system"
 }
+
+# Edit a JSON file with `jq' in-place.
+jq_edit() {
+  local _file="${1?You must provide a target file}"
+  local _command="${2?You must provide a jq command}"
+  local _tmp
+  _tmp="${_file}~"
+  jq "$_command" "$_file" > "$_tmp"
+  mv "$_tmp" "$_file"
+}
+
 # ---------------------------------------------------------------------------- #
 #
 #

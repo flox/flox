@@ -751,21 +751,22 @@ impl CoreEnvironment<ReadOnly> {
 
         // todo: handle flake diffs
         // Iterate over the two sorted maps in lockstep
+        // Since BTreeMap is ordered and we must have the same packages before
+        // and after upgrading, we can zip the two iterators together knowing
+        // that we'll visit the same install_id from each map at the same time.
         let package_diff = previous_packages
             .iter()
             .zip(pkgs_after_upgrade.iter())
+            // Extract LockedPackage
             .flat_map(|((_prev_id, prev_map), (_curr_id, curr_map))| {
                 let curr_iter = curr_map.iter().map(|(_sys, pkg)| pkg);
                 prev_map.iter().map(|(_sys, pkg)| pkg).zip(curr_iter)
             })
+            // Keep anything that has been upgraded, using a change in
+            // derivation to define upgraded for both flake and catalog packages.
             .filter_map(|(prev_pkg, curr_pkg)| {
-                let prev = prev_pkg.as_catalog_package_ref();
-                let curr = curr_pkg.as_catalog_package_ref();
-                prev.zip(curr)
-            })
-            .filter_map(|(prev_pkg, curr_pkg)| {
-                if prev_pkg.derivation != curr_pkg.derivation {
-                    Some((prev_pkg.to_owned().into(), curr_pkg.to_owned().into()))
+                if prev_pkg.derivation() != curr_pkg.derivation() {
+                    Some((prev_pkg.to_owned(), curr_pkg.to_owned()))
                 } else {
                     None
                 }
