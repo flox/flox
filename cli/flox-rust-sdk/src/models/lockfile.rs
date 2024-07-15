@@ -149,20 +149,6 @@ impl LockedPackage {
         }
     }
 
-    fn licenses(&self) -> Option<Vec<&str>> {
-        match self {
-            LockedPackage::Catalog(pkg) => pkg
-                .license
-                .as_deref()
-                .map(|l| l.split_ascii_whitespace().collect()),
-            LockedPackage::Flake(pkg) => pkg
-                .locked_installable
-                .licenses
-                .as_ref()
-                .map(|l| l.iter().map(String::as_str).collect()),
-        }
-    }
-
     pub fn broken(&self) -> Option<bool> {
         match self {
             LockedPackage::Catalog(pkg) => pkg.broken,
@@ -524,8 +510,12 @@ impl LockedManifestCatalog {
 
         // The manifest could have been edited since locking packages,
         // in which case there may be packages that aren't allowed.
-        Self::check_packages_are_allowed(&already_locked_packages, &manifest.options.allow)?;
-        Self::check_packages_are_allowed(&already_locked_installables, &manifest.options.allow)?;
+        Self::check_packages_are_allowed(
+            already_locked_packages
+                .iter()
+                .filter_map(LockedPackage::as_catalog_package_ref),
+            &manifest.options.allow,
+        )?;
 
         if groups_to_lock.is_empty() {
             debug!("All packages are already locked, skipping resolution");
@@ -555,7 +545,12 @@ impl LockedManifestCatalog {
 
         // The server should be checking this,
         // but double check
-        Self::check_packages_are_allowed(&locked_packages, &manifest.options.allow)?;
+        Self::check_packages_are_allowed(
+            locked_packages
+                .iter()
+                .filter_map(LockedPackage::as_catalog_package_ref),
+            &manifest.options.allow,
+        )?;
 
         let lockfile = LockedManifestCatalog {
             version: Version::<1>,
@@ -574,49 +569,45 @@ impl LockedManifestCatalog {
 
     /// Given locked packages and manifest options allows, verify that the
     /// locked packages are allowed.
-    fn check_packages_are_allowed(
-        locked_packages: &[LockedPackage],
+    fn check_packages_are_allowed<'a>(
+        locked_packages: impl IntoIterator<Item = &'a LockedPackageCatalog>,
         allow: &Allows,
     ) -> Result<(), LockedManifestError> {
-        if !allow.licenses.is_empty() {
-            for package in locked_packages {
-                let Some(licenses) = package.licenses() else {
+        for package in locked_packages {
+            if !allow.licenses.is_empty() {
+                let Some(ref license) = package.license else {
                     continue;
                 };
-                for license in licenses {
-                    if !allow.licenses.iter().any(|allowed| allowed == license) {
-                        return Err(LockedManifestError::LicenseNotAllowed(
-                            package.install_id().to_string(),
-                            license.to_string(),
-                        ));
-                    }
+
+                if !allow.licenses.iter().any(|allowed| allowed == license) {
+                    return Err(LockedManifestError::LicenseNotAllowed(
+                        package.install_id.to_string(),
+                        license.to_string(),
+                    ));
                 }
             }
-        }
 
-        // Don't allow broken by default
-        if !allow.broken.unwrap_or(false) {
-            for package in locked_packages {
+            // Don't allow broken by default
+            if !allow.broken.unwrap_or(false) {
                 // Assume a package isn't broken
-                if package.broken().unwrap_or(false) {
+                if package.broken.unwrap_or(false) {
                     return Err(LockedManifestError::BrokenNotAllowed(
-                        package.install_id().to_owned(),
+                        package.install_id.to_owned(),
+                    ));
+                }
+            }
+
+            // Allow unfree by default
+            if !allow.unfree.unwrap_or(true) {
+                // Assume a package isn't unfree
+                if package.unfree.unwrap_or(false) {
+                    return Err(LockedManifestError::UnfreeNotAllowed(
+                        package.install_id.to_owned(),
                     ));
                 }
             }
         }
 
-        // Allow unfree by default
-        if !allow.unfree.unwrap_or(true) {
-            for package in locked_packages {
-                // Assume a package isn't unfree
-                if package.unfree().unwrap_or(false) {
-                    return Err(LockedManifestError::UnfreeNotAllowed(
-                        package.install_id().to_owned(),
-                    ));
-                }
-            }
-        }
         Ok(())
     }
 
@@ -2747,7 +2738,7 @@ pub(crate) mod tests {
         foo_locked.license = Some("disallowed".to_string());
 
         assert!(matches!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked.into()], &Allows {
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
                 licenses: vec!["allowed".to_string()]
@@ -2763,15 +2754,14 @@ pub(crate) mod tests {
         let (_, _, mut foo_locked) = fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.license = Some("allowed".to_string());
 
-        assert!(LockedManifestCatalog::check_packages_are_allowed(
-            &vec![foo_locked.into()],
-            &Allows {
+        assert!(
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
                 licenses: vec!["allowed".to_string()]
-            }
-        )
-        .is_ok());
+            })
+            .is_ok()
+        );
     }
 
     /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
@@ -2782,7 +2772,7 @@ pub(crate) mod tests {
         foo_locked.broken = Some(true);
 
         assert!(matches!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked.into()], &Allows {
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
                 licenses: vec![]
@@ -2798,15 +2788,14 @@ pub(crate) mod tests {
         let (_, _, mut foo_locked) = fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.broken = Some(true);
 
-        assert!(LockedManifestCatalog::check_packages_are_allowed(
-            &vec![foo_locked.into()],
-            &Allows {
+        assert!(
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: Some(true),
                 licenses: vec![]
-            }
-        )
-        .is_ok());
+            })
+            .is_ok()
+        );
     }
 
     /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
@@ -2817,7 +2806,7 @@ pub(crate) mod tests {
         foo_locked.broken = Some(true);
 
         assert!(matches!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked.into()], &Allows {
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: Some(false),
                 licenses: vec![]
@@ -2833,15 +2822,14 @@ pub(crate) mod tests {
         let (_, _, mut foo_locked) = fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.unfree = Some(true);
 
-        assert!(LockedManifestCatalog::check_packages_are_allowed(
-            &vec![foo_locked.into()],
-            &Allows {
+        assert!(
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
                 licenses: vec![]
-            }
-        )
-        .is_ok());
+            })
+            .is_ok()
+        );
     }
 
     /// [LockedManifestCatalog::check_packages_are_allowed] does not error for a
@@ -2851,15 +2839,14 @@ pub(crate) mod tests {
         let (_, _, mut foo_locked) = fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
         foo_locked.unfree = Some(true);
 
-        assert!(LockedManifestCatalog::check_packages_are_allowed(
-            &vec![foo_locked.into()],
-            &Allows {
+        assert!(
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: Some(true),
                 broken: None,
                 licenses: vec![]
-            }
-        )
-        .is_ok());
+            })
+            .is_ok()
+        );
     }
 
     /// [LockedManifestCatalog::check_packages_are_allowed] returns an error
@@ -2870,7 +2857,7 @@ pub(crate) mod tests {
         foo_locked.unfree = Some(true);
 
         assert!(matches!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked.into()], &Allows {
+            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: Some(false),
                 broken: None,
                 licenses: vec![]
