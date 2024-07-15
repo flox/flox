@@ -63,6 +63,7 @@ impl FloxCompletionExt for Flox {
             floxhub_token: None,
             floxhub: Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None)?,
             catalog_client,
+            installable_locker: Default::default(),
             features: config.features.clone().unwrap_or_default(),
         })
     }

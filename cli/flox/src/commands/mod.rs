@@ -334,6 +334,7 @@ impl FloxArgs {
             floxhub_token,
             floxhub,
             catalog_client,
+            installable_locker: Default::default(),
             features: config.features.clone().unwrap_or_default(),
         };
 

@@ -29,7 +29,7 @@ use crate::models::lockfile::{
     LockedManifestCatalog,
     LockedManifestError,
     LockedManifestPkgdb,
-    LockedPackageCatalog,
+    LockedPackage,
     ResolutionFailure,
 };
 use crate::models::manifest::{
@@ -54,6 +54,7 @@ use crate::models::pkgdb::{
     PKGDB_BIN,
 };
 use crate::providers::catalog::{self, ClientTrait};
+use crate::providers::flox_cpp_utils::InstallableLocker;
 use crate::providers::services::{maybe_make_service_config_file, ServiceError};
 use crate::utils::CommandExt;
 
@@ -129,7 +130,11 @@ impl<State> CoreEnvironment<State> {
                     return Err(CoreEnvironmentError::CatalogClientMissing);
                 };
                 tracing::debug!("using catalog client to lock");
-                LockedManifest::Catalog(self.lock_with_catalog_client(client, *manifest)?)
+                LockedManifest::Catalog(self.lock_with_catalog_client(
+                    client,
+                    &flox.installable_locker,
+                    *manifest,
+                )?)
             },
         };
 
@@ -195,6 +200,7 @@ impl<State> CoreEnvironment<State> {
     fn lock_with_catalog_client(
         &self,
         client: &catalog::Client,
+        installable_locker: &impl InstallableLocker,
         manifest: TypedManifestCatalog,
     ) -> Result<LockedManifestCatalog, CoreEnvironmentError> {
         let existing_lockfile = 'lockfile: {
@@ -215,9 +221,14 @@ impl<State> CoreEnvironment<State> {
             }
         };
 
-        LockedManifestCatalog::lock_manifest(&manifest, existing_lockfile.as_ref(), client)
-            .block_on()
-            .map_err(CoreEnvironmentError::LockedManifest)
+        LockedManifestCatalog::lock_manifest(
+            &manifest,
+            existing_lockfile.as_ref(),
+            client,
+            installable_locker,
+        )
+        .block_on()
+        .map_err(CoreEnvironmentError::LockedManifest)
     }
 
     /// Build the environment.
@@ -518,7 +529,7 @@ impl CoreEnvironment<ReadOnly> {
     pub fn upgrade(
         &mut self,
         flox: &Flox,
-        groups_or_iids: &[String],
+        groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, CoreEnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let manifest = self.manifest()?;
@@ -537,13 +548,17 @@ impl CoreEnvironment<ReadOnly> {
                     .as_ref()
                     .ok_or(CoreEnvironmentError::CatalogClientMissing)?;
 
-                let (lockfile, upgraded) =
-                    self.upgrade_with_catalog_client(client, groups_or_iids, &catalog)?;
+                let (lockfile, upgraded) = self.upgrade_with_catalog_client(
+                    client,
+                    &flox.installable_locker,
+                    groups_or_iids,
+                    &catalog,
+                )?;
 
                 let upgraded = {
                     let mut install_ids = upgraded
                         .into_iter()
-                        .map(|(_, pkg)| pkg.install_id.clone())
+                        .map(|(_, pkg)| pkg.install_id().to_owned())
                         .collect::<HashSet<_>>()
                         .into_iter()
                         .collect::<Vec<_>>();
@@ -565,12 +580,12 @@ impl CoreEnvironment<ReadOnly> {
     }
 
     fn ensure_valid_upgrade(
-        groups_or_iids: &[String],
+        groups_or_iids: &[&str],
         manifest: &TypedManifestCatalog,
     ) -> Result<(), CoreEnvironmentError> {
         for id in groups_or_iids {
             tracing::debug!(id, "checking that id is a package or group");
-            if id == "toplevel" {
+            if *id == "toplevel" {
                 continue;
             }
             if !manifest.pkg_or_group_found_in_manifest(id) {
@@ -594,7 +609,7 @@ impl CoreEnvironment<ReadOnly> {
             {
                 return Err(CoreEnvironmentError::UpgradeFailedCatalog(
                     UpgradeError::NonEmptyNamedGroup {
-                        pkg: id.clone(),
+                        pkg: id.to_string(),
                         group: "toplevel".to_string(),
                     },
                 ));
@@ -605,7 +620,7 @@ impl CoreEnvironment<ReadOnly> {
             {
                 return Err(CoreEnvironmentError::UpgradeFailedCatalog(
                     UpgradeError::NonEmptyNamedGroup {
-                        pkg: id.clone(),
+                        pkg: id.to_string(),
                         group,
                     },
                 ));
@@ -617,7 +632,7 @@ impl CoreEnvironment<ReadOnly> {
     fn upgrade_with_pkgdb(
         &mut self,
         flox: &Flox,
-        groups_or_iids: &[String],
+        groups_or_iids: &[&str],
     ) -> Result<(LockedManifestPkgdb, Vec<String>), CoreEnvironmentError> {
         let manifest_path = self.manifest_path();
         let lockfile_path = self.lockfile_path();
@@ -662,15 +677,11 @@ impl CoreEnvironment<ReadOnly> {
     fn upgrade_with_catalog_client(
         &mut self,
         client: &impl ClientTrait,
-        groups_or_iids: &[String],
+        flake_locking: &impl InstallableLocker,
+        groups_or_iids: &[&str],
         manifest: &TypedManifestCatalog,
-    ) -> Result<
-        (
-            LockedManifestCatalog,
-            Vec<(LockedPackageCatalog, LockedPackageCatalog)>,
-        ),
-        CoreEnvironmentError,
-    > {
+    ) -> Result<(LockedManifestCatalog, Vec<(LockedPackage, LockedPackage)>), CoreEnvironmentError>
+    {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let existing_lockfile = 'lockfile: {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
@@ -696,9 +707,9 @@ impl CoreEnvironment<ReadOnly> {
             let mut pkgs_by_id = BTreeMap::new();
             lockfile.packages.iter().for_each(|pkg| {
                 let by_system = pkgs_by_id
-                    .entry(pkg.install_id.clone())
+                    .entry(pkg.install_id().to_owned())
                     .or_insert(BTreeMap::new());
-                by_system.entry(pkg.system.clone()).or_insert(pkg.clone());
+                by_system.entry(pkg.system().clone()).or_insert(pkg.clone());
             });
             pkgs_by_id
         } else {
@@ -718,22 +729,27 @@ impl CoreEnvironment<ReadOnly> {
             })
         };
 
-        let upgraded_lockfile =
-            LockedManifestCatalog::lock_manifest(manifest, seed_lockfile.as_ref(), client)
-                .block_on()
-                .map_err(CoreEnvironmentError::LockedManifest)?;
+        let upgraded_lockfile = LockedManifestCatalog::lock_manifest(
+            manifest,
+            seed_lockfile.as_ref(),
+            client,
+            flake_locking,
+        )
+        .block_on()
+        .map_err(CoreEnvironmentError::LockedManifest)?;
 
         let pkgs_after_upgrade = {
             let mut pkgs_by_id = BTreeMap::new();
             upgraded_lockfile.packages.iter().for_each(|pkg| {
                 let by_system = pkgs_by_id
-                    .entry(pkg.install_id.clone())
+                    .entry(pkg.install_id().to_owned())
                     .or_insert(BTreeMap::new());
-                by_system.entry(pkg.system.clone()).or_insert(pkg.clone());
+                by_system.entry(pkg.system().clone()).or_insert(pkg.clone());
             });
             pkgs_by_id
         };
 
+        // todo: handle flake diffs
         // Iterate over the two sorted maps in lockstep
         let package_diff = previous_packages
             .iter()
@@ -743,8 +759,13 @@ impl CoreEnvironment<ReadOnly> {
                 prev_map.iter().map(|(_sys, pkg)| pkg).zip(curr_iter)
             })
             .filter_map(|(prev_pkg, curr_pkg)| {
+                let prev = prev_pkg.as_catalog_package_ref();
+                let curr = curr_pkg.as_catalog_package_ref();
+                prev.zip(curr)
+            })
+            .filter_map(|(prev_pkg, curr_pkg)| {
                 if prev_pkg.derivation != curr_pkg.derivation {
-                    Some((prev_pkg.clone(), curr_pkg.clone()))
+                    Some((prev_pkg.to_owned().into(), curr_pkg.to_owned().into()))
                 } else {
                     None
                 }
@@ -1351,10 +1372,11 @@ mod tests {
         flox_instance_with_global_lock,
         flox_instance_with_optional_floxhub_and_client,
     };
-    use crate::models::lockfile::test_helpers::fake_package;
+    use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::ResolutionFailures;
     use crate::models::manifest::{RawManifest, DEFAULT_GROUP_NAME};
     use crate::models::{lockfile, manifest};
+    use crate::providers::flox_cpp_utils::InstallableLockerMock;
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
     /// Create a CoreEnvironment with an empty manifest
@@ -1604,11 +1626,11 @@ mod tests {
         let (mut env_view, _flox, _temp_dir_handle) = empty_core_environment();
 
         let mut manifest = manifest::test::empty_catalog_manifest();
-        let (foo_iid, foo_descriptor, foo_locked) = fake_package("foo", None);
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
         let lockfile = lockfile::LockedManifestCatalog {
             version: Version,
-            packages: vec![foo_locked.clone()],
+            packages: vec![foo_locked.into()],
             manifest: manifest.clone(),
         };
 
@@ -1650,7 +1672,12 @@ mod tests {
         }]);
 
         let (_, upgraded_packages) = env_view
-            .upgrade_with_catalog_client(&mock_client, &[], &manifest)
+            .upgrade_with_catalog_client(
+                &mock_client,
+                &InstallableLockerMock::new(),
+                &[],
+                &manifest,
+            )
             .unwrap();
 
         assert!(upgraded_packages.len() == 1);

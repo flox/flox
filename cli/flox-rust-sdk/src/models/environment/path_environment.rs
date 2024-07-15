@@ -274,7 +274,7 @@ impl Environment for PathEnvironment {
     fn upgrade(
         &mut self,
         flox: &Flox,
-        groups_or_iids: &[String],
+        groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));

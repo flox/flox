@@ -74,7 +74,16 @@ impl Upgrade {
         let result = Dialog {
             message: "Upgrading packages...",
             help_message: None,
-            typed: Spinner::new(|| environment.upgrade(&flox, &self.groups_or_iids)),
+            typed: Spinner::new(|| {
+                environment.upgrade(
+                    &flox,
+                    &self
+                        .groups_or_iids
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>(),
+                )
+            }),
         }
         .spin()?;
 

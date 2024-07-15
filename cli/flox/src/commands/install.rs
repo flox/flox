@@ -10,7 +10,7 @@ use flox_rust_sdk::models::lockfile::{
     LockedManifest,
     LockedManifestError,
     LockedManifestPkgdb,
-    LockedPackageCatalog,
+    LockedPackage,
     ResolutionFailure,
     ResolutionFailures,
 };
@@ -316,7 +316,7 @@ impl Install {
 
     /// Generate warnings to print to the user about unfree and broken packages.
     fn generate_warnings(
-        locked_packages: &[LockedPackageCatalog],
+        locked_packages: &[LockedPackage],
         packages_to_install: &[CatalogPackage],
     ) -> Vec<String> {
         let mut warnings = vec![];
@@ -330,26 +330,26 @@ impl Install {
         for locked_package in locked_packages.iter() {
             // If unfree && just installed && we haven't already warned for this install_id,
             // warn that this package is unfree
-            if locked_package.unfree == Some(true)
+            if locked_package.unfree() == Some(true)
                 && packages_to_install
                     .iter()
-                    .any(|p| locked_package.install_id == p.id)
-                && !warned_unfree.contains(&locked_package.install_id)
+                    .any(|p| locked_package.install_id() == p.id)
+                && !warned_unfree.contains(&locked_package.install_id())
             {
-                warnings.push(format!("The package '{}' has an unfree license, please verify the licensing terms of use", locked_package.install_id));
-                warned_unfree.insert(&locked_package.install_id);
+                warnings.push(format!("The package '{}' has an unfree license, please verify the licensing terms of use", locked_package.install_id()));
+                warned_unfree.insert(locked_package.install_id());
             }
 
             // If broken && just installed && we haven't already warned for this install_id,
             // warn that this package is broken
-            if locked_package.broken == Some(true)
+            if locked_package.broken() == Some(true)
                 && packages_to_install
                     .iter()
-                    .any(|p| locked_package.install_id == p.id)
-                && !warned_broken.contains(&locked_package.install_id)
+                    .any(|p| locked_package.install_id() == p.id)
+                && !warned_broken.contains(&locked_package.install_id())
             {
-                warnings.push(format!("The package '{}' is marked as broken, it may not behave as expected during runtime.", locked_package.install_id));
-                warned_broken.insert(&locked_package.install_id);
+                warnings.push(format!("The package '{}' is marked as broken, it may not behave as expected during runtime.", locked_package.install_id()));
+                warned_broken.insert(locked_package.install_id());
             }
         }
         warnings
@@ -358,7 +358,7 @@ impl Install {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::models::lockfile::test_helpers::fake_package;
+    use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
     use flox_rust_sdk::models::manifest::CatalogPackage;
     use flox_rust_sdk::providers::catalog::SystemEnum;
@@ -368,8 +368,6 @@ mod tests {
     /// [Install::generate_warnings] shouldn't warn for packages not in packages_to_install
     #[test]
     fn generate_warnings_empty() {
-        let (_, _, mut foo_locked) = fake_package("foo", None);
-        foo_locked.unfree = Some(true);
         let locked_packages = vec![];
         let packages_to_install = vec![];
         assert_eq!(
@@ -381,9 +379,9 @@ mod tests {
     /// [Install::generate_warnings] should warn for an unfree package
     #[test]
     fn generate_warnings_unfree() {
-        let (foo_iid, _, mut foo_locked) = fake_package("foo", None);
+        let (foo_iid, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.unfree = Some(true);
-        let locked_packages = vec![foo_locked];
+        let locked_packages = vec![foo_locked.into()];
         let packages_to_install = vec![CatalogPackage {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
@@ -402,7 +400,7 @@ mod tests {
     /// even if it's installed on multiple systems
     #[test]
     fn generate_warnings_unfree_multi_system() {
-        let (foo_iid, _, mut foo_locked) = fake_package("foo", None);
+        let (foo_iid, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.unfree = Some(true);
 
         // TODO: fake_package shouldn't hardcode system?
@@ -411,7 +409,7 @@ mod tests {
             ..foo_locked.clone()
         };
 
-        let locked_packages = vec![foo_locked, foo_locked_second_system];
+        let locked_packages = vec![foo_locked.into(), foo_locked_second_system.into()];
         let packages_to_install = vec![CatalogPackage {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
@@ -429,9 +427,9 @@ mod tests {
     /// [Install::generate_warnings] should warn for a broken package
     #[test]
     fn generate_warnings_broken() {
-        let (foo_iid, _, mut foo_locked) = fake_package("foo", None);
+        let (foo_iid, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.broken = Some(true);
-        let locked_packages = vec![foo_locked];
+        let locked_packages = vec![foo_locked.into()];
         let packages_to_install = vec![CatalogPackage {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
@@ -450,7 +448,7 @@ mod tests {
     /// even if it's installed on multiple systems
     #[test]
     fn generate_warnings_broken_multi_system() {
-        let (foo_iid, _, mut foo_locked) = fake_package("foo", None);
+        let (foo_iid, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.broken = Some(true);
 
         // TODO: fake_package shouldn't hardcode system?
@@ -459,7 +457,7 @@ mod tests {
             ..foo_locked.clone()
         };
 
-        let locked_packages = vec![foo_locked, foo_locked_second_system];
+        let locked_packages = vec![foo_locked.into(), foo_locked_second_system.into()];
         let packages_to_install = vec![CatalogPackage {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),

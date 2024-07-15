@@ -113,6 +113,28 @@ getDerivationCursor( const nix::ref<nix::EvalState> & state,
 }
 
 /**
+ * @brief Lock the flake referenced by the installable.
+ * @note This function ensures that potential nix exceptions are caught and
+ * rethrown as @a LockFlakeInstallableException.
+ * @param installable The installable to lock
+ * @return A locked flake
+ * @throws LockFlakeInstallableException if the flake could not be locked
+ */
+static std::shared_ptr<nix::flake::LockedFlake>
+getLockedFlake( nix::InstallableFlake & installable )
+{
+  try
+    {
+      return installable.getLockedFlake();
+    }
+  catch ( const nix::Error & e )
+    {
+      throw LockFlakeInstallableException( "could not lock flake",
+                                           e.info().msg.str() );
+    }
+}
+
+/**
  * @brief Read a license string or id from a nix value.
  * @note The license can be either a string or an attribute set with a `spdxId`
  * if `<nixpkgs>.lib.licenses.<license>` is used.
@@ -203,14 +225,17 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     },
     lockFlags );
 
+
   debugLog(
-    nix::fmt( "locked installable: '%s'", installable.what().c_str() ) );
+    nix::fmt( "original installable: '%s'", installable.what().c_str() ) );
 
+  auto lockedFlake = getLockedFlake( installable );
 
-  auto lockedUrl = installable.getLockedFlake()->flake.lockedRef.to_string();
+  auto lockedUrl = lockedFlake->flake.lockedRef.to_string();
+
   debugLog( nix::fmt( "locked url: '%s'", lockedUrl ) );
 
-  auto flakeDescription = installable.getLockedFlake()->flake.description;
+  auto flakeDescription = lockedFlake->flake.description;
 
   auto cursor = getDerivationCursor( state, installable );
 
