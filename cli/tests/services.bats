@@ -73,12 +73,10 @@ setup_sleeping_services() {
   assert_success
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/start_and_cleanup.sh"
-    echo "looking for file"
-    [ -e hello.txt ]
-    echo "found it"
 EOF
 )
   assert_success
+  [ -e hello.txt ]
 }
 
 @test "'flox activate -s' error without feature flag" {
