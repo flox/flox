@@ -184,6 +184,24 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   debugLog( nix::fmt( "original extendedOutputsSpec: '%s'",
                       extendedOutputsSpec.to_string() ) );
 
+  if ( flakeRef.input.toURL().scheme == "git+file"
+       || flakeRef.input.toURL().scheme == "file+file"
+       || flakeRef.input.toURL().scheme == "tarball+file"
+       || flakeRef.input.toURL().scheme == "path" )
+    {
+      auto * maybeAllowLocal = std::getenv( "_PKGDB_ALLOW_LOCAL_FLAKE" );
+      if ( maybeAllowLocal != nullptr )
+        {
+          std::string allowLocal = std::string( maybeAllowLocal );
+          if ( ( allowLocal == std::string( "" ) )
+               || ( allowLocal == std::string( "0" ) ) )
+            {
+              throw LockLocalFlakeException();
+            }
+        }
+      else { throw LockLocalFlakeException(); }
+    }
+
   auto lockFlags = nix::flake::LockFlags {
     .recreateLockFile      = false,
     .updateLockFile        = false,

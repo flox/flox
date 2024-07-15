@@ -111,6 +111,12 @@ enum error_category {
    * due to file I/O failing.
    */
   EC_ACTIVATION_SCRIPT_BUILD_ERROR,
+
+  /**
+   * Attempted lock of a local flake, which is not allowed for floxhub
+   * compatibility.
+   */
+  EC_LOCK_LOCAL_FLAKE,
 }; /* End enum `error_category' */
 
 
