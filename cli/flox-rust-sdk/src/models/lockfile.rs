@@ -517,7 +517,7 @@ impl LockedManifestCatalog {
             &manifest.options.allow,
         )?;
 
-        if groups_to_lock.is_empty() {
+        if groups_to_lock.is_empty() && installables_to_lock.is_empty() {
             debug!("All packages are already locked, skipping resolution");
             return Ok(LockedManifestCatalog {
                 version: Version::<1>,
