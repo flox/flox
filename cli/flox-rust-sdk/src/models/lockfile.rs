@@ -2455,23 +2455,40 @@ pub(crate) mod tests {
         );
     }
 
-    /// unlocking by iid should remove only the package with that iid
+    /// Unlocking by iid should remove only the package with that iid.
+    /// Both catalog packages and flake installables should be removed.
     #[test]
     fn unlock_by_iid() {
         let mut manifest = manifest::test::empty_catalog_manifest();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         let (bar_iid, bar_descriptor, bar_locked) = fake_catalog_package_lock("bar", None);
+        let (baz_iid, baz_descriptor, baz_locked) = fake_flake_installable_lock("baz");
+        let (qux_iid, qux_descriptor, qux_locked) = fake_flake_installable_lock("qux");
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
         manifest.install.insert(bar_iid.clone(), bar_descriptor);
+        manifest
+            .install
+            .insert(baz_iid.clone(), baz_descriptor.into());
+        manifest
+            .install
+            .insert(qux_iid.clone(), qux_descriptor.into());
         let mut lockfile = LockedManifestCatalog {
             version: Version::<1>,
             manifest: manifest.clone(),
-            packages: vec![foo_locked.into(), bar_locked.clone().into()],
+            packages: vec![
+                foo_locked.into(),
+                bar_locked.clone().into(),
+                baz_locked.into(),
+                qux_locked.clone().into(),
+            ],
         };
 
-        lockfile.unlock_packages_by_group_or_iid(&[&foo_iid.clone()]);
+        lockfile.unlock_packages_by_group_or_iid(&[&foo_iid, &baz_iid]);
 
-        assert_eq!(lockfile.packages, vec![bar_locked.into()]);
+        assert_eq!(lockfile.packages, vec![
+            bar_locked.into(),
+            qux_locked.into()
+        ]);
     }
 
     /// Unlocking by group should remove all packages in that group
