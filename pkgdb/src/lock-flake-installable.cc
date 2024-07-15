@@ -467,7 +467,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     .outputsToInstall          = outputsToInstall,
     .requestedOutputsToInstall = requestedOutputs,
     .packageSystem             = systemAttribute,
-    .lockedSystem              = system,
+    .system                    = system,
     .name                      = name,
     .pname                     = pname,
     .version                   = version,
@@ -494,7 +494,7 @@ to_json( nlohmann::json & jto, const LockedInstallable & from )
     { "outputs-to-install", from.outputsToInstall },
     { "requested-outputs-to-install", from.requestedOutputsToInstall },
     { "package-system", from.packageSystem },
-    { "locked-system", from.lockedSystem },
+    { "system", from.system },
     { "name", from.name },
     { "pname", from.pname },
     { "version", from.version },
@@ -503,6 +503,39 @@ to_json( nlohmann::json & jto, const LockedInstallable & from )
     { "broken", from.broken },
     { "unfree", from.unfree },
   };
+}
+
+void
+from_json( const nlohmann::json & jfrom, LockedInstallable & to )
+{
+  to.lockedUrl = jfrom.at( "locked-url" );
+  if ( jfrom.contains( "flake-description" ) )
+    {
+      to.flakeDescription = jfrom.at( "flake-description" );
+    };
+  to.lockedFlakeAttrPath = jfrom.at( "locked-flake-attr-path" );
+  to.derivation          = jfrom.at( "derivation" );
+  to.outputs             = jfrom.at( "outputs" );
+  if ( jfrom.contains( "outputs-to-install" ) )
+    {
+      to.outputsToInstall = jfrom.at( "outputs-to-install" );
+    };
+  if ( jfrom.contains( "requested-outputs-to-install" ) )
+    {
+      to.requestedOutputsToInstall = jfrom.at( "requested-outputs-to-install" );
+    };
+  to.packageSystem = jfrom.at( "package-system" );
+  to.system        = jfrom.at( "system" );
+  to.name          = jfrom.at( "name" );
+  if ( jfrom.contains( "pname" ) ) { to.pname = jfrom.at( "pname" ); };
+  if ( jfrom.contains( "version" ) ) { to.version = jfrom.at( "version" ); };
+  if ( jfrom.contains( "description" ) )
+    {
+      to.description = jfrom.at( "description" );
+    };
+  if ( jfrom.contains( "licenses" ) ) { to.licenses = jfrom.at( "licenses" ); };
+  if ( jfrom.contains( "broken" ) ) { to.broken = jfrom.at( "broken" ); };
+  if ( jfrom.contains( "unfree" ) ) { to.unfree = jfrom.at( "unfree" ); };
 }
 
 

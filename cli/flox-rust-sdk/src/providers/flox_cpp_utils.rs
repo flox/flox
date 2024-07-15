@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use enum_dispatch::enum_dispatch;
 use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 use thiserror::Error;
 use tracing::debug;
 
@@ -31,6 +32,7 @@ pub enum FlakeInstallableError {
 /// Rust representation of the output of `pkgdb lock-flake-installable`
 /// This is a direct translation of the definition in
 /// `<flox>/pkgdb/include/flox/lock-flake-installable.hh`
+#[skip_serializing_none]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -51,8 +53,9 @@ pub struct LockedInstallable {
     pub(crate) requested_outputs_to_install: Option<Vec<String>>,
     /// System as defined by the package
     pub(crate) package_system: String,
-    /// System as defined by the specified target system
-    pub(crate) locked_system: String,
+    /// System as specified by the manifest and used to set default attribute
+    /// paths when locking the installable
+    pub(crate) system: String,
     pub(crate) name: String,
     pub(crate) pname: Option<String>,
     pub(crate) version: Option<String>,

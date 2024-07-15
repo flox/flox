@@ -145,7 +145,7 @@ impl LockedPackage {
     pub(crate) fn system(&self) -> &System {
         match self {
             LockedPackage::Catalog(pkg) => &pkg.system,
-            LockedPackage::Flake(pkg) => &pkg.locked_installable.locked_system,
+            LockedPackage::Flake(pkg) => &pkg.locked_installable.system,
         }
     }
 
@@ -1598,7 +1598,7 @@ pub mod test_helpers {
                 outputs_to_install: None,
                 requested_outputs_to_install: None,
                 package_system: "aarch64-darwin".to_string(),
-                locked_system: "aarch64-darwin".to_string(),
+                system: "aarch64-darwin".to_string(),
                 name: format!("{name}-1.0.0"),
                 pname: Some(name.to_string()),
                 version: Some("1.0.0".to_string()),
@@ -2911,7 +2911,7 @@ pub(crate) mod tests {
 
         let foo_locked_system_1 = foo_locked.clone();
         let mut foo_locked_system_2 = foo_locked;
-        foo_locked_system_2.locked_installable.locked_system = SystemEnum::Aarch64Linux.to_string();
+        foo_locked_system_2.locked_installable.system = SystemEnum::Aarch64Linux.to_string();
 
         let mut manifest = manifest::test::empty_catalog_manifest();
         manifest.options.systems = Some(vec![system.to_string()]);

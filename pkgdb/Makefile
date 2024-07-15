@@ -195,7 +195,8 @@ FULLCLEANDIRS  =
 FULLCLEANFILES =
 
 # Where to find test suite input data files.
-TEST_DATA_DIR = $(PKGDB_ROOT)/tests/data
+TEST_DATA_DIR  = $(PKGDB_ROOT)/tests/data
+GENERATED_DATA = $(REPO_ROOT)/test_data/generated
 
 
 # ---------------------------------------------------------------------------- #
