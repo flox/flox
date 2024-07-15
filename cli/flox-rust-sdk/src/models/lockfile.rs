@@ -522,7 +522,7 @@ impl LockedManifestCatalog {
             return Ok(LockedManifestCatalog {
                 version: Version::<1>,
                 manifest: manifest.clone(),
-                packages: already_locked_packages,
+                packages: [already_locked_packages, already_locked_installables].concat(),
             });
         }
 
