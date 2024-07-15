@@ -947,23 +947,25 @@ impl FromStr for PackageToInstall {
 
 /// Tries to infer an install id from the flake ref URL, or falls back to "flake".
 fn infer_flake_install_id(url: &Url) -> Result<String, ManifestError> {
-    if url.scheme() == "github" {
-        url.path()
-            .split('/')
-            .nth(1)
-            .map(|s| s.to_string())
-            .ok_or(ManifestError::InvalidFlakeRef(url.to_string()))
-    } else if url.scheme() == "https" && url.domain().is_some_and(|host| host == "github.com") {
-        let mut segments = url
-            .path_segments()
-            .ok_or(ManifestError::InvalidFlakeRef(url.to_string()))?;
-        segments
-            .nth(1)
-            .map(|s| s.to_string())
-            .ok_or(ManifestError::InvalidFlakeRef(url.to_string()))
-    } else {
-        Ok("flake".to_string())
+    if let Some(fragment) = url.fragment() {
+        let attr_path = fragment
+            .rsplit_once('^')
+            .map(|(attr_path, _)| attr_path)
+            .unwrap_or(fragment);
+        let install_id = install_id_from_attr_path(attr_path, url.as_ref())?;
+        if !install_id.is_empty() {
+            return Ok(install_id);
+        }
     }
+
+    // use path because `github:` and co. are `cannot-be-a-base` urls
+    // for which "path-segments" are undefined.
+    // `Url::path_segments` will return `None` for such urls.
+    url.path()
+        .split('/')
+        .last()
+        .map(|s| s.to_string())
+        .ok_or(ManifestError::InvalidFlakeRef(url.to_string()))
 }
 
 /// Extracts only the catalog packages from a list of packages to install.
@@ -1919,24 +1921,21 @@ pub(super) mod test {
     fn infers_id_from_https_flake_ref() {
         let url = Url::parse("https://github.com/foo/bar/archive/main.tar.gz").unwrap();
         let inferred = infer_flake_install_id(&url).unwrap();
-        assert_eq!(inferred.as_str(), "bar");
+        assert_eq!(inferred.as_str(), "main.tar.gz");
     }
 
     #[test]
     fn infers_fallback_id_for_https_flake_ref() {
         let url = Url::parse("https://example.com/foo/bar/baz").unwrap();
         let inferred = infer_flake_install_id(&url).unwrap();
-        assert_eq!(inferred.as_str(), "flake");
+        assert_eq!(inferred.as_str(), "baz");
     }
 
     #[test]
     fn inferring_id_fails_with_malformed_flakeref() {
         let url = Url::parse("github:flox").unwrap();
         let inferred = infer_flake_install_id(&url);
-        assert!(matches!(
-            inferred,
-            Err(ManifestError::InvalidFlakeRef { .. })
-        ));
+        assert_eq!(inferred.unwrap(), "flox");
     }
 
     #[test]
