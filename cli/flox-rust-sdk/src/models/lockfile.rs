@@ -527,10 +527,14 @@ impl LockedManifestCatalog {
         }
 
         // lock packages
-        let resolved = client
-            .resolve(groups_to_lock)
-            .await
-            .map_err(LockedManifestError::CatalogResolve)?;
+        let resolved = if !groups_to_lock.is_empty() {
+            client
+                .resolve(groups_to_lock)
+                .await
+                .map_err(LockedManifestError::CatalogResolve)?
+        } else {
+            vec![]
+        };
 
         // unpack locked packages from response
         let locked_packages: Vec<LockedPackage> =
@@ -538,10 +542,13 @@ impl LockedManifestCatalog {
                 .map(Into::into)
                 .collect();
 
-        let locked_installables =
+        let locked_installables = if !installables_to_lock.is_empty() {
             Self::lock_flake_installables(installable_locker, installables_to_lock)?
                 .map(Into::into)
-                .collect();
+                .collect()
+        } else {
+            vec![]
+        };
 
         // The server should be checking this,
         // but double check
