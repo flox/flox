@@ -1139,7 +1139,7 @@ impl LockedManifestCatalog {
             .into_iter()
             .map(|installable| {
                 locking
-                    .lock_flake_installable(&installable.descriptor.flake, &installable.system)
+                    .lock_flake_installable(&installable.system, &installable.descriptor.flake)
                     .map(|locked_installable| {
                         LockedPackageFlake::from_parts(installable.install_id, locked_installable)
                     })
