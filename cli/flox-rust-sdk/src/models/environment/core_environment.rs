@@ -1377,7 +1377,7 @@ mod tests {
     use crate::models::manifest::{RawManifest, DEFAULT_GROUP_NAME};
     use crate::models::{lockfile, manifest};
     use crate::providers::flox_cpp_utils::InstallableLockerMock;
-    use crate::providers::services::{SERVICES_TEMP_CONFIG_PATH_VAR, SERVICE_CONFIG_FILENAME};
+    use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
     /// Create a CoreEnvironment with an empty manifest
     ///
