@@ -68,7 +68,7 @@ sharing environments, and administration.
 `edit`
 :   Edit the declarative environment configuration file.
 
-`list`
+`list`, 'l'
 :   List packages installed in an environment.
 
 `delete`

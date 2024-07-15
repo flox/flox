@@ -717,7 +717,12 @@ enum LocalDevelopmentCommands {
     #[bpaf(command, footer("Run 'man flox-edit' for more details."))]
     Edit(#[bpaf(external(edit::edit))] edit::Edit),
     /// List packages installed in an environment
-    #[bpaf(command, footer("Run 'man flox-list' for more details."))]
+    #[bpaf(
+        command,
+        long("list"),
+        short('l'),
+        footer("Run 'man flox-list' for more details.")
+    )]
     List(#[bpaf(external(list::list))] list::List),
     /// Delete an environment
     #[bpaf(

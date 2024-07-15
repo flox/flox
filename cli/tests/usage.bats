@@ -68,7 +68,7 @@ EOF
   line=$((line + 1))
   assert_line -n "$line" --regexp '^    edit[ ]+[\w .,]+'
   line=$((line + 1))
-  assert_line -n "$line" --regexp '^    list[ ]+[\w .,]+'
+  assert_line -n "$line" --regexp '^    list, l[ ]+[\w .,]+'
   line=$((line + 1))
   assert_line -n "$line" --regexp '^    delete[ ]+[\w .,]+'
 }
