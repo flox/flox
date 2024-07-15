@@ -496,10 +496,18 @@ impl LockedManifestCatalog {
             .collect()
     }
 
-    /// Produce a lockfile for a given manifest using the catalog service.
+    /// Produce a lockfile for a given manifest.
+    /// Uses the catalog service to resolve [ManifestPackageDescriptorCatalog],
+    /// and an [InstallableLocker] to lock [ManifestPackageDescriptorFlake] descriptors.
     ///
     /// If a seed lockfile is provided, packages that are already locked
-    /// will constrain the resolution.
+    /// will constrain the resolution of catalog packages to the same derivation.
+    /// Already locked flake installables will not be locked again,
+    /// and copied from the seed lockfile as is.
+    ///
+    /// Catalog and flake installables are locked separately, usinf largely symmetric logic.
+    /// Keeping the locking of each kind separate keeps the existing methods simpler
+    /// and allows for potential parallelization in the future.
     pub async fn lock_manifest(
         manifest: &TypedManifestCatalog,
         seed_lockfile: Option<&LockedManifestCatalog>,
@@ -1039,35 +1047,41 @@ impl LockedManifestCatalog {
             .collect::<Vec<_>>()
     }
 
+    /// Collect flake installable descriptors from the manifest and create a list of
+    /// [FlakeInstallableToLock] to be resolved.
+    /// Each descriptor is resolved once per system supported by the manifest,
+    /// or other if not specified, for each system in [DEFAULT_SYSTEMS_STR].
     fn collect_flake_installables(
         manifest: &TypedManifestCatalog,
-    ) -> impl Iterator<Item = FlakeInstallableToLock> {
-        let mut flake_installables = Vec::new();
-
-        for (install_id, manifest_descriptor) in manifest.install.iter() {
-            let manifest_descriptor = match manifest_descriptor {
-                ManifestPackageDescriptor::FlakeRef(f) => f,
-                _ => continue,
-            };
-
-            let systems = manifest
-                .options
-                .systems
-                .as_deref()
-                .unwrap_or(&*DEFAULT_SYSTEMS_STR);
-
-            for system in systems {
-                flake_installables.push(FlakeInstallableToLock {
-                    install_id: install_id.clone(),
-                    descriptor: manifest_descriptor.clone(),
-                    system: system.to_owned(),
-                });
-            }
-        }
-
-        flake_installables.into_iter()
+    ) -> impl Iterator<Item = FlakeInstallableToLock> + '_ {
+        manifest
+            .install
+            .iter()
+            .filter_map(|(install_id, descriptor)| {
+                descriptor
+                    .as_flake_descriptor_ref()
+                    .map(|d| (install_id, d))
+            })
+            .flat_map(|(iid, d)| {
+                let systems = manifest
+                    .options
+                    .systems
+                    .as_deref()
+                    .unwrap_or(&*DEFAULT_SYSTEMS_STR);
+                systems.iter().map(move |s| FlakeInstallableToLock {
+                    install_id: iid.clone(),
+                    descriptor: d.clone(),
+                    system: s.to_owned(),
+                })
+            })
     }
 
+    /// Split a list of flake installables into already Locked packages ([LockedPackage])
+    /// and yet to lock [FlakeInstallableToLock].
+    ///
+    /// This is equivalent to [Self::split_fully_locked_groups] but for flake installables.
+    /// where `installables` are the flake installables found in a lockfile,
+    /// with [Self::collect_flake_installables].
     fn split_locked_flake_installables(
         installables: impl IntoIterator<Item = FlakeInstallableToLock>,
         seed_lockfile: Option<&LockedManifestCatalog>,
