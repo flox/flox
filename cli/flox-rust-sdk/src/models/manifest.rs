@@ -1034,43 +1034,7 @@ impl FromStr for CatalogPackage {
             None => (descriptor.to_string(), None),
         };
 
-        let install_id = {
-            let mut install_id = None;
-            let mut cur = String::new();
-
-            let mut start_quote = None;
-
-            for (n, c) in attr_path.chars().enumerate() {
-                match c {
-                    '.' if start_quote.is_none() => {
-                        let _ = install_id.insert(std::mem::take(&mut cur));
-                    },
-                    '"' if start_quote.is_some() => start_quote = None,
-                    '"' if start_quote.is_none() => start_quote = Some(n),
-                    other => cur.push(other),
-                }
-            }
-
-            if start_quote.is_some() {
-                return Err(ManifestError::MalformedStringDescriptor {
-                    msg: "unclosed quote".to_string(),
-                    desc: descriptor.to_string(),
-                });
-            }
-
-            if !cur.is_empty() {
-                let _ = install_id.insert(cur);
-            }
-
-            if install_id.is_none() {
-                return Err(ManifestError::MalformedStringDescriptor {
-                    msg: "attribute path is empty".to_string(),
-                    desc: descriptor.to_string(),
-                });
-            }
-
-            install_id.unwrap()
-        };
+        let install_id = install_id_from_attr_path(&attr_path, descriptor)?;
 
         Ok(Self {
             id: install_id,
@@ -1078,6 +1042,45 @@ impl FromStr for CatalogPackage {
             version,
         })
     }
+}
+
+/// parses a dot-separated attribute path into
+fn install_id_from_attr_path(attr_path: &str, descriptor: &str) -> Result<String, ManifestError> {
+    let mut install_id = None;
+    let mut cur = String::new();
+
+    let mut start_quote = None;
+
+    for (n, c) in attr_path.chars().enumerate() {
+        match c {
+            '.' if start_quote.is_none() => {
+                let _ = install_id.insert(std::mem::take(&mut cur));
+            },
+            '"' if start_quote.is_some() => start_quote = None,
+            '"' if start_quote.is_none() => start_quote = Some(n),
+            other => cur.push(other),
+        }
+    }
+
+    if start_quote.is_some() {
+        return Err(ManifestError::MalformedStringDescriptor {
+            msg: "unclosed quote".to_string(),
+            desc: descriptor.to_string(),
+        });
+    }
+
+    if !cur.is_empty() {
+        let _ = install_id.insert(cur);
+    }
+
+    if install_id.is_none() {
+        return Err(ManifestError::MalformedStringDescriptor {
+            msg: "attribute path is empty".to_string(),
+            desc: descriptor.to_string(),
+        });
+    }
+
+    Ok(install_id.unwrap())
 }
 
 impl From<&CatalogPackage> for Vec<(&'static str, String)> {
