@@ -7,7 +7,7 @@ resolver = "2"
 [workspace.dependencies]
 anyhow = "1"
 async-stream = "0.3.5"
-blake3 = "1.5.0"
+blake3 = "1.5.3"
 bpaf = { version = "0.9.12", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.38", features = ["serde"] }
@@ -45,12 +45,12 @@ semver = "1.0.23"
 sentry = { version = "0.32.3", features = ["test"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
-serde_with = "3.8.3"
+serde_with = "3.9.0"
 serde_yaml = "0.9"
 shell-escape = "0.1.5"
 supports-color = "3.0.0"
 # provides process tools for shell detection
-sysinfo = "0.30.12"
+sysinfo = "0.30.13"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
@@ -65,7 +65,7 @@ tracing = "0.1"
 tracing-log = { version = "0.2", features = [] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2.5", features = ["serde"] }
-uuid = { version = "1.9", features = ["serde", "v4"] }
+uuid = { version = "1.10", features = ["serde", "v4"] }
 walkdir = "2"
 xdg = "2.4"
 
