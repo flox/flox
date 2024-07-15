@@ -28,7 +28,7 @@ pub static GIT_PKG_BIN: Lazy<String> =
 pub mod error_codes {
     /// Manifest file has invalid format
     pub const INVALID_MANIFEST_FILE: u64 = 105;
-    /// Flake locking error, aslo used by locking flake installables
+    /// Flake locking error, also used by locking flake installables
     pub const NIX_LOCK_FLAKE: u64 = 108;
     /// Parsing of the manifest.toml file failed
     pub const TOML_TO_JSON: u64 = 116;
