@@ -1158,20 +1158,23 @@ impl LockedManifestCatalog {
     /// This is used to create a seed lockfile to upgrade a subset of packages,
     /// as packages that are not in the seed lockfile will be re-resolved unconstrained.
     pub(crate) fn unlock_packages_by_group_or_iid(&mut self, groups_or_iids: &[&str]) -> &mut Self {
-        self.packages.retain(|package| {
-            if !groups_or_iids.contains(&package.install_id()) {
-                return false;
-            }
+        self.packages = std::mem::take(&mut self.packages)
+            .into_iter()
+            .filter(|package| {
+                if groups_or_iids.contains(&package.install_id()) {
+                    return false;
+                }
 
-            if let Some(group) = package
-                .as_catalog_package_ref()
-                .map(|pkg| pkg.group.as_str())
-            {
-                return groups_or_iids.contains(&group);
-            }
+                if let Some(group) = package
+                    .as_catalog_package_ref()
+                    .map(|pkg| pkg.group.as_str())
+                {
+                    return !groups_or_iids.contains(&group);
+                }
 
-            true
-        });
+                true
+            })
+            .collect();
 
         self
     }
