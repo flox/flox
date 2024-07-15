@@ -4,7 +4,7 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
-use flox_rust_sdk::models::manifest::PackageToInstall;
+use flox_rust_sdk::models::manifest::CatalogPackage;
 use flox_rust_sdk::utils::traceable_path;
 use indoc::{formatdoc, indoc};
 use semver::VersionReq;
@@ -646,7 +646,7 @@ impl InitHook for Node {
 
         let hook_on_activate = match &self.action {
             NodeInstallAction::Yarn(yarn_install) => {
-                packages.push(PackageToInstall {
+                packages.push(CatalogPackage {
                     id: "yarn".to_string(),
                     pkg_path: yarn_install.yarn.rel_path.clone().into(),
                     // TODO: we probably shouldn't pin this when we're just
@@ -660,12 +660,12 @@ impl InitHook for Node {
             NodeInstallAction::YarnOrNode(_, node_install)
             | NodeInstallAction::Node(node_install) => {
                 let nodejs_to_install = match &node_install.node {
-                    Some(result) => PackageToInstall {
+                    Some(result) => CatalogPackage {
                         id: "nodejs".to_string(),
                         pkg_path: result.rel_path.clone().into(),
                         version: result.version.clone(),
                     },
-                    None => PackageToInstall {
+                    None => CatalogPackage {
                         id: "nodejs".to_string(),
                         pkg_path: "nodejs".to_string(),
                         version: None,
@@ -780,7 +780,7 @@ mod tests {
             }
             .get_init_customization(),
             InitCustomization {
-                packages: Some(vec![PackageToInstall {
+                packages: Some(vec![CatalogPackage {
                     id: "yarn".to_string(),
                     pkg_path: "yarn.path".to_string(),
                     version: Some("1".to_string()),
@@ -831,7 +831,7 @@ mod tests {
             }
             .get_init_customization(),
             InitCustomization {
-                packages: Some(vec![PackageToInstall {
+                packages: Some(vec![CatalogPackage {
                     id: "nodejs".to_string(),
                     pkg_path: "nodejs.path".to_string(),
                     version: Some("1".to_string()),
@@ -864,7 +864,7 @@ mod tests {
             }
             .get_init_customization(),
             InitCustomization {
-                packages: Some(vec![PackageToInstall {
+                packages: Some(vec![CatalogPackage {
                     id: "nodejs".to_string(),
                     pkg_path: "nodejs.path".to_string(),
                     version: Some("1".to_string()),

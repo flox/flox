@@ -383,3 +383,32 @@ EOF
 EOF
 )"
 }
+
+# ---------------------------------------------------------------------------- #
+
+@test "flake: github ref added to manifest" {
+  "$FLOX_BIN" init
+  input_flake="github:foo/bar"
+  run "$FLOX_BIN" install "$input_flake"
+  assert_success
+  installed_flake=$(tomlq -r -c -t ".install.bar" "$MANIFEST_PATH")
+  assert_equal "$installed_flake" "flake = \"$input_flake\""
+}
+
+@test "flake: https ref added to manifest" {
+  "$FLOX_BIN" init
+  input_flake="https://github.com/foo/bar/archive/main.tar.gz"
+  run "$FLOX_BIN" install "$input_flake"
+  assert_success
+  installed_flake=$(tomlq -r -c -t ".install.bar" "$MANIFEST_PATH")
+  assert_equal "$installed_flake" "flake = \"$input_flake\""
+}
+
+@test "flake: fallback id added to manifest" {
+  "$FLOX_BIN" init
+  input_flake="https://example.com/foo"
+  run "$FLOX_BIN" install "$input_flake"
+  assert_success
+  installed_flake=$(tomlq -r -c -t ".install.flake" "$MANIFEST_PATH")
+  assert_equal "$installed_flake" "flake = \"$input_flake\""
+}

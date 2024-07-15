@@ -49,7 +49,7 @@ use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::LockedManifest;
-use crate::models::manifest::{PackageToInstall, RawManifest, TypedManifest};
+use crate::models::manifest::{CatalogPackage, PackageToInstall, RawManifest, TypedManifest};
 use crate::models::pkgdb::UpgradeResult;
 use crate::utils::mtime_of;
 
@@ -85,7 +85,7 @@ pub struct InitCustomization {
     pub profile_fish: Option<String>,
     pub profile_tcsh: Option<String>,
     pub profile_zsh: Option<String>,
-    pub packages: Option<Vec<PackageToInstall>>,
+    pub packages: Option<Vec<CatalogPackage>>,
 }
 
 impl PartialEq for PathEnvironment {

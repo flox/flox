@@ -34,6 +34,10 @@ pub(crate) fn warning(v: impl Display) {
 pub(crate) fn package_installed(pkg: &PackageToInstall, environment_description: &str) {
     updated(format!(
         "'{}' installed to environment {environment_description}",
-        pkg.id
+        pkg.id()
     ));
+}
+
+pub(crate) fn service_stopped(service_name: &str) {
+    updated(format!("Service '{}' stopped", service_name));
 }

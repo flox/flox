@@ -1537,8 +1537,7 @@ mod tests {
         env.lock(&flox).unwrap();
 
         // Build the environment and verify that the config file exists
-        let store_path =
-            temp_env::with_var_unset(SERVICES_TEMP_CONFIG_PATH_VAR, || env.build(&flox).unwrap());
+        let store_path = env.build(&flox).unwrap();
         let config_path = store_path.join(SERVICE_CONFIG_FILENAME);
         assert!(config_path.exists());
     }

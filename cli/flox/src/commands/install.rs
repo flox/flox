@@ -14,7 +14,12 @@ use flox_rust_sdk::models::lockfile::{
     ResolutionFailure,
     ResolutionFailures,
 };
-use flox_rust_sdk::models::manifest::PackageToInstall;
+use flox_rust_sdk::models::manifest::{
+    catalog_packages_to_install,
+    is_local_flake_ref,
+    CatalogPackage,
+    PackageToInstall,
+};
 use flox_rust_sdk::models::pkgdb::error_codes;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -65,7 +70,7 @@ pub struct PkgWithIdOption {
     ///
     /// Append `@<version>` to specify a version requirement
     #[bpaf(positional("package"))]
-    pub path: String,
+    pub pkg: String,
 }
 
 impl Install {
@@ -118,13 +123,28 @@ impl Install {
             .iter()
             .map(|p| PackageToInstall::from_str(p))
             .collect::<Result<Vec<_>, _>>()?;
-        packages_to_install.extend(self.id.iter().map(|p| PackageToInstall {
-            id: p.id.clone(),
-            pkg_path: p.path.clone(),
-            version: None,
-        }));
+        let pkgs_with_ids = self
+            .id
+            .iter()
+            .map(|p| {
+                let mut pkg = PackageToInstall::from_str(&p.pkg);
+                if let Ok(ref mut pkg) = pkg {
+                    pkg.set_id(&p.id);
+                }
+                pkg
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        packages_to_install.extend(pkgs_with_ids.into_iter());
         if packages_to_install.is_empty() {
             bail!("Must specify at least one package");
+        }
+
+        for pkg in packages_to_install.iter() {
+            if let PackageToInstall::Flake(pkg) = pkg {
+                if is_local_flake_ref(pkg.url.as_str()) {
+                    bail!("Cannot install local flake references");
+                }
+            }
         }
 
         // We don't know the contents of the packages field when the span is created
@@ -152,9 +172,10 @@ impl Install {
             // TODO: move this behind the `installation.new_manifest.is_some()`
             // check below so we don't warn when we don't even install anything
             LockedManifest::Catalog(locked_manifest) => {
-                for warning in
-                    Self::generate_warnings(&locked_manifest.packages, &packages_to_install)
-                {
+                for warning in Self::generate_warnings(
+                    &locked_manifest.packages,
+                    &catalog_packages_to_install(&packages_to_install),
+                ) {
                     message::warning(warning);
                 }
             },
@@ -165,7 +186,7 @@ impl Install {
                     .iter()
                     .filter(|w| {
                         // Filter out warnings that are not related to the packages we just installed
-                        packages_to_install.iter().any(|p| w.package == p.id)
+                        packages_to_install.iter().any(|p| w.package == p.id())
                     })
                     .for_each(|w| message::warning(&w.message));
             },
@@ -174,12 +195,12 @@ impl Install {
         if installation.new_manifest.is_some() {
             // Print which new packages were installed
             for pkg in packages_to_install.iter() {
-                if let Some(false) = installation.already_installed.get(&pkg.id) {
+                if let Some(false) = installation.already_installed.get(pkg.id()) {
                     message::package_installed(pkg, &description);
                 } else {
                     message::warning(format!(
                         "Package with id '{}' already installed to environment {description}",
-                        pkg.id
+                        pkg.id()
                     ));
                 }
             }
@@ -187,7 +208,7 @@ impl Install {
             for pkg in packages_to_install.iter() {
                 message::warning(format!(
                     "Package with id '{}' already installed to environment {description}",
-                    pkg.id
+                    pkg.id()
                 ));
             }
         }
@@ -195,8 +216,13 @@ impl Install {
     }
 
     fn format_packages_for_tracing(packages: &[PackageToInstall]) -> String {
-        // TODO: settle on a real format for the contents of this string (JSON, etc)
-        packages.iter().map(|p| p.pkg_path.clone()).join(",")
+        packages
+            .iter()
+            .map(|p| match p {
+                PackageToInstall::Catalog(pkg) => pkg.pkg_path.clone(),
+                PackageToInstall::Flake(pkg) => pkg.url.to_string(),
+            })
+            .join(",")
     }
 
     fn handle_error(
@@ -209,7 +235,7 @@ impl Install {
 
         subcommand_metric!(
             "install",
-            "failed_packages" = packages.iter().map(|p| p.pkg_path.clone()).join(",")
+            "failed_packages" = Install::format_packages_for_tracing(packages)
         );
 
         match err {
@@ -219,6 +245,13 @@ impl Install {
                     flox_rust_sdk::models::pkgdb::CallPkgDbError::PkgDbError(pkgdberr),
                 ),
             )) if pkgdberr.exit_code == error_codes::RESOLUTION_FAILURE => 'error: {
+                let packages = packages
+                    .iter()
+                    .filter_map(|p| match p {
+                        PackageToInstall::Catalog(pkg) => Some(pkg),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
                 debug!("attempting to make install suggestion");
                 let paths = packages.iter().map(|p| p.pkg_path.clone()).join(", ");
 
@@ -284,7 +317,7 @@ impl Install {
     /// Generate warnings to print to the user about unfree and broken packages.
     fn generate_warnings(
         locked_packages: &[LockedPackage],
-        packages_to_install: &[PackageToInstall],
+        packages_to_install: &[CatalogPackage],
     ) -> Vec<String> {
         let mut warnings = vec![];
 
@@ -327,7 +360,7 @@ impl Install {
 mod tests {
     use flox_rust_sdk::models::lockfile::test_helpers::fake_catalog_package_lock;
     use flox_rust_sdk::models::lockfile::LockedPackageCatalog;
-    use flox_rust_sdk::models::manifest::PackageToInstall;
+    use flox_rust_sdk::models::manifest::CatalogPackage;
     use flox_rust_sdk::providers::catalog::SystemEnum;
 
     use crate::commands::install::Install;
@@ -349,7 +382,7 @@ mod tests {
         let (foo_iid, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.unfree = Some(true);
         let locked_packages = vec![foo_locked.into()];
-        let packages_to_install = vec![PackageToInstall {
+        let packages_to_install = vec![CatalogPackage {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
             version: None,
@@ -377,7 +410,7 @@ mod tests {
         };
 
         let locked_packages = vec![foo_locked.into(), foo_locked_second_system.into()];
-        let packages_to_install = vec![PackageToInstall {
+        let packages_to_install = vec![CatalogPackage {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
             version: None,
@@ -397,7 +430,7 @@ mod tests {
         let (foo_iid, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.broken = Some(true);
         let locked_packages = vec![foo_locked.into()];
-        let packages_to_install = vec![PackageToInstall {
+        let packages_to_install = vec![CatalogPackage {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
             version: None,
@@ -425,7 +458,7 @@ mod tests {
         };
 
         let locked_packages = vec![foo_locked.into(), foo_locked_second_system.into()];
-        let packages_to_install = vec![PackageToInstall {
+        let packages_to_install = vec![CatalogPackage {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
             version: None,

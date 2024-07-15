@@ -10,6 +10,7 @@ use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
+use url::Url;
 
 use super::environment::path_environment::InitCustomization;
 use crate::data::{System, Version};
@@ -854,6 +855,10 @@ pub enum ManifestError {
     PkgDbCall(#[source] std::io::Error),
     #[error("no package or group named '{0}' in the manifest")]
     PkgOrGroupNotFound(String),
+    #[error("invalid flake ref: {0}")]
+    InvalidFlakeRef(String),
+    #[error("only remote flake refs are supported: {0}")]
+    LocalFlakeRef(String),
 }
 
 /// A subset of the manifest used to check what type of edits users make. We
@@ -902,20 +907,96 @@ pub struct PackageInsertion {
     pub already_installed: HashMap<String, bool>,
 }
 
-/// A package to install.
+/// Any kind of package that can be installed via `flox install`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PackageToInstall {
+    Catalog(CatalogPackage),
+    Flake(FlakePackage),
+}
+
+impl PackageToInstall {
+    pub fn id(&self) -> &str {
+        match self {
+            PackageToInstall::Catalog(pkg) => &pkg.id,
+            PackageToInstall::Flake(pkg) => &pkg.id,
+        }
+    }
+
+    pub fn set_id(&mut self, id: impl AsRef<str>) {
+        let id = String::from(id.as_ref());
+        match self {
+            PackageToInstall::Catalog(pkg) => pkg.id = id,
+            PackageToInstall::Flake(pkg) => pkg.id = id,
+        }
+    }
+}
+
+impl FromStr for PackageToInstall {
+    type Err = ManifestError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match Url::parse(s) {
+            Ok(url) => {
+                let id = infer_flake_install_id(&url)?;
+                Ok(PackageToInstall::Flake(FlakePackage { id, url }))
+            },
+            _ => Ok(PackageToInstall::Catalog(s.parse()?)),
+        }
+    }
+}
+
+/// Tries to infer an install id from the flake ref URL, or falls back to "flake".
+fn infer_flake_install_id(url: &Url) -> Result<String, ManifestError> {
+    if url.scheme() == "github" {
+        url.path()
+            .split('/')
+            .nth(1)
+            .map(|s| s.to_string())
+            .ok_or(ManifestError::InvalidFlakeRef(url.to_string()))
+    } else if url.scheme() == "https" && url.domain().is_some_and(|host| host == "github.com") {
+        let mut segments = url
+            .path_segments()
+            .ok_or(ManifestError::InvalidFlakeRef(url.to_string()))?;
+        segments
+            .nth(1)
+            .map(|s| s.to_string())
+            .ok_or(ManifestError::InvalidFlakeRef(url.to_string()))
+    } else {
+        Ok("flake".to_string())
+    }
+}
+
+/// Extracts only the catalog packages from a list of packages to install.
+pub fn catalog_packages_to_install(packages: &[PackageToInstall]) -> Vec<CatalogPackage> {
+    packages
+        .iter()
+        .filter_map(|pkg| match pkg {
+            PackageToInstall::Catalog(pkg) => Some((*pkg).clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A package to install from the catalog.
 ///
 /// Users may specify a different install ID than the package name,
 /// especially when the package is nested. This struct is the common
 /// denominator for packages with specified IDs and packages with
 /// default IDs.
-#[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct PackageToInstall {
+#[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct CatalogPackage {
     pub id: String,
     pub pkg_path: String,
     pub version: Option<String>,
 }
 
-impl FromStr for PackageToInstall {
+#[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct FlakePackage {
+    pub id: String,
+    pub url: Url,
+}
+
+impl FromStr for CatalogPackage {
     type Err = ManifestError;
 
     /// Parse a shorthand descriptor into `install_id`, `attribute_path` and `version`.
@@ -999,8 +1080,8 @@ impl FromStr for PackageToInstall {
     }
 }
 
-impl From<&PackageToInstall> for Vec<(&'static str, String)> {
-    fn from(val: &PackageToInstall) -> Self {
+impl From<&CatalogPackage> for Vec<(&'static str, String)> {
+    fn from(val: &CatalogPackage) -> Self {
         let mut vec = vec![("pkg-path", val.pkg_path.clone())];
         if let Some(version) = &val.version {
             vec.push(("version", version.clone()));
@@ -1009,10 +1090,16 @@ impl From<&PackageToInstall> for Vec<(&'static str, String)> {
     }
 }
 
-impl From<&PackageToInstall> for InlineTable {
-    fn from(val: &PackageToInstall) -> Self {
+impl From<&CatalogPackage> for InlineTable {
+    fn from(val: &CatalogPackage) -> Self {
         InlineTable::from_iter(Vec::from(val))
     }
+}
+
+/// Reports whether a flake reference is a path on the local system.
+pub fn is_local_flake_ref(flakeref: impl AsRef<str>) -> bool {
+    let flakeref = flakeref.as_ref();
+    flakeref.starts_with('.') || flakeref.starts_with('/') || flakeref.starts_with("path:")
 }
 
 /// Insert package names into the `[install]` table of a manifest.
@@ -1045,25 +1132,40 @@ pub fn insert_packages(
     };
 
     for pkg in pkgs {
-        if !install_table.contains_key(&pkg.id) {
+        if !install_table.contains_key(pkg.id()) {
             let mut descriptor_table = InlineTable::new();
-            descriptor_table.insert(
-                "pkg-path",
-                Value::String(Formatted::new(pkg.pkg_path.clone())),
-            );
-            if let Some(ref version) = pkg.version {
-                descriptor_table.insert("version", Value::String(Formatted::new(version.clone())));
+            match pkg {
+                PackageToInstall::Catalog(pkg) => {
+                    descriptor_table.insert(
+                        "pkg-path",
+                        Value::String(Formatted::new(pkg.pkg_path.clone())),
+                    );
+                    if let Some(ref version) = pkg.version {
+                        descriptor_table
+                            .insert("version", Value::String(Formatted::new(version.clone())));
+                    }
+                    debug!(
+                        "package newly installed: id={}, pkg-path={}",
+                        pkg.id, pkg.pkg_path
+                    );
+                },
+                PackageToInstall::Flake(pkg) => {
+                    descriptor_table
+                        .insert("flake", Value::String(Formatted::new(pkg.url.to_string())));
+                    debug!(
+                        "package newly installed: id={}, flakeref={}",
+                        pkg.id,
+                        pkg.url.to_string()
+                    );
+                },
             }
+
             descriptor_table.set_dotted(true);
-            install_table.insert(&pkg.id, Item::Value(Value::InlineTable(descriptor_table)));
-            already_installed.insert(pkg.id.clone(), false);
-            debug!(
-                "package newly installed: id={}, pkg-path={}",
-                pkg.id, pkg.pkg_path
-            );
+            install_table.insert(pkg.id(), Item::Value(Value::InlineTable(descriptor_table)));
+            already_installed.insert(pkg.id().to_string(), false);
         } else {
-            already_installed.insert(pkg.id.clone(), true);
-            debug!("package already installed: id={}", pkg.id);
+            already_installed.insert(pkg.id().to_string(), true);
+            debug!("package already installed: id={}", pkg.id());
         }
     }
 
@@ -1402,7 +1504,7 @@ pub(super) mod test {
             profile_fish: None,
             profile_tcsh: None,
             profile_zsh: None,
-            packages: Some(vec![PackageToInstall {
+            packages: Some(vec![CatalogPackage {
                 id: "python3".to_string(),
                 pkg_path: "python3".to_string(),
                 version: Some("3.11.6".to_string()),
@@ -1640,23 +1742,27 @@ pub(super) mod test {
 
     #[test]
     fn insert_adds_new_package() {
-        let test_packages = vec![PackageToInstall::from_str("python").unwrap()];
+        let test_packages = vec![PackageToInstall::Catalog(
+            CatalogPackage::from_str("python").unwrap(),
+        )];
         let pre_addition_toml = DUMMY_MANIFEST.parse::<DocumentMut>().unwrap();
-        assert!(!contains_package(&pre_addition_toml, &test_packages[0].id).unwrap());
+        assert!(!contains_package(&pre_addition_toml, test_packages[0].id()).unwrap());
         let insertion =
             insert_packages(DUMMY_MANIFEST, &test_packages).expect("couldn't add package");
         assert!(
             insertion.new_toml.is_some(),
             "manifest was changed by install"
         );
-        assert!(contains_package(&insertion.new_toml.unwrap(), &test_packages[0].id).unwrap());
+        assert!(contains_package(&insertion.new_toml.unwrap(), test_packages[0].id()).unwrap());
     }
 
     #[test]
     fn no_change_adding_existing_package() {
-        let test_packages = vec![PackageToInstall::from_str("hello").unwrap()];
+        let test_packages = vec![PackageToInstall::Catalog(
+            CatalogPackage::from_str("hello").unwrap(),
+        )];
         let pre_addition_toml = DUMMY_MANIFEST.parse::<DocumentMut>().unwrap();
-        assert!(contains_package(&pre_addition_toml, &test_packages[0].id).unwrap());
+        assert!(contains_package(&pre_addition_toml, test_packages[0].id()).unwrap());
         let insertion = insert_packages(DUMMY_MANIFEST, &test_packages).unwrap();
         assert!(
             insertion.new_toml.is_none(),
@@ -1670,10 +1776,12 @@ pub(super) mod test {
 
     #[test]
     fn insert_adds_install_table_when_missing() {
-        let test_packages = vec![PackageToInstall::from_str("foo").unwrap()];
+        let test_packages = vec![PackageToInstall::Catalog(
+            CatalogPackage::from_str("foo").unwrap(),
+        )];
         let insertion = insert_packages("", &test_packages).unwrap();
         assert!(
-            contains_package(&insertion.new_toml.clone().unwrap(), &test_packages[0].id).unwrap()
+            contains_package(&insertion.new_toml.clone().unwrap(), test_packages[0].id()).unwrap()
         );
         assert!(
             insertion.new_toml.is_some(),
@@ -1687,7 +1795,9 @@ pub(super) mod test {
 
     #[test]
     fn insert_error_when_manifest_malformed() {
-        let test_packages = vec![PackageToInstall::from_str("foo").unwrap()];
+        let test_packages = vec![PackageToInstall::Catalog(
+            CatalogPackage::from_str("foo").unwrap(),
+        )];
         let attempted_insertion = insert_packages(BAD_MANIFEST, &test_packages);
         assert!(matches!(
             attempted_insertion,
@@ -1730,9 +1840,11 @@ pub(super) mod test {
     #[test]
     fn inserts_package_needing_quotes() {
         let attrs = r#"foo."bar.baz".qux"#;
-        let test_packages = vec![PackageToInstall::from_str(attrs).unwrap()];
+        let test_packages = vec![PackageToInstall::Catalog(
+            CatalogPackage::from_str(attrs).unwrap(),
+        )];
         let pre_addition_toml = DUMMY_MANIFEST.parse::<DocumentMut>().unwrap();
-        assert!(!contains_package(&pre_addition_toml, &test_packages[0].id).unwrap());
+        assert!(!contains_package(&pre_addition_toml, test_packages[0].id()).unwrap());
         let insertion =
             insert_packages(DUMMY_MANIFEST, &test_packages).expect("couldn't add package");
         assert!(
@@ -1740,7 +1852,7 @@ pub(super) mod test {
             "manifest was changed by install"
         );
         let new_toml = insertion.new_toml.unwrap();
-        assert!(contains_package(&new_toml, &test_packages[0].id).unwrap());
+        assert!(contains_package(&new_toml, test_packages[0].id()).unwrap());
         let inserted_path = new_toml
             .get("install")
             .and_then(|t| t.get("qux"))
@@ -1752,35 +1864,35 @@ pub(super) mod test {
 
     #[test]
     fn parses_string_descriptor() {
-        let parsed: PackageToInstall = "hello".parse().unwrap();
-        assert_eq!(parsed, PackageToInstall {
+        let parsed: CatalogPackage = "hello".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
             id: "hello".to_string(),
             pkg_path: "hello".to_string(),
             version: None,
         });
-        let parsed: PackageToInstall = "foo.bar@=1.2.3".parse().unwrap();
-        assert_eq!(parsed, PackageToInstall {
+        let parsed: CatalogPackage = "foo.bar@=1.2.3".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
             id: "bar".to_string(),
             pkg_path: "foo.bar".to_string(),
             version: Some("=1.2.3".to_string()),
         });
-        let parsed: PackageToInstall = "foo.bar@23.11".parse().unwrap();
-        assert_eq!(parsed, PackageToInstall {
+        let parsed: CatalogPackage = "foo.bar@23.11".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
             id: "bar".to_string(),
             pkg_path: "foo.bar".to_string(),
             version: Some("23.11".to_string()),
         });
-        let parsed: PackageToInstall = "rubyPackages.\"http_parser.rb\"".parse().unwrap();
-        assert_eq!(parsed, PackageToInstall {
+        let parsed: CatalogPackage = "rubyPackages.\"http_parser.rb\"".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
             id: "http_parser.rb".to_string(),
             pkg_path: "rubyPackages.\"http_parser.rb\"".to_string(),
             version: None,
         });
 
-        PackageToInstall::from_str("foo.\"bar.baz.qux@1.2.3")
+        CatalogPackage::from_str("foo.\"bar.baz.qux@1.2.3")
             .expect_err("missing closing quote should cause failure");
-        PackageToInstall::from_str("@1.2.3").expect_err("missing attrpath should cause failure");
-        PackageToInstall::from_str("foo@").expect_err("missing version should cause failure");
+        CatalogPackage::from_str("@1.2.3").expect_err("missing attrpath should cause failure");
+        CatalogPackage::from_str("foo@").expect_err("missing version should cause failure");
     }
 
     proptest! {
@@ -1790,5 +1902,45 @@ pub(super) mod test {
             let parsed = toml_edit::de::from_str::<TypedManifestCatalog>(&toml).unwrap();
             prop_assert_eq!(manifest, parsed);
         }
+    }
+
+    #[test]
+    fn infers_id_from_github_flake_ref() {
+        let url = Url::parse("github:foo/bar").unwrap();
+        eprintln!("{:?}", url);
+        let inferred = infer_flake_install_id(&url).unwrap();
+        assert_eq!(inferred.as_str(), "bar");
+    }
+
+    #[test]
+    fn infers_id_from_https_flake_ref() {
+        let url = Url::parse("https://github.com/foo/bar/archive/main.tar.gz").unwrap();
+        let inferred = infer_flake_install_id(&url).unwrap();
+        assert_eq!(inferred.as_str(), "bar");
+    }
+
+    #[test]
+    fn infers_fallback_id_for_https_flake_ref() {
+        let url = Url::parse("https://example.com/foo/bar/baz").unwrap();
+        let inferred = infer_flake_install_id(&url).unwrap();
+        assert_eq!(inferred.as_str(), "flake");
+    }
+
+    #[test]
+    fn inferring_id_fails_with_malformed_flakeref() {
+        let url = Url::parse("github:flox").unwrap();
+        let inferred = infer_flake_install_id(&url);
+        assert!(matches!(
+            inferred,
+            Err(ManifestError::InvalidFlakeRef { .. })
+        ));
+    }
+
+    #[test]
+    fn detects_local_flake_ref() {
+        assert!(is_local_flake_ref("./foo/bar"));
+        assert!(is_local_flake_ref("/some/absolute/path"));
+        assert!(is_local_flake_ref("path:foo/bar"));
+        assert!(!is_local_flake_ref("github:foo/bar"));
     }
 }
