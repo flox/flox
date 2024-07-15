@@ -1101,12 +1101,6 @@ impl From<&CatalogPackage> for InlineTable {
     }
 }
 
-/// Reports whether a flake reference is a path on the local system.
-pub fn is_local_flake_ref(flakeref: impl AsRef<str>) -> bool {
-    let flakeref = flakeref.as_ref();
-    flakeref.starts_with('.') || flakeref.starts_with('/') || flakeref.starts_with("path:")
-}
-
 /// Insert package names into the `[install]` table of a manifest.
 ///
 /// Note that the packages may be provided as dot-separated attribute paths
@@ -1954,13 +1948,5 @@ pub(super) mod test {
         let url = Url::parse("github:flox/flox#^*").unwrap();
         let inferred = infer_flake_install_id(&url);
         assert_eq!(inferred.unwrap(), "flox");
-    }
-
-    #[test]
-    fn detects_local_flake_ref() {
-        assert!(is_local_flake_ref("./foo/bar"));
-        assert!(is_local_flake_ref("/some/absolute/path"));
-        assert!(is_local_flake_ref("path:foo/bar"));
-        assert!(!is_local_flake_ref("github:foo/bar"));
     }
 }
