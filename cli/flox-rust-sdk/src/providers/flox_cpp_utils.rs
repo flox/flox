@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt::Debug;
-use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
@@ -90,30 +89,14 @@ pub enum InstallableLockerImpl {
 
 impl Default for InstallableLockerImpl {
     fn default() -> Self {
-        InstallableLockerImpl::Pkgdb(Pkgdb::default())
+        InstallableLockerImpl::Pkgdb(Pkgdb)
     }
 }
 /// A wrapper for (eventually) various `pkgdb` commands
 /// Currently only implements [InstallableLocker] through
 /// `pkgdb lock-flake-installable`.
-#[derive(Debug)]
-pub struct Pkgdb {
-    pkgdb_path: PathBuf,
-}
-
-impl Pkgdb {
-    fn new() -> Self {
-        Pkgdb {
-            pkgdb_path: PathBuf::from(&*PKGDB_BIN),
-        }
-    }
-}
-
-impl Default for Pkgdb {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Pkgdb;
 
 impl InstallableLocker for Pkgdb {
     fn lock_flake_installable(
@@ -122,7 +105,7 @@ impl InstallableLocker for Pkgdb {
         installable: impl AsRef<str>,
     ) -> Result<LockedInstallable, FlakeInstallableError> {
         let installable = installable.as_ref();
-        let mut pkgdb_cmd = Command::new(&self.pkgdb_path);
+        let mut pkgdb_cmd = Command::new(&*PKGDB_BIN);
 
         pkgdb_cmd
             .arg("lock-flake-installable")
@@ -226,13 +209,12 @@ mod tests {
     /// into a [LockedFlakeInstallble] struct.
     #[test]
     fn test_output_format() {
-        let pkgdb = Pkgdb::new();
         // `$system` is set by the nix devshell
         let system = env!("system");
         let installable = format!("{flake}#hello", flake = local_test_flake());
 
         // make sure the deserialization is not accidentally optimized away
-        let _locked = pkgdb
+        let _locked = Pkgdb
             .lock_flake_installable(system, installable)
             .expect("locking local test flake should succeed");
     }
@@ -252,11 +234,10 @@ mod tests {
 
     #[test]
     fn test_catches_absent_flake() {
-        let pkgdb = Pkgdb::new();
         let system = env!("system");
         let installable = "github:flox/trust-this-wont-be-added#hello";
 
-        let result = pkgdb.lock_flake_installable(system, installable);
+        let result = Pkgdb.lock_flake_installable(system, installable);
         assert!(
             matches!(result, Err(FlakeInstallableError::LockInstallable(_))),
             "{result:#?}"
@@ -265,11 +246,10 @@ mod tests {
 
     #[test]
     fn test_catches_absent_flake_output() {
-        let pkgdb = Pkgdb::new();
         let system = env!("system");
         let installable = format!("{flake}#nonexistent", flake = local_test_flake());
 
-        let result = pkgdb.lock_flake_installable(system, installable);
+        let result = Pkgdb.lock_flake_installable(system, installable);
 
         assert!(
             matches!(result, Err(FlakeInstallableError::LockInstallable(_))),
