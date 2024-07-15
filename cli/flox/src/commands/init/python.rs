@@ -6,7 +6,7 @@ use std::str::FromStr;
 use anyhow::{anyhow, Context, Error, Result};
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::path_environment::InitCustomization;
-use flox_rust_sdk::models::manifest::PackageToInstall;
+use flox_rust_sdk::models::manifest::CatalogPackage;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::debug;
@@ -456,12 +456,12 @@ impl Provider for PoetryPyProject {
                 .to_string(),
             ),
             packages: Some(vec![
-                PackageToInstall {
+                CatalogPackage {
                     id: "python3".to_string(),
                     pkg_path: "python3".to_string(),
                     version: python_version,
                 },
-                PackageToInstall {
+                CatalogPackage {
                     id: "poetry".to_string(),
                     pkg_path: "poetry".to_string(),
                     version: None,
@@ -656,7 +656,7 @@ impl Provider for PyProject {
                 source "$PYTHON_DIR/bin/activate""#}
                 .to_string(),
             ),
-            packages: Some(vec![PackageToInstall {
+            packages: Some(vec![CatalogPackage {
                 id: "python3".to_string(),
                 pkg_path: "python3".to_string(),
                 version: python_version,
@@ -807,7 +807,7 @@ impl Provider for Requirements {
                 source "$PYTHON_DIR/bin/activate""#}
                 .to_string(),
             ),
-            packages: Some(vec![PackageToInstall {
+            packages: Some(vec![CatalogPackage {
                 id: "python3".to_string(),
                 pkg_path: "python3".to_string(),
                 version: None,
