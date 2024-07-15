@@ -1631,7 +1631,7 @@ mod tests {
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
         let lockfile = lockfile::LockedManifestCatalog {
             version: Version,
-            packages: vec![foo_locked],
+            packages: vec![foo_locked.into()],
             manifest: manifest.clone(),
         };
 

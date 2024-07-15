@@ -1615,7 +1615,7 @@ mod test {
     use crate::models::environment::{DOT_FLOX, MANIFEST_FILENAME};
     use crate::models::floxmeta::floxmeta_dir;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
-    use crate::models::lockfile::{LockedManifestCatalog, LockedPackage};
+    use crate::models::lockfile::LockedManifestCatalog;
     use crate::models::manifest::{ManifestPackageDescriptorCatalog, TypedManifestCatalog};
     use crate::providers::catalog::MockClient;
     use crate::providers::git::tests::commit_file;
@@ -2450,7 +2450,7 @@ mod test {
             &toml_edit::ser::to_string_pretty(&manifest_b).unwrap(),
         );
 
-        let (iid, descriptor, _) = fake_catalog_package_lock::<LockedPackage>("package", None);
+        let (iid, descriptor, _) = fake_catalog_package_lock("package", None);
         manifest_a.install.insert(iid, descriptor);
 
         fs::write(

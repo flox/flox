@@ -346,8 +346,7 @@ mod tests {
     /// [Install::generate_warnings] should warn for an unfree package
     #[test]
     fn generate_warnings_unfree() {
-        let (foo_iid, _, mut foo_locked) =
-            fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
+        let (foo_iid, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.unfree = Some(true);
         let locked_packages = vec![foo_locked.into()];
         let packages_to_install = vec![PackageToInstall {
@@ -368,8 +367,7 @@ mod tests {
     /// even if it's installed on multiple systems
     #[test]
     fn generate_warnings_unfree_multi_system() {
-        let (foo_iid, _, mut foo_locked) =
-            fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
+        let (foo_iid, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.unfree = Some(true);
 
         // TODO: fake_package shouldn't hardcode system?
@@ -396,8 +394,7 @@ mod tests {
     /// [Install::generate_warnings] should warn for a broken package
     #[test]
     fn generate_warnings_broken() {
-        let (foo_iid, _, mut foo_locked) =
-            fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
+        let (foo_iid, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.broken = Some(true);
         let locked_packages = vec![foo_locked.into()];
         let packages_to_install = vec![PackageToInstall {
@@ -418,8 +415,7 @@ mod tests {
     /// even if it's installed on multiple systems
     #[test]
     fn generate_warnings_broken_multi_system() {
-        let (foo_iid, _, mut foo_locked) =
-            fake_catalog_package_lock::<LockedPackageCatalog>("foo", None);
+        let (foo_iid, _, mut foo_locked) = fake_catalog_package_lock("foo", None);
         foo_locked.broken = Some(true);
 
         // TODO: fake_package shouldn't hardcode system?
