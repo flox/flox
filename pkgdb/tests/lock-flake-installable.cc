@@ -166,7 +166,7 @@ test_systemAttributes( const nix::ref<nix::EvalState> & state )
     localTestFlake + "#packages.aarch64-darwin.hello" );
 
   EXPECT_EQ( systemSpecifiedInAttrpath.packageSystem, "aarch64-darwin" );
-  EXPECT_EQ( systemSpecifiedInAttrpath.lockedSystem, "aarch64-linux" );
+  EXPECT_EQ( systemSpecifiedInAttrpath.system, "aarch64-linux" );
 
   return true;
 }

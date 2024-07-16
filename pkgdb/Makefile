@@ -195,7 +195,8 @@ FULLCLEANDIRS  =
 FULLCLEANFILES =
 
 # Where to find test suite input data files.
-GENERATED_DATA = $(PKGDB_ROOT)/tests/data
+TEST_DATA_DIR  = $(PKGDB_ROOT)/tests/data
+GENERATED_DATA = $(REPO_ROOT)/test_data/generated
 
 
 # ---------------------------------------------------------------------------- #
@@ -470,7 +471,7 @@ ccls: ../.ccls
 	  fi;                                                                 \
 	  echo $(CXXFLAGS) $(nljson_CFLAGS) $(nix_CFLAGS);                    \
 	  echo $(argparse_CFLAGS) $(sqlite3pp_CFLAGS);                        \
-	  echo '-DGENERATED_DATA="$(GENERATED_DATA)"';                          \
+	  echo '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"';                          \
 	}|$(TR) ' ' '\n'|$(SED) 's/-std=\(.*\)/%cpp -std=\1|%h -std=\1/'      \
 	 |$(TR) '|' '\n' >> "$@";
 
@@ -627,7 +628,7 @@ $(BINS): %: $(SRCS:.cc=.o)
 
 # ---------------------------------------------------------------------------- #
 
-$(test_SRCS:.cc=.o): CXXFLAGS += '-DGENERATED_DATA="$(GENERATED_DATA)"'
+$(test_SRCS:.cc=.o): CXXFLAGS += '-DTEST_DATA_DIR="$(TEST_DATA_DIR)"'
 $(TESTS) $(TEST_UTILS): tests/%: $(filter-out src/main.o,$(SRCS:.cc=.o))
 $(TESTS) $(TEST_UTILS): tests/%: tests/%.o tests/test.hh
 	$(CXX) $(filter %.o,$^) $(LDFLAGS) -o $@;

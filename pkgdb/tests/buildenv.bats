@@ -67,13 +67,40 @@ setup_file() {
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=single,binaries
-@test "Built environment contains binaries" {
+@test "Built environment contains binaries for v0 lock" {
   run "$PKGDB_BIN" buildenv \
     "$LOCKFILES/single-package/manifest.lock"
   assert_success
   store_path=$(echo "$output" | jq -er '.store_path')
   assert "$TEST" -x "${store_path}/bin/vim"
 }
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=single,binaries
+@test "Built environment contains binaries for v1 catalog package" {
+  run --separate-stderr "$PKGDB_BIN" buildenv \
+    "$GENERATED_DATA/envs/hello/manifest.lock"
+  assert_success
+  store_path=$(echo "$output" | jq -er '.store_path')
+  assert "$TEST" -x "${store_path}/bin/hello"
+}
+
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=single,binaries
+@test "Built environment contains binaries for v1 flake package" {
+  run --separate-stderr "$PKGDB_BIN" buildenv \
+    "${TESTS_DIR?}"/data/buildenv/manual-lockfiles/flake/manifest.lock
+  assert_success
+  store_path=$(echo "$output" | jq -er '.store_path')
+  assert "$TEST" -x "${store_path}/bin/hello"
+}
+
+
+# ---------------------------------------------------------------------------- #
 
 # bats test_tags=single,activate-files
 @test "Built environment contains activate files" {

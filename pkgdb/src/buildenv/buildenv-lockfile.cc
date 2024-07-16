@@ -10,6 +10,8 @@
 #include "flox/buildenv/buildenv-lockfile.hh"
 #include "flox/core/util.hh"
 #include "flox/fetchers/wrapped-nixpkgs-input.hh"
+#include "flox/lock-flake-installable.hh"
+#include "flox/resolver/descriptor.hh"
 #include "flox/resolver/lockfile.hh"
 
 /* -------------------------------------------------------------------------- */
@@ -125,35 +127,49 @@ nixpkgsHttpsToGithubInput( std::string locked_url )
 /* -------------------------------------------------------------------------- */
 
 static void
-buildenvPackageFromCatalogDescriptor( const nlohmann::json &  jfrom,
-                                      std::string &&          installId,
-                                      std::string &&          system,
-                                      BuildenvLockedPackage & pkg )
+buildenvPackageFromV1Descriptor( const nlohmann::json &  jfrom,
+                                 std::string &&          installId,
+                                 std::string &&          system,
+                                 BuildenvLockedPackage & pkg )
 {
   pkg.installId = installId;
   pkg.system    = system;
 
-  std::string attrPath = jfrom["attr_path"];
+  // Catalog packages don't come from a flake context so only have attr-path.
+  // Flake packages will always have locked-flake-attr-path.
+  // For now, use this to differentiate between the two.
+  if ( jfrom.contains( "locked-flake-attr-path" ) )
+    {
+      LockedInstallable lockedInstallable = LockedInstallable();
+      jfrom.get_to( lockedInstallable );
+      pkg.attrPath  = splitAttrPath( lockedInstallable.lockedFlakeAttrPath );
+      pkg.priority  = resolver::DEFAULT_PRIORITY;
+      pkg.input     = resolver::LockedInputRaw();
+      pkg.input.url = lockedInstallable.lockedUrl;
+      pkg.input.attrs
+        = nix::parseFlakeRef( lockedInstallable.lockedUrl ).toAttrs();
+    }
+  else
+    {
+      // We assume that all v1 catalog descriptors are from nixpkgs,
+      // so we should
+      // 1. Prepend `legacyPackages.system` to attrPath
+      // 2. Wrap with our custom flox-nixpkgs fetcher
+      std::string attrPath = jfrom["attr_path"];
+      pkg.attrPath
+        = splitAttrPath( "legacyPackages." + system + "." + attrPath );
 
-  // This would be more appropriately moved to `evalCacheCursorForInput` where
-  // we are introducing the concept of a flake, but that code won't know where
-  // the attrPath is coming from to make that detemination.
-  pkg.attrPath = splitAttrPath( "legacyPackages." + system + "." + attrPath );
-  pkg.priority = jfrom["priority"];
-  pkg.input    = resolver::LockedInputRaw();
+      pkg.priority = jfrom["priority"];
 
-
-  // These attributes are needed by the current builder, and not included in the
-  // descriptor. This will not always be true, but also may not be required to
-  // build depending on the path taken for future environment builds.
-
-  std::string locked_url = jfrom["locked_url"];
-
-  // Convert first from https to github and then to flox-nixpkgs
-  // TODO: do this in one hop instead of two
-  pkg.input       = nixpkgsHttpsToGithubInput( locked_url );
-  pkg.input.attrs = flox::githubAttrsToFloxNixpkgsAttrs( pkg.input.attrs );
-  pkg.input.url   = nix::FlakeRef::fromAttrs( pkg.input.attrs ).to_string();
+      // Set `input` to a flox-nixpkgs input
+      pkg.input              = resolver::LockedInputRaw();
+      std::string locked_url = jfrom["locked_url"];
+      // Convert first from https to github and then to flox-nixpkgs
+      // TODO: do this in one hop instead of two
+      pkg.input       = nixpkgsHttpsToGithubInput( locked_url );
+      pkg.input.attrs = flox::githubAttrsToFloxNixpkgsAttrs( pkg.input.attrs );
+      pkg.input.url   = nix::FlakeRef::fromAttrs( pkg.input.attrs ).to_string();
+    }
 }
 
 
@@ -245,10 +261,19 @@ BuildenvLockfile::from_v1_content( const nlohmann::json & jfrom )
             }
 
           BuildenvLockedPackage pkg = BuildenvLockedPackage();
-          buildenvPackageFromCatalogDescriptor( package,
-                                                std::move( installId ),
-                                                std::move( system ),
-                                                pkg );
+          try
+            {
+              buildenvPackageFromV1Descriptor( package,
+                                               std::move( installId ),
+                                               std::move( system ),
+                                               pkg );
+            }
+          catch ( nlohmann::json::exception & err )
+            {
+              throw resolver::InvalidLockfileException(
+                "couldn't parse 'packages[" + idx + "]'",
+                extract_json_errmsg( err ) );
+            }
 
 
           this->packages.emplace_back( pkg );

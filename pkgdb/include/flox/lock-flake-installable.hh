@@ -57,16 +57,19 @@ public:
 
 struct LockedInstallable
 {
-  std::string                             lockedUrl;
-  std::optional<std::string>              flakeDescription;
-  std::string                             lockedFlakeAttrPath;
-  std::string                             derivation;
-  std::map<std::string, std::string>      outputs;
-  std::vector<std::string>                outputNames;
-  std::optional<std::set<std::string>>    outputsToInstall;
-  std::optional<std::set<std::string>>    requestedOutputsToInstall;
-  std::string                             packageSystem;
-  std::string                             lockedSystem;
+  std::string                          lockedUrl;
+  std::optional<std::string>           flakeDescription;
+  std::string                          lockedFlakeAttrPath;
+  std::string                          derivation;
+  std::map<std::string, std::string>   outputs;
+  std::vector<std::string>             outputNames;
+  std::optional<std::set<std::string>> outputsToInstall;
+  std::optional<std::set<std::string>> requestedOutputsToInstall;
+  /** The system the package reports in <drv>.system */
+  std::string packageSystem;
+  /** The system passed to pkgdb when locking an installable, which is used to
+   * choose a default attribute path. */
+  std::string                             system;
   std::string                             name;
   std::optional<std::string>              pname;
   std::optional<std::string>              version;
@@ -85,11 +88,11 @@ struct LockedInstallable
            && outputNames == other.outputNames
            && outputsToInstall == other.outputsToInstall
            && requestedOutputsToInstall == other.requestedOutputsToInstall
-           && packageSystem == other.packageSystem
-           && lockedSystem == other.lockedSystem && name == other.name
-           && pname == other.pname && version == other.version
-           && description == other.description && licenses == other.licenses
-           && broken == other.broken && unfree == other.unfree;
+           && packageSystem == other.packageSystem && system == other.system
+           && name == other.name && pname == other.pname
+           && version == other.version && description == other.description
+           && licenses == other.licenses && broken == other.broken
+           && unfree == other.unfree;
   }
 
   [[nodiscard]] bool
@@ -102,6 +105,9 @@ struct LockedInstallable
 
 void
 to_json( nlohmann::json & jto, const LockedInstallable & from );
+
+void
+from_json( const nlohmann::json & jfrom, LockedInstallable & from );
 
 /**
  * @brief Lock a flake installable, and evaluate critical metadata.
