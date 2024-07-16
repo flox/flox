@@ -952,8 +952,8 @@ fn infer_flake_install_id(url: &Url) -> Result<String, ManifestError> {
             .rsplit_once('^')
             .map(|(attr_path, _)| attr_path)
             .unwrap_or(fragment);
-        let install_id = install_id_from_attr_path(attr_path, url.as_ref())?;
-        if !install_id.is_empty() {
+        if !attr_path.is_empty() {
+            let install_id = install_id_from_attr_path(attr_path, url.as_ref())?;
             return Ok(install_id);
         }
     }
