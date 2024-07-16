@@ -1958,6 +1958,7 @@ pub(super) mod test {
     #[derive(Debug, Arbitrary, PartialEq)]
     enum PkgFragment {
         None,
+        Name(AttrPathComponent),
         #[proptest(
             strategy = "proptest::collection::vec(any::<AttrPathComponent>(), 1..=2).prop_map(PkgFragment::AttrPath)"
         )]
@@ -1999,6 +2000,14 @@ pub(super) mod test {
                             (String::new(), "bar")
                         }
                     },
+                    PkgFragment::Name(attr) => {
+                        let id = match attr {
+                            AttrPathComponent::Bare => "floxtastic",
+                            AttrPathComponent::Quoted => "\"floxtastic\"",
+                            AttrPathComponent::QuotedWithDots => "\"flox.tastic\"",
+                        };
+                        (format!("#{}", id), id)
+                    },
                     PkgFragment::AttrPath(attr_path_seeds) => match attr_path_seeds.len() {
                         1 => {
                             let id = match attr_path_seeds[0] {
@@ -2006,7 +2015,7 @@ pub(super) mod test {
                                 AttrPathComponent::Quoted => "\"floxtastic\"",
                                 AttrPathComponent::QuotedWithDots => "\"flox.tastic\"",
                             };
-                            (format!("#{}", id), id)
+                            (format!("#legacyPackges.aarch64-darwin.{}", id), id)
                         },
                         2 => {
                             let namespace = match attr_path_seeds[0] {
@@ -2019,7 +2028,10 @@ pub(super) mod test {
                                 AttrPathComponent::Quoted => "\"floxtastic\"",
                                 AttrPathComponent::QuotedWithDots => "\"flox.tastic\"",
                             };
-                            (format!("#{}.{}", namespace, id), id)
+                            (
+                                format!("#legacyPackages.aarch64-darwin.{}.{}", namespace, id),
+                                id,
+                            )
                         },
                         _ => unreachable!(),
                     },
