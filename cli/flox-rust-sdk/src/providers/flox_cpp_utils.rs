@@ -145,8 +145,7 @@ impl InstallableLockerMock {
         Self::default()
     }
 
-    #[allow(unused)]
-    fn push_lock_result(&self, result: Result<LockedInstallable, FlakeInstallableError>) {
+    pub fn push_lock_result(&self, result: Result<LockedInstallable, FlakeInstallableError>) {
         self.lock_flake_installable
             .lock()
             .unwrap()
