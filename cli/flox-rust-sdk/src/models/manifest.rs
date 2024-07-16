@@ -18,7 +18,7 @@ use crate::data::{System, Version};
 use crate::utils::proptest_btree_map_alphanum_keys;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
-pub(super) const DEFAULT_PRIORITY: usize = 5;
+pub const DEFAULT_PRIORITY: usize = 5;
 
 /// Represents the `[version]` number key in manifest.toml
 pub const MANIFEST_VERSION_KEY: &str = "version";
