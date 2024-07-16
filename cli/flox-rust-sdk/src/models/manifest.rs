@@ -691,7 +691,7 @@ impl ManifestPackageDescriptorCatalog {
 #[serde(rename_all = "kebab-case")]
 #[serde(deny_unknown_fields)]
 pub struct ManifestPackageDescriptorFlake {
-    pub(crate) flake: String,
+    pub flake: String,
 }
 
 #[skip_serializing_none]

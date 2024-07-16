@@ -456,30 +456,52 @@ fn format_multiple_resolution_failures(failures: &[ResolutionFailure]) -> String
 }
 
 impl LockedManifestCatalog {
-    /// Convert a locked manifest to a list of installed packages for a given system
-    /// in a format shared with the pkgdb based locked manifest.
-    pub fn list_packages(&self, system: &System) -> Vec<PackageToList> {
+    /// Convert a locked manifest to a list of installed packages for a given system.
+    ///
+    /// Catalog packages share a format with pkgdb.
+    /// Flake packages have their own format.
+    pub fn list_packages(
+        &self,
+        system: &System,
+    ) -> Result<Vec<PackageToList>, LockedManifestError> {
         self.packages
             .iter()
             .filter(|package| package.system() == system)
             .cloned()
             .map(|package| match package {
-                LockedPackage::Catalog(pkg) => PackageToList::CatalogOrPkgdb(InstalledPackage {
-                    install_id: pkg.install_id,
-                    rel_path: pkg.attr_path,
-                    info: PackageInfo {
-                        description: pkg.description,
-                        broken: pkg.broken,
-                        license: pkg.license,
-                        pname: pkg.pname,
-                        unfree: pkg.unfree,
-                        version: Some(pkg.version),
-                    },
-                    priority: Some(pkg.priority),
-                }),
-                LockedPackage::Flake(pkg) => PackageToList::Flake(pkg),
+                LockedPackage::Catalog(pkg) => {
+                    Ok(PackageToList::CatalogOrPkgdb(InstalledPackage {
+                        install_id: pkg.install_id,
+                        rel_path: pkg.attr_path,
+                        info: PackageInfo {
+                            description: pkg.description,
+                            broken: pkg.broken,
+                            license: pkg.license,
+                            pname: pkg.pname,
+                            unfree: pkg.unfree,
+                            version: Some(pkg.version),
+                        },
+                        priority: Some(pkg.priority),
+                    }))
+                },
+                LockedPackage::Flake(locked_package) => {
+                    let descriptor = self
+                        .manifest
+                        .pkg_descriptor_with_id(&locked_package.install_id)
+                        .ok_or(LockedManifestError::MissingPackageDescriptor(
+                            locked_package.install_id.clone(),
+                        ))?;
+
+                    let ManifestPackageDescriptor::FlakeRef(descriptor) = descriptor else {
+                        Err(LockedManifestError::MissingPackageDescriptor(
+                            locked_package.install_id.clone(),
+                        ))?
+                    };
+
+                    Ok(PackageToList::Flake(descriptor, locked_package))
+                },
             })
-            .collect()
+            .collect::<Result<Vec<_>, LockedManifestError>>()
     }
 
     /// Produce a lockfile for a given manifest.
@@ -1458,18 +1480,12 @@ impl TypedLockedManifestPkgdb {
 #[derive(Debug, Clone, PartialEq)]
 pub enum PackageToList {
     CatalogOrPkgdb(InstalledPackage),
-    Flake(LockedPackageFlake),
+    Flake(ManifestPackageDescriptorFlake, LockedPackageFlake),
 }
 
 impl From<InstalledPackage> for PackageToList {
     fn from(installed: InstalledPackage) -> Self {
         PackageToList::CatalogOrPkgdb(installed)
-    }
-}
-
-impl From<LockedPackageFlake> for PackageToList {
-    fn from(flake: LockedPackageFlake) -> Self {
-        PackageToList::Flake(flake)
     }
 }
 
@@ -1545,6 +1561,11 @@ pub enum LockedManifestError {
     BrokenNotAllowed(String),
     #[error("The package '{0}' has an unfree license.\n\nAllow unfree packages by setting 'options.allow.unfree = true' in manifest.toml")]
     UnfreeNotAllowed(String),
+
+    #[error(
+        "Corrupt manifest; couldn't find flake package descriptor for locked install_id '{0}'"
+    )]
+    MissingPackageDescriptor(String),
 }
 
 /// A warning produced by `pkgdb manifest check`
@@ -1636,6 +1657,12 @@ pub mod test_helpers {
             },
         };
         (install_id, descriptor, locked)
+    }
+
+    pub fn nix_eval_jobs_descriptor() -> ManifestPackageDescriptorFlake {
+        ManifestPackageDescriptorFlake {
+            flake: "github:nix-community/nix-eval-jobs".to_string(),
+        }
     }
 
     /// This JSON was copied from a manifest.lock after installing github:nix-community/nix-eval-jobs
@@ -3307,7 +3334,9 @@ pub(crate) mod tests {
             .expect("expected a catalog descriptor")
             .pkg_path;
 
-        let actual = locked.list_packages(&SystemEnum::Aarch64Darwin.to_string());
+        let actual = locked
+            .list_packages(&SystemEnum::Aarch64Darwin.to_string())
+            .unwrap();
         let expected = [
             InstalledPackage {
                 install_id: foo_iid,
@@ -3353,7 +3382,7 @@ pub(crate) mod tests {
         let mut manifest = manifest::test::empty_catalog_manifest();
         manifest
             .install
-            .insert(foo_iid.clone(), foo_descriptor.into());
+            .insert(foo_iid.clone(), foo_descriptor.clone().into());
         manifest
             .install
             .insert(baz_iid.clone(), baz_descriptor.into());
@@ -3364,10 +3393,11 @@ pub(crate) mod tests {
             packages: vec![foo_locked.clone().into(), baz_locked.clone().into()],
         };
 
-        let actual = locked.list_packages(&SystemEnum::Aarch64Darwin.to_string());
+        let actual = locked
+            .list_packages(&SystemEnum::Aarch64Darwin.to_string())
+            .unwrap();
         let expected = [
-            foo_locked.into(),
-            // baz is not in the list because it is not available for the requested system
+            PackageToList::Flake(foo_descriptor, foo_locked), // baz is not in the list because it is not available for the requested system
         ];
 
         assert_eq!(&actual, &expected);

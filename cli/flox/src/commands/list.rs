@@ -77,7 +77,7 @@ impl List {
             LockedManifest::Pkgdb(pkgdb_lockfile) => {
                 TypedLockedManifestPkgdb::try_from(pkgdb_lockfile)?.list_packages(system)
             },
-            LockedManifest::Catalog(catalog_lockfile) => catalog_lockfile.list_packages(system),
+            LockedManifest::Catalog(catalog_lockfile) => catalog_lockfile.list_packages(system)?,
         };
 
         if packages.is_empty() {
@@ -114,7 +114,7 @@ impl List {
         for p in packages {
             let install_id = match p {
                 PackageToList::CatalogOrPkgdb(p) => &p.install_id,
-                PackageToList::Flake(p) => &p.install_id,
+                PackageToList::Flake(_, p) => &p.install_id,
             };
             writeln!(&mut out, "{install_id}")?;
         }
@@ -138,13 +138,12 @@ impl List {
                         version = p.info.version.as_deref().unwrap_or("N/A")
                     )?;
                 },
-                PackageToList::Flake(p) => {
+                PackageToList::Flake(descriptor, locked_package) => {
                     writeln!(
                         &mut out,
-                        "{id}: {locked_url}#{flake_attr_path}",
-                        id = p.install_id,
-                        locked_url = p.locked_installable.locked_url,
-                        flake_attr_path = p.locked_installable.locked_flake_attr_path
+                        "{id}: {flake}",
+                        id = locked_package.install_id,
+                        flake = descriptor.flake
                     )?;
                 },
             }
@@ -158,7 +157,7 @@ impl List {
             .iter()
             .sorted_by_key(|p| match p {
                 PackageToList::CatalogOrPkgdb(p) => p.priority.unwrap_or(DEFAULT_PRIORITY),
-                PackageToList::Flake(_) => DEFAULT_PRIORITY,
+                PackageToList::Flake(..) => DEFAULT_PRIORITY,
             })
             .enumerate()
         {
@@ -197,7 +196,7 @@ impl List {
                         broken = broken.map(|b|b.to_string()).as_deref().unwrap_or("N/A"),
                     }
                 },
-                PackageToList::Flake(package) => {
+                PackageToList::Flake(_, package) => {
                     let LockedPackageFlake {
                         install_id,
                         locked_installable:
@@ -286,7 +285,10 @@ impl List {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::models::lockfile::test_helpers::LOCKED_NIX_EVAL_JOBS;
+    use flox_rust_sdk::models::lockfile::test_helpers::{
+        nix_eval_jobs_descriptor,
+        LOCKED_NIX_EVAL_JOBS,
+    };
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -342,6 +344,10 @@ mod tests {
         .into()
     }
 
+    fn test_flake_package() -> PackageToList {
+        PackageToList::Flake(nix_eval_jobs_descriptor(), LOCKED_NIX_EVAL_JOBS.clone())
+    }
+
     #[test]
     fn test_name_only_output() {
         let mut out = Vec::new();
@@ -357,10 +363,7 @@ mod tests {
     #[test]
     fn test_name_only_flake_output() {
         let mut out = Vec::new();
-        List::print_name_only(&mut out, &[PackageToList::Flake(
-            LOCKED_NIX_EVAL_JOBS.clone(),
-        )])
-        .unwrap();
+        List::print_name_only(&mut out, &[test_flake_package()]).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs
@@ -382,13 +385,10 @@ mod tests {
     #[test]
     fn test_print_extended_flake_output() {
         let mut out = Vec::new();
-        List::print_extended(&mut out, &[PackageToList::Flake(
-            LOCKED_NIX_EVAL_JOBS.clone(),
-        )])
-        .unwrap();
+        List::print_extended(&mut out, &[test_flake_package()]).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
-            nix-eval-jobs: github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b#packages.aarch64-darwin.default
+            nix-eval-jobs: github:nix-community/nix-eval-jobs
         "});
     }
 
@@ -433,10 +433,7 @@ mod tests {
     #[test]
     fn test_print_detail_flake_output() {
         let mut out = Vec::new();
-        List::print_detail(&mut out, &[PackageToList::Flake(
-            LOCKED_NIX_EVAL_JOBS.clone(),
-        )])
-        .unwrap();
+        List::print_detail(&mut out, &[test_flake_package()]).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs: (nix-eval-jobs)
@@ -455,9 +452,12 @@ mod tests {
     #[test]
     fn test_print_detail_flake_output_pname_missing() {
         let mut out = Vec::new();
-        let mut package = LOCKED_NIX_EVAL_JOBS.clone();
-        package.locked_installable.pname = None;
-        List::print_detail(&mut out, &[PackageToList::Flake(package)]).unwrap();
+        let mut package = test_flake_package();
+        if let PackageToList::Flake(_, ref mut locked_package) = package {
+            locked_package.locked_installable.pname = None;
+        }
+
+        List::print_detail(&mut out, &[package]).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs:
@@ -476,11 +476,13 @@ mod tests {
     #[test]
     fn test_print_detail_flake_output_multiple_licenses() {
         let mut out = Vec::new();
-        let mut package = LOCKED_NIX_EVAL_JOBS.clone();
-        if let Some(licenses) = package.locked_installable.licenses.as_mut() {
-            licenses.push("license 2".to_string());
+        let mut package = test_flake_package();
+        if let PackageToList::Flake(_, ref mut locked_package) = package {
+            if let Some(licenses) = locked_package.locked_installable.licenses.as_mut() {
+                licenses.push("license 2".to_string());
+            }
         }
-        List::print_detail(&mut out, &[PackageToList::Flake(package)]).unwrap();
+        List::print_detail(&mut out, &[package]).unwrap();
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs: (nix-eval-jobs)
