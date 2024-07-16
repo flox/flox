@@ -394,8 +394,6 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "flake: github ref added to manifest" {
-  skip "installables will be fixed in a follow-up PR"
-
   "$FLOX_BIN" init
   input_flake="github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_OLD#hello"
   run "$FLOX_BIN" install "$input_flake"
@@ -405,22 +403,10 @@ EOF
 }
 
 @test "flake: https ref added to manifest" {
-  skip "installables will be fixed in a follow-up PR"
-
   "$FLOX_BIN" init
   input_flake="https://github.com/nixos/nixpkgs/archive/master.tar.gz#hello"
   run "$FLOX_BIN" install "$input_flake"
   assert_success
   installed_flake=$(tomlq -r -c -t ".install.hello" "$MANIFEST_PATH")
-  assert_equal "$installed_flake" "flake = \"$input_flake\""
-}
-
-@test "flake: fallback id added to manifest" {
-  skip "installables will be fixed in a follow-up PR"
-  "$FLOX_BIN" init
-  input_flake="https://github.com/flox/flox"
-  run "$FLOX_BIN" install "$input_flake"
-  assert_success
-  installed_flake=$(tomlq -r -c -t ".install.flox" "$MANIFEST_PATH")
   assert_equal "$installed_flake" "flake = \"$input_flake\""
 }
