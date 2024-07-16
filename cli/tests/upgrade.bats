@@ -186,6 +186,30 @@ teardown() {
   assert_equal "$curr_lock_hash" "$prev_lock_hash"
 }
 
+@test "upgrade for flake installable" {
+  "$FLOX_BIN" init
+
+  MANIFEST_CONTENT="$(cat << "EOF"
+  version = 1
+
+  [install]
+  hello.flake = "github:NixOS/nixpkgs#hello"
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+
+  run "$FLOX_BIN" upgrade
+  assert_success
+  assert_output --partial "No packages need to be upgraded"
+
+  jq_edit "$LOCK_PATH" '.packages[]."derivation" = "/nix/store/blahblahblah"'
+
+  run "$FLOX_BIN" upgrade
+  assert_success
+  assert_output --partial "Upgraded 'hello'"
+}
+
 @test "upgrade performs manifest migration" {
   NAME="name"
   FLOX_FEATURES_USE_CATALOG=false "$FLOX_BIN" init -n "$NAME"
