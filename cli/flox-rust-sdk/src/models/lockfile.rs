@@ -1622,8 +1622,8 @@ pub(crate) mod tests {
     use std::vec;
 
     use catalog::test_helpers::resolved_pkg_group_with_dummy_package;
-    use catalog::{MsgUnknown, ResolutionMessage};
-    use catalog_api_v1::types::Output;
+    use catalog::{MsgUnknown, ResolutionMessage, ResolveError, SearchError, VersionsError};
+    use catalog_api_v1::types::{Output, ResolvedPackageDescriptor};
     use indoc::indoc;
     use once_cell::sync::Lazy;
     use pretty_assertions::assert_eq;
@@ -1633,7 +1633,47 @@ pub(crate) mod tests {
     use super::*;
     use crate::models::manifest::test::empty_catalog_manifest;
     use crate::models::manifest::{self, RawManifest, TypedManifest};
-    use crate::providers::flox_cpp_utils::InstallableLockerMock;
+    use crate::models::search::{SearchLimit, SearchResults};
+    use crate::providers::flox_cpp_utils::{FlakeInstallableError, InstallableLockerMock};
+
+    /// A mock client that panics if any of its methods are called
+    struct PanickingClient;
+    impl catalog::ClientTrait for PanickingClient {
+        async fn resolve(
+            &self,
+            _: Vec<PackageGroup>,
+        ) -> Result<Vec<ResolvedPackageGroup>, ResolveError> {
+            unreachable!("resolve should not be called");
+        }
+
+        async fn search(
+            &self,
+            _: impl AsRef<str> + Send + Sync,
+            _: System,
+            _: SearchLimit,
+        ) -> Result<SearchResults, SearchError> {
+            unreachable!("search should not be called");
+        }
+
+        async fn package_versions(
+            &self,
+            _: impl AsRef<str> + Send + Sync,
+        ) -> Result<SearchResults, VersionsError> {
+            unreachable!("package_versions should not be called");
+        }
+    }
+
+    /// A mock locker that panics if any of its methods are called
+    struct PanickingLocker;
+    impl InstallableLocker for PanickingLocker {
+        fn lock_flake_installable(
+            &self,
+            _: impl AsRef<str>,
+            _: impl AsRef<str>,
+        ) -> Result<LockedInstallable, FlakeInstallableError> {
+            todo!()
+        }
+    }
 
     /// Validate that the parser for the locked manifest can handle null values
     /// for the `version`, `license`, and `description` fields.
@@ -2984,6 +3024,145 @@ pub(crate) mod tests {
                 system: system.to_string(),
             })
         );
+    }
+
+    /// If all packages are already locked, return without locking/resolution
+    #[tokio::test]
+    async fn lock_manifest_noop_if_fully_locked() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
+        let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
+
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
+        manifest
+            .install
+            .insert(foo_iid.clone(), foo_descriptor.clone());
+        manifest
+            .install
+            .insert(bar_iid.clone(), bar_descriptor.clone().into());
+
+        let locked = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.into(), bar_locked.into()],
+        };
+
+        let locked_manifest = LockedManifestCatalog::lock_manifest(
+            &manifest,
+            Some(&locked),
+            &PanickingClient,
+            &PanickingLocker,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(locked_manifest, locked);
+    }
+
+    /// If flake installables are already locked, no locking should occur.
+    /// Catalog packages are still being resolved if not locked.
+    #[tokio::test]
+    async fn skip_flake_installables_noop_if_fully_locked() {
+        let (foo_iid, foo_descriptor, _) = fake_catalog_package_lock("foo", None);
+        let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
+
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
+        manifest
+            .install
+            .insert(foo_iid.clone(), foo_descriptor.clone());
+        manifest
+            .install
+            .insert(bar_iid.clone(), bar_descriptor.clone().into());
+
+        let locked = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![bar_locked.into()],
+        };
+
+        let foo_catalog_descriptor = foo_descriptor.as_catalog_descriptor_ref().unwrap();
+
+        let mut client_mock = catalog::MockClient::new(None::<String>).unwrap();
+        client_mock.push_resolve_response(vec![ResolvedPackageGroup {
+            msgs: vec![],
+            name: DEFAULT_GROUP_NAME.to_string(),
+            page: Some(CatalogPage {
+                complete: true,
+                packages: Some(vec![ResolvedPackageDescriptor {
+                    attr_path: foo_catalog_descriptor.pkg_path.clone(),
+                    broken: Default::default(),
+                    derivation: "derivation".to_string(),
+                    description: Default::default(),
+                    install_id: foo_iid.clone(),
+                    license: Default::default(),
+                    locked_url: Default::default(),
+                    name: Default::default(),
+                    outputs: Default::default(),
+                    outputs_to_install: Default::default(),
+                    pname: Default::default(),
+                    rev: Default::default(),
+                    rev_count: Default::default(),
+                    rev_date: Default::default(),
+                    scrape_date: Default::default(),
+                    stabilities: Default::default(),
+                    system: SystemEnum::Aarch64Darwin,
+                    unfree: Default::default(),
+                    version: Default::default(),
+                }]),
+                page: 1,
+                url: "url".to_string(),
+                msgs: vec![],
+            }),
+        }]);
+
+        let locked_manifest = LockedManifestCatalog::lock_manifest(
+            &manifest,
+            Some(&locked),
+            &client_mock,
+            &PanickingLocker,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(locked_manifest.packages.len(), 2, "{:#?}", locked_manifest);
+    }
+
+    /// If catalog packages are already locked, no locking should occur.
+    /// Installables are still being resolved if not locked.
+    #[tokio::test]
+    async fn skip_catatalog_package_if_fully_locked() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
+        let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
+
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
+        manifest
+            .install
+            .insert(foo_iid.clone(), foo_descriptor.clone());
+        manifest
+            .install
+            .insert(bar_iid.clone(), bar_descriptor.clone().into());
+
+        let locked = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.into()],
+        };
+
+        let locker_mock = InstallableLockerMock::new();
+        locker_mock.push_lock_result(Ok(bar_locked.locked_installable));
+
+        let locked_manifest = LockedManifestCatalog::lock_manifest(
+            &manifest,
+            Some(&locked),
+            &PanickingClient,
+            &locker_mock,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(locked_manifest.packages.len(), 2, "{:#?}", locked_manifest);
     }
 
     /// [LockedManifestCatalog::lock_manifest] returns an error if an already
