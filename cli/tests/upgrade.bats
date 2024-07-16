@@ -188,12 +188,16 @@ teardown() {
 
 @test "upgrade for flake installable" {
   "$FLOX_BIN" init
-  cat <<EOF | "$FLOX_BIN" edit -f -
+
+  MANIFEST_CONTENT="$(cat << "EOF"
   version = 1
 
   [install]
   hello.flake = "github:NixOS/nixpkgs#hello"
 EOF
+  )"
+
+  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
 
   run "$FLOX_BIN" upgrade
   assert_success
