@@ -947,22 +947,36 @@ impl FromStr for PackageToInstall {
 
 /// Tries to infer an install id from the flake ref URL, or falls back to "flake".
 fn infer_flake_install_id(url: &Url) -> Result<String, ManifestError> {
+    if let Some(fragment) = url.fragment() {
+        let fragment = url_escape::decode(fragment).to_string();
+        let attr_path = fragment
+            // split off extended output spec
+            .rsplit_once('^')
+            .map(|(attr_path, _)| attr_path.to_string())
+            .unwrap_or(fragment);
+        if !attr_path.is_empty() {
+            let install_id = install_id_from_attr_path(&attr_path, url.as_ref())?;
+            return Ok(install_id);
+        }
+    }
+
+    // Use `.path()`` because `github:` and co. are `cannot-be-a-base` urls
+    // for which "path-segments" are undefined.
+    // `Url::path_segments` will return `None` for such urls.
     if url.scheme() == "github" {
+        // Using `.last()` isn't reliable for `github:` refs because you can have a `/<rev>`
+        // after the repository name.
         url.path()
             .split('/')
             .nth(1)
-            .map(|s| s.to_string())
-            .ok_or(ManifestError::InvalidFlakeRef(url.to_string()))
-    } else if url.scheme() == "https" && url.domain().is_some_and(|host| host == "github.com") {
-        let mut segments = url
-            .path_segments()
-            .ok_or(ManifestError::InvalidFlakeRef(url.to_string()))?;
-        segments
-            .nth(1)
-            .map(|s| s.to_string())
+            .map(|s| url_escape::decode(s).to_string())
             .ok_or(ManifestError::InvalidFlakeRef(url.to_string()))
     } else {
-        Ok("flake".to_string())
+        url.path()
+            .split('/')
+            .last()
+            .map(|s| url_escape::decode(s).to_string())
+            .ok_or(ManifestError::InvalidFlakeRef(url.to_string()))
     }
 }
 
@@ -1034,43 +1048,7 @@ impl FromStr for CatalogPackage {
             None => (descriptor.to_string(), None),
         };
 
-        let install_id = {
-            let mut install_id = None;
-            let mut cur = String::new();
-
-            let mut start_quote = None;
-
-            for (n, c) in attr_path.chars().enumerate() {
-                match c {
-                    '.' if start_quote.is_none() => {
-                        let _ = install_id.insert(std::mem::take(&mut cur));
-                    },
-                    '"' if start_quote.is_some() => start_quote = None,
-                    '"' if start_quote.is_none() => start_quote = Some(n),
-                    other => cur.push(other),
-                }
-            }
-
-            if start_quote.is_some() {
-                return Err(ManifestError::MalformedStringDescriptor {
-                    msg: "unclosed quote".to_string(),
-                    desc: descriptor.to_string(),
-                });
-            }
-
-            if !cur.is_empty() {
-                let _ = install_id.insert(cur);
-            }
-
-            if install_id.is_none() {
-                return Err(ManifestError::MalformedStringDescriptor {
-                    msg: "attribute path is empty".to_string(),
-                    desc: descriptor.to_string(),
-                });
-            }
-
-            install_id.unwrap()
-        };
+        let install_id = install_id_from_attr_path(&attr_path, descriptor)?;
 
         Ok(Self {
             id: install_id,
@@ -1078,6 +1056,49 @@ impl FromStr for CatalogPackage {
             version,
         })
     }
+}
+
+/// Extracts an install ID from a dot-separated attribute path that potentially contains quotes.
+fn install_id_from_attr_path(attr_path: &str, descriptor: &str) -> Result<String, ManifestError> {
+    let mut install_id = None;
+    let mut cur = String::new();
+
+    let mut start_quote = None;
+
+    for (n, c) in attr_path.chars().enumerate() {
+        match c {
+            '.' if start_quote.is_none() => {
+                let _ = install_id.insert(std::mem::take(&mut cur));
+            },
+            // '"' if start_quote.is_some() => start_quote = None,
+            '"' if start_quote.is_some() => {
+                start_quote = None;
+                cur.push('"');
+            },
+            // '"' if start_quote.is_none() => start_quote = Some(n),
+            '"' if start_quote.is_none() => {
+                start_quote = Some(n);
+                cur.push('"');
+            },
+            other => cur.push(other),
+        }
+    }
+
+    if start_quote.is_some() {
+        return Err(ManifestError::MalformedStringDescriptor {
+            msg: "unclosed quote".to_string(),
+            desc: descriptor.to_string(),
+        });
+    }
+
+    if !cur.is_empty() {
+        let _ = install_id.insert(cur);
+    }
+
+    install_id.ok_or(ManifestError::MalformedStringDescriptor {
+        msg: "attribute path is empty".to_string(),
+        desc: descriptor.to_string(),
+    })
 }
 
 impl From<&CatalogPackage> for Vec<(&'static str, String)> {
@@ -1094,12 +1115,6 @@ impl From<&CatalogPackage> for InlineTable {
     fn from(val: &CatalogPackage) -> Self {
         InlineTable::from_iter(Vec::from(val))
     }
-}
-
-/// Reports whether a flake reference is a path on the local system.
-pub fn is_local_flake_ref(flakeref: impl AsRef<str>) -> bool {
-    let flakeref = flakeref.as_ref();
-    flakeref.starts_with('.') || flakeref.starts_with('/') || flakeref.starts_with("path:")
 }
 
 /// Insert package names into the `[install]` table of a manifest.
@@ -1280,6 +1295,7 @@ pub fn add_system(toml: &str, system: &str) -> Result<DocumentMut, TomlEditError
 pub(super) mod test {
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
+    use proptest_derive::Arbitrary;
 
     use super::*;
 
@@ -1884,7 +1900,7 @@ pub(super) mod test {
         });
         let parsed: CatalogPackage = "rubyPackages.\"http_parser.rb\"".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
-            id: "http_parser.rb".to_string(),
+            id: "\"http_parser.rb\"".to_string(),
             pkg_path: "rubyPackages.\"http_parser.rb\"".to_string(),
             version: None,
         });
@@ -1904,43 +1920,147 @@ pub(super) mod test {
         }
     }
 
-    #[test]
-    fn infers_id_from_github_flake_ref() {
-        let url = Url::parse("github:foo/bar").unwrap();
-        eprintln!("{:?}", url);
-        let inferred = infer_flake_install_id(&url).unwrap();
-        assert_eq!(inferred.as_str(), "bar");
+    /// Determines whether to have a branch and/or revision in the URL
+    #[derive(Debug, Arbitrary, PartialEq)]
+    enum FlakeRefPathAttrs {
+        None,
+        RevPath,
+        RevParam,
+        RefParam,
+        RefAndRevParams,
+    }
+
+    /// The components of an attrpath after `packages.<system>.`
+    #[derive(Debug, Arbitrary, PartialEq)]
+    enum AttrPathComponent {
+        Bare,
+        Quoted,
+        QuotedWithDots,
+    }
+
+    /// The type of URL in the flake reference
+    #[derive(Debug, Arbitrary, PartialEq)]
+    enum FlakeRefURLType {
+        GitHub,
+        Https,
+        GitHttps,
+    }
+
+    /// Flake ref outputs
+    #[derive(Debug, Arbitrary, PartialEq)]
+    enum FlakeRefOutputs {
+        None,
+        All,
+        Out,
+        OutAndMan,
+    }
+
+    #[derive(Debug, Arbitrary, PartialEq)]
+    enum PkgFragment {
+        None,
+        Name(AttrPathComponent),
+        #[proptest(
+            strategy = "proptest::collection::vec(any::<AttrPathComponent>(), 1..=2).prop_map(PkgFragment::AttrPath)"
+        )]
+        AttrPath(Vec<AttrPathComponent>),
+    }
+
+    #[derive(Debug, Arbitrary)]
+    struct ArbitraryFlakeRefURL {
+        url_type: FlakeRefURLType,
+        path_attrs: FlakeRefPathAttrs,
+        pkg_fragment: PkgFragment,
+        outputs: FlakeRefOutputs,
+    }
+
+    fn arbitrary_flake_ref_url() -> impl Strategy<Value = (String, String)> {
+        any::<ArbitraryFlakeRefURL>()
+            .prop_filter("don't add rev as path segment on arbitrary URLs", |seed| {
+                (seed.url_type == FlakeRefURLType::Https)
+                    && (seed.path_attrs != FlakeRefPathAttrs::RevPath)
+            })
+            .prop_map(|url_seed| {
+                let stem = match url_seed.url_type {
+                    FlakeRefURLType::GitHub => "github:foo/bar",
+                    FlakeRefURLType::Https => "https://example.com/foo/bar",
+                    FlakeRefURLType::GitHttps => "git+https://example.com/foo/bar",
+                };
+                let path_attrs = match url_seed.path_attrs {
+                    FlakeRefPathAttrs::None => "",
+                    FlakeRefPathAttrs::RevPath => "/abc123",
+                    FlakeRefPathAttrs::RefParam => "?ref=master",
+                    FlakeRefPathAttrs::RevParam => "?rev=abc123",
+                    FlakeRefPathAttrs::RefAndRevParams => "?ref=master&rev=abc123",
+                };
+                let (fragment, expected_install_id) = match url_seed.pkg_fragment {
+                    PkgFragment::None => {
+                        if url_seed.outputs != FlakeRefOutputs::None {
+                            ("#".to_string(), "bar")
+                        } else {
+                            (String::new(), "bar")
+                        }
+                    },
+                    PkgFragment::Name(attr) => {
+                        let id = match attr {
+                            AttrPathComponent::Bare => "floxtastic",
+                            AttrPathComponent::Quoted => "\"floxtastic\"",
+                            AttrPathComponent::QuotedWithDots => "\"flox.tastic\"",
+                        };
+                        (format!("#{}", id), id)
+                    },
+                    PkgFragment::AttrPath(attr_path_seeds) => match attr_path_seeds.len() {
+                        1 => {
+                            let id = match attr_path_seeds[0] {
+                                AttrPathComponent::Bare => "floxtastic",
+                                AttrPathComponent::Quoted => "\"floxtastic\"",
+                                AttrPathComponent::QuotedWithDots => "\"flox.tastic\"",
+                            };
+                            (format!("#legacyPackges.aarch64-darwin.{}", id), id)
+                        },
+                        2 => {
+                            let namespace = match attr_path_seeds[0] {
+                                AttrPathComponent::Bare => "nested",
+                                AttrPathComponent::Quoted => "\"nested\"",
+                                AttrPathComponent::QuotedWithDots => "\"nest.ed\"",
+                            };
+                            let id = match attr_path_seeds[1] {
+                                AttrPathComponent::Bare => "floxtastic",
+                                AttrPathComponent::Quoted => "\"floxtastic\"",
+                                AttrPathComponent::QuotedWithDots => "\"flox.tastic\"",
+                            };
+                            (
+                                format!("#legacyPackages.aarch64-darwin.{}.{}", namespace, id),
+                                id,
+                            )
+                        },
+                        _ => unreachable!(),
+                    },
+                };
+                let outputs = match url_seed.outputs {
+                    FlakeRefOutputs::None => "".to_string(),
+                    FlakeRefOutputs::All => "^*".to_string(),
+                    FlakeRefOutputs::Out => "^out".to_string(),
+                    FlakeRefOutputs::OutAndMan => "^out,man".to_string(),
+                };
+                let url = format!("{}{}{}{}", stem, path_attrs, fragment, outputs);
+                (url, expected_install_id.to_string())
+            })
+    }
+
+    proptest! {
+        #[test]
+        fn infers_install_id_from_arbitrary_flake_ref_url((url, expected_id) in arbitrary_flake_ref_url()) {
+            let url = Url::parse(&url).unwrap();
+            let inferred = infer_flake_install_id(&url).unwrap();
+            prop_assert_eq!(inferred, expected_id);
+        }
     }
 
     #[test]
-    fn infers_id_from_https_flake_ref() {
+    fn infers_id_from_tarball_flake_ref() {
+        // This is one case not covered by the proptest above
         let url = Url::parse("https://github.com/foo/bar/archive/main.tar.gz").unwrap();
         let inferred = infer_flake_install_id(&url).unwrap();
-        assert_eq!(inferred.as_str(), "bar");
-    }
-
-    #[test]
-    fn infers_fallback_id_for_https_flake_ref() {
-        let url = Url::parse("https://example.com/foo/bar/baz").unwrap();
-        let inferred = infer_flake_install_id(&url).unwrap();
-        assert_eq!(inferred.as_str(), "flake");
-    }
-
-    #[test]
-    fn inferring_id_fails_with_malformed_flakeref() {
-        let url = Url::parse("github:flox").unwrap();
-        let inferred = infer_flake_install_id(&url);
-        assert!(matches!(
-            inferred,
-            Err(ManifestError::InvalidFlakeRef { .. })
-        ));
-    }
-
-    #[test]
-    fn detects_local_flake_ref() {
-        assert!(is_local_flake_ref("./foo/bar"));
-        assert!(is_local_flake_ref("/some/absolute/path"));
-        assert!(is_local_flake_ref("path:foo/bar"));
-        assert!(!is_local_flake_ref("github:foo/bar"));
+        assert_eq!(inferred.as_str(), "main.tar.gz");
     }
 }

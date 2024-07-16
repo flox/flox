@@ -48,6 +48,8 @@ pub mod error_codes {
     pub const BAD_PACKAGE_FAILURE: u64 = 127;
     /// Failed to build the activation script, possibly due to an I/O failure
     pub const ACTIVATION_SCRIPT_BUILD_FAILURE: u64 = 128;
+    /// Tried to lock a local flakeref
+    pub const LOCK_LOCAL_FLAKE: u64 = 129;
 }
 
 /// The JSON output of a `pkgdb upgrade` call

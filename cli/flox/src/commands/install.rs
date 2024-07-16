@@ -16,7 +16,6 @@ use flox_rust_sdk::models::lockfile::{
 };
 use flox_rust_sdk::models::manifest::{
     catalog_packages_to_install,
-    is_local_flake_ref,
     CatalogPackage,
     PackageToInstall,
 };
@@ -137,14 +136,6 @@ impl Install {
         packages_to_install.extend(pkgs_with_ids.into_iter());
         if packages_to_install.is_empty() {
             bail!("Must specify at least one package");
-        }
-
-        for pkg in packages_to_install.iter() {
-            if let PackageToInstall::Flake(pkg) = pkg {
-                if is_local_flake_ref(pkg.url.as_str()) {
-                    bail!("Cannot install local flake references");
-                }
-            }
         }
 
         // We don't know the contents of the packages field when the span is created

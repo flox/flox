@@ -134,6 +134,18 @@ FLOX_DEFINE_EXCEPTION( LockFlakeInstallableException,
                        "Failed to lock flake installable" )
 /** @} */
 
+/**
+ * @class flox::LockLocalFlakeException
+ * @brief An exception thrown when locking a flake installble to a
+ * @a flox::LockedInstallable.
+ *
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( LockLocalFlakeException,
+                       EC_LOCK_LOCAL_FLAKE,
+                       "flake must be hosted in a remote code repository" )
+/** @} */
+
 }  // namespace flox
 
 

@@ -237,7 +237,7 @@ teardown() {
 # This is also checking we can build an unfree package
 @test "'flox install' warns about unfree packages" {
   "$FLOX_BIN" init
-  export  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello_unfree.json"
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello_unfree.json"
   run "$FLOX_BIN" install hello-unfree
   assert_success
   assert_line --partial "The package 'hello-unfree' has an unfree license"
@@ -253,7 +253,8 @@ teardown() {
 
 @test "'flox install' can build a broken package when allowed" {
   "$FLOX_BIN" init
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENT="$(
+    cat << "EOF"
     version = 1
     [options]
     allow.broken = true
@@ -275,11 +276,12 @@ EOF
     run "$FLOX_BIN" install badpkg
 
   assert_failure
-  assert_output "$(cat <<EOF
+  assert_output "$(
+    cat << EOF
 ❌ ERROR: resolution failed: Could not find package 'badpkg'.
 Try 'flox search' with a broader search term.
 EOF
-)"
+  )"
 }
 
 @test "resolution message: multiple packages not found, without curation" {
@@ -289,14 +291,15 @@ EOF
     run "$FLOX_BIN" install badpkg1 badpkg2
 
   assert_failure
-  assert_output "$(cat <<EOF
+  assert_output "$(
+    cat << EOF
 ❌ ERROR: resolution failed: multiple resolution failures:
 - Could not find package 'badpkg1'.
   Try 'flox search' with a broader search term.
 - Could not find package 'badpkg2'.
   Try 'flox search' with a broader search term.
 EOF
-)"
+  )"
 }
 
 @test "resolution message: single package not found, with curation" {
@@ -306,14 +309,15 @@ EOF
     run "$FLOX_BIN" install node
 
   assert_failure
-  assert_output --partial "$(cat <<EOF
+  assert_output --partial "$(
+    cat << EOF
 ❌ ERROR: resolution failed: Could not find package 'node'.
 Try 'flox install nodejs' instead.
 
 Here are a few other similar options:
   $ flox install nodejs
 EOF
-)"
+  )"
 }
 
 @test "resolution message: single package not availabe on all systems" {
@@ -323,7 +327,8 @@ EOF
     run "$FLOX_BIN" install bpftrace
 
   assert_failure
-  assert_output "$(cat <<EOF
+  assert_output "$(
+    cat << EOF
 ❌ ERROR: resolution failed: package 'bpftrace' not available for
     - aarch64-darwin
     - x86_64-darwin
@@ -334,7 +339,7 @@ EOF
 For more on managing system-specific packages, visit the documentation:
 https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
 EOF
-)"
+  )"
 }
 
 @test "resolution message: multiple packages not available on all systems" {
@@ -344,7 +349,8 @@ EOF
     run "$FLOX_BIN" install bpftrace systemd
 
   assert_failure
-  assert_output "$(cat <<EOF
+  assert_output "$(
+    cat << EOF
 ❌ ERROR: resolution failed: multiple resolution failures:
 - package 'bpftrace' not available for
       - aarch64-darwin
@@ -365,7 +371,7 @@ EOF
   For more on managing system-specific packages, visit the documentation:
   https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
 EOF
-)"
+  )"
 }
 
 @test "resolution message: constraints too tight" {
@@ -375,45 +381,32 @@ EOF
     run "$FLOX_BIN" install nodejs@14.16.1
 
   assert_failure
-  assert_output "$(cat <<EOF
+  assert_output "$(
+    cat << EOF
 ❌ ERROR: resolution failed: constraints for group 'toplevel' are too tight
 
    Use 'flox edit' to adjust version constraints in the [install] section,
    or isolate dependencies in a new group with '<pkg>.pkg-group = "newgroup"'
 EOF
-)"
+  )"
 }
 
 # ---------------------------------------------------------------------------- #
 
 @test "flake: github ref added to manifest" {
-  skip "installables will be fixed in a follow-up PR"
-
   "$FLOX_BIN" init
-  input_flake="github:foo/bar"
+  input_flake="github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_OLD#hello"
   run "$FLOX_BIN" install "$input_flake"
   assert_success
-  installed_flake=$(tomlq -r -c -t ".install.bar" "$MANIFEST_PATH")
+  installed_flake=$(tomlq -r -c -t ".install.hello" "$MANIFEST_PATH")
   assert_equal "$installed_flake" "flake = \"$input_flake\""
 }
 
 @test "flake: https ref added to manifest" {
-  skip "installables will be fixed in a follow-up PR"
-
   "$FLOX_BIN" init
-  input_flake="https://github.com/foo/bar/archive/main.tar.gz"
+  input_flake="https://github.com/nixos/nixpkgs/archive/master.tar.gz#hello"
   run "$FLOX_BIN" install "$input_flake"
   assert_success
-  installed_flake=$(tomlq -r -c -t ".install.bar" "$MANIFEST_PATH")
-  assert_equal "$installed_flake" "flake = \"$input_flake\""
-}
-
-@test "flake: fallback id added to manifest" {
-  skip "installables will be fixed in a follow-up PR"
-  "$FLOX_BIN" init
-  input_flake="https://example.com/foo"
-  run "$FLOX_BIN" install "$input_flake"
-  assert_success
-  installed_flake=$(tomlq -r -c -t ".install.flake" "$MANIFEST_PATH")
+  installed_flake=$(tomlq -r -c -t ".install.hello" "$MANIFEST_PATH")
   assert_equal "$installed_flake" "flake = \"$input_flake\""
 }
