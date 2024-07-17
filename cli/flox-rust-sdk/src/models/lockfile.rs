@@ -283,14 +283,14 @@ impl LockedPackageCatalog {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedPackageFlake {
-    install_id: String,
+    pub install_id: String,
     /// Unaltered lock information as returned by `pkgdb lock-flake-installable`.
     /// In this case we completely own the data format in this repo
     /// and so far have to do no conversion.
     /// If this changes in the future, we can add a conversion layer here
     /// similar to [LockedPackageCatalog::from_parts].
     #[serde(flatten)]
-    locked_installable: LockedInstallable,
+    pub locked_installable: LockedInstallable,
 }
 
 impl LockedPackageFlake {
@@ -463,30 +463,52 @@ fn format_multiple_resolution_failures(failures: &[ResolutionFailure]) -> String
 }
 
 impl LockedManifestCatalog {
-    /// Convert a locked manifest to a list of installed packages for a given system
-    /// in a format shared with the pkgdb based locked manifest.
-    pub fn list_packages(&self, system: &System) -> Vec<InstalledPackage> {
+    /// Convert a locked manifest to a list of installed packages for a given system.
+    ///
+    /// Catalog packages share a format with pkgdb.
+    /// Flake packages have their own format.
+    pub fn list_packages(
+        &self,
+        system: &System,
+    ) -> Result<Vec<PackageToList>, LockedManifestError> {
         self.packages
             .iter()
             .filter(|package| package.system() == system)
             .cloned()
-            .filter_map(|package| match package {
-                LockedPackage::Catalog(pkg) => Some(InstalledPackage {
-                    install_id: pkg.install_id,
-                    rel_path: pkg.attr_path,
-                    info: PackageInfo {
-                        description: pkg.description,
-                        broken: pkg.broken,
-                        license: pkg.license,
-                        pname: pkg.pname,
-                        unfree: pkg.unfree,
-                        version: Some(pkg.version),
-                    },
-                    priority: Some(pkg.priority),
-                }),
-                LockedPackage::Flake(_) => None,
+            .map(|package| match package {
+                LockedPackage::Catalog(pkg) => {
+                    Ok(PackageToList::CatalogOrPkgdb(InstalledPackage {
+                        install_id: pkg.install_id,
+                        rel_path: pkg.attr_path,
+                        info: PackageInfo {
+                            description: pkg.description,
+                            broken: pkg.broken,
+                            license: pkg.license,
+                            pname: pkg.pname,
+                            unfree: pkg.unfree,
+                            version: Some(pkg.version),
+                        },
+                        priority: Some(pkg.priority),
+                    }))
+                },
+                LockedPackage::Flake(locked_package) => {
+                    let descriptor = self
+                        .manifest
+                        .pkg_descriptor_with_id(&locked_package.install_id)
+                        .ok_or(LockedManifestError::MissingPackageDescriptor(
+                            locked_package.install_id.clone(),
+                        ))?;
+
+                    let ManifestPackageDescriptor::FlakeRef(descriptor) = descriptor else {
+                        Err(LockedManifestError::MissingPackageDescriptor(
+                            locked_package.install_id.clone(),
+                        ))?
+                    };
+
+                    Ok(PackageToList::Flake(descriptor, locked_package))
+                },
             })
-            .collect()
+            .collect::<Result<Vec<_>, LockedManifestError>>()
     }
 
     /// Produce a lockfile for a given manifest.
@@ -1430,17 +1452,20 @@ impl TypedLockedManifestPkgdb {
     }
 
     /// List all packages in the locked manifest for a given system
-    pub fn list_packages(&self, system: &System) -> Vec<InstalledPackage> {
+    pub fn list_packages(&self, system: &System) -> Vec<PackageToList> {
         let mut packages = vec![];
         if let Some(system_packages) = self.packages.get(system) {
             for (install_id, locked_package) in system_packages {
                 if let Some(locked_package) = locked_package {
-                    packages.push(InstalledPackage {
-                        install_id: install_id.clone(),
-                        rel_path: locked_package.rel_path(),
-                        info: locked_package.info.clone(),
-                        priority: Some(locked_package.priority),
-                    });
+                    packages.push(
+                        InstalledPackage {
+                            install_id: install_id.clone(),
+                            rel_path: locked_package.rel_path(),
+                            info: locked_package.info.clone(),
+                            priority: Some(locked_package.priority),
+                        }
+                        .into(),
+                    );
                 };
             }
         }
@@ -1450,8 +1475,26 @@ impl TypedLockedManifestPkgdb {
 
 // endregion
 
+/// `list` uses a common format for catalog and pkgdb packages,
+/// but then another format is used for flake packages.
+/// The info needed from catalog and pkgdb packages is so similar it makes sense
+/// to convert them to a common format,
+/// but flake packages need enough special handling that it makes sense to
+/// bubble LockedPackageFlake all the way up to `list`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PackageToList {
+    CatalogOrPkgdb(InstalledPackage),
+    Flake(ManifestPackageDescriptorFlake, LockedPackageFlake),
+}
+
+impl From<InstalledPackage> for PackageToList {
+    fn from(installed: InstalledPackage) -> Self {
+        PackageToList::CatalogOrPkgdb(installed)
+    }
+}
+
 // TODO: consider dropping this in favor of mapping to [LockedPackageCatalog]?
-/// A locked package with additionally derived attributes
+/// A common format for catalog and pkgdb packages use by list
 #[derive(Debug, Clone, PartialEq)]
 pub struct InstalledPackage {
     pub install_id: String,
@@ -1522,6 +1565,11 @@ pub enum LockedManifestError {
     BrokenNotAllowed(String),
     #[error("The package '{0}' has an unfree license.\n\nAllow unfree packages by setting 'options.allow.unfree = true' in manifest.toml")]
     UnfreeNotAllowed(String),
+
+    #[error(
+        "Corrupt manifest; couldn't find flake package descriptor for locked install_id '{0}'"
+    )]
+    MissingPackageDescriptor(String),
 }
 
 /// A warning produced by `pkgdb manifest check`
@@ -1614,6 +1662,45 @@ pub mod test_helpers {
         };
         (install_id, descriptor, locked)
     }
+
+    pub fn nix_eval_jobs_descriptor() -> ManifestPackageDescriptorFlake {
+        ManifestPackageDescriptorFlake {
+            flake: "github:nix-community/nix-eval-jobs".to_string(),
+        }
+    }
+
+    /// This JSON was copied from a manifest.lock after installing github:nix-community/nix-eval-jobs
+    pub static LOCKED_NIX_EVAL_JOBS: Lazy<LockedPackageFlake> = Lazy::new(|| {
+        serde_json::from_str(r#"
+            {
+              "install_id": "nix-eval-jobs",
+              "locked-url": "github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b",
+              "flake-description": "Hydra's builtin hydra-eval-jobs as a standalone",
+              "locked-flake-attr-path": "packages.aarch64-darwin.default",
+              "derivation": "/nix/store/29y1mrdqncdjfkdfa777zmspp9djzb6b-nix-eval-jobs-2.23.0.drv",
+              "outputs": {
+                "out": "/nix/store/qigv8kbk1gpk0g2pfw10lbmdy44cf06r-nix-eval-jobs-2.23.0"
+              },
+              "output-names": [
+                "out"
+              ],
+              "outputs-to-install": [
+                "out"
+              ],
+              "package-system": "aarch64-darwin",
+              "system": "aarch64-darwin",
+              "name": "nix-eval-jobs-2.23.0",
+              "pname": "nix-eval-jobs",
+              "version": "2.23.0",
+              "description": "Hydra's builtin hydra-eval-jobs as a standalone",
+              "licenses": [
+                "GPL-3.0"
+              ],
+              "broken": false,
+              "unfree": false
+            }
+        "#).unwrap()
+    });
 }
 
 #[cfg(test)]
@@ -3384,7 +3471,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_list_packages() {
+    fn test_list_packages_catalog() {
         let (foo_iid, foo_descriptor, foo_locked) =
             fake_catalog_package_lock("foo", Some("group1"));
         let (bar_iid, bar_descriptor, bar_locked) =
@@ -3430,7 +3517,9 @@ pub(crate) mod tests {
             .expect("expected a catalog descriptor")
             .pkg_path;
 
-        let actual = locked.list_packages(&SystemEnum::Aarch64Darwin.to_string());
+        let actual = locked
+            .list_packages(&SystemEnum::Aarch64Darwin.to_string())
+            .unwrap();
         let expected = [
             InstalledPackage {
                 install_id: foo_iid,
@@ -3444,7 +3533,8 @@ pub(crate) mod tests {
                     version: Some(foo_locked.version),
                 },
                 priority: Some(foo_locked.priority),
-            },
+            }
+            .into(),
             InstalledPackage {
                 install_id: bar_iid,
                 rel_path: bar_pkg_path,
@@ -3457,8 +3547,40 @@ pub(crate) mod tests {
                     version: Some(bar_locked.version),
                 },
                 priority: Some(bar_locked.priority),
-            },
+            }
+            .into(),
             // baz is not in the list because it is not available for the requested system
+        ];
+
+        assert_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn test_list_packages_flake() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_flake_installable_lock("foo");
+        let (baz_iid, baz_descriptor, mut baz_locked) = fake_flake_installable_lock("baz");
+
+        baz_locked.locked_installable.system = SystemEnum::Aarch64Linux.to_string();
+
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        manifest
+            .install
+            .insert(foo_iid.clone(), foo_descriptor.clone().into());
+        manifest
+            .install
+            .insert(baz_iid.clone(), baz_descriptor.into());
+
+        let locked = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest,
+            packages: vec![foo_locked.clone().into(), baz_locked.clone().into()],
+        };
+
+        let actual = locked
+            .list_packages(&SystemEnum::Aarch64Darwin.to_string())
+            .unwrap();
+        let expected = [
+            PackageToList::Flake(foo_descriptor, foo_locked), // baz is not in the list because it is not available for the requested system
         ];
 
         assert_eq!(&actual, &expected);

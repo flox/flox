@@ -8,9 +8,13 @@ use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::lockfile::{
     InstalledPackage,
     LockedManifest,
+    LockedPackageFlake,
     PackageInfo,
+    PackageToList,
     TypedLockedManifestPkgdb,
 };
+use flox_rust_sdk::models::manifest::DEFAULT_PRIORITY;
+use flox_rust_sdk::providers::flox_cpp_utils::LockedInstallable;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
@@ -73,7 +77,7 @@ impl List {
             LockedManifest::Pkgdb(pkgdb_lockfile) => {
                 TypedLockedManifestPkgdb::try_from(pkgdb_lockfile)?.list_packages(system)
             },
-            LockedManifest::Catalog(catalog_lockfile) => catalog_lockfile.list_packages(system),
+            LockedManifest::Catalog(catalog_lockfile) => catalog_lockfile.list_packages(system)?,
         };
 
         if packages.is_empty() {
@@ -106,9 +110,13 @@ impl List {
     }
 
     /// print package ids only
-    fn print_name_only(mut out: impl Write, packages: &[InstalledPackage]) -> Result<()> {
+    fn print_name_only(mut out: impl Write, packages: &[PackageToList]) -> Result<()> {
         for p in packages {
-            writeln!(&mut out, "{}", p.install_id)?;
+            let install_id = match p {
+                PackageToList::CatalogOrPkgdb(p) => &p.install_id,
+                PackageToList::Flake(_, p) => &p.install_id,
+            };
+            writeln!(&mut out, "{install_id}")?;
         }
         Ok(())
     }
@@ -118,55 +126,125 @@ impl List {
     /// e.g. `pip: python3Packages.pip (20.3.4)`
     ///
     /// This is the default mode
-    fn print_extended(mut out: impl Write, packages: &[InstalledPackage]) -> Result<()> {
+    fn print_extended(mut out: impl Write, packages: &[PackageToList]) -> Result<()> {
         for p in packages {
-            writeln!(
-                &mut out,
-                "{id}: {path} ({version})",
-                id = p.install_id,
-                path = p.rel_path,
-                version = p.info.version.as_deref().unwrap_or("N/A")
-            )?;
+            match p {
+                PackageToList::CatalogOrPkgdb(p) => {
+                    writeln!(
+                        &mut out,
+                        "{id}: {path} ({version})",
+                        id = p.install_id,
+                        path = p.rel_path,
+                        version = p.info.version.as_deref().unwrap_or("N/A")
+                    )?;
+                },
+                PackageToList::Flake(descriptor, locked_package) => {
+                    writeln!(
+                        &mut out,
+                        "{id}: {flake}",
+                        id = locked_package.install_id,
+                        flake = descriptor.flake
+                    )?;
+                },
+            }
         }
         Ok(())
     }
 
     /// print package ids, as well as extended detailed information
-    fn print_detail(mut out: impl Write, packages: &[InstalledPackage]) -> Result<()> {
-        for (idx, package) in packages.iter().sorted_by_key(|p| p.priority).enumerate() {
-            let InstalledPackage {
-                install_id: name,
-                rel_path,
-                info:
-                    PackageInfo {
-                        pname,
-                        version,
-                        description,
-                        license,
-                        unfree,
-                        broken,
-                    },
-                priority,
-            } = package;
+    fn print_detail(mut out: impl Write, packages: &[PackageToList]) -> Result<()> {
+        for (idx, package) in packages
+            .iter()
+            .sorted_by_key(|p| match p {
+                PackageToList::CatalogOrPkgdb(p) => p.priority.unwrap_or(DEFAULT_PRIORITY),
+                PackageToList::Flake(..) => DEFAULT_PRIORITY,
+            })
+            .enumerate()
+        {
+            let message = match package {
+                PackageToList::CatalogOrPkgdb(package) => {
+                    let InstalledPackage {
+                        install_id: name,
+                        rel_path,
+                        info:
+                            PackageInfo {
+                                pname,
+                                version,
+                                description,
+                                license,
+                                unfree,
+                                broken,
+                            },
+                        priority,
+                    } = package;
 
-            let message = formatdoc! {"
-                {name}: ({pname})
-                  Description: {description}
-                  Path:     {rel_path}
-                  Priority: {priority}
-                  Version:  {version}
-                  License:  {license}
-                  Unfree:   {unfree}
-                  Broken:   {broken}
-                ",
-                description = description.as_deref().unwrap_or("N/A"),
-                priority = priority.map(|p| p.to_string()).as_deref().unwrap_or("N/A"),
-                version = version.as_deref().unwrap_or("N/A"),
-                license = license.as_deref().unwrap_or("N/A"),
-                unfree = unfree.map(|u|u.to_string()).as_deref().unwrap_or("N/A"),
-                broken = broken.map(|b|b.to_string()).as_deref().unwrap_or("N/A"),
+                    formatdoc! {"
+                    {name}: ({pname})
+                      Description: {description}
+                      Path:     {rel_path}
+                      Priority: {priority}
+                      Version:  {version}
+                      License:  {license}
+                      Unfree:   {unfree}
+                      Broken:   {broken}
+                    ",
+                        description = description.as_deref().unwrap_or("N/A"),
+                        priority = priority.map(|p| p.to_string()).as_deref().unwrap_or("N/A"),
+                        version = version.as_deref().unwrap_or("N/A"),
+                        license = license.as_deref().unwrap_or("N/A"),
+                        unfree = unfree.map(|u|u.to_string()).as_deref().unwrap_or("N/A"),
+                        broken = broken.map(|b|b.to_string()).as_deref().unwrap_or("N/A"),
+                    }
+                },
+                PackageToList::Flake(_, package) => {
+                    let LockedPackageFlake {
+                        install_id,
+                        locked_installable:
+                            LockedInstallable {
+                                locked_url,
+                                locked_flake_attr_path,
+                                pname,
+                                version,
+                                description,
+                                licenses,
+                                broken,
+                                unfree,
+                                ..
+                            },
+                    } = package;
+
+                    let formatted_licenses = licenses.as_ref().map(|licenses| {
+                        if licenses.len() == 1 {
+                            format!("License:         {}", licenses[0])
+                        } else {
+                            format!("Licenses:        {}", licenses.join(", "))
+                        }
+                    });
+
+                    // Add parenthesis and a space to pname if it's not None
+                    let formatted_pname = pname.as_ref().map(|pname| format!(" ({})", pname));
+
+                    formatdoc! {"
+                    {install_id}:{formatted_pname}
+                      Locked URL:      {locked_url}
+                      Flake attribute: {locked_flake_attr_path}
+                      Description:     {description}
+                      Priority:        {priority}
+                      Version:         {version}
+                      {formatted_licenses}
+                      Unfree:          {unfree}
+                      Broken:          {broken}
+                    ",
+                        formatted_pname = formatted_pname.as_deref().unwrap_or(""),
+                        description = description.as_deref().unwrap_or("N/A"),
+                        priority = DEFAULT_PRIORITY,
+                        version = version.as_deref().unwrap_or("N/A"),
+                        formatted_licenses = formatted_licenses.as_deref().unwrap_or("License: N/A"),
+                        unfree = unfree.map(|u|u.to_string()).as_deref().unwrap_or("N/A"),
+                        broken = broken.map(|b|b.to_string()).as_deref().unwrap_or("N/A"),
+                    }
+                },
             };
-
             // add an empty line between packages
             if idx < packages.len() - 1 {
                 writeln!(&mut out, "{message}")?;
@@ -207,12 +285,16 @@ impl List {
 
 #[cfg(test)]
 mod tests {
+    use flox_rust_sdk::models::lockfile::test_helpers::{
+        nix_eval_jobs_descriptor,
+        LOCKED_NIX_EVAL_JOBS,
+    };
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
     use super::*;
 
-    fn test_packages() -> [InstalledPackage; 2] {
+    fn test_packages() -> [PackageToList; 2] {
         [
             InstalledPackage {
                 install_id: "pip-iid".to_string(),
@@ -226,7 +308,8 @@ mod tests {
                     broken: Some(false),
                 },
                 priority: Some(100),
-            },
+            }
+            .into(),
             InstalledPackage {
                 install_id: "python".to_string(),
                 rel_path: "python3Packages.python".to_string(),
@@ -239,11 +322,12 @@ mod tests {
                     broken: Some(false),
                 },
                 priority: Some(200),
-            },
+            }
+            .into(),
         ]
     }
 
-    fn uninformative_package() -> InstalledPackage {
+    fn uninformative_package() -> PackageToList {
         InstalledPackage {
             install_id: "pip-iid".to_string(),
             rel_path: "python3Packages.pip".to_string(),
@@ -257,6 +341,11 @@ mod tests {
             },
             priority: None,
         }
+        .into()
+    }
+
+    fn test_flake_package() -> PackageToList {
+        PackageToList::Flake(nix_eval_jobs_descriptor(), LOCKED_NIX_EVAL_JOBS.clone())
     }
 
     #[test]
@@ -270,6 +359,17 @@ mod tests {
         "});
     }
 
+    /// Test name only output for flake installables
+    #[test]
+    fn test_name_only_flake_output() {
+        let mut out = Vec::new();
+        List::print_name_only(&mut out, &[test_flake_package()]).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            nix-eval-jobs
+        "});
+    }
+
     #[test]
     fn test_print_extended_output() {
         let mut out = Vec::new();
@@ -278,6 +378,17 @@ mod tests {
         assert_eq!(out, indoc! {"
             pip-iid: python3Packages.pip (20.3.4)
             python: python3Packages.python (3.9.5)
+        "});
+    }
+
+    /// Test extended output for flake installables
+    #[test]
+    fn test_print_extended_flake_output() {
+        let mut out = Vec::new();
+        List::print_extended(&mut out, &[test_flake_package()]).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            nix-eval-jobs: github:nix-community/nix-eval-jobs
         "});
     }
 
@@ -318,10 +429,81 @@ mod tests {
         "})
     }
 
+    /// Test detailed output for flake installables
+    #[test]
+    fn test_print_detail_flake_output() {
+        let mut out = Vec::new();
+        List::print_detail(&mut out, &[test_flake_package()]).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            nix-eval-jobs: (nix-eval-jobs)
+              Locked URL:      github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
+              Flake attribute: packages.aarch64-darwin.default
+              Description:     Hydra's builtin hydra-eval-jobs as a standalone
+              Priority:        5
+              Version:         2.23.0
+              License:         GPL-3.0
+              Unfree:          false
+              Broken:          false
+        "});
+    }
+
+    /// Test detailed output for flake installables when pname is missing
+    #[test]
+    fn test_print_detail_flake_output_pname_missing() {
+        let mut out = Vec::new();
+        let mut package = test_flake_package();
+        if let PackageToList::Flake(_, ref mut locked_package) = package {
+            locked_package.locked_installable.pname = None;
+        }
+
+        List::print_detail(&mut out, &[package]).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            nix-eval-jobs:
+              Locked URL:      github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
+              Flake attribute: packages.aarch64-darwin.default
+              Description:     Hydra's builtin hydra-eval-jobs as a standalone
+              Priority:        5
+              Version:         2.23.0
+              License:         GPL-3.0
+              Unfree:          false
+              Broken:          false
+        "});
+    }
+
+    /// Test detailed output for flake installables with multiple licenses
+    #[test]
+    fn test_print_detail_flake_output_multiple_licenses() {
+        let mut out = Vec::new();
+        let mut package = test_flake_package();
+        if let PackageToList::Flake(_, ref mut locked_package) = package {
+            if let Some(licenses) = locked_package.locked_installable.licenses.as_mut() {
+                licenses.push("license 2".to_string());
+            }
+        }
+        List::print_detail(&mut out, &[package]).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert_eq!(out, indoc! {"
+            nix-eval-jobs: (nix-eval-jobs)
+              Locked URL:      github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
+              Flake attribute: packages.aarch64-darwin.default
+              Description:     Hydra's builtin hydra-eval-jobs as a standalone
+              Priority:        5
+              Version:         2.23.0
+              Licenses:        GPL-3.0, license 2
+              Unfree:          false
+              Broken:          false
+        "});
+    }
+
     #[test]
     fn test_print_detail_output_orders_by_priority_unknown_first() {
         let mut packages = test_packages();
-        packages[1].priority = None;
+        let PackageToList::CatalogOrPkgdb(ref mut package_2) = packages[1] else {
+            panic!();
+        };
+        package_2.priority = None;
 
         let mut out = Vec::new();
         List::print_detail(&mut out, &packages).unwrap();
@@ -350,7 +532,10 @@ mod tests {
     #[test]
     fn test_print_detail_output_orders_by_priority() {
         let mut packages = test_packages();
-        packages[1].priority = Some(10);
+        let PackageToList::CatalogOrPkgdb(ref mut package_2) = packages[1] else {
+            panic!();
+        };
+        package_2.priority = Some(10);
 
         let mut out = Vec::new();
         List::print_detail(&mut out, &packages).unwrap();

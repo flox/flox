@@ -871,6 +871,7 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         LockedManifestError::BrokenNotAllowed(_) => display_chain(err),
         // User facing
         LockedManifestError::UnfreeNotAllowed(_) => display_chain(err),
+        LockedManifestError::MissingPackageDescriptor(_) => display_chain(err),
     }
 }
 

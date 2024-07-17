@@ -38,31 +38,31 @@ pub enum FlakeInstallableError {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedInstallable {
     /// locked url of the flakeref component of the installable
-    pub(crate) locked_url: String,
-    pub(crate) flake_description: Option<String>,
-    pub(crate) locked_flake_attr_path: String,
-    pub(crate) derivation: String,
+    pub locked_url: String,
+    pub flake_description: Option<String>,
+    pub locked_flake_attr_path: String,
+    pub derivation: String,
     /// Map of output names to their paths
     /// The values are expected to be nix store paths
-    pub(crate) outputs: BTreeMap<String, String>,
+    pub outputs: BTreeMap<String, String>,
     /// List of output names in the original order
-    pub(crate) output_names: Vec<String>,
+    pub output_names: Vec<String>,
     /// List of output names to install as defined by the package
-    pub(crate) outputs_to_install: Option<Vec<String>>,
+    pub outputs_to_install: Option<Vec<String>>,
     /// List of output names to install as requested by the user
-    pub(crate) requested_outputs_to_install: Option<Vec<String>>,
+    pub requested_outputs_to_install: Option<Vec<String>>,
     /// System as defined by the package
-    pub(crate) package_system: String,
+    pub package_system: String,
     /// System as specified by the manifest and used to set default attribute
     /// paths when locking the installable
-    pub(crate) system: String,
-    pub(crate) name: String,
-    pub(crate) pname: Option<String>,
-    pub(crate) version: Option<String>,
-    pub(crate) description: Option<String>,
-    pub(crate) licenses: Option<Vec<String>>,
-    pub(crate) broken: Option<bool>,
-    pub(crate) unfree: Option<bool>,
+    pub system: String,
+    pub name: String,
+    pub pname: Option<String>,
+    pub version: Option<String>,
+    pub description: Option<String>,
+    pub licenses: Option<Vec<String>>,
+    pub broken: Option<bool>,
+    pub unfree: Option<bool>,
 }
 
 /// Required functionality to lock a flake installable
