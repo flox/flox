@@ -201,8 +201,6 @@ mod tests {
 
     use super::*;
 
-    const ALLOW_LOCAL_FLAKE_VAR: &str = "_PKGDB_ALLOW_LOCAL_FLAKE";
-
     /// Returns the path to a bundled flake that contains a number of test packages
     /// for sped up evaluation
     fn local_test_flake() -> String {
@@ -223,11 +221,9 @@ mod tests {
         let installable = format!("{flake}#hello", flake = local_test_flake());
 
         // make sure the deserialization is not accidentally optimized away
-        temp_env::with_var(ALLOW_LOCAL_FLAKE_VAR, Some("1"), || {
-            Pkgdb
-                .lock_flake_installable(system, installable)
-                .expect("locking local test flake should succeed")
-        });
+        Pkgdb
+            .lock_flake_installable(system, installable)
+            .expect("locking local test flake should succeed");
     }
 
     // Tests against locking errors thown by pkgdb.
@@ -260,9 +256,7 @@ mod tests {
         let system = env!("system");
         let installable = format!("{flake}#nonexistent", flake = local_test_flake());
 
-        let result = temp_env::with_var(ALLOW_LOCAL_FLAKE_VAR, Some("1"), || {
-            Pkgdb.lock_flake_installable(system, installable)
-        });
+        let result = Pkgdb.lock_flake_installable(system, installable);
 
         assert!(
             matches!(result, Err(FlakeInstallableError::LockInstallable(_))),

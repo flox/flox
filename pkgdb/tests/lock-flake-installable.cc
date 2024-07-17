@@ -348,8 +348,6 @@ main( int argc, char * argv[] )
       nix::verbosity = nix::lvlDebug;
     }
 
-  setenv( "_PKGDB_ALLOW_LOCAL_FLAKE", "1", 1 );
-
   /* Initialize `nix' */
   flox::NixState nstate;
   auto           state = nstate.getState();
@@ -372,8 +370,6 @@ main( int argc, char * argv[] )
   RUN_TEST( version, state, system );
   RUN_TEST( broken, state, system );
   RUN_TEST( unfree, state, system );
-
-  setenv( "_PKGDB_ALLOW_LOCAL_FLAKE", "", 1 );
 
   return exitCode;
 }
