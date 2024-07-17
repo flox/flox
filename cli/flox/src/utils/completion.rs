@@ -45,10 +45,6 @@ impl FloxCompletionExt for Flox {
         .map_err(|e| debug!("Failed to initialize access tokens: {e}"))
         .unwrap_or_default();
 
-        let netrc_file = dirs::home_dir()
-            .expect("User must have a home directory")
-            .join(".netrc");
-
         let catalog_client = init_catalog_client(&config)?;
 
         Ok(Flox {
@@ -57,7 +53,6 @@ impl FloxCompletionExt for Flox {
             config_dir: config.flox.config_dir,
             temp_dir: temp_dir.into_path(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
-            netrc_file,
             access_tokens,
             uuid: uuid::Uuid::nil(),
             floxhub_token: None,

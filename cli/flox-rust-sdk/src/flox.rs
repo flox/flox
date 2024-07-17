@@ -41,7 +41,6 @@ pub struct Flox {
     ///
     /// Use [Vec] to preserve original ordering
     pub access_tokens: Vec<(String, String)>,
-    pub netrc_file: PathBuf,
 
     pub system: String,
 
@@ -329,7 +328,6 @@ pub mod test_helpers {
             temp_dir,
             config_dir,
             access_tokens: Default::default(),
-            netrc_file: Default::default(),
             uuid: Default::default(),
             floxhub: Floxhub::new(
                 Url::from_str("https://hub.flox.dev").unwrap(),

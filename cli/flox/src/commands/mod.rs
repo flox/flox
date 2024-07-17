@@ -256,10 +256,6 @@ impl FloxArgs {
                 .map(|nix_config| &nix_config.access_tokens),
         )?;
 
-        let netrc_file = dirs::home_dir()
-            .expect("User must have a home directory")
-            .join(".netrc");
-
         let git_url_override = {
             if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
                 message::warning(formatdoc! {"
@@ -327,7 +323,6 @@ impl FloxArgs {
             data_dir: config.flox.data_dir.clone(),
             config_dir: config.flox.config_dir.clone(),
             access_tokens,
-            netrc_file,
             temp_dir: temp_dir_path.clone(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             uuid: init_uuid(&config.flox.data_dir).await?,
