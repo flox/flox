@@ -334,12 +334,16 @@ impl Edit {
         Self::determine_editor_from_vars(
             env::var("VISUAL").unwrap_or_default(),
             env::var("EDITOR").unwrap_or_default(),
-            env::var("PATH").context("$PATH not set")?
-        );
+            env::var("PATH").context("$PATH not set")?,
+        )
     }
 
     /// Determines the editor to use for interactive editing, based on passed values
-    fn determine_editor_from_vars(visual_var: String, editor_var: String, path_var: String) -> Result<(PathBuf, Vec<String>)> {
+    fn determine_editor_from_vars(
+        visual_var: String,
+        editor_var: String,
+        path_var: String,
+    ) -> Result<(PathBuf, Vec<String>)> {
         let var = if !visual_var.is_empty() {
             visual_var
         } else {
@@ -350,7 +354,7 @@ impl Edit {
         let editor = command.next().unwrap_or_default().to_owned();
         let args = command.map(|s| s.to_owned()).collect();
 
-        if editor != "" {
+        if !editor.is_empty() {
             debug!("Using configured editor {:?} with args {:?}", editor, args);
             return Ok((PathBuf::from(editor), args));
         }
@@ -362,7 +366,7 @@ impl Edit {
 
         debug!("Using default editor {:?} from {:?}", editor, path);
 
-        Ok((path.join(editor), (&[]).to_vec()))
+        Ok((path.join(editor), vec![]))
     }
 
     /// Retrieves the new manifest file contents if a new manifest file was provided
@@ -389,7 +393,7 @@ impl Edit {
         args: impl AsRef<Vec<String>>,
     ) -> Result<String> {
         let mut command = Command::new(editor.as_ref());
-        if args.as_ref().len() > 0 {
+        if !args.as_ref().is_empty() {
             command.args(args.as_ref());
         }
         command.arg(path.as_ref());
@@ -413,6 +417,7 @@ mod tests {
     use flox_rust_sdk::models::lockfile::LockedManifestError;
     use indoc::indoc;
     use serde::de::Error;
+    use tempfile::tempdir;
 
     use super::*;
 
@@ -470,6 +475,260 @@ mod tests {
         ));
 
         Edit::make_interactively_recoverable(result).expect_err("should return unhandled Err");
+    }
+
+    /// Error due to empty vars and no editor in PATH
+    #[test]
+    fn test_determine_editor_from_vars_not_found() {
+        let visual_var = "".to_owned();
+        let editor_var = "".to_owned();
+
+        let tmp1 = tempdir().expect("should create tempdir");
+        let tmp2 = tempdir().expect("should create tempdir");
+        let tmp3 = tempdir().expect("should create tempdir");
+
+        let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path().to_owned()))
+            .expect("should path-join tmpdirs")
+            .into_string()
+            .expect("should convert paths from OsString to String");
+
+        Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
+            .expect_err("should error with editor not found");
+
+        assert!(tmp1.path().is_dir());
+        assert!(tmp2.path().is_dir());
+        assert!(tmp3.path().is_dir());
+    }
+
+    /// Default to the first of any editor while traversing PATH
+    #[test]
+    fn test_determine_editor_from_vars_first_default_editor() {
+        let visual_var = "".to_owned();
+        let editor_var = "".to_owned();
+
+        let tmp1 = tempdir().expect("should create tempdir");
+        let tmp2 = tempdir().expect("should create tempdir");
+        let tmp3 = tempdir().expect("should create tempdir");
+
+        let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path().to_owned()))
+            .expect("should path-join tmpdirs")
+            .into_string()
+            .expect("should convert paths from OsString to String");
+
+        let nano = tmp1.path().join("nano");
+        let vim = tmp2.path().join("vim");
+        let vi = tmp2.path().join("vi");
+        let emacs = tmp3.path().join("emacs");
+        File::create(nano.clone()).expect("should create file");
+        File::create(vim.clone()).expect("should create file");
+        File::create(vi.clone()).expect("should create file");
+        File::create(emacs.clone()).expect("should create file");
+
+        assert_eq!(
+            Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
+                .expect("should determine default editor"),
+            (nano, Vec::<String>::new())
+        );
+
+        assert!(tmp1.path().is_dir());
+        assert!(tmp2.path().is_dir());
+        assert!(tmp3.path().is_dir());
+    }
+
+    /// Return VISUAL before EDITOR, do not default to PATH
+    #[test]
+    fn test_determine_editor_from_vars_visual() {
+        let visual_var = "micro".to_owned();
+        let editor_var = "hx".to_owned();
+
+        let tmp1 = tempdir().expect("should create tempdir");
+        let tmp2 = tempdir().expect("should create tempdir");
+        let tmp3 = tempdir().expect("should create tempdir");
+
+        let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path().to_owned()))
+            .expect("should path-join tmpdirs")
+            .into_string()
+            .expect("should convert paths from OsString to String");
+
+        let nano = tmp1.path().join("nano");
+        let vim = tmp2.path().join("vim");
+        let vi = tmp2.path().join("vi");
+        let emacs = tmp3.path().join("emacs");
+        File::create(nano.clone()).expect("should create file");
+        File::create(vim.clone()).expect("should create file");
+        File::create(vi.clone()).expect("should create file");
+        File::create(emacs.clone()).expect("should create file");
+
+        assert_eq!(
+            Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
+                .expect("should determine default editor"),
+            (PathBuf::from("micro"), Vec::<String>::new())
+        );
+
+        assert!(tmp1.path().is_dir());
+        assert!(tmp2.path().is_dir());
+        assert!(tmp3.path().is_dir());
+    }
+
+    /// Fallback to EDITOR, no default editor available in PATH
+    #[test]
+    fn test_determine_editor_from_vars_editor() {
+        let visual_var = "".to_owned();
+        let editor_var = "hx".to_owned();
+
+        let tmp1 = tempdir().expect("should create tempdir");
+        let tmp2 = tempdir().expect("should create tempdir");
+        let tmp3 = tempdir().expect("should create tempdir");
+
+        let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path().to_owned()))
+            .expect("should path-join tmpdirs")
+            .into_string()
+            .expect("should convert paths from OsString to String");
+
+        assert_eq!(
+            Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
+                .expect("should determine default editor"),
+            (PathBuf::from("hx"), Vec::<String>::new())
+        );
+
+        assert!(tmp1.path().is_dir());
+        assert!(tmp2.path().is_dir());
+        assert!(tmp3.path().is_dir());
+    }
+
+    /// Split VISUAL into editor and args
+    #[test]
+    fn test_determine_editor_from_vars_visual_with_args() {
+        let visual_var = "  code -w --reuse-window   --userdata-dir /home/user/code  ".to_owned();
+        let editor_var = "hx".to_owned();
+
+        let path_var = "".to_owned();
+
+        assert_eq!(
+            Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
+                .expect("should determine default editor"),
+            (
+                PathBuf::from("code"),
+                vec!["-w", "--reuse-window", "--userdata-dir", "/home/user/code"]
+                    .into_iter()
+                    .map(String::from)
+                    .collect()
+            )
+        );
+    }
+
+    /// Split EDITOR into editor and args
+    #[test]
+    fn test_determine_editor_from_vars_editor_with_args() {
+        let visual_var = "".to_owned();
+        let editor_var = "code -w".to_owned();
+
+        let path_var = "".to_owned();
+
+        assert_eq!(
+            Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
+                .expect("should determine default editor"),
+            (
+                PathBuf::from("code"),
+                vec!["-w"].into_iter().map(String::from).collect()
+            )
+        );
+    }
+
+    /// VISUAL whitespace only skips EDITOR, defaulting to PATH
+    /// This is a consequence of using is_empty to determine fallback logic
+    /// This test makes this behavior explicit, but whitespace only filenames
+    /// are already a strange variable value.
+    #[test]
+    fn test_determine_editor_from_vars_visual_whitespace() {
+        let visual_var = "       ".to_owned();
+        let editor_var = "code -w".to_owned();
+
+        let tmp1 = tempdir().expect("should create tempdir");
+        let tmp2 = tempdir().expect("should create tempdir");
+        let tmp3 = tempdir().expect("should create tempdir");
+
+        let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path().to_owned()))
+            .expect("should path-join tmpdirs")
+            .into_string()
+            .expect("should convert paths from OsString to String");
+
+        let nano = tmp1.path().join("nano");
+        let vim = tmp2.path().join("vim");
+        File::create(nano.clone()).expect("should create file");
+        File::create(vim.clone()).expect("should create file");
+
+        assert_eq!(
+            Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
+                .expect("should determine default editor"),
+            (nano, Vec::<String>::new())
+        );
+
+        assert!(tmp1.path().is_dir());
+        assert!(tmp2.path().is_dir());
+        assert!(tmp3.path().is_dir());
+    }
+
+    /// EDITOR whitespace only defaults to editors on PATH
+    #[test]
+    fn test_determine_editor_from_vars_editor_whitespace() {
+        let visual_var = "".to_owned();
+        let editor_var = "       ".to_owned();
+
+        let tmp1 = tempdir().expect("should create tempdir");
+        let tmp2 = tempdir().expect("should create tempdir");
+        let tmp3 = tempdir().expect("should create tempdir");
+
+        let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path().to_owned()))
+            .expect("should path-join tmpdirs")
+            .into_string()
+            .expect("should convert paths from OsString to String");
+
+        let nano = tmp1.path().join("nano");
+        let vim = tmp2.path().join("vim");
+        File::create(nano.clone()).expect("should create file");
+        File::create(vim.clone()).expect("should create file");
+
+        assert_eq!(
+            Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
+                .expect("should determine default editor"),
+            (nano, Vec::<String>::new())
+        );
+
+        assert!(tmp1.path().is_dir());
+        assert!(tmp2.path().is_dir());
+        assert!(tmp3.path().is_dir());
+    }
+
+    /// VISUAL and EDITOR whitespace only defaults to editors on PATH
+    #[test]
+    fn test_determine_editor_from_vars_whitespace() {
+        let visual_var = "       ".to_owned();
+        let editor_var = "       ".to_owned();
+
+        let tmp1 = tempdir().expect("should create tempdir");
+        let tmp2 = tempdir().expect("should create tempdir");
+        let tmp3 = tempdir().expect("should create tempdir");
+
+        let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path().to_owned()))
+            .expect("should path-join tmpdirs")
+            .into_string()
+            .expect("should convert paths from OsString to String");
+
+        let nano = tmp1.path().join("nano");
+        let vim = tmp2.path().join("vim");
+        File::create(nano.clone()).expect("should create file");
+        File::create(vim.clone()).expect("should create file");
+
+        assert_eq!(
+            Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
+                .expect("should determine default editor"),
+            (nano, Vec::<String>::new())
+        );
+
+        assert!(tmp1.path().is_dir());
+        assert!(tmp2.path().is_dir());
+        assert!(tmp3.path().is_dir());
     }
 
     /// Given a v0 manifest that can be migrated and v0 contents, the migration
