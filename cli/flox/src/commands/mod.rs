@@ -74,7 +74,6 @@ use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
 use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
 use crate::utils::errors::display_chain;
 use crate::utils::init::{
-    init_access_tokens,
     init_catalog_client,
     init_telemetry_uuid,
     init_uuid,
@@ -249,13 +248,6 @@ impl FloxArgs {
             env::set_var("FLOX_DISABLE_METRICS", "true");
         }
 
-        let access_tokens = init_access_tokens(
-            config
-                .nix
-                .as_ref()
-                .map(|nix_config| &nix_config.access_tokens),
-        )?;
-
         let git_url_override = {
             if let Ok(env_set_host) = std::env::var("_FLOX_FLOXHUB_GIT_URL") {
                 message::warning(formatdoc! {"
@@ -322,7 +314,6 @@ impl FloxArgs {
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
             config_dir: config.flox.config_dir.clone(),
-            access_tokens,
             temp_dir: temp_dir_path.clone(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             uuid: init_uuid(&config.flox.data_dir).await?,
