@@ -529,6 +529,43 @@ mod tests {
         assert!(tmp3.path().is_dir());
     }
 
+    /// Do not default to directories
+    #[test]
+    fn test_determine_editor_from_vars_no_directory() {
+        let visual_var = "".to_owned();
+        let editor_var = "".to_owned();
+
+        let tmp1 = tempdir().expect("should create tempdir");
+        let tmp2 = tempdir().expect("should create tempdir");
+        let tmp3 = tempdir().expect("should create tempdir");
+
+        let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path().to_owned()))
+            .expect("should path-join tmpdirs")
+            .into_string()
+            .expect("should convert paths from OsString to String");
+
+        let nano = tmp1.path().join("nano");
+        let vim = tmp2.path().join("vim");
+        let vi = tmp2.path().join("vi");
+        let emacs = tmp3.path().join("emacs");
+
+        fs::create_dir(nano.clone()).expect("should create directory");
+
+        File::create(vim.clone()).expect("should create file");
+        File::create(vi.clone()).expect("should create file");
+        File::create(emacs.clone()).expect("should create file");
+
+        assert_eq!(
+            Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
+                .expect("should determine default editor"),
+            (vim, Vec::<String>::new())
+        );
+
+        assert!(tmp1.path().is_dir());
+        assert!(tmp2.path().is_dir());
+        assert!(tmp3.path().is_dir());
+    }
+
     /// Return VISUAL before EDITOR, do not default to PATH
     #[test]
     fn test_determine_editor_from_vars_visual() {
