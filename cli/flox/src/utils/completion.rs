@@ -3,7 +3,7 @@ use flox_rust_sdk::flox::{Flox, Floxhub, DEFAULT_FLOXHUB_URL};
 use log::debug;
 use tempfile::TempDir;
 
-use super::init::{init_access_tokens, init_catalog_client};
+use super::init::init_catalog_client;
 use crate::config::Config;
 
 pub(crate) trait FloxCompletionExt
@@ -36,19 +36,6 @@ impl FloxCompletionExt for Flox {
             },
         };
 
-        let access_tokens = init_access_tokens(
-            config
-                .nix
-                .as_ref()
-                .map(|nix_config| &nix_config.access_tokens),
-        )
-        .map_err(|e| debug!("Failed to initialize access tokens: {e}"))
-        .unwrap_or_default();
-
-        let netrc_file = dirs::home_dir()
-            .expect("User must have a home directory")
-            .join(".netrc");
-
         let catalog_client = init_catalog_client(&config)?;
 
         Ok(Flox {
@@ -57,8 +44,6 @@ impl FloxCompletionExt for Flox {
             config_dir: config.flox.config_dir,
             temp_dir: temp_dir.into_path(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
-            netrc_file,
-            access_tokens,
             uuid: uuid::Uuid::nil(),
             floxhub_token: None,
             floxhub: Floxhub::new(DEFAULT_FLOXHUB_URL.clone(), None)?,

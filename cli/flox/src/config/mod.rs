@@ -29,10 +29,6 @@ pub struct Config {
     #[serde(default, flatten)]
     pub flox: FloxConfig,
 
-    /// nix configuration options
-    #[serde(default)]
-    pub nix: Option<NixConfig>,
-
     /// Feature flags are set from config but more commonly controlled by
     /// `FLOX_FEATURES_` environment variables.
     ///
@@ -103,13 +99,6 @@ pub enum EnvironmentPromptConfig {
     /// Change the shell prompt to show the active environments,
     /// but omit 'default' environments
     HideDefault,
-}
-
-// TODO: move to runix?
-/// Describes the nix config under flox
-#[derive(Clone, Debug, Deserialize, Serialize, Default)]
-pub struct NixConfig {
-    pub access_tokens: HashMap<String, String>,
 }
 
 /// Error returned by [`Config::get()`]
@@ -489,22 +478,6 @@ mod tests {
     }
 
     #[test]
-    fn test_writing_nested() {
-        let config_content = Config::write_to(
-            None,
-            &Key::parse("nix.access_tokens.\"github.com\"").unwrap(),
-            Some("ghp_my_access_token"),
-        )
-        .unwrap();
-        assert_eq!(config_content, indoc! {"
-        [nix]
-
-        [nix.access_tokens]
-        \"github.com\" = \"ghp_my_access_token\"
-        "});
-    }
-
-    #[test]
     fn test_writing_bool() {
         let config_content =
             Config::write_to(None, &Key::parse("disable_metrics").unwrap(), Some(true)).unwrap();
@@ -575,7 +548,7 @@ mod tests {
 
         let config_content = Config::write_to(
             Some(config_before.to_string()),
-            &Key::parse("nix.access_tokens.\"github.com\"").unwrap(),
+            &Key::parse("trusted_environments.\"foo/bar\"").unwrap(),
             None::<()>,
         );
         assert!(matches!(
@@ -587,22 +560,18 @@ mod tests {
     #[test]
     fn test_remove_nested() {
         let config_before = indoc! {"
-        [nix]
-
-        [nix.access_tokens]
-        \"github.com\" = \"ghp_my_access_token\"
+        [trusted_environments]
+        \"foo/bar\" = \"baz\"
         "};
 
         let config_content = Config::write_to(
             Some(config_before.to_string()),
-            &Key::parse("nix.access_tokens.\"github.com\"").unwrap(),
+            &Key::parse("trusted_environments.\"foo/bar\"").unwrap(),
             None::<()>,
         )
         .unwrap();
         assert_eq!(config_content, indoc! {"
-        [nix]
-
-        [nix.access_tokens]
+        [trusted_environments]
         "});
     }
 }

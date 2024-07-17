@@ -37,12 +37,6 @@ pub struct Flox {
     pub data_dir: PathBuf,
     pub temp_dir: PathBuf,
 
-    /// access tokens injected in nix.conf
-    ///
-    /// Use [Vec] to preserve original ordering
-    pub access_tokens: Vec<(String, String)>,
-    pub netrc_file: PathBuf,
-
     pub system: String,
 
     pub uuid: uuid::Uuid,
@@ -328,8 +322,6 @@ pub mod test_helpers {
             data_dir,
             temp_dir,
             config_dir,
-            access_tokens: Default::default(),
-            netrc_file: Default::default(),
             uuid: Default::default(),
             floxhub: Floxhub::new(
                 Url::from_str("https://hub.flox.dev").unwrap(),
