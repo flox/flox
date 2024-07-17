@@ -255,7 +255,7 @@ impl Edit {
             bail!("Can't edit interactively in non-interactive context")
         }
 
-        let editor = Self::determine_editor()?;
+        let (editor, args) = Self::determine_editor()?;
 
         // Make a copy of the manifest for the user to edit so failed edits aren't left in
         // the original manifest. You can't put creation/cleanup inside the `edited_manifest_contents`
@@ -278,7 +278,7 @@ impl Edit {
         // Let the user keep editing the file until the build succeeds or the user
         // decides to stop.
         loop {
-            let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor)?;
+            let new_manifest = Edit::edited_manifest_contents(&tmp_manifest, &editor, &args)?;
 
             let result = Dialog {
                 message: "Building environment to validate edit...",
@@ -321,29 +321,48 @@ impl Edit {
         }
     }
 
-    /// Determines the editor to use for interactive editing
+    /// Determines the editor to use for interactive editing, based on the environment
     ///
-    /// If $EDITOR or $VISUAL is set, use that. Otherwise, try to find a known editor in $PATH.
+    /// If $VISUAL or $EDITOR is set, use that.
+    /// The editor cannot be an empty string or one that consists of fully Unicode whitespace.
+    /// Arguments can be passed and will be split on whitespace.
+    /// Otherwise, try to find a known editor in $PATH.
     /// The known editor selected is the first one found in $PATH from the following list:
     ///
     ///   vim, vi, nano, emacs.
-    fn determine_editor() -> Result<PathBuf> {
-        let editor = std::env::var("EDITOR").or(std::env::var("VISUAL")).ok();
+    fn determine_editor() -> Result<(PathBuf, Vec<String>)> {
+        Self::determine_editor_from_vars(
+            env::var("VISUAL").unwrap_or_default(),
+            env::var("EDITOR").unwrap_or_default(),
+            env::var("PATH").context("$PATH not set")?
+        );
+    }
 
-        if let Some(editor) = editor {
-            return Ok(PathBuf::from(editor));
+    /// Determines the editor to use for interactive editing, based on passed values
+    fn determine_editor_from_vars(visual_var: String, editor_var: String, path_var: String) -> Result<(PathBuf, Vec<String>)> {
+        let var = if !visual_var.is_empty() {
+            visual_var
+        } else {
+            editor_var
+        };
+        let mut command = var.split_whitespace();
+
+        let editor = command.next().unwrap_or_default().to_owned();
+        let args = command.map(|s| s.to_owned()).collect();
+
+        if editor != "" {
+            debug!("Using configured editor {:?} with args {:?}", editor, args);
+            return Ok((PathBuf::from(editor), args));
         }
-
-        let path_var = env::var("PATH").context("$PATH not set")?;
 
         let (path, editor) = env::split_paths(&path_var)
             .cartesian_product(["vim", "vi", "nano", "emacs"])
             .find(|(path, editor)| path.join(editor).exists())
             .context("no known editor found in $PATH")?;
 
-        debug!("Using editor {:?} from {:?}", editor, path);
+        debug!("Using default editor {:?} from {:?}", editor, path);
 
-        Ok(path.join(editor))
+        Ok((path.join(editor), (&[]).to_vec()))
     }
 
     /// Retrieves the new manifest file contents if a new manifest file was provided
@@ -367,8 +386,12 @@ impl Edit {
     fn edited_manifest_contents(
         path: impl AsRef<Path>,
         editor: impl AsRef<Path>,
+        args: impl AsRef<Vec<String>>,
     ) -> Result<String> {
         let mut command = Command::new(editor.as_ref());
+        if args.as_ref().len() > 0 {
+            command.args(args.as_ref());
+        }
         command.arg(path.as_ref());
 
         let child = command.spawn().context("editor command failed")?;
