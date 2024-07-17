@@ -226,9 +226,9 @@ impl List {
 
                     formatdoc! {"
                     {install_id}:{formatted_pname}
+                      Description:     {description}
                       Locked URL:      {locked_url}
                       Flake attribute: {locked_flake_attr_path}
-                      Description:     {description}
                       Priority:        {priority}
                       Version:         {version}
                       {formatted_licenses}
@@ -437,9 +437,9 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs: (nix-eval-jobs)
+              Description:     Hydra's builtin hydra-eval-jobs as a standalone
               Locked URL:      github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
               Flake attribute: packages.aarch64-darwin.default
-              Description:     Hydra's builtin hydra-eval-jobs as a standalone
               Priority:        5
               Version:         2.23.0
               License:         GPL-3.0
@@ -461,9 +461,9 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs:
+              Description:     Hydra's builtin hydra-eval-jobs as a standalone
               Locked URL:      github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
               Flake attribute: packages.aarch64-darwin.default
-              Description:     Hydra's builtin hydra-eval-jobs as a standalone
               Priority:        5
               Version:         2.23.0
               License:         GPL-3.0
@@ -486,9 +486,9 @@ mod tests {
         let out = String::from_utf8(out).unwrap();
         assert_eq!(out, indoc! {"
             nix-eval-jobs: (nix-eval-jobs)
+              Description:     Hydra's builtin hydra-eval-jobs as a standalone
               Locked URL:      github:nix-community/nix-eval-jobs/c132534bc68eb48479a59a3116ee7ce0f16ce12b
               Flake attribute: packages.aarch64-darwin.default
-              Description:     Hydra's builtin hydra-eval-jobs as a standalone
               Priority:        5
               Version:         2.23.0
               Licenses:        GPL-3.0, license 2
