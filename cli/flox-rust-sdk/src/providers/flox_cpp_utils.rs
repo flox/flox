@@ -386,8 +386,9 @@ mod tests {
             env.install(&pkgs, &flox)
         });
         if let Err(e) = res {
+            eprintln!("Error: {:?}", e);
             let err_string = e.to_string();
-            let has_nix_error = err_string.contains("is marked as broken")
+            let has_nix_error = err_string.contains("I'm broken inside")
                 || err_string.contains("cached failure of attribute");
             assert!(has_nix_error);
         } else {
