@@ -1099,15 +1099,19 @@ impl LockedManifestCatalog {
                     .map(|d| (install_id, d))
             })
             .flat_map(|(iid, d)| {
-                let systems = manifest
-                    .options
-                    .systems
-                    .as_deref()
-                    .unwrap_or(&*DEFAULT_SYSTEMS_STR);
-                systems.iter().map(move |s| FlakeInstallableToLock {
+                let systems = if let Some(ref d_systems) = d.systems {
+                    d_systems.clone()
+                } else {
+                    manifest
+                        .options
+                        .systems
+                        .clone()
+                        .unwrap_or((*DEFAULT_SYSTEMS_STR).to_vec())
+                };
+                systems.into_iter().map(move |s| FlakeInstallableToLock {
                     install_id: iid.clone(),
                     descriptor: d.clone(),
-                    system: s.to_owned(),
+                    system: s.clone(),
                 })
             })
     }
@@ -1639,6 +1643,8 @@ pub mod test_helpers {
 
         let descriptor = ManifestPackageDescriptorFlake {
             flake: format!("github:nowhere/exciting#{name}"),
+            priority: None,
+            systems: None,
         };
 
         let locked = LockedPackageFlake {
@@ -1671,6 +1677,8 @@ pub mod test_helpers {
     pub fn nix_eval_jobs_descriptor() -> ManifestPackageDescriptorFlake {
         ManifestPackageDescriptorFlake {
             flake: "github:nix-community/nix-eval-jobs".to_string(),
+            priority: None,
+            systems: None,
         }
     }
 
@@ -3589,5 +3597,27 @@ pub(crate) mod tests {
         ];
 
         assert_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn respects_flake_descriptor_systems() {
+        let manifest_contents = formatdoc! {r#"
+        version = 1
+
+        [install]
+        bpftrace.flake = "github:NixOS/nixpkgs#bpftrace"
+        bpftrace.systems = ["x86_64-linux"]
+
+        [options]
+        systems = ["aarch64-linux", "x86_64-linux"]
+        "#};
+        let TypedManifest::Catalog(manifest) = toml_edit::de::from_str(&manifest_contents).unwrap()
+        else {
+            panic!("expected a catalog manifest");
+        };
+        let installables =
+            LockedManifestCatalog::collect_flake_installables(&manifest).collect::<Vec<_>>();
+        assert_eq!(installables.len(), 1);
+        assert_eq!(installables[0].system.as_str(), "x86_64-linux");
     }
 }

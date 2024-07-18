@@ -692,6 +692,15 @@ impl ManifestPackageDescriptorCatalog {
 #[serde(deny_unknown_fields)]
 pub struct ManifestPackageDescriptorFlake {
     pub flake: String,
+    #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10usize)"))]
+    pub(crate) priority: Option<usize>,
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest::option::of(proptest::collection::vec(any::<System>(), 1..3))"
+        )
+    )]
+    pub(crate) systems: Option<Vec<System>>,
 }
 
 #[skip_serializing_none]
