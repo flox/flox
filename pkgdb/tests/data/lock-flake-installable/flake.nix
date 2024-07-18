@@ -109,8 +109,8 @@
           } ''
             touch $out
           '';
-        
-        priority = 
+
+        priority =
           pkgs.runCommand "priority" {
             meta.priority = 10;
           } ''
