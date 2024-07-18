@@ -209,7 +209,7 @@ pub struct LockedPackageCatalog {
     // region: added fields
     pub system: System, // FIXME: this is an enum in the generated code, can't derive Arbitrary there
     pub group: String,
-    pub priority: usize,
+    pub priority: u64,
     // endregion
 }
 
@@ -1420,7 +1420,7 @@ struct LockedPackagePkgdb {
     info: PackageInfo,
     #[serde(rename = "attr-path")]
     abs_path: Vec<String>,
-    priority: usize,
+    priority: u64,
 }
 
 impl LockedPackagePkgdb {
@@ -1506,7 +1506,7 @@ pub struct InstalledPackage {
     pub install_id: String,
     pub rel_path: String,
     pub info: PackageInfo,
-    pub priority: Option<usize>,
+    pub priority: Option<u64>,
 }
 
 #[derive(Debug, Error)]
