@@ -77,6 +77,7 @@ struct LockedInstallable
   std::optional<std::vector<std::string>> licenses;
   std::optional<bool>                     broken;
   std::optional<bool>                     unfree;
+  std::optional<int64_t>                  priority;
 
   [[nodiscard]] bool
   operator==( const LockedInstallable & other ) const

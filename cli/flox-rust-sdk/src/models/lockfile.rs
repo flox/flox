@@ -1182,7 +1182,7 @@ impl LockedManifestCatalog {
         let mut ok = Vec::new();
         for installable in installables.into_iter() {
             match locking
-                .lock_flake_installable(&installable.system, &installable.descriptor.flake)
+                .lock_flake_installable(&installable.system, &installable.descriptor)
                 .map(|locked_installable| {
                     LockedPackageFlake::from_parts(installable.install_id, locked_installable)
                 }) {
@@ -1669,6 +1669,7 @@ pub mod test_helpers {
                 licenses: None,
                 broken: None,
                 unfree: None,
+                priority: None,
             },
         };
         (install_id, descriptor, locked)
@@ -1769,9 +1770,9 @@ pub(crate) mod tests {
         fn lock_flake_installable(
             &self,
             _: impl AsRef<str>,
-            _: impl AsRef<str>,
+            _: &ManifestPackageDescriptorFlake,
         ) -> Result<LockedInstallable, FlakeInstallableError> {
-            todo!()
+            panic!("this flake locker always panics")
         }
     }
 
