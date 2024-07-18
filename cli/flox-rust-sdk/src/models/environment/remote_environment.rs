@@ -257,8 +257,8 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Extract the current content of the manifest
-    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError> {
-        self.inner.manifest_content(flox)
+    fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
+        self.inner.manifest_contents(flox)
     }
 
     /// Return the deserialized manifest

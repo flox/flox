@@ -274,7 +274,7 @@ teardown() {
 
 @test "'flox install' can build a broken package when allowed" {
   "$FLOX_BIN" init
-  MANIFEST_CONTENT="$(
+  MANIFEST_CONTENTS="$(
     cat << "EOF"
     version = 1
     [options]
@@ -282,7 +282,7 @@ teardown() {
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/tabula_allowed.json" \
     run "$FLOX_BIN" install tabula
   assert_success

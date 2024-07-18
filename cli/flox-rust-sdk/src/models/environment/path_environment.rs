@@ -279,7 +279,7 @@ impl Environment for PathEnvironment {
     }
 
     /// Read the environment definition file as a string
-    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError> {
+    fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
         fs::read_to_string(self.manifest_path(flox)?).map_err(EnvironmentError::ReadManifest)
     }
 

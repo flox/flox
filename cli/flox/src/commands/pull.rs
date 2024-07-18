@@ -539,7 +539,7 @@ impl Pull {
         env: &ManagedEnvironment,
         flox: &Flox,
     ) -> Result<DocumentMut, anyhow::Error> {
-        manifest::add_system(&env.manifest_content(flox)?, &flox.system)
+        manifest::add_system(&env.manifest_contents(flox)?, &flox.system)
             .context("Could not add system to manifest")
     }
 
@@ -855,7 +855,7 @@ mod tests {
 
         assert!(dot_flox_path.exists());
 
-        let new_content = environment.manifest_content(&flox).unwrap();
+        let new_content = environment.manifest_contents(&flox).unwrap();
         assert!(environment.lockfile_path(&flox).unwrap().exists());
         assert!(new_content.contains("version = 1"));
         // The test might be run on aarch64 or x86_64
@@ -899,7 +899,7 @@ mod tests {
 
         assert!(dot_flox_path.exists());
 
-        let new_content = environment.manifest_content(&flox).unwrap();
+        let new_content = environment.manifest_contents(&flox).unwrap();
         assert!(!environment.lockfile_path(&flox).unwrap().exists());
         assert!(new_content.contains("version = 1"));
         // The test might be run on aarch64 or x86_64

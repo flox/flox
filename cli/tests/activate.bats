@@ -531,7 +531,7 @@ EOF
 @test "bash: activate runs hook only once in nested activation" {
   project_setup
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [hook]
     on-activate = """
@@ -540,7 +540,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
@@ -556,7 +556,7 @@ EOF
 @test "fish: activate runs hook only once in nested activation" {
   project_setup
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [hook]
     on-activate = """
@@ -565,7 +565,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
@@ -583,7 +583,7 @@ EOF
 @test "tcsh: activate runs hook only once in nested activation" {
   project_setup
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [hook]
     on-activate = """
@@ -592,7 +592,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
@@ -610,7 +610,7 @@ EOF
 @test "zsh: activate runs hook only once in nested activations" {
   project_setup
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [hook]
     on-activate = """
@@ -619,7 +619,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
@@ -637,7 +637,7 @@ EOF
 @test "bash: activate runs profile twice in nested activation" {
   project_setup
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [profile]
     bash = """
@@ -646,7 +646,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
@@ -662,7 +662,7 @@ EOF
 @test "fish: activate runs profile twice in nested activation" {
   project_setup
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [profile]
     fish = """
@@ -671,7 +671,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # TODO: this gives unhelpful failures
   cat << 'EOF' | fish
@@ -686,7 +686,7 @@ EOF
 @test "tcsh: activate runs profile twice in nested activation" {
   project_setup
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [profile]
     tcsh = """
@@ -695,7 +695,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
@@ -709,7 +709,7 @@ EOF
 @test "zsh: activate runs profile twice in nested activation" {
   project_setup
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [profile]
     zsh = """
@@ -718,7 +718,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # TODO: this gives unhelpful failures
   cat << 'EOF' | zsh
@@ -1612,7 +1612,7 @@ EOF
 @test "'hook.on-activate' unsets environment variables in nested activation (bash)" {
   project_setup
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [hook]
     on-activate = """
@@ -1621,7 +1621,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   {
     export foo=baz
@@ -1637,7 +1637,7 @@ EOF
 @test "'hook.on-activate' unsets environment variables in nested activation (fish)" {
   project_setup
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [hook]
     on-activate = """
@@ -1646,7 +1646,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # TODO: this gives unhelpful failures
   cat << 'EOF' | fish
@@ -1667,7 +1667,7 @@ EOF
 @test "'hook.on-activate' unsets environment variables in nested activation (tcsh)" {
   project_setup
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [hook]
     on-activate = """
@@ -1676,7 +1676,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # TODO: this gives unhelpful failures
   cat << 'EOF' | tcsh
@@ -1697,7 +1697,7 @@ EOF
 @test "'hook.on-activate' unsets environment variables in nested activation (zsh)" {
   project_setup
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
     [hook]
     on-activate = """
@@ -1706,7 +1706,7 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # TODO: this gives unhelpful failures
   cat << 'EOF' | zsh
