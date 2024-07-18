@@ -42,7 +42,11 @@ use crate::providers::catalog::{
     PackageGroup,
     ResolvedPackageGroup,
 };
-use crate::providers::flox_cpp_utils::{InstallableLocker, LockedInstallable};
+use crate::providers::flox_cpp_utils::{
+    FlakeInstallableError,
+    InstallableLocker,
+    LockedInstallable,
+};
 use crate::utils::CommandExt;
 
 static DEFAULT_SYSTEMS_STR: Lazy<[String; 4]> = Lazy::new(|| {
@@ -1180,6 +1184,9 @@ impl LockedManifestCatalog {
                 }) {
                 Ok(locked) => ok.push(locked),
                 Err(e) => {
+                    if let FlakeInstallableError::NixError(_) = e {
+                        return Err(LockedManifestError::LockFlakeNixError(e));
+                    }
                     let failure = ResolutionFailure::FallbackMessage { msg: e.to_string() };
                     return Err(LockedManifestError::ResolutionFailed(ResolutionFailures(
                         vec![failure],
@@ -1565,6 +1572,9 @@ pub enum LockedManifestError {
         "Corrupt manifest; couldn't find flake package descriptor for locked install_id '{0}'"
     )]
     MissingPackageDescriptor(String),
+
+    #[error(transparent)]
+    LockFlakeNixError(FlakeInstallableError),
 }
 
 /// A warning produced by `pkgdb manifest check`

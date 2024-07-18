@@ -27,6 +27,8 @@ pub enum FlakeInstallableError {
     LockInstallable(String),
     #[error("Failed to deserialize locked installable")]
     DeserializeLockedInstallable(#[from] serde_json::Error),
+    #[error("Caught Nix error while locking flake:\n{0}")]
+    NixError(String),
 }
 
 /// Rust representation of the output of `pkgdb lock-flake-installable`
@@ -126,7 +128,7 @@ impl InstallableLocker for Pkgdb {
                         ..
                     }),
                 ..
-            }) => FlakeInstallableError::LockInstallable(nix_error.message),
+            }) => FlakeInstallableError::NixError(nix_error.message),
             CallPkgDbError::PkgDbError(PkgDbError {
                 exit_code: error_codes::NIX_EVAL,
                 context_message:
@@ -135,7 +137,7 @@ impl InstallableLocker for Pkgdb {
                         ..
                     }),
                 ..
-            }) => FlakeInstallableError::LockInstallable(nix_error.message),
+            }) => FlakeInstallableError::NixError(nix_error.message),
             CallPkgDbError::PkgDbError(PkgDbError {
                 exit_code: error_codes::NIX_LOCK_FLAKE,
                 context_message:
@@ -312,21 +314,29 @@ mod tests {
     }
 
     #[test]
-    fn catches_nix_errors() {
+    fn catches_nix_eval_errors() {
         let (flox, _temp_dir) = flox_instance_with_optional_floxhub_and_client(None, true);
-        let manifest = formatdoc! {"
+        let manifest = formatdoc! {r#"
         version =  1
-        "};
+        "#};
         let mut env = new_path_environment(&flox, &manifest);
+        let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let flake_dir = crate_root
+            .join("../tests/flakes/teeny-tiny-failure")
+            .canonicalize()
+            .unwrap();
         let pkgs = [PackageToInstall::Flake(FlakePackage {
-            id: "cachix".to_string(),
-            url: Url::parse("github:cachix/cachix").unwrap(),
+            id: "gonna_fail".to_string(),
+            url: Url::parse(&format!("path:{}", flake_dir.display())).unwrap(),
         })];
-        let res = env.install(&pkgs, &flox);
+        let res = temp_env::with_var("_PKGDB_ALLOW_LOCAL_FLAKE", Some("1"), || {
+            env.install(&pkgs, &flox)
+        });
         if let Err(e) = res {
-            assert!(e
-                .to_string()
-                .contains("the option 'allow-import-from-derivation' is disabled"))
+            let err_string = e.to_string();
+            let has_nix_error = err_string.contains("is marked as broken")
+                || err_string.contains("cached failure of attribute");
+            assert!(has_nix_error);
         } else {
             panic!("expected an error");
         }
