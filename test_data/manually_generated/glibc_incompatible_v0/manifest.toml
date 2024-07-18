@@ -1,0 +1,11 @@
+# A lock was generated for this manifest with
+# flox init
+# cp ./test_data/manually_generated/glibc_v0/manifest.toml .flox/env/manifest.toml
+# FLOX_FEATURES_USE_CATALOG=false flox list
+# cp .flox/env/manifest.lock test_data/manually_generated/glibc_v0/manifest.lock
+
+[install]
+glibc.pkg-path = "glibc"
+
+[options]
+systems = [ "x86_64-linux", "aarch64-darwin" ]

@@ -12,6 +12,8 @@ use thiserror::Error;
 /// and writes a container tarball to stdout.
 ///
 /// [ContainerBuilder::stream_container] can be used to write that tarball to a sink.
+
+#[derive(Clone, Debug)]
 pub struct ContainerBuilder {
     path: PathBuf,
 }

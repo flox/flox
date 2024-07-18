@@ -1,0 +1,86 @@
+{
+  "lockfile-version": 0,
+  "manifest": {
+    "install": {
+      "hello": {
+        "pkg-path": "hello"
+      }
+    },
+    "registry": {
+      "defaults": {
+        "subtrees": null
+      },
+      "inputs": {
+        "nixpkgs": {
+          "from": {
+            "owner": "NixOS",
+            "ref": "release-23.11",
+            "repo": "nixpkgs",
+            "type": "github"
+          },
+          "subtrees": [
+            "legacyPackages"
+          ]
+        }
+      },
+      "priority": [
+        "nixpkgs"
+      ]
+    }
+  },
+  "packages": {
+    "aarch64-darwin": {
+      "hello": {
+        "attr-path": [
+          "legacyPackages",
+          "aarch64-darwin",
+          "hello"
+        ],
+        "info": {
+          "broken": false,
+          "description": "A program that produces a familiar, friendly greeting",
+          "license": "GPL-3.0-or-later",
+          "pname": "hello",
+          "unfree": false,
+          "version": "2.12.1"
+        },
+        "input": {
+          "attrs": {
+            "lastModified": 1718132686,
+            "narHash": "sha256-JRinkq+FeAkYnrrK8+Bh+jtLHJBN5jDzSimk1ye00EE=",
+            "owner": "NixOS",
+            "repo": "nixpkgs",
+            "rev": "96b3dae4f8753c1f5ce0d06b57fe250fb5d9b0e0",
+            "type": "github"
+          },
+          "fingerprint": "d00f00cc0b4a10cd832ce3f73a3fcdfbab77482451eeabfd99c2f0fb1ada3cb0",
+          "url": "github:NixOS/nixpkgs/96b3dae4f8753c1f5ce0d06b57fe250fb5d9b0e0"
+        },
+        "priority": 5
+      }
+    }
+  },
+  "registry": {
+    "defaults": {
+      "subtrees": null
+    },
+    "inputs": {
+      "nixpkgs": {
+        "from": {
+          "lastModified": 1718132686,
+          "narHash": "sha256-JRinkq+FeAkYnrrK8+Bh+jtLHJBN5jDzSimk1ye00EE=",
+          "owner": "NixOS",
+          "repo": "nixpkgs",
+          "rev": "96b3dae4f8753c1f5ce0d06b57fe250fb5d9b0e0",
+          "type": "github"
+        },
+        "subtrees": [
+          "legacyPackages"
+        ]
+      }
+    },
+    "priority": [
+      "nixpkgs"
+    ]
+  }
+}

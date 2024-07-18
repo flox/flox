@@ -99,8 +99,123 @@ impl<State> CoreEnvironment<State> {
         fs::read_to_string(self.manifest_path()).map_err(CoreEnvironmentError::OpenManifest)
     }
 
+    /// Return the contents of the lockfile or None if it doesn't exist
+    pub fn existing_lockfile_contents(&self) -> Result<Option<String>, CoreEnvironmentError> {
+        let lockfile_path = self.lockfile_path();
+        if let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) {
+            Ok(Some(
+                fs::read_to_string(lockfile_path)
+                    .map_err(LockedManifestError::ReadLockfile)
+                    .map_err(CoreEnvironmentError::LockedManifest)?,
+            ))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Return a [LockedManifest] if the lockfile exists,
+    /// otherwise return None
+    pub fn existing_deserialized_lockfile(
+        &self,
+    ) -> Result<Option<LockedManifest>, CoreEnvironmentError> {
+        let lockfile_path = self.lockfile_path();
+        if let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) {
+            Ok(Some(
+                LockedManifest::read_from_file(&lockfile_path)
+                    .map_err(CoreEnvironmentError::LockedManifest)?,
+            ))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn manifest(&self) -> Result<TypedManifest, CoreEnvironmentError> {
         toml::from_str(&self.manifest_content()?).map_err(CoreEnvironmentError::DeserializeManifest)
+    }
+
+    /// Return a [LockedManifest] if the environment is already locked, otherwise return None.
+    /// Error if there is a pkgdb manifest that needs to be locked.
+    fn already_locked(&self) -> Result<Option<LockedManifest>, CoreEnvironmentError> {
+        let lockfile_path = self.lockfile_path();
+
+        let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) else {
+            return Ok(None);
+        };
+
+        let manifest_content = self.manifest_content()?;
+        let manifest: TypedManifest = toml::from_str(&self.manifest_content()?)
+            .map_err(CoreEnvironmentError::DeserializeManifest)?;
+        let lockfile = LockedManifest::read_from_file(&lockfile_path)
+            .map_err(CoreEnvironmentError::LockedManifest)?;
+
+        // Check if the manifest embedded in the lockfile and the manifest
+        // itself have the same contents
+        let already_locked = match (manifest, &lockfile) {
+            (TypedManifest::Catalog(manifest), LockedManifest::Catalog(lock)) => {
+                *manifest == lock.manifest
+            },
+            (TypedManifest::Pkgdb(_), LockedManifest::Catalog(_)) => {
+                return Err(CoreEnvironmentError::LockingVersion0NotSupported);
+            },
+            (TypedManifest::Catalog(_), LockedManifest::Pkgdb(_)) => false,
+            (TypedManifest::Pkgdb(_), LockedManifest::Pkgdb(locked)) => {
+                // Try to deserialize TOML content into a JSON value
+                let manifest_value = toml::from_str::<serde_json::Value>(&manifest_content).ok();
+                let manifest_object = manifest_value
+                    .as_ref()
+                    .and_then(|manifest_value| manifest_value.as_object());
+                match manifest_object {
+                    None => {
+                        // If we can't deserialize the manifest content as an
+                        // object, the lockfile is invalid and we can't relock,
+                        // so error.
+                        return Err(CoreEnvironmentError::LockingVersion0NotSupported);
+                    },
+                    Some(manifest_object) => {
+                        let lockfile_manifest = locked
+                            .0
+                            .get("manifest")
+                            .and_then(|lockfile_manifest| lockfile_manifest.as_object());
+                        if let Some(lockfile_manifest) = lockfile_manifest {
+                            // pkgdb lock inserts the GA registry into the
+                            // manifest in the lockfile,
+                            // but the actual manifest won't have it
+                            let mut lockfile_manifest = lockfile_manifest.clone();
+                            lockfile_manifest.remove("registry");
+                            if manifest_object == &lockfile_manifest {
+                                true
+                            } else {
+                                return Err(CoreEnvironmentError::LockingVersion0NotSupported);
+                            }
+                        } else {
+                            return Err(CoreEnvironmentError::LockingVersion0NotSupported);
+                        }
+                    },
+                }
+            },
+        };
+
+        if already_locked {
+            Ok(Some(lockfile))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Lock the environment if it isn't already locked.
+    /// Error if there is a pkgdb manifest that needs to be locked.
+    ///
+    /// This might be a slight optimization as compared to calling [Self::lock],
+    /// but [Self::lock] skips re-locking already locked packages,
+    /// so it probably doesn't make much of a difference.
+    /// The real point of this method is letting us skip locking for an already
+    /// locked pkgdb manifest,
+    /// since pkgdb manifests can no longer be locked.
+    pub fn ensure_locked(&mut self, flox: &Flox) -> Result<LockedManifest, CoreEnvironmentError> {
+        match self.already_locked()? {
+            Some(lock) => Ok(lock),
+            None => self.lock(flox),
+        }
     }
 
     /// Lock the environment.
@@ -116,14 +231,20 @@ impl<State> CoreEnvironment<State> {
     /// It's included in the [ReadOnly] struct for ergonomic reasons
     /// and because it doesn't modify the manifest.
     ///
-    /// todo: should we always write the lockfile to disk?
+    /// The caller is responsible for skipping calls to lock when an environment
+    /// is already locked.
+    /// For that reason, this always writes the lockfile to disk.
     pub fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, CoreEnvironmentError> {
         let manifest = self.manifest()?;
 
         let lockfile = match manifest {
             TypedManifest::Pkgdb(_) => {
-                tracing::debug!("using pkgdb to lock");
-                LockedManifest::Pkgdb(self.lock_with_pkgdb(flox)?)
+                if *flox.features.use_catalog {
+                    return Err(CoreEnvironmentError::LockingVersion0NotSupported);
+                } else {
+                    tracing::debug!("using pkgdb to lock");
+                    LockedManifest::Pkgdb(self.lock_with_pkgdb(flox)?)
+                }
             },
             TypedManifest::Catalog(manifest) => {
                 let Some(ref client) = flox.catalog_client else {
@@ -141,7 +262,6 @@ impl<State> CoreEnvironment<State> {
         let environment_lockfile_path = self.lockfile_path();
 
         // Write the lockfile to disk
-        // todo: do we always want to do this?
         debug!(
             "generated lockfile, writing to {}",
             environment_lockfile_path.display()
@@ -284,7 +404,9 @@ impl<State> CoreEnvironment<State> {
 
         Ok(store_path)
     }
+}
 
+impl CoreEnvironment<()> {
     /// Creates a [ContainerBuilder] from the environment.
     ///
     /// The sink is typically a [File](std::fs::File), [Stdout](std::io::Stdout)
@@ -305,17 +427,13 @@ impl<State> CoreEnvironment<State> {
     /// It's included in the [ReadOnly] struct for ergonomic reasons
     /// and because it doesn't modify the manifest.
     pub fn build_container(
-        &mut self,
-        _flox: &Flox,
+        lockfile_path: CanonicalPath,
     ) -> Result<ContainerBuilder, CoreEnvironmentError> {
         if std::env::consts::OS != "linux" {
             return Err(CoreEnvironmentError::ContainerizeUnsupportedSystem(
                 std::env::consts::OS.to_string(),
             ));
         }
-
-        let lockfile_path = CanonicalPath::new(self.lockfile_path())
-            .map_err(CoreEnvironmentError::BadLockfilePath)?;
 
         let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
         pkgdb_cmd
@@ -335,8 +453,6 @@ impl<State> CoreEnvironment<State> {
     /// Create a new out-link for the environment at the given path with a
     /// store-path obtained from [Self::build].
     pub fn link(
-        &mut self,
-        _flox: &Flox,
         out_link_path: impl AsRef<Path>,
         store_path: impl AsRef<Path>,
     ) -> Result<(), CoreEnvironmentError> {
@@ -1242,6 +1358,10 @@ pub enum CoreEnvironmentError {
         "Modifying version 0 manifests is no longer supported.\nSet 'version = 1' in the manifest."
     )]
     Version0NotSupported,
+    #[error(
+        "Locking version 0 manifests is no longer supported.\nSet 'version = 1' in the manifest."
+    )]
+    LockingVersion0NotSupported,
 
     #[error(transparent)]
     Services(#[from] ServiceError),
@@ -1305,9 +1425,14 @@ pub mod test_helpers {
         [options]
         semver.prefer-pre-releases = true
         "#};
-    // TODO: add version = 1 to this manifest
     #[cfg(target_os = "macos")]
     pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
+        version = 1
+        [options]
+        systems = ["x86_64-linux"]
+        "#};
+    #[cfg(target_os = "macos")]
+    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V0: &str = indoc! {r#"
         [options]
         systems = ["x86_64-linux"]
         "#};
@@ -1326,6 +1451,12 @@ pub mod test_helpers {
 
     #[cfg(target_os = "linux")]
     pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
+        version = 1
+        [options]
+        systems = ["aarch64-darwin"]
+        "#};
+    #[cfg(target_os = "linux")]
+    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V0: &str = indoc! {r#"
         [options]
         systems = ["aarch64-darwin"]
         "#};
@@ -1348,6 +1479,29 @@ pub mod test_helpers {
 
         CoreEnvironment::new(&env_path)
     }
+
+    pub fn new_core_environment_with_lockfile(
+        flox: &Flox,
+        manifest_contents: &str,
+        lockfile_contents: &str,
+    ) -> CoreEnvironment {
+        let env_path = tempfile::tempdir_in(&flox.temp_dir).unwrap().into_path();
+        fs::write(env_path.join(MANIFEST_FILENAME), manifest_contents).unwrap();
+        fs::write(env_path.join(LOCKFILE_FILENAME), lockfile_contents).unwrap();
+
+        CoreEnvironment::new(&env_path)
+    }
+
+    pub fn new_core_environment_from_env_files(
+        flox: &Flox,
+
+        env_files_dir: impl AsRef<Path>,
+    ) -> CoreEnvironment {
+        let env_files_dir = env_files_dir.as_ref();
+        let manifest_contents = fs::read_to_string(env_files_dir.join(MANIFEST_FILENAME)).unwrap();
+        let lockfile_contents = fs::read_to_string(env_files_dir.join(LOCKFILE_FILENAME)).unwrap();
+        new_core_environment_with_lockfile(flox, &manifest_contents, &lockfile_contents)
+    }
 }
 
 #[cfg(test)]
@@ -1355,13 +1509,14 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
     use std::str::FromStr;
 
-    use catalog::Client;
+    use catalog::{Client, GENERATED_DATA, MANUALLY_GENERATED};
     use catalog_api_v1::types::{ResolvedPackageDescriptor, SystemEnum};
     use chrono::{DateTime, Utc};
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
     use serial_test::serial;
     use tempfile::{tempdir_in, TempDir};
+    use test_helpers::{new_core_environment_from_env_files, new_core_environment_with_lockfile};
     use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
 
     use self::catalog::{CatalogPage, MockClient, ResolvedPackageGroup};
@@ -1380,14 +1535,14 @@ mod tests {
     use crate::providers::flox_cpp_utils::InstallableLockerMock;
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
-    /// Create a CoreEnvironment with an empty manifest
+    /// Create a CoreEnvironment with an empty manifest (with version = 1)
     ///
     /// This calls flox_instance_with_global_lock(),
     /// so the resulting environment can be built without incurring a pkgdb scrape.
     fn empty_core_environment() -> (CoreEnvironment, Flox, TempDir) {
-        let (flox, tempdir) = flox_instance_with_global_lock();
+        let (flox, tempdir) = flox_instance_with_optional_floxhub_and_client(None, true);
 
-        (new_core_environment(&flox, ""), flox, tempdir)
+        (new_core_environment(&flox, "version = 1"), flox, tempdir)
     }
 
     /// Check that `edit` updates the manifest and creates a lockfile
@@ -1395,7 +1550,7 @@ mod tests {
     #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn edit_env_creates_manifest_and_lockfile() {
-        let (flox, tempdir) = flox_instance_with_global_lock();
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub_and_client(None, true);
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
         fs::write(env_path.path().join(MANIFEST_FILENAME), "").unwrap();
@@ -1403,9 +1558,17 @@ mod tests {
         let mut env_view = CoreEnvironment::new(&env_path);
 
         let new_env_str = r#"
+        version = 1
+
         [install]
-        hello = {}
+        hello.pkg-path = "hello"
         "#;
+
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+            client.clear_and_load_responses_from_file("resolve/hello.json");
+        } else {
+            panic!("expected Mock client")
+        };
 
         env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
@@ -1417,9 +1580,10 @@ mod tests {
     #[test]
     #[serial]
     fn edit_no_op_returns_unchanged() {
-        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let mut env_view = new_core_environment(&flox, "version = 1");
 
-        let result = env_view.edit(&flox, "".to_string()).unwrap();
+        let result = env_view.edit(&flox, "version = 1".to_string()).unwrap();
 
         assert!(matches!(result, EditResult::Unchanged));
     }
@@ -1429,7 +1593,8 @@ mod tests {
     #[test]
     #[serial]
     fn build_incompatible_system() {
-        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let mut env_view = new_core_environment(&flox, "");
         let mut temp_env = env_view
             .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
             .unwrap();
@@ -1449,49 +1614,16 @@ mod tests {
     #[test]
     #[serial]
     fn build_incompatible_package() {
-        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-        let manifest_contents = formatdoc! {r#"
-        [install]
-        glibc.pkg-path = "glibc"
+        #[cfg(target_os = "macos")]
+        let env_files_dirname = "glibc_incompatible_v0_both_darwin";
 
-        [options]
-        systems = ["aarch64-darwin"]
-        "#};
+        #[cfg(target_os = "linux")]
+        let env_files_dirname = "ps_incompatible_v0_both_linux";
 
-        #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-        let manifest_contents = formatdoc! {r#"
-        [install]
-        glibc.pkg-path = "glibc"
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
 
-        [options]
-        systems = ["x86_64-darwin"]
-        "#};
-
-        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-        let manifest_contents = formatdoc! {r#"
-        [install]
-        ps.pkg-path = "darwin.ps"
-
-        [options]
-        systems = ["x86_64-linux"]
-        "#};
-
-        #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-        let manifest_contents = formatdoc! {r#"
-        [install]
-        ps.pkg-path = "darwin.ps"
-
-        [options]
-        systems = ["aarch64-linux"]
-        "#};
-
-        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
-        let mut temp_env = env_view
-            .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
-            .unwrap();
-        temp_env.update_manifest(&manifest_contents).unwrap();
-        temp_env.lock(&flox).unwrap();
-        env_view.replace_with(temp_env).unwrap();
+        let mut env_view =
+            new_core_environment_from_env_files(&flox, MANUALLY_GENERATED.join(env_files_dirname));
 
         let result = env_view.build(&flox).unwrap_err();
 
@@ -1503,18 +1635,11 @@ mod tests {
     #[test]
     #[serial]
     fn build_insecure_package() {
-        let manifest_content = indoc! {r#"
-            [install]
-            python2.pkg-path = "python2"
-            "#
-        };
-        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
-        let mut temp_env = env_view
-            .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
-            .unwrap();
-        temp_env.update_manifest(manifest_content).unwrap();
-        temp_env.lock(&flox).unwrap();
-        env_view.replace_with(temp_env).unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let mut env_view = new_core_environment_from_env_files(
+            &flox,
+            MANUALLY_GENERATED.join("python2_insecure_v0"),
+        );
 
         let result = env_view.build(&flox).unwrap_err();
 
@@ -1547,12 +1672,20 @@ mod tests {
     #[test]
     #[serial]
     fn edit_adding_package_returns_success() {
-        let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
+        let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
 
         let new_env_str = r#"
+        version = 1
+
         [install]
-        hello = {}
+        hello.pkg-path = "hello"
         "#;
+
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+            client.clear_and_load_responses_from_file("resolve/hello.json");
+        } else {
+            panic!("expected Mock client")
+        };
 
         let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
@@ -1566,6 +1699,8 @@ mod tests {
         let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
 
         let new_env_str = r#"
+        version = 1
+
         [hook]
         on-activate = ""
         "#;
@@ -1581,8 +1716,6 @@ mod tests {
     fn locking_of_v1_manifest_requires_catalog_client() {
         let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
         flox.catalog_client = None;
-
-        fs::write(env_view.manifest_path(), r#"version = 1"#).unwrap();
 
         let err = env_view
             .lock(&flox)
@@ -1603,7 +1736,6 @@ mod tests {
     fn upgrade_with_catalog_client_requires_catalog_client() {
         // flox already has a catalog client
         let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
-        fs::write(env_view.manifest_path(), r#"version = 1"#).unwrap();
 
         flox.catalog_client = None;
         let err = env_view
@@ -1737,28 +1869,31 @@ mod tests {
     #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn build_flox_environment_and_links() {
-        let (flox, tempdir) = flox_instance_with_global_lock();
+        let (mut flox, tempdir) = flox_instance_with_optional_floxhub_and_client(None, true);
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
         fs::write(
             env_path.path().join(MANIFEST_FILENAME),
-            "
+            r#"
+        version = 1
+
         [install]
-        hello = {}
-        ",
+        hello.pkg-path = "hello"
+        "#,
         )
         .unwrap();
 
         let mut env_view = CoreEnvironment::new(&env_path);
 
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+            client.clear_and_load_responses_from_file("resolve/hello.json");
+        } else {
+            panic!("expected Mock client")
+        };
+
         env_view.lock(&flox).expect("locking should succeed");
         let store_path = env_view.build(&flox).expect("build should succeed");
-        env_view
-            .link(
-                &flox,
-                env_path.path().with_extension("out-link"),
-                &store_path,
-            )
+        CoreEnvironment::link(env_path.path().with_extension("out-link"), store_path)
             .expect("link should succeed");
 
         // very rudimentary check that the environment manifest built correctly
@@ -1799,32 +1934,32 @@ mod tests {
 
     #[test]
     fn migrate_to_v1_error_for_locking() {
-        let (flox_pkgdb, _temp_dir_handle) = flox_instance_with_global_lock();
-        let contents = indoc! {r#"
-            [install]
-            glibc.pkg-path = "glibc"
-
-            [options]
-            systems = [ "x86_64-linux", "aarch64-darwin" ]
-            "#};
-
-        let mut environment = new_core_environment(&flox_pkgdb, contents);
+        let (mut flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(None, true);
         // The v0 lockfile should get ignored,
         // but create it just to keep this more realistic
-        environment.lock(&flox_pkgdb).unwrap();
+        let mut environment = new_core_environment_from_env_files(
+            &flox,
+            MANUALLY_GENERATED.join("glibc_incompatible_v0"),
+        );
 
-        let (mut flox_catalog, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
-        if let Some(Client::Mock(ref mut client)) = flox_catalog.catalog_client {
+        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             client.clear_and_load_responses_from_file("resolve/glibc_incompatible.json");
         } else {
             panic!("expected Mock client")
         };
 
-        let raw_manifest = RawManifest::from_str(contents).unwrap();
+        let manifest_contents = fs::read_to_string(
+            MANUALLY_GENERATED
+                .join("glibc_incompatible_v0")
+                .join(MANIFEST_FILENAME),
+        )
+        .unwrap();
+
+        let raw_manifest = RawManifest::from_str(&manifest_contents).unwrap();
 
         let err = environment
-            .migrate_to_v1(&flox_catalog, MigrationInfo {
+            .migrate_to_v1(&flox, MigrationInfo {
                 raw_manifest,
                 needs_manifest_migration: true,
                 needs_upgrade: true,
@@ -1962,5 +2097,51 @@ mod tests {
             raw_manifest.get("version").unwrap().as_integer().unwrap(),
             1
         );
+    }
+
+    #[test]
+    fn v0_does_not_need_relock() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let environment =
+            new_core_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
+        assert!(environment.already_locked().unwrap().is_some());
+    }
+
+    #[test]
+    fn modified_v0_errors() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let manifest_contents =
+            fs::read_to_string(MANUALLY_GENERATED.join("empty_v0").join(MANIFEST_FILENAME))
+                .unwrap();
+        let lockfile_contents =
+            fs::read_to_string(MANUALLY_GENERATED.join("hello_v0").join(LOCKFILE_FILENAME))
+                .unwrap();
+        let environment =
+            new_core_environment_with_lockfile(&flox, &manifest_contents, &lockfile_contents);
+        let err = environment.already_locked().unwrap_err();
+        assert!(matches!(
+            err,
+            CoreEnvironmentError::LockingVersion0NotSupported
+        ));
+    }
+
+    #[test]
+    fn v1_does_not_need_relock() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let environment =
+            new_core_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
+        assert!(environment.already_locked().unwrap().is_some());
+    }
+
+    #[test]
+    fn modified_v1_needs_relock() {
+        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let manifest_contents =
+            fs::read_to_string(MANUALLY_GENERATED.join("empty").join(MANIFEST_FILENAME)).unwrap();
+        let lockfile_contents =
+            fs::read_to_string(GENERATED_DATA.join("envs/hello").join(LOCKFILE_FILENAME)).unwrap();
+        let environment =
+            new_core_environment_with_lockfile(&flox, &manifest_contents, &lockfile_contents);
+        assert!(environment.already_locked().unwrap().is_none());
     }
 }

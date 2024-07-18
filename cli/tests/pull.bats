@@ -105,6 +105,31 @@ function make_incompatible() {
   rm -rf "$PROJECT_DIR/floxmeta"
 }
 
+function copy_manifest_and_lockfile_to_remote() {
+  OWNER="$1"
+  shift
+  ENV_NAME="$1"
+  shift
+  ENV_FILES_DIR="$1"
+  shift
+
+  git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
+  pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
+  git checkout "$ENV_NAME"
+  cp "$ENV_FILES_DIR/manifest.toml" 2/env/manifest.toml
+  cp "$ENV_FILES_DIR/manifest.lock" 2/env/manifest.lock
+
+  git add .
+  git \
+    -c "user.name=test" \
+    -c "user.email=test@email.address" \
+    commit \
+    -m "copy manifest and lockfile"
+  git push
+  popd >/dev/null || return
+  rm -rf "$PROJECT_DIR/floxmeta"
+}
+
 # catalog manifests by default support all systems.
 # remove additional systems to check handling of missing systems.
 # should be run on an empty environment.
@@ -143,13 +168,11 @@ function add_incompatible_package() {
   # replace linux with darwin or darwin with linux
   if [ -z "${NIX_SYSTEM##*-linux}" ]; then
     package='"darwin.ps"'
-    export INCOMPATIBLE_MOCK_RESPONSE_FIRST_TIME="$GENERATED_DATA/resolve/darwin_ps.json"
-    export INCOMPATIBLE_MOCK_RESPONSE_SECOND_TIME="$GENERATED_DATA/resolve/darwin_ps_incompatible.json"
+    export INCOMPATIBLE_MOCK_RESPONSE="$GENERATED_DATA/resolve/darwin_ps_incompatible.json"
 
   elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
     package='"glibc"'
-    export INCOMPATIBLE_MOCK_RESPONSE_FIRST_TIME="$GENERATED_DATA/resolve/glibc.json"
-    export INCOMPATIBLE_MOCK_RESPONSE_SECOND_TIME="$GENERATED_DATA/resolve/glibc_incompatible.json"
+    export INCOMPATIBLE_MOCK_RESPONSE="$GENERATED_DATA/resolve/glibc_incompatible.json"
   else
     echo "unknown system: '$NIX_SYSTEM'"
     exit 1
@@ -166,29 +189,6 @@ function add_incompatible_package() {
     -c "user.email=test@email.address" \
     commit \
     -m "make unsupported system"
-  git push
-  popd >/dev/null || return
-  rm -rf "$PROJECT_DIR/floxmeta"
-}
-
-# make the environment with specified owner and name incompatible with the current system
-# by adding a package that fails nix evaluation due to being on an unsupported system.
-function add_insecure_package() {
-  OWNER="$1"
-  shift
-  ENV_NAME="$1"
-  shift
-
-  git clone "$FLOX_FLOXHUB_PATH/$OWNER/floxmeta" "$PROJECT_DIR/floxmeta"
-  pushd "$PROJECT_DIR/floxmeta" >/dev/null || return
-  git checkout "$ENV_NAME"
-  tomlq --in-place --toml-output '.install.extra."pkg-path" = "python2"' 2/env/manifest.toml
-  git add .
-  git \
-    -c "user.name=test" \
-    -c "user.email=test@email.address" \
-    commit \
-    -m "add failing package"
   git push
   popd >/dev/null || return
   rm -rf "$PROJECT_DIR/floxmeta"
@@ -363,17 +363,33 @@ function add_insecure_package() {
 # due to the current system missing <system> in `option.systems`
 # AND a package that is indeed not able to be built for the current system
 # should show a warning, but otherwise succeed to pull
-@test "pull unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
+@test "pull v0 unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
   make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
-  make_incompatible "owner" "name"
-  add_incompatible_package "owner" "name"
+  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
+    ENV_FILES_DIR="$MANUALLY_GENERATED/ps_v0_aarch64-darwin"
+    # This response might not be precisely correct if we regenerate because it's
+    # for x86_64-darwin and aarch64-linux, but currently it's the same
+    CATALOG_RESPONSE="$GENERATED_DATA/resolve/darwin_ps_incompatible.json"
+    PACKAGE="ps"
+  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
+    ENV_FILES_DIR="$MANUALLY_GENERATED/glibc_v0_x86_64-linux"
+    # This response might not be precisely correct if we regenerate because it's
+    # for x86_64-linux and aarch64-darwin, but currently it's the same
+    CATALOG_RESPONSE="$GENERATED_DATA/resolve/glibc_incompatible.json"
+    PACKAGE="glibc"
+  else
+    echo "unknown system: '$NIX_SYSTEM'"
+    exit 1
+  fi
 
-  run "$FLOX_BIN" pull --remote owner/name --force
+  copy_manifest_and_lockfile_to_remote "owner" "name" "$ENV_FILES_DIR"
+
+  _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSE" \
+    run "$FLOX_BIN" pull --remote owner/name --force
   assert_success
-  assert_line --partial "Modified the manifest to include your system but could not build."
+  assert_line --partial "resolution failed: package '$PACKAGE' not available for"
+  assert_line --partial "Migrated the environment to version 1 and included your system but could not"
 
   run "$FLOX_BIN" list
   assert_success
@@ -400,17 +416,34 @@ function add_insecure_package() {
 # bats test_tags=pull:unsupported-package
 # pulling an environment with a package that is not available for the current platform
 # should fail with an error
-@test "pull environment with package not available for the current platform fails" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
+@test "pull v0 environment with package not available for the current platform fails" {
   make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
-  add_incompatible_package "owner" "name"
 
-  run "$FLOX_BIN" pull --remote owner/name
+  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
+    ENV_FILES_DIR="$MANUALLY_GENERATED/ps_incompatible_v0_both_linux"
+    # This response might not be precisely correct if we regenerate because it's
+    # for x86_64-darwin and aarch64-linux, but currently it's the same
+    CATALOG_RESPONSE="$GENERATED_DATA/resolve/darwin_ps_incompatible.json"
+    PACKAGE="ps"
+  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
+    ENV_FILES_DIR="$MANUALLY_GENERATED/glibc_incompatible_v0_both_darwin"
+    # This response might not be precisely correct if we regenerate because it's
+    # for x86_64-linux and aarch64-darwin, but currently it's the same
+    CATALOG_RESPONSE="$GENERATED_DATA/resolve/glibc_incompatible.json"
+    PACKAGE="glibc"
+  else
+    echo "unknown system: '$NIX_SYSTEM'"
+    exit 1
+  fi
+
+  copy_manifest_and_lockfile_to_remote "owner" "name" "$ENV_FILES_DIR"
+
+  _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSE" \
+    run "$FLOX_BIN" pull --remote owner/name
 
   assert_failure
-  assert_line --partial "package 'extra' is not available for this system ('$NIX_SYSTEM')"
+  assert_line --partial "package '$PACKAGE' is not available for this system ('$NIX_SYSTEM')"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -418,17 +451,15 @@ function add_insecure_package() {
 # bats test_tags=pull:eval-failure
 # pulling an environment with a package that fails to evaluate
 # should fail with an error
-@test "pull environment with insecure package fails to evaluate" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
+@test "pull v0 environment with insecure package fails to evaluate" {
   make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
-  add_insecure_package "owner" "name"
+  copy_manifest_and_lockfile_to_remote "owner" "name" "$MANUALLY_GENERATED/python2_insecure_v0"
 
   run "$FLOX_BIN" pull --remote owner/name
 
   assert_failure
-  assert_line --partial "package 'extra' failed to evaluate:"
+  assert_line --partial "package 'python2' failed to evaluate:"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -613,19 +644,12 @@ function add_insecure_package() {
   add_incompatible_package "owner" "name"
 
   # add_incompatible_package does not _lock_ the environment,
-  # therefore pull will resolve the package.
-  _FLOX_USE_CATALOG_MOCK="$INCOMPATIBLE_MOCK_RESPONSE_FIRST_TIME" \
-    run "$FLOX_BIN" pull --remote owner/name
+  # but pull won't either because it will expect it to already have a lock
+  run "$FLOX_BIN" pull --remote owner/name
   assert_failure
   assert_line --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
 
-  # combine output of calling resolve before and after adding the system
-  jq -s add \
-    "$INCOMPATIBLE_MOCK_RESPONSE_FIRST_TIME" \
-    "$INCOMPATIBLE_MOCK_RESPONSE_SECOND_TIME" \
-    >"./twice.json"
-
-  _FLOX_USE_CATALOG_MOCK="./twice.json" \
+  _FLOX_USE_CATALOG_MOCK="$INCOMPATIBLE_MOCK_RESPONSE" \
     run "$FLOX_BIN" pull --remote owner/name --force
   assert_success
   assert_line --partial "Modified the manifest to include your system but could not build."

@@ -16,6 +16,7 @@
   flox-manpages,
   ci ? false,
   GENERATED_DATA ? ./../../test_data/generated,
+  MANUALLY_GENERATED ? ./../../test_data/manually_generated,
 }: let
   # For use in GitHub Actions and local development.
   ciPackages =
@@ -66,6 +67,7 @@ in
         '';
 
       inherit GENERATED_DATA;
+      inherit MANUALLY_GENERATED;
     }
     // flox-pkgdb.devEnvs
     // flox-cli.devEnvs

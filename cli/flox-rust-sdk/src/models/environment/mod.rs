@@ -122,12 +122,6 @@ pub struct MigrationInfo {
 }
 
 pub trait Environment: Send {
-    /// Build the environment and create a result link as gc-root
-    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError>;
-
-    /// Resolve the environment and return the lockfile
-    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError>;
-
     /// Create a container image from the environment
     fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError>;
 
@@ -161,6 +155,12 @@ pub trait Environment: Send {
         flox: &Flox,
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError>;
+
+    /// Return the content of the lockfile.
+    ///
+    /// Some implementations error if the lock does not already exist, while
+    /// others call lock.
+    fn deserialized_lockfile(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError>;
 
     /// Extract the current content of the manifest
     ///
@@ -570,6 +570,9 @@ pub enum EnvironmentError {
 
     #[error("path for services socket is too long: {0}")]
     ServicesSocketPathTooLong(PathBuf),
+
+    #[error("corrupt environment; environment does not have a lockfile")]
+    MissingLockfile,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -777,7 +780,10 @@ mod test {
     use std::time::Duration;
 
     use once_cell::sync::Lazy;
-    use path_environment::test_helpers::new_path_environment;
+    use path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_from_env_files,
+    };
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -787,6 +793,7 @@ mod test {
         flox_instance_with_optional_floxhub_and_client,
     };
     use crate::flox::DEFAULT_FLOXHUB_URL;
+    use crate::providers::catalog::MANUALLY_GENERATED;
     use crate::providers::git::GitProvider;
 
     const MANAGED_ENV_JSON: &'_ str = r#"{
@@ -1059,8 +1066,8 @@ mod test {
     #[test]
     fn needs_manifest_migration_0_0() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let mut environment = new_path_environment(&flox, "");
-        environment.lock(&flox).unwrap();
+        let environment =
+            new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
         assert!(matches!(
             environment.needs_migration_to_v1(&flox),
             Ok(Some(MigrationInfo {
@@ -1076,8 +1083,9 @@ mod test {
     #[test]
     fn needs_manifest_migration_0_1() {
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
-        let mut environment = new_path_environment(&flox, "version = 1");
-        environment.lock(&flox).unwrap();
+        let environment = new_path_environment(&flox, "version = 1");
+        let mut env_view = CoreEnvironment::new(environment.path.join(ENV_DIR_NAME));
+        env_view.lock(&flox).unwrap();
         assert!(matches!(
             LockedManifest::read_from_file(
                 &CanonicalPath::new(environment.lockfile_path(&flox).unwrap()).unwrap(),
@@ -1112,8 +1120,8 @@ mod test {
     #[test]
     fn needs_manifest_migration_1_0() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let mut environment = new_path_environment(&flox, "");
-        environment.lock(&flox).unwrap();
+        let environment =
+            new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
         fs::write(environment.manifest_path(&flox).unwrap(), "version = 1").unwrap();
         assert!(matches!(
             environment.needs_migration_to_v1(&flox),
@@ -1129,8 +1137,9 @@ mod test {
     #[test]
     fn needs_manifest_migration_1_1() {
         let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
-        let mut environment = new_path_environment(&flox, "version = 1");
-        environment.lock(&flox).unwrap();
+        let environment = new_path_environment(&flox, "version = 1");
+        let mut env_view = CoreEnvironment::new(environment.path.join(ENV_DIR_NAME));
+        env_view.lock(&flox).unwrap();
         assert!(environment.needs_migration_to_v1(&flox).unwrap().is_none());
     }
 

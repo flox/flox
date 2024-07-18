@@ -179,6 +179,9 @@ pub enum ManagedEnvironmentError {
 
     #[error("failed to locate project in environment registry")]
     Registry(#[from] EnvRegistryError),
+
+    #[error(transparent)]
+    Core(#[from] CoreEnvironmentError),
 }
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
@@ -204,26 +207,21 @@ impl GenerationLock {
 }
 
 impl Environment for ManagedEnvironment {
-    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError> {
+    /// This will lock if there is an out of sync local checkout
+    fn deserialized_lockfile(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
-
-        local_checkout.lock(flox)?;
-        let store_path = local_checkout.build(flox)?;
-        local_checkout.link(flox, &self.out_link, &store_path)?;
-
-        Ok(())
+        self.ensure_locked(flox, &mut local_checkout)
     }
 
-    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
-        let mut temporary = self.local_env_or_copy_current_generation(flox)?;
-
-        Ok(temporary.lock(flox)?)
-    }
-
+    /// This will lock if there is an out of sync local checkout
     fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError> {
-        let mut temporary = self.local_env_or_copy_current_generation(flox)?;
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
+        self.ensure_locked(flox, &mut local_checkout)?;
 
-        let builder = temporary.build_container(flox)?;
+        let lockfile_path = CanonicalPath::new(local_checkout.lockfile_path())
+            .expect("a locked environment must have a lockfile");
+
+        let builder = CoreEnvironment::build_container(lockfile_path)?;
         Ok(builder)
     }
 
@@ -258,7 +256,7 @@ impl Environment for ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
         if let Some(ref store_path) = &result.store_path {
-            local_checkout.link(flox, &self.out_link, store_path)?;
+            CoreEnvironment::link(&self.out_link, store_path)?;
         }
 
         Ok(result)
@@ -294,7 +292,7 @@ impl Environment for ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
         if let Some(ref store_path) = &result.store_path {
-            local_checkout.link(flox, &self.out_link, store_path)?;
+            CoreEnvironment::link(&self.out_link, store_path)?;
         }
 
         Ok(result)
@@ -317,7 +315,7 @@ impl Environment for ManagedEnvironment {
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
             self.lock_pointer()?;
             if let Some(ref store_path) = result.store_path() {
-                local_checkout.link(flox, &self.out_link, store_path)?;
+                CoreEnvironment::link(&self.out_link, store_path)?;
             }
         }
 
@@ -356,7 +354,7 @@ impl Environment for ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
         if let Some(ref store_path) = result.store_path {
-            temporary.link(flox, &self.out_link, store_path)?;
+            CoreEnvironment::link(&self.out_link, store_path)?;
         }
 
         Ok(result)
@@ -415,10 +413,13 @@ impl Environment for ManagedEnvironment {
             .map_err(CoreEnvironmentError::DeserializeManifest)?)
     }
 
+    /// This will lock if there is an out of sync local checkout
     fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
-        let local_manifest_path = self
-            .local_env_or_copy_current_generation(flox)?
-            .manifest_path();
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
+
+        self.ensure_locked(flox, &mut local_checkout)?;
+
+        let local_manifest_path = local_checkout.manifest_path();
 
         let local_manifest = mtime_of(local_manifest_path);
         let out_link_modified_at = mtime_of(&self.out_link);
@@ -429,7 +430,8 @@ impl Environment for ManagedEnvironment {
         );
 
         if local_manifest >= out_link_modified_at || !self.out_link.exists() {
-            self.build(flox)?;
+            let store_path = self.build(flox)?;
+            self.link(store_path)?
         }
 
         Ok(self.out_link.to_path_buf())
@@ -541,7 +543,7 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata.to_string())
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        temporary.link(flox, &self.out_link, &store_path)?;
+        CoreEnvironment::link(&self.out_link, store_path)?;
 
         Ok(())
     }
@@ -555,6 +557,38 @@ impl Environment for ManagedEnvironment {
 
 /// Constructors and related functions
 impl ManagedEnvironment {
+    /// If there's an out of sync local checkout, ensure it's locked.
+    /// If the checkout is in sync, return it's lock contents.
+    ///
+    /// This errors if an in-sync checkout doesn't have a lockfile, since that's
+    /// a bad state.
+    fn ensure_locked(
+        &mut self,
+        flox: &Flox,
+        local_checkout: &mut CoreEnvironment,
+    ) -> Result<LockedManifest, EnvironmentError> {
+        // Otherwise, there would be a generation without a lockfile, which is a bad state,
+        // and we error.
+        if !Self::validate_checkout(local_checkout, &self.get_current_generation(flox)?)? {
+            Ok(local_checkout.ensure_locked(flox)?)
+        } else {
+            let content = local_checkout.existing_deserialized_lockfile()?;
+            content.ok_or(EnvironmentError::MissingLockfile)
+        }
+    }
+
+    pub fn build(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+        let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
+
+        Ok(local_checkout.build(flox)?)
+    }
+
+    pub fn link(&mut self, store_path: impl AsRef<Path>) -> Result<(), EnvironmentError> {
+        CoreEnvironment::link(&self.out_link, store_path)?;
+
+        Ok(())
+    }
+
     /// Returns a unique identifier for the location of the environment.
     fn path_hash(&self) -> String {
         path_hash(&self.path)
@@ -662,7 +696,7 @@ impl ManagedEnvironment {
         dot_flox_path: CanonicalPath,
         out_link: PathBuf,
     ) -> Result<Self, ManagedEnvironmentError> {
-        let lock = Self::ensure_locked(&pointer, &dot_flox_path, &floxmeta)?;
+        let lock = Self::ensure_generation_locked(&pointer, &dot_flox_path, &floxmeta)?;
 
         Self::ensure_branch(&branch_name(&pointer, &dot_flox_path), &lock, &floxmeta)?;
 
@@ -695,7 +729,7 @@ impl ManagedEnvironment {
     ///
     /// Currently we can only recommend to not commit lockfiles with a local revision.
     /// This behavior may change in the future.
-    fn ensure_locked(
+    fn ensure_generation_locked(
         pointer: &ManagedPointer,
         dot_flox_path: &CanonicalPath,
         floxmeta: &FloxMeta,
@@ -958,6 +992,9 @@ impl ManagedEnvironment {
         // Ensure the environment is locked
         // PathEnvironment may not have a lockfile or an outdated lockfile
         // if the environment was modified primarily through editing the manifest manually.
+        // Call lock rather than ensure_locked because the primary purpose of
+        // ensure_locked is avoiding locking of v0 manifests,
+        // but we don't need to support pushing old manifests.
         local_checkout
             .lock(flox)
             .map_err(ManagedEnvironmentError::Lock)?;
@@ -967,9 +1004,7 @@ impl ManagedEnvironment {
             .build(flox)
             .map_err(ManagedEnvironmentError::Build)?;
 
-        local_checkout
-            .link(flox, &self.out_link, &store_path)
-            .map_err(ManagedEnvironmentError::Link)?;
+        CoreEnvironment::link(&self.out_link, store_path).map_err(ManagedEnvironmentError::Link)?;
 
         let mut generations = self
             .generations()
@@ -1069,6 +1104,12 @@ impl ManagedEnvironment {
         local: &CoreEnvironment,
         remote: &CoreEnvironment,
     ) -> Result<bool, ManagedEnvironmentError> {
+        let local_lockfile_bytes = local.existing_lockfile_contents()?;
+        let remote_lockfile_bytes = remote.existing_lockfile_contents()?;
+        if local_lockfile_bytes != remote_lockfile_bytes {
+            return Ok(false);
+        }
+
         let local_manifest_bytes = local
             .manifest_content()
             .map_err(ManagedEnvironmentError::ReadLocalManifest)?;
@@ -1287,6 +1328,9 @@ impl ManagedEnvironment {
         // Ensure the environment is locked
         // PathEnvironment may not have a lockfile or an outdated lockfile
         // if the environment was modified primarily through editing the manifest manually.
+        // Call lock rather than ensure_locked because the primary purpose of
+        // ensure_locked is avoiding locking of v0 manifests,
+        // but we don't need to support pushing old manifests.
         core_environment
             .lock(flox)
             .map_err(ManagedEnvironmentError::Lock)?;
@@ -1611,7 +1655,10 @@ mod test {
         RegisteredEnv,
         RegistryEntry,
     };
-    use crate::models::environment::test_helpers::new_core_environment;
+    use crate::models::environment::test_helpers::{
+        new_core_environment,
+        new_core_environment_with_lockfile,
+    };
     use crate::models::environment::{DOT_FLOX, MANIFEST_FILENAME};
     use crate::models::floxmeta::floxmeta_dir;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
@@ -1732,7 +1779,8 @@ mod test {
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, None);
 
-        ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta).unwrap();
+        ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta)
+            .unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
@@ -1777,7 +1825,8 @@ mod test {
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
-        ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta).unwrap();
+        ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta)
+            .unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
         let lock: GenerationLock = serde_json::from_slice(&fs::read(lock_path).unwrap()).unwrap();
@@ -1833,7 +1882,7 @@ mod test {
             Some(&lock),
         );
 
-        ManagedEnvironment::ensure_locked(
+        ManagedEnvironment::ensure_generation_locked(
             &make_test_pointer(&remote_path),
             &dot_flox_path,
             &floxmeta,
@@ -1888,7 +1937,7 @@ mod test {
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
         assert!(matches!(
-            ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta),
+            ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta),
             Err(ManagedEnvironmentError::RevDoesNotExist)
         ));
     }
@@ -1928,7 +1977,7 @@ mod test {
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
         assert!(matches!(
-            ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta),
+            ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta),
             Err(ManagedEnvironmentError::RevDoesNotExist)
         ));
 
@@ -1966,7 +2015,8 @@ mod test {
         let dot_flox_path = flox.temp_dir.join(DOT_FLOX);
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
-        ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta).unwrap();
+        ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta)
+            .unwrap();
 
         let lock_path = dot_flox_path.join(GENERATION_LOCK_FILENAME);
 
@@ -2010,7 +2060,7 @@ mod test {
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
         assert!(matches!(
-            ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta),
+            ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta),
             Err(ManagedEnvironmentError::LocalRevDoesNotExist)
         ));
     }
@@ -2056,7 +2106,8 @@ mod test {
         let dot_flox_path = create_dot_flox(&dot_flox_path, &test_pointer, Some(&lock));
 
         assert_eq!(
-            ManagedEnvironment::ensure_locked(&test_pointer, &dot_flox_path, &floxmeta).unwrap(),
+            ManagedEnvironment::ensure_generation_locked(&test_pointer, &dot_flox_path, &floxmeta)
+                .unwrap(),
             lock
         );
     }
@@ -2480,6 +2531,17 @@ mod test {
             &toml_edit::ser::to_string_pretty(&manifest_a).unwrap(),
         );
         let env_b = new_core_environment(&flox, &toml_edit::ser::to_string(&manifest_b).unwrap());
+
+        assert!(!ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
+    }
+
+    // An out of sync lockfile should fail validation
+    #[test]
+    fn validate_different_lockfiles() {
+        let (flox, _temp_dir_handle) = flox_instance();
+
+        let env_a = new_core_environment_with_lockfile(&flox, "manifest", "{}");
+        let env_b = new_core_environment_with_lockfile(&flox, "manifest", "{ }");
 
         assert!(!ManagedEnvironment::validate_checkout(&env_a, &env_b).unwrap());
     }

@@ -436,6 +436,8 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
         },
         // User facing
         CoreEnvironmentError::Version0NotSupported => display_chain(err),
+        // User facing
+        CoreEnvironmentError::LockingVersion0NotSupported => display_chain(err),
         CoreEnvironmentError::Services(err) => display_chain(err),
         CoreEnvironmentError::ServicesWithV0 => {
             format_core_error(&CoreEnvironmentError::ServicesWithV0)
@@ -641,6 +643,10 @@ pub fn format_managed_error(err: &ManagedEnvironmentError) -> String {
         },
 
         ManagedEnvironmentError::Registry(_) => display_chain(err),
+
+        ManagedEnvironmentError::Core(core_environment_error) => {
+            format_core_error(core_environment_error)
+        },
     }
 }
 

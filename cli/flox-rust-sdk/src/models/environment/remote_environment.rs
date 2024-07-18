@@ -175,14 +175,10 @@ impl RemoteEnvironment {
 }
 
 impl Environment for RemoteEnvironment {
-    /// Build the environment and create a result link as gc-root
-    fn build(&mut self, flox: &Flox) -> Result<(), EnvironmentError> {
-        self.inner.build(flox)
-    }
-
-    /// Lock the environment and return the lockfile contents
-    fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
-        self.inner.lock(flox)
+    /// Return the lockfile content,
+    /// or error if the lockfile doesn't exist.
+    fn deserialized_lockfile(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
+        self.inner.deserialized_lockfile(flox)
     }
 
     fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError> {

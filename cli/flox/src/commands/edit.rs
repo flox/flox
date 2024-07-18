@@ -150,7 +150,12 @@ impl Edit {
                 Dialog {
                     message: "Building environment",
                     help_message: None,
-                    typed: Spinner::new(|| environment.build(&flox)),
+                    typed: Spinner::new(|| {
+                        // The current generation already has a lock,
+                        // so we can skip locking.
+                        let store_path = environment.build(&flox)?;
+                        environment.link(store_path)
+                    }),
                 }
                 .spin()?;
 
