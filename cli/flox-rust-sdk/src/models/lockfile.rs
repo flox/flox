@@ -42,7 +42,11 @@ use crate::providers::catalog::{
     PackageGroup,
     ResolvedPackageGroup,
 };
-use crate::providers::flox_cpp_utils::{InstallableLocker, LockedInstallable};
+use crate::providers::flox_cpp_utils::{
+    FlakeInstallableError,
+    InstallableLocker,
+    LockedInstallable,
+};
 use crate::utils::CommandExt;
 
 static DEFAULT_SYSTEMS_STR: Lazy<[String; 4]> = Lazy::new(|| {
@@ -1171,27 +1175,26 @@ impl LockedManifestCatalog {
         locking: &'locking impl InstallableLocker,
         installables: impl IntoIterator<Item = FlakeInstallableToLock> + 'locking,
     ) -> Result<impl Iterator<Item = LockedPackageFlake> + 'locking, LockedManifestError> {
-        let (ok, errs): (Vec<_>, Vec<_>) = installables
-            .into_iter()
-            .map(|installable| {
-                locking
-                    .lock_flake_installable(&installable.system, &installable.descriptor.flake)
-                    .map(|locked_installable| {
-                        LockedPackageFlake::from_parts(installable.install_id, locked_installable)
-                    })
-            })
-            .partition_result();
-
-        if errs.is_empty() {
-            Ok(ok.into_iter())
-        } else {
-            let resolution_failures = errs
-                .into_iter()
-                .map(|e| ResolutionFailure::FallbackMessage { msg: e.to_string() })
-                .collect();
-
-            Err(LockedManifestError::ResolutionFailed(resolution_failures))
+        let mut ok = Vec::new();
+        for installable in installables.into_iter() {
+            match locking
+                .lock_flake_installable(&installable.system, &installable.descriptor.flake)
+                .map(|locked_installable| {
+                    LockedPackageFlake::from_parts(installable.install_id, locked_installable)
+                }) {
+                Ok(locked) => ok.push(locked),
+                Err(e) => {
+                    if let FlakeInstallableError::NixError(_) = e {
+                        return Err(LockedManifestError::LockFlakeNixError(e));
+                    }
+                    let failure = ResolutionFailure::FallbackMessage { msg: e.to_string() };
+                    return Err(LockedManifestError::ResolutionFailed(ResolutionFailures(
+                        vec![failure],
+                    )));
+                },
+            }
         }
+        Ok(ok.into_iter())
     }
 
     /// Filter out packages from the locked manifest by install_id or group
@@ -1213,7 +1216,6 @@ impl LockedManifestCatalog {
                 true
             })
             .collect();
-
         self
     }
 }
@@ -1570,6 +1572,9 @@ pub enum LockedManifestError {
         "Corrupt manifest; couldn't find flake package descriptor for locked install_id '{0}'"
     )]
     MissingPackageDescriptor(String),
+
+    #[error(transparent)]
+    LockFlakeNixError(FlakeInstallableError),
 }
 
 /// A warning produced by `pkgdb manifest check`
