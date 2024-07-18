@@ -76,7 +76,6 @@ pub struct LockedInstallable {
 /// using the `pkgdb lock-flake-installable` command.
 ///
 /// The trait is also implemented by the [`InstallableLockerMock`] struct which is used for testing.
-#[enum_dispatch]
 pub trait InstallableLocker {
     fn lock_flake_installable(
         &self,
@@ -86,10 +85,26 @@ pub trait InstallableLocker {
 }
 
 #[derive(Debug)]
-#[enum_dispatch(InstallableLocker)]
 pub enum InstallableLockerImpl {
     Pkgdb(Pkgdb),
     Mock(InstallableLockerMock),
+}
+
+impl InstallableLocker for InstallableLockerImpl {
+    fn lock_flake_installable(
+        &self,
+        system: impl AsRef<str>,
+        installable: impl AsRef<str>,
+    ) -> Result<LockedInstallable, FlakeInstallableError> {
+        match self {
+            InstallableLockerImpl::Pkgdb(locker) => {
+                locker.lock_flake_installable(system, installable)
+            },
+            InstallableLockerImpl::Mock(locker) => {
+                locker.lock_flake_installable(system, installable)
+            },
+        }
+    }
 }
 
 impl Default for InstallableLockerImpl {
