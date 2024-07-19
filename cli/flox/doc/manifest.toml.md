@@ -217,9 +217,10 @@ descriptors,
 and `flake` is described below:
 
 `flake`
-:   Specifies a Nix flake output attribute, which Nix documents at
+:   Specifies a Nix flake installable, which Nix refers to as a flake output
+    attribute and documents at
     https://nix.dev/manual/nix/2.17/command-ref/new-cli/nix#flake-output-attribute.
-    Flake output attributes are of the form `flakeref[#attrpath]`, where
+    Flake installables are of the form `flakeref[#attrpath]`, where
     flakeref is a flake reference and attrpath is an optional attribute path.
 
     Flox tries to use the same fallback behavior as Nix;
