@@ -428,18 +428,14 @@ mod tests {
             "version": "2.12.1"
         }
         "#;
-        let locked: LockedInstallable = serde_json::from_str(locked_hello).unwrap();
+        let mut locked: LockedInstallable = serde_json::from_str(locked_hello).unwrap();
         let descriptor = ManifestPackageDescriptorFlake {
             flake: "github:NixOS/nipxkgs#hello".to_string(),
             priority: Some(10),
             systems: None,
         };
-        let mock_locker = InstallableLockerMock::new();
-        mock_locker.push_lock_result(Ok(locked));
-        let resolved = mock_locker
-            .lock_flake_installable("aarch64-darwin", &descriptor)
-            .unwrap();
-        assert_eq!(resolved.priority.unwrap(), 10);
+        set_priority(&mut locked, &descriptor);
+        assert_eq!(locked.priority, Some(10));
     }
 
     // endregion: pkgdb errors
