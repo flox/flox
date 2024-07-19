@@ -56,8 +56,9 @@ ID is set to that attribute.
 For pkg-paths that consist of multiple attributes (e.g. `python310Packages.pip`)
 the install ID is set to the last attribute in the pkg-path (e.g. `pip`).
 
-If a flake output attribute is specified instead of a pkg-path, the install ID
-is inferred from the attribute path specified,
+As an advanced feature, a Nix flake installable may be specified instead of a
+pkg-path,
+and in this case the install ID is inferred from the attribute path specified,
 or if no attribute path is provided, the install ID is inferred from the flake
 reference.
 
@@ -76,7 +77,7 @@ reference.
 :   The pkg-path of the package to install as shown by 'flox search'
     Append `@<version>` to specify a version requirement.
 
-    Alternatively, an arbitrary Nix flake output attribute may be specified.
+    Alternatively, an arbitrary Nix flake installable may be specified.
     See [`manfifest-toml(1)`](./manifest.toml.md) for more details.
 
 
