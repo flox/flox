@@ -34,6 +34,10 @@ static const std::string lockfileContentV1 = R"( {
         "priority": null,
         "systems": null,
         "version": null
+      },
+      "myflake": {
+        "flake": "github:NixOS/nixpkgs#hello",
+        "priority": 6
       }
     },
     "options": {
@@ -87,6 +91,34 @@ static const std::string lockfileContentV1 = R"( {
       "system": "x86_64-linux",
       "unfree": false,
       "version": "version"
+    },
+    {
+      "install_id": "myflake",
+      "locked-url": "github:NixOS/nixpkgs/c35032a3c98e9bbdd8eef7337d9de2cb5f174d99",
+      "flake-description": "A collection of packages for the Nix package manager",
+      "locked-flake-attr-path": "legacyPackages.x86_64-linux.hello",
+      "derivation": "/nix/store/fqs92lzychkm6p37j7fnj4d65nq9fzla-hello-2.12.1.drv",
+      "outputs": {
+        "out": "/nix/store/kwmqk7ygvhypxadsdaai27gl6qfxv7za-hello-2.12.1"
+      },
+      "output-names": [
+        "out"
+      ],
+      "outputs-to-install": [
+        "out"
+      ],
+      "package-system": "x86_64-linux",
+      "system": "x86_64-linux",
+      "name": "hello-2.12.1",
+      "pname": "hello",
+      "version": "2.12.1",
+      "description": "Program that produces a familiar, friendly greeting",
+      "licenses": [
+        "GPL-3.0-or-later"
+      ],
+      "broken": false,
+      "unfree": false,
+      "priority": 6
     }
   ]
 } )";
@@ -114,7 +146,7 @@ test_LockfileFromV1()
   EXPECT( lockfile.manifest.vars.value().size() == 1 );
   EXPECT_EQ( lockfile.manifest.vars.value()["TEST"], "VAR" );
 
-  EXPECT( lockfile.packages.size() == 1 );
+  EXPECT( lockfile.packages.size() == 2 );
   auto pkg = lockfile.packages[0];
   EXPECT_EQ( pkg.installId, "mycowsay" );
 
@@ -129,6 +161,10 @@ test_LockfileFromV1()
              "9a333eaa80901efe01df07eade2c16d183761fa3" );
   EXPECT_EQ( pkg.input.attrs["owner"], "flox" );
   EXPECT_EQ( pkg.input.attrs["type"], "flox-nixpkgs" );
+
+  auto flakepkg = lockfile.packages[1];
+  EXPECT_EQ( flakepkg.priority, (uint64_t) 6 );
+
   return true;
 }
 
