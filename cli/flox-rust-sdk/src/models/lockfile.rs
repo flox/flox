@@ -1103,15 +1103,15 @@ impl LockedManifestCatalog {
             })
             .flat_map(|(iid, d)| {
                 let systems = if let Some(ref d_systems) = d.systems {
-                    d_systems.clone()
+                    d_systems.as_slice()
                 } else {
                     manifest
                         .options
                         .systems
-                        .clone()
-                        .unwrap_or((*DEFAULT_SYSTEMS_STR).to_vec())
+                        .as_deref()
+                        .unwrap_or(&*DEFAULT_SYSTEMS_STR)
                 };
-                systems.into_iter().map(move |s| FlakeInstallableToLock {
+                systems.iter().map(move |s| FlakeInstallableToLock {
                     install_id: iid.clone(),
                     descriptor: d.clone(),
                     system: s.clone(),
