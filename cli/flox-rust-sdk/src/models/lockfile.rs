@@ -209,6 +209,9 @@ pub struct LockedPackageCatalog {
     // region: added fields
     pub system: System, // FIXME: this is an enum in the generated code, can't derive Arbitrary there
     pub group: String,
+    // This was previously a `usize`, but in Nix `priority` is a `NixInt`, which is explicitly
+    // a `uint64_t` instead of a `size_t`. Using a `u64` here matches those semantics, though in
+    // reality it's likely not an issue.
     pub priority: u64,
     // endregion
 }
