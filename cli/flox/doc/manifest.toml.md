@@ -98,8 +98,14 @@ This allows you to change package details while keeping a stable install ID,
 for example upgrading from `gcc.pkg-path = "gcc12"` to
 `gcc.pkg-path = "gcc13"`.
 
-The descriptor options allow you to specify in detail the package to install.
-The full list of descriptor options are shown below:
+Most package descriptors will be catalog descriptors, which allow specifying
+packages from the Flox catalog.
+A second format, flake descriptors, is also supported, which allows specifying
+software to install from an arbitrary Nix flake.
+
+#### Catalog descriptors
+
+The full list of catalog descriptor options is:
 ```
 Descriptor ::= {
   pkg-group          = null | <STRING>
@@ -126,11 +132,11 @@ Each option is described below:
 
 `pkg-group`
 :   Marks a package as belonging to a pkg-group.
-    
-    The pkg-group is a collection of software that is known to work together at 
-    a point in time. 
+
+    The pkg-group is a collection of software that is known to work together at
+    a point in time.
     Adding packages to a pkg-group enables packages in the pkg-group to share
-    the same libraries and dependencies, which ensures maximum compatibility 
+    the same libraries and dependencies, which ensures maximum compatibility
     and minimizes the size of the environment.
 
     Packages are marked as belonging to a pkg-group simply by setting this
@@ -191,6 +197,39 @@ Each option is described below:
     The default priority is 5.
     Packages with a lower `priority` value will take precedence over packages
     with higher `priority` values.
+
+#### Flake descriptors
+
+Flake descriptors allow installing software from an arbitrary Nix flake.
+
+The full list of flake descriptor options is:
+```
+Descriptor ::= {
+  flake              = <STRING>
+, systems            = null | [<STRING>, ...]
+, priority           = null | <INT>
+}
+```
+
+Only `flake` is required.
+`systems` and `priority` behave the same as described above for catalog
+descriptors,
+and `flake` is described below:
+
+`flake`
+:   Specifies a Nix flake output attribute, which Nix documents at
+    https://nix.dev/manual/nix/2.17/command-ref/new-cli/nix#flake-output-attribute.
+    Flake output attributes are of the form `flakeref[#attrpath]`, where
+    flakeref is a flake reference and attrpath is an optional attribute path.
+
+    Flox tries to use the same fallback behavior as Nix;
+    if no attrpath is specified, the flake is checked for containing
+    `packages.$system.default` or `defaultPackage.$system`.
+    If an attrpath is specified, it is checked whether
+    `packages.$system.$attrpath` or `legacyPackages.$system.$attrpath` exist.
+
+    Private flakes (e.g. flakes authenticated with `git+ssh`) are not yet
+    supported.
 
 ## `[vars]`
 
