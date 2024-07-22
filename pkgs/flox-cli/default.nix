@@ -1,16 +1,23 @@
 {
   bashInteractive,
   cacert,
+  coreutils,
   darwin,
   flox-activation-scripts,
   flox-pkgdb,
+  fontconfig,
   gitMinimal,
   glibcLocalesUtf8,
+  gnumake,
+  gnugrep,
   gnused,
+  graphviz,
   hostPlatform,
   inputs,
   installShellFiles,
+  ld-floxlib,
   lib,
+  makeWrapper,
   nix,
   pkgsFor,
   process-compose,
@@ -20,6 +27,7 @@
   rust-internal-deps,
   flox-watchdog,
   flox-src,
+  writers,
 }: let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
 
@@ -79,6 +87,11 @@
     // lib.optionalAttrs hostPlatform.isLinux {
       LOCALE_ARCHIVE = "${glibcLocalesUtf8}/lib/locale/locale-archive";
     };
+
+  makedot = writers.writePerl "makedot" {} (
+    builtins.readFile ../../libexec/makedot.pl
+  );
+
 in
   craneLib.buildPackage ({
       pname = "flox";
@@ -109,6 +122,7 @@ in
         ++ [
           installShellFiles
           gnused
+          makeWrapper
         ];
 
       # Ensure all referenced packages are available in the closure.
@@ -146,7 +160,35 @@ in
         for target in "$(basename ${rust-toolchain.rust.outPath} | cut -f1 -d- )" ; do
           sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/flox
         done
-      '';
+      ''
+      + ''
+          makeWrapper ${gnumake}/bin/make $out/bin/flox-build \
+            --prefix PATH : "${lib.makeBinPath [bashInteractive coreutils gitMinimal gnugrep gnused nix]}" \
+            --add-flags "--no-builtin-rules --no-builtin-variables --makefile $out/libexec/flox-build.mk"
+          mkdir -p $out/libexec
+          cp ${../../libexec/build-manifest.nix} $out/libexec/build-manifest.nix
+          substituteInPlace $out/libexec/build-manifest.nix \
+            --replace "__FLOX_CLI_OUTPATH__" "$out"
+          cp ${../../libexec/flox-build.mk} $out/libexec/flox-build.mk
+          substituteInPlace $out/libexec/flox-build.mk \
+            --replace "__FLOX_CLI_OUTPATH__" "$out"
+          mkdir -p $out/lib
+          ${if hostPlatform.isLinux then ''
+            ln -s ${ld-floxlib}/lib/ld-floxlib.so $out/lib
+            ln -s ${ld-floxlib}/lib/libsandbox.so $out/lib
+          '' else ''
+            ln -s ${ld-floxlib}/lib/libsandbox.dylib $out/lib
+	  ''}
+          cp ${writers.writeBash "flox-build-graph" ''
+            # Update PATH for access to `dot` command.
+            export PATH=${graphviz}/bin:$PATH
+            export FONTCONFIG_FILE=${fontconfig.out}/etc/fonts/fonts.conf
+            __FLOX_CLI_OUTPATH__/bin/flox-build --print-data-base --just-print "$@" | \
+              ${makedot} --targets --png --rewrite FLOX_ENV --rewrite TMPDIR --nodraw FORCE -
+          ''} $out/bin/flox-build-graph
+          substituteInPlace $out/bin/flox-build-graph \
+            --replace "__FLOX_CLI_OUTPATH__" "$out"
+        '';
 
       doInstallCheck = false;
       postInstallCheck = ''

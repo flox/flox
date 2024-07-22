@@ -295,6 +295,23 @@ fi
 #   b. source the relevant activation script
 #   c. invoke the command in one of "stdin" or "-c" modes
 if [ $# -gt 0 ]; then
+  if [ -n "$FLOX_TURBO" ]; then
+    # "turbo command" mode: simply exec the provided command and args
+    # without paying the cost of invoking the userShell.
+    if [ "$1" = "-c" ]; then
+      if [ -n "$FLOX_SET_ARG0" ]; then
+        exec -a "$FLOX_SET_ARG0" bash --noprofile --norc "$@"
+      else
+        exec bash --noprofile --norc "$@"
+      fi
+    else
+      if [ -n "$FLOX_SET_ARG0" ]; then
+        exec -a "$FLOX_SET_ARG0" "$@"
+      else
+        exec "$@"
+      fi
+    fi
+  fi
   if [ $# -ne 2 ] || [ "$1" != "-c" ]; then
     # Marshal the provided args into a single safely-quoted string.
     # We use the magic "${@@Q}" parameter transformation to return
@@ -302,11 +319,6 @@ if [ $# -gt 0 ]; then
     declare -a cmdarray=()
     cmdarray=("-c" "${@@Q}")
     set -- "${cmdarray[@]}"
-  fi
-  if [ -n "$FLOX_TURBO" ]; then
-    # "turbo command" mode: simply exec the provided command and args
-    # without paying the cost of invoking the userShell.
-    eval "exec $2"
   fi
   # "-c" command mode: pass both [2] arguments unaltered to shell invocation
   case "$_flox_shell" in

@@ -121,6 +121,9 @@ createEnvironmentStorePath(
 {
   /* build the profile into a tempdir */
   auto tempDir = nix::createTempDir();
+  /* add "requisites.txt" file containing full list of requisites */
+  addRequisitesTxt( state, references, tempDir );
+  /* drop the service management config in place if defined */
   if ( serviceConfigPath.has_value() )
     {
       try
@@ -595,6 +598,49 @@ addScriptToScriptsDir( const std::string &           scriptContents,
                       scriptPath ) );
   std::filesystem::copy_file( scriptTempPath, scriptPath );
 }
+
+/* -------------------------------------------------------------------------- */
+
+void
+addRequisitesTxt( nix::EvalState &              state,
+                  nix::StorePathSet &           references,
+                  const std::filesystem::path & tempDir )
+{
+  /* Compute the full store closure of the references. */
+  nix::StorePathSet closure;
+  state.store->computeFSClosure( references, closure );
+
+  /* Write the script to a temporary file. */
+  std::filesystem::path tempPath( nix::createTempFile().second );
+  debugLog(
+    nix::fmt( "created tempfile for requisites.txt file: script=%s, path=%s",
+              REQUISITES_TXT_NAME,
+              tempPath ) );
+  std::ofstream tempFile( tempPath );
+  if ( ! tempFile.is_open() )
+    {
+      throw RequisitesTxtBuildFailure( std::string( strerror( errno ) ) );
+    }
+  for ( auto storePath : closure )
+    {
+      auto sStorePath = state.store->printStorePath( storePath );
+      tempFile << sStorePath.c_str() << std::endl;
+    }
+  if ( tempFile.fail() )
+    {
+      throw RequisitesTxtBuildFailure( std::string( strerror( errno ) ) );
+    }
+  tempFile.close();
+
+  /* Copy the script to the temp directory. */
+  auto requisitesTxtPath = tempDir / REQUISITES_TXT_NAME;
+  debugLog( nix::fmt( "copying requisites.txt to scripts dir: src=%s, dest=%s",
+                      tempPath,
+                      requisitesTxtPath ) );
+  std::filesystem::copy_file( tempPath, requisitesTxtPath );
+}
+
+/* -------------------------------------------------------------------------- */
 
 std::string
 activationScriptEnvironmentPath( const std::string & scriptName )

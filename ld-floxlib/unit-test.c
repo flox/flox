@@ -18,6 +18,7 @@
 #include <string.h>
 #include <assert.h>
 #include <link.h>
+extern int sandbox_level;
 extern unsigned int la_version( unsigned int version );
 extern char * la_objsearch( const char * name, uintptr_t * cookie, unsigned int flag );
 

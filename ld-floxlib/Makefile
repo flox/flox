@@ -1,22 +1,47 @@
 .DEFAULT_GOAL = ld-floxlib.so
 GREENCHECK = ✅
 REDCROSS = ❌
+OS := $(shell uname -s)
+
+.DEFAULT_GOAL := all
+
+ifeq (Linux,$(OS))
+  ALL = libsandbox.so ld-floxlib.so
+  TESTS = sandbox-tests ld-audit-tests
+  IS_LINUX := true
+else
+  ALL = libsandbox.dylib
+  TESTS = sandbox-tests
+endif
 
 # Define LD_FLOXLIB with macro to allow testing builds from other hosts.
 LD_FLOXLIB ?= $(abspath ld-floxlib.so)
 
 ld-floxlib.so: ld-floxlib.c
 	$(CC) -shared -fPIC $< -o $@
-	# The ld-floxlib.so library only requires libc, which is guaranteed
-	# to either be already loaded or available by way of a default provided
-	# by the linker itself, so to avoid loading a different libc than the
-	# one already loaded we remove RPATH/RUNPATH from the shared library.
+	@# The ld-floxlib.so library only requires libc, which is guaranteed
+	@# to either be already loaded or available by way of a default provided
+	@# by the linker itself, so to avoid loading a different libc than the
+	@# one already loaded we remove RPATH/RUNPATH from the shared library.
 	patchelf --remove-rpath $@
 
+closure.o: closure.c closure.h
+	$(CC) -fPIC -c $<
+
+libsandbox.so: sandbox.c closure.o
+	$(CC) -shared -fPIC $^ -o $@
+	patchelf --remove-rpath $@
+
+libsandbox.dylib: sandbox.c closure.o
+	$(CC) -pthread -dynamiclib $^ -o $@
+
+.PHONY: all
+all: $(ALL)
+
 .PHONY: install
-install: ld-floxlib.so
+install: $(ALL)
 	mkdir -p $(PREFIX)/lib
-	cp $< $(PREFIX)/lib
+	cp $^ $(PREFIX)/lib
 
 # Build unit-test linked with ld-floxlib.so.
 unit-test: unit-test.c ld-floxlib.so
@@ -135,5 +160,12 @@ $(eval $(call integration_test_TEMPLATE,$(strip \
   test3     1 \
 )))
 
-.PHONY: test
-test: $(unit_tests) $(integration_tests)
+.PHONY: ld-audit-tests
+ld-audit-tests: $(unit_tests) $(integration_tests)
+
+.PHONY: sandbox-tests
+sandbox-tests:
+	@echo TODO: create sandbox tests
+
+.PHONY: tests
+tests: $(TESTS)

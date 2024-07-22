@@ -357,10 +357,8 @@ EOF
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
-  # Turbo mode exec()s the provided command without involving the
-  # userShell, so cannot invoke shell primitives like ":".
-  FLOX_TURBO=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -127 $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_failure
+  FLOX_TURBO=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  assert_success
   FLOX_TURBO=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
   assert_output --partial "sourcing hook.on-activate"
@@ -405,10 +403,8 @@ EOF
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
-  # Turbo mode exec()s the provided command without involving the
-  # userShell, so cannot invoke shell primitives like ":".
-  FLOX_TURBO=1 FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run -127 $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_failure
+  FLOX_TURBO=1 FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  assert_success
   FLOX_TURBO=1 FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
   assert_output --partial "sourcing hook.on-activate"
@@ -454,10 +450,8 @@ EOF
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
-  # Turbo mode exec()s the provided command without involving the
-  # userShell, so cannot invoke shell primitives like ":".
-  FLOX_TURBO=1 FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run -127 $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_failure
+  FLOX_TURBO=1 FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  assert_success
   FLOX_TURBO=1 FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
   assert_output --partial "sourcing hook.on-activate"
@@ -505,10 +499,8 @@ EOF
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
-  # Turbo mode exec()s the provided command without involving the
-  # userShell, so cannot invoke shell primitives like ":".
-  FLOX_TURBO=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -127 $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_failure
+  FLOX_TURBO=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  assert_success
   FLOX_TURBO=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
   assert_output --partial "sourcing hook.on-activate"
