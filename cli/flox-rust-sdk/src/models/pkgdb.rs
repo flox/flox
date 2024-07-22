@@ -99,23 +99,26 @@ pub enum CallPkgDbError {
 /// Call pkgdb and try to parse JSON or error JSON.
 ///
 /// Error JSON is parsed into a [CallPkgDbError::PkgDbError].
-pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
-    // Configure pkgdb PATH with exact versions of everything it needs.
-    //
-    // Nix itself isn't pure, which is to say that it isn't built with a
-    // reference to `git` in its closure, so correspondingly depends upon
-    // finding it in $PATH to function.
-    //
-    // This just isn't OK for us as we're looking for flox to operate reliably
-    // in "hostile" environments, which includes situation where a user may
-    // redefine or blat their $PATH variable entirely, so we always invoke
-    // pkgdb with an explicit PATH of our making.
-    //
-    // It really shouldn't be necessary to append $PATH, so we won't.
+/// If clear_path is true, PATH is set to only contain a git binary.
+pub fn call_pkgdb(mut pkgdb_cmd: Command, clear_path: bool) -> Result<Value, CallPkgDbError> {
     debug!("calling pkgdb: {}", pkgdb_cmd.display());
-    let pkgdb_path = Path::new(&*GIT_PKG_BIN);
+    if clear_path {
+        // Configure pkgdb PATH with exact versions of everything it needs.
+        //
+        // Nix itself isn't pure, which is to say that it isn't built with a
+        // reference to `git` in its closure, so correspondingly depends upon
+        // finding it in $PATH to function.
+        //
+        // This just isn't OK for us as we're looking for flox to operate reliably
+        // in "hostile" environments, which includes situation where a user may
+        // redefine or blat their $PATH variable entirely, so we always invoke
+        // pkgdb with an explicit PATH of our making.
+        //
+        // It really shouldn't be necessary to append $PATH, so we won't.
+        let pkgdb_path = Path::new(&*GIT_PKG_BIN);
+        pkgdb_cmd.env("PATH", pkgdb_path);
+    }
     let mut proc = pkgdb_cmd
-        .env("PATH", pkgdb_path)
         .stderr(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -293,6 +296,6 @@ pub fn scrape_input(input: &FlakeRef) -> Result<(), ScrapeError> {
         .arg("legacyPackages");
 
     debug!("scraping input: {pkgdb_cmd:?}");
-    call_pkgdb(pkgdb_cmd)?;
+    call_pkgdb(pkgdb_cmd, true)?;
     Ok(())
 }

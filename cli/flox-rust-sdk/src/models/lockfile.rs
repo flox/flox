@@ -1251,7 +1251,7 @@ impl LockedManifestPkgdb {
             .arg(existing_lockfile_path);
 
         debug!("locking manifest with command: {}", pkgdb_cmd.display());
-        call_pkgdb(pkgdb_cmd)
+        call_pkgdb(pkgdb_cmd, true)
             .map_err(LockedManifestError::LockManifest)
             .map(Self)
     }
@@ -1307,8 +1307,9 @@ impl LockedManifestPkgdb {
         pkgdb_cmd.args(inputs);
 
         debug!("updating lockfile with command: {}", pkgdb_cmd.display());
-        let lockfile: LockedManifestPkgdb =
-            LockedManifestPkgdb(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::UpdateFailed)?);
+        let lockfile: LockedManifestPkgdb = LockedManifestPkgdb(
+            call_pkgdb(pkgdb_cmd, true).map_err(LockedManifestError::UpdateFailed)?,
+        );
 
         Ok(UpdateResult {
             new_lockfile: lockfile,
@@ -1365,7 +1366,7 @@ impl LockedManifestPkgdb {
 
         debug!("checking lockfile with command: {}", pkgdb_cmd.display());
 
-        let value = call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::CheckLockfile)?;
+        let value = call_pkgdb(pkgdb_cmd, true).map_err(LockedManifestError::CheckLockfile)?;
         let warnings: Vec<LockfileCheckWarning> =
             serde_json::from_value(value).map_err(LockedManifestError::ParseCheckWarnings)?;
 
