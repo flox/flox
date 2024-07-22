@@ -567,8 +567,8 @@ addScriptToScriptsDir( const std::string &           scriptContents,
                        const std::filesystem::path & scriptsDir,
                        const std::string &           scriptName )
 {
-  /* Ensure that the activation scripts "activate.d" subdirectory exists. */
-  std::filesystem::create_directories( scriptsDir / ACTIVATION_SUBDIR_NAME );
+  /* Ensure that the `scriptsDir` subdirectory exists. */
+  std::filesystem::create_directories( scriptsDir );
 
   /* Write the script to a temporary file. */
   std::filesystem::path scriptTempPath( nix::createTempFile().second );
@@ -589,7 +589,7 @@ addScriptToScriptsDir( const std::string &           scriptContents,
   scriptTmpFile.close();
 
   /* Copy the script to the scripts directory. */
-  auto scriptPath = scriptsDir / ACTIVATION_SUBDIR_NAME / scriptName;
+  auto scriptPath = scriptsDir / scriptName;
   debugLog( nix::fmt( "copying script to scripts dir: src=%s, dest=%s",
                       scriptTempPath,
                       scriptPath ) );
@@ -609,8 +609,9 @@ makeActivationScripts( nix::EvalState &         state,
                        const BuildenvLockfile & lockfile )
 {
   std::vector<nix::StorePath> activationScripts;
-  auto tempDir = std::filesystem::path( nix::createTempDir() );
-  std::filesystem::create_directories( tempDir / ACTIVATION_SUBDIR_NAME );
+  auto tempDir            = std::filesystem::path( nix::createTempDir() );
+  auto activateScriptsDir = tempDir / ACTIVATION_SUBDIR_NAME;
+  std::filesystem::create_directories( activateScriptsDir );
 
   /* Create the shell-specific activation scripts */
   std::stringstream envrcScript;
@@ -658,7 +659,7 @@ makeActivationScripts( nix::EvalState &         state,
   if ( envrcScript.str().size() > 0 )
     {
       debugLog( "adding 'envrc' to activation scripts" );
-      addScriptToScriptsDir( envrcScript.str(), tempDir, "envrc" );
+      addScriptToScriptsDir( envrcScript.str(), activateScriptsDir, "envrc" );
     }
 
   /* Append profile script invocations in the middle */
@@ -668,27 +669,37 @@ makeActivationScripts( nix::EvalState &         state,
       if ( profile->common.has_value() )
         {
           debugLog( "adding 'profile.common' to activation scripts" );
-          addScriptToScriptsDir( *profile->common, tempDir, "profile-common" );
+          addScriptToScriptsDir( *profile->common,
+                                 activateScriptsDir,
+                                 "profile-common" );
         }
       if ( profile->bash.has_value() )
         {
           debugLog( "adding 'profile.bash' to activation scripts" );
-          addScriptToScriptsDir( *profile->bash, tempDir, "profile-bash" );
+          addScriptToScriptsDir( *profile->bash,
+                                 activateScriptsDir,
+                                 "profile-bash" );
         }
       if ( profile->fish.has_value() )
         {
           debugLog( "adding 'profile.fish' to activation scripts" );
-          addScriptToScriptsDir( *profile->fish, tempDir, "profile-fish" );
+          addScriptToScriptsDir( *profile->fish,
+                                 activateScriptsDir,
+                                 "profile-fish" );
         }
       if ( profile->tcsh.has_value() )
         {
           debugLog( "adding 'profile.tcsh' to activation scripts" );
-          addScriptToScriptsDir( *profile->tcsh, tempDir, "profile-tcsh" );
+          addScriptToScriptsDir( *profile->tcsh,
+                                 activateScriptsDir,
+                                 "profile-tcsh" );
         }
       if ( profile->zsh.has_value() )
         {
           debugLog( "adding 'profile.zsh' to activation scripts" );
-          addScriptToScriptsDir( *profile->zsh, tempDir, "profile-zsh" );
+          addScriptToScriptsDir( *profile->zsh,
+                                 activateScriptsDir,
+                                 "profile-zsh" );
         }
     }
 
@@ -702,14 +713,16 @@ makeActivationScripts( nix::EvalState &         state,
       if ( hook->script.has_value() )
         {
           debugLog( "adding 'hook.script' to activation scripts" );
-          addScriptToScriptsDir( *hook->script, tempDir, "hook-script" );
+          addScriptToScriptsDir( *hook->script,
+                                 activateScriptsDir,
+                                 "hook-script" );
         }
 
       if ( hook->onActivate.has_value() )
         {
           debugLog( "adding 'hook.on-activate' to activation scripts" );
           addScriptToScriptsDir( *hook->onActivate,
-                                 tempDir,
+                                 activateScriptsDir,
                                  "hook-on-activate" );
         }
     }
@@ -730,6 +743,37 @@ makeActivationScripts( nix::EvalState &         state,
 
   return { realised, references };
 }
+
+std::pair<buildenv::RealisedPackage, nix::StorePathSet>
+makePackageBuildScripts( nix::EvalState &         state,
+                         const BuildenvLockfile & lockfile )
+{
+  auto tempDir          = std::filesystem::path( nix::createTempDir() );
+  auto packageBuildsDir = tempDir / PACKAGE_BUILDS_SUBDIR_NAME;
+  std::filesystem::create_directories( packageBuildsDir );
+
+
+  if ( lockfile.manifest.build.has_value() )
+    {
+      for ( auto [name, descriptor] : *lockfile.manifest.build )
+        {
+          addScriptToScriptsDir( descriptor.command, packageBuildsDir, name );
+        }
+    }
+
+  debugLog( "adding package build scripts to store" );
+  auto packageBuildsStorePath
+    = state.store->addToStore( "package-build-scripts", tempDir );
+
+  RealisedPackage realised(
+    state.store->printStorePath( packageBuildsStorePath ),
+    true,
+    buildenv::Priority() );
+  auto references = nix::StorePathSet();
+  references.insert( packageBuildsStorePath );
+  return { realised, references };
+}
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -816,13 +860,19 @@ createFloxEnv( nix::ref<nix::EvalState> &         state,
   references.insert( activationScriptReferences.begin(),
                      activationScriptReferences.end() );
 
-
-  // Add the scripts with our activation logic to  the environment
+  // Add the scripts with our activation logic to the environment
   auto [profileScriptsPath, profileScriptsReference]
     = makeActivationScriptsPackageDir( *state );
 
   pkgs.push_back( profileScriptsPath );
   references.insert( profileScriptsReference );
+
+  auto [packageBuildsPackage, packageBuildsReferences]
+    = makePackageBuildScripts( *state, lockfile );
+
+  pkgs.push_back( packageBuildsPackage );
+  references.insert( packageBuildsReferences.begin(),
+                     packageBuildsReferences.end() );
 
   return createEnvironmentStorePath( *state,
                                      pkgs,

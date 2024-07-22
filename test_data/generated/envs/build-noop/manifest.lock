@@ -1,0 +1,25 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {},
+    "vars": {},
+    "hook": {},
+    "profile": {},
+    "options": {
+      "allow": {
+        "licenses": []
+      },
+      "semver": {}
+    },
+    "services": {},
+    "build": {
+      "hello": {
+        "command": "echo hello",
+        "files": null,
+        "systems": null
+      }
+    }
+  },
+  "packages": []
+}

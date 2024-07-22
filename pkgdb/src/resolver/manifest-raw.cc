@@ -646,6 +646,18 @@ HookRaw::check() const
     }
 }
 
+/* -------------------------------------------------------------------------- */
+
+void
+from_json( const nlohmann::json & jfrom, BuildDescriptorRaw & build )
+{
+  // for building we only need the command,
+  // other attribute are handled by `flox` and passed to the build script as
+  // applicable
+  auto value = jfrom.at( "command" );
+  value.get_to( build.command );
+}
+
 
 /* -------------------------------------------------------------------------- */
 

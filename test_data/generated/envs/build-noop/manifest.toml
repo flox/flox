@@ -1,0 +1,5 @@
+
+version = 1
+[build]
+hello.command = "echo hello"
+

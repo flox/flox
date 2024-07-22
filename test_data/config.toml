@@ -321,15 +321,20 @@ post_cmd = '''
     mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
 '''
 
-[envs.hello]
-skip_if_output_exists = "envs/hello"
+[envs.build-noop]
+skip_if_output_exists = "envs/build-noop"
 pre_cmd = "flox init"
-cmd = "flox install hello"
+cmd = '''
+echo '
+version = 1
+[build]
+hello.command = "echo hello"
+' | flox edit -f -
+'''
 post_cmd = '''
     envs_output_dir="$(dirname $RESPONSE_FILE)"
-    env_dir="$envs_output_dir/hello"
+    env_dir="$envs_output_dir/build-noop"
     mkdir -p "$env_dir"
     cp .flox/env/manifest.toml "$env_dir/manifest.toml"
     cp .flox/env/manifest.lock "$env_dir/manifest.lock"
-    rm "$RESPONSE_FILE"
 '''
