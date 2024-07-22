@@ -1,5 +1,9 @@
 version = 1
 
+[vars]
+# https://github.com/flox/flox/issues/1341
+LD_AUDIT = ""
+
 [install]
 redis.pkg-path = "redis"
 netcat.pkg-path = "netcat"
