@@ -44,6 +44,8 @@ namespace flox::buildenv {
 
 static constexpr std::string_view ACTIVATION_SCRIPT_NAME = "activate";
 static constexpr std::string_view ACTIVATION_SUBDIR_NAME = "activate.d";
+static constexpr std::string_view PACKAGE_BUILDS_SUBDIR_NAME
+  = "package-builds.d";
 
 /* -------------------------------------------------------------------------- */
 
