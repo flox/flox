@@ -14,7 +14,7 @@ load test_support.bash
 
 setup_file() {
   common_file_setup
-  export FLOX_CATALOG_URL="https://flox-catalog.preview.flox.dev"
+  export FLOX_CATALOG_URL="https://api.preview.flox.dev"
 }
 
 teardown_file() {
