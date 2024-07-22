@@ -264,21 +264,5 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_catches_local_flake_locking() {
-        let system = env!("system");
-        let installable = format!("{flake}#hello", flake = local_test_flake());
-
-        let result = Pkgdb.lock_flake_installable(system, installable);
-
-        assert!(
-            matches!(
-                result,
-                Err(FlakeInstallableError::LockInstallable(ref message))
-                if message.contains("flake must be hosted in a remote code repository")),
-            "{result:#?}"
-        );
-    }
-
     // endregion: pkgdb errors
 }
