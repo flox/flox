@@ -18,7 +18,7 @@ use crate::data::{System, Version};
 use crate::utils::proptest_btree_map_alphanum_keys;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
-pub const DEFAULT_PRIORITY: usize = 5;
+pub const DEFAULT_PRIORITY: u64 = 5;
 
 /// Represents the `[version]` number key in manifest.toml
 pub const MANIFEST_VERSION_KEY: &str = "version";
@@ -651,8 +651,8 @@ impl From<ManifestPackageDescriptorFlake> for ManifestPackageDescriptor {
 pub struct ManifestPackageDescriptorCatalog {
     pub(crate) pkg_path: String,
     pub(crate) pkg_group: Option<String>,
-    #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10usize)"))]
-    pub(crate) priority: Option<usize>,
+    #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
+    pub(crate) priority: Option<u64>,
     pub(crate) version: Option<String>,
     #[cfg_attr(
         test,
@@ -692,6 +692,15 @@ impl ManifestPackageDescriptorCatalog {
 #[serde(deny_unknown_fields)]
 pub struct ManifestPackageDescriptorFlake {
     pub flake: String,
+    #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
+    pub(crate) priority: Option<u64>,
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest::option::of(proptest::collection::vec(any::<System>(), 1..3))"
+        )
+    )]
+    pub(crate) systems: Option<Vec<System>>,
 }
 
 #[skip_serializing_none]

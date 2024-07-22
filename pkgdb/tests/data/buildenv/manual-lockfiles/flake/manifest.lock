@@ -4,7 +4,8 @@
     "version": 1,
     "install": {
       "hello": {
-        "flake": "github:nixos/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd#hello"
+        "flake": "github:nixos/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd#hello",
+        "priority": 6
       }
     },
     "vars": {},
@@ -43,7 +44,8 @@
         "GPL-3.0-or-later"
       ],
       "broken": false,
-      "unfree": false
+      "unfree": false,
+      "priority": 6
     },
     {
       "install_id": "hello",
@@ -70,7 +72,8 @@
         "GPL-3.0-or-later"
       ],
       "broken": false,
-      "unfree": false
+      "unfree": false,
+      "priority": 6
     },
     {
       "install_id": "hello",
@@ -97,7 +100,8 @@
         "GPL-3.0-or-later"
       ],
       "broken": false,
-      "unfree": false
+      "unfree": false,
+      "priority": 6
     },
     {
       "install_id": "hello",
@@ -124,7 +128,8 @@
         "GPL-3.0-or-later"
       ],
       "broken": false,
-      "unfree": false
+      "unfree": false,
+      "priority": 6
     }
   ]
 }

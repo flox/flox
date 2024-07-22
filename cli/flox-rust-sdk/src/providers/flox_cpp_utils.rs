@@ -9,6 +9,7 @@ use serde_with::skip_serializing_none;
 use thiserror::Error;
 use tracing::debug;
 
+use crate::models::manifest::{ManifestPackageDescriptorFlake, DEFAULT_PRIORITY};
 use crate::models::pkgdb::{
     call_pkgdb,
     error_codes,
@@ -65,6 +66,7 @@ pub struct LockedInstallable {
     pub licenses: Option<Vec<String>>,
     pub broken: Option<bool>,
     pub unfree: Option<bool>,
+    pub priority: Option<u64>,
 }
 
 /// Required functionality to lock a flake installable
@@ -81,7 +83,7 @@ pub trait InstallableLocker {
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,
-        installable: impl AsRef<str>,
+        descriptor: &ManifestPackageDescriptorFlake,
     ) -> Result<LockedInstallable, FlakeInstallableError>;
 }
 
@@ -107,9 +109,9 @@ impl InstallableLocker for Pkgdb {
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,
-        installable: impl AsRef<str>,
+        descriptor: &ManifestPackageDescriptorFlake,
     ) -> Result<LockedInstallable, FlakeInstallableError> {
-        let installable = installable.as_ref();
+        let installable = descriptor.flake.clone();
         let mut pkgdb_cmd = Command::new(&*PKGDB_BIN);
 
         pkgdb_cmd
@@ -155,10 +157,26 @@ impl InstallableLocker for Pkgdb {
             _ => FlakeInstallableError::Pkgdb(err),
         })?;
 
-        let lock = serde_json::from_value(lock)
+        let mut lock: LockedInstallable = serde_json::from_value(lock)
             .map_err(FlakeInstallableError::DeserializeLockedInstallable)?;
 
+        set_priority(&mut lock, descriptor);
+
         Ok(lock)
+    }
+}
+
+/// Sets the priority for the locked installable.
+///
+/// The priority order of...the priority is:
+/// - Priority set in the descriptor
+/// - `meta.priority` of the derivation
+/// - Default priority
+fn set_priority(locked: &mut LockedInstallable, descriptor: &ManifestPackageDescriptorFlake) {
+    if descriptor.priority.is_some() {
+        locked.priority = descriptor.priority;
+    } else if locked.priority.is_none() {
+        locked.priority = Some(DEFAULT_PRIORITY);
     }
 }
 
@@ -195,9 +213,9 @@ impl InstallableLocker for InstallableLockerMock {
     fn lock_flake_installable(
         &self,
         system: impl AsRef<str>,
-        installable: impl AsRef<str>,
+        descriptor: &ManifestPackageDescriptorFlake,
     ) -> Result<LockedInstallable, FlakeInstallableError> {
-        let mocked_result = self
+        let mut mocked_result = self
             .lock_flake_installable
             .lock()
             .unwrap()
@@ -206,10 +224,15 @@ impl InstallableLocker for InstallableLockerMock {
 
         debug!(
             system=system.as_ref(),
-            installable=installable.as_ref(),
+            installable=&descriptor.flake,
             mocked_result=?mocked_result,
             "responding with mocked result"
         );
+
+        // Same logic as the real locker
+        if let Ok(ref mut lock) = mocked_result {
+            set_priority(lock, descriptor);
+        }
 
         mocked_result
     }
@@ -252,7 +275,11 @@ mod tests {
         // make sure the deserialization is not accidentally optimized away
         temp_env::with_var(ALLOW_LOCAL_FLAKE_VAR, Some("1"), || {
             Pkgdb
-                .lock_flake_installable(system, installable)
+                .lock_flake_installable(system, &ManifestPackageDescriptorFlake {
+                    flake: installable,
+                    priority: None,
+                    systems: None,
+                })
                 .expect("locking local test flake should succeed")
         });
     }
@@ -275,7 +302,11 @@ mod tests {
         let system = env!("system");
         let installable = "github:flox/trust-this-wont-be-added#hello";
 
-        let result = Pkgdb.lock_flake_installable(system, installable);
+        let result = Pkgdb.lock_flake_installable(system, &ManifestPackageDescriptorFlake {
+            flake: installable.to_string(),
+            priority: None,
+            systems: None,
+        });
         assert!(
             matches!(result, Err(FlakeInstallableError::LockInstallable(_))),
             "{result:#?}"
@@ -288,7 +319,11 @@ mod tests {
         let installable = format!("{flake}#nonexistent", flake = local_test_flake());
 
         let result = temp_env::with_var(ALLOW_LOCAL_FLAKE_VAR, Some("1"), || {
-            Pkgdb.lock_flake_installable(system, installable)
+            Pkgdb.lock_flake_installable(system, &ManifestPackageDescriptorFlake {
+                flake: installable,
+                priority: None,
+                systems: None,
+            })
         });
 
         assert!(
@@ -302,7 +337,11 @@ mod tests {
         let system = env!("system");
         let installable = format!("{flake}#hello", flake = local_test_flake());
 
-        let result = Pkgdb.lock_flake_installable(system, installable);
+        let result = Pkgdb.lock_flake_installable(system, &ManifestPackageDescriptorFlake {
+            flake: installable,
+            priority: None,
+            systems: None,
+        });
 
         assert!(
             matches!(
@@ -333,13 +372,56 @@ mod tests {
             env.install(&pkgs, &flox)
         });
         if let Err(e) = res {
+            eprintln!("Error: {:?}", e);
             let err_string = e.to_string();
-            let has_nix_error = err_string.contains("is marked as broken")
+            let has_nix_error = err_string.contains("I'm broken inside")
                 || err_string.contains("cached failure of attribute");
             assert!(has_nix_error);
         } else {
             panic!("expected an error");
         }
+    }
+
+    #[test]
+    fn fills_in_priority() {
+        let locked_hello = r#"
+        {
+            "broken": false,
+            "derivation": "/nix/store/4w0wsrlfad3ilqjxk34fnkmdckiq0k0m-hello-2.12.1.drv",
+            "description": "Program that produces a familiar, friendly greeting",
+            "flake-description": "A collection of packages for the Nix package manager",
+            "licenses": [
+                "GPL-3.0-or-later"
+            ],
+            "locked-flake-attr-path": "legacyPackages.aarch64-darwin.hello",
+            "locked-url": "github:NixOS/nixpkgs/56bf14fe1c5ba088fff3f337bc0cdf28c8227f81",
+            "name": "hello-2.12.1",
+            "output-names": [
+                "out"
+            ],
+            "outputs": {
+                "out": "/nix/store/ia1pdwpvhswwnbamqkzbz69ja02bjfqx-hello-2.12.1"
+            },
+            "outputs-to-install": [
+                "out"
+            ],
+            "package-system": "aarch64-darwin",
+            "pname": "hello",
+            "priority": null,
+            "requested-outputs-to-install": null,
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "2.12.1"
+        }
+        "#;
+        let mut locked: LockedInstallable = serde_json::from_str(locked_hello).unwrap();
+        let descriptor = ManifestPackageDescriptorFlake {
+            flake: "github:NixOS/nipxkgs#hello".to_string(),
+            priority: Some(10),
+            systems: None,
+        };
+        set_priority(&mut locked, &descriptor);
+        assert_eq!(locked.priority, Some(10));
     }
 
     // endregion: pkgdb errors

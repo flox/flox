@@ -334,6 +334,18 @@ test_unfree( const nix::ref<nix::EvalState> & state,
   return true;
 }
 
+bool
+test_priority( const nix::ref<nix::EvalState> & state,
+               const std::string &              system )
+{
+  auto priority
+    = flox::lockFlakeInstallable( state, system, localTestFlake + "#priority" );
+
+  EXPECT_EQ( priority.priority.value(), 10 );
+
+  return true;
+}
+
 /* -------------------------------------------------------------------------- */
 
 int
@@ -372,6 +384,7 @@ main( int argc, char * argv[] )
   RUN_TEST( version, state, system );
   RUN_TEST( broken, state, system );
   RUN_TEST( unfree, state, system );
+  RUN_TEST( priority, state, system );
 
   setenv( "_PKGDB_ALLOW_LOCAL_FLAKE", "", 1 );
 

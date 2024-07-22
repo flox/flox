@@ -6,3 +6,4 @@ version = 1
 
 [install]
 hello.flake = "github:nixos/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd#hello"
+hello.priority = 6
