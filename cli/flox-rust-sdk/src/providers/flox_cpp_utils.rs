@@ -27,6 +27,8 @@ pub enum FlakeInstallableError {
     LockInstallable(String),
     #[error("Failed to deserialize locked installable")]
     DeserializeLockedInstallable(#[from] serde_json::Error),
+    #[error("Caught Nix error while locking flake:\n{0}")]
+    NixError(String),
 }
 
 /// Rust representation of the output of `pkgdb lock-flake-installable`
@@ -119,6 +121,24 @@ impl InstallableLocker for Pkgdb {
 
         let lock = call_pkgdb(pkgdb_cmd).map_err(|err| match err {
             CallPkgDbError::PkgDbError(PkgDbError {
+                exit_code: error_codes::NIX_GENERIC,
+                context_message:
+                    Some(ContextMsgError {
+                        caught: Some(nix_error),
+                        ..
+                    }),
+                ..
+            }) => FlakeInstallableError::NixError(nix_error.message),
+            CallPkgDbError::PkgDbError(PkgDbError {
+                exit_code: error_codes::NIX_EVAL,
+                context_message:
+                    Some(ContextMsgError {
+                        caught: Some(nix_error),
+                        ..
+                    }),
+                ..
+            }) => FlakeInstallableError::NixError(nix_error.message),
+            CallPkgDbError::PkgDbError(PkgDbError {
                 exit_code: error_codes::NIX_LOCK_FLAKE,
                 context_message:
                     Some(ContextMsgError {
@@ -199,7 +219,14 @@ impl InstallableLocker for InstallableLockerMock {
 mod tests {
     use std::path::Path;
 
+    use indoc::formatdoc;
+    use url::Url;
+
     use super::*;
+    use crate::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
+    use crate::models::environment::path_environment::test_helpers::new_path_environment;
+    use crate::models::environment::Environment;
+    use crate::models::manifest::{FlakePackage, PackageToInstall};
 
     /// Returns the path to a bundled flake that contains a number of test packages
     /// for sped up evaluation
@@ -262,6 +289,35 @@ mod tests {
             matches!(result, Err(FlakeInstallableError::LockInstallable(_))),
             "{result:#?}"
         );
+    }
+
+    #[test]
+    fn catches_nix_eval_errors() {
+        let (flox, _temp_dir) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let manifest = formatdoc! {r#"
+        version =  1
+        "#};
+        let mut env = new_path_environment(&flox, &manifest);
+        let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let flake_dir = crate_root
+            .join("../tests/flakes/teeny-tiny-failure")
+            .canonicalize()
+            .unwrap();
+        let pkgs = [PackageToInstall::Flake(FlakePackage {
+            id: "gonna_fail".to_string(),
+            url: Url::parse(&format!("path:{}", flake_dir.display())).unwrap(),
+        })];
+        let res = temp_env::with_var("_PKGDB_ALLOW_LOCAL_FLAKE", Some("1"), || {
+            env.install(&pkgs, &flox)
+        });
+        if let Err(e) = res {
+            let err_string = e.to_string();
+            let has_nix_error = err_string.contains("is marked as broken")
+                || err_string.contains("cached failure of attribute");
+            assert!(has_nix_error);
+        } else {
+            panic!("expected an error");
+        }
     }
 
     // endregion: pkgdb errors

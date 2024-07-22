@@ -35,6 +35,14 @@ If multiple packages are requested and some of them are already installed,
 only the new packages are installed and the transaction will still succeed as
 long as the build succeeds.
 
+You may also specify packages to be installed via
+[`flox-edit(1)`](./flox-edit.md),
+which allows specifying a variety of options for package installation.
+See [`manfifest-toml(1)`](./manifest.toml.md) for more details on the available
+options.
+
+## Install ID
+
 The name of a package as it exists in the manifest is referred to as the
 "install ID".
 This ID is separate from the pkg-path and provides a shorthand for packages
@@ -48,11 +56,11 @@ ID is set to that attribute.
 For pkg-paths that consist of multiple attributes (e.g. `python310Packages.pip`)
 the install ID is set to the last attribute in the pkg-path (e.g. `pip`).
 
-You may also specify packages to be installed via
-[`flox-edit(1)`](./flox-edit.md),
-which allows specifying a variety of options for package installation.
-See [`manfifest-toml(1)`](./manifest.toml.md) for more details on the available
-options.
+As an advanced feature, a Nix flake installable may be specified instead of a
+pkg-path,
+and in this case the install ID is inferred from the attribute path specified,
+or if no attribute path is provided, the install ID is inferred from the flake
+reference.
 
 ```{.include}
 ./include/package-names.md
@@ -67,7 +75,10 @@ options.
 
 `<package>`
 :   The pkg-path of the package to install as shown by 'flox search'
-    Append `@<version>` to specify a version requirement
+    Append `@<version>` to specify a version requirement.
+
+    Alternatively, an arbitrary Nix flake installable may be specified.
+    See [`manfifest-toml(1)`](./manifest.toml.md) for more details.
 
 
 ```{.include}

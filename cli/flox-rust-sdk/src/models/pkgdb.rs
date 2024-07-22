@@ -28,6 +28,10 @@ pub static GIT_PKG_BIN: Lazy<String> =
 pub mod error_codes {
     /// Manifest file has invalid format
     pub const INVALID_MANIFEST_FILE: u64 = 105;
+    /// A generic Nix error
+    pub const NIX_GENERIC: u64 = 106;
+    /// A Nix evaluation error
+    pub const NIX_EVAL: u64 = 107;
     /// Flake locking error, also used by locking flake installables
     pub const NIX_LOCK_FLAKE: u64 = 108;
     /// Parsing of the manifest.toml file failed
