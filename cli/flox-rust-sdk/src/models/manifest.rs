@@ -361,7 +361,6 @@ pub struct TypedManifestCatalog {
     pub options: ManifestOptions,
     /// Service definitions
     #[serde(default)]
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub services: ManifestServices,
 }
 
@@ -712,40 +711,6 @@ pub struct ManifestPackageDescriptorStorePath {
     store_path: String,
 }
 
-/// A map of service names to service definitions
-#[derive(
-    Debug,
-    Clone,
-    Serialize,
-    Deserialize,
-    Default,
-    PartialEq,
-    derive_more::Deref,
-    derive_more::DerefMut,
-)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestServices(
-    #[cfg_attr(
-        test,
-        proptest(
-            strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
-        )
-    )]
-    pub(crate) BTreeMap<String, ManifestServiceDescriptor>,
-);
-
-/// The definition of a service in a manifest
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[serde(rename_all = "kebab-case")]
-#[serde(deny_unknown_fields)]
-pub struct ManifestServiceDescriptor {
-    /// The command to run to start the service
-    pub command: String,
-    /// Service-specific environment variables
-    pub vars: Option<ManifestVariables>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestVariables(
@@ -834,6 +799,41 @@ pub struct SemverOptions {
     /// Whether to allow pre-release versions when resolving
     #[serde(default)]
     pub allow_pre_releases: Option<bool>,
+}
+
+/// A map of service names to service definitions
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Default,
+    PartialEq,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ManifestServices(
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
+        )
+    )]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) BTreeMap<String, ManifestServiceDescriptor>,
+);
+
+/// The definition of a service in a manifest
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ManifestServiceDescriptor {
+    /// The command to run to start the service
+    pub command: String,
+    /// Service-specific environment variables
+    pub vars: Option<ManifestVariables>,
 }
 
 /// Deserialize the manifest as a [serde_json::Value],
