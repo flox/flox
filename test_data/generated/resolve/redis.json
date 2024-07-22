@@ -8,6 +8,194 @@
         "msgs": [],
         "packages": [
           {
+            "attr_path": "netcat",
+            "broken": false,
+            "derivation": "/nix/store/6k76k3sispd3dy8gz43z0xnz0fync7cm-libressl-3.9.2.drv",
+            "description": "Free TLS/SSL implementation",
+            "install_id": "netcat",
+            "license": "[ Public Domain, BSD-4-Clause, 0BSD, BSD-3-Clause, GPL-3.0, ISC, OpenSSL ]",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "name": "libressl-3.9.2",
+            "outputs": [
+              {
+                "name": "nc",
+                "store_path": "/nix/store/vbxjcxfyjlg14kdp70lzsbnril02fy7g-libressl-3.9.2-nc"
+              },
+              {
+                "name": "bin",
+                "store_path": "/nix/store/8y6aisryapbcq41r0zkfx7yz931h5f1l-libressl-3.9.2-bin"
+              },
+              {
+                "name": "dev",
+                "store_path": "/nix/store/d86wzaammc97ayh8nmv9rx9w8fkdf0yj-libressl-3.9.2-dev"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/kwqs3d566pksx0z40kdmbrzmbyq0srkg-libressl-3.9.2-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/gvxdqj2x3gsaq760m8mva62rnlb59l9g-libressl-3.9.2"
+              }
+            ],
+            "outputs_to_install": [
+              "bin",
+              "man"
+            ],
+            "pname": "netcat",
+            "rev": "1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "rev_count": 655136,
+            "rev_date": "2024-07-19T09:00:53Z",
+            "scrape_date": "2024-07-20T05:30:31Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "libressl-3.9.2"
+          },
+          {
+            "attr_path": "netcat",
+            "broken": false,
+            "derivation": "/nix/store/hqcnnllm4ciip798f3dzm1ns8bg7kl70-libressl-3.9.2.drv",
+            "description": "Free TLS/SSL implementation",
+            "install_id": "netcat",
+            "license": "[ Public Domain, BSD-4-Clause, 0BSD, BSD-3-Clause, GPL-3.0, ISC, OpenSSL ]",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "name": "libressl-3.9.2",
+            "outputs": [
+              {
+                "name": "nc",
+                "store_path": "/nix/store/rvj9zlhl6j26hm3s6kmixr423ha2621z-libressl-3.9.2-nc"
+              },
+              {
+                "name": "bin",
+                "store_path": "/nix/store/q51qw5f1n0zv5nn7kyrndhihhscy4h5p-libressl-3.9.2-bin"
+              },
+              {
+                "name": "dev",
+                "store_path": "/nix/store/1jb24na99wanl80lz59q1gykbgypbzrm-libressl-3.9.2-dev"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/xsikiangrcf153aka6vx4dcfbzihazhn-libressl-3.9.2-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/swnkadki3j0r6jw2zy7qc04894sck0p3-libressl-3.9.2"
+              }
+            ],
+            "outputs_to_install": [
+              "bin",
+              "man"
+            ],
+            "pname": "netcat",
+            "rev": "1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "rev_count": 655136,
+            "rev_date": "2024-07-19T09:00:53Z",
+            "scrape_date": "2024-07-20T05:30:31Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "libressl-3.9.2"
+          },
+          {
+            "attr_path": "netcat",
+            "broken": false,
+            "derivation": "/nix/store/rx80h3kzrqj0whjsx56c8sdibh1dhb1z-libressl-3.9.2.drv",
+            "description": "Free TLS/SSL implementation",
+            "install_id": "netcat",
+            "license": "[ Public Domain, BSD-4-Clause, 0BSD, BSD-3-Clause, GPL-3.0, ISC, OpenSSL ]",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "name": "libressl-3.9.2",
+            "outputs": [
+              {
+                "name": "nc",
+                "store_path": "/nix/store/9swq4b0zixp9fzydiqlqy93ahp3bkbq3-libressl-3.9.2-nc"
+              },
+              {
+                "name": "bin",
+                "store_path": "/nix/store/a6yc689d9zrhxqs8mqsqxhk6l7rc00fg-libressl-3.9.2-bin"
+              },
+              {
+                "name": "dev",
+                "store_path": "/nix/store/gzhykfbsvjfhd6l0ff2qn43n9gkymsdw-libressl-3.9.2-dev"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/nhc2rr93sk2c9j6ndbkszz479gnpqza9-libressl-3.9.2-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/n4n0s9agd70gw6ccqv23lapkk2nk4n61-libressl-3.9.2"
+              }
+            ],
+            "outputs_to_install": [
+              "bin",
+              "man"
+            ],
+            "pname": "netcat",
+            "rev": "1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "rev_count": 655136,
+            "rev_date": "2024-07-19T09:00:53Z",
+            "scrape_date": "2024-07-20T05:30:31Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "libressl-3.9.2"
+          },
+          {
+            "attr_path": "netcat",
+            "broken": false,
+            "derivation": "/nix/store/7vzj194v4s46lzw7kai7f10d17wcvqkx-libressl-3.9.2.drv",
+            "description": "Free TLS/SSL implementation",
+            "install_id": "netcat",
+            "license": "[ Public Domain, BSD-4-Clause, 0BSD, BSD-3-Clause, GPL-3.0, ISC, OpenSSL ]",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "name": "libressl-3.9.2",
+            "outputs": [
+              {
+                "name": "nc",
+                "store_path": "/nix/store/cdfkqcx3401l6cfxxs9c696id1bmvfsb-libressl-3.9.2-nc"
+              },
+              {
+                "name": "bin",
+                "store_path": "/nix/store/vp5gw3pb8s88fy4iycv25v7pdbiq9gpb-libressl-3.9.2-bin"
+              },
+              {
+                "name": "dev",
+                "store_path": "/nix/store/78pncc7pf6m3bax3n69v316bcr1lc932-libressl-3.9.2-dev"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/jgfzg4pcgik6mn7151mfrynwpxchr3qx-libressl-3.9.2-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/9c44d9g104ac36sz5zyg2yaj8my1vnaj-libressl-3.9.2"
+              }
+            ],
+            "outputs_to_install": [
+              "bin",
+              "man"
+            ],
+            "pname": "netcat",
+            "rev": "1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "rev_count": 655136,
+            "rev_date": "2024-07-19T09:00:53Z",
+            "scrape_date": "2024-07-20T05:30:31Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "libressl-3.9.2"
+          },
+          {
             "attr_path": "redis",
             "broken": false,
             "derivation": "/nix/store/d1z230q7h7d9097z75h4c7iyd2s84lrx-redis-7.2.5.drv",

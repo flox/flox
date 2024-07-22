@@ -2,6 +2,14 @@ version = 1
 
 [install]
 redis.pkg-path = "redis"
+netcat.pkg-path = "netcat"
+
+[hook]
+on-activate = """
+source "${TESTS_DIR}/services/portgrab.sh"
+REDIS_PORT="$(flox_portgrab)"
+export REDIS_PORT
+"""
 
 [services.redis]
-command = "redis-server"
+command = 'redis-server --port "${REDIS_PORT}"'

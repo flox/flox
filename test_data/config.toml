@@ -158,7 +158,7 @@ cmd = "flox install python311Packages.pip"
 
 [resolve.redis]
 pre_cmd = "flox init"
-cmd = "flox install redis"
+cmd = "flox install redis netcat"
 
 [resolve."rubyPackages_3_2.rails"]
 pre_cmd = "flox init"
