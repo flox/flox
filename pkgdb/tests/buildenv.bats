@@ -171,6 +171,14 @@ setup_file() {
   assert_line "export singlequoteescaped='\'\''baz'"
 }
 
+# bats test_tags=buildenv:build-commands
+@test "Built environment contains build scripts" {
+  run "$PKGDB_BIN" buildenv "$GENERATED_DATA/envs/build-noop/manifest.lock"
+  assert_success
+  store_path=$(echo "$output" | jq -er '.store_path')
+  assert "$TEST" -f "${store_path}/package-builds.d/hello"
+}
+
 # ---------------------------------------------------------------------------- #
 
 # With '--container' produces a script that can be used to build a container.
