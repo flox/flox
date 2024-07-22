@@ -384,6 +384,9 @@ pub struct TypedManifestCatalog {
     /// Service definitions
     #[serde(default)]
     pub services: ManifestServices,
+    /// Package build definitions
+    #[serde(default)]
+    pub build: ManifestBuild,
 }
 
 impl TypedManifestCatalog {
@@ -901,6 +904,37 @@ pub struct ManifestServiceShutdown {
     pub command: String,
 }
 
+/// A map of package ids to package build descriptors
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Default,
+    PartialEq,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ManifestBuild(
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest_btree_map_alphanum_keys::<ManifestBuildDescriptor>(10, 3)")
+    )]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) BTreeMap<String, ManifestBuildDescriptor>,
+);
+
+/// The definition of a package built from within the environment
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ManifestBuildDescriptor {
+    /// The command to run build a package
+    pub command: String,
+}
+
 /// Deserialize the manifest as a [serde_json::Value],
 /// then convert it to a [RawManifest] that can then be converted to a [TypedManifest].
 /// This provides more precise errors based on the version of the manifest.
@@ -1402,6 +1436,7 @@ pub(super) mod test {
             profile: ManifestProfile::default(),
             options: ManifestOptions::default(),
             services: ManifestServices::default(),
+            build: ManifestBuild::default(),
         }
     }
 
