@@ -383,7 +383,6 @@ pub struct TypedManifestCatalog {
     pub options: ManifestOptions,
     /// Service definitions
     #[serde(default)]
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub services: ManifestServices,
 }
 
@@ -734,83 +733,6 @@ pub struct ManifestPackageDescriptorStorePath {
     store_path: String,
 }
 
-/// A map of service names to service definitions
-#[derive(
-    Debug,
-    Clone,
-    Serialize,
-    Deserialize,
-    Default,
-    PartialEq,
-    derive_more::Deref,
-    derive_more::DerefMut,
-)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestServices(
-    #[cfg_attr(
-        test,
-        proptest(
-            strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
-        )
-    )]
-    pub(crate) BTreeMap<String, ManifestServiceDescriptor>,
-);
-
-/// The definition of a service in a manifest
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[serde(rename_all = "kebab-case")]
-#[serde(deny_unknown_fields)]
-pub struct ManifestServiceDescriptor {
-    /// The command to run to start the service
-    pub command: String,
-    /// Service-specific environment variables
-    pub vars: Option<ManifestVariables>,
-    /// Whether the service spawns a background process (daemon)
-    // TODO: This option _requires_ the shutdown command, so we'll need to add
-    //       that explanation to the manifest.toml docs and service mgmt guide
-    pub is_daemon: Option<bool>,
-    /// How to shut down the service
-    pub shutdown: Option<ManifestServiceShutdown>,
-}
-
-impl ManifestServices {
-    pub fn validate(&self) -> Result<(), ServiceError> {
-        let mut bad_services = vec![];
-        for (name, desc) in self.0.iter() {
-            let daemonizes = desc.is_daemon.is_some_and(|_self| _self);
-            let has_shutdown_cmd = desc.shutdown.is_some();
-            if daemonizes && !has_shutdown_cmd {
-                bad_services.push(name.clone());
-            }
-        }
-        let list = bad_services
-            .into_iter()
-            .map(|name| format!("- {name}"))
-            .join("\n");
-        if list.is_empty() {
-            Ok(())
-        } else {
-            let msg = formatdoc! {"
-                Services that spawn daemon processes must supply a shutdown command.
-
-                The following services did not specify a shutdown command:
-                {list}
-            "};
-            Err(ServiceError::InvalidConfig(msg))
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[serde(rename_all = "kebab-case")]
-#[serde(deny_unknown_fields)]
-pub struct ManifestServiceShutdown {
-    /// What command to run to shut down the service
-    pub command: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestVariables(
@@ -899,6 +821,84 @@ pub struct SemverOptions {
     /// Whether to allow pre-release versions when resolving
     #[serde(default)]
     pub allow_pre_releases: Option<bool>,
+}
+
+/// A map of service names to service definitions
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Default,
+    PartialEq,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ManifestServices(
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
+        )
+    )]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) BTreeMap<String, ManifestServiceDescriptor>,
+);
+
+/// The definition of a service in a manifest
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ManifestServiceDescriptor {
+    /// The command to run to start the service
+    pub command: String,
+    /// Service-specific environment variables
+    pub vars: Option<ManifestVariables>,
+    /// Whether the service spawns a background process (daemon)
+    // TODO: This option _requires_ the shutdown command, so we'll need to add
+    //       that explanation to the manifest.toml docs and service mgmt guide
+    pub is_daemon: Option<bool>,
+    /// How to shut down the service
+    pub shutdown: Option<ManifestServiceShutdown>,
+}
+
+impl ManifestServices {
+    pub fn validate(&self) -> Result<(), ServiceError> {
+        let mut bad_services = vec![];
+        for (name, desc) in self.0.iter() {
+            let daemonizes = desc.is_daemon.is_some_and(|_self| _self);
+            let has_shutdown_cmd = desc.shutdown.is_some();
+            if daemonizes && !has_shutdown_cmd {
+                bad_services.push(name.clone());
+            }
+        }
+        let list = bad_services
+            .into_iter()
+            .map(|name| format!("- {name}"))
+            .join("\n");
+        if list.is_empty() {
+            Ok(())
+        } else {
+            let msg = formatdoc! {"
+                Services that spawn daemon processes must supply a shutdown command.
+
+                The following services did not specify a shutdown command:
+                {list}
+            "};
+            Err(ServiceError::InvalidConfig(msg))
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ManifestServiceShutdown {
+    /// What command to run to shut down the service
+    pub command: String,
 }
 
 /// Deserialize the manifest as a [serde_json::Value],
