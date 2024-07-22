@@ -333,6 +333,20 @@ from_json( const nlohmann::json & jfrom, ProfileScriptsRaw & profile );
 
 /* -------------------------------------------------------------------------- */
 
+/** @brief Declares scripts to be sourced by the user's interactive shell after
+ * activating the environment.*/
+struct BuildDescriptorRaw
+{
+  std::string command;
+};
+
+void
+from_json( const nlohmann::json & jfrom, BuildDescriptorRaw & profile );
+
+void
+to_json( nlohmann::json & jto, const BuildDescriptorRaw & manifest );
+/* -------------------------------------------------------------------------- */
+
 /**
  * @brief A _raw_ description of an environment to be read from a file.
  *
@@ -357,6 +371,7 @@ struct ManifestRaw : public GlobalManifestRaw
 
   std::optional<HookRaw> hook;
 
+  std::optional<std::unordered_map<std::string, BuildDescriptorRaw>> build;
 
   ~ManifestRaw() override            = default;
   ManifestRaw()                      = default;
@@ -418,6 +433,7 @@ struct ManifestRaw : public GlobalManifestRaw
     this->vars    = std::nullopt;
     this->hook    = std::nullopt;
     this->profile = std::nullopt;
+    this->build   = std::nullopt;
   }
 
   /**

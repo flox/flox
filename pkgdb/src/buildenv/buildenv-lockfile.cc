@@ -299,6 +299,19 @@ BuildenvLockfile::from_v1_content( const nlohmann::json & jfrom )
         extract_json_errmsg( err ) );
     }
 
+  // load build scripts
+  try
+    {
+      auto build = jfrom["manifest"]["build"];
+      build.get_to( this->manifest.build );
+    }
+  catch ( nlohmann::json::exception & err )
+    {
+      throw resolver::InvalidLockfileException(
+        "couldn't parse lockfile field 'manifest.build'",
+        extract_json_errmsg( err ) );
+    }
+
   debugLog( nix::fmt( "loaded lockfile v1" ) );
 }
 
