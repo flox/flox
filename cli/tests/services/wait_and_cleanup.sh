@@ -14,6 +14,10 @@ function cleanup() {
 # TODO: Replace when exiting the activation stops `process-compose`.
 trap cleanup EXIT
 
-# TODO: Replace when `flox activate --start-services` waits for socket.
-echo "Waiting for process-compose socket"
-timeout 2s bash -c "while [ ! -e \"$PC_SOCKET_PATH\" ]; do sleep 0.1; done"
+# TODO: Replace when `flox activate --start-services` waits.
+echo "Waiting for process-compose to start"
+timeout 2s bash -c '
+    while ! process-compose process list -o wide >/dev/null 2>&1; do
+        sleep 0.1
+    done
+'
