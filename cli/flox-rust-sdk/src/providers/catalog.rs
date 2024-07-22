@@ -124,7 +124,7 @@ pub struct CatalogClient {
 }
 
 impl CatalogClient {
-    pub fn new(baseurl: Option<&str>, device_uuid: Option<Uuid>) -> Self {
+    pub fn new(baseurl: Option<&str>, device_uuid: Option<Uuid>, running_in_ci: bool) -> Self {
         // Remove the existing output file if it exists so we don't merge with
         // a previous `flox` invocation
         if let Ok(path_str) = std::env::var(FLOX_CATALOG_DUMP_DATA_VAR) {
@@ -135,7 +135,7 @@ impl CatalogClient {
         use reqwest::header;
         let mut headers = header::HeaderMap::new();
         // Pass a flag if we are running in CI
-        if std::env::var("CI").is_ok() {
+        if running_in_ci {
             headers.insert("flox-ci", header::HeaderValue::from_static("true"));
         };
         // if given a device_uuid, send that along
@@ -1073,7 +1073,7 @@ mod tests {
             then.status(200).json_body(json_response);
         });
 
-        let client = CatalogClient::new(Some(&server.base_url()), Some(Uuid::new_v4()));
+        let client = CatalogClient::new(Some(&server.base_url()), Some(Uuid::new_v4()), false);
         let res = client.resolve(resolve_req).await.unwrap();
         match &res[0].msgs[0] {
             ResolutionMessage::Unknown(msg_struct) => {
@@ -1101,7 +1101,45 @@ mod tests {
             then.status(200).json_body_obj(empty_response);
         });
 
-        let client = CatalogClient::new(Some(&server.base_url()), Some(Uuid::new_v4()));
+        let client = CatalogClient::new(Some(&server.base_url()), Some(Uuid::new_v4()), false);
+        let _ = client.package_versions("some-package").await;
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn device_uuid_set_on_all_requests() {
+        let device_uuid = Uuid::new_v4();
+        let empty_response = &api_types::PackageSearchResultOutput {
+            items: vec![],
+            total_count: 0,
+        };
+
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.header("flox-device-uuid", device_uuid);
+            then.status(200).json_body_obj(empty_response);
+        });
+
+        let client = CatalogClient::new(Some(&server.base_url()), Some(device_uuid), false);
+        let _ = client.package_versions("some-package").await;
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn running_in_ci_set_on_requests() {
+        let device_uuid = Uuid::new_v4();
+        let empty_response = &api_types::PackageSearchResultOutput {
+            items: vec![],
+            total_count: 0,
+        };
+
+        let server = MockServer::start_async().await;
+        let mock = server.mock(|when, then| {
+            when.header("flox-ci", "true");
+            then.status(200).json_body_obj(empty_response);
+        });
+
+        let client = CatalogClient::new(Some(&server.base_url()), Some(device_uuid), true);
         let _ = client.package_versions("some-package").await;
         mock.assert();
     }

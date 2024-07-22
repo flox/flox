@@ -32,6 +32,8 @@ pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Er
     } else {
         Some(read_metrics_uuid(config).unwrap())
     };
+    // Pass in a bool if we are running in CI, so requests can reflect this in the headers
+    let running_in_ci = std::env::var("CI").is_ok();
 
     // if $_FLOX_USE_CATALOG_MOCK is set to a path to mock data, use the mock client
     if let Ok(path_str) = std::env::var(FLOX_CATALOG_MOCK_DATA_VAR) {
@@ -50,12 +52,14 @@ pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Er
         Ok(Some(Client::Catalog(CatalogClient::new(
             Some(catalog_url),
             device_uuid_for_catalog,
+            running_in_ci,
         ))))
     } else {
         debug!("using production catalog client");
         Ok(Some(Client::Catalog(CatalogClient::new(
             None,
             device_uuid_for_catalog,
+            running_in_ci,
         ))))
     }
 }
