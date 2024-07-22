@@ -91,6 +91,26 @@ EOF
   assert_output --partial "Services are not enabled in this environment"
 }
 
+@test "can start redis-server and access it using redis-cli" {
+  export FLOX_FEATURES_SERVICES=true
+
+  run "$FLOX_BIN" init
+  assert_success
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/redis.json" \
+    run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/redis.toml"
+  assert_success
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    redis-cli ping
+EOF
+)
+  assert_success
+  assert_output --partial "PONG"
+}
+
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=services:stop

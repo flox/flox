@@ -1,0 +1,7 @@
+version = 1
+
+[install]
+redis.pkg-path = "redis"
+
+[services.redis]
+command = "redis-server"

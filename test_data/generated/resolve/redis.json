@@ -1,0 +1,136 @@
+[
+  [
+    {
+      "msgs": [],
+      "name": "toplevel",
+      "page": {
+        "complete": true,
+        "msgs": [],
+        "packages": [
+          {
+            "attr_path": "redis",
+            "broken": false,
+            "derivation": "/nix/store/d1z230q7h7d9097z75h4c7iyd2s84lrx-redis-7.2.5.drv",
+            "description": "Open source, advanced key-value store",
+            "install_id": "redis",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "name": "redis-7.2.5",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/r25wa9rba51wgaam4cpsfkrw7w04j06s-redis-7.2.5"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "redis",
+            "rev": "1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "rev_count": 655136,
+            "rev_date": "2024-07-19T09:00:53Z",
+            "scrape_date": "2024-07-20T05:30:31Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "7.2.5"
+          },
+          {
+            "attr_path": "redis",
+            "broken": false,
+            "derivation": "/nix/store/n297lv0fh3b9bjmgxazlhnbjvrncf1y9-redis-7.2.5.drv",
+            "description": "Open source, advanced key-value store",
+            "install_id": "redis",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "name": "redis-7.2.5",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/dh8rdvd9r2az0hcl2iksz3nix7msq11b-redis-7.2.5"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "redis",
+            "rev": "1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "rev_count": 655136,
+            "rev_date": "2024-07-19T09:00:53Z",
+            "scrape_date": "2024-07-20T05:30:31Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "7.2.5"
+          },
+          {
+            "attr_path": "redis",
+            "broken": false,
+            "derivation": "/nix/store/0s6a90i58bpamk2d0v21v47skhby0fkq-redis-7.2.5.drv",
+            "description": "Open source, advanced key-value store",
+            "install_id": "redis",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "name": "redis-7.2.5",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/l5z6yq56lc1rl5chbjxh4y3521qsby5x-redis-7.2.5"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "redis",
+            "rev": "1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "rev_count": 655136,
+            "rev_date": "2024-07-19T09:00:53Z",
+            "scrape_date": "2024-07-20T05:30:31Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "7.2.5"
+          },
+          {
+            "attr_path": "redis",
+            "broken": false,
+            "derivation": "/nix/store/qhhxycr7gr9d74yri9242blqf9vay2wc-redis-7.2.5.drv",
+            "description": "Open source, advanced key-value store",
+            "install_id": "redis",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "name": "redis-7.2.5",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/n63288jr0baik4d379f44vcjlk4ng2w1-redis-7.2.5"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "redis",
+            "rev": "1d9c2c9b3e71b9ee663d11c5d298727dace8d374",
+            "rev_count": 655136,
+            "rev_date": "2024-07-19T09:00:53Z",
+            "scrape_date": "2024-07-20T05:30:31Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "7.2.5"
+          }
+        ],
+        "page": 655136,
+        "url": ""
+      }
+    }
+  ]
+]
