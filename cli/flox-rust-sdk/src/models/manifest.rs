@@ -384,6 +384,9 @@ pub struct TypedManifestCatalog {
     /// Service definitions
     #[serde(default)]
     pub services: ManifestServices,
+    /// Package build definitions
+    #[serde(default)]
+    pub build: ManifestBuild,
 }
 
 impl TypedManifestCatalog {
@@ -901,6 +904,52 @@ pub struct ManifestServiceShutdown {
     pub command: String,
 }
 
+/// A map of package ids to package build descriptors
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Default,
+    PartialEq,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ManifestBuild(
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest_btree_map_alphanum_keys::<ManifestBuildDescriptor>(10, 3)")
+    )]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) BTreeMap<String, ManifestBuildDescriptor>,
+);
+
+/// The definition of a package built from within the environment
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ManifestBuildDescriptor {
+    /// The command to run to build a package
+    pub command: String,
+    /// Files to explicitly include in the build result
+    pub files: Option<Vec<String>>,
+    /// Systems to allow running the build
+    pub systems: Option<Vec<System>>,
+    /// Sandbox mode for the build
+    pub sandbox: Option<ManifestBuildSandbox>,
+}
+
+/// The definition of a package built from within the environment
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, derive_more::Display)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+pub enum ManifestBuildSandbox {
+    Off,
+    Pure,
+}
+
 /// Deserialize the manifest as a [serde_json::Value],
 /// then convert it to a [RawManifest] that can then be converted to a [TypedManifest].
 /// This provides more precise errors based on the version of the manifest.
@@ -1402,6 +1451,7 @@ pub(super) mod test {
             profile: ManifestProfile::default(),
             options: ManifestOptions::default(),
             services: ManifestServices::default(),
+            build: ManifestBuild::default(),
         }
     }
 
@@ -2145,5 +2195,30 @@ pub(super) mod test {
         let url = Url::parse("https://github.com/foo/bar/archive/main.tar.gz").unwrap();
         let inferred = infer_flake_install_id(&url).unwrap();
         assert_eq!(inferred.as_str(), "main.tar.gz");
+    }
+
+    #[test]
+    fn parses_build_section() {
+        let build_manifest = indoc! {r#"
+            version = 1
+            [build]
+            test.command = 'hello'
+
+        "#};
+
+        let parsed = toml_edit::de::from_str::<TypedManifestCatalog>(build_manifest).unwrap();
+
+        assert_eq!(
+            parsed.build,
+            ManifestBuild(
+                [("test".to_string(), ManifestBuildDescriptor {
+                    command: "hello".to_string(),
+                    files: None,
+                    systems: None,
+                    sandbox: None
+                })]
+                .into()
+            )
+        );
     }
 }
