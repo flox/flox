@@ -119,7 +119,9 @@ impl InstallableLocker for Pkgdb {
 
         debug!("locking installable: {pkgdb_cmd:?}");
 
-        let lock = call_pkgdb(pkgdb_cmd).map_err(|err| match err {
+        // Locking flakes may require using `ssh` for private flakes,
+        // so don't clear PATH
+        let lock = call_pkgdb(pkgdb_cmd, false).map_err(|err| match err {
             CallPkgDbError::PkgDbError(PkgDbError {
                 exit_code: error_codes::NIX_GENERIC,
                 context_message:
