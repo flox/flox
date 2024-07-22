@@ -103,7 +103,11 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/wait_and_cleanup.sh"
-    redis-cli -p "${REDIS_PORT}" ping
+    timeout 2s bash -c '
+      while ! redis-cli -p "${REDIS_PORT}" ping; do
+        sleep 0.1
+      done
+    '
 EOF
 )
   assert_success
