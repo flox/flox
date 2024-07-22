@@ -11,6 +11,7 @@ use flox_rust_sdk::utils::traceable_path;
 use tracing::debug;
 
 use crate::config::Config;
+use crate::utils::metrics::read_metrics_uuid;
 
 /// Initialize the Catalog API client
 ///
@@ -23,6 +24,14 @@ pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Er
         debug!("catalog feature is disabled, skipping client initialization");
         return Ok(None);
     }
+
+    // If metrics are not disabled, pass along the metrics UUID so it can be
+    // sent in catalog request headers.
+    let device_uuid_for_catalog = if config.flox.disable_metrics {
+        Option::None
+    } else {
+        Some(read_metrics_uuid(config).unwrap())
+    };
 
     // if $_FLOX_USE_CATALOG_MOCK is set to a path to mock data, use the mock client
     if let Ok(path_str) = std::env::var(FLOX_CATALOG_MOCK_DATA_VAR) {
@@ -38,9 +47,15 @@ pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Er
         Ok(Some(Client::Mock(MockClient::new(Some(path))?)))
     } else if let Some(ref catalog_url) = config.flox.catalog_url {
         debug!("using catalog client with url: {}", catalog_url);
-        Ok(Some(Client::Catalog(CatalogClient::new(catalog_url))))
+        Ok(Some(Client::Catalog(CatalogClient::new(
+            Some(catalog_url),
+            device_uuid_for_catalog,
+        ))))
     } else {
         debug!("using production catalog client");
-        Ok(Some(Client::Catalog(CatalogClient::default())))
+        Ok(Some(Client::Catalog(CatalogClient::new(
+            None,
+            device_uuid_for_catalog,
+        ))))
     }
 }

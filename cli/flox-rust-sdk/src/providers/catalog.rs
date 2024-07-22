@@ -30,6 +30,7 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::data::System;
 use crate::flox::FLOX_VERSION;
@@ -123,12 +124,27 @@ pub struct CatalogClient {
 }
 
 impl CatalogClient {
-    pub fn new(baseurl: &str) -> Self {
+    pub fn new(baseurl: Option<&str>, device_uuid: Option<Uuid>) -> Self {
         // Remove the existing output file if it exists so we don't merge with
         // a previous `flox` invocation
         if let Ok(path_str) = std::env::var(FLOX_CATALOG_DUMP_DATA_VAR) {
             let path = Path::new(&path_str);
             let _ = std::fs::remove_file(path);
+        }
+
+        use reqwest::header;
+        let mut headers = header::HeaderMap::new();
+        // Pass a flag if we are running in CI
+        if std::env::var("CI").is_ok() {
+            headers.insert("flox-ci", header::HeaderValue::from_static("true"));
+        };
+        // if given a device_uuid, send that along
+        if let Some(device_uuid) = device_uuid {
+            headers.insert(
+                "flox-device-uuid",
+                header::HeaderValue::from_str(&device_uuid.to_string())
+                    .expect("No device_id given!"),
+            );
         }
 
         let client = {
@@ -137,9 +153,13 @@ impl CatalogClient {
                 .connect_timeout(timeout)
                 .timeout(timeout)
                 .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
+                .default_headers(headers)
         };
         Self {
-            client: APIClient::new_with_client(baseurl, client.build().unwrap()),
+            client: APIClient::new_with_client(
+                baseurl.unwrap_or(DEFAULT_CATALOG_URL),
+                client.build().unwrap(),
+            ),
         }
     }
 
@@ -200,12 +220,6 @@ impl CatalogClient {
         );
         file.write_all_at(contents.as_bytes(), 0)
             .expect("failed writing dumped response file");
-    }
-}
-
-impl Default for CatalogClient {
-    fn default() -> Self {
-        Self::new(DEFAULT_CATALOG_URL)
     }
 }
 
@@ -1059,7 +1073,7 @@ mod tests {
             then.status(200).json_body(json_response);
         });
 
-        let client = CatalogClient::new(&server.base_url());
+        let client = CatalogClient::new(Some(&server.base_url()), Some(Uuid::new_v4()));
         let res = client.resolve(resolve_req).await.unwrap();
         match &res[0].msgs[0] {
             ResolutionMessage::Unknown(msg_struct) => {
@@ -1087,7 +1101,7 @@ mod tests {
             then.status(200).json_body_obj(empty_response);
         });
 
-        let client = CatalogClient::new(&server.base_url());
+        let client = CatalogClient::new(Some(&server.base_url()), Some(Uuid::new_v4()));
         let _ = client.package_versions("some-package").await;
         mock.assert();
     }
