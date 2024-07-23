@@ -191,7 +191,7 @@ BuildenvLockfile::from_v1_content( const nlohmann::json & jfrom )
   // load vars
   try
     {
-      auto value = jfrom["manifest"]["vars"];
+      auto value = jfrom.at( "manifest" ).value( "vars", nlohmann::json() );
       value.get_to( this->manifest.vars );
     }
   catch ( nlohmann::json::exception & err )
@@ -204,7 +204,7 @@ BuildenvLockfile::from_v1_content( const nlohmann::json & jfrom )
   // load hooks
   try
     {
-      auto hook = jfrom["manifest"]["hook"];
+      auto hook = jfrom.at( "manifest" ).value( "hook", nlohmann::json() );
       hook.get_to( this->manifest.hook );
     }
   catch ( nlohmann::json::exception & err )
@@ -217,8 +217,9 @@ BuildenvLockfile::from_v1_content( const nlohmann::json & jfrom )
   // load profile
   try
     {
-      auto hook = jfrom["manifest"]["profile"];
-      hook.get_to( this->manifest.profile );
+      auto profile
+        = jfrom.at( "manifest" ).value( "profile", nlohmann::json() );
+      profile.get_to( this->manifest.profile );
     }
   catch ( nlohmann::json::exception & err )
     {
@@ -239,7 +240,7 @@ BuildenvLockfile::from_v1_content( const nlohmann::json & jfrom )
           std::string system;
           try
             {
-              installId = package["install_id"];
+              installId = package.at( "install_id" );
             }
           catch ( nlohmann::json::exception & err )
             {
@@ -251,7 +252,7 @@ BuildenvLockfile::from_v1_content( const nlohmann::json & jfrom )
 
           try
             {
-              system = package["system"];
+              system = package.at( "system" );
             }
           catch ( nlohmann::json::exception & err )
             {
@@ -289,7 +290,8 @@ BuildenvLockfile::from_v1_content( const nlohmann::json & jfrom )
   // load options
   try
     {
-      auto options = jfrom["manifest"]["options"];
+      auto options
+        = jfrom.at( "manifest" ).value( "options", nlohmann::json() );
       options.get_to( this->manifest.options );
     }
   catch ( nlohmann::json::exception & err )
@@ -302,8 +304,8 @@ BuildenvLockfile::from_v1_content( const nlohmann::json & jfrom )
   // load build scripts
   try
     {
-      auto build = jfrom["manifest"]["build"];
-      build.get_to( this->manifest.build );
+      auto value = jfrom.at( "manifest" ).value( "build", nlohmann::json() );
+      value.get_to( this->manifest.build );
     }
   catch ( nlohmann::json::exception & err )
     {
