@@ -72,9 +72,9 @@ pub fn init_telemetry_uuid(data_dir: impl AsRef<Path>, cache_dir: impl AsRef<Pat
     debug!("Created new telemetry UUID: {}", telemetry_uuid);
 
     let notice = formatdoc! {"
-        flox collects basic usage metrics in order to improve the user experience.
+        Flox collects basic usage metrics in order to improve the user experience.
 
-        flox includes a record of the subcommand invoked along with a unique token.
+        Flox includes a record of the subcommand invoked along with a unique token.
         It does not collect any personal information.
 
         The collection of metrics can be disabled in the following ways:
