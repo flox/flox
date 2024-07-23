@@ -11,8 +11,8 @@ expect_after {
   "*\n" { exp_continue }
   "*\r" { exp_continue }
 }
-# check that prompt is set for interactive shell
-expect {flox \[project-*\]}
+
+expect "You are now using the environment"
 
 send "exit\n"
 expect eof
