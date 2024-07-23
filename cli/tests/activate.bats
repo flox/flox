@@ -97,6 +97,11 @@ project_teardown() {
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
   unset PROJECT_NAME
+  rm -f \
+    "$HOME/.bashrc.extra" \
+    "$HOME/.tcshrc.extra" \
+    "$HOME/.config/fish/config.fish.extra" \
+    "$HOME/.zshrc.extra"
 }
 
 
@@ -776,7 +781,6 @@ EOF
   # USER to REAL_USER.
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is aliased to \`echo testing'"
-  rm -f "$HOME/.bashrc.extra"
 }
 
 # bats test_tags=activate,activate:fish,activate:rc:fish
@@ -796,7 +800,6 @@ EOF
   # TODO: come up with a way to invoke fish with the "No colors" theme.
   assert_output --regexp \
     'function.*test_alias.*--wraps=.*echo testing.*--description.*alias test_alias=echo testing'
-  rm -f "$HOME/.config/fish/config.fish.extra"
 }
 
 # bats test_tags=activate,activate:rc:tcsh
@@ -808,7 +811,6 @@ EOF
   # USER to REAL_USER.
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/rc-tcsh.exp" "$PROJECT_DIR"
   assert_line --partial "echo testing"
-  rm -f "$HOME/.tcshrc.extra"
 }
 
 # bats test_tags=activate,activate:rc:zsh
@@ -820,7 +822,6 @@ EOF
   # USER to REAL_USER.
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/rc.exp" "$PROJECT_DIR"
   assert_output --partial "test_alias is an alias for echo testing"
-  rm -f "$HOME/.zshrc.extra"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -1887,7 +1888,6 @@ fi
 eval "\$("$FLOX_BIN" activate -d "$PWD")"
 EOF
   bash -ic true
-  rm -f "$HOME/.bashrc.extra"
 }
 
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:fish
@@ -1902,7 +1902,6 @@ set -gx ALREADY_SOURCED 1
 eval "\$("$FLOX_BIN" activate -d "$PWD")"
 EOF
   fish -ic true
-  rm -f "$HOME/.config/fish/config.fish.extra"
 }
 
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:tcsh
@@ -1917,7 +1916,6 @@ setenv ALREADY_SOURCED 1
 eval "\`$FLOX_BIN activate -d $PWD\`"
 EOF
   tcsh -ic true
-  rm -f "$HOME/.tcshrc.extra"
 }
 
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:zsh
@@ -1933,7 +1931,6 @@ fi
 eval "\$("$FLOX_BIN" activate -d "$PWD")"
 EOF
   zsh -ic true
-  rm -f "$HOME/.zshrc.extra"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -2140,11 +2137,6 @@ EOF
   done
 
   rm -rf "$_temp_env"
-  rm \
-    "$HOME/.bashrc.extra" \
-    "$HOME/.tcshrc.extra" \
-    "$HOME/.config/fish/config.fish.extra" \
-    "$HOME/.zshrc.extra"
 }
 
 # ---------------------------------------------------------------------------- #
