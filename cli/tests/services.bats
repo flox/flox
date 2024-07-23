@@ -259,3 +259,14 @@ EOF
   assert_output --regexp " +one +default +Completed +"
   assert_output --partial "❌ ERROR: service 'one' is not running"
 }
+
+@test "activate services: shows warning when services already running" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+  dummy_socket="$PWD/sock.sock"
+  touch "$dummy_socket"
+  _FLOX_SERVICES_SOCKET="$dummy_socket" run "$FLOX_BIN" activate -s -- true
+
+  assert_success
+  assert_output --partial "⚠️  Skipped starting services, services are already running"
+}
