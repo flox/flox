@@ -1,0 +1,21 @@
+version = 1
+
+[vars]
+# https://github.com/flox/flox/issues/1341
+LD_AUDIT = ""
+# Redis requires this but it's unset on some of our runners/builders.
+LANG = "en_US.UTF-8"
+
+[install]
+redis.pkg-path = "redis"
+netcat.pkg-path = "netcat"
+
+[hook]
+on-activate = """
+source "${TESTS_DIR}/services/portgrab.sh"
+REDIS_PORT="$(flox_portgrab)"
+export REDIS_PORT
+"""
+
+[services.redis]
+command = 'redis-server --port "${REDIS_PORT}"'
