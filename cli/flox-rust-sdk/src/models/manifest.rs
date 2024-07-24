@@ -897,8 +897,7 @@ pub enum TomlEditError {
     /// The `[install]` table was missing entirely
     #[error("'install' table not found")]
     MissingInstallTable,
-    /// Tried to uninstall a package that wasn't installed
-    #[error("couldn't uninstall '{0}', wasn't previously installed")]
+    #[error("couldn't find package '{0}' in the manifest")]
     PackageNotFound(String),
     #[error("'options' must be a table, but found {0} instead")]
     MalformedOptionsTable(String),
@@ -1857,7 +1856,11 @@ pub(super) mod test {
 
     #[test]
     fn error_when_removing_nonexistent_package() {
-        let test_packages = vec!["hello".to_owned(), "DOES_NOT_EXIST".to_owned()];
+        let test_packages = vec![
+            "hello".to_owned(),
+            "DOES_NOT_EXIST".to_owned(),
+            "nodePackages.@".to_owned(),
+        ];
         let removal = remove_packages(DUMMY_MANIFEST, &test_packages);
         assert!(matches!(removal, Err(TomlEditError::PackageNotFound(_))));
     }
