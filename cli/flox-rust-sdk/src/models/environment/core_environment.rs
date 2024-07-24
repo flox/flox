@@ -1428,7 +1428,11 @@ mod tests {
     };
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::ResolutionFailures;
-    use crate::models::manifest::{RawManifest, DEFAULT_GROUP_NAME};
+    use crate::models::manifest::{
+        ManifestPackageDescriptorCatalog,
+        RawManifest,
+        DEFAULT_GROUP_NAME,
+    };
     use crate::models::{lockfile, manifest};
     use crate::providers::flox_cpp_utils::InstallableLockerMock;
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
@@ -2015,5 +2019,107 @@ mod tests {
             raw_manifest.get("version").unwrap().as_integer().unwrap(),
             1
         );
+    }
+
+    /// UNINSTALL TESTS
+
+    /// Generates a mock `TypedManifest` for testing purposes.
+    /// This function is designed to simplify the creation of test data by
+    /// generating a `TypedManifest` based on a list of install IDs and
+    /// package paths.
+    /// # Arguments
+    ///
+    /// * `entries` - A vector of tuples, where each tuple contains an install
+    ///   ID and a package path.
+    ///
+    /// # Returns
+    ///
+    /// * `TypedManifest` - A mock `TypedManifest` containing the provided entries.
+    fn generate_mock_manifest(entries: Vec<(&str, &str)>) -> TypedManifest {
+        let mut typed_manifest_mock = TypedManifestCatalog::default();
+
+        for (test_iid, dotted_package) in entries {
+            typed_manifest_mock.install.insert(
+                test_iid.to_string(),
+                ManifestPackageDescriptor::Catalog(
+                    ManifestPackageDescriptorCatalog {
+                        pkg_path: dotted_package.to_string(),
+                        pkg_group: None,
+                        priority: None,
+                        version: None,
+                        systems: None,
+                    }
+                    .into(),
+                ),
+            );
+        }
+
+        TypedManifest::Catalog(Box::new(typed_manifest_mock))
+    }
+    /// Return the install ID if it matches the user input
+    #[test]
+    fn test_get_install_ids_to_uninstall_by_install_id() {
+        let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
+        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+            "testInstallID".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(result, vec!["testInstallID".to_string()]);
+    }
+
+    #[test]
+    /// Return the install ID if a pkg-path matches the user input
+    fn test_get_install_ids_to_uninstall_by_pkg_path() {
+        let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
+        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+            "dotted.package".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(result, vec!["testInstallID".to_string()]);
+    }
+
+    #[test]
+    /// Ensure that the install ID takes precedence over pkg-path when both are present
+    fn test_get_install_ids_to_uninstall_iid_wins() {
+        let manifest_mock = generate_mock_manifest(vec![
+            ("testInstallID1", "dotted.package"),
+            ("testInstallID2", "dotted.package"),
+            ("dotted.package", "dotted.package"),
+        ]);
+
+        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+            "dotted.package".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(result, vec!["dotted.package".to_string()]);
+    }
+
+    #[test]
+    /// Throw an error when multiple packages match by pkg_path and flox can't determine which to uninstall
+    fn test_get_install_ids_to_uninstall_multiple_pkg_paths_match() {
+        let manifest_mock = generate_mock_manifest(vec![
+            ("testInstallID1", "dotted.package"),
+            ("testInstallID2", "dotted.package"),
+            ("testInstallID3", "dotted.package"),
+        ]);
+        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+            "dotted.package".to_string(),
+        ])
+        .unwrap_err();
+        assert!(matches!(
+            result,
+            CoreEnvironmentError::MultiplePackagesMatch(_, _)
+        ));
+    }
+
+    #[test]
+    /// Throw an error if no install ID or pkg-path matches the user input
+    fn test_get_install_ids_to_uninstall_pkg_not_found() {
+        let manifest_mock = generate_mock_manifest(vec![("testInstallID1", "dotted.package")]);
+        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+            "invalid.packageName".to_string(),
+        ])
+        .unwrap_err();
+        assert!(matches!(result, CoreEnvironmentError::PackageNotFound(_)));
     }
 }
