@@ -72,7 +72,7 @@ setup_sleeping_services() {
   run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
   assert_success
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
 EOF
 )
   assert_success
@@ -102,7 +102,7 @@ EOF
   assert_success
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     timeout 2s bash -c '
       while ! redis-cli -p "${REDIS_PORT}" ping; do
         sleep 0.1
@@ -130,7 +130,7 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop invalid
 EOF
 )
@@ -145,7 +145,7 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     exit_code=0
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one invalid || exit_code=$?
     "$PROCESS_COMPOSE_BIN" process list --output wide
     exit $exit_code
@@ -164,7 +164,7 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     exit_code=0
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop invalid one || exit_code=$?
     "$PROCESS_COMPOSE_BIN" process list --output wide
     exit $exit_code
@@ -196,7 +196,7 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
@@ -214,7 +214,7 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
@@ -231,7 +231,7 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one two
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
@@ -249,7 +249,7 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one
     "$PROCESS_COMPOSE_BIN" process list --output wide
     "$FLOX_BIN" services stop one
