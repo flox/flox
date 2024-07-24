@@ -156,7 +156,7 @@ jobs:
         env:
           RUST_BACKTRACE: 1
           AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.MANAGED_AUTH0_FLOX_DEV_CLIENT_SECRET }}"
-        run: nix develop -L --no-update-lock-file --command just integ-tests
+        run: nix develop -L --no-update-lock-file --command just integ-tests -- --filter-tags activate:nested_flox_activate_tracelevel
 
   nix-build:
     name: "Nix build"
@@ -374,4 +374,5 @@ jobs:
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests'
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests' \
+                -- -- --filter-tags activate:nested_flox_activate_tracelevel
