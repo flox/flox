@@ -229,9 +229,6 @@ and `flake` is described below:
     If an attrpath is specified, it is checked whether
     `packages.$system.$attrpath` or `legacyPackages.$system.$attrpath` exist.
 
-    Private flakes (e.g. flakes authenticated with `git+ssh`) are not yet
-    supported.
-
 ## `[vars]`
 
 The `[vars]` section allows you to define environment variables for your
