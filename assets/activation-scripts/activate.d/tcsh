@@ -1,18 +1,12 @@
 setenv _gnused "@gnused@"
 
-# Confirm _flox_activate_tracelevel is defined before proceeding.
-if ( ! $?_flox_activate_tracelevel ) then
-  sh -c "echo 'WARNING (tcsh): _flox_activate_tracelevel not defined .. defaulting to 0' >&2"
-  setenv _flox_activate_tracelevel 0
-endif
-
 if ( $_flox_activate_tracelevel >= 2 ) then
   set verbose
 endif
 
 # Assert that the expected _{add,del}_env variables are present.
 if ( ! $?_add_env || ! $?_del_env ) then
-  sh -c "echo 'ERROR (tcsh): _add_env and _del_env not found in environment' >&2"
+  echo 'ERROR (tcsh): $_add_env and $_del_env not found in environment' >&2
   exit 1
 endif
 

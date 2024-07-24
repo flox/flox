@@ -2019,8 +2019,8 @@ EOF
   project_setup
   FLOX_SHELL="bash" run $FLOX_BIN activate --dir "$PROJECT_DIR" -- env
   assert_success
-  refute_output --partial "FLOX_SHELL="
-  refute_output --partial "_flox_shell="
+  refute_output "FLOX_SHELL="
+  refute_output "_flox_shell="
 }
 
 # ---------------------------------------------------------------------------- #

@@ -1,11 +1,5 @@
 set -gx _gnused "@gnused@"
 
-# Confirm _flox_activate_tracelevel is defined before proceeding.
-if not set -q _flox_activate_tracelevel
-  echo 'WARNING (fish): _flox_activate_tracelevel not defined .. defaulting to 0' >&2
-  set -gx _flox_activate_tracelevel 0
-end
-
 # Set verbosity level with a default of 0 if not already set
 if test $_flox_activate_tracelevel -ge 2
   set -gx fish_trace 1

@@ -7,10 +7,6 @@
 # Start by reinstating the user's original $HOME.
 setenv HOME "$FLOX_ORIG_HOME"
 
-# Save the current tracelevel in the event that sourcing one of the user
-# dotfiles launches an inner nested activation which unsets it.
-set _save_flox_activate_tracelevel = "$_flox_activate_tracelevel"
-
 # We invoke tcsh with -f to prevent the user and system-wide
 # config files from coming back and overriding the environment
 # that we're trying to set up here, so we start by replicating
@@ -42,9 +38,6 @@ if ( $?loginsh ) then
   endif
 endif
 # TODO: handle sourcing of $dirsfile (.cshdirs), as per tcsh(1).
-
-# Restore the current tracelevel.
-setenv _flox_activate_tracelevel "$_save_flox_activate_tracelevel"
 
 # Bring in the Nix and Flox environment customizations.
 if ( $?FLOX_TCSH_INIT_SCRIPT ) then
