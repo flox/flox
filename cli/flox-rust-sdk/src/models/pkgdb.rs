@@ -122,13 +122,17 @@ pub fn call_pkgdb(mut pkgdb_cmd: Command, clear_path: bool) -> Result<Value, Cal
         // pkgdb with an explicit PATH of our making.
         //
         // It really shouldn't be necessary to append $PATH, so we won't.
+        debug!("Setting PATH to only include git");
         git_path
     } else if let Some(current_path) = env::var_os("PATH") {
         // Add our git binary as a fallback in case the user doesn't have git
         let mut split_paths = env::split_paths(&current_path).collect::<Vec<_>>();
         split_paths.push(git_path.into());
-        env::join_paths(split_paths).map_err(CallPkgDbError::AppendGitToPath)?
+        let joined = env::join_paths(split_paths).map_err(CallPkgDbError::AppendGitToPath)?;
+        debug!("appending git, setting PATH to: {:?}", joined);
+        joined
     } else {
+        debug!("Setting PATH to only include git");
         // PATH is unset, has non-unicode characters, or has an = character, so we don't mind overwriting it
         git_path
     };

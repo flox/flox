@@ -331,7 +331,7 @@ impl<State> CoreEnvironment<State> {
         // Locking flakes may require using `ssh` for private flakes,
         // so don't clear PATH
         let result: BuildEnvResult = serde_json::from_value(
-            call_pkgdb(pkgdb_cmd, true).map_err(CoreEnvironmentError::BuildEnv)?,
+            call_pkgdb(pkgdb_cmd, false).map_err(CoreEnvironmentError::BuildEnv)?,
         )
         .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
 
