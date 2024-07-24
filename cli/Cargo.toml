@@ -75,6 +75,12 @@ pretty_assertions = "1.3"
 serial_test = "3.1.1"
 temp-env = "0.3.2"
 
+# watchdog dependencies
+kqueue = "1.0.8"
+proctitle = "0.1.1"
+signal-hook = "0.3.17"
+signal-hook-tokio = { version = "0.3.1", features = ["futures-v0_3"] }
+
 # build(.rs) dependencies
 prettyplease = "0.2"
 progenitor = "0.6"
