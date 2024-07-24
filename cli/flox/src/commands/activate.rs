@@ -268,16 +268,19 @@ impl Activate {
 
             if flox.features.services && !manifest.services.is_empty() {
                 tracing::debug!(start = self.start_services, "setting service variables");
-                exports.insert(
-                    FLOX_ACTIVATE_START_SERVICES_VAR,
-                    self.start_services.to_string(),
-                );
+                let socket_path = environment.services_socket_path(&flox)?;
+                if socket_path.exists() {
+                    debug!("detected existing services socket");
+                    message::warning("Skipped starting services, services are already running");
+                } else {
+                    exports.insert(
+                        FLOX_ACTIVATE_START_SERVICES_VAR,
+                        self.start_services.to_string(),
+                    );
+                }
                 exports.insert(
                     FLOX_SERVICES_SOCKET_VAR,
-                    environment
-                        .services_socket_path(&flox)?
-                        .to_string_lossy()
-                        .to_string(),
+                    socket_path.to_string_lossy().to_string(),
                 );
             }
         }

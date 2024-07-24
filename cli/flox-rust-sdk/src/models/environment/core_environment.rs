@@ -272,9 +272,10 @@ impl<State> CoreEnvironment<State> {
             pkgdb_cmd.args(["--service-config", &service_config_path.to_string_lossy()]);
         }
 
-        let result: BuildEnvResult =
-            serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?)
-                .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
+        let result: BuildEnvResult = serde_json::from_value(
+            call_pkgdb(pkgdb_cmd, true).map_err(CoreEnvironmentError::BuildEnv)?,
+        )
+        .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
 
         let store_path = PathBuf::from(result.store_path);
         debug!(
@@ -323,9 +324,10 @@ impl<State> CoreEnvironment<State> {
             .arg("--container")
             .arg(lockfile_path);
 
-        let result: BuildEnvResult =
-            serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?)
-                .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
+        let result: BuildEnvResult = serde_json::from_value(
+            call_pkgdb(pkgdb_cmd, true).map_err(CoreEnvironmentError::BuildEnv)?,
+        )
+        .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
 
         let store_path = PathBuf::from(result.store_path);
 
@@ -347,7 +349,7 @@ impl<State> CoreEnvironment<State> {
             .args(["--store-path", &store_path.as_ref().to_string_lossy()]);
 
         serde_json::from_value::<BuildEnvResult>(
-            call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?,
+            call_pkgdb(pkgdb_cmd, true).map_err(CoreEnvironmentError::BuildEnv)?,
         )
         .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
 
@@ -663,7 +665,7 @@ impl CoreEnvironment<ReadOnly> {
             pkgdb_cmd.display()
         );
         let json: UpgradeResultJSON = serde_json::from_value(
-            call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::UpgradeFailedPkgDb)?,
+            call_pkgdb(pkgdb_cmd, true).map_err(CoreEnvironmentError::UpgradeFailedPkgDb)?,
         )
         .map_err(CoreEnvironmentError::ParseUpgradeOutput)?;
 

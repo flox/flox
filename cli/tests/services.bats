@@ -71,8 +71,8 @@ setup_sleeping_services() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
   assert_success
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
 EOF
 )
   assert_success
@@ -91,6 +91,30 @@ EOF
   assert_output --partial "Services are not enabled in this environment"
 }
 
+@test "can start redis-server and access it using redis-cli" {
+  export FLOX_FEATURES_SERVICES=true
+
+  run "$FLOX_BIN" init
+  assert_success
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/redis.json" \
+    run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/redis.toml"
+  assert_success
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    timeout 2s bash -c '
+      while ! redis-cli -p "${REDIS_PORT}" ping; do
+        sleep 0.1
+      done
+    '
+EOF
+)
+  assert_success
+  assert_output --partial "PONG"
+}
+
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=services:stop
@@ -105,8 +129,8 @@ EOF
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
     "$FLOX_BIN" services stop invalid
 EOF
 )
@@ -119,9 +143,9 @@ EOF
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     exit_code=0
-    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
     "$FLOX_BIN" services stop one invalid || exit_code=$?
     "$PROCESS_COMPOSE_BIN" process list --output wide
     exit $exit_code
@@ -138,9 +162,9 @@ EOF
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     exit_code=0
-    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
     "$FLOX_BIN" services stop invalid one || exit_code=$?
     "$PROCESS_COMPOSE_BIN" process list --output wide
     exit $exit_code
@@ -171,8 +195,8 @@ EOF
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
     "$FLOX_BIN" services stop
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
@@ -189,8 +213,8 @@ EOF
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
     "$FLOX_BIN" services stop one
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
@@ -206,8 +230,8 @@ EOF
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
     "$FLOX_BIN" services stop one two
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
@@ -224,8 +248,8 @@ EOF
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/start_and_cleanup.sh"
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
     "$FLOX_BIN" services stop one
     "$PROCESS_COMPOSE_BIN" process list --output wide
     "$FLOX_BIN" services stop one
@@ -234,4 +258,15 @@ EOF
   assert_failure
   assert_output --regexp " +one +default +Completed +"
   assert_output --partial "❌ ERROR: service 'one' is not running"
+}
+
+@test "activate services: shows warning when services already running" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+  dummy_socket="$PWD/sock.sock"
+  touch "$dummy_socket"
+  _FLOX_SERVICES_SOCKET="$dummy_socket" run "$FLOX_BIN" activate -s -- true
+
+  assert_success
+  assert_output --partial "⚠️  Skipped starting services, services are already running"
 }

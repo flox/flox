@@ -86,6 +86,8 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 
 `-s`, `--start-services`
 :  Start the services listed in the manifest when activating the environment.
+   If services are already running, new instances of the environment's services
+   will not be started and a warning will be displayed.
 
 ```{.include}
 ./include/environment-options.md

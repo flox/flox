@@ -209,7 +209,10 @@ pub struct LockedPackageCatalog {
     // region: added fields
     pub system: System, // FIXME: this is an enum in the generated code, can't derive Arbitrary there
     pub group: String,
-    pub priority: usize,
+    // This was previously a `usize`, but in Nix `priority` is a `NixInt`, which is explicitly
+    // a `uint64_t` instead of a `size_t`. Using a `u64` here matches those semantics, though in
+    // reality it's likely not an issue.
+    pub priority: u64,
     // endregion
 }
 
@@ -1099,15 +1102,19 @@ impl LockedManifestCatalog {
                     .map(|d| (install_id, d))
             })
             .flat_map(|(iid, d)| {
-                let systems = manifest
-                    .options
-                    .systems
-                    .as_deref()
-                    .unwrap_or(&*DEFAULT_SYSTEMS_STR);
+                let systems = if let Some(ref d_systems) = d.systems {
+                    d_systems.as_slice()
+                } else {
+                    manifest
+                        .options
+                        .systems
+                        .as_deref()
+                        .unwrap_or(&*DEFAULT_SYSTEMS_STR)
+                };
                 systems.iter().map(move |s| FlakeInstallableToLock {
                     install_id: iid.clone(),
                     descriptor: d.clone(),
-                    system: s.to_owned(),
+                    system: s.clone(),
                 })
             })
     }
@@ -1178,7 +1185,7 @@ impl LockedManifestCatalog {
         let mut ok = Vec::new();
         for installable in installables.into_iter() {
             match locking
-                .lock_flake_installable(&installable.system, &installable.descriptor.flake)
+                .lock_flake_installable(&installable.system, &installable.descriptor)
                 .map(|locked_installable| {
                     LockedPackageFlake::from_parts(installable.install_id, locked_installable)
                 }) {
@@ -1251,7 +1258,7 @@ impl LockedManifestPkgdb {
             .arg(existing_lockfile_path);
 
         debug!("locking manifest with command: {}", pkgdb_cmd.display());
-        call_pkgdb(pkgdb_cmd)
+        call_pkgdb(pkgdb_cmd, true)
             .map_err(LockedManifestError::LockManifest)
             .map(Self)
     }
@@ -1307,8 +1314,9 @@ impl LockedManifestPkgdb {
         pkgdb_cmd.args(inputs);
 
         debug!("updating lockfile with command: {}", pkgdb_cmd.display());
-        let lockfile: LockedManifestPkgdb =
-            LockedManifestPkgdb(call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::UpdateFailed)?);
+        let lockfile: LockedManifestPkgdb = LockedManifestPkgdb(
+            call_pkgdb(pkgdb_cmd, true).map_err(LockedManifestError::UpdateFailed)?,
+        );
 
         Ok(UpdateResult {
             new_lockfile: lockfile,
@@ -1365,7 +1373,7 @@ impl LockedManifestPkgdb {
 
         debug!("checking lockfile with command: {}", pkgdb_cmd.display());
 
-        let value = call_pkgdb(pkgdb_cmd).map_err(LockedManifestError::CheckLockfile)?;
+        let value = call_pkgdb(pkgdb_cmd, true).map_err(LockedManifestError::CheckLockfile)?;
         let warnings: Vec<LockfileCheckWarning> =
             serde_json::from_value(value).map_err(LockedManifestError::ParseCheckWarnings)?;
 
@@ -1416,7 +1424,7 @@ struct LockedPackagePkgdb {
     info: PackageInfo,
     #[serde(rename = "attr-path")]
     abs_path: Vec<String>,
-    priority: usize,
+    priority: u64,
 }
 
 impl LockedPackagePkgdb {
@@ -1502,7 +1510,7 @@ pub struct InstalledPackage {
     pub install_id: String,
     pub rel_path: String,
     pub info: PackageInfo,
-    pub priority: Option<usize>,
+    pub priority: Option<u64>,
 }
 
 #[derive(Debug, Error)]
@@ -1639,6 +1647,8 @@ pub mod test_helpers {
 
         let descriptor = ManifestPackageDescriptorFlake {
             flake: format!("github:nowhere/exciting#{name}"),
+            priority: None,
+            systems: None,
         };
 
         let locked = LockedPackageFlake {
@@ -1663,6 +1673,7 @@ pub mod test_helpers {
                 licenses: None,
                 broken: None,
                 unfree: None,
+                priority: None,
             },
         };
         (install_id, descriptor, locked)
@@ -1671,6 +1682,8 @@ pub mod test_helpers {
     pub fn nix_eval_jobs_descriptor() -> ManifestPackageDescriptorFlake {
         ManifestPackageDescriptorFlake {
             flake: "github:nix-community/nix-eval-jobs".to_string(),
+            priority: None,
+            systems: None,
         }
     }
 
@@ -1761,9 +1774,9 @@ pub(crate) mod tests {
         fn lock_flake_installable(
             &self,
             _: impl AsRef<str>,
-            _: impl AsRef<str>,
+            _: &ManifestPackageDescriptorFlake,
         ) -> Result<LockedInstallable, FlakeInstallableError> {
-            todo!()
+            panic!("this flake locker always panics")
         }
     }
 
@@ -3589,5 +3602,27 @@ pub(crate) mod tests {
         ];
 
         assert_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn respects_flake_descriptor_systems() {
+        let manifest_contents = formatdoc! {r#"
+        version = 1
+
+        [install]
+        bpftrace.flake = "github:NixOS/nixpkgs#bpftrace"
+        bpftrace.systems = ["x86_64-linux"]
+
+        [options]
+        systems = ["aarch64-linux", "x86_64-linux"]
+        "#};
+        let TypedManifest::Catalog(manifest) = toml_edit::de::from_str(&manifest_contents).unwrap()
+        else {
+            panic!("expected a catalog manifest");
+        };
+        let installables =
+            LockedManifestCatalog::collect_flake_installables(&manifest).collect::<Vec<_>>();
+        assert_eq!(installables.len(), 1);
+        assert_eq!(installables[0].system.as_str(), "x86_64-linux");
     }
 }

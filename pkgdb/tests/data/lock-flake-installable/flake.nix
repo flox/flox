@@ -109,6 +109,13 @@
           } ''
             touch $out
           '';
+
+        priority =
+          pkgs.runCommand "priority" {
+            meta.priority = 10;
+          } ''
+            touch $out
+          '';
       }
     );
   };
