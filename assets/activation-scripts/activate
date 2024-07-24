@@ -15,6 +15,69 @@ export _tcsh_home="@out@/activate.d/tcsh_home"
 export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
 [ "$_flox_activate_tracelevel" -eq 0 ] || set -x
 
+NOT_READY="SOCKET_NOT_READY"
+
+poll_services_status () {
+  local socket_file="$1"
+  local output
+  output=$(process-compose process list -u "$socket_file" -o json 2>&1)
+  # Save whatever the current `pipefail` behavior is so it can be restored
+  local saved_options
+  saved_options=$(set +o)
+  # We don't want to exit on pipe failures here
+  set +o pipefail
+  local parsed_json
+  parsed_json=$(echo "$output" | jq -r -c '.[0].status' 2>/dev/null)
+  # Restore the previous shell settings
+  eval "$saved_options"
+  # `parsed_json` will be a null string if anything went wrong
+  echo "${parsed_json:-${NOT_READY}}"
+}
+
+wait_for_services_socket () {
+  local socket_file="$1"
+  local status
+  status=$(poll_services_status "$socket_file")
+  while [ "$status" == "$NOT_READY" ]; do
+    sleep 0.1
+    status=$(poll_services_status "$socket_file")
+  done
+}
+
+start_services_blocking () {
+  local config_file="$1"; shift
+  local socket_file="$1";
+  local log_file
+  log_file="${_FLOX_SERVICES_LOG_FILE:-$(mktemp)}"
+  # process-compose will vomit all over your log files unless you tell it otherwise
+  local previous_no_color="${NO_COLOR:-}"
+  export NO_COLOR=1
+  "$_process_compose" up -f "$config_file" -u "$socket_file" -L "$log_file" --tui=false >/dev/null 2>&1 &
+  # Make these functions available in subshells so that `timeout` can call them
+  export -f wait_for_services_socket poll_services_status
+  local activation_timeout="${_FLOX_SERVICES_ACTIVATE_TIMEOUT:-1}"
+  local blocking_command="wait_for_services_socket \"$socket_file\""
+  if ! "$_coreutils/bin/timeout" "$activation_timeout" bash -c "$blocking_command"; then
+    if [ ! -e "$log_file" ]; then
+      # If something failed before process-compose could write to the log file,
+      # don't tell a user to look at the log file
+      echo "❌ Failed to start services" >&2
+      exit 1
+    else
+      echo "❌ Failed to start services, see $log_file for logs" >&2
+      exit 1
+    fi
+  fi
+  # Unset the helper functions so that they aren't passed to the user shell/command
+  unset wait_for_services_socket poll_services_status
+  if [ -z "$previous_no_color" ]; then
+    # It wasn't previously set
+    unset NO_COLOR
+  else
+    export NO_COLOR="$previous_no_color"
+  fi
+}
+
 
 # TODO: add getopt arg parser for following args:
 # -c "<cmd> <args>": specify exact command args to pass to shell
@@ -197,7 +260,7 @@ fi
 # Start services before the shell or command is invoked
 if [ "$FLOX_ACTIVATE_START_SERVICES" == "true" ]; then
   config_file="$FLOX_ENV/service-config.yaml"
-  "$_process_compose" up -f "$config_file" -u "$_FLOX_SERVICES_SOCKET" --tui=false >/dev/null 2>&1 &
+  start_services_blocking "$config_file" "$_FLOX_SERVICES_SOCKET"
 fi
 
 # From this point on the activation process depends on the mode:

@@ -72,7 +72,7 @@ setup_sleeping_services() {
   run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
   assert_success
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
 EOF
 )
   assert_success
@@ -102,7 +102,7 @@ EOF
   assert_success
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     timeout 2s bash -c '
       while ! redis-cli -p "${REDIS_PORT}" ping; do
         sleep 0.1
@@ -130,7 +130,7 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop invalid
 EOF
 )
@@ -145,7 +145,7 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     exit_code=0
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one invalid || exit_code=$?
     "$PROCESS_COMPOSE_BIN" process list --output wide
     exit $exit_code
@@ -164,7 +164,7 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     exit_code=0
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop invalid one || exit_code=$?
     "$PROCESS_COMPOSE_BIN" process list --output wide
     exit $exit_code
@@ -196,7 +196,7 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
@@ -214,7 +214,7 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
@@ -231,7 +231,7 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one two
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
@@ -249,7 +249,7 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/wait_and_cleanup.sh"
+    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one
     "$PROCESS_COMPOSE_BIN" process list --output wide
     "$FLOX_BIN" services stop one
@@ -269,4 +269,51 @@ EOF
 
   assert_success
   assert_output --partial "⚠️  Skipped starting services, services are already running"
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "blocking: error message when startup times out" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+  export _FLOX_SERVICES_ACTIVATE_TIMEOUT=0.1
+  export _FLOX_SERVICES_LOG_FILE="$PROJECT_DIR/logs.txt"
+  # process-compose will never be able to create this socket,
+  # which looks the same as taking a long time to create the socket
+  export _FLOX_SERVICES_SOCKET="/no_permission.sock"
+  # Don't need to run cleanup because it will never start services
+  run "$FLOX_BIN" activate -s -- true
+  assert_output --partial "❌ Failed to start services"
+}
+
+@test "blocking: activation blocks on socket creation" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+  export _FLOX_SERVICES_LOG_FILE="$PROJECT_DIR/logs.txt"
+  # This is run immediately after activation starts, which is about as good
+  # as we can get for checking that activation has blocked until the socket
+  # exists
+  run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$PROCESS_COMPOSE_BIN" process list
+EOF
+)
+  # Just assert that one of our processes shows up in the output, which indicates
+  # that process-compose has responded
+  assert_output --partial "flox_never_exit"
+}
+
+@test "blocking: process-compose writes logs to file" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+  export _FLOX_SERVICES_LOG_FILE="$PROJECT_DIR/logs.txt"
+  "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    # No actual work to do here other than let process-compose
+    # start and write to logs
+EOF
+)
+  # Check that a startup log line shows up in the logs
+  run grep "process=flox_never_exit" "$_FLOX_SERVICES_LOG_FILE"
+  assert_success
 }
