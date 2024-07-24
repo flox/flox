@@ -2109,10 +2109,11 @@ EOF
   # environment, so we also assert that this warning is not present
   # in any of the activation output.
 
-  # Start by adding logic to inspect the var within all shells.
+  # Start by adding logic to create semaphore files for all shells.
   for i in "$HOME/.bashrc.extra" "$HOME/.config/fish/config.fish.extra" "$HOME/.tcshrc.extra" "$HOME/.zshrc.extra"; do
     cat > "$i" <<EOF
-test -n "\$_flox_activate_tracelevel" && echo "_flox_activate_tracelevel is set"
+touch "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+test -n "\$_flox_activate_tracelevel" || touch "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
 EOF
   done
 
@@ -2131,8 +2132,11 @@ EOF
   for target_shell in bash fish tcsh zsh; do
     echo "Testing $target_shell"
     FLOX_SHELL="$target_shell" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/hook.exp" "$_temp_env"
+    refute_output --partial "_flox_activate_tracelevel not defined"
+    run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
     assert_success
-    assert_output --partial "_flox_activate_tracelevel is set"
+    run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+    assert_failure
     echo # leave a line between test outputs
   done
 
