@@ -272,8 +272,12 @@ impl<State> CoreEnvironment<State> {
             pkgdb_cmd.args(["--service-config", &service_config_path.to_string_lossy()]);
         }
 
+        // Locking flakes may require using `ssh` for private flakes,
+        // so don't clear PATH
+        // We don't have tests for private flakes,
+        // so make sure private flakes work after touching this.
         let result: BuildEnvResult = serde_json::from_value(
-            call_pkgdb(pkgdb_cmd, true).map_err(CoreEnvironmentError::BuildEnv)?,
+            call_pkgdb(pkgdb_cmd, false).map_err(CoreEnvironmentError::BuildEnv)?,
         )
         .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
 
@@ -324,8 +328,10 @@ impl<State> CoreEnvironment<State> {
             .arg("--container")
             .arg(lockfile_path);
 
+        // Locking flakes may require using `ssh` for private flakes,
+        // so don't clear PATH
         let result: BuildEnvResult = serde_json::from_value(
-            call_pkgdb(pkgdb_cmd, true).map_err(CoreEnvironmentError::BuildEnv)?,
+            call_pkgdb(pkgdb_cmd, false).map_err(CoreEnvironmentError::BuildEnv)?,
         )
         .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
 
