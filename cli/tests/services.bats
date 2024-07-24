@@ -290,13 +290,12 @@ EOF
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
   export _FLOX_SERVICES_LOG_FILE="$PROJECT_DIR/logs.txt"
-  export _FLOX_SERVICES_SOCKET="$PROJECT_DIR/sock.sock"
   # This is run immediately after activation starts, which is about as good
   # as we can get for checking that activation has blocked until the socket
   # exists
   run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
-    "$PROCESS_COMPOSE_BIN" process list -u $_FLOX_SERVICES_SOCKET
+    "$PROCESS_COMPOSE_BIN" process list
 EOF
 )
   # Just assert that one of our processes shows up in the output, which indicates
