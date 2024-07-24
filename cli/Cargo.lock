@@ -1821,6 +1821,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "klaus"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "clap_derive",
+ "flox-rust-sdk",
+ "futures",
+ "nix",
+ "sentry",
+ "serde",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "kv-log-macro"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
