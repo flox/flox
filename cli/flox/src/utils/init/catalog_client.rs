@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use anyhow::bail;
@@ -13,6 +14,8 @@ use tracing::debug;
 use crate::config::Config;
 use crate::utils::metrics::read_metrics_uuid;
 
+pub const DEFAULT_CATALOG_URL: &str = "https://api.flox.dev";
+
 /// Initialize the Catalog API client
 ///
 /// - Return [None] if the Catalog API is disabled through the feature flag
@@ -24,16 +27,6 @@ pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Er
         debug!("catalog feature is disabled, skipping client initialization");
         return Ok(None);
     }
-
-    // If metrics are not disabled, pass along the metrics UUID so it can be
-    // sent in catalog request headers.
-    let device_uuid_for_catalog = if config.flox.disable_metrics {
-        Option::None
-    } else {
-        Some(read_metrics_uuid(config).unwrap())
-    };
-    // Pass in a bool if we are running in CI, so requests can reflect this in the headers
-    let running_in_ci = std::env::var("CI").is_ok();
 
     // if $_FLOX_USE_CATALOG_MOCK is set to a path to mock data, use the mock client
     if let Ok(path_str) = std::env::var(FLOX_CATALOG_MOCK_DATA_VAR) {
@@ -47,19 +40,39 @@ pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Er
             "using mock catalog client"
         );
         Ok(Some(Client::Mock(MockClient::new(Some(path))?)))
-    } else if let Some(ref catalog_url) = config.flox.catalog_url {
+    } else {
+        let mut extra_headers: BTreeMap<String, String> = BTreeMap::new();
+
+        // If metrics are not disabled, pass along the metrics UUID so it can be
+        // sent in catalog request headers, as well as the Sentry span info
+        if !config.flox.disable_metrics {
+            extra_headers.insert(
+                "flox-device-uuid".to_string(),
+                read_metrics_uuid(config).unwrap().to_string(),
+            );
+
+            if let Some(span) = sentry::configure_scope(|scope| scope.get_span()) {
+                for (k, v) in span.iter_headers() {
+                    extra_headers.insert(k.to_string(), v);
+                }
+            }
+        };
+
+        // Pass in a bool if we are running in CI, so requests can reflect this in the headers
+        if std::env::var("CI").is_ok() {
+            extra_headers.insert("flox-ci".to_string(), "true".to_string());
+        };
+
+        // If not configured, use the default URL
+        let mut catalog_url = DEFAULT_CATALOG_URL.to_string();
+        if config.flox.catalog_url.is_some() {
+            catalog_url = config.flox.catalog_url.as_ref().unwrap().to_string();
+        }
+
         debug!("using catalog client with url: {}", catalog_url);
         Ok(Some(Client::Catalog(CatalogClient::new(
-            Some(catalog_url),
-            device_uuid_for_catalog,
-            running_in_ci,
-        ))))
-    } else {
-        debug!("using production catalog client");
-        Ok(Some(Client::Catalog(CatalogClient::new(
-            None,
-            device_uuid_for_catalog,
-            running_in_ci,
+            &catalog_url,
+            Some(extra_headers),
         ))))
     }
 }
