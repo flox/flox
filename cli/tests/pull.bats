@@ -371,7 +371,8 @@ function add_incompatible_package() {
     # This response might not be precisely correct if we regenerate because it's
     # for x86_64-darwin and aarch64-linux, but currently it's the same
     CATALOG_RESPONSE="$GENERATED_DATA/resolve/darwin_ps_incompatible.json"
-    PACKAGE="ps"
+    # TODO: flox uses attr path in errors, while pkgdb uses install ID
+    PACKAGE="darwin.ps"
   elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
     ENV_FILES_DIR="$MANUALLY_GENERATED/glibc_v0_x86_64-linux"
     # This response might not be precisely correct if we regenerate because it's
@@ -425,6 +426,7 @@ function add_incompatible_package() {
     # This response might not be precisely correct if we regenerate because it's
     # for x86_64-darwin and aarch64-linux, but currently it's the same
     CATALOG_RESPONSE="$GENERATED_DATA/resolve/darwin_ps_incompatible.json"
+    # TODO: pkgdb uses install ID in errors, while flox uses attr path
     PACKAGE="ps"
   elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
     ENV_FILES_DIR="$MANUALLY_GENERATED/glibc_incompatible_v0_both_darwin"
