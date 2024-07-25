@@ -172,8 +172,7 @@ impl<State> CoreEnvironment<State> {
                         return Err(CoreEnvironmentError::LockingVersion0NotSupported);
                     },
                     Some(manifest_object) => {
-                        let lockfile_manifest = locked
-                            .0
+                        let lockfile_manifest = (*locked)
                             .get("manifest")
                             .and_then(|lockfile_manifest| lockfile_manifest.as_object());
                         if let Some(lockfile_manifest) = lockfile_manifest {

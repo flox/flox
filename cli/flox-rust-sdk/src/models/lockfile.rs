@@ -1220,8 +1220,8 @@ impl LockedManifestCatalog {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct LockedManifestPkgdb(pub Value);
+#[derive(Debug, Clone, derive_more::Deref, Serialize, Deserialize, PartialEq)]
+pub struct LockedManifestPkgdb(Value);
 
 // region: pkgdb lockfile operations
 
