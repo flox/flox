@@ -20,7 +20,7 @@ NOT_READY="SOCKET_NOT_READY"
 poll_services_status () {
   local socket_file="$1"
   local output
-  output=$(process-compose process list -u "$socket_file" -o json 2>&1)
+  output=$($_process_compose process list -u "$socket_file" -o json 2>&1)
   # Save whatever the current `pipefail` behavior is so it can be restored
   local saved_options
   saved_options=$(set +o)
@@ -39,7 +39,7 @@ wait_for_services_socket () {
   local status
   status=$(poll_services_status "$socket_file")
   while [ "$status" == "$NOT_READY" ]; do
-    sleep 0.1
+    sleep 0.02
     status=$(poll_services_status "$socket_file")
   done
 }
