@@ -420,10 +420,10 @@ impl CoreEnvironment<()> {
     /// Until then, this function will error with [CoreEnvironmentError::ContainerizeUnsupportedSystem]
     /// if the environment is not linux.
     ///
-    /// Errors if the environment is not locked.
-    ///
-    /// It's included in the [ReadOnly] struct for ergonomic reasons
-    /// and because it doesn't modify the manifest.
+    /// CoreEnvironment can't know whether or not to lock an environment (e.g.
+    /// a RemoteEnvironment shouldn't have to be locked),
+    /// so force the caller to handle locking by taking lockfile_path as an
+    /// argument.
     pub fn build_container(
         lockfile_path: CanonicalPath,
     ) -> Result<ContainerBuilder, CoreEnvironmentError> {
