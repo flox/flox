@@ -758,6 +758,11 @@ makePackageBuildScripts( nix::EvalState &         state,
       for ( auto [name, descriptor] : *lockfile.manifest.build )
         {
           addScriptToScriptsDir( descriptor.command, packageBuildsDir, name );
+          std::filesystem::permissions( packageBuildsDir / name,
+                                        std::filesystem::perms::owner_exec
+                                          | std::filesystem::perms::group_exec
+                                          | std::filesystem::perms::others_exec,
+                                        std::filesystem::perm_options::add );
         }
     }
 
