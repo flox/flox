@@ -257,8 +257,9 @@ impl List {
     /// Read existing lockfile or lock to create a new [LockedManifest].
     ///
     /// This may write the lockfile depending on the type of environment;
-    /// path and managed environments with local checkouts will write the
-    /// lockfile.
+    /// path and managed environments with local checkouts will lock if there
+    /// isn't a lockfile or it has different manifest contents than the
+    /// manifest.
     fn get_lockfile(flox: &Flox, env: &mut dyn Environment) -> Result<LockedManifest> {
         let lockfile = Dialog {
                 message: "No lockfile found for environment, building...",
