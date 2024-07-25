@@ -74,7 +74,7 @@ setup_sleeping_services() {
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
 EOF
-)
+) 3>&-
   assert_success
   [ -e hello.txt ]
 }
@@ -109,7 +109,7 @@ EOF
       done
     '
 EOF
-)
+) 3>&-
   assert_success
   assert_output --partial "PONG"
 }
@@ -133,7 +133,7 @@ EOF
     source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop invalid
 EOF
-)
+) 3>&-
   assert_failure
   assert_output --partial "❌ ERROR: service 'invalid' is not running"
 }
@@ -150,7 +150,7 @@ EOF
     "$PROCESS_COMPOSE_BIN" process list --output wide
     exit $exit_code
 EOF
-)
+) 3>&-
   assert_failure
   assert_output --partial "❌ ERROR: service 'invalid' is not running"
   assert_output --regexp " +one +default +Completed +"
@@ -169,7 +169,7 @@ EOF
     "$PROCESS_COMPOSE_BIN" process list --output wide
     exit $exit_code
 EOF
-)
+) 3>&-
   assert_failure
   assert_output --partial "❌ ERROR: service 'invalid' is not running"
   assert_output --regexp " +one +default +Running +"
@@ -185,7 +185,7 @@ EOF
     export _FLOX_SERVICES_SOCKET=invalid
     "$FLOX_BIN" services stop one invalid
 EOF
-)
+) 3>&-
   assert_failure
   assert_output --partial "❌ ERROR: couldn't connect to service manager"
 }
@@ -200,7 +200,7 @@ EOF
     "$FLOX_BIN" services stop
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
-)
+) 3>&-
   assert_success
   assert_output --partial "✅ Service 'one' stopped"
   assert_output --partial "✅ Service 'two' stopped"
@@ -218,7 +218,7 @@ EOF
     "$FLOX_BIN" services stop one
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
-)
+) 3>&-
   assert_success
   assert_output --partial "✅ Service 'one' stopped"
   assert_output --regexp " +one +default +Completed +"
@@ -235,7 +235,7 @@ EOF
     "$FLOX_BIN" services stop one two
     "$PROCESS_COMPOSE_BIN" process list --output wide
 EOF
-)
+) 3>&-
   assert_success
   assert_output --partial "✅ Service 'one' stopped"
   assert_output --partial "✅ Service 'two' stopped"
@@ -254,7 +254,7 @@ EOF
     "$PROCESS_COMPOSE_BIN" process list --output wide
     "$FLOX_BIN" services stop one
 EOF
-)
+) 3>&-
   assert_failure
   assert_output --regexp " +one +default +Completed +"
   assert_output --partial "❌ ERROR: service 'one' is not running"
@@ -297,7 +297,7 @@ EOF
     source "${TESTS_DIR}/services/register_cleanup.sh"
     "$PROCESS_COMPOSE_BIN" process list
 EOF
-)
+) 3>&-
   # Just assert that one of our processes shows up in the output, which indicates
   # that process-compose has responded
   assert_output --partial "flox_never_exit"
@@ -312,7 +312,7 @@ EOF
     # No actual work to do here other than let process-compose
     # start and write to logs
 EOF
-)
+) 3>&-
   # Check that a startup log line shows up in the logs
   run grep "process=flox_never_exit" "$_FLOX_SERVICES_LOG_FILE"
   assert_success
