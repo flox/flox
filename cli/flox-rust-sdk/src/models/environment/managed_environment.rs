@@ -256,7 +256,7 @@ impl Environment for ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
         if let Some(ref store_path) = &result.store_path {
-            CoreEnvironment::link(&self.out_link, store_path)?;
+            self.link(store_path)?;
         }
 
         Ok(result)
@@ -292,7 +292,7 @@ impl Environment for ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
         if let Some(ref store_path) = &result.store_path {
-            CoreEnvironment::link(&self.out_link, store_path)?;
+            self.link(store_path)?;
         }
 
         Ok(result)
@@ -315,7 +315,7 @@ impl Environment for ManagedEnvironment {
                 .map_err(ManagedEnvironmentError::CommitGeneration)?;
             self.lock_pointer()?;
             if let Some(ref store_path) = result.store_path() {
-                CoreEnvironment::link(&self.out_link, store_path)?;
+                self.link(store_path)?;
             }
         }
 
@@ -354,7 +354,7 @@ impl Environment for ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
         if let Some(ref store_path) = result.store_path {
-            CoreEnvironment::link(&self.out_link, store_path)?;
+            self.link(store_path)?;
         }
 
         Ok(result)
@@ -543,7 +543,7 @@ impl Environment for ManagedEnvironment {
             .add_generation(&mut temporary, metadata.to_string())
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
         self.lock_pointer()?;
-        CoreEnvironment::link(&self.out_link, store_path)?;
+        self.link(store_path)?;
 
         Ok(())
     }
@@ -1004,6 +1004,7 @@ impl ManagedEnvironment {
             .build(flox)
             .map_err(ManagedEnvironmentError::Build)?;
 
+        // TODO: should use self.link but that returns an EnvironmentError
         CoreEnvironment::link(&self.out_link, store_path).map_err(ManagedEnvironmentError::Link)?;
 
         let mut generations = self
