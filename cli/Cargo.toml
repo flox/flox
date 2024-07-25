@@ -1,6 +1,6 @@
 [workspace]
 members = ["flox", "flox-rust-sdk", "catalog-api-v1", "mk_data", "klaus"]
-default-members = ["flox"]
+default-members = ["flox", "klaus"]
 
 resolver = "2"
 
