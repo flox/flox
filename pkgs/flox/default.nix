@@ -30,11 +30,18 @@ in
     nativeBuildInputs = [makeBinaryWrapper];
 
     postBuild = ''
+      wrapProgram $out/bin/klaus \
+        ${lib.optionalString (SENTRY_DSN != null) "--set FLOX_SENTRY_DSN \"${SENTRY_DSN}\" "} \
+        ${lib.optionalString (SENTRY_ENV != null) "--set FLOX_SENTRY_ENV \"${SENTRY_ENV}\" "} \
+        --set PROCESS_COMPOSE_BIN "${process-compose}/bin/process-compose" \
+        --set FLOX_VERSION    "${version}"
+
       wrapProgram $out/bin/flox \
         ${lib.optionalString (SENTRY_DSN != null) "--set FLOX_SENTRY_DSN \"${SENTRY_DSN}\" "} \
         ${lib.optionalString (SENTRY_ENV != null) "--set FLOX_SENTRY_ENV \"${SENTRY_ENV}\" "} \
         --set PKGDB_BIN       "${flox-pkgdb}/bin/pkgdb" \
         --set FLOX_BIN        "${flox-cli}/bin/flox" \
+        --set KLAUS_BIN       "${flox-cli}/bin/klaus" \
         --set PROCESS_COMPOSE_BIN "${process-compose}/bin/process-compose" \
         --set FLOX_VERSION    "${version}"
     '';

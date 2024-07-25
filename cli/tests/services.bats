@@ -331,3 +331,11 @@ EOF
   run grep "process=flox_never_exit" "$_FLOX_SERVICES_LOG_FILE"
   assert_success
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=bats:focus
+@test "watchdog: can run klaus" {
+  run "$KLAUS_BIN" --help
+  assert_success
+}
