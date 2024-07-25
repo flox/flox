@@ -7,8 +7,10 @@
 
 use std::collections::BTreeMap;
 use std::env;
+use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::mpsc::{Receiver, Sender};
 
 use once_cell::sync::Lazy;
 #[cfg(test)]
@@ -17,11 +19,12 @@ use regex::Regex;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::NamedTempFile;
+use tracing::{debug, trace};
 
 use crate::flox::Flox;
 use crate::models::lockfile::LockedManifestCatalog;
 use crate::models::manifest::ManifestServices;
-use crate::utils::traceable_path;
+use crate::utils::{traceable_path, CommandExt};
 
 const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
 pub const SERVICES_ENV_VAR: &str = "FLOX_FEATURES_SERVICES";
@@ -50,6 +53,8 @@ pub enum ServiceError {
     ParseOutput(#[source] serde_json::Error),
     #[error("environment doesn't have any running services")]
     NoRunningServices,
+    #[error("failed to read process log line")]
+    ReadLogLine(#[source] std::io::Error),
 }
 
 impl ServiceError {
@@ -367,6 +372,89 @@ impl From<ProcessComposeLogContents> for LoggedError {
     }
 }
 
+
+/// Representation of a thread reading logs from a `process-compose process logs` process.
+struct ProcessComposeLogReader {
+    handle: std::thread::JoinHandle<Result<(), ServiceError>>,
+}
+
+impl ProcessComposeLogReader {
+    fn start(
+        socket: impl AsRef<Path>,
+        process: impl AsRef<str>,
+        tx: Sender<ProcessComposeLogLine>,
+    ) -> Result<ProcessComposeLogReader, ServiceError> {
+        let socket = socket.as_ref().to_path_buf();
+        let process = process.as_ref().to_string();
+
+        let handle = std::thread::spawn(move || {
+            let span = tracing::debug_span!("process-compose-log-reader", process = &process);
+            let _guard = span.enter();
+
+            let mut cmd = base_process_compose_command(socket);
+            cmd.arg("logs")
+                .arg(&process)
+                .arg("--follow")
+                .stderr(Stdio::piped())
+                .stdout(Stdio::piped());
+
+            debug!(cmd = cmd.display().to_string(), "attaching to logs");
+
+            let mut child = cmd.spawn().map_err(ServiceError::ProcessComposeCmd)?;
+
+            let stdout = child.stdout.take().expect("failed to get stdout");
+            let reader = std::io::BufReader::new(stdout);
+
+            // `process-compose process logs` will keep blocking even
+            // when the process **and socket** are gone.
+            // Thus reader.lines() will keep blocking indefinitely.
+            // Todo: add a heartbeat to stop receiving logs and kill log reader processes
+            for line in reader.lines() {
+                let line = line.map_err(ServiceError::ReadLogLine)?;
+
+                // The receiver end was dropped, so we can't send any more messages.
+                // Might as well break out of the loop and kill the child process.
+                let Ok(_) = tx.send(ProcessComposeLogLine::new(&process, line)) else {
+                    debug!("receiver dropped, stopping log reader");
+                    break;
+                };
+            }
+
+            // Here, either sending to the receiver failed i.e. the receiver was dropped,
+            // or the child process died.
+            // If the child process ended, that's unexpected
+            // and we'll try to communicate that through the channel.
+            // The most likely error is that the socket doesn't exist,
+            // trying to read logs for a non existent process
+            // unfortunately just blocks indefinitely without any error message.
+
+            if let Some(exit_status) = child.try_wait().map_err(ServiceError::ProcessComposeCmd)? {
+                debug!(?exit_status, "child process exited");
+
+                if !exit_status.success() {
+                    let mut output = String::new();
+                    child
+                        .stderr
+                        .take()
+                        .unwrap()
+                        .read_to_string(&mut output)
+                        .map_err(ServiceError::ProcessComposeCmd)?;
+
+                    trace!(output, "child process quit with error");
+
+                    let err = ServiceError::from_process_compose_log(output);
+                    Err(err)?;
+                }
+            } else {
+                // The child process is still running, so we can kill it.
+                child.kill().map_err(ServiceError::ProcessComposeCmd)?;
+            }
+            Ok(())
+        });
+
+        Ok(ProcessComposeLogReader { handle })
+    }
+}
 #[cfg(test)]
 mod tests {
     use indoc::indoc;
@@ -479,5 +567,32 @@ mod tests {
                 let _ = stop_services(&self.socket, &names);
             }
         }
+    }
+
+    /// Test that [ProcessComposeLogReader] reads logs in order and sends them to the receiver.
+    #[test]
+    fn test_single_process_logs_received_in_order() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: [("foo".to_string(), ProcessConfig {
+                command: String::from(
+                    "i=0; while true; do i=$((i+1)); echo foo \"$((i))\"; sleep 0.1; done",
+                ),
+                vars: None,
+            })]
+            .into(),
+        });
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _ = ProcessComposeLogReader::start(instance.socket(), "foo", tx).unwrap();
+
+        let logs = rx.iter().take(5).collect::<Vec<_>>();
+
+        assert_eq!(logs, vec![
+            ProcessComposeLogLine::new("foo", "foo 1"),
+            ProcessComposeLogLine::new("foo", "foo 2"),
+            ProcessComposeLogLine::new("foo", "foo 3"),
+            ProcessComposeLogLine::new("foo", "foo 4"),
+            ProcessComposeLogLine::new("foo", "foo 5"),
+        ]);
     }
 }
