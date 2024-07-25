@@ -168,18 +168,22 @@ in
               [--klaus <KLAUS BINARY | -K <KLAUS BINARY>] \
               [--pkgdb <PKGDB BINARY>| -P <PKGDB BINARY>] \
               [--nix <NIX BINARY>| -N <NIX BINARY>] \
+              [--input-data <INPUT DATA> | -I <INPUT DATA>] \
+              [--generated-data <GENERATED DATA> | -G <GENERATED DATA>] \
               [--tests <TESTS_DIR>| -T <TESTS_DIR>] \
               [--watch | -W] \
               [--help | -h] -- [BATS ARGUMENTS]
 
     Available options:
-        -F, --flox          Path to flox binary (Default: $FLOX_BIN)
-        -K, --klaus         Path to the klaus binary (Default: $KLAUS_BIN)
-        -P, --pkgdb         Path to pkgdb binary (Default: $PKGDB_BIN)
-        -N, --nix           Path to nix binary (Default: $NIX_BIN)
-        -T, --tests         Path to folder of tests (Default: $PROJECT_TESTS_DIR)
-        -W, --watch         Run tests in a continuous watch mode
-        -h, --help          Prints help information
+        -F, --flox           Path to flox binary (Default: $FLOX_BIN)
+        -K, --klaus          Path to the klaus binary (Default: $KLAUS_BIN)
+        -P, --pkgdb          Path to pkgdb binary (Default: $PKGDB_BIN)
+        -N, --nix            Path to nix binary (Default: $NIX_BIN)
+        -I, --input-data     Path to the input data directory (Default: $INPUT_DATA)
+        -G, --generated-data Path to the generated data directory (Default: $GENERATED_DATA)
+        -T, --tests          Path to folder of tests (Default: $PROJECT_TESTS_DIR)
+        -W, --watch          Run tests in a continuous watch mode
+        -h, --help           Prints help information
     EOF
     }
 
@@ -189,14 +193,16 @@ in
     _FLOX_TESTS=();
     while [[ "$#" -gt 0 ]]; do
       case "$1" in
-        -[fF]|--flox)         export FLOX_BIN="''${2?}"; shift; ;;
-        -[kK]|--klaus)        export KLAUS_BIN="''${2?}"; shift; ;;
-        -[pP]|--pkgdb)        export PKGDB_BIN="''${2?}"; shift; ;;
-        -[nN]|--nix)          export NIX_BIN="''${2?}"; shift; ;;
-        -[tT]|--tests)        export TESTS_DIR="''${2?}"; shift; ;;
-        -[wW]|--watch)        WATCH=:; ;;
-        -h|--help|-u|--usage) usage; exit 0; ;;
-        --)                   shift; break; ;;
+        -[fF]|--flox)           export FLOX_BIN="''${2?}"; shift; ;;
+        -[kK]|--klaus)          export KLAUS_BIN="''${2?}"; shift; ;;
+        -[pP]|--pkgdb)          export PKGDB_BIN="''${2?}"; shift; ;;
+        -[nN]|--nix)            export NIX_BIN="''${2?}"; shift; ;;
+        -[iI]|--input-data)     export INPUT_DATA="''${2?}"; shift; ;;
+        -[gG]|--generated-data) export GENERATED_DATA="''${2?}"; shift; ;;
+        -[tT]|--tests)          export TESTS_DIR="''${2?}"; shift; ;;
+        -[wW]|--watch)          WATCH=:; ;;
+        -h|--help|-u|--usage)   usage; exit 0; ;;
+        --)                     shift; break; ;;
         *)
           if [[ -e "$1" ]]; then
             _FLOX_TESTS+=( "$1" );
@@ -210,6 +216,9 @@ in
       shift;
     done
 
+    # Set the test data location
+    export GENERATED_DATA=''${GENERATED_DATA:-'${GENERATED_DATA}'}
+    export INPUT_DATA=''${INPUT_DATA:-'${INPUT_DATA}'}
 
     # Default flag values
     : "''${TESTS_DIR:=$WORKDIR}";
@@ -234,6 +243,7 @@ in
       echo "  PKGDB_BIN:                $PKGDB_BIN";
       echo "  NIX_BIN:                  $NIX_BIN";
       echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
+      echo "  INPUT_DATA:               $INPUT_DATA";
       echo "  GENERATED_DATA:           $GENERATED_DATA";
       echo "  bats                      ${batsWith}/bin/bats";
       echo "  bats options              ''${_BATS_ARGS[*]}";

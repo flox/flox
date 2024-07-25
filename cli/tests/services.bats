@@ -334,7 +334,6 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=bats:focus
 @test "watchdog: can run klaus" {
   run "$KLAUS_BIN" --help
   assert_success
