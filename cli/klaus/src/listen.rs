@@ -20,7 +20,7 @@
 //! is created via `spawn_blocking` because there are no async calls in this task, but we still
 //! want the task to run in concert with the other async tasks (this is why we don't use a thread).
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -45,7 +45,7 @@ pub async fn wait_for_shutdown(flag: Arc<AtomicBool>) {
 /// Returns the PID that will be waited on
 pub fn target_pid(args: &crate::Cli) -> Pid {
     #[cfg(target_os = "linux")]
-    let pid = if let Some(pid) = args.pid {
+    let pid = if let Some(_pid) = args.pid {
         debug!("ignoring user-provided PID, not available on Linux, using parent PID instead");
         nix::unistd::getppid()
     } else {
@@ -138,6 +138,7 @@ pub(crate) fn spawn_termination_listener(
     pid: Pid,
     shutdown_flag: Arc<AtomicBool>,
 ) -> JoinHandle<Result<Action, Error>> {
+    use std::sync::atomic::Ordering;
     // NOTE: You cannot call `.abort` on this task because it is spawned with `spawn_blocking`,
     //       and attempting to do so will have no effect, that's why we need a shutdown flag.
     tokio::task::spawn_blocking(move || {
@@ -181,21 +182,13 @@ pub(crate) fn spawn_termination_listener(
         let span = debug_span!("linux_termination_listener");
         let _ = span.enter();
         debug!(task = "linux_termination_listener", "task started");
-        unsafe {
-            prctl(PR_SET_PDEATHSIG, SIGUSR1);
-        }
-        let action = select! {
-            // This will never return
-            _ = pending().fuse() => {
-                // We should *never* get here
-                error!("pending task resolved");
-                Action::Terminate
-            },
-            _ = wait_for_shutdown(shutdown_flag).fuse() => {
-                debug!(task = "linux_termination_listener", "observed shutdown flag");
-                Action::Terminate
-            }
-        };
-        Ok(action)
+        nix::sys::prctl::set_pdeathsig(Some(nix::sys::signal::Signal::SIGUSR1))
+            .context("set_pdeathsig failed")?;
+        wait_for_shutdown(shutdown_flag).await;
+        debug!(
+            task = "linux_termination_listener",
+            "observed shutdown flag"
+        );
+        Ok(Action::Terminate)
     })
 }
