@@ -315,6 +315,7 @@ jobs:
   nix-build-bats-tests:
     name: "Flox Bats Tests"
     runs-on: "ubuntu-latest"
+    timeout-minutes: 90
 
     needs:
       - "nix-build"
