@@ -178,7 +178,7 @@ impl PathEnvironment {
 
 impl Environment for PathEnvironment {
     /// This will lock the environment if it is not already locked.
-    fn deserialized_lockfile(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
+    fn lockfile(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         Ok(env_view.ensure_locked(flox)?)
     }

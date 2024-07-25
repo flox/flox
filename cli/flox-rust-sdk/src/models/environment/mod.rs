@@ -156,11 +156,11 @@ pub trait Environment: Send {
         groups_or_iids: &[&str],
     ) -> Result<UpgradeResult, EnvironmentError>;
 
-    /// Return the content of the lockfile.
+    /// Return the lockfile.
     ///
     /// Some implementations error if the lock does not already exist, while
     /// others call lock.
-    fn deserialized_lockfile(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError>;
+    fn lockfile(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError>;
 
     /// Extract the current content of the manifest
     ///

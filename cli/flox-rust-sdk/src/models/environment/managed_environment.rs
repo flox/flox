@@ -208,7 +208,7 @@ impl GenerationLock {
 
 impl Environment for ManagedEnvironment {
     /// This will lock if there is an out of sync local checkout
-    fn deserialized_lockfile(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
+    fn lockfile(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
         self.ensure_locked(flox, &mut local_checkout)
     }

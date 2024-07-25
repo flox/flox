@@ -263,7 +263,7 @@ impl List {
         let lockfile = Dialog {
                 message: "No lockfile found for environment, building...",
                 help_message: None,
-                typed: Spinner::new(|| env.deserialized_lockfile(flox)),
+                typed: Spinner::new(|| env.lockfile(flox)),
             }
             // TODO: it would be better if we knew when a lock was actually happening
             .spin_with_delay(Duration::from_secs_f32(0.25))?;
