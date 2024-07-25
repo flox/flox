@@ -132,8 +132,8 @@ impl CatalogClient {
 
         // convert to HeaderMap
         let mut header_map = HeaderMap::new();
-        if extra_headers.is_some() {
-            for (key, value) in extra_headers.unwrap() {
+        if let Some(headers) = extra_headers {
+            for (key, value) in headers {
                 header_map.insert(
                     header::HeaderName::from_str(&key).unwrap(),
                     header::HeaderValue::from_str(&value).unwrap(),
@@ -1064,7 +1064,7 @@ mod tests {
             then.status(200).json_body(json_response);
         });
 
-        let client = CatalogClient::new(&server.base_url(), Option::None);
+        let client = CatalogClient::new(&server.base_url(), None);
         let res = client.resolve(resolve_req).await.unwrap();
         match &res[0].msgs[0] {
             ResolutionMessage::Unknown(msg_struct) => {
@@ -1092,7 +1092,7 @@ mod tests {
             then.status(200).json_body_obj(empty_response);
         });
 
-        let client = CatalogClient::new(&server.base_url(), Option::None);
+        let client = CatalogClient::new(&server.base_url(), None);
         let _ = client.package_versions("some-package").await;
         mock.assert();
     }
