@@ -734,6 +734,10 @@ pub fn path_hash(p: &impl AsRef<Path>) -> String {
 /// https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
 /// If unset, fallback to cache_dir like for macOS.
 fn services_socket_path(id: &str, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+    if let Ok(path) = std::env::var(FLOX_SERVICES_SOCKET_VAR) {
+        return Ok(PathBuf::from(path));
+    }
+
     #[cfg(target_os = "macos")]
     let runtime_dir = None;
     #[cfg(target_os = "linux")]

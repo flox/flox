@@ -73,7 +73,8 @@ parseInstallable( const std::string & installableStr )
   try
     {
       return nix::parseFlakeRefWithFragmentAndExtendedOutputsSpec(
-        installableStr );
+        installableStr,
+        nix::absPath( "." ) );
     }
   catch ( const nix::Error & e )
     {
@@ -183,24 +184,6 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
   debugLog( nix::fmt( "original fragment: '%s'", fragment ) );
   debugLog( nix::fmt( "original extendedOutputsSpec: '%s'",
                       extendedOutputsSpec.to_string() ) );
-
-  if ( flakeRef.input.toURL().scheme == "git+file"
-       || flakeRef.input.toURL().scheme == "file+file"
-       || flakeRef.input.toURL().scheme == "tarball+file"
-       || flakeRef.input.toURL().scheme == "path" )
-    {
-      auto * maybeAllowLocal = std::getenv( "_PKGDB_ALLOW_LOCAL_FLAKE" );
-      if ( maybeAllowLocal != nullptr )
-        {
-          std::string allowLocal = std::string( maybeAllowLocal );
-          if ( ( allowLocal == std::string( "" ) )
-               || ( allowLocal == std::string( "0" ) ) )
-            {
-              throw LockLocalFlakeException();
-            }
-        }
-      else { throw LockLocalFlakeException(); }
-    }
 
   auto lockFlags = nix::flake::LockFlags {
     .recreateLockFile      = false,
@@ -474,6 +457,14 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     if ( unfreeCursor ) { unfree = ( *unfreeCursor )->getBool(); }
   }
 
+  std::optional<int64_t> priority;
+  {
+
+    auto priorityCursor = cursor->findAlongAttrPath(
+      nix::parseAttrPath( *state, "meta.priority" ) );
+    if ( priorityCursor ) { priority = ( *priorityCursor )->getInt(); }
+  }
+
 
   LockedInstallable lockedInstallable = {
     .lockedUrl                 = lockedUrl,
@@ -493,6 +484,7 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
     .licenses                  = licenses,
     .broken                    = broken,
     .unfree                    = unfree,
+    .priority                  = priority,
   };
 
   return lockedInstallable;
@@ -502,25 +494,25 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
 void
 to_json( nlohmann::json & jto, const LockedInstallable & from )
 {
-  jto = nlohmann::json {
-    { "locked-url", from.lockedUrl },
-    { "flake-description", from.flakeDescription },
-    { "locked-flake-attr-path", from.lockedFlakeAttrPath },
-    { "derivation", from.derivation },
-    { "outputs", from.outputs },
-    { "output-names", from.outputNames },
-    { "outputs-to-install", from.outputsToInstall },
-    { "requested-outputs-to-install", from.requestedOutputsToInstall },
-    { "package-system", from.packageSystem },
-    { "system", from.system },
-    { "name", from.name },
-    { "pname", from.pname },
-    { "version", from.version },
-    { "description", from.description },
-    { "licenses", from.licenses },
-    { "broken", from.broken },
-    { "unfree", from.unfree },
-  };
+  jto = nlohmann::json { { "locked-url", from.lockedUrl },
+                         { "flake-description", from.flakeDescription },
+                         { "locked-flake-attr-path", from.lockedFlakeAttrPath },
+                         { "derivation", from.derivation },
+                         { "outputs", from.outputs },
+                         { "output-names", from.outputNames },
+                         { "outputs-to-install", from.outputsToInstall },
+                         { "requested-outputs-to-install",
+                           from.requestedOutputsToInstall },
+                         { "package-system", from.packageSystem },
+                         { "system", from.system },
+                         { "name", from.name },
+                         { "pname", from.pname },
+                         { "version", from.version },
+                         { "description", from.description },
+                         { "licenses", from.licenses },
+                         { "broken", from.broken },
+                         { "unfree", from.unfree },
+                         { "priority", from.priority } };
 }
 
 void
@@ -554,6 +546,7 @@ from_json( const nlohmann::json & jfrom, LockedInstallable & to )
   if ( jfrom.contains( "licenses" ) ) { to.licenses = jfrom.at( "licenses" ); };
   if ( jfrom.contains( "broken" ) ) { to.broken = jfrom.at( "broken" ); };
   if ( jfrom.contains( "unfree" ) ) { to.unfree = jfrom.at( "unfree" ); };
+  if ( jfrom.contains( "priority" ) ) { to.priority = jfrom.at( "priority" ); }
 }
 
 

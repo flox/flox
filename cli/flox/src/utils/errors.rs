@@ -315,6 +315,8 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
 
             Please ensure that you have write permissions to '.flox/env/manifest.toml'.
         "},
+        CoreEnvironmentError::PackageNotFound(_) => display_chain(err),
+        CoreEnvironmentError::MultiplePackagesMatch(_, _) => display_chain(err),
 
         // internal error, a bug if this happens to users!
         CoreEnvironmentError::BadLockfilePath(_) => display_chain(err),

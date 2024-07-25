@@ -18,7 +18,7 @@ use crate::data::{System, Version};
 use crate::utils::proptest_btree_map_alphanum_keys;
 
 pub(super) const DEFAULT_GROUP_NAME: &str = "toplevel";
-pub const DEFAULT_PRIORITY: usize = 5;
+pub const DEFAULT_PRIORITY: u64 = 5;
 
 /// Represents the `[version]` number key in manifest.toml
 pub const MANIFEST_VERSION_KEY: &str = "version";
@@ -651,8 +651,8 @@ impl From<ManifestPackageDescriptorFlake> for ManifestPackageDescriptor {
 pub struct ManifestPackageDescriptorCatalog {
     pub(crate) pkg_path: String,
     pub(crate) pkg_group: Option<String>,
-    #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10usize)"))]
-    pub(crate) priority: Option<usize>,
+    #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
+    pub(crate) priority: Option<u64>,
     pub(crate) version: Option<String>,
     #[cfg_attr(
         test,
@@ -692,6 +692,15 @@ impl ManifestPackageDescriptorCatalog {
 #[serde(deny_unknown_fields)]
 pub struct ManifestPackageDescriptorFlake {
     pub flake: String,
+    #[cfg_attr(test, proptest(strategy = "proptest::option::of(0..10u64)"))]
+    pub(crate) priority: Option<u64>,
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest::option::of(proptest::collection::vec(any::<System>(), 1..3))"
+        )
+    )]
+    pub(crate) systems: Option<Vec<System>>,
 }
 
 #[skip_serializing_none]
@@ -888,8 +897,7 @@ pub enum TomlEditError {
     /// The `[install]` table was missing entirely
     #[error("'install' table not found")]
     MissingInstallTable,
-    /// Tried to uninstall a package that wasn't installed
-    #[error("couldn't uninstall '{0}', wasn't previously installed")]
+    #[error("couldn't find package with install id '{0}' in the manifest")]
     PackageNotFound(String),
     #[error("'options' must be a table, but found {0} instead")]
     MalformedOptionsTable(String),
@@ -1194,10 +1202,10 @@ pub fn insert_packages(
     })
 }
 
-/// Remove package names from the `[install]` table of a manifest
+/// Remove package names from the `[install]` table of a manifest based on their install IDs.
 pub fn remove_packages(
     manifest_contents: &str,
-    pkgs: &[String],
+    install_ids: &[String],
 ) -> Result<DocumentMut, TomlEditError> {
     debug!("attempting to remove packages from the manifest");
     let mut toml = manifest_contents
@@ -1208,7 +1216,7 @@ pub fn remove_packages(
     let installs_table = {
         let installs_field = toml
             .get_mut("install")
-            .ok_or(TomlEditError::PackageNotFound(pkgs[0].clone()))?;
+            .ok_or(TomlEditError::PackageNotFound(install_ids[0].clone()))?;
 
         let type_name = installs_field.type_name().into();
 
@@ -1217,14 +1225,14 @@ pub fn remove_packages(
             .ok_or(TomlEditError::MalformedInstallTable(type_name))?
     };
 
-    for pkg in pkgs {
-        debug!("checking for presence of package '{pkg}'");
-        if !installs_table.contains_key(pkg) {
-            debug!("package '{pkg}' wasn't found");
-            return Err(TomlEditError::PackageNotFound(pkg.clone()));
+    for id in install_ids {
+        debug!("checking for presence of package '{id}'");
+        if !installs_table.contains_key(id) {
+            debug!("package with install id '{id}' wasn't found");
+            return Err(TomlEditError::PackageNotFound(id.clone()));
         } else {
-            installs_table.remove(pkg);
-            debug!("package '{pkg}' was removed");
+            installs_table.remove(id);
+            debug!("package with install id '{id}' was removed");
         }
     }
 
@@ -1848,7 +1856,11 @@ pub(super) mod test {
 
     #[test]
     fn error_when_removing_nonexistent_package() {
-        let test_packages = vec!["hello".to_owned(), "DOES_NOT_EXIST".to_owned()];
+        let test_packages = vec![
+            "hello".to_owned(),
+            "DOES_NOT_EXIST".to_owned(),
+            "nodePackages.@".to_owned(),
+        ];
         let removal = remove_packages(DUMMY_MANIFEST, &test_packages);
         assert!(matches!(removal, Err(TomlEditError::PackageNotFound(_))));
     }

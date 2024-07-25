@@ -36,6 +36,7 @@ use crate::models::manifest::{
     insert_packages,
     remove_packages,
     ManifestError,
+    ManifestPackageDescriptor,
     PackageToInstall,
     RawManifest,
     TomlEditError,
@@ -390,9 +391,14 @@ impl<State> CoreEnvironment<State> {
             pkgdb_cmd.args(["--service-config", &service_config_path.to_string_lossy()]);
         }
 
-        let result: BuildEnvResult =
-            serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?)
-                .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
+        // Locking flakes may require using `ssh` for private flakes,
+        // so don't clear PATH
+        // We don't have tests for private flakes,
+        // so make sure private flakes work after touching this.
+        let result: BuildEnvResult = serde_json::from_value(
+            call_pkgdb(pkgdb_cmd, false).map_err(CoreEnvironmentError::BuildEnv)?,
+        )
+        .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
 
         let store_path = PathBuf::from(result.store_path);
         debug!(
@@ -439,9 +445,12 @@ impl CoreEnvironment<()> {
             .arg("--container")
             .arg(lockfile_path);
 
-        let result: BuildEnvResult =
-            serde_json::from_value(call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?)
-                .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
+        // Locking flakes may require using `ssh` for private flakes,
+        // so don't clear PATH
+        let result: BuildEnvResult = serde_json::from_value(
+            call_pkgdb(pkgdb_cmd, false).map_err(CoreEnvironmentError::BuildEnv)?,
+        )
+        .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
 
         let store_path = PathBuf::from(result.store_path);
 
@@ -461,7 +470,7 @@ impl CoreEnvironment<()> {
             .args(["--store-path", &store_path.as_ref().to_string_lossy()]);
 
         serde_json::from_value::<BuildEnvResult>(
-            call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::BuildEnv)?,
+            call_pkgdb(pkgdb_cmd, true).map_err(CoreEnvironmentError::BuildEnv)?,
         )
         .map_err(CoreEnvironmentError::ParseBuildEnvOutput)?;
 
@@ -523,13 +532,55 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
     ) -> Result<UninstallationAttempt, CoreEnvironmentError> {
         let current_manifest_contents = self.manifest_content()?;
-        let toml = remove_packages(&current_manifest_contents, &packages)
+
+        let install_ids = Self::get_install_ids_to_uninstall(&self.manifest()?, packages)?;
+
+        let toml = remove_packages(&current_manifest_contents, &install_ids)
             .map_err(CoreEnvironmentError::ModifyToml)?;
         let store_path = self.transact_with_manifest_contents(toml.to_string(), flox)?;
         Ok(UninstallationAttempt {
             new_manifest: Some(toml.to_string()),
             store_path: Some(store_path),
         })
+    }
+
+    fn get_install_ids_to_uninstall(
+        manifest: &TypedManifest,
+        packages: Vec<String>,
+    ) -> Result<Vec<String>, CoreEnvironmentError> {
+        let iids = if let TypedManifest::Catalog(manifest) = manifest {
+            let mut install_ids = Vec::new();
+            for pkg in packages {
+                // User passed an install id directly
+                if manifest.install.contains_key(&pkg) {
+                    install_ids.push(pkg);
+                    continue;
+                }
+                // User passed a package path to uninstall
+                let matching_iids_by_pkg_path = manifest.install.iter().filter(|(_iid, descriptor)| {
+                    // Find matching pkg-paths and select for uninstall
+                    matches!(descriptor, ManifestPackageDescriptor::Catalog(des) if des.pkg_path == pkg)
+                }).map(|(iid, _)| iid.to_owned()).collect::<Vec<String>>();
+
+                // Extend the install_ids with the matching install id from pkg-path
+                match matching_iids_by_pkg_path.len() {
+                    0 => return Err(CoreEnvironmentError::PackageNotFound(pkg)),
+                    // if there is only one package with the given pkg-path, uninstall it
+                    1 => install_ids.extend(matching_iids_by_pkg_path),
+                    // if there are multiple packages with the given pkg-path, ask for a specific install id
+                    _ => {
+                        return Err(CoreEnvironmentError::MultiplePackagesMatch(
+                            pkg,
+                            matching_iids_by_pkg_path,
+                        ))
+                    },
+                }
+            }
+            install_ids
+        } else {
+            packages
+        };
+        Ok(iids)
     }
 
     /// Atomically edit this environment, ensuring that it still builds
@@ -777,7 +828,7 @@ impl CoreEnvironment<ReadOnly> {
             pkgdb_cmd.display()
         );
         let json: UpgradeResultJSON = serde_json::from_value(
-            call_pkgdb(pkgdb_cmd).map_err(CoreEnvironmentError::UpgradeFailedPkgDb)?,
+            call_pkgdb(pkgdb_cmd, true).map_err(CoreEnvironmentError::UpgradeFailedPkgDb)?,
         )
         .map_err(CoreEnvironmentError::ParseUpgradeOutput)?;
 
@@ -1308,6 +1359,14 @@ pub enum CoreEnvironmentError {
     OpenManifest(#[source] std::io::Error),
     #[error("could not write manifest")]
     UpdateManifest(#[source] std::io::Error),
+    /// Tried to uninstall a package that wasn't installed
+    #[error("couldn't uninstall '{0}', wasn't previously installed")]
+    PackageNotFound(String),
+    // Multiple packages match user input, must specify install_id
+    #[error(
+        "multiple packages match '{0}', please specify an install id from possible matches: {1:?}"
+    )]
+    MultiplePackagesMatch(String, Vec<String>),
     // endregion
 
     // region: pkgdb manifest errors
@@ -1527,7 +1586,11 @@ mod tests {
     };
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::ResolutionFailures;
-    use crate::models::manifest::{RawManifest, DEFAULT_GROUP_NAME};
+    use crate::models::manifest::{
+        ManifestPackageDescriptorCatalog,
+        RawManifest,
+        DEFAULT_GROUP_NAME,
+    };
     use crate::models::{lockfile, manifest};
     use crate::providers::flox_cpp_utils::InstallableLockerMock;
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
@@ -2140,5 +2203,107 @@ mod tests {
         let environment =
             new_core_environment_with_lockfile(&flox, &manifest_contents, &lockfile_contents);
         assert!(environment.lockfile_if_up_to_date().unwrap().is_none());
+    }
+
+    /// UNINSTALL TESTS
+
+    /// Generates a mock `TypedManifest` for testing purposes.
+    /// This function is designed to simplify the creation of test data by
+    /// generating a `TypedManifest` based on a list of install IDs and
+    /// package paths.
+    /// # Arguments
+    ///
+    /// * `entries` - A vector of tuples, where each tuple contains an install
+    ///   ID and a package path.
+    ///
+    /// # Returns
+    ///
+    /// * `TypedManifest` - A mock `TypedManifest` containing the provided entries.
+    fn generate_mock_manifest(entries: Vec<(&str, &str)>) -> TypedManifest {
+        let mut typed_manifest_mock = TypedManifestCatalog::default();
+
+        for (test_iid, dotted_package) in entries {
+            typed_manifest_mock.install.insert(
+                test_iid.to_string(),
+                ManifestPackageDescriptor::Catalog(
+                    ManifestPackageDescriptorCatalog {
+                        pkg_path: dotted_package.to_string(),
+                        pkg_group: None,
+                        priority: None,
+                        version: None,
+                        systems: None,
+                    }
+                    .into(),
+                ),
+            );
+        }
+
+        TypedManifest::Catalog(Box::new(typed_manifest_mock))
+    }
+    /// Return the install ID if it matches the user input
+    #[test]
+    fn test_get_install_ids_to_uninstall_by_install_id() {
+        let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
+        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+            "testInstallID".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(result, vec!["testInstallID".to_string()]);
+    }
+
+    #[test]
+    /// Return the install ID if a pkg-path matches the user input
+    fn test_get_install_ids_to_uninstall_by_pkg_path() {
+        let manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
+        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+            "dotted.package".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(result, vec!["testInstallID".to_string()]);
+    }
+
+    #[test]
+    /// Ensure that the install ID takes precedence over pkg-path when both are present
+    fn test_get_install_ids_to_uninstall_iid_wins() {
+        let manifest_mock = generate_mock_manifest(vec![
+            ("testInstallID1", "dotted.package"),
+            ("testInstallID2", "dotted.package"),
+            ("dotted.package", "dotted.package"),
+        ]);
+
+        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+            "dotted.package".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(result, vec!["dotted.package".to_string()]);
+    }
+
+    #[test]
+    /// Throw an error when multiple packages match by pkg_path and flox can't determine which to uninstall
+    fn test_get_install_ids_to_uninstall_multiple_pkg_paths_match() {
+        let manifest_mock = generate_mock_manifest(vec![
+            ("testInstallID1", "dotted.package"),
+            ("testInstallID2", "dotted.package"),
+            ("testInstallID3", "dotted.package"),
+        ]);
+        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+            "dotted.package".to_string(),
+        ])
+        .unwrap_err();
+        assert!(matches!(
+            result,
+            CoreEnvironmentError::MultiplePackagesMatch(_, _)
+        ));
+    }
+
+    #[test]
+    /// Throw an error if no install ID or pkg-path matches the user input
+    fn test_get_install_ids_to_uninstall_pkg_not_found() {
+        let manifest_mock = generate_mock_manifest(vec![("testInstallID1", "dotted.package")]);
+        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+            "invalid.packageName".to_string(),
+        ])
+        .unwrap_err();
+        assert!(matches!(result, CoreEnvironmentError::PackageNotFound(_)));
     }
 }

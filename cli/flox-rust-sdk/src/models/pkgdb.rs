@@ -1,4 +1,5 @@
 use std::env;
+use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -94,28 +95,50 @@ pub enum CallPkgDbError {
     PkgDbStderr,
     #[error("internal error: {0}")]
     SomethingElse(String),
+    #[error("couldn't append git to PATH")]
+    AppendGitToPath(#[source] env::JoinPathsError),
 }
 
 /// Call pkgdb and try to parse JSON or error JSON.
 ///
 /// Error JSON is parsed into a [CallPkgDbError::PkgDbError].
-pub fn call_pkgdb(mut pkgdb_cmd: Command) -> Result<Value, CallPkgDbError> {
-    // Configure pkgdb PATH with exact versions of everything it needs.
-    //
-    // Nix itself isn't pure, which is to say that it isn't built with a
-    // reference to `git` in its closure, so correspondingly depends upon
-    // finding it in $PATH to function.
-    //
-    // This just isn't OK for us as we're looking for flox to operate reliably
-    // in "hostile" environments, which includes situation where a user may
-    // redefine or blat their $PATH variable entirely, so we always invoke
-    // pkgdb with an explicit PATH of our making.
-    //
-    // It really shouldn't be necessary to append $PATH, so we won't.
+/// If clear_path is true, PATH is set to only contain a git binary.
+pub fn call_pkgdb(mut pkgdb_cmd: Command, clear_path: bool) -> Result<Value, CallPkgDbError> {
     debug!("calling pkgdb: {}", pkgdb_cmd.display());
-    let pkgdb_path = Path::new(&*GIT_PKG_BIN);
+    // TODO: we may want to add ssh as well
+    let git_path = OsStr::new(&*GIT_PKG_BIN).to_owned();
+    // We don't have tests for private flakes,
+    // so make sure private flakes work after touching this.
+    let path_value = if clear_path {
+        // Configure pkgdb PATH with exact versions of everything it needs.
+        //
+        // Nix itself isn't pure, which is to say that it isn't built with a
+        // reference to `git` in its closure, so correspondingly depends upon
+        // finding it in $PATH to function.
+        //
+        // This just isn't OK for us as we're looking for flox to operate reliably
+        // in "hostile" environments, which includes situation where a user may
+        // redefine or blat their $PATH variable entirely, so we always invoke
+        // pkgdb with an explicit PATH of our making.
+        //
+        // It really shouldn't be necessary to append $PATH, so we won't.
+        debug!("Setting PATH to only include git");
+        git_path
+    } else if let Some(current_path) = env::var_os("PATH") {
+        // Add our git binary as a fallback in case the user doesn't have git
+        let mut split_paths = env::split_paths(&current_path).collect::<Vec<_>>();
+        split_paths.push(git_path.into());
+        let joined = env::join_paths(split_paths).map_err(CallPkgDbError::AppendGitToPath)?;
+        debug!("appending git, setting PATH to: {:?}", joined);
+        joined
+    } else {
+        debug!("Setting PATH to only include git");
+        // PATH is unset, has non-unicode characters, or has an = character, so we don't mind overwriting it
+        git_path
+    };
+    pkgdb_cmd.env("PATH", path_value);
+
     let mut proc = pkgdb_cmd
-        .env("PATH", pkgdb_path)
         .stderr(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -293,6 +316,6 @@ pub fn scrape_input(input: &FlakeRef) -> Result<(), ScrapeError> {
         .arg("legacyPackages");
 
     debug!("scraping input: {pkgdb_cmd:?}");
-    call_pkgdb(pkgdb_cmd)?;
+    call_pkgdb(pkgdb_cmd, true)?;
     Ok(())
 }

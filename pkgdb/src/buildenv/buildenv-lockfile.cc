@@ -143,7 +143,7 @@ buildenvPackageFromV1Descriptor( const nlohmann::json &  jfrom,
       LockedInstallable lockedInstallable = LockedInstallable();
       jfrom.get_to( lockedInstallable );
       pkg.attrPath  = splitAttrPath( lockedInstallable.lockedFlakeAttrPath );
-      pkg.priority  = resolver::DEFAULT_PRIORITY;
+      pkg.priority  = jfrom["priority"];
       pkg.input     = resolver::LockedInputRaw();
       pkg.input.url = lockedInstallable.lockedUrl;
       pkg.input.attrs

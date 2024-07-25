@@ -170,6 +170,27 @@ teardown() {
   assert_output --partial "couldn't uninstall 'hello', wasn't previously installed"
 }
 
+@test "'flox uninstall' can uninstall packages with dotted att_paths" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rubyPackages_3_2.rails.json"
+  run "$FLOX_BIN" init
+  assert_success
+  # Install a dotted package
+  run "$FLOX_BIN" install rubyPackages_3_2.rails
+  assert_success
+
+  # The package should be in the manifest
+  manifest_after_install=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
+  assert_regex "$manifest_after_install" 'rails\.pkg-path = "rubyPackages_3_2\.rails"'
+
+  # Flox can uninstall the dotted package
+  run "$FLOX_BIN" uninstall rubyPackages_3_2.rails
+  assert_success
+
+  # The package should be removed from the manifest
+  manifest_after_uninstall=$(cat "$PROJECT_DIR/.flox/env/manifest.toml")
+  ! assert_regex "$manifest_after_uninstall" 'rails\.pkg-path = "rubyPackages_3_2\.rails"'
+}
+
 @test "'flox install' installs by path" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" init
