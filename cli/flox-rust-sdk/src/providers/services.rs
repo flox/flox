@@ -372,6 +372,81 @@ impl From<ProcessComposeLogContents> for LoggedError {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct ProcessComposeLogLine {
+    pub process: String,
+    pub message: String,
+}
+
+impl ProcessComposeLogLine {
+    /// Construct a new log line.
+    fn new(process: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            process: process.into(),
+            message: message.into(),
+        }
+    }
+}
+
+pub struct ProcessComposeLogStream {
+    readers: Vec<ProcessComposeLogReader>,
+    rx: Receiver<ProcessComposeLogLine>,
+}
+
+impl ProcessComposeLogStream {
+    /// Create a new log stream by attaching to the logs of multiple processes.
+    ///
+    /// For each `process` in `processes`, a new [ProcessComposeLogReader] will be started,
+    /// which will read log lines for the process and send them via MPSC to the receiver.
+    /// [ProcessComposeLogStream] implements [Iterator]
+    /// that will wait for log lines from any of the processes.
+    pub fn new(
+        socket: impl AsRef<Path>,
+        processes: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> Result<ProcessComposeLogStream, ServiceError> {
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        let readers = processes
+            .into_iter()
+            .map(|process| ProcessComposeLogReader::start(socket.as_ref(), process, tx.clone()))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(ProcessComposeLogStream { readers, rx })
+    }
+}
+
+/// An iterator over log lines from multiple processes.
+///
+/// This iterator will block until a log line is received from any of the processes.
+/// Once _all_ processes have stopped,
+/// the iterator will return possible errors returned by the reader threads.
+/// Note that as long as at least one process is running,
+/// the iterator will keep outputting logs from that process.
+///
+/// Consider: send errors via the channel, to end logging early.
+impl Iterator for ProcessComposeLogStream {
+    type Item = Result<ProcessComposeLogLine, ServiceError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.rx.recv() {
+            Ok(line) => Some(Ok(line)),
+            // All senders have been dropped, so we wont't receive any more messages.
+            // Drain remaining reader return values.
+            Err(_) => {
+                loop {
+                    let reader: ProcessComposeLogReader = self.readers.pop()?;
+                    let joined = reader.handle.join().expect("reader thread panicked");
+                    match joined {
+                        // thread joined successfully
+                        // we can continue to the next reader
+                        Ok(()) => continue,
+                        Err(e) => return Some(Err(e)),
+                    }
+                }
+            },
+        }
+    }
+}
 
 /// Representation of a thread reading logs from a `process-compose process logs` process.
 struct ProcessComposeLogReader {
@@ -455,9 +530,15 @@ impl ProcessComposeLogReader {
         Ok(ProcessComposeLogReader { handle })
     }
 }
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+    use std::thread;
+    use std::time::Duration;
+
     use indoc::indoc;
+    use itertools::Itertools;
     use proptest::prelude::*;
     use tempfile::TempDir;
 
@@ -594,5 +675,86 @@ mod tests {
             ProcessComposeLogLine::new("foo", "foo 4"),
             ProcessComposeLogLine::new("foo", "foo 5"),
         ]);
+    }
+
+    /// Test that [ProcessComposeLogStream] reads logs from multiple processes in order
+    /// and maintains the order of logs from each process.
+    #[test]
+    fn test_multiple_process_logs_received_in_order() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: [
+                ("foo".to_string(), ProcessConfig {
+                    command: "i=0; while true; do i=$((i+1)); echo \"$((i))\"; sleep 0.1; done"
+                        .to_string(),
+                    vars: None,
+                }),
+                ("bar".to_string(), ProcessConfig {
+                    command: "i=0; while true; do i=$((i+1)); echo \"$((i))\"; sleep 0.1; done"
+                        .to_string(),
+                    vars: None,
+                }),
+            ]
+            .into(),
+        });
+
+        let stream = ProcessComposeLogStream::new(instance.socket(), ["foo", "bar"])
+            .unwrap()
+            .map(|line| line.unwrap())
+            .take(10);
+
+        let groups = stream.group_by(|line| line.process.clone());
+        let groups = groups.into_iter().collect::<HashMap<_, _>>();
+
+        assert_eq!(groups.len(), 2, "expected two processes");
+
+        for (process, lines) in groups.into_iter() {
+            let lines = lines.collect::<Vec<_>>();
+            let lines_sorted = lines
+                .clone()
+                .into_iter()
+                .sorted_by_key(|line| line.message.clone())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                lines, lines_sorted,
+                "{process} lines out of order: {lines:#?}"
+            );
+        }
+    }
+
+    /// Test that [ProcessComposeLogStream] returns an error when the socket doesn't exist.
+    #[test]
+    fn test_socket_gone() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: [("foo".to_string(), ProcessConfig {
+                command: String::from(
+                    "i=0; while true; do i=$((i+1)); echo foo \"$((i))\"; sleep 0.1; done",
+                ),
+                vars: None,
+            })]
+            .into(),
+        });
+
+        let socket = instance.socket().to_path_buf();
+        instance.stop();
+
+        let mut stream = ProcessComposeLogStream::new(socket, ["foo"]).unwrap();
+
+        let first_message = stream.next().unwrap();
+        // the only error in the stream should be that the socket doesn't exist
+        assert!(
+            matches!(
+                first_message,
+                Err(ServiceError::LoggedError(LoggedError::SocketDoesntExist))
+            ),
+            "expected socket error, got {:?}",
+            first_message
+        );
+
+        let remaining_messages = stream.collect::<Vec<_>>();
+        assert!(
+            remaining_messages.is_empty(),
+            "expected no more messages, got: {:?}",
+            remaining_messages
+        );
     }
 }
