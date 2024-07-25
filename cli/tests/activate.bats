@@ -348,7 +348,7 @@ EOF
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
-  FLOX_NO_PROFILES=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_NOPROFILE=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -357,11 +357,53 @@ EOF
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
-  # Turbo mode exec()s the provided command without involving the
-  # userShell, so cannot invoke shell primitives like ":".
-  FLOX_TURBO=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -127 $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_failure
+  FLOX_TURBO=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  assert_success
   FLOX_TURBO=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  refute_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
+
+  # Test running the activate script directly in various forms.
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
+  assert_success
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
+  assert_success
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
+  assert_success
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command true
+  assert_success
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate :
+  assert_success
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- :
+  assert_success
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate true
+  assert_success
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  assert_output --partial "sourcing profile.common"
+  assert_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
+
+  # Test running the activate script directly with --noprofile.
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  refute_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
+
+  # Test running the activate script directly with --turbo.
+  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -396,7 +438,7 @@ EOF
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
-  FLOX_NO_PROFILES=1 FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_NOPROFILE=1 FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -405,11 +447,53 @@ EOF
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
-  # Turbo mode exec()s the provided command without involving the
-  # userShell, so cannot invoke shell primitives like ":".
-  FLOX_TURBO=1 FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run -127 $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_failure
+  FLOX_TURBO=1 FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  assert_success
   FLOX_TURBO=1 FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  refute_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
+
+  # Test running the activate script directly in various forms.
+  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
+  assert_success
+  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
+  assert_success
+  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
+  assert_success
+  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command true
+  assert_success
+  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate :
+  assert_success
+  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- :
+  assert_success
+  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate true
+  assert_success
+  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  assert_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  assert_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
+
+  # Test running the activate script directly with --noprofile.
+  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  refute_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
+
+  # Test running the activate script directly with --turbo.
+  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -435,7 +519,6 @@ EOF
   assert_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
-  cat $HOME/.logout
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
@@ -445,7 +528,7 @@ EOF
   assert_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
-  FLOX_NO_PROFILES=1 FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_NOPROFILE=1 FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -454,11 +537,53 @@ EOF
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
-  # Turbo mode exec()s the provided command without involving the
-  # userShell, so cannot invoke shell primitives like ":".
-  FLOX_TURBO=1 FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run -127 $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_failure
+  FLOX_TURBO=1 FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  assert_success
   FLOX_TURBO=1 FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  refute_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
+
+  # Test running the activate script directly in various forms.
+  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
+  assert_success
+  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
+  assert_success
+  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
+  assert_success
+  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command true
+  assert_success
+  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate :
+  assert_success
+  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- :
+  assert_success
+  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate true
+  assert_success
+  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  assert_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  assert_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
+
+  # Test running the activate script directly with --noprofile.
+  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  refute_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
+
+  # Test running the activate script directly with --turbo.
+  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -496,7 +621,7 @@ EOF
   refute_output --partial "sourcing profile.tcsh"
   assert_output --partial "sourcing profile.zsh"
 
-  FLOX_NO_PROFILES=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  FLOX_NOPROFILE=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -505,11 +630,53 @@ EOF
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
 
-  # Turbo mode exec()s the provided command without involving the
-  # userShell, so cannot invoke shell primitives like ":".
-  FLOX_TURBO=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -127 $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_failure
+  FLOX_TURBO=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
+  assert_success
   FLOX_TURBO=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  refute_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
+
+  # Test running the activate script directly in various forms.
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
+  assert_success
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
+  assert_success
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
+  assert_success
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command true
+  assert_success
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate :
+  assert_success
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- :
+  assert_success
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate true
+  assert_success
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  assert_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  assert_output --partial "sourcing profile.zsh"
+
+  # Test running the activate script directly with --noprofile.
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  refute_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
+
+  # Test running the activate script directly with --turbo.
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"

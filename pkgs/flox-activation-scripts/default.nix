@@ -2,6 +2,7 @@
   bash,
   coreutils,
   findutils,
+  getopt,
   gnused,
   util-linux,
   ld-floxlib,
@@ -30,6 +31,7 @@ in
 
     substituteInPlace $out/activate \
       --replace "@coreutils@" "${coreutils}" \
+      --replace "@getopt@" "${getopt}" \
       --replace "@gnused@" "${gnused}" \
       --replace "@setsid@" "${util-linux}/bin/setsid" \
       --replace "@out@" "$out" \
