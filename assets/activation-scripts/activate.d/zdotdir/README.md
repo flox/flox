@@ -5,7 +5,7 @@ be in a position to configure the environment _last_, after all system and
 user-specific configuration "rc" files have been processed, simply to prevent
 these scripts from perturbing the flox environment.
 
-Unlike `bash`, `zsh` does not support `--rcfile`, `--norc` or `--no-profile`
+Unlike `bash`, `zsh` does not support `--rcfile`, `--norc` or `--noprofile`
 options for manipulating the user and system-specific initialization, but it
 does offer a `ZDOTDIR` environment variable that can be used to specify an
 entirely new set of "system" configuration files to be used at startup.

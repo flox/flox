@@ -3,6 +3,7 @@
 export _coreutils="@coreutils@"
 export _gnused="@gnused@"
 export _setsid="@setsid@"
+export _getopt="@getopt@"
 export _process_compose="@process-compose@"
 export _jq="@jq@"
 export _zdotdir="@out@/activate.d/zdotdir"
@@ -16,6 +17,15 @@ export _tcsh_home="@out@/activate.d/tcsh_home"
 #   3. (-vvv) zsh `autoload -U compinit` (very verbose)
 export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
 [ "$_flox_activate_tracelevel" -eq 0 ] || set -x
+
+# Ensure mandatory environment variables are defined as required by
+# other scripts. For example, we provide defaults for the following
+# variables as required by the various set-prompt scripts, and tcsh
+# in particular does not tolerate references to undefined variables.
+export FLOX_PROMPT_ENVIRONMENTS="${FLOX_PROMPT_ENVIRONMENTS:-}"
+export _FLOX_SET_PROMPT="${_FLOX_SET_PROMPT:-true}"
+export FLOX_PROMPT_COLOR_1="${FLOX_PROMPT_COLOR_1:-99}"
+export FLOX_PROMPT_COLOR_2="${FLOX_PROMPT_COLOR_2:-141}"
 
 NOT_READY="SOCKET_NOT_READY"
 
@@ -94,11 +104,72 @@ start_services_blocking () {
   fi
 }
 
+# Parse command-line arguments.
+# shellcheck disable=SC1091
+OPTIONS=c:
+LONGOPTS=command:,noprofile,turbo
+USAGE="Usage: $0 [-c \"<cmd> <args>\"] [--turbo] [--noprofile]"
 
-# TODO: add getopt arg parser for following args:
-# -c "<cmd> <args>": specify exact command args to pass to shell
-# --turbo: invoke commands directly without involving userShell
-# --noprofile: do not source `[profile]` scripts
+PARSED=$("$_getopt/bin/getopt" --options="$OPTIONS" --longoptions="$LONGOPTS" --name "$0" -- "$@")
+# shellcheck disable=SC2181
+if [[ $? -ne 0 ]]; then
+  echo "Failed to parse options."
+  exit 1
+fi
+
+# Use eval to remove quotes and replace them with spaces.
+eval set -- "$PARSED"
+
+# Set default values for options.
+FLOX_CMD=""
+FLOX_TURBO="${FLOX_TURBO:-}"
+FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
+while true; do
+  case "$1" in
+    -c|--command)
+      shift
+      if [ -z "$1" ]; then
+	echo "Option -c requires an argument." >&2
+	echo "$USAGE" >&2
+	exit 1
+      fi
+      FLOX_CMD="$1"
+      shift
+      ;;
+    --turbo)
+      FLOX_TURBO="true"
+      shift
+      ;;
+    --noprofile)
+      FLOX_NOPROFILE="true"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "Invalid option: $1" >&2
+      echo "$USAGE" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Convert the provided command string into an array of arguments in "$@".
+# Henceforth in the script it is assumed that these are the arguments to be
+# invoked either by this shell (with FLOX_TURBO) or with the chosen userShell.
+if [ -n "$FLOX_CMD" ]; then
+  # Throw an error if passed additional arguments along with the -c arg.
+  if [ $# -gt 0 ]; then
+    echo "Unexpected arguments provided with -c argument: $*" >&2
+    echo "$USAGE" >&2
+    exit 1
+  fi
+
+  # Set $@ to reflect the command to be invoked.
+  set -- "$FLOX_CMD"
+fi
 
 # Set FLOX_ENV as the path by which all flox scripts can make reference to
 # the environment to which they belong. Use this to define the path to the
@@ -295,62 +366,56 @@ fi
 #   b. source the relevant activation script
 #   c. invoke the command in one of "stdin" or "-c" modes
 if [ $# -gt 0 ]; then
-  if [ $# -ne 2 ] || [ "$1" != "-c" ]; then
-    # Marshal the provided args into a single safely-quoted string.
-    # We use the magic "${@@Q}" parameter transformation to return
-    # each element of "$@" as a safely quoted string.
-    declare -a cmdarray=()
-    cmdarray=("-c" "${@@Q}")
-    set -- "${cmdarray[@]}"
-  fi
   if [ -n "$FLOX_TURBO" ]; then
-    # "turbo command" mode: simply exec the provided command and args
-    # without paying the cost of invoking the userShell.
-    eval "exec $2"
+    # "turbo command" mode: simply invoke the provided command and args
+    # from *this shell* without paying the cost of invoking the userShell.
+    # We cannot exec this because we support bash shell internal commands.
+    "$@"
+    exit $?
   fi
   # "-c" command mode: pass both [2] arguments unaltered to shell invocation
   case "$_flox_shell" in
     *bash)
-      if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$_flox_shell" --noprofile --norc "$@"
+      if [ -n "$FLOX_NOPROFILE" ]; then
+        exec "$_flox_shell" --noprofile --norc -c "$*"
       else
         if [ -t 1 ]; then
-          exec "$_flox_shell" --noprofile --rcfile "$FLOX_ENV/activate.d/bash" "$@"
+          exec "$_flox_shell" --noprofile --rcfile "$FLOX_ENV/activate.d/bash" -c "$*"
         else
           # The bash --rcfile option only works for interactive shells
           # so we need to cobble together our own means of sourcing our
           # startup script for non-interactive shells.
-          exec "$_flox_shell" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash && $2"
+          exec "$_flox_shell" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash && $*"
         fi
       fi
       ;;
     *fish)
-      if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$_flox_shell" "$@"
+      if [ -n "$FLOX_NOPROFILE" ]; then
+        exec "$_flox_shell" -c "$*"
       else
-        exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $FLOX_ENV/activate.d/fish" "$@"
+        exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $FLOX_ENV/activate.d/fish" -c "$*"
       fi
       ;;
     *tcsh)
-      if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$_flox_shell" "$@"
+      if [ -n "$FLOX_NOPROFILE" ]; then
+        exec "$_flox_shell" -c "$*"
       else
         export FLOX_ORIG_HOME="$HOME"
         export HOME="$_tcsh_home"
         export FLOX_TCSH_INIT_SCRIPT="$FLOX_ENV/activate.d/tcsh"
-        exec "$_flox_shell" -m "$@"
+        exec "$_flox_shell" -m -c "$*"
       fi
       ;;
     *zsh)
-      if [ -n "$FLOX_NO_PROFILES" ]; then
-        exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS "$@"
+      if [ -n "$FLOX_NOPROFILE" ]; then
+        exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS -c "$*"
       else
         export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
         export ZDOTDIR="$_zdotdir"
         export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
         # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
         # automatically sourcing /etc/zshrc et al.
-        exec "$_flox_shell" -o NO_GLOBAL_RCS "$@"
+        exec "$_flox_shell" -o NO_GLOBAL_RCS -c "$*"
       fi
       ;;
     *)
@@ -366,7 +431,7 @@ fi
 if [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
   case "$_flox_shell" in
     *bash)
-      if [ -n "$FLOX_NO_PROFILES" ]; then
+      if [ -n "$FLOX_NOPROFILE" ]; then
         exec "$_flox_shell" --noprofile --norc
       else
         if [ -t 1 ]; then
@@ -383,14 +448,14 @@ if [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
       fi
       ;;
     *fish)
-      if [ -n "$FLOX_NO_PROFILES" ]; then
+      if [ -n "$FLOX_NOPROFILE" ]; then
         exec "$_flox_shell"
       else
         exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $FLOX_ENV/activate.d/fish"
       fi
       ;;
     *tcsh)
-      if [ -n "$FLOX_NO_PROFILES" ]; then
+      if [ -n "$FLOX_NOPROFILE" ]; then
         exec "$_flox_shell" -f
       else
         export FLOX_ORIG_HOME="$HOME"
@@ -402,7 +467,7 @@ if [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
       fi
       ;;
     *zsh)
-      if [ -n "$FLOX_NO_PROFILES" ]; then
+      if [ -n "$FLOX_NOPROFILE" ]; then
         exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS
       else
         export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
