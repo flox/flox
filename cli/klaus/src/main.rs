@@ -1,68 +1,104 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use anyhow::Context;
 use clap::Parser;
-use futures::StreamExt;
+use futures::future::Either;
+use listen::{spawn_signal_listener, spawn_termination_listener, target_pid};
 use logger::init_logger;
-use nix::libc::{SIGINT, SIGQUIT, SIGTERM};
-use signal_hook_tokio::Signals;
-use tokio::task::JoinHandle;
-use tracing::debug;
+use tracing::{debug, error, info};
 
 mod listen;
-mod listen_orig;
+// mod listen_orig;
 mod logger;
 
-static SHUTDOWN_FLAG: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 type Error = anyhow::Error;
 
+const SHORT_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
+const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.
+
+The watchdog (klaus) is spawned during activation to aid in service cleanup
+when the final activation of an environment has terminated. This cleanup can
+be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
+
 #[derive(Debug, Parser)]
-#[command()]
+#[command(version, about = SHORT_HELP, long_about = LONG_HELP)]
 pub struct Cli {
     /// The PID of the process to monitor.
     ///
     /// Note: this has no effect on Linux
-    #[arg(short, long)]
-    pub parent_pid: Option<u32>,
+    #[arg(short, long, value_name = "PID")]
+    pub pid: Option<i32>,
 
     /// The path to the environment registry
-    #[arg(short, long = "registry")]
+    #[arg(short, long = "registry", value_name = "PATH")]
     pub registry_path: PathBuf,
 
     /// The path to the process-compose socket
-    #[arg(short, long = "socket")]
+    #[arg(short, long = "socket", value_name = "PATH")]
     pub socket_path: PathBuf,
 
     /// Where to store watchdog logs
-    #[arg(short, long = "logs")]
+    #[arg(short, long = "logs", value_name = "PATH")]
     pub log_path: Option<PathBuf>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let args = Cli::parse();
-    init_logger(args.log_path).context("failed to init logger")?;
-    debug!("started");
-    Ok(())
-}
+    init_logger(&args.log_path).context("failed to initialize logger")?;
+    debug!("starting");
+    let shutdown_flag = Arc::new(AtomicBool::new(false));
+    let signal_task = spawn_signal_listener(shutdown_flag.clone())?;
 
-/// Takes action based on the delivery of a signal.
-async fn handle_signals(mut signals: Signals, shutdown_flag: Arc<AtomicBool>) {
-    while let Some(signal) = signals.next().await {
-        match signal {
-            SIGTERM | SIGINT | SIGQUIT => shutdown_flag.store(true, Ordering::SeqCst),
-            _ => unreachable!(),
-        }
+    let pid = target_pid(&args);
+
+    let termination_task = spawn_termination_listener(pid, shutdown_flag.clone());
+
+    info!(
+        this_pid = nix::unistd::getpid().as_raw(),
+        target_pid = pid.as_raw(),
+        "watchdog is on duty"
+    );
+
+    match futures::future::select(termination_task, signal_task).await {
+        Either::Left((maybe_term_action, unresolved_signal_task)) => {
+            info!("received termination, setting shutdown flag");
+            shutdown_flag.store(true, Ordering::SeqCst);
+            // Let the signal task shut down gracefully
+            debug!("waiting for signal task to abort");
+            let _ = unresolved_signal_task.await;
+            match maybe_term_action {
+                Ok(Ok(action)) => {
+                    debug!(%action, "termination task completed successfully");
+                },
+                Ok(Err(err)) => {
+                    error!(%err, "error encountered in termination task");
+                },
+                Err(err) => {
+                    error!(%err, "termination task was cancelled");
+                },
+            }
+        },
+        Either::Right((maybe_signal_action, unresolved_termination_task)) => {
+            info!("received signal, setting shutdown flag");
+            shutdown_flag.store(true, Ordering::SeqCst);
+            // Let the signal task shut down gracefully
+            debug!("waiting for termination task to shut down");
+            let _ = unresolved_termination_task.await;
+            match maybe_signal_action {
+                Ok(Ok(action)) => {
+                    debug!(%action, "signal task completed successfully");
+                },
+                Ok(Err(err)) => {
+                    error!(%err, "error encountered in signal task");
+                },
+                Err(err) => {
+                    error!(%err, "signal task was cancelled");
+                },
+            }
+        },
     }
-}
-
-/// Spawns a task that resolves on the delivery of a signal of interest.
-fn init_shutdown_handler() -> Result<JoinHandle<()>, Error> {
-    let shutdown_flag = SHUTDOWN_FLAG.get_or_init(|| Arc::new(AtomicBool::new(false)));
-    let signals =
-        Signals::new([SIGTERM, SIGINT, SIGQUIT]).context("couldn't install signal handler")?;
-    let signals_stream_handle = signals.handle();
-    Ok(tokio::spawn(handle_signals(signals, shutdown_flag.clone())))
+    Ok(())
 }
