@@ -572,7 +572,7 @@ impl ManagedEnvironment {
         if !Self::validate_checkout(local_checkout, &self.get_current_generation(flox)?)? {
             Ok(local_checkout.ensure_locked(flox)?)
         } else {
-            let content = local_checkout.existing_deserialized_lockfile()?;
+            let content = local_checkout.existing_lockfile()?;
             content.ok_or(EnvironmentError::MissingLockfile)
         }
     }

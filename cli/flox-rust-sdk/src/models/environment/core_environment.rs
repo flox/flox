@@ -115,9 +115,7 @@ impl<State> CoreEnvironment<State> {
 
     /// Return a [LockedManifest] if the lockfile exists,
     /// otherwise return None
-    pub fn existing_deserialized_lockfile(
-        &self,
-    ) -> Result<Option<LockedManifest>, CoreEnvironmentError> {
+    pub fn existing_lockfile(&self) -> Result<Option<LockedManifest>, CoreEnvironmentError> {
         let lockfile_path = self.lockfile_path();
         if let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) {
             Ok(Some(
