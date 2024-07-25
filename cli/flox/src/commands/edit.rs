@@ -316,6 +316,7 @@ impl Edit {
     }
 
     /// Determines the editor to use for interactive editing, based on the environment
+    /// Returns the editor and a list of args to pass to the editor
     ///
     /// If $VISUAL or $EDITOR is set, use that.
     /// The editor cannot be an empty string or one that consists of fully Unicode whitespace.
@@ -333,12 +334,13 @@ impl Edit {
     }
 
     /// Determines the editor to use for interactive editing, based on passed values
+    /// Returns the editor and a list of args to pass to the editor
     fn determine_editor_from_vars(
         visual_var: String,
         editor_var: String,
         path_var: String,
     ) -> Result<(PathBuf, Vec<String>)> {
-        let var = if !visual_var.is_empty() {
+        let var = if !visual_var.trim().is_empty() {
             visual_var
         } else {
             editor_var
@@ -482,7 +484,7 @@ mod tests {
         let tmp3 = tempdir().expect("should create tempdir");
 
         let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path().to_owned()))
-            .expect("should path-join tmpdirs")
+        let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path()))
             .into_string()
             .expect("should convert paths from OsString to String");
 
@@ -513,10 +515,10 @@ mod tests {
         let vim = tmp2.path().join("vim");
         let vi = tmp2.path().join("vi");
         let emacs = tmp3.path().join("emacs");
-        File::create(nano.clone()).expect("should create file");
-        File::create(vim.clone()).expect("should create file");
-        File::create(vi.clone()).expect("should create file");
-        File::create(emacs.clone()).expect("should create file");
+        File::create(&nano).expect("should create file");
+        File::create(&vim).expect("should create file");
+        File::create(&vi).expect("should create file");
+        File::create(&emacs).expect("should create file");
 
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
@@ -549,11 +551,11 @@ mod tests {
         let vi = tmp2.path().join("vi");
         let emacs = tmp3.path().join("emacs");
 
-        fs::create_dir(nano.clone()).expect("should create directory");
+        fs::create_dir(&nano).expect("should create directory");
 
-        File::create(vim.clone()).expect("should create file");
-        File::create(vi.clone()).expect("should create file");
-        File::create(emacs.clone()).expect("should create file");
+        File::create(&vim).expect("should create file");
+        File::create(&vi).expect("should create file");
+        File::create(&emacs).expect("should create file");
 
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
@@ -585,10 +587,10 @@ mod tests {
         let vim = tmp2.path().join("vim");
         let vi = tmp2.path().join("vi");
         let emacs = tmp3.path().join("emacs");
-        File::create(nano.clone()).expect("should create file");
-        File::create(vim.clone()).expect("should create file");
-        File::create(vi.clone()).expect("should create file");
-        File::create(emacs.clone()).expect("should create file");
+        File::create(&nano).expect("should create file");
+        File::create(&vim).expect("should create file");
+        File::create(&vi).expect("should create file");
+        File::create(&emacs).expect("should create file");
 
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
@@ -686,8 +688,8 @@ mod tests {
 
         let nano = tmp1.path().join("nano");
         let vim = tmp2.path().join("vim");
-        File::create(nano.clone()).expect("should create file");
-        File::create(vim.clone()).expect("should create file");
+        File::create(&nano).expect("should create file");
+        File::create(&vim).expect("should create file");
 
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
@@ -717,8 +719,8 @@ mod tests {
 
         let nano = tmp1.path().join("nano");
         let vim = tmp2.path().join("vim");
-        File::create(nano.clone()).expect("should create file");
-        File::create(vim.clone()).expect("should create file");
+        File::create(&nano).expect("should create file");
+        File::create(&vim).expect("should create file");
 
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
@@ -748,8 +750,8 @@ mod tests {
 
         let nano = tmp1.path().join("nano");
         let vim = tmp2.path().join("vim");
-        File::create(nano.clone()).expect("should create file");
-        File::create(vim.clone()).expect("should create file");
+        File::create(&nano).expect("should create file");
+        File::create(&vim).expect("should create file");
 
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
