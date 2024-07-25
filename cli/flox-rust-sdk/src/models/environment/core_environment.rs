@@ -133,9 +133,10 @@ impl<State> CoreEnvironment<State> {
         toml::from_str(&self.manifest_content()?).map_err(CoreEnvironmentError::DeserializeManifest)
     }
 
-    /// Return a [LockedManifest] if the environment is already locked, otherwise return None.
+    /// Return a [LockedManifest] if the environment is already locked and has
+    /// the same manifest contents as the manifest, otherwise return None.
     /// Error if there is a pkgdb manifest that needs to be locked.
-    fn already_locked(&self) -> Result<Option<LockedManifest>, CoreEnvironmentError> {
+    fn lockfile_if_up_to_date(&self) -> Result<Option<LockedManifest>, CoreEnvironmentError> {
         let lockfile_path = self.lockfile_path();
 
         let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) else {
@@ -211,7 +212,7 @@ impl<State> CoreEnvironment<State> {
     /// locked pkgdb manifest,
     /// since pkgdb manifests can no longer be locked.
     pub fn ensure_locked(&mut self, flox: &Flox) -> Result<LockedManifest, CoreEnvironmentError> {
-        match self.already_locked()? {
+        match self.lockfile_if_up_to_date()? {
             Some(lock) => Ok(lock),
             None => self.lock(flox),
         }
@@ -2102,7 +2103,7 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let environment =
             new_core_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
-        assert!(environment.already_locked().unwrap().is_some());
+        assert!(environment.lockfile_if_up_to_date().unwrap().is_some());
     }
 
     #[test]
@@ -2116,7 +2117,7 @@ mod tests {
                 .unwrap();
         let environment =
             new_core_environment_with_lockfile(&flox, &manifest_contents, &lockfile_contents);
-        let err = environment.already_locked().unwrap_err();
+        let err = environment.lockfile_if_up_to_date().unwrap_err();
         assert!(matches!(
             err,
             CoreEnvironmentError::LockingVersion0NotSupported
@@ -2128,7 +2129,7 @@ mod tests {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
         let environment =
             new_core_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
-        assert!(environment.already_locked().unwrap().is_some());
+        assert!(environment.lockfile_if_up_to_date().unwrap().is_some());
     }
 
     #[test]
@@ -2140,6 +2141,6 @@ mod tests {
             fs::read_to_string(GENERATED_DATA.join("envs/hello").join(LOCKFILE_FILENAME)).unwrap();
         let environment =
             new_core_environment_with_lockfile(&flox, &manifest_contents, &lockfile_contents);
-        assert!(environment.already_locked().unwrap().is_none());
+        assert!(environment.lockfile_if_up_to_date().unwrap().is_none());
     }
 }
