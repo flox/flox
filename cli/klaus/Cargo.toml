@@ -12,6 +12,7 @@ clap_derive.workspace = true
 flox-rust-sdk.workspace = true
 futures.workspace = true
 nix.workspace = true
+once_cell.workspace = true
 proctitle.workspace = true
 sentry.workspace = true
 serde.workspace = true

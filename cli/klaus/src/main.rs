@@ -4,14 +4,18 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use clap::Parser;
+use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_rust_sdk::utils::traceable_path;
 use futures::future::Either;
 use listen::{spawn_signal_listener, spawn_termination_listener, target_pid};
 use logger::init_logger;
-use tracing::{debug, error, info};
+use once_cell::sync::Lazy;
+use sentry::init_sentry;
+use tracing::{debug, error, info, instrument};
 
 mod listen;
-// mod listen_orig;
 mod logger;
+mod sentry;
 
 type Error = anyhow::Error;
 
@@ -23,7 +27,8 @@ when the final activation of an environment has terminated. This cleanup can
 be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
 
 #[derive(Debug, Parser)]
-#[command(version, about = SHORT_HELP, long_about = LONG_HELP)]
+#[command(version = Lazy::get(&FLOX_VERSION).unwrap().as_str())]
+#[command(about = SHORT_HELP, long_about = LONG_HELP)]
 pub struct Cli {
     /// The PID of the process to monitor.
     ///
@@ -45,9 +50,20 @@ pub struct Cli {
 }
 
 #[tokio::main]
+#[instrument("watchdog",
+    skip_all,
+    fields(
+        pid = tracing::field::Empty,
+        registry = tracing::field::Empty,
+        socket = tracing::field::Empty))]
 async fn main() -> Result<(), Error> {
     let args = Cli::parse();
     init_logger(&args.log_path).context("failed to initialize logger")?;
+    let _sentry_guard = init_sentry();
+    let span = tracing::Span::current();
+    span.record("pid", args.pid);
+    span.record("registry", traceable_path(&args.registry_path));
+    span.record("socket", traceable_path(&args.socket_path));
     debug!("starting");
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let signal_task = spawn_signal_listener(shutdown_flag.clone())?;

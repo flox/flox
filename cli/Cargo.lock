@@ -1831,6 +1831,7 @@ dependencies = [
  "futures",
  "kqueue",
  "nix",
+ "once_cell",
  "proctitle",
  "sentry",
  "serde",
