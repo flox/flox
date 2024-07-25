@@ -1493,7 +1493,6 @@ pub mod test_helpers {
 
     pub fn new_core_environment_from_env_files(
         flox: &Flox,
-
         env_files_dir: impl AsRef<Path>,
     ) -> CoreEnvironment {
         let env_files_dir = env_files_dir.as_ref();
