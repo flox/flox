@@ -405,4 +405,79 @@ mod tests {
                 command: bar
         "})
     }
+
+    /// A test helper that starts a `process-compose` instance with a given [ProcessComposeConfig].
+    /// The process is stopped when the instance is dropped or [TestProcessComposeInstance::stop]
+    /// is called.
+    struct TestProcessComposeInstance {
+        _temp_dir: TempDir,
+        socket: PathBuf,
+    }
+
+    impl TestProcessComposeInstance {
+        /// Start a `process-compose` instance with the given [ProcessComposeConfig].
+        /// Wait for the socket to appear before returning.
+        ///
+        /// Panics if the socket doesn't appear after 5 tries with backoff.
+        fn start(config: &ProcessComposeConfig) -> Self {
+            let temp_dir = TempDir::new().unwrap();
+
+            let config_path = temp_dir.path().join("config.yaml");
+            let socket = temp_dir.path().join("S.process-compose");
+            write_process_compose_config(config, &config_path).unwrap();
+
+            let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
+
+            // apparently it doesn't do this automatically even though it's not connected to a tty...
+            cmd.env("NO_COLOR", "1");
+            cmd.arg("--unix-socket")
+                .arg(&socket)
+                .arg("--config")
+                .arg(config_path)
+                .arg("--tui=false")
+                .arg("up")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+
+            // Dropping the child as stopping is handled via a process-compose command.
+            let _ = cmd.spawn().unwrap();
+
+            let max_tries = 5;
+            for backoff in 1..max_tries {
+                println!("waiting for socket to exist");
+                thread::sleep(Duration::from_millis(100 * backoff));
+                if socket.exists() {
+                    break;
+                }
+                if backoff == max_tries {
+                    panic!("socket never appeared");
+                }
+            }
+
+            Self {
+                _temp_dir: temp_dir,
+                socket,
+            }
+        }
+
+        /// Get the path to the socket.
+        fn socket(&self) -> &Path {
+            self.socket.as_ref()
+        }
+
+        /// Stop the `process-compose` instance.
+        fn stop(self) {
+            drop(self)
+        }
+    }
+
+    /// Try to stop the process-compose instance by stopping all its services.
+    impl std::ops::Drop for TestProcessComposeInstance {
+        fn drop(&mut self) {
+            if let Ok(states) = ProcessStates::read(&self.socket) {
+                let names = states.running_process_names();
+                let _ = stop_services(&self.socket, &names);
+            }
+        }
+    }
 }
