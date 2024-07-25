@@ -40,7 +40,7 @@
     <img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square"/>
   </a>
   <a href="https://github.com/flox/flox/releases">
-    <img alt="flox version" src="https://img.shields.io/badge/version-beta-brightgreen?style=flat-square"/>
+    <img alt="flox version" src="https://img.shields.io/github/v/release/flox/flox?style=flat-square"/>
     <!-- <img alt="GitHub tag (latest by date)" src="https://img.shields.io/github/v/tag/flox/flox?label=Version&style=flat-square"> -->
   </a>
 </p>
