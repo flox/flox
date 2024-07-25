@@ -151,6 +151,7 @@ pub(crate) fn spawn_termination_listener(
             kqueue::EventFilter::EVFILT_PROC,
             kqueue::FilterFlag::NOTE_EXIT,
         )?;
+        watcher.watch().context("failed to register watcher")?;
         let action = loop {
             // The only event coming our way is the exit event for
             // the parent pid, so just grab it and continue.
