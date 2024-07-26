@@ -48,3 +48,6 @@ gmon.out
 /.direnv/
 *.tmp
 /build/
+
+# Records storePath of last known build of activation scripts package.
+.ACTIVATION_SCRIPTS_PACKAGE_DIR

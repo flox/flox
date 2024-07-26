@@ -147,17 +147,6 @@ endif  # ifndef TOOLCHAIN
 
 VERSION := $(file < $(PKGDB_ROOT)/.version)
 
-# Files used by `pkgdb buildenv' need to be added to the `nix' store.
-ifndef ACTIVATION_SCRIPTS_PACKAGE_DIR
-  # Must use the ":=" operator to populate $(.SHELLSTATUS) which is why
-  # we only enter this section of code if the variable is not defined.
-  ACTIVATION_SCRIPTS_PACKAGE_DIR := \
-    $(shell $(NIX) build --print-out-paths .#flox-activation-scripts)
-  ifneq ($(.SHELLSTATUS),0)
-    $(error failed to build .#flox-activation-scripts)
-  endif
-endif
-
 # The reference to CONTAINER_BUILDER_PATH in realise.cc requires that
 # libexec/mkContainer.nix be rendered as a single-file package in the
 # Nix store.
@@ -357,11 +346,29 @@ endif # ifeq (Linux,$(OS))
 
 # ---------------------------------------------------------------------------- #
 
-# Flags for Specific Files
+# Flags and Prerequisites for Specific Files
 # ------------------------
 
+# Save path for most recent build of flox-activation-scripts package
+# in a file, and automatically rebuild that file when assets change,
+# or overwrite it with the value from the environment if defined.
+ifdef ACTIVATION_SCRIPTS_PACKAGE_DIR
+  .ACTIVATION_SCRIPTS_PACKAGE_DIR: FORCE
+	@# Only update the file if the value has changed.
+	-rm -f $@.new
+	echo '$(ACTIVATION_SCRIPTS_PACKAGE_DIR)' > $@.new
+	( cmp $@ $@.new && rm $@.new ) || mv -f $@.new $@
+else
+  _rebuild_dirs = ../assets/activation-scripts ../pkgs/flox-activation-scripts
+  .ACTIVATION_SCRIPTS_PACKAGE_DIR: $(shell find $(_rebuild_dirs) -type f)
+	$(NIX) build --print-out-paths .#flox-activation-scripts > $@
+endif
+
+# Rebuild realise.o whenever the activation scripts package changes.
+src/buildenv/realise.o: .ACTIVATION_SCRIPTS_PACKAGE_DIR
+
 src/buildenv/realise.o: CXXFLAGS +=               \
-	'-DACTIVATION_SCRIPTS_PACKAGE_DIR="$(ACTIVATION_SCRIPTS_PACKAGE_DIR)"'
+	'-DACTIVATION_SCRIPTS_PACKAGE_DIR="$(file <.ACTIVATION_SCRIPTS_PACKAGE_DIR)"'
 
 src/buildenv/realise.o: CXXFLAGS +=               \
 	'-DCONTAINER_BUILDER_PATH="$(CONTAINER_BUILDER_PATH)"'
@@ -608,13 +615,6 @@ src/pkgdb/scrape-rules.o: src/pkgdb/rules.json.hh
 
 # Make all `.o' files depend on all `include/**/*.hh' files.
 $(ALL_SRCS:.cc=.o): %.o: %.cc $(HEADERS)
-
-# Automatically pick up changes to embedded assets.
-src/buildenv/realise.o: \
-  $(if $(shell \
-    strings src/buildenv/realise.o 2>/dev/null | \
-      grep $(ACTIVATION_SCRIPTS_PACKAGE_DIR) \
-  ),,FORCE)
 
 
 # ---------------------------------------------------------------------------- #
