@@ -581,6 +581,7 @@ mod tests {
     struct TestProcessComposeInstance {
         _temp_dir: TempDir,
         socket: PathBuf,
+        child: std::process::Child,
     }
 
     impl TestProcessComposeInstance {
@@ -609,7 +610,7 @@ mod tests {
                 .stderr(Stdio::null());
 
             // Dropping the child as stopping is handled via a process-compose command.
-            let _ = cmd.spawn().unwrap();
+            let child = cmd.spawn().unwrap();
 
             let max_tries = 5;
             for backoff in 1..max_tries {
@@ -626,6 +627,7 @@ mod tests {
             Self {
                 _temp_dir: temp_dir,
                 socket,
+                child,
             }
         }
 
@@ -640,12 +642,17 @@ mod tests {
         }
     }
 
-    /// Try to stop the process-compose instance by stopping all its services.
+    /// Try to stop the process-compose instance by sending a SIGTERM
+    /// to the process-compose process, which will stop all services.
     impl std::ops::Drop for TestProcessComposeInstance {
         fn drop(&mut self) {
-            if let Ok(states) = ProcessStates::read(&self.socket) {
-                let names = states.running_process_names();
-                let _ = stop_services(&self.socket, &names);
+            let term_result = nix::sys::signal::kill(
+                nix::unistd::Pid::from_raw(self.child.id() as i32),
+                nix::sys::signal::SIGTERM,
+            );
+
+            if let Err(e) = term_result {
+                debug!("failed to send SIGTERM to process-compose: {:?}", e);
             }
         }
     }
