@@ -443,10 +443,35 @@ impl CoreEnvironment<ReadOnly> {
                     continue;
                 }
                 // User passed a package path to uninstall
-                let matching_iids_by_pkg_path = manifest.install.iter().filter(|(_iid, descriptor)| {
-                    // Find matching pkg-paths and select for uninstall
-                    matches!(descriptor, ManifestPackageDescriptor::Catalog(des) if des.pkg_path == pkg)
-                }).map(|(iid, _)| iid.to_owned()).collect::<Vec<String>>();
+                let matching_iids_by_pkg_path = manifest
+                    .install
+                    .iter()
+                    .filter(|(_iid, descriptor)| {
+                        // Find matching pkg-paths and select for uninstall
+
+                        // If the descriptor is not a catalog descriptor, skip.
+                        // flakes descriptors are only matched by install_id.
+                        let ManifestPackageDescriptor::Catalog(des) = descriptor else {
+                            return false;
+                        };
+
+                        // Select if the descriptor's pkg_path matches the user's input
+                        if des.pkg_path == pkg {
+                            return true;
+                        }
+
+                        // Select if the descriptor matches the user's input when the version is included
+                        // Future: if we want to allow uninstalling a specific outputs as well,
+                        //         parsing of uninstall specs will need to be more sophisticated.
+                        //         For now going with a simple check for pkg-path@version.
+                        if let Some(version) = &des.version {
+                            format!("{}@{}", des.pkg_path, version) == pkg
+                        } else {
+                            false
+                        }
+                    })
+                    .map(|(iid, _)| iid.to_owned())
+                    .collect::<Vec<String>>();
 
                 // Extend the install_ids with the matching install id from pkg-path
                 match matching_iids_by_pkg_path.len() {
@@ -2127,5 +2152,25 @@ mod tests {
         ])
         .unwrap_err();
         assert!(matches!(result, CoreEnvironmentError::PackageNotFound(_)));
+    }
+
+    #[test]
+    fn test_get_install_ids_to_uninstall_with_version() {
+        let mut manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
+
+        if let TypedManifest::Catalog(ref mut catalog) = manifest_mock {
+            if let ManifestPackageDescriptor::Catalog(descriptor) =
+                catalog.install.get_mut("testInstallID").unwrap()
+            {
+                descriptor.version = Some("1.0".to_string());
+            };
+        }
+
+        let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
+            "dotted.package@1.0".to_string(),
+        ])
+        .unwrap();
+
+        assert_eq!(result.len(), 1);
     }
 }
