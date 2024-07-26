@@ -7,11 +7,7 @@ use clap::Parser;
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
 use listen::{
-    listen,
-    signal_listener,
-    spawn_signal_listener,
-    spawn_termination_listener,
-    target_pid,
+    listen, signal_listener, spawn_signal_listener, spawn_termination_listener, target_pid,
 };
 use logger::init_logger;
 use nix::errno::Errno;
@@ -48,6 +44,10 @@ pub struct Cli {
     #[arg(short, long = "registry", value_name = "PATH")]
     pub registry_path: PathBuf,
 
+    /// The hash of the environment's .flox path
+    #[arg(short, long = "dot-flox-hash", value_name = "DOT_FLOX_HASH")]
+    pub dot_flox_hash: String,
+
     /// The path to the process-compose socket
     #[arg(short, long = "socket", value_name = "PATH")]
     pub socket_path: Option<PathBuf>,
@@ -76,6 +76,7 @@ async fn main() -> Result<(), Error> {
     let span = tracing::Span::current();
     span.record("pid", args.pid);
     span.record("registry", traceable_path(&args.registry_path));
+    span.record("dot_flox_hash", &args.dot_flox_hash);
     span.record("socket", maybe_traceable_path(&args.socket_path));
     span.record("log", maybe_traceable_path(&args.log_path));
     if let Some(ref path) = args.socket_path {
