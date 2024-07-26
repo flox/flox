@@ -607,7 +607,7 @@ mod tests {
                 .arg("--tui=false")
                 .arg("up")
                 .stdout(Stdio::null())
-                .stderr(Stdio::null());
+                .stderr(Stdio::inherit());
 
             // Dropping the child as stopping is handled via a process-compose command.
             let child = cmd.spawn().unwrap();
