@@ -454,6 +454,13 @@ struct ProcessComposeLogReader {
 }
 
 impl ProcessComposeLogReader {
+    /// Start a new log reader for a single process
+    /// and listen to its output on a separate thread.
+    ///
+    /// For each logged line, a [ProcessComposeLogLine] is created
+    /// and sent via an [std::sync::mpsc::channel].
+    /// [ProcessComposeLogReader] is meant to be used in conjunction with [ProcessComposeLogStream],
+    /// which holds the receiver end of the channel, receiving log lines from multiple readers.
     fn start(
         socket: impl AsRef<Path>,
         process: impl AsRef<str>,
