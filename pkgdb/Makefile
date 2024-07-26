@@ -351,7 +351,8 @@ endif # ifeq (Linux,$(OS))
 
 # Save path for most recent build of flox-activation-scripts package
 # in a file, and automatically rebuild that file when assets change.
-.ACTIVATION_SCRIPTS_PACKAGE_DIR: $(shell find ../assets/activation-scripts -type f)
+_rebuild_dirs = ../assets/activation-scripts ../pkgs/flox-activation-scripts
+.ACTIVATION_SCRIPTS_PACKAGE_DIR: $(shell find $(_rebuild_dirs) -type f)
 	$(NIX) build --print-out-paths .#flox-activation-scripts > $@
 
 # Rebuild realise.o whenever the activation scripts package changes.
