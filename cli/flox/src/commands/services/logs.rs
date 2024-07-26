@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::{
@@ -19,6 +19,9 @@ pub struct Logs {
     /// Which services' logs to view
     #[bpaf(positional("name"))]
     names: Vec<String>,
+
+    /// Follow log output
+    follow: bool,
 }
 
 impl Logs {
@@ -38,6 +41,10 @@ impl Logs {
         } else {
             self.names.iter().map(String::from).collect::<Vec<_>>()
         };
+
+        if !self.follow {
+            bail!("printing logs without following is not yet implemented");
+        }
 
         let log_stream = ProcessComposeLogStream::new(socket, &names)?;
 
