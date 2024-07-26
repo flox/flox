@@ -354,7 +354,10 @@ endif # ifeq (Linux,$(OS))
 # or overwrite it with the value from the environment if defined.
 ifdef ACTIVATION_SCRIPTS_PACKAGE_DIR
   .ACTIVATION_SCRIPTS_PACKAGE_DIR: FORCE
-	echo '$(ACTIVATION_SCRIPTS_PACKAGE_DIR)' > $@
+	@# Only update the file if the value has changed.
+	-rm -f $@.new
+	echo '$(ACTIVATION_SCRIPTS_PACKAGE_DIR)' > $@.new
+	( cmp $@ $@.new && rm $@.new ) || mv -f $@.new $@
 else
   _rebuild_dirs = ../assets/activation-scripts ../pkgs/flox-activation-scripts
   .ACTIVATION_SCRIPTS_PACKAGE_DIR: $(shell find $(_rebuild_dirs) -type f)
