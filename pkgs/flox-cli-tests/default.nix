@@ -28,6 +28,7 @@
   openssh,
   parallel,
   podman,
+  procps,
   unixtools,
   which,
   writeShellScriptBin,
