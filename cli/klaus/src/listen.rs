@@ -20,16 +20,18 @@
 //! is created via `spawn_blocking` because there are no async calls in this task, but we still
 //! want the task to run in concert with the other async tasks (this is why we don't use a thread).
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
+use futures::future::Either;
 use futures::{select, FutureExt, StreamExt};
 use nix::unistd::Pid;
-use signal_hook_tokio::Signals;
+use signal_hook::consts::signal::*;
+use signal_hook_tokio::{Handle, Signals};
 use tokio::task::JoinHandle;
-use tracing::{debug, debug_span, error, info_span, Instrument};
+use tracing::{debug, debug_span, error, info, info_span, Instrument};
 
 use crate::Error;
 
@@ -83,23 +85,117 @@ impl std::fmt::Display for Action {
     }
 }
 
+/// Behavior for something that can listen for signals
+trait Listen {
+    /// Listen for the first signal to be delivered
+    async fn listen(&mut self) -> Option<i32>;
+    /// Clean up any resources (only really needed for the real listener)
+    fn close(&mut self);
+}
+
+/// A type that can listen for signals
+pub enum SignalListener {
+    Real(RealSignalListener),
+    #[allow(dead_code)] // used in tests
+    Mock(mock::MockListener),
+}
+
+impl Listen for SignalListener {
+    async fn listen(&mut self) -> Option<i32> {
+        match self {
+            SignalListener::Real(listener) => listener.listen().await,
+            SignalListener::Mock(listener) => listener.listen().await,
+        }
+    }
+
+    fn close(&mut self) {
+        match self {
+            SignalListener::Real(listener) => listener.close(),
+            SignalListener::Mock(listener) => listener.close(),
+        }
+    }
+}
+
+/// Listens for a signal delivered to the process
+pub struct RealSignalListener {
+    signals: Signals, // this doesn't impl Debug...somehow
+    handle: Handle,
+}
+
+impl RealSignalListener {
+    pub fn new(signals: Signals) -> Self {
+        let handle = signals.handle();
+        Self { signals, handle }
+    }
+}
+
+impl Listen for RealSignalListener {
+    async fn listen(&mut self) -> Option<i32> {
+        self.signals
+            .next()
+            .instrument(info_span!("signal_listener"))
+            .await
+    }
+
+    fn close(&mut self) {
+        self.handle.close();
+    }
+}
+
+// Doing this makes the `MockListener` fields private, meaning that you can't construct a `MockListener`
+// except via the `MockListener::new` function, which is only available when `cfg(test)`
+mod mock {
+    use super::*;
+
+    /// Delivers a configurable signal once a flag is set
+    #[derive(Debug, Default)]
+    pub struct MockListener {
+        /// A flag used to indicate that it's time for the signal to be delivered
+        flag: Arc<AtomicBool>,
+        /// The signal that will be delivered
+        sig: Option<i32>,
+    }
+
+    impl MockListener {
+        #[cfg(test)]
+        pub fn new(sig: Option<i32>, flag: Arc<AtomicBool>) -> Self {
+            Self { sig, flag }
+        }
+    }
+
+    impl Listen for MockListener {
+        async fn listen(&mut self) -> Option<i32> {
+            loop {
+                if self.flag.load(Ordering::SeqCst) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            self.sig
+        }
+
+        // Nothing to close in this case
+        fn close(&mut self) {}
+    }
+}
+
+pub fn signal_listener() -> Result<SignalListener, Error> {
+    let signals = Signals::new([SIGTERM, SIGINT, SIGQUIT, SIGUSR1])
+        .context("couldn't install signal handler")?;
+    Ok(SignalListener::Real(RealSignalListener::new(signals)))
+}
+
 /// Spawns a task that resolves on the delivery of a signal of interest.
 pub(crate) fn spawn_signal_listener(
+    mut signal_listener: SignalListener,
     shutdown_flag: Arc<AtomicBool>,
 ) -> Result<JoinHandle<Result<Action, Error>>, Error> {
-    use signal_hook::consts::signal::*;
-    let mut signals = Signals::new([SIGTERM, SIGINT, SIGQUIT, SIGUSR1])
-        .context("couldn't install signal handler")?;
-    // Creates a stream of signals that were deliverd to the process
-    let signals_stream_handle = signals.handle();
     Ok(tokio::spawn(async move {
         let span = debug_span!("signal_listener");
         let _ = span.enter();
         debug!(task = "signal_listener", "task started");
         let action = select! {
-            maybe_signal = signals
-                .next()
-                .instrument(info_span!("wait_for_signal")).fuse()
+            maybe_signal = signal_listener.listen().fuse()
                 => {
                 if let Some(signal) = maybe_signal {
                     match signal {
@@ -126,7 +222,7 @@ pub(crate) fn spawn_signal_listener(
                 Action::Terminate
             }
         };
-        signals_stream_handle.close();
+        signal_listener.close();
         Ok(action)
     }))
 }
@@ -138,7 +234,6 @@ pub(crate) fn spawn_termination_listener(
     pid: Pid,
     shutdown_flag: Arc<AtomicBool>,
 ) -> JoinHandle<Result<Action, Error>> {
-    use std::sync::atomic::Ordering;
     // NOTE: You cannot call `.abort` on this task because it is spawned with `spawn_blocking`,
     //       and attempting to do so will have no effect, that's why we need a shutdown flag.
     tokio::task::spawn_blocking(move || {
@@ -192,4 +287,155 @@ pub(crate) fn spawn_termination_listener(
         );
         Ok(Action::Terminate)
     })
+}
+
+/// Waits for a notification (signal, termination, or error) and returns
+/// which action should be taken in response to the notification.
+pub async fn listen(
+    sig_task: JoinHandle<Result<Action, Error>>,
+    term_task: JoinHandle<Result<Action, Error>>,
+    shutdown: Arc<AtomicBool>,
+) -> Action {
+    match futures::future::select(term_task, sig_task).await {
+        Either::Left((maybe_term_action, unresolved_signal_task)) => {
+            info!("received termination, setting shutdown flag");
+            shutdown.store(true, Ordering::SeqCst);
+            // Let the signal task shut down gracefully
+            debug!("waiting for signal task to abort");
+            let _ = unresolved_signal_task.await;
+            match maybe_term_action {
+                Ok(Ok(action)) => {
+                    debug!(%action, "termination task completed successfully");
+                    action
+                },
+                Ok(Err(err)) => {
+                    error!(%err, "error encountered in termination task");
+                    Action::Terminate
+                },
+                Err(err) => {
+                    error!(%err, "termination task was cancelled");
+                    Action::Terminate
+                },
+            }
+        },
+        Either::Right((maybe_signal_action, unresolved_termination_task)) => {
+            info!("received signal, setting shutdown flag");
+            shutdown.store(true, Ordering::SeqCst);
+            // Let the signal task shut down gracefully
+            debug!("waiting for termination task to shut down");
+            let _ = unresolved_termination_task.await;
+            match maybe_signal_action {
+                Ok(Ok(action)) => {
+                    debug!(%action, "signal task completed successfully");
+                    action
+                },
+                Ok(Err(err)) => {
+                    error!(%err, "error encountered in signal task");
+                    Action::Terminate
+                },
+                Err(err) => {
+                    error!(%err, "signal task was cancelled");
+                    Action::Terminate
+                },
+            }
+        },
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::task::Context;
+
+    use futures::task::noop_waker_ref;
+
+    use super::*;
+
+    /// Returns a [std::task::Context] that does nothing,
+    /// only useful for testing purposes when you need to poll a future
+    /// without scheduling it to be woken up again.
+    fn dummy_ctx() -> Context<'static> {
+        Context::from_waker(noop_waker_ref())
+    }
+
+    #[tokio::test]
+    async fn shutdown_flag_works() {
+        let flag = Arc::new(AtomicBool::new(false));
+        let sig_flag = flag.clone();
+        let sig_task = tokio::spawn(async move {
+            wait_for_shutdown(sig_flag).await;
+            Ok(Action::Terminate)
+        });
+        let term_flag = flag.clone();
+        let term_task = tokio::spawn(async move {
+            wait_for_shutdown(term_flag).await;
+            Ok(Action::Terminate)
+        });
+        let main_flag = flag.clone();
+        let mut main_task = tokio::spawn(listen(sig_task, term_task, main_flag));
+
+        // Ensure the main task isn't already complete, the first poll gets us to the `.await`
+        // and the second poll ensures that it's still pending.
+        let mut ctx = dummy_ctx();
+        assert!(main_task.poll_unpin(&mut ctx).is_pending());
+        assert!(main_task.poll_unpin(&mut ctx).is_pending());
+
+        // Now set the shutdown flag and the task should complete immediately
+        flag.store(true, Ordering::SeqCst);
+        let action = main_task.await.unwrap();
+        assert_eq!(action, Action::Terminate);
+    }
+
+    #[tokio::test]
+    async fn action_terminate_when_receiving_terminate_signal() {
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let deliver_signal = Arc::new(AtomicBool::new(true));
+        for sig in [SIGINT, SIGTERM, SIGQUIT].into_iter() {
+            let mock_listener =
+                SignalListener::Mock(mock::MockListener::new(Some(sig), deliver_signal.clone()));
+            let sig_task = spawn_signal_listener(mock_listener, shutdown.clone()).unwrap();
+            assert_eq!(sig_task.await.unwrap().unwrap(), Action::Terminate);
+        }
+    }
+
+    #[tokio::test]
+    async fn action_cleanup_when_receiving_cleanup_signal() {
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let deliver_signal = Arc::new(AtomicBool::new(true));
+        let mock_listener = SignalListener::Mock(mock::MockListener::new(
+            Some(SIGUSR1),
+            deliver_signal.clone(),
+        ));
+        let sig_task = spawn_signal_listener(mock_listener, shutdown.clone()).unwrap();
+        assert_eq!(sig_task.await.unwrap().unwrap(), Action::Cleanup);
+    }
+
+    #[tokio::test]
+    async fn waits_for_termination() {
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let term_flag = Arc::new(AtomicBool::new(false));
+        let term_wait = term_flag.clone();
+        let term_task = tokio::spawn(async move {
+            // This just blocks until `term_flag` is set
+            wait_for_shutdown(term_wait).await;
+            Ok(Action::Cleanup)
+        });
+        let sig_flag = shutdown.clone();
+        let sig_task = tokio::spawn(async {
+            // This flag is set in `listen` when a termination is detected
+            wait_for_shutdown(sig_flag).await;
+            Ok(Action::Terminate)
+        });
+        let main_flag = shutdown.clone();
+        let mut main_task = tokio::spawn(listen(sig_task, term_task, main_flag));
+
+        // Ensure the main task isn't already complete, the first poll gets us to the `.await`
+        // and the second poll ensures that it's still pending.
+        let mut ctx = dummy_ctx();
+        assert!(main_task.poll_unpin(&mut ctx).is_pending());
+        assert!(main_task.poll_unpin(&mut ctx).is_pending());
+
+        term_flag.store(true, Ordering::SeqCst);
+        let action = main_task.await.unwrap();
+        assert_eq!(action, Action::Cleanup);
+    }
 }

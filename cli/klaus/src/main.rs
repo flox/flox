@@ -1,17 +1,22 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use anyhow::Context;
 use clap::Parser;
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::utils::traceable_path;
-use futures::future::Either;
-use listen::{spawn_signal_listener, spawn_termination_listener, target_pid};
+use listen::{
+    listen,
+    signal_listener,
+    spawn_signal_listener,
+    spawn_termination_listener,
+    target_pid,
+};
 use logger::init_logger;
 use once_cell::sync::Lazy;
 use sentry::init_sentry;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, info, instrument};
 
 mod listen;
 mod logger;
@@ -57,6 +62,7 @@ pub struct Cli {
         registry = tracing::field::Empty,
         socket = tracing::field::Empty))]
 async fn main() -> Result<(), Error> {
+    // Initialization
     let args = Cli::parse();
     init_logger(&args.log_path).context("failed to initialize logger")?;
     let _sentry_guard = init_sentry();
@@ -64,12 +70,14 @@ async fn main() -> Result<(), Error> {
     span.record("pid", args.pid);
     span.record("registry", traceable_path(&args.registry_path));
     span.record("socket", traceable_path(&args.socket_path));
+
     debug!("starting");
+
+    // Start the listeners
     let shutdown_flag = Arc::new(AtomicBool::new(false));
-    let signal_task = spawn_signal_listener(shutdown_flag.clone())?;
-
+    let signal_listener = signal_listener()?;
+    let signal_task = spawn_signal_listener(signal_listener, shutdown_flag.clone())?;
     let pid = target_pid(&args);
-
     let termination_task = spawn_termination_listener(pid, shutdown_flag.clone());
 
     info!(
@@ -78,43 +86,8 @@ async fn main() -> Result<(), Error> {
         "watchdog is on duty"
     );
 
-    match futures::future::select(termination_task, signal_task).await {
-        Either::Left((maybe_term_action, unresolved_signal_task)) => {
-            info!("received termination, setting shutdown flag");
-            shutdown_flag.store(true, Ordering::SeqCst);
-            // Let the signal task shut down gracefully
-            debug!("waiting for signal task to abort");
-            let _ = unresolved_signal_task.await;
-            match maybe_term_action {
-                Ok(Ok(action)) => {
-                    debug!(%action, "termination task completed successfully");
-                },
-                Ok(Err(err)) => {
-                    error!(%err, "error encountered in termination task");
-                },
-                Err(err) => {
-                    error!(%err, "termination task was cancelled");
-                },
-            }
-        },
-        Either::Right((maybe_signal_action, unresolved_termination_task)) => {
-            info!("received signal, setting shutdown flag");
-            shutdown_flag.store(true, Ordering::SeqCst);
-            // Let the signal task shut down gracefully
-            debug!("waiting for termination task to shut down");
-            let _ = unresolved_termination_task.await;
-            match maybe_signal_action {
-                Ok(Ok(action)) => {
-                    debug!(%action, "signal task completed successfully");
-                },
-                Ok(Err(err)) => {
-                    error!(%err, "error encountered in signal task");
-                },
-                Err(err) => {
-                    error!(%err, "signal task was cancelled");
-                },
-            }
-        },
-    }
+    // Listen for a notification
+    let _action = listen(signal_task, termination_task, shutdown_flag).await;
+
     Ok(())
 }
