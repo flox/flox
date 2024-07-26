@@ -260,6 +260,9 @@ impl List {
     /// path and managed environments with local checkouts will lock if there
     /// isn't a lockfile or it has different manifest contents than the
     /// manifest.
+    ///
+    /// Check the implementation docs of [Environment::lockfile] for more
+    /// information.
     fn get_lockfile(flox: &Flox, env: &mut dyn Environment) -> Result<LockedManifest> {
         let lockfile = Dialog {
                 message: "No lockfile found for environment, building...",
