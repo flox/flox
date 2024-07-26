@@ -210,8 +210,8 @@ pub fn env_registry_path(flox: &Flox) -> PathBuf {
 }
 
 /// Returns the path to the user's environment registry lock file.
-pub(crate) fn env_registry_lock_path(flox: &Flox) -> PathBuf {
-    env_registry_path(flox).with_extension("lock")
+pub(crate) fn env_registry_lock_path(reg_path: impl AsRef<Path>) -> PathBuf {
+    reg_path.as_ref().with_extension("lock")
 }
 
 /// Returns the parsed environment registry file or `None` if it doesn't yet exist.
@@ -265,8 +265,8 @@ pub fn write_environment_registry(
 }
 
 /// Acquires the filesystem-based lock on the user's environment registry file
-pub fn acquire_env_registry_lock(flox: &Flox) -> Result<LockFile, EnvRegistryError> {
-    let lock_path = env_registry_lock_path(flox);
+pub fn acquire_env_registry_lock(reg_path: impl AsRef<Path>) -> Result<LockFile, EnvRegistryError> {
+    let lock_path = env_registry_lock_path(reg_path);
     LockFile::open(lock_path.as_os_str()).map_err(EnvRegistryError::AcquireLock)
 }
 
@@ -278,8 +278,8 @@ pub fn ensure_registered(
 ) -> Result<(), EnvRegistryError> {
     // Acquire the lock before reading the registry so that we know there are no modifications while
     // we're editing it.
-    let lock = acquire_env_registry_lock(flox)?;
     let reg_path = env_registry_path(flox);
+    let lock = acquire_env_registry_lock(&reg_path)?;
     let mut reg = read_environment_registry(&reg_path)?.unwrap_or_default();
     let dot_flox_hash = path_hash(&dot_flox_path);
     // Skip writing the registry if the environment was already registered
@@ -303,8 +303,8 @@ pub fn deregister(
 ) -> Result<(), EnvRegistryError> {
     // Acquire the lock before reading the registry so that we know there are no modifications while
     // we're editing it.
-    let lock = acquire_env_registry_lock(flox)?;
     let reg_path = env_registry_path(flox);
+    let lock = acquire_env_registry_lock(&reg_path)?;
     let mut reg = read_environment_registry(&reg_path)?.unwrap_or_default();
     let dot_flox_hash = path_hash(&dot_flox_path);
     reg.deregister_env(&dot_flox_hash, env_pointer)?;
