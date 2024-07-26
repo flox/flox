@@ -42,6 +42,7 @@ url-escape.workspace = true
 uuid.workspace = true
 walkdir.workspace = true
 xdg.workspace = true
+nix = { workspace = true, features = ["signal"] }
 
 [dev-dependencies]
 anyhow.workspace = true
