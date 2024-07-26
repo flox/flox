@@ -1,0 +1,12 @@
+# A lock was generated for this manifest with
+# flox init
+# OUTPUT_DIRNAME=glibc_incompatible_v0_both_darwin
+# cp "./test_data/manually_generated/$OUTPUT_DIRNAME/manifest.toml" .flox/env/manifest.toml
+# FLOX_FEATURES_USE_CATALOG=false flox list
+# cp .flox/env/manifest.lock "test_data/manually_generated/$OUTPUT_DIRNAME/manifest.lock"
+
+[install]
+glibc.pkg-path = "glibc"
+
+[options]
+systems = [ "x86_64-darwin", "aarch64-darwin" ]

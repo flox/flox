@@ -1,0 +1,12 @@
+# A lock was generated for this manifest with
+# flox init
+# OUTPUT_DIRNAME=ps_v0_aarch64-darwin
+# cp "./test_data/manually_generated/$OUTPUT_DIRNAME/manifest.toml" .flox/env/manifest.toml
+# FLOX_FEATURES_USE_CATALOG=false flox list
+# cp .flox/env/manifest.lock "test_data/manually_generated/$OUTPUT_DIRNAME/manifest.lock"
+
+[install]
+ps.pkg-path = "darwin.ps"
+
+[options]
+systems = ["aarch64-darwin"]

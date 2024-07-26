@@ -33,6 +33,7 @@
   writeShellScriptBin,
   process-compose,
   GENERATED_DATA ? ./../../test_data/generated,
+  MANUALLY_GENERATED ? ./../../test_data/manually_generated,
   INPUT_DATA ? ./../../test_data/input_data,
   PROJECT_NAME ? "flox-cli-tests",
   PROJECT_TESTS_DIR ? ./../../cli/tests,
@@ -103,6 +104,7 @@ in
 
     # Set the test data location
     export GENERATED_DATA='${GENERATED_DATA}'
+    export MANUALLY_GENERATED='${MANUALLY_GENERATED}'
     export INPUT_DATA='${INPUT_DATA}'
 
     # Find root of the subproject if not specified

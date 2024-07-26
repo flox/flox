@@ -1,0 +1,91 @@
+{
+  "lockfile-version": 0,
+  "manifest": {
+    "install": {
+      "glibc": {
+        "pkg-path": "glibc"
+      }
+    },
+    "options": {
+      "systems": [
+        "x86_64-linux"
+      ]
+    },
+    "registry": {
+      "defaults": {
+        "subtrees": null
+      },
+      "inputs": {
+        "nixpkgs": {
+          "from": {
+            "owner": "NixOS",
+            "ref": "release-23.11",
+            "repo": "nixpkgs",
+            "type": "github"
+          },
+          "subtrees": [
+            "legacyPackages"
+          ]
+        }
+      },
+      "priority": [
+        "nixpkgs"
+      ]
+    }
+  },
+  "packages": {
+    "x86_64-linux": {
+      "glibc": {
+        "attr-path": [
+          "legacyPackages",
+          "x86_64-linux",
+          "glibc"
+        ],
+        "info": {
+          "broken": false,
+          "description": "The GNU C Library",
+          "license": "LGPL-2.0-or-later",
+          "pname": "glibc",
+          "unfree": false,
+          "version": "2.38"
+        },
+        "input": {
+          "attrs": {
+            "lastModified": 1718132686,
+            "narHash": "sha256-JRinkq+FeAkYnrrK8+Bh+jtLHJBN5jDzSimk1ye00EE=",
+            "owner": "NixOS",
+            "repo": "nixpkgs",
+            "rev": "96b3dae4f8753c1f5ce0d06b57fe250fb5d9b0e0",
+            "type": "github"
+          },
+          "fingerprint": "d00f00cc0b4a10cd832ce3f73a3fcdfbab77482451eeabfd99c2f0fb1ada3cb0",
+          "url": "github:NixOS/nixpkgs/96b3dae4f8753c1f5ce0d06b57fe250fb5d9b0e0"
+        },
+        "priority": 5
+      }
+    }
+  },
+  "registry": {
+    "defaults": {
+      "subtrees": null
+    },
+    "inputs": {
+      "nixpkgs": {
+        "from": {
+          "lastModified": 1718132686,
+          "narHash": "sha256-JRinkq+FeAkYnrrK8+Bh+jtLHJBN5jDzSimk1ye00EE=",
+          "owner": "NixOS",
+          "repo": "nixpkgs",
+          "rev": "96b3dae4f8753c1f5ce0d06b57fe250fb5d9b0e0",
+          "type": "github"
+        },
+        "subtrees": [
+          "legacyPackages"
+        ]
+      }
+    },
+    "priority": [
+      "nixpkgs"
+    ]
+  }
+}

@@ -174,6 +174,7 @@
       };
 
       GENERATED_DATA = ./test_data/generated;
+      MANUALLY_GENERATED = ./test_data/manually_generated;
 
       # Package activation scripts.
       flox-activation-scripts = callPackage ./pkgs/flox-activation-scripts {};

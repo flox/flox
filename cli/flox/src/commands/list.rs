@@ -1,8 +1,8 @@
 use std::io::{stdout, Write};
+use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use bpaf::Bpaf;
-use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::lockfile::{
@@ -17,7 +17,6 @@ use flox_rust_sdk::models::manifest::DEFAULT_PRIORITY;
 use flox_rust_sdk::providers::flox_cpp_utils::LockedInstallable;
 use indoc::formatdoc;
 use itertools::Itertools;
-use log::debug;
 use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
@@ -255,40 +254,44 @@ impl List {
         Ok(())
     }
 
-    /// Read existing lockfile or resolve to create a new [LockedManifest].
+    /// Read existing lockfile or lock to create a new [LockedManifest].
     ///
-    /// Does not write the lockfile,
-    /// as that would require writing to the environment in case of remote environments)
+    /// This may write the lockfile depending on the type of environment;
+    /// path and managed environments with local checkouts will lock if there
+    /// isn't a lockfile or it has different manifest contents than the
+    /// manifest.
+    ///
+    /// Check the implementation docs of [Environment::lockfile] for more
+    /// information.
     fn get_lockfile(flox: &Flox, env: &mut dyn Environment) -> Result<LockedManifest> {
-        let lockfile_path = env
-            .lockfile_path(flox)
-            .context("Could not get lockfile path")?;
-
-        let lockfile = if !lockfile_path.exists() {
-            debug!("No lockfile found, locking environment...");
-            Dialog {
+        let lockfile = Dialog {
                 message: "No lockfile found for environment, building...",
                 help_message: None,
-                typed: Spinner::new(|| env.lock(flox)),
+                typed: Spinner::new(|| env.lockfile(flox)),
             }
-            .spin()?
-        } else {
-            debug!("Using existing lockfile");
-            // we have already checked that the lockfile exists
-            let path = CanonicalPath::new(lockfile_path).unwrap();
-            LockedManifest::read_from_file(&path)?
-        };
-
+            // TODO: it would be better if we knew when a lock was actually happening
+            .spin_with_delay(Duration::from_secs_f32(0.25))?;
         Ok(lockfile)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_from_env_files,
+    };
+    use flox_rust_sdk::models::environment::{
+        CoreEnvironmentError,
+        EnvironmentError,
+        MANIFEST_FILENAME,
+    };
     use flox_rust_sdk::models::lockfile::test_helpers::{
         nix_eval_jobs_descriptor,
         LOCKED_NIX_EVAL_JOBS,
     };
+    use flox_rust_sdk::providers::catalog::MANUALLY_GENERATED;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
@@ -577,5 +580,45 @@ mod tests {
               Unfree:   N/A
               Broken:   N/A
         "})
+    }
+
+    /// Listing a v0 environment should succeed (without having to call pkgdb lock)
+    #[tokio::test]
+    async fn list_v0_environment() {
+        // We want a catalog client so we know we aren't calling pkgdb lock
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+
+        let environment =
+            new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
+        List {
+            environment: EnvironmentSelect::Dir(environment.path.parent().unwrap().to_path_buf()),
+            list_mode: ListMode::Extended,
+        }
+        .handle(flox)
+        .await
+        .unwrap();
+    }
+
+    /// Attempting to `flox list` on a v0 environment without a lockfile should fail
+    #[tokio::test]
+    async fn list_v0_environment_fails_without_lockfile() {
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+
+        let manifest_contents =
+            std::fs::read_to_string(MANUALLY_GENERATED.join("hello_v0").join(MANIFEST_FILENAME))
+                .unwrap();
+        let environment = new_path_environment(&flox, &manifest_contents);
+        let err = List {
+            environment: EnvironmentSelect::Dir(environment.path.parent().unwrap().to_path_buf()),
+            list_mode: ListMode::Extended,
+        }
+        .handle(flox)
+        .await
+        .unwrap_err();
+        let core_err = err.downcast_ref::<EnvironmentError>().unwrap();
+        assert!(matches!(
+            core_err,
+            EnvironmentError::Core(CoreEnvironmentError::LockingVersion0NotSupported)
+        ));
     }
 }

@@ -304,8 +304,12 @@ impl DisplaySearchResults {
 #[cfg(test)]
 mod tests {
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_global_lock;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
-    use flox_rust_sdk::models::environment::{global_manifest_lockfile_path, Environment};
+    use flox_rust_sdk::models::environment::global_manifest_lockfile_path;
+    use flox_rust_sdk::models::environment::path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_from_env_files,
+    };
+    use flox_rust_sdk::providers::catalog::MANUALLY_GENERATED;
     use serial_test::serial;
 
     use super::*;
@@ -354,8 +358,8 @@ mod tests {
     #[serial]
     fn test_manifest_and_lockfile_environment_lock() {
         let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let mut environment = new_path_environment(&flox, "");
-        environment.lock(&flox).unwrap();
+        let environment =
+            new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
         let (manifest, lockfile) = manifest_and_lockfile_from_detected_environment(
             &flox,
             Some(

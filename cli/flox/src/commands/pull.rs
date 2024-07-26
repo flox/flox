@@ -165,7 +165,12 @@ impl Pull {
                 Dialog {
                     message: "🛠️  Building the environment",
                     help_message: None,
-                    typed: Spinner::new(|| env.build(flox)),
+                    typed: Spinner::new(|| {
+                        // The pulled generation already has a lock,
+                        // so we can skip locking.
+                        let store_path = env.build(flox)?;
+                        env.link(store_path)
+                    }),
                 }
                 .spin()?;
 
@@ -269,7 +274,12 @@ impl Pull {
         let result = Dialog {
             message,
             help_message: None,
-            typed: Spinner::new(|| env.build(flox)),
+            typed: Spinner::new(|| {
+                // The pulled generation already has a lock,
+                // so we can skip locking.
+                let store_path = env.build(flox)?;
+                env.link(store_path)
+            }),
         }
         .spin();
 
@@ -291,9 +301,9 @@ impl Pull {
     ///
     /// A value of [None] for query_functions represents when the user cannot be prompted.
     /// [Some] represents when the user should be prompted with the provided functions.
-    fn handle_pull_result(
+    fn handle_pull_result<T>(
         flox: &Flox,
-        result: Result<(), EnvironmentError>,
+        result: Result<T, EnvironmentError>,
         dot_flox_path: &PathBuf,
         force: bool,
         env: &mut ManagedEnvironment,
@@ -608,6 +618,7 @@ mod tests {
     };
     use flox_rust_sdk::models::environment::test_helpers::{
         MANIFEST_INCOMPATIBLE_SYSTEM,
+        MANIFEST_INCOMPATIBLE_SYSTEM_V0,
         MANIFEST_INCOMPATIBLE_SYSTEM_V0_FIELDS,
         MANIFEST_INCOMPATIBLE_SYSTEM_V1,
     };
@@ -825,7 +836,8 @@ mod tests {
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
-        let mut environment = mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner);
+        let mut environment =
+            mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM_V0, owner);
 
         Pull::handle_pull_result(
             &flox,

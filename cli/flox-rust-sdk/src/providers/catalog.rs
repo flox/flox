@@ -40,8 +40,10 @@ const NIXPKGS_CATALOG: &str = "nixpkgs";
 pub const FLOX_CATALOG_MOCK_DATA_VAR: &str = "_FLOX_USE_CATALOG_MOCK";
 pub const FLOX_CATALOG_DUMP_DATA_VAR: &str = "_FLOX_CATALOG_DUMP_RESPONSE_FILE";
 
-static GENERATED_DATA: Lazy<PathBuf> =
+pub static GENERATED_DATA: Lazy<PathBuf> =
     Lazy::new(|| PathBuf::from(std::env::var("GENERATED_DATA").unwrap()));
+pub static MANUALLY_GENERATED: Lazy<PathBuf> =
+    Lazy::new(|| PathBuf::from(std::env::var("MANUALLY_GENERATED").unwrap()));
 
 const RESPONSE_PAGE_SIZE: NonZeroU32 = unsafe { NonZeroU32::new_unchecked(1000) };
 

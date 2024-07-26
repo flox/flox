@@ -112,7 +112,7 @@ impl ToString for LockedManifest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedManifestCatalog {
     #[serde(rename = "lockfile-version")]
@@ -1227,7 +1227,7 @@ impl LockedManifestCatalog {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, derive_more::Deref, Serialize, Deserialize, PartialEq)]
 pub struct LockedManifestPkgdb(Value);
 
 // region: pkgdb lockfile operations
