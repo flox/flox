@@ -616,9 +616,17 @@ mod tests {
             for backoff in 1..max_tries {
                 println!("waiting for socket to exist");
                 thread::sleep(Duration::from_millis(100 * backoff));
+
+                // For now just check if the socket exists.
+                // Processes _may_ have not started yet, or the socket is unresponsive.
+                // We can't really check if the process is running,
+                // as it may have already exited.
+                // We could chek if the socket can be connected to
+                // or try to read ProcessStates, if the current approach leads to flaking tests.
                 if socket.exists() {
                     break;
                 }
+
                 if backoff == max_tries {
                     panic!("socket never appeared");
                 }
