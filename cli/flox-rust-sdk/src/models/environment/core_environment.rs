@@ -134,7 +134,8 @@ impl<State> CoreEnvironment<State> {
 
     /// Return a [LockedManifest] if the environment is already locked and has
     /// the same manifest contents as the manifest, otherwise return None.
-    /// Error if there is a pkgdb manifest that needs to be locked.
+    /// Error if there is a v0 manifest that needs to be locked, because
+    /// locking with pkgdb is no longer supported
     fn lockfile_if_up_to_date(&self) -> Result<Option<LockedManifest>, CoreEnvironmentError> {
         let lockfile_path = self.lockfile_path();
 
@@ -202,7 +203,8 @@ impl<State> CoreEnvironment<State> {
     }
 
     /// Lock the environment if it isn't already locked.
-    /// Error if there is a pkgdb manifest that needs to be locked.
+    /// Error if there is a v0 manifest that needs to be locked, because
+    /// locking with pkgdb is no longer supported
     ///
     /// This might be a slight optimization as compared to calling [Self::lock],
     /// but [Self::lock] skips re-locking already locked packages,
