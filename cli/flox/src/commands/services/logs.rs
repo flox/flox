@@ -39,7 +39,7 @@ impl Logs {
             tracing::debug!("no service names provided");
             ProcessStates::read(&socket)?.running_process_names()
         } else {
-            self.names.iter().map(String::from).collect::<Vec<_>>()
+            self.names
         };
 
         if !self.follow {
