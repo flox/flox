@@ -597,7 +597,7 @@ mod tests {
         ///
         /// Panics if the socket doesn't appear after 5 tries with backoff.
         fn start(config: &ProcessComposeConfig) -> Self {
-            let temp_dir = TempDir::new().unwrap();
+            let temp_dir = TempDir::new_in("/tmp").unwrap();
 
             let config_path = temp_dir.path().join("config.yaml");
             let socket = temp_dir.path().join("S.process-compose");
