@@ -211,9 +211,17 @@ if [ $# -gt 0 ]; then
     # "turbo command" mode: simply exec the provided command and args
     # without paying the cost of invoking the userShell.
     if [ "$1" = "-c" ]; then
-      exec bash --noprofile --norc "$@"
+      if [ -n "$FLOX_SET_ARG0" ]; then
+        exec -a "$FLOX_SET_ARG0" bash --noprofile --norc "$@"
+      else
+        exec bash --noprofile --norc "$@"
+      fi
     else
-      exec "$@"
+      if [ -n "$FLOX_SET_ARG0" ]; then
+        exec -a "$FLOX_SET_ARG0" "$@"
+      else
+        exec "$@"
+      fi
     fi
   fi
   if [ $# -ne 2 ] || [ "$1" != "-c" ]; then
