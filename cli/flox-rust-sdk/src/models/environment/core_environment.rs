@@ -442,7 +442,10 @@ impl CoreEnvironment<ReadOnly> {
                     install_ids.push(pkg);
                     continue;
                 }
+
                 // User passed a package path to uninstall
+                // To support version constraints, we match the provided value against
+                // `<pkg-path>` and `<pkg-path>@<version>`.
                 let matching_iids_by_pkg_path = manifest
                     .install
                     .iter()
