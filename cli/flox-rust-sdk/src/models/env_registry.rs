@@ -243,7 +243,7 @@ pub struct Pid(u32);
 
 impl Pid {
     /// Construct a Pid from the current running process.
-    pub fn from_self() -> Self {
+    pub fn from_current_process() -> Self {
         Pid(nix::unistd::getpid().as_raw() as u32)
     }
 

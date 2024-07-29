@@ -305,7 +305,7 @@ impl Activate {
             register_activation(
                 env_registry_path(&flox),
                 &path_hash(&dot_flox_path),
-                Pid::from_self(),
+                Pid::from_current_process(),
             )?;
         }
 
