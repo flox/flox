@@ -215,17 +215,13 @@ impl RegistryEntry {
 
     /// Remove any activation PIDs that are no longer running and weren't explicitly deregistered.
     fn remove_stale_activations(&mut self) {
-        let stale_pids: Vec<Pid> = self
-            .activations
-            .iter()
-            .filter(|pid| !pid.is_running())
-            .cloned()
-            .collect();
-
-        for pid in stale_pids {
-            tracing::debug!("removing stale activation: {}", &pid);
-            self.activations.remove(&pid);
-        }
+        self.activations.retain(|pid| {
+            let running = pid.is_running();
+            if !running {
+                tracing::debug!("removing stale activation: {}", pid);
+            }
+            running
+        })
     }
 }
 
