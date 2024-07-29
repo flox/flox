@@ -434,6 +434,7 @@ impl Iterator for ProcessComposeLogStream {
             // Drain remaining reader return values.
             Err(_) => {
                 loop {
+                    // Returns None if there are no readers left
                     let reader: ProcessComposeLogReader = self.readers.pop()?;
                     let joined = reader.handle.join().expect("reader thread panicked");
                     match joined {
