@@ -281,9 +281,23 @@ EOF
   # process-compose will never be able to create this socket,
   # which looks the same as taking a long time to create the socket
   export _FLOX_SERVICES_SOCKET="/no_permission.sock"
-  # Don't need to run cleanup because it will never start services
-  run "$FLOX_BIN" activate -s -- true
+  # As of version 1.6.1, there's a race condition in process-compose such that
+  # it may leave behind a sleep process.
+  # Close FD 3 so bats doesn't hang forever.
+  # Kill sleep for now just to be safe.
+
+  # pgrep is not in procps for some reason
+  pgrep_sleep() {
+    ps -o comm -o pid | grep sleep | sed "s/sleep //"
+  }
+  pgrep_sleep > sleeping_before || echo > sleeping_before
+  run "$FLOX_BIN" activate -s -- true 3>&-
   assert_output --partial "❌ Failed to start services"
+  pgrep_sleep > sleeping_after
+  SLEEP_PID="$(comm -13 sleeping_before sleeping_after)"
+  if [ -n "$SLEEP_PID" ]; then
+    kill "$SLEEP_PID"
+  fi
 }
 
 @test "blocking: activation blocks on socket creation" {
