@@ -1,4 +1,5 @@
-{
+
+  {
   bashInteractive,
   cacert,
   darwin,
@@ -19,6 +20,9 @@
   rust-toolchain,
   rustfmt ? rust-toolchain.rustfmt,
   targetPlatform,
+  pname,
+  crateName,
+  KLAUS_BIN ? null,
 }: let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
 
@@ -57,6 +61,10 @@
         if flox-pkgdb == null
         then "pkgdb"
         else "${flox-pkgdb}/bin/pkgdb";
+      KLAUS_BIN = 
+        if KLAUS_BIN == null
+        then "klaus"
+        else KLAUS_BIN;
       FLOX_ZDOTDIR = flox-activation-scripts + activate.d/zdotdir;
       PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
       # [sic] nix handles `BASH_` variables specially,
@@ -133,9 +141,12 @@
   };
 in
   craneLib.buildPackage ({
-      pname = "flox-cli";
+      inherit pname;
       version = envs.FLOX_VERSION;
       src = flox-src;
+      cargoExtraArgs = "-p ${crateName}";
+      
+      inherit KLAUS_BIN;
 
       cargoArtifacts = cargoDepsArtifacts;
 
@@ -162,7 +173,8 @@ in
       #
       # sed: Removes rust-toolchain from binary. Likely due to toolchain overriding.
       #   unclear about the root cause, so this is a hotfix.
-      postInstall = ''
+      postInstall = if KLAUS_BIN != null
+      then ''
         installShellCompletion --cmd flox                         \
           --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
           --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
@@ -170,19 +182,19 @@ in
 
         for target in "$(basename ${rust-toolchain.rust.outPath} | cut -f1 -d- )" ; do
           sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/flox
-          sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/klaus
         done
-      '';
+      '' else null;
 
       doInstallCheck = false;
-      postInstallCheck = ''
+      postInstallCheck = if KLAUS_BIN != null 
+      then ''
         # Quick unit test to ensure that we are not using any "naked"
         # commands within our scripts. Doesn't hit all codepaths but
         # catches most of them.
         : "''${USER:=$( id -un; )}";
         env -i USER="$USER" HOME="$PWD" "$out/bin/flox" --help > /dev/null;
         env -i USER="$USER" HOME="$PWD" "$out/bin/flox" nix help > /dev/null;
-      '';
+      '' else null;
 
       passthru = {
         inherit
@@ -213,6 +225,8 @@ in
           #  # Find the project root and add the `bin' directory to `PATH'.
           if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             PATH="$( git rev-parse --show-toplevel; )/cli/target/debug":$PATH;
+            REPO_ROOT="$( git rev-parse --show-toplevel; )";
+            KLAUS_BIN="$REPO_ROOT/cli/target/debug/klaus";
           fi
 
         '';

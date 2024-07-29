@@ -3,7 +3,7 @@ pub mod guard;
 #[cfg(any(test, feature = "test"))]
 use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{fs, io};
 
@@ -165,6 +165,15 @@ impl Display for DisplayCommand<'_> {
 pub fn traceable_path(p: impl AsRef<Path>) -> impl tracing::Value {
     let path = p.as_ref();
     path.display().to_string()
+}
+
+/// Returns a `tracing`-compatible form of an `Option<PathBuf>`
+pub fn maybe_traceable_path(maybe_path: &Option<PathBuf>) -> impl tracing::Value {
+    if let Some(ref p) = maybe_path {
+        p.display().to_string()
+    } else {
+        String::from("null")
+    }
 }
 
 #[cfg(any(test, feature = "test"))]
