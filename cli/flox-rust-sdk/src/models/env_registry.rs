@@ -254,10 +254,11 @@ impl ActivationPid {
         // TODO: Compare name or check for watchdog child to see if it's a real activation?
         let pid = NixPid::from_raw(self.0);
         match kill(pid, None) {
-            Ok(_) => true,              // known running
-            Err(Errno::EPERM) => true,  // no perms but running
-            Err(Errno::ESRCH) => false, // known not running
-            Err(_) => false,            // assumed not running
+            // These semantics come from kill(2).
+            Ok(_) => true,              // Process received the signal and is running.
+            Err(Errno::EPERM) => true,  // No permission to send a signal but we know it's running.
+            Err(Errno::ESRCH) => false, // No process running to receive the signal.
+            Err(_) => false,            // Unknown error, assume no running process.
         }
     }
 }
