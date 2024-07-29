@@ -7,6 +7,7 @@ use std::time::SystemTime;
 
 use fslock::LockFile;
 use nix::errno::Errno;
+use nix::libc::pid_t;
 use nix::sys::signal::kill;
 use nix::unistd::Pid as NixPid;
 use serde::{Deserialize, Serialize};
@@ -142,7 +143,7 @@ pub struct RegistryEntry {
     pub envs: Vec<RegisteredEnv>,
     /// The PIDs of current activations
     #[serde(default)]
-    pub activations: HashSet<Pid>,
+    pub activations: HashSet<ActivationPid>,
 }
 
 impl RegistryEntry {
@@ -202,13 +203,13 @@ impl RegistryEntry {
     }
 
     /// Register an activation for an existing enviroment.
-    fn register_activation(&mut self, pid: Pid) {
+    fn register_activation(&mut self, pid: ActivationPid) {
         tracing::debug!("registering activation: {}", &pid);
         self.activations.insert(pid);
     }
 
     /// Deregister an activation for an existing enviroment.
-    fn deregister_activation(&mut self, pid: Pid) {
+    fn deregister_activation(&mut self, pid: ActivationPid) {
         tracing::debug!("deregistering activation: {}", &pid);
         self.activations.remove(&pid);
     }
@@ -236,21 +237,22 @@ pub struct RegisteredEnv {
     pub pointer: EnvironmentPointer,
 }
 
-/// PID of an environment's activation.
+/// PID of an environment's activation. This is a simpler variation of
+/// `nix::unistd::Pid`.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct Pid(u32);
+pub struct ActivationPid(pid_t);
 
-impl Pid {
+impl ActivationPid {
     /// Construct a Pid from the current running process.
     pub fn from_current_process() -> Self {
-        Pid(nix::unistd::getpid().as_raw() as u32)
+        ActivationPid(nix::unistd::getpid().as_raw())
     }
 
     /// Check whether an activation is still running.
     fn is_running(&self) -> bool {
         // TODO: Compare name or check for watchdog child to see if it's a real activation?
-        let pid = NixPid::from_raw(self.0 as i32);
+        let pid = NixPid::from_raw(self.0);
         match kill(pid, None) {
             Ok(_) => true,              // known running
             Err(Errno::EPERM) => true,  // no perms but running
@@ -260,7 +262,7 @@ impl Pid {
     }
 }
 
-impl fmt::Display for Pid {
+impl fmt::Display for ActivationPid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -381,7 +383,7 @@ pub fn deregister(
 pub fn register_activation(
     reg_path: impl AsRef<Path>,
     path_hash: &str,
-    pid: Pid,
+    pid: ActivationPid,
 ) -> Result<(), EnvRegistryError> {
     // Acquire the lock before reading the registry so that we know there are no modifications while
     // we're editing it.
@@ -402,7 +404,7 @@ pub fn register_activation(
 pub fn deregister_activation(
     reg_path: impl AsRef<Path>,
     path_hash: &str,
-    pid: Pid,
+    pid: ActivationPid,
 ) -> Result<(), EnvRegistryError> {
     // Acquire the lock before reading the registry so that we know there are no modifications while
     // we're editing it.
@@ -445,7 +447,7 @@ mod test {
             //   be in reality.
             (
                 PathBuf::arbitrary_with(PathParams::default().with_components(1..3)),
-                hash_set((1u32..=65535).prop_map(Pid), 0..20),
+                hash_set((1i32..=65535).prop_map(ActivationPid), 0..20),
                 vec(any::<RegisteredEnv>(), 0..=3),
             )
                 .prop_flat_map(|(path, activation_pids, mut registered_envs)| {
@@ -591,7 +593,7 @@ mod test {
         }
 
         #[test]
-        fn entries_register_activation(mut entry: RegistryEntry, activation: Pid) {
+        fn entries_register_activation(mut entry: RegistryEntry, activation: ActivationPid) {
             entry.register_activation(activation.clone());
             prop_assert!(entry.activations.contains(&activation));
         }
@@ -626,7 +628,7 @@ mod test {
     fn test_pid_is_running_lifecycle() {
         let child = start_process();
 
-        let pid = Pid(child.id());
+        let pid = ActivationPid(child.id() as i32);
         assert!(pid.is_running());
 
         stop_process(child);
@@ -636,14 +638,18 @@ mod test {
     #[test]
     fn test_pid_is_running_pid1() {
         // PID 1 is always running on Linux and MacOS but we don't have perms to send signals.
-        assert!(Pid(1).is_running());
+        assert!(ActivationPid(1).is_running());
     }
 
     #[test]
     fn test_remove_stale_activations() {
         let child1 = start_process();
         let child2 = start_process();
-        let activations_before = HashSet::from([Pid(1), Pid(child1.id()), Pid(child2.id())]);
+        let activations_before = HashSet::from([
+            ActivationPid(1),
+            ActivationPid(child1.id() as i32),
+            ActivationPid(child2.id() as i32),
+        ]);
         let mut entry = RegistryEntry {
             path: PathBuf::from("foo"),
             path_hash: String::from("foo"),
@@ -656,6 +662,6 @@ mod test {
         stop_process(child1);
         stop_process(child2);
         entry.remove_stale_activations();
-        assert_eq!(entry.activations, HashSet::from([Pid(1)]));
+        assert_eq!(entry.activations, HashSet::from([ActivationPid(1)]));
     }
 }

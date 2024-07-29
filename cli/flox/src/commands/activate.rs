@@ -10,7 +10,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
-use flox_rust_sdk::models::env_registry::{env_registry_path, register_activation, Pid};
+use flox_rust_sdk::models::env_registry::{env_registry_path, register_activation, ActivationPid};
 use flox_rust_sdk::models::environment::{
     path_hash,
     CoreEnvironmentError,
@@ -305,7 +305,7 @@ impl Activate {
             register_activation(
                 env_registry_path(&flox),
                 &path_hash(&dot_flox_path),
-                Pid::from_current_process(),
+                ActivationPid::from_current_process(),
             )?;
         }
 
