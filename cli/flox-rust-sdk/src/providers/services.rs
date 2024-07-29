@@ -390,7 +390,7 @@ impl ProcessComposeLogLine {
 
 pub struct ProcessComposeLogStream {
     readers: Vec<ProcessComposeLogReader>,
-    rx: Receiver<ProcessComposeLogLine>,
+    receiver: Receiver<ProcessComposeLogLine>,
 }
 
 impl ProcessComposeLogStream {
@@ -404,14 +404,14 @@ impl ProcessComposeLogStream {
         socket: impl AsRef<Path>,
         processes: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Result<ProcessComposeLogStream, ServiceError> {
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (sender, receiver) = std::sync::mpsc::channel();
 
         let readers = processes
             .into_iter()
-            .map(|process| ProcessComposeLogReader::start(socket.as_ref(), process, tx.clone()))
+            .map(|process| ProcessComposeLogReader::start(socket.as_ref(), process, sender.clone()))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(ProcessComposeLogStream { readers, rx })
+        Ok(ProcessComposeLogStream { readers, receiver })
     }
 }
 
@@ -428,7 +428,7 @@ impl Iterator for ProcessComposeLogStream {
     type Item = Result<ProcessComposeLogLine, ServiceError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.rx.recv() {
+        match self.receiver.recv() {
             Ok(line) => Some(Ok(line)),
             // All senders have been dropped, so we wont't receive any more messages.
             // Drain remaining reader return values.
@@ -464,7 +464,7 @@ impl ProcessComposeLogReader {
     fn start(
         socket: impl AsRef<Path>,
         process: impl AsRef<str>,
-        tx: Sender<ProcessComposeLogLine>,
+        sender: Sender<ProcessComposeLogLine>,
     ) -> Result<ProcessComposeLogReader, ServiceError> {
         let socket = socket.as_ref().to_path_buf();
         let process = process.as_ref().to_string();
@@ -496,7 +496,7 @@ impl ProcessComposeLogReader {
 
                 // The receiver end was dropped, so we can't send any more messages.
                 // Might as well break out of the loop and kill the child process.
-                let Ok(_) = tx.send(ProcessComposeLogLine::new(&process, line)) else {
+                let Ok(_) = sender.send(ProcessComposeLogLine::new(&process, line)) else {
                     debug!("receiver dropped, stopping log reader");
                     break;
                 };
@@ -685,10 +685,10 @@ mod tests {
             .into(),
         });
 
-        let (tx, rx) = std::sync::mpsc::channel();
-        let _ = ProcessComposeLogReader::start(instance.socket(), "foo", tx).unwrap();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let _ = ProcessComposeLogReader::start(instance.socket(), "foo", sender).unwrap();
 
-        let logs = rx.iter().take(5).collect::<Vec<_>>();
+        let logs = receiver.iter().take(5).collect::<Vec<_>>();
 
         assert_eq!(logs, vec![
             ProcessComposeLogLine::new("foo", "foo 1"),
