@@ -1,27 +1,33 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::services::{stop_services, ProcessStates};
+use flox_rust_sdk::providers::services::{
+    ProcessComposeLogLine,
+    ProcessComposeLogStream,
+    ProcessStates,
+};
 use tracing::instrument;
 
 use crate::commands::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
-use crate::utils::message;
 
 #[derive(Bpaf, Debug, Clone)]
-pub struct Stop {
+pub struct Logs {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// Names of the services to stop
+    /// Which services' logs to view
     #[bpaf(positional("name"))]
     names: Vec<String>,
+
+    /// Follow log output
+    follow: bool,
 }
 
-impl Stop {
-    #[instrument(name = "stop", skip_all)]
+impl Logs {
+    #[instrument(name = "logs", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
-        subcommand_metric!("services::stop");
+        subcommand_metric!("services::logs");
 
         let env = self
             .environment
@@ -36,10 +42,16 @@ impl Stop {
             self.names
         };
 
-        stop_services(socket, &names)?;
+        if !self.follow {
+            bail!("printing logs without following is not yet implemented");
+        }
 
-        for name in names.iter() {
-            message::service_stopped(name);
+        let log_stream = ProcessComposeLogStream::new(socket, &names)?;
+
+        let max_name_length = names.iter().map(|name| name.len()).max().unwrap_or(0);
+        for log in log_stream {
+            let ProcessComposeLogLine { process, message } = log?;
+            println!("{process:<max_name_length$}: {message}",);
         }
 
         Ok(())
