@@ -63,6 +63,7 @@ pub struct Cli {
     fields(
         pid = tracing::field::Empty,
         registry = tracing::field::Empty,
+        dot_flox_hash = tracing::field::Empty,
         socket = tracing::field::Empty,
         log = tracing::field::Empty))]
 async fn main() -> Result<(), Error> {
