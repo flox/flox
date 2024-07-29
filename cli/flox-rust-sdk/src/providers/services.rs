@@ -701,6 +701,8 @@ mod tests {
 
     /// Test that [ProcessComposeLogStream] reads logs from multiple processes in order
     /// and maintains the order of logs from each process.
+    /// Logs across different processes ar printed in a partial order,
+    /// i.e. the order of logs is preserved _per process_.
     #[test]
     fn test_multiple_process_logs_received_in_order() {
         let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
