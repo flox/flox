@@ -4,7 +4,7 @@ use flox_rust_sdk::flox::Flox;
 use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
-use crate::commands::environment_description;
+use crate::commands::{ensure_floxhub_token, environment_description};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
@@ -21,12 +21,17 @@ pub struct Upgrade {
 }
 impl Upgrade {
     #[instrument(name = "upgrade", skip_all)]
-    pub async fn handle(self, flox: Flox) -> Result<()> {
+    pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("upgrade");
         tracing::debug!(
             to_upgrade = self.groups_or_iids.join(","),
             "upgrading groups and install ids"
         );
+
+        // Ensure the user is logged in for the following remote operations
+        if let EnvironmentSelect::Remote(_) = self.environment {
+            ensure_floxhub_token(&mut flox).await?;
+        };
 
         let concrete_environment = self
             .environment
