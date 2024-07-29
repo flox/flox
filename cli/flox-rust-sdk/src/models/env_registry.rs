@@ -246,6 +246,11 @@ pub struct RegisteredEnv {
 pub struct Pid(u32);
 
 impl Pid {
+    /// Construct a Pid from the current running process.
+    pub fn from_self() -> Self {
+        Pid(nix::unistd::getpid().as_raw() as u32)
+    }
+
     /// Check whether an activation is still running.
     fn is_running(&self) -> bool {
         // TODO: Compare name or check for watchdog child to see if it's a real activation?

@@ -10,8 +10,9 @@ use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
-use flox_rust_sdk::models::env_registry::env_registry_path;
+use flox_rust_sdk::models::env_registry::{env_registry_path, register_activation, Pid};
 use flox_rust_sdk::models::environment::{
+    path_hash,
     CoreEnvironmentError,
     Environment,
     EnvironmentError,
@@ -293,6 +294,20 @@ impl Activate {
 
         // Launch the watchdog process
         Activate::launch_watchdog(&flox, environment.cache_path()?.to_path_buf(), &exports)?;
+
+        let dot_flox_path = match concrete_environment {
+            ConcreteEnvironment::Path(env) => Some(env.path),
+            ConcreteEnvironment::Managed(env) => Some(env.path),
+            ConcreteEnvironment::Remote(_) => None,
+        };
+        if let Some(dot_flox_path) = dot_flox_path {
+            // TODO: Move to klaus.
+            register_activation(
+                env_registry_path(&flox),
+                &path_hash(&dot_flox_path),
+                Pid::from_self(),
+            )?;
+        }
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
