@@ -33,7 +33,13 @@ and no packages will be uninstalled.
 ## Remove Options
 
 `<packages>`
-:   The install IDs of the packages to remove.
+:   The install IDs or package path of the packages to remove.
+    If the manifest contains both an install ID and a pacakge
+    with matching package path, the install ID takes precedence.
+    If the same pacakge path is installed under different install IDs,
+    an error is returned.
+    A package path can optionally contain the original version constraint.
+
 
 ```{.include}
 ./include/environment-options.md
