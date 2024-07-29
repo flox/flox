@@ -659,6 +659,7 @@ mod tests {
 
     /// Try to stop the process-compose instance by sending a SIGTERM
     /// to the process-compose process, which will stop all services.
+    /// This should be functionally equivalent to calling `process-compose down`.
     impl std::ops::Drop for TestProcessComposeInstance {
         fn drop(&mut self) {
             let term_result = nix::sys::signal::kill(
