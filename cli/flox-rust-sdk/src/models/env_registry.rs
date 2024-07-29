@@ -237,7 +237,7 @@ pub struct RegisteredEnv {
 }
 
 /// PID of an environment's activation.
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Pid(u32);
 
