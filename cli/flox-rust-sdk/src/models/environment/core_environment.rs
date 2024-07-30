@@ -2173,5 +2173,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(result.len(), 1);
+        assert_eq!(result[0], "testInstallID");
     }
 }
