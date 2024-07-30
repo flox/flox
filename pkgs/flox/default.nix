@@ -27,7 +27,7 @@ in
     name = "flox-${version}";
     inherit version;
 
-    paths = [flox-cli flox-manpages];
+    paths = [flox-cli flox-klaus flox-manpages];
     nativeBuildInputs = [makeBinaryWrapper];
 
     postBuild = ''
