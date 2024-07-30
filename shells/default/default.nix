@@ -6,6 +6,7 @@
   yq,
   lib,
   mkShell,
+  procps,
   pre-commit-check,
   shfmt,
   mitmproxy,
@@ -28,6 +29,7 @@
         PROJECT_TESTS_DIR = "/cli/tests";
         PKGDB_BIN = null;
         FLOX_BIN = null;
+        KLAUS_BIN = null;
       })
     ];
 
@@ -43,6 +45,7 @@
       mitmproxy
       yq
       cargo-nextest
+      procps
     ];
 in
   mkShell (

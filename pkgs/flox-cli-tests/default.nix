@@ -15,6 +15,7 @@
   expect,
   findutils,
   flox-pkgdb,
+  flox-klaus,
   flox-cli,
   gawk,
   git,
@@ -41,6 +42,7 @@
   NIX_BIN ? "${nix}/bin/nix",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   FLOX_BIN ? "${flox-cli}/bin/flox",
+  KLAUS_BIN ? "${flox-klaus}/bin/klaus",
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
@@ -74,6 +76,7 @@
       which
       yq
       process-compose
+      procps
     ]
     # TODO: this hack is not going to be needed once we test against sutff on system
     ++ lib.optional stdenv.isDarwin (
@@ -150,6 +153,11 @@ in
       else "export PKGDB_BIN='${PKGDB_BIN}';"
     }
     ${
+      if KLAUS_BIN == null
+      then "export KLAUS_BIN='klaus';"
+      else "export KLAUS_BIN='${KLAUS_BIN}';"
+    }
+    ${
       if FLOX_BIN == null
       then "export FLOX_BIN='flox';"
       else "export FLOX_BIN='${FLOX_BIN}';"
@@ -159,19 +167,25 @@ in
     usage() {
           cat << EOF
     Usage: $0 [--flox <FLOX BINARY>| -F <FLOX BINARY>] \
+              [--klaus <KLAUS BINARY | -K <KLAUS BINARY>] \
               [--pkgdb <PKGDB BINARY>| -P <PKGDB BINARY>] \
               [--nix <NIX BINARY>| -N <NIX BINARY>] \
+              [--input-data <INPUT DATA> | -I <INPUT DATA>] \
+              [--generated-data <GENERATED DATA> | -G <GENERATED DATA>] \
               [--tests <TESTS_DIR>| -T <TESTS_DIR>] \
               [--watch | -W] \
               [--help | -h] -- [BATS ARGUMENTS]
 
     Available options:
-        -F, --flox          Path to flox binary (Default: $FLOX_BIN)
-        -P, --pkgdb         Path to pkgdb binary (Default: $PKGDB_BIN)
-        -N, --nix           Path to nix binary (Default: $NIX_BIN)
-        -T, --tests         Path to folder of tests (Default: $PROJECT_TESTS_DIR)
-        -W, --watch         Run tests in a continuous watch mode
-        -h, --help          Prints help information
+        -F, --flox           Path to flox binary (Default: $FLOX_BIN)
+        -K, --klaus          Path to the klaus binary (Default: $KLAUS_BIN)
+        -P, --pkgdb          Path to pkgdb binary (Default: $PKGDB_BIN)
+        -N, --nix            Path to nix binary (Default: $NIX_BIN)
+        -I, --input-data     Path to the input data directory (Default: $INPUT_DATA)
+        -G, --generated-data Path to the generated data directory (Default: $GENERATED_DATA)
+        -T, --tests          Path to folder of tests (Default: $PROJECT_TESTS_DIR)
+        -W, --watch          Run tests in a continuous watch mode
+        -h, --help           Prints help information
     EOF
     }
 
@@ -181,13 +195,16 @@ in
     _FLOX_TESTS=();
     while [[ "$#" -gt 0 ]]; do
       case "$1" in
-        -[fF]|--flox)         export FLOX_BIN="''${2?}"; shift; ;;
-        -[pP]|--pkgdb)        export PKGDB_BIN="''${2?}"; shift; ;;
-        -[nN]|--nix)          export NIX_BIN="''${2?}"; shift; ;;
-        -[tT]|--tests)        export TESTS_DIR="''${2?}"; shift; ;;
-        -[wW]|--watch)        WATCH=:; ;;
-        -h|--help|-u|--usage) usage; exit 0; ;;
-        --)                   shift; break; ;;
+        -[fF]|--flox)           export FLOX_BIN="''${2?}"; shift; ;;
+        -[kK]|--klaus)          export KLAUS_BIN="''${2?}"; shift; ;;
+        -[pP]|--pkgdb)          export PKGDB_BIN="''${2?}"; shift; ;;
+        -[nN]|--nix)            export NIX_BIN="''${2?}"; shift; ;;
+        -[iI]|--input-data)     export INPUT_DATA="''${2?}"; shift; ;;
+        -[gG]|--generated-data) export GENERATED_DATA="''${2?}"; shift; ;;
+        -[tT]|--tests)          export TESTS_DIR="''${2?}"; shift; ;;
+        -[wW]|--watch)          WATCH=:; ;;
+        -h|--help|-u|--usage)   usage; exit 0; ;;
+        --)                     shift; break; ;;
         *)
           if [[ -e "$1" ]]; then
             _FLOX_TESTS+=( "$1" );
@@ -201,6 +218,9 @@ in
       shift;
     done
 
+    # Set the test data location
+    export GENERATED_DATA=''${GENERATED_DATA:-'${GENERATED_DATA}'}
+    export INPUT_DATA=''${INPUT_DATA:-'${INPUT_DATA}'}
 
     # Default flag values
     : "''${TESTS_DIR:=$WORKDIR}";
@@ -221,10 +241,12 @@ in
     {
       echo "''${0##*/}: Running test suite with:";
       echo "  FLOX_BIN:                 $FLOX_BIN";
+      echo "  KLAUS_BIN:                $KLAUS_BIN";
       echo "  PKGDB_BIN:                $PKGDB_BIN";
       echo "  NIX_BIN:                  $NIX_BIN";
       echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
-      echo "  GENERATED_DATA:            $GENERATED_DATA";
+      echo "  INPUT_DATA:               $INPUT_DATA";
+      echo "  GENERATED_DATA:           $GENERATED_DATA";
       echo "  bats                      ${batsWith}/bin/bats";
       echo "  bats options              ''${_BATS_ARGS[*]}";
       echo "  bats tests                ''${_FLOX_TESTS[*]}";
@@ -232,7 +254,7 @@ in
 
     # Run basts either via entr or just a single run
     if [[ -n "''${WATCH:-}" ]]; then
-      find "$TESTS_DIR" "$NIX_BIN" "$PKGDB_BIN" "$FLOX_BIN"    \
+      find "$TESTS_DIR" "$NIX_BIN" "$PKGDB_BIN" "$KLAUS_BIN" "$FLOX_BIN"    \
         |${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
     else
       exec -a "$0" ${batsWith}/bin/bats "''${_BATS_ARGS[@]}"    \

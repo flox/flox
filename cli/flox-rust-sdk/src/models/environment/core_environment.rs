@@ -2255,14 +2255,13 @@ mod tests {
         for (test_iid, dotted_package) in entries {
             typed_manifest_mock.install.insert(
                 test_iid.to_string(),
-                ManifestPackageDescriptorCatalog {
+                ManifestPackageDescriptor::Catalog(ManifestPackageDescriptorCatalog {
                     pkg_path: dotted_package.to_string(),
                     pkg_group: None,
                     priority: None,
                     version: None,
                     systems: None,
-                }
-                .into(),
+                }),
             );
         }
 

@@ -14,6 +14,9 @@ nix_options := "--extra-experimental-features nix-command \
  --extra-experimental-features flakes"
 PKGDB_BIN := "${PWD}/pkgdb/bin/pkgdb"
 FLOX_BIN := "${PWD}/cli/target/debug/flox"
+KLAUS_BIN := "${PWD}/cli/target/debug/klaus"
+GENERATED_DATA := "${PWD}/test_data/generated"
+INPUT_DATA := "${PWD}/test_data/input_data"
 cargo_test_invocation := "PKGDB_BIN=${PKGDB_BIN} cargo nextest run --manifest-path ${PWD}/cli/Cargo.toml --workspace"
 
 
@@ -76,6 +79,9 @@ build: build-cli
     flox-cli-tests \
         --pkgdb "{{PKGDB_BIN}}" \
         --flox "{{FLOX_BIN}}" \
+        --klaus "{{KLAUS_BIN}}" \
+        --input-data "{{INPUT_DATA}}" \
+        --generated-data "{{GENERATED_DATA}}" \
         {{bats_args}}
 
 # Run the CLI unit tests

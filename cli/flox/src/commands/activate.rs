@@ -10,6 +10,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
+use flox_rust_sdk::models::env_registry::env_registry_path;
 use flox_rust_sdk::models::environment::{
     CoreEnvironmentError,
     Environment,
@@ -30,6 +31,7 @@ use indexmap::IndexSet;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::{debug, warn};
+use nix::unistd::getpid;
 use once_cell::sync::Lazy;
 
 use super::{
@@ -51,6 +53,8 @@ pub static INTERACTIVE_BASH_BIN: Lazy<PathBuf> = Lazy::new(|| {
     )
 });
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
+pub static KLAUS_BIN: Lazy<PathBuf> =
+    Lazy::new(|| PathBuf::from(env::var("KLAUS_BIN").unwrap_or(env!("KLAUS_BIN").to_string())));
 
 /// When called with no arguments 'flox activate' will look for a '.flox' directory
 /// in the current directory. Calling 'flox activate' in your home directory will
@@ -287,6 +291,9 @@ impl Activate {
 
         exports.extend(default_nix_env_vars());
 
+        // Launch the watchdog process
+        Activate::launch_watchdog(&flox, environment.cache_path()?.to_path_buf(), &exports)?;
+
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
         //
@@ -308,6 +315,47 @@ impl Activate {
         } else {
             Self::activate_interactive(shell, exports, activation_path, now_active)
         }
+    }
+
+    /// Launch the watchdog process
+    fn launch_watchdog(
+        flox: &Flox,
+        cache_path: PathBuf,
+        vars: &HashMap<&str, String>,
+    ) -> Result<()> {
+        let mut cmd = Command::new(&*KLAUS_BIN);
+
+        // This process may terminate before the watchdog installs its signal handler,
+        // so we pass it the PID of this process unconditionally (note that on Linux passing this
+        // PID doesn't change which process the watchdog waits on to terminate) so that the watchdog
+        // can check that it still exists before installing its signal handler. There's still a
+        // TOCTOU race condition between checking that this process is still running and installing
+        // the signal handler, but doing the PID checking should mitigate it to a degree.
+        cmd.arg("--pid");
+        cmd.arg(getpid().as_raw().to_string());
+
+        // Set the log path
+        let pid = getpid();
+        let log_path = cache_path.join(format!("klaus.{}.log", pid.as_raw()));
+        cmd.arg("--logs");
+        cmd.arg(log_path);
+        cmd.env("_FLOX_WATCHDOG_LOG_LEVEL", "debug"); // always write to log file
+
+        // Get the socket path if possible
+        if let Some(path) = vars.get(FLOX_SERVICES_SOCKET_VAR) {
+            cmd.arg("--socket");
+            cmd.arg(path);
+        }
+
+        // Set the environment registry path
+        let reg_path = env_registry_path(flox);
+        cmd.arg("--registry");
+        cmd.arg(reg_path);
+
+        // Launch the watchdog
+        let _child = cmd.spawn().context("failed to spawn watchdog process")?;
+
+        Ok(())
     }
 
     /// Used for `flox activate -- run_args`
