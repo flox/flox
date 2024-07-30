@@ -213,6 +213,7 @@
       ld-floxlib = callPackage ./pkgs/ld-floxlib {};
 
       rust-external-deps = callPackage ./pkgs/rust-external-deps {rust-toolchain = rust-toolchain;};
+      rust-internal-deps = callPackage ./pkgs/rust-internal-deps {rust-toolchain = rust-toolchain;};
     };
 
     # Composes dependency overlays and the overlay defined here.
@@ -256,6 +257,7 @@
         ld-floxlib
         pre-commit-check
         rust-external-deps
+        rust-internal-deps
         ;
       default = pkgs.flox;
     });
