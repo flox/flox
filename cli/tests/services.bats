@@ -362,7 +362,36 @@ EOF
   fi
 }
 
-@test "watchdog: exits on signal" {
+@test "watchdog: exits on termination signal (SIGUSR1)" {
+  log_file=klaus.log
+  # This 'foo' is because we don't actually do anything with the registry yet
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" -r foo -l "$log_file" &
+  klaus_pid="$!"
+
+  # Wait for start.
+  timeout 1s bash -c "
+    while ! grep -qs 'watchdog is on duty' \"$log_file\"; do
+      sleep 0.1
+    done
+  "
+
+  # Check running.
+  run kill -s 0 "$klaus_pid"
+  assert_success
+
+  # Signal to exit.
+  run kill -s SIGUSR1 "$klaus_pid"
+  assert_success
+
+  # Wait for exit.
+  timeout 1s bash -c "
+    while kill -s 0 \"$klaus_pid\"; do
+      sleep 0.1
+    done
+  "
+}
+
+@test "watchdog: exits on shutdown signal (SIGINT)" {
   log_file=klaus.log
   # This 'foo' is because we don't actually do anything with the registry yet
   _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" -r foo -l "$log_file" &
@@ -384,6 +413,37 @@ EOF
   assert_success
 
   # Wait for exit.
+  timeout 1s bash -c "
+    while kill -s 0 \"$klaus_pid\"; do
+      sleep 0.1
+    done
+  "
+}
+
+@test "watchdog: exits when parent doesn't match provided PID" {
+  log_file=klaus.log
+
+  # We need a test PID, but PIDs can be reused. There's also no delay on reusing
+  # PIDs, so you can't create and kill a process to use its PID during that
+  # make-believe no-reuse window. At best we can choose a random PID and skip
+  # the test if something is already using it.
+  test_pid=31415
+  if kill -0 "$test_pid"; then
+    skip "test PID is in use"
+  fi
+
+  # This 'foo' is because we don't actually do anything with the registry yet
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" -r foo -l "$log_file" -p "$test_pid" &
+  klaus_pid="$!"
+
+  # Wait for start.
+  timeout 1s bash -c "
+    while ! grep -qs 'starting' \"$log_file\"; do
+      sleep 0.1
+    done
+  "
+
+  # The watchdog should immediately exit, so wait for it to exit.
   timeout 1s bash -c "
     while kill -s 0 \"$klaus_pid\"; do
       sleep 0.1

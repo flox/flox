@@ -325,6 +325,15 @@ impl Activate {
     ) -> Result<()> {
         let mut cmd = Command::new(&*KLAUS_BIN);
 
+        // This process may terminate before the watchdog installs its signal handler,
+        // so we pass it the PID of this process unconditionally (note that on Linux passing this
+        // PID doesn't change which process the watchdog waits on to terminate) so that the watchdog
+        // can check that it still exists before installing its signal handler. There's still a
+        // TOCTOU race condition between checking that this process is still running and installing
+        // the signal handler, but doing the PID checking should mitigate it to a degree.
+        cmd.arg("--pid");
+        cmd.arg(getpid().as_raw().to_string());
+
         // Set the log path
         let pid = getpid();
         let log_path = cache_path.join(format!("klaus.{}.log", pid.as_raw()));

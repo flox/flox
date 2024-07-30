@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use clap::Parser;
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
@@ -14,7 +14,9 @@ use listen::{
     target_pid,
 };
 use logger::init_logger;
-use nix::unistd::{getpgid, getpid, setsid};
+use nix::errno::Errno;
+use nix::sys::signal::kill;
+use nix::unistd::{getpgid, getpid, setsid, Pid};
 use once_cell::sync::Lazy;
 use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
@@ -81,6 +83,21 @@ async fn main() -> Result<(), Error> {
     }
 
     debug!("starting");
+
+    // The parent may have already died, in which case we just want to exit
+    if let Some(ref pid) = args.pid {
+        // TODO: re-use the method from ActivationPid after merging both PRs
+        let parent_is_running = match kill(Pid::from_raw(*pid), None) {
+            // These semantics come from kill(2).
+            Ok(_) => true,              // Process received the signal and is running.
+            Err(Errno::EPERM) => true,  // No permission to send a signal but we know it's running.
+            Err(Errno::ESRCH) => false, // No process running to receive the signal.
+            Err(_) => false,            // Unknown error, assume no running process.
+        };
+        if !parent_is_running {
+            return Err(anyhow!("detected that watchdog had unexpected parent"));
+        }
+    }
 
     // Start the listeners
     let shutdown_flag = Arc::new(AtomicBool::new(false));
