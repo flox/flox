@@ -185,9 +185,7 @@
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
 
       # Flox Command Line Interface ( development build ).
-      flox-klaus = callPackage ./pkgs/rust-pkg {
-        crateName = "klaus";
-        pname = "flox-klaus";
+      flox-klaus = callPackage ./pkgs/flox-klaus {
         rust-toolchain = rust-toolchain;
         rustfmt = rustfmt-nightly;
       };
