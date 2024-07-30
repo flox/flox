@@ -363,21 +363,30 @@ EOF
 }
 
 @test "watchdog: exits on signal" {
-  skip "FIXME: I have no idea why this doesn't work"
+  log_file=klaus.log
   # This 'foo' is because we don't actually do anything with the registry yet
-  "$KLAUS_BIN" -r foo &
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" -r foo -l "$log_file" &
   klaus_pid="$!"
-  echo "klaus pid is $klaus_pid" >&3
-  run ps -p "$klaus_pid" -o state=
+
+  # Wait for start.
+  timeout 1s bash -c "
+    while ! grep -qs 'watchdog is on duty' \"$log_file\"; do
+      sleep 0.1
+    done
+  "
+
+  # Check running.
+  run kill -s 0 "$klaus_pid"
   assert_success
-  assert_output --partial "?+"
-  kill -s SIGINT "$klaus_pid"
-  # I originally tried kill -0 "$klaus_pid", but that wasn't detecting a terminated
-  # process, so I switched to this to see what the actual state was. `ps` helpfully
-  # tells you '?', and the manual doesn't mention anything about that state,
-  # but I did find this:
-  # https://apple.stackexchange.com/questions/460394/what-does-a-question-mark-in-the-stat-column-of-ps-on-macos-indicate
-  # (tl;dr - "unknown", which isn't supposed to happen...)
-  run ps -p "$klaus_pid" -o state=
-  assert_failure
+
+  # Signal to exit.
+  run kill -s SIGINT "$klaus_pid"
+  assert_success
+
+  # Wait for exit.
+  timeout 1s bash -c "
+    while kill -s 0 \"$klaus_pid\"; do
+      sleep 0.1
+    done
+  "
 }
