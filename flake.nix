@@ -179,6 +179,8 @@
       # Package activation scripts.
       flox-activation-scripts = callPackage ./pkgs/flox-activation-scripts {};
 
+      flox-src = callPackage ./pkgs/flox-src {};
+
       # Package Database Utilities: scrape, search, and resolve.
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
 
