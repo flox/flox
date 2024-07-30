@@ -4,6 +4,7 @@
   flox-env,
   install-prefix,
   srcdir ? null, # optional
+  buildDeps ? [], # optional
   buildScript ? null, # optional
   buildCache ? null, # optional
 }:
@@ -18,6 +19,9 @@ assert (srcdir != null) -> (buildScript != null);
 let
 
   flox-env-package = builtins.storePath flox-env;
+  buildInputs = (
+    map (d: builtins.storePath d) buildDeps
+  ) ++ [flox-env-package];
   install-prefix-contents = /. + install-prefix;
   src =
     if (srcdir == null)
@@ -30,8 +34,8 @@ let
 
 in
   pkgs.runCommand name {
-    inherit src;
-    buildInputs = with pkgs; [flox-env-package findutils gnutar gnused makeWrapper];
+    inherit buildInputs src;
+    nativeBuildInputs = with pkgs; [findutils gnutar gnused makeWrapper];
     outputs = [ "out" ] ++ pkgs.lib.optionals ( buildCache != null ) [ "buildCache" ];
   } ( (
       if (buildScript == null)

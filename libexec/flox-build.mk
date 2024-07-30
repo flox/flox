@@ -41,6 +41,35 @@ $(foreach _build,$(BUILDGOALS),\
   $(foreach _buildtype,local sandbox,\
     $(eval $(_pname)_$(_buildtype)_build: FORCE)))
 
+# Scan for "${package}" references within the build instructions and add
+# target prerequisites for any inter-package prerequisites, letting make
+# flag any circular dependencies encountered along the way.
+define DEPENDS_template =
+  # Infer pname from script path.
+  $(eval _pname = $(notdir $(build)))
+  # Target names cannot have "-" in them so replace with "_" in the target name.
+  $(eval _pvarname = $(subst -,_,$(_pname)))
+
+  # Render the build script with the package prerequisites replaced with their
+  # corresponding outpaths, using a temporary path that is stable across builds
+  # so that we only perform a Nix rebuild when the contents actually change.
+  $(eval _buildScript_checksum := $(shell sha256sum $(build) | head -c8))
+  $(eval $(_pvarname)_buildScript := $(TMPDIR)/$(_buildScript_checksum)-build-$(_pname).bash)
+
+  # Iterate over each possible {build,package} pair looking for references to
+  # ${package} in the build script, being careful to avoid looking for references
+  # to the package in its own build. If found add dependency from the build
+  # script to the package.
+  $(foreach package,$(notdir $(BUILDS)),\
+    $(if $(filter-out $(package),$(notdir $(build))),\
+      $(if $(shell grep '\$${$(package)}' $(build)),\
+        $(eval _dep = result-$(package))\
+        $(eval $(_pvarname)_buildDeps += $(realpath $(_dep)))\
+        $($(_pvarname)_buildScript): $(_dep))))
+endef
+
+$(foreach build,$(BUILDS),$(eval $(call DEPENDS_template)))
+
 # Template for rendering temporary stable buildcache symlink. We use
 # the shorter relative result symlink path rather than the absolute
 # nix storePath so it looks better on the graph. Marking it as
@@ -59,6 +88,7 @@ endef
 # The following template renders targets for each of the build modes.
 # We render all the possible build modes here and then below we select
 # the actual targets to be evaluated based on the build types observed.
+space := $(subst x,,x x)
 define BUILD_template =
   # Infer pname from script path.
   $(eval _pname = $(notdir $(build)))
@@ -71,6 +101,10 @@ define BUILD_template =
   $(eval _version = 0.0.0)
   # Calculate name.
   $(eval _name = $(_pname)-$(_version))
+  # Short variable name for buildDependencies derived in the DEPENDS step.
+  $(eval _buildDeps = $(strip \
+    $(if $($(_pvarname)_buildDeps),\
+      '["$(subst $(space),",$($(_pvarname)_buildDeps))"]')))
 
   # Set temp outpath of same strlen as eventual package storePath using sha256sum
   # derived from the package name, the current working directory and the $(FLOX_ENV)
@@ -97,12 +131,6 @@ define BUILD_template =
       $(eval _buildCache_checksum = $(shell sha256sum $(_result)-buildCache | head -c8)) \
       $(eval _buildCache = $(TMPDIR)/$(_buildCache_checksum)-$(_name)-buildCache) \
       $(eval $(call BUILDCACHE_template))))
-
-  # Render the build script with the package prerequisites replaced with their
-  # corresponding outpaths, using a temporary path that is stable across builds
-  # so that we only perform a Nix rebuild when the contents actually change.
-  $(eval _buildScript_checksum := $(shell sha256sum $(build) | head -c8))
-  $(eval $(_pvarname)_buildScript := $(TMPDIR)/$(_buildScript_checksum)-build-$(_pname).bash)
 
   # By the time this rule will be evaluated all of the package dependencies
   # will have been added to the set of rule prerequisites in $^, using their
@@ -131,7 +159,7 @@ define BUILD_template =
   .INTERMEDIATE: $(_pname)_local_build
   $(_pname)_local_build: $($(_pvarname)_buildScript)
 	@echo "Building $(_name) in local mode"
-	MAKEFLAGS= FLOX_TURBO=1 out=$(_out) $(FLOX_ENV)/activate bash -e $$<
+	MAKEFLAGS= FLOX_TURBO=1 out=$(_out) $(FLOX_ENV)/activate bash -e $($(_pvarname)_buildScript)
 	nix --extra-experimental-features nix-command \
 	  build -L --file __FLOX_CLI_OUTPATH__/libexec/build-manifest.nix \
 	    --argstr name "$(_name)" \
@@ -151,7 +179,8 @@ define BUILD_template =
 	    --argstr srcdir "$(realpath .)" \
 	    --argstr flox-env "$(FLOX_ENV)" \
 	    --argstr install-prefix "$(_out)" \
-	    --argstr buildScript "$$<" \
+	    $(if $(_buildDeps),--arg buildDeps $(_buildDeps)) \
+	    --argstr buildScript "$($(_pvarname)_buildScript)" \
 	    $(if $(_do_buildCache),--argstr buildCache "$(_buildCache)") \
 	    --out-link "result-$(_pname)" \
 	    '^*' 2>&1 | tee $($(_pvarname)_logfile)
@@ -174,28 +203,6 @@ define BUILD_template =
 endef
 
 $(foreach build,$(BUILDS),$(eval $(call BUILD_template)))
-
-# We then scan for "${package}" references within the build instructions and
-# add target prerequisites for any inter-package prerequisites, letting make
-# flag any circular dependencies encountered along the way.
-define DEPENDS_template =
-  # Infer pname from script path.
-  $(eval _pname = $(notdir $(build)))
-  # Target names cannot have "-" in them so replace with "_" in the target name.
-  $(eval _pvarname = $(subst -,_,$(_pname)))
-  # Look for references to ${package} in the build script, and if found add
-  # dependency from the target to the package.
-  $(if $(shell grep '\$${$(package)}' $(build)),\
-    $(eval _dep = result-$(package))\
-    $($(_pvarname)_buildScript): $(_dep))
-endef
-
-# Iterate over each possible {package,package} pair looking for dependencies,
-# being careful to avoid looking for references to the package in its own build.
-$(foreach build,$(BUILDS),\
-  $(foreach package,$(notdir $(BUILDS)),\
-    $(if $(filter-out $(package),$(notdir $(build))),\
-      $(eval $(call DEPENDS_template)))))
 
 # Finally, we create the "all" target to build all known packages.
 all: $(all)
