@@ -6,6 +6,7 @@
   yq,
   lib,
   mkShell,
+  procps,
   pre-commit-check,
   shfmt,
   mitmproxy,
@@ -44,6 +45,7 @@
       mitmproxy
       yq
       cargo-nextest
+      procps
     ];
 in
   mkShell (

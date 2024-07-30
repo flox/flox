@@ -27,7 +27,7 @@ pub(crate) fn init_logger(file_path: &Option<PathBuf>) -> Result<(), anyhow::Err
             tracing_subscriber::fmt::layer()
                 .with_ansi(false)
                 .with_writer(file)
-                .with_filter(EnvFilter::from_default_env()),
+                .with_filter(EnvFilter::from_env("_FLOX_WATCHDOG_LOG_LEVEL")),
         )
     } else {
         None

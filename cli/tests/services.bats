@@ -338,3 +338,46 @@ EOF
   run "$KLAUS_BIN" --help
   assert_success
 }
+
+@test "watchdog: lives as long as the activation" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+  run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+
+    log_file="$PWD/.flox/cache/$(ls .flox/cache)"
+
+    # Ensure that the watchdog is still running
+    if tail -n 1 "$log_file" | grep "exiting"; then
+      exit 1
+    fi
+EOF
+)
+  assert_success
+
+  # Ensure that the watchdog has exited now
+  log_file="$PWD/.flox/cache/$(ls .flox/cache)"
+  if ! tail -n 1 "$log_file" | grep "exiting"; then
+    exit 1
+  fi
+}
+
+@test "watchdog: exits on signal" {
+  skip "FIXME: I have no idea why this doesn't work"
+  # This 'foo' is because we don't actually do anything with the registry yet
+  "$KLAUS_BIN" -r foo &
+  klaus_pid="$!"
+  echo "klaus pid is $klaus_pid" >&3
+  run ps -p "$klaus_pid" -o state=
+  assert_success
+  assert_output --partial "?+"
+  kill -s SIGINT "$klaus_pid"
+  # I originally tried kill -0 "$klaus_pid", but that wasn't detecting a terminated
+  # process, so I switched to this to see what the actual state was. `ps` helpfully
+  # tells you '?', and the manual doesn't mention anything about that state,
+  # but I did find this:
+  # https://apple.stackexchange.com/questions/460394/what-does-a-question-mark-in-the-stat-column-of-ps-on-macos-indicate
+  # (tl;dr - "unknown", which isn't supposed to happen...)
+  run ps -p "$klaus_pid" -o state=
+  assert_failure
+}

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use clap::Parser;
 use flox_rust_sdk::flox::FLOX_VERSION;
-use flox_rust_sdk::utils::traceable_path;
+use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
 use listen::{
     listen,
     signal_listener,
@@ -14,9 +14,10 @@ use listen::{
     target_pid,
 };
 use logger::init_logger;
+use nix::unistd::{getpgid, getpid, setsid};
 use once_cell::sync::Lazy;
 use sentry::init_sentry;
-use tracing::{debug, info, instrument};
+use tracing::{debug, error, info, instrument};
 
 mod listen;
 mod logger;
@@ -47,7 +48,7 @@ pub struct Cli {
 
     /// The path to the process-compose socket
     #[arg(short, long = "socket", value_name = "PATH")]
-    pub socket_path: PathBuf,
+    pub socket_path: Option<PathBuf>,
 
     /// Where to store watchdog logs
     #[arg(short, long = "logs", value_name = "PATH")]
@@ -60,16 +61,24 @@ pub struct Cli {
     fields(
         pid = tracing::field::Empty,
         registry = tracing::field::Empty,
-        socket = tracing::field::Empty))]
+        socket = tracing::field::Empty,
+        log = tracing::field::Empty))]
 async fn main() -> Result<(), Error> {
     // Initialization
     let args = Cli::parse();
     init_logger(&args.log_path).context("failed to initialize logger")?;
+    if let Err(err) = ensure_process_group_leader() {
+        error!(%err, "failed to ensure watchdog is detached from terminal");
+    }
     let _sentry_guard = init_sentry();
     let span = tracing::Span::current();
     span.record("pid", args.pid);
     span.record("registry", traceable_path(&args.registry_path));
-    span.record("socket", traceable_path(&args.socket_path));
+    span.record("socket", maybe_traceable_path(&args.socket_path));
+    span.record("log", maybe_traceable_path(&args.log_path));
+    if let Some(ref path) = args.socket_path {
+        debug!(socket_path = traceable_path(&path), "was provided a socket");
+    }
 
     debug!("starting");
 
@@ -89,5 +98,29 @@ async fn main() -> Result<(), Error> {
     // Listen for a notification
     let _action = listen(signal_task, termination_task, shutdown_flag).await;
 
+    // Exit
+    info!("exiting");
+    Ok(())
+}
+
+/// We want to make sure that the watchdog is detached from the terminal in case it sends
+/// any signals to the activation. A terminal sends signals to all processes in a process group,
+/// and we want to make sure that the watchdog is in its own process group to avoid receiving any
+/// signals intended for the shell.
+///
+/// From local testing I haven't been able to deliver signals to the watchdog by sending signals to
+/// the activation, so this is more of a "just in case" measure.
+fn ensure_process_group_leader() -> Result<(), Error> {
+    let pid = getpid();
+    // Trivia:
+    // You can't create a new session if you're already a session leader, the reason being that
+    // the other processes in the group aren't automatically moved to the new session. You're supposed
+    // to have this invariant: all processes in a process group share the same controllling terminal.
+    // If you were able to create a new session as session leader and leave behind the other processes
+    // in the group in the old session, it would be possible for processes in this group to be in two
+    // different sessions and therefore have two different controlling terminals.
+    if pid != getpgid(None).context("failed to get process group leader")? {
+        setsid().context("failed to create new session")?;
+    }
     Ok(())
 }

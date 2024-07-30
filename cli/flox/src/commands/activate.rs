@@ -330,6 +330,7 @@ impl Activate {
         let log_path = cache_path.join(format!("klaus.{}.log", pid.as_raw()));
         cmd.arg("--logs");
         cmd.arg(log_path);
+        cmd.env("_FLOX_WATCHDOG_LOG_LEVEL", "debug"); // always write to log file
 
         // Get the socket path if possible
         if let Some(path) = vars.get(FLOX_SERVICES_SOCKET_VAR) {

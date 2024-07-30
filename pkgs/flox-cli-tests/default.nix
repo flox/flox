@@ -75,6 +75,7 @@
       which
       yq
       process-compose
+      procps
     ]
     # TODO: this hack is not going to be needed once we test against sutff on system
     ++ lib.optional stdenv.isDarwin (
