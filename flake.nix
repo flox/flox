@@ -211,6 +211,8 @@
 
       # (Linux-only) LD_AUDIT library for using dynamic libraries in Flox envs.
       ld-floxlib = callPackage ./pkgs/ld-floxlib {};
+
+      rust-external-deps = callPackage ./pkgs/rust-external-deps {rust-toolchain = rust-toolchain;};
     };
 
     # Composes dependency overlays and the overlay defined here.
@@ -253,6 +255,7 @@
         flox
         ld-floxlib
         pre-commit-check
+        rust-external-deps
         ;
       default = pkgs.flox;
     });
