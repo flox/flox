@@ -16,12 +16,12 @@ pub struct Logs {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
+    /// Follow log output
+    follow: bool,
+
     /// Which services' logs to view
     #[bpaf(positional("name"))]
     names: Vec<String>,
-
-    /// Follow log output
-    follow: bool,
 }
 
 impl Logs {
