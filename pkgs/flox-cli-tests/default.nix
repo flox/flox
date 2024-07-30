@@ -15,6 +15,7 @@
   expect,
   findutils,
   flox-pkgdb,
+  flox-klaus,
   flox-cli,
   gawk,
   git,
@@ -41,7 +42,7 @@
   NIX_BIN ? "${nix}/bin/nix",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   FLOX_BIN ? "${flox-cli}/bin/flox",
-  KLAUS_BIN ? "${flox-cli}/bin/klaus",
+  KLAUS_BIN ? "${flox-klaus}/bin/klaus",
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
