@@ -25,7 +25,7 @@ pub struct Uninstall {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
-    /// The install IDs of the packages to remove
+    /// The install IDs or package paths of the packages to remove
     #[bpaf(positional("packages"), some("Must specify at least one package"))]
     packages: Vec<String>,
 }
