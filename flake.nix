@@ -126,7 +126,7 @@
       # which would avoid the need to pull another channel altogether.
       rustfmt-nightly = final.fenix.default.withComponents ["rustfmt"];
       rust-toolchain = final.fenix.stable;
-    in rec {
+    in {
       # Generates a `.git/hooks/pre-commit' script.
       pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
         src = builtins.path {path = ./.;};
@@ -190,10 +190,7 @@
         rustfmt = rustfmt-nightly;
       };
 
-      flox-cli = callPackage ./pkgs/rust-pkg {
-        crateName = "flox";
-        pname = "flox-cli";
-        KLAUS_BIN = "${flox-klaus}/bin/klaus";
+      flox-cli = callPackage ./pkgs/flox-cli {
         rust-toolchain = rust-toolchain;
         rustfmt = rustfmt-nightly;
       };
@@ -274,7 +271,10 @@
           FLOX_BIN = null;
           KLAUS_BIN = null;
         };
-        flox-cli = prev.flox-cli.override {flox-pkgdb = null;};
+        flox-cli = prev.flox-cli.override {
+          flox-pkgdb = null;
+          flox-klaus = null;
+        };
       });
       checksFor = builtins.getAttr system checks;
     in {
