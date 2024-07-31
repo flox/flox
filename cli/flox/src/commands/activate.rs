@@ -35,6 +35,7 @@ use log::{debug, warn};
 use nix::unistd::getpid;
 use once_cell::sync::Lazy;
 
+use super::services::supported_environment;
 use super::{
     activated_environments,
     environment_select,
@@ -274,6 +275,7 @@ impl Activate {
             }
 
             if flox.features.services && !manifest.services.is_empty() {
+                supported_environment(&flox, self.environment)?; // Error for remote envs.
                 tracing::debug!(start = self.start_services, "setting service variables");
                 if socket_path.exists() {
                     debug!("detected existing services socket");

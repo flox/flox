@@ -8,6 +8,7 @@ use flox_rust_sdk::providers::services::{
 };
 use tracing::instrument;
 
+use super::supported_environment;
 use crate::commands::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
 
@@ -29,10 +30,7 @@ impl Logs {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("services::logs");
 
-        let env = self
-            .environment
-            .detect_concrete_environment(&flox, "Services in")?
-            .into_dyn_environment();
+        let env = supported_environment(&flox, self.environment)?;
         let socket = env.services_socket_path(&flox)?;
 
         let names = if self.names.is_empty() {

@@ -50,6 +50,13 @@ setup_sleeping_services() {
 }
 
 # ---------------------------------------------------------------------------- #
+#
+# NOTE: The following functionality is tested elsewhere:
+#
+#   - logs: providers/services.rs
+#   - remote environments: tests/environment-remotes.bats
+#
+# ---------------------------------------------------------------------------- #
 
 @test "feature flag works" {
   RUST_LOG=flox=debug run "$FLOX_BIN" init

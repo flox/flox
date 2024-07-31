@@ -1,8 +1,11 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::providers::services::ServiceError;
 use tracing::instrument;
+
+use super::{ConcreteEnvironment, EnvironmentSelect};
 
 mod logs;
 mod stop;
@@ -33,4 +36,17 @@ impl ServicesCommands {
 
         Ok(())
     }
+}
+
+/// Return an Environment for variants that support services.
+pub fn supported_environment(
+    flox: &Flox,
+    environment: EnvironmentSelect,
+) -> Result<Box<dyn Environment>> {
+    let concrete_environment = environment.detect_concrete_environment(flox, "Services in")?;
+    if let ConcreteEnvironment::Remote(_) = concrete_environment {
+        return Err(ServiceError::RemoteEnvsNotSupported.into());
+    }
+    let dyn_environment = concrete_environment.into_dyn_environment();
+    Ok(dyn_environment)
 }

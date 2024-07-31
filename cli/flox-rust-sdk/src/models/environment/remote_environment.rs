@@ -61,9 +61,6 @@ pub enum RemoteEnvironmentError {
 
     #[error("could not set a new install prefix")]
     WriteNewOutlink(#[source] std::io::Error),
-
-    #[error("services are not currently supported for remote environments")]
-    ServicesUnsupported,
 }
 
 #[derive(Debug)]
@@ -334,9 +331,7 @@ impl Environment for RemoteEnvironment {
         Ok(())
     }
 
-    fn services_socket_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError> {
-        Err(EnvironmentError::RemoteEnvironment(
-            RemoteEnvironmentError::ServicesUnsupported,
-        ))
+    fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+        self.inner.services_socket_path(flox)
     }
 }
