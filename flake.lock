@@ -130,16 +130,16 @@
     },
     "nixpkgs-process-compose": {
       "locked": {
-        "lastModified": 1719406840,
-        "narHash": "sha256-f28HAjj6t6Uioe6KavnYvTC63VzO8+leRqRSIZM9qUU=",
+        "lastModified": 1722415718,
+        "narHash": "sha256-5US0/pgxbMksF92k1+eOa8arJTJiPvsdZj9Dl+vJkM4=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "a67ad0452b1ecd013ed3c0e2d4a50cabca396db7",
+        "rev": "c3392ad349a5227f4a3464dce87bcc5046692fce",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
-        "ref": "release-24.05",
+        "ref": "nixpkgs-unstable",
         "repo": "nixpkgs",
         "type": "github"
       }

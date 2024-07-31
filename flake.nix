@@ -18,7 +18,7 @@
   # drop once bear is no longer broken in a newer release
   inputs.nixpkgs-bear.url = "github:NixOS/nixpkgs/release-23.05";
 
-  inputs.nixpkgs-process-compose.url = "github:NixOS/nixpkgs/release-24.05";
+  inputs.nixpkgs-process-compose.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
   inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
   inputs.sqlite3pp.inputs.nixpkgs.follows = "nixpkgs";
