@@ -508,13 +508,13 @@ impl ProcessComposeLogReader {
 
             // Here, process-compose has closed stdout.
             // It should have exited or be about to exit.
+            // kill() it just to be sure
+            child.kill().map_err(ServiceError::ProcessComposeCmd)?;
+
             // Communicate why it exited through the channel.
             // The most likely error is that the socket doesn't exist,
             // trying to read logs for a non existent process
             // unfortunately just blocks indefinitely without any error message.
-            // If process-compose closes stdout but doesn't exit, this will hang
-            // forever.
-
             let exit_status = child.wait().map_err(ServiceError::ProcessComposeCmd)?;
             if !exit_status.success() {
                 let mut output = String::new();
