@@ -24,7 +24,6 @@ use super::{
     UninstallationAttempt,
     UpdateResult,
     CACHE_DIR_NAME,
-    DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     ENV_DIR_NAME,
     N_HASH_CHARS,
@@ -460,9 +459,8 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Path to the environment's .flox directory
-    fn dot_flox_path(&self) -> Result<PathBuf, EnvironmentError> {
-        let parent = self.parent_path()?;
-        Ok(parent.join(DOT_FLOX))
+    fn dot_flox_path(&self) -> CanonicalPath {
+        self.path.clone()
     }
 
     /// Path to the environment definition file

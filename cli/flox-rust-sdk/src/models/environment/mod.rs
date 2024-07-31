@@ -195,7 +195,7 @@ pub trait Environment: Send {
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError>;
 
     /// Path to the environment's .flox directory
-    fn dot_flox_path(&self) -> Result<PathBuf, EnvironmentError>;
+    fn dot_flox_path(&self) -> CanonicalPath;
 
     /// Path to the environment definition file
     ///

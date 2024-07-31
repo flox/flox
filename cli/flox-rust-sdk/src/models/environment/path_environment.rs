@@ -345,9 +345,8 @@ impl Environment for PathEnvironment {
     }
 
     /// Path to the environment's .flox directory
-    fn dot_flox_path(&self) -> Result<PathBuf, EnvironmentError> {
-        let parent = self.parent_path()?;
-        Ok(parent.join(DOT_FLOX))
+    fn dot_flox_path(&self) -> CanonicalPath {
+        self.path.clone()
     }
 
     /// Path to the environment definition file

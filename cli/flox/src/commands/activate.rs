@@ -113,7 +113,6 @@ impl Activate {
             UninitializedEnvironment::from_concrete_environment(&concrete_environment)?;
 
         let environment = concrete_environment.dyn_environment_ref_mut();
-        let dot_flox_path = environment.dot_flox_path()?;
 
         let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         // Don't spin in bashrcs and similar contexts
@@ -299,7 +298,7 @@ impl Activate {
         Activate::launch_watchdog(
             &flox,
             environment.cache_path()?.to_path_buf(),
-            &path_hash(dot_flox_path),
+            &path_hash(environment.dot_flox_path()),
             socket_path,
         )?;
 

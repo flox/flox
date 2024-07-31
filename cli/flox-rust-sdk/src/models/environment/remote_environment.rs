@@ -289,7 +289,7 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Path to the environment's .flox directory
-    fn dot_flox_path(&self) -> Result<PathBuf, EnvironmentError> {
+    fn dot_flox_path(&self) -> CanonicalPath {
         self.inner.dot_flox_path()
     }
 
