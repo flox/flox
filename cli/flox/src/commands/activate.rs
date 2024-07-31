@@ -265,6 +265,7 @@ impl Activate {
             ),
         ]);
 
+        let socket_path = environment.services_socket_path(&flox)?;
         if let TypedManifest::Catalog(manifest) = environment.manifest(&flox)? {
             // default to enabling CUDA
             if manifest.options.cuda_detection != Some(false) {
@@ -273,7 +274,6 @@ impl Activate {
 
             if flox.features.services && !manifest.services.is_empty() {
                 tracing::debug!(start = self.start_services, "setting service variables");
-                let socket_path = environment.services_socket_path(&flox)?;
                 if socket_path.exists() {
                     debug!("detected existing services socket");
                     message::warning("Skipped starting services, services are already running");
@@ -293,7 +293,7 @@ impl Activate {
         exports.extend(default_nix_env_vars());
 
         // Launch the watchdog process
-        Activate::launch_watchdog(&flox, environment.cache_path()?.to_path_buf(), &exports)?;
+        Activate::launch_watchdog(&flox, environment.cache_path()?.to_path_buf(), socket_path)?;
 
         let dot_flox_path = match concrete_environment {
             ConcreteEnvironment::Path(env) => Some(env.path),
@@ -336,7 +336,7 @@ impl Activate {
     fn launch_watchdog(
         flox: &Flox,
         cache_path: PathBuf,
-        vars: &HashMap<&str, String>,
+        socket_path: impl AsRef<Path>,
     ) -> Result<()> {
         let mut cmd = Command::new(&*KLAUS_BIN);
 
@@ -356,11 +356,9 @@ impl Activate {
         cmd.arg(log_path);
         cmd.env("_FLOX_WATCHDOG_LOG_LEVEL", "debug"); // always write to log file
 
-        // Get the socket path if possible
-        if let Some(path) = vars.get(FLOX_SERVICES_SOCKET_VAR) {
-            cmd.arg("--socket");
-            cmd.arg(path);
-        }
+        // Set the socket path
+        cmd.arg("--socket");
+        cmd.arg(socket_path.as_ref());
 
         // Set the environment registry path
         let reg_path = env_registry_path(flox);

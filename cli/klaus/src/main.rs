@@ -50,7 +50,7 @@ pub struct Cli {
 
     /// The path to the process-compose socket
     #[arg(short, long = "socket", value_name = "PATH")]
-    pub socket_path: Option<PathBuf>,
+    pub socket_path: PathBuf,
 
     /// Where to store watchdog logs
     #[arg(short, long = "logs", value_name = "PATH")]
@@ -78,13 +78,15 @@ async fn main() -> Result<(), Error> {
     span.record("pid", args.pid);
     span.record("registry", traceable_path(&args.registry_path));
     span.record("dot_flox_hash", &args.dot_flox_hash);
-    span.record("socket", maybe_traceable_path(&args.socket_path));
+    span.record("socket", traceable_path(&args.socket_path));
     span.record("log", maybe_traceable_path(&args.log_path));
-    if let Some(ref path) = args.socket_path {
-        debug!(socket_path = traceable_path(&path), "was provided a socket");
-    }
 
     debug!("starting");
+    debug!(
+        path = traceable_path(&args.socket_path),
+        exists = &args.socket_path.exists(),
+        "checked socket"
+    );
 
     // The parent may have already died, in which case we just want to exit
     if let Some(ref pid) = args.pid {
