@@ -194,6 +194,9 @@ pub trait Environment: Send {
     /// TODO: figure out what to store for remote environments
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError>;
 
+    /// Path to the environment's .flox directory
+    fn dot_flox_path(&self) -> CanonicalPath;
+
     /// Path to the environment definition file
     ///
     /// Implementations may use process context from [Flox]
@@ -715,7 +718,7 @@ pub(super) fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
 }
 
 /// Returns the truncated hash of a [Path]
-pub fn path_hash(p: &impl AsRef<Path>) -> String {
+pub fn path_hash(p: impl AsRef<Path>) -> String {
     let mut chars = blake3::hash(p.as_ref().as_os_str().as_bytes()).to_hex();
     chars.truncate(N_HASH_CHARS);
     chars.to_string()

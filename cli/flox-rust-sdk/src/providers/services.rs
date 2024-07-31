@@ -39,6 +39,8 @@ pub enum ServiceError {
     GenerateConfig(#[source] serde_yaml::Error),
     #[error("failed to write service config")]
     WriteConfig(#[source] std::io::Error),
+    #[error("services are not currently supported for remote environments")]
+    RemoteEnvsNotSupported,
     #[error("services are not enabled")]
     FeatureFlagDisabled,
     #[error("services have not been started in this activation")]

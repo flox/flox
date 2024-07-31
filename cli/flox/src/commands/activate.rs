@@ -12,6 +12,7 @@ use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::env_registry::env_registry_path;
 use flox_rust_sdk::models::environment::{
+    path_hash,
     CoreEnvironmentError,
     Environment,
     EnvironmentError,
@@ -34,6 +35,7 @@ use log::{debug, warn};
 use nix::unistd::getpid;
 use once_cell::sync::Lazy;
 
+use super::services::supported_environment;
 use super::{
     activated_environments,
     environment_select,
@@ -264,6 +266,7 @@ impl Activate {
             ),
         ]);
 
+        let socket_path = environment.services_socket_path(&flox)?;
         if let TypedManifest::Catalog(manifest) = environment.manifest(&flox)? {
             // default to enabling CUDA
             if manifest.options.cuda_detection != Some(false) {
@@ -271,8 +274,10 @@ impl Activate {
             }
 
             if flox.features.services && !manifest.services.is_empty() {
+                if self.start_services {
+                    supported_environment(&flox, self.environment)?; // Error for remote envs.
+                }
                 tracing::debug!(start = self.start_services, "setting service variables");
-                let socket_path = environment.services_socket_path(&flox)?;
                 if socket_path.exists() {
                     debug!("detected existing services socket");
                     message::warning("Skipped starting services, services are already running");
@@ -292,7 +297,12 @@ impl Activate {
         exports.extend(default_nix_env_vars());
 
         // Launch the watchdog process
-        Activate::launch_watchdog(&flox, environment.cache_path()?.to_path_buf(), &exports)?;
+        Activate::launch_watchdog(
+            &flox,
+            environment.cache_path()?.to_path_buf(),
+            &path_hash(environment.dot_flox_path()),
+            socket_path,
+        )?;
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
@@ -321,7 +331,8 @@ impl Activate {
     fn launch_watchdog(
         flox: &Flox,
         cache_path: PathBuf,
-        vars: &HashMap<&str, String>,
+        path_hash: &str,
+        socket_path: impl AsRef<Path>,
     ) -> Result<()> {
         let mut cmd = Command::new(&*KLAUS_BIN);
 
@@ -341,11 +352,13 @@ impl Activate {
         cmd.arg(log_path);
         cmd.env("_FLOX_WATCHDOG_LOG_LEVEL", "debug"); // always write to log file
 
-        // Get the socket path if possible
-        if let Some(path) = vars.get(FLOX_SERVICES_SOCKET_VAR) {
-            cmd.arg("--socket");
-            cmd.arg(path);
-        }
+        // Set the socket path
+        cmd.arg("--socket");
+        cmd.arg(socket_path.as_ref());
+
+        // Set the path hash so the watchdog doesn't need to compute it
+        cmd.arg("--hash");
+        cmd.arg(path_hash);
 
         // Set the environment registry path
         let reg_path = env_registry_path(flox);

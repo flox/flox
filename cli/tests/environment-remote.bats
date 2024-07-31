@@ -345,7 +345,20 @@ EOF
   assert_success
   assert_output --partial "✅ Environment successfully updated."
 
+  # Normal activation should still work.
   run "$FLOX_BIN" activate --remote "flox/test" -- true
+  assert_success
+
+  # Everything else that explicitly uses services shouldn't work.
+  run "$FLOX_BIN" activate --start-services --remote "flox/test" -- true
+  assert_failure
+  assert_output --partial "❌ ERROR: services are not currently supported for remote environments"
+
+  run "$FLOX_BIN" services stop hello --remote "flox/test"
+  assert_failure
+  assert_output --partial "❌ ERROR: services are not currently supported for remote environments"
+
+  run "$FLOX_BIN" services logs hello --remote "flox/test"
   assert_failure
   assert_output --partial "❌ ERROR: services are not currently supported for remote environments"
 }

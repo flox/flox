@@ -44,29 +44,6 @@ pub async fn wait_for_shutdown(flag: Arc<AtomicBool>) {
     }
 }
 
-/// Returns the PID that will be waited on
-pub fn target_pid(args: &crate::Cli) -> Pid {
-    #[cfg(target_os = "linux")]
-    let pid = if let Some(_pid) = args.pid {
-        debug!("ignoring user-provided PID, not available on Linux, using parent PID instead");
-        nix::unistd::getppid()
-    } else {
-        debug!("using parent PID for target PID");
-        nix::unistd::getppid()
-    };
-
-    #[cfg(target_os = "macos")]
-    let pid = if let Some(pid) = args.pid {
-        debug!("using user-provided target PID");
-        Pid::from_raw(pid)
-    } else {
-        debug!("using parent PID for target PID");
-        nix::unistd::getppid()
-    };
-
-    pid
-}
-
 /// What should be done in response to receiving a signal
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum Action {

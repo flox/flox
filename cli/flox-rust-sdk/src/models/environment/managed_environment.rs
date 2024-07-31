@@ -458,6 +458,11 @@ impl Environment for ManagedEnvironment {
             .map(|p| p.to_path_buf())
     }
 
+    /// Path to the environment's .flox directory
+    fn dot_flox_path(&self) -> CanonicalPath {
+        self.path.clone()
+    }
+
     /// Path to the environment definition file
     ///
     /// Path will not share a common prefix with the path returned by [`ManagedEnvironment::lockfile_path`]
@@ -1640,6 +1645,7 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
     use std::str::FromStr;
 
     use fslock::LockFile;
@@ -2570,9 +2576,11 @@ mod test {
                     created_at: 0,
                     pointer: EnvironmentPointer::Managed(pointer.clone()),
                 }],
+                activations: HashSet::new(),
             }],
         };
-        let lock = LockFile::open(&env_registry_lock_path(&flox)).unwrap();
+        let reg_path = env_registry_path(&flox);
+        let lock = LockFile::open(&env_registry_lock_path(reg_path)).unwrap();
         write_environment_registry(&reg, &env_registry_path(&flox), lock).unwrap();
         let branch_name = branch_name(&pointer, &path);
         let decoded_path = ManagedEnvironment::decode(&flox, &branch_name).unwrap();

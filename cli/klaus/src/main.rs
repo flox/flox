@@ -5,18 +5,15 @@ use std::sync::Arc;
 use anyhow::{anyhow, Context};
 use clap::Parser;
 use flox_rust_sdk::flox::FLOX_VERSION;
-use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
-use listen::{
-    listen,
-    signal_listener,
-    spawn_signal_listener,
-    spawn_termination_listener,
-    target_pid,
+use flox_rust_sdk::models::env_registry::{
+    deregister_activation,
+    register_activation,
+    ActivationPid,
 };
+use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
+use listen::{listen, signal_listener, spawn_signal_listener, spawn_termination_listener, Action};
 use logger::init_logger;
-use nix::errno::Errno;
-use nix::sys::signal::kill;
-use nix::unistd::{getpgid, getpid, setsid, Pid};
+use nix::unistd::{getpgid, getpid, setsid};
 use once_cell::sync::Lazy;
 use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
@@ -39,18 +36,20 @@ be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
 #[command(about = SHORT_HELP, long_about = LONG_HELP)]
 pub struct Cli {
     /// The PID of the process to monitor.
-    ///
-    /// Note: this has no effect on Linux
     #[arg(short, long, value_name = "PID")]
-    pub pid: Option<i32>,
+    pub pid: i32,
 
     /// The path to the environment registry
     #[arg(short, long = "registry", value_name = "PATH")]
     pub registry_path: PathBuf,
 
+    /// The hash of the environment's .flox path
+    #[arg(short, long = "hash", value_name = "DOT_FLOX_HASH")]
+    pub dot_flox_hash: String,
+
     /// The path to the process-compose socket
     #[arg(short, long = "socket", value_name = "PATH")]
-    pub socket_path: Option<PathBuf>,
+    pub socket_path: PathBuf,
 
     /// Where to store watchdog logs
     #[arg(short, long = "logs", value_name = "PATH")]
@@ -63,6 +62,7 @@ pub struct Cli {
     fields(
         pid = tracing::field::Empty,
         registry = tracing::field::Empty,
+        dot_flox_hash = tracing::field::Empty,
         socket = tracing::field::Empty,
         log = tracing::field::Empty))]
 async fn main() -> Result<(), Error> {
@@ -76,44 +76,50 @@ async fn main() -> Result<(), Error> {
     let span = tracing::Span::current();
     span.record("pid", args.pid);
     span.record("registry", traceable_path(&args.registry_path));
-    span.record("socket", maybe_traceable_path(&args.socket_path));
+    span.record("dot_flox_hash", &args.dot_flox_hash);
+    span.record("socket", traceable_path(&args.socket_path));
     span.record("log", maybe_traceable_path(&args.log_path));
-    if let Some(ref path) = args.socket_path {
-        debug!(socket_path = traceable_path(&path), "was provided a socket");
-    }
 
     debug!("starting");
+    debug!(
+        path = traceable_path(&args.socket_path),
+        exists = &args.socket_path.exists(),
+        "checked socket"
+    );
 
-    // The parent may have already died, in which case we just want to exit
-    if let Some(ref pid) = args.pid {
-        // TODO: re-use the method from ActivationPid after merging both PRs
-        let parent_is_running = match kill(Pid::from_raw(*pid), None) {
-            // These semantics come from kill(2).
-            Ok(_) => true,              // Process received the signal and is running.
-            Err(Errno::EPERM) => true,  // No permission to send a signal but we know it's running.
-            Err(Errno::ESRCH) => false, // No process running to receive the signal.
-            Err(_) => false,            // Unknown error, assume no running process.
-        };
-        if !parent_is_running {
-            return Err(anyhow!("detected that watchdog had unexpected parent"));
-        }
+    // Register activation PID so that we can track last one out
+    let activation = ActivationPid::from(args.pid);
+    if !activation.is_current_process_parent() {
+        return Err(anyhow!("detected that watchdog had unexpected parent"));
     }
+    register_activation(&args.registry_path, &args.dot_flox_hash, activation)?;
 
     // Start the listeners
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let signal_listener = signal_listener()?;
     let signal_task = spawn_signal_listener(signal_listener, shutdown_flag.clone())?;
-    let pid = target_pid(&args);
-    let termination_task = spawn_termination_listener(pid, shutdown_flag.clone());
+    let termination_task = spawn_termination_listener(activation.into(), shutdown_flag.clone());
 
     info!(
         this_pid = nix::unistd::getpid().as_raw(),
-        target_pid = pid.as_raw(),
+        target_pid = args.pid,
         "watchdog is on duty"
     );
 
     // Listen for a notification
-    let _action = listen(signal_task, termination_task, shutdown_flag).await;
+    let action = listen(signal_task, termination_task, shutdown_flag).await;
+
+    match action {
+        Action::Cleanup => {
+            info!(pid = &args.pid, "deregistering activation");
+            deregister_activation(&args.registry_path, &args.dot_flox_hash, activation)
+                .context("failed to deregister activation")?;
+        },
+        Action::Terminate => {
+            // TODO: deregister if !is_running?
+            debug!("received termination action, exiting");
+        },
+    }
 
     // Exit
     info!("exiting");
