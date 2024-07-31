@@ -288,7 +288,7 @@ EOF
 
   # pgrep is not in procps for some reason
   pgrep_sleep() {
-    ps -o comm -o pid | grep sleep | sed "s/sleep //"
+    ps -o comm -o pid | grep sleep | sed "s/sleep\s*//"
   }
   pgrep_sleep > sleeping_before || echo > sleeping_before
   run "$FLOX_BIN" activate -s -- true 3>&-
