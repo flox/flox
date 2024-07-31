@@ -325,6 +325,41 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=remote,remote:auth-required,remote:auth-required:install
+@test "'install --remote' fails if not authenticated" {
+  unset FLOX_FLOXHUB_TOKEN # logout, effectively
+  run "$FLOX_BIN" install hello --remote "$OWNER/test"
+  assert_failure
+  assert_output --partial "You are not logged in to FloxHub."
+}
+
+
+# bats test_tags=remote,remote:auth-required,remote:auth-required:uninstall
+@test "'uninstall --remote' fails if not authenticated" {
+  unset FLOX_FLOXHUB_TOKEN # logout, effectively
+  run "$FLOX_BIN" uninstall hello --remote "$OWNER/test"
+  assert_failure
+  assert_output --partial "You are not logged in to FloxHub."
+}
+
+# bats test_tags=remote,remote:auth-required,remote:auth-required:edit
+@test "'edit --remote' fails if not authenticated" {
+  unset FLOX_FLOXHUB_TOKEN # logout, effectively
+  run "$FLOX_BIN" edit --remote "$OWNER/test"
+  assert_failure
+  assert_output --partial "You are not logged in to FloxHub."
+}
+
+# bats test_tags=remote,remote:auth-required,remote:auth-required:upgrade
+@test "'upgrade --remote' fails if not authenticated" {
+  unset FLOX_FLOXHUB_TOKEN # logout, effectively
+  run "$FLOX_BIN" upgrade hello --remote "$OWNER/test"
+  assert_failure
+  assert_output --partial "You are not logged in to FloxHub."
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=remote,remote:services
 @test "services: not currently supported for remote environments" {
   export FLOX_FEATURES_SERVICES=true
