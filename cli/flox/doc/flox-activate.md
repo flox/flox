@@ -93,6 +93,11 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 
 ## Variables set by `flox activate`
 
+`$FLOX_ENV`
+:   Contains the path to the built environment. This directory contains a merged
+    set of `bin`, `lib`, etc directories for all the packages in the
+    environment.
+
 `$FLOX_PROMPT_ENVIRONMENTS`
 :   Contains a space-delimited list of the active environments,
     e.g. `owner1/foo owner2/bar local_env`.
