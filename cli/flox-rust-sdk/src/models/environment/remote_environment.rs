@@ -291,6 +291,11 @@ impl Environment for RemoteEnvironment {
         self.inner.parent_path()
     }
 
+    /// Path to the environment's .flox directory
+    fn dot_flox_path(&self) -> Result<PathBuf, EnvironmentError> {
+        self.inner.dot_flox_path()
+    }
+
     /// Path to the environment definition file
     fn manifest_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         self.inner.manifest_path(flox)

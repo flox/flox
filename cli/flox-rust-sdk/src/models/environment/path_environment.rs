@@ -344,6 +344,12 @@ impl Environment for PathEnvironment {
         }
     }
 
+    /// Path to the environment's .flox directory
+    fn dot_flox_path(&self) -> Result<PathBuf, EnvironmentError> {
+        let parent = self.parent_path()?;
+        Ok(parent.join(DOT_FLOX))
+    }
+
     /// Path to the environment definition file
     fn manifest_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         Ok(self.path.join(ENV_DIR_NAME).join(MANIFEST_FILENAME))

@@ -194,6 +194,9 @@ pub trait Environment: Send {
     /// TODO: figure out what to store for remote environments
     fn parent_path(&self) -> Result<PathBuf, EnvironmentError>;
 
+    /// Path to the environment's .flox directory
+    fn dot_flox_path(&self) -> Result<PathBuf, EnvironmentError>;
+
     /// Path to the environment definition file
     ///
     /// Implementations may use process context from [Flox]
