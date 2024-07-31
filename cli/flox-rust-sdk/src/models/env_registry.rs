@@ -204,13 +204,13 @@ impl RegistryEntry {
 
     /// Register an activation for an existing enviroment.
     fn register_activation(&mut self, pid: ActivationPid) {
-        tracing::debug!("registering activation: {}", &pid);
+        tracing::debug!(%pid, "registering activation");
         self.activations.insert(pid);
     }
 
     /// Deregister an activation for an existing enviroment.
     fn deregister_activation(&mut self, pid: ActivationPid) {
-        tracing::debug!("deregistering activation: {}", &pid);
+        tracing::debug!(%pid, "deregistering activation");
         self.activations.remove(&pid);
     }
 
@@ -219,7 +219,7 @@ impl RegistryEntry {
         self.activations.retain(|pid| {
             let running = pid.is_running();
             if !running {
-                tracing::debug!("removing stale activation: {}", pid);
+                tracing::debug!(%pid, "removing stale activation");
             }
             running
         })
