@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -10,6 +11,7 @@ use flox_rust_sdk::models::env_registry::{
     register_activation,
     ActivationPid,
 };
+use flox_rust_sdk::providers::services::PROCESS_COMPOSE_BIN;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
 use listen::{listen, signal_listener, spawn_signal_listener, spawn_termination_listener, Action};
 use logger::init_logger;
@@ -111,9 +113,39 @@ async fn main() -> Result<(), Error> {
 
     match action {
         Action::Cleanup => {
-            info!(pid = &args.pid, "deregistering activation");
-            deregister_activation(&args.registry_path, &args.dot_flox_hash, activation)
-                .context("failed to deregister activation")?;
+            let remaining_activations =
+                deregister_activation(&args.registry_path, &args.dot_flox_hash, activation)
+                    .context("failed to deregister activation")?;
+            debug!(n = remaining_activations, "remaining activations");
+            if remaining_activations == 0 {
+                if args.socket_path.exists() {
+                    let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
+                    cmd.arg("down");
+                    cmd.arg("--unix-socket");
+                    cmd.arg(&args.socket_path);
+                    cmd.env("NO_COLOR", "1");
+                    match cmd.output() {
+                        Ok(output) => {
+                            if !output.status.success() {
+                                error!(
+                                    code = output.status.code(),
+                                    "failed to run process-compose shutdown command"
+                                );
+                            }
+                        },
+                        Err(err) => {
+                            error!(%err, "failed to run process-compose shutdown command");
+                        },
+                    }
+                } else {
+                    debug!(reason = "no socket", "did not shut down process-compose");
+                }
+            } else {
+                debug!(
+                    reason = "remaining activations",
+                    "did not shut down process-compose"
+                );
+            }
         },
         Action::Terminate => {
             // TODO: deregister if !is_running?

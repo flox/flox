@@ -4,7 +4,7 @@ use std::env;
 use std::io::stdout;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
@@ -398,6 +398,10 @@ impl Activate {
         let reg_path = env_registry_path(flox);
         cmd.arg("--registry");
         cmd.arg(reg_path);
+
+        // Redirect the output streams so watchdog output doesn't appear in the shell
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::null());
 
         // Launch the watchdog
         let _child = cmd.spawn().context("failed to spawn watchdog process")?;
