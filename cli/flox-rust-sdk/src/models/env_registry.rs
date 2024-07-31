@@ -649,11 +649,17 @@ mod test {
         child.wait().expect("failed to wait");
     }
 
+    impl From<&Child> for ActivationPid {
+        fn from(child: &Child) -> Self {
+            Self(child.id() as i32)
+        }
+    }
+
     #[test]
     fn test_pid_is_running_lifecycle() {
         let child = start_process();
 
-        let pid = ActivationPid(child.id() as i32);
+        let pid = ActivationPid::from(&child);
         assert!(pid.is_running());
 
         stop_process(child);
@@ -672,8 +678,8 @@ mod test {
         let child2 = start_process();
         let activations_before = HashSet::from([
             ActivationPid(1),
-            ActivationPid(child1.id() as i32),
-            ActivationPid(child2.id() as i32),
+            ActivationPid::from(&child1),
+            ActivationPid::from(&child2),
         ]);
         let mut entry = RegistryEntry {
             path: PathBuf::from("foo"),
