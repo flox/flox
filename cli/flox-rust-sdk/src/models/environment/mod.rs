@@ -715,7 +715,7 @@ pub(super) fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
 }
 
 /// Returns the truncated hash of a [Path]
-pub fn path_hash(p: &impl AsRef<Path>) -> String {
+pub fn path_hash(p: impl AsRef<Path>) -> String {
     let mut chars = blake3::hash(p.as_ref().as_os_str().as_bytes()).to_hex();
     chars.truncate(N_HASH_CHARS);
     chars.to_string()

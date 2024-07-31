@@ -349,7 +349,7 @@ pub fn ensure_registered(
     let reg_path = env_registry_path(flox);
     let lock = acquire_env_registry_lock(&reg_path)?;
     let mut reg = read_environment_registry(&reg_path)?.unwrap_or_default();
-    let dot_flox_hash = path_hash(&dot_flox_path);
+    let dot_flox_hash = path_hash(dot_flox_path);
     // Skip writing the registry if the environment was already registered
     if reg
         .register_env(dot_flox_path, &dot_flox_hash, env_pointer)?
@@ -374,7 +374,7 @@ pub fn deregister(
     let reg_path = env_registry_path(flox);
     let lock = acquire_env_registry_lock(&reg_path)?;
     let mut reg = read_environment_registry(&reg_path)?.unwrap_or_default();
-    let dot_flox_hash = path_hash(&dot_flox_path);
+    let dot_flox_hash = path_hash(dot_flox_path);
     reg.deregister_env(&dot_flox_hash, env_pointer)?;
     write_environment_registry(&reg, &reg_path, lock)?;
     Ok(())
@@ -595,7 +595,7 @@ mod test {
 
         #[test]
         fn entries_register_activation(mut entry: RegistryEntry, activation: ActivationPid) {
-            entry.register_activation(activation.clone());
+            entry.register_activation(activation);
             prop_assert!(entry.activations.contains(&activation));
         }
 
@@ -604,8 +604,8 @@ mod test {
             prop_assume!(!entry.activations.is_empty());
             let activations = entry.activations.clone();
             let activation = activations.iter().next().unwrap();
-            entry.deregister_activation(activation.clone());
-            prop_assert!(!entry.activations.contains(&activation));
+            entry.deregister_activation(*activation);
+            prop_assert!(!entry.activations.contains(activation));
         }
     }
 
