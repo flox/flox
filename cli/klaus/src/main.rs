@@ -5,9 +5,19 @@ use std::sync::Arc;
 use anyhow::{anyhow, Context};
 use clap::Parser;
 use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_rust_sdk::models::env_registry::{
+    deregister_activation,
+    register_activation,
+    ActivationPid,
+};
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
 use listen::{
-    listen, signal_listener, spawn_signal_listener, spawn_termination_listener, target_pid,
+    listen,
+    signal_listener,
+    spawn_signal_listener,
+    spawn_termination_listener,
+    target_pid,
+    Action,
 };
 use logger::init_logger;
 use nix::errno::Errno;
@@ -45,7 +55,7 @@ pub struct Cli {
     pub registry_path: PathBuf,
 
     /// The hash of the environment's .flox path
-    #[arg(short, long = "dot-flox-hash", value_name = "DOT_FLOX_HASH")]
+    #[arg(short, long = "hash", value_name = "DOT_FLOX_HASH")]
     pub dot_flox_hash: String,
 
     /// The path to the process-compose socket
@@ -103,6 +113,10 @@ async fn main() -> Result<(), Error> {
         }
     }
 
+    // Register activation PID so that we can track last one out
+    let activation = ActivationPid::from_current_process();
+    register_activation(&args.registry_path, &args.dot_flox_hash, activation)?;
+
     // Start the listeners
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let signal_listener = signal_listener()?;
@@ -117,7 +131,19 @@ async fn main() -> Result<(), Error> {
     );
 
     // Listen for a notification
-    let _action = listen(signal_task, termination_task, shutdown_flag).await;
+    let action = listen(signal_task, termination_task, shutdown_flag).await;
+
+    match action {
+        Action::Cleanup => {
+            info!(pid = &args.pid, "deregistering activation");
+            deregister_activation(&args.registry_path, &args.dot_flox_hash, activation)
+                .context("failed to deregister activation")?;
+        },
+        Action::Terminate => {
+            // TODO: deregister if !is_running?
+            debug!("received termination action, exiting");
+        },
+    }
 
     // Exit
     info!("exiting");

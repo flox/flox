@@ -364,8 +364,14 @@ EOF
 
 @test "watchdog: exits on termination signal (SIGUSR1)" {
   log_file=klaus.log
-  # This 'foo' is because we don't actually do anything with the registry yet
-  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" -r foo -l "$log_file" &
+  registry_file=registry.json
+  dummy_registry path/to/env abcde123 > "$registry_file"
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" \
+    --logs "$log_file" \
+    --pid $$ \
+    --registry "$registry_file" \
+    --hash abcde123 \
+    --socket does_not_exist &
   klaus_pid="$!"
 
   # Wait for start.
@@ -393,8 +399,14 @@ EOF
 
 @test "watchdog: exits on shutdown signal (SIGINT)" {
   log_file=klaus.log
-  # This 'foo' is because we don't actually do anything with the registry yet
-  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" -r foo -l "$log_file" &
+  registry_file=registry.json
+  dummy_registry path/to/env abcde123 > "$registry_file"
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" \
+    --logs "$log_file" \
+    --pid $$ \
+    --registry "$registry_file" \
+    --hash abcde123 \
+    --socket does_not_exist &
   klaus_pid="$!"
 
   # Wait for start.
@@ -420,7 +432,7 @@ EOF
   "
 }
 
-@test "watchdog: exits when parent doesn't match provided PID" {
+@test "watchdog: exits when provided PID isn't running" {
   log_file=klaus.log
 
   # We need a test PID, but PIDs can be reused. There's also no delay on reusing
@@ -432,8 +444,14 @@ EOF
     skip "test PID is in use"
   fi
 
-  # This 'foo' is because we don't actually do anything with the registry yet
-  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" -r foo -l "$log_file" -p "$test_pid" &
+  registry_file=registry.json
+  dummy_registry path/to/env abcde123 > "$registry_file"
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" \
+    --logs "$log_file" \
+    --pid "$test_pid" \
+    --registry "$registry_file" \
+    --hash abcde123 \
+    --socket does_not_exist &
   klaus_pid="$!"
 
   # Wait for start.

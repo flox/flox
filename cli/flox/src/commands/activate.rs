@@ -10,7 +10,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
 use crossterm::tty::IsTty;
 use flox_rust_sdk::flox::{Flox, DEFAULT_NAME};
-use flox_rust_sdk::models::env_registry::{env_registry_path, register_activation, ActivationPid};
+use flox_rust_sdk::models::env_registry::env_registry_path;
 use flox_rust_sdk::models::environment::{
     path_hash,
     CoreEnvironmentError,
@@ -112,6 +112,7 @@ impl Activate {
             UninitializedEnvironment::from_concrete_environment(&concrete_environment)?;
 
         let environment = concrete_environment.dyn_environment_ref_mut();
+        let dot_flox_path = environment.dot_flox_path()?;
 
         let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         // Don't spin in bashrcs and similar contexts
@@ -293,21 +294,12 @@ impl Activate {
         exports.extend(default_nix_env_vars());
 
         // Launch the watchdog process
-        Activate::launch_watchdog(&flox, environment.cache_path()?.to_path_buf(), socket_path)?;
-
-        let dot_flox_path = match concrete_environment {
-            ConcreteEnvironment::Path(env) => Some(env.path),
-            ConcreteEnvironment::Managed(env) => Some(env.path),
-            ConcreteEnvironment::Remote(_) => None,
-        };
-        if let Some(dot_flox_path) = dot_flox_path {
-            // TODO: Move to klaus.
-            register_activation(
-                env_registry_path(&flox),
-                &path_hash(&dot_flox_path),
-                ActivationPid::from_current_process(),
-            )?;
-        }
+        Activate::launch_watchdog(
+            &flox,
+            environment.cache_path()?.to_path_buf(),
+            &path_hash(dot_flox_path),
+            socket_path,
+        )?;
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
@@ -336,6 +328,7 @@ impl Activate {
     fn launch_watchdog(
         flox: &Flox,
         cache_path: PathBuf,
+        path_hash: &str,
         socket_path: impl AsRef<Path>,
     ) -> Result<()> {
         let mut cmd = Command::new(&*KLAUS_BIN);
@@ -359,6 +352,10 @@ impl Activate {
         // Set the socket path
         cmd.arg("--socket");
         cmd.arg(socket_path.as_ref());
+
+        // Set the path hash so the watchdog doesn't need to compute it
+        cmd.arg("--hash");
+        cmd.arg(path_hash);
 
         // Set the environment registry path
         let reg_path = env_registry_path(flox);
