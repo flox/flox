@@ -11,18 +11,9 @@ use flox_rust_sdk::models::env_registry::{
     ActivationPid,
 };
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
-use listen::{
-    listen,
-    signal_listener,
-    spawn_signal_listener,
-    spawn_termination_listener,
-    target_pid,
-    Action,
-};
+use listen::{listen, signal_listener, spawn_signal_listener, spawn_termination_listener, Action};
 use logger::init_logger;
-use nix::errno::Errno;
-use nix::sys::signal::kill;
-use nix::unistd::{getpgid, getpid, setsid, Pid};
+use nix::unistd::{getpgid, getpid, setsid};
 use once_cell::sync::Lazy;
 use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
@@ -45,10 +36,8 @@ be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
 #[command(about = SHORT_HELP, long_about = LONG_HELP)]
 pub struct Cli {
     /// The PID of the process to monitor.
-    ///
-    /// Note: this has no effect on Linux
     #[arg(short, long, value_name = "PID")]
-    pub pid: Option<i32>,
+    pub pid: i32,
 
     /// The path to the environment registry
     #[arg(short, long = "registry", value_name = "PATH")]
@@ -98,35 +87,22 @@ async fn main() -> Result<(), Error> {
         "checked socket"
     );
 
-    // The parent may have already died, in which case we just want to exit
-    if let Some(ref pid) = args.pid {
-        // TODO: re-use the method from ActivationPid after merging both PRs
-        let parent_is_running = match kill(Pid::from_raw(*pid), None) {
-            // These semantics come from kill(2).
-            Ok(_) => true,              // Process received the signal and is running.
-            Err(Errno::EPERM) => true,  // No permission to send a signal but we know it's running.
-            Err(Errno::ESRCH) => false, // No process running to receive the signal.
-            Err(_) => false,            // Unknown error, assume no running process.
-        };
-        if !parent_is_running {
-            return Err(anyhow!("detected that watchdog had unexpected parent"));
-        }
-    }
-
     // Register activation PID so that we can track last one out
-    let activation = ActivationPid::from_current_process();
+    let activation = ActivationPid::from(args.pid);
+    if !activation.is_current_process_parent() {
+        return Err(anyhow!("detected that watchdog had unexpected parent"));
+    }
     register_activation(&args.registry_path, &args.dot_flox_hash, activation)?;
 
     // Start the listeners
     let shutdown_flag = Arc::new(AtomicBool::new(false));
     let signal_listener = signal_listener()?;
     let signal_task = spawn_signal_listener(signal_listener, shutdown_flag.clone())?;
-    let pid = target_pid(&args);
-    let termination_task = spawn_termination_listener(pid, shutdown_flag.clone());
+    let termination_task = spawn_termination_listener(activation.into(), shutdown_flag.clone());
 
     info!(
         this_pid = nix::unistd::getpid().as_raw(),
-        target_pid = pid.as_raw(),
+        target_pid = args.pid,
         "watchdog is on duty"
     );
 

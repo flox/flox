@@ -249,10 +249,16 @@ impl ActivationPid {
         ActivationPid(nix::unistd::getpid().as_raw())
     }
 
+    /// Check whether an activation is the parent of the current process.
+    pub fn is_current_process_parent(&self) -> bool {
+        let parent = nix::unistd::getppid();
+        NixPid::from(*self) == parent
+    }
+
     /// Check whether an activation is still running.
     fn is_running(&self) -> bool {
         // TODO: Compare name or check for watchdog child to see if it's a real activation?
-        let pid = NixPid::from_raw(self.0);
+        let pid = NixPid::from(*self);
         match kill(pid, None) {
             // These semantics come from kill(2).
             Ok(_) => true,              // Process received the signal and is running.
@@ -260,6 +266,24 @@ impl ActivationPid {
             Err(Errno::ESRCH) => false, // No process running to receive the signal.
             Err(_) => false,            // Unknown error, assume no running process.
         }
+    }
+}
+
+impl From<i32> for ActivationPid {
+    fn from(value: i32) -> Self {
+        Self(value)
+    }
+}
+
+impl From<ActivationPid> for NixPid {
+    fn from(pid: ActivationPid) -> Self {
+        NixPid::from_raw(pid.0)
+    }
+}
+
+impl From<NixPid> for ActivationPid {
+    fn from(pid: NixPid) -> Self {
+        ActivationPid(pid.as_raw())
     }
 }
 
