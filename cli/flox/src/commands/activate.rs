@@ -274,7 +274,9 @@ impl Activate {
             }
 
             if flox.features.services && !manifest.services.is_empty() {
-                supported_environment(&flox, self.environment)?; // Error for remote envs.
+                if self.start_services {
+                    supported_environment(&flox, self.environment)?; // Error for remote envs.
+                }
                 tracing::debug!(start = self.start_services, "setting service variables");
                 if socket_path.exists() {
                     debug!("detected existing services socket");
