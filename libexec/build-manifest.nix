@@ -28,9 +28,17 @@ let
     then null
     else builtins.fetchGit srcdir;
   buildScript-contents = /. + buildScript;
+  buildCache-init = pkgs.runCommand "buildCache-init" {
+    nativeBuildInputs = with pkgs; [gnutar];
+  } ( ''
+    cd $(mktemp -d)
+    echo ${builtins.toString builtins.currentTime} > .buildCache.init
+    find . -type f | tar -c -z --no-recursion -f $out -T -
+  '' );
   buildCache-tgz =
-    if (buildCache != null && buildCache != "") then (/. + buildCache)
-    else null;
+    if (buildCache == null) then null else (
+      if (buildCache == "") then buildCache-init else (/. + buildCache)
+    );
 
 in
   pkgs.runCommand name {
