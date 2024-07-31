@@ -483,8 +483,8 @@ mod tests {
         let tmp2 = tempdir().expect("should create tempdir");
         let tmp3 = tempdir().expect("should create tempdir");
 
-        let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path().to_owned()))
         let path_var = std::env::join_paths([&tmp1, &tmp2, &tmp3].map(|d| d.path()))
+            .expect("should path-join tmpdirs")
             .into_string()
             .expect("should convert paths from OsString to String");
 
@@ -668,10 +668,7 @@ mod tests {
         );
     }
 
-    /// VISUAL whitespace only skips EDITOR, defaulting to PATH
-    /// This is a consequence of using is_empty to determine fallback logic
-    /// This test makes this behavior explicit, but whitespace only filenames
-    /// are already a strange variable value.
+    /// VISUAL whitespace only defaults to EDITOR before PATH
     #[test]
     fn test_determine_editor_from_vars_visual_whitespace() {
         let visual_var = "       ".to_owned();
@@ -694,7 +691,10 @@ mod tests {
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
                 .expect("should determine default editor"),
-            (nano, Vec::<String>::new())
+            (
+                PathBuf::from("code"),
+                vec!["-w"].into_iter().map(String::from).collect()
+            )
         );
 
         assert!(tmp1.path().is_dir());
@@ -725,7 +725,7 @@ mod tests {
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
                 .expect("should determine default editor"),
-            (nano, Vec::<String>::new())
+            (nano, Vec::new())
         );
 
         assert!(tmp1.path().is_dir());
