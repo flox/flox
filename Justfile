@@ -82,7 +82,7 @@ build: build-cli
         --klaus "{{KLAUS_BIN}}" \
         --input-data "{{INPUT_DATA}}" \
         --generated-data "{{GENERATED_DATA}}" \
-        -- -x -f "ook.on-activate' modifies environment variables in nested activation \(zsh|unsets environment variables in nested activation \(bash\)"
+        -- -x -f "ook.on-activate' modifies environment variables in nested activation \(zsh"
 
 # Run the CLI unit tests
 @unit-tests regex="": build
