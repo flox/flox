@@ -375,7 +375,10 @@ EOF
 
   # Ensure that the watchdog has exited now
   log_file="$PWD/.flox/cache/$(ls .flox/cache)"
-  run bash -c "tail -n 1 $log_file | grep exiting"
+  if ! tail -n 1 "$log_file" | grep exiting; then
+    cat "$log_file" >&3
+    exit 1
+  fi
   assert_success
 }
 
