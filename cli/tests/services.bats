@@ -365,7 +365,8 @@ EOF
     log_file="$PWD/.flox/cache/$(ls .flox/cache)"
 
     # Ensure that the watchdog is still running
-    if tail -n 1 "$log_file" | grep "exiting"; then
+    if tail -n 1 "$log_file" | grep exiting; then
+      cat "$log_file" >&3
       exit 1
     fi
 EOF
@@ -374,9 +375,8 @@ EOF
 
   # Ensure that the watchdog has exited now
   log_file="$PWD/.flox/cache/$(ls .flox/cache)"
-  if ! tail -n 1 "$log_file" | grep "exiting"; then
-    exit 1
-  fi
+  run bash -c "tail -n 1 $log_file | grep exiting"
+  assert_success
 }
 
 @test "watchdog: exits on termination signal (SIGUSR1)" {
