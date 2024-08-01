@@ -2,11 +2,7 @@
   flox-pkgdb,
   gitMinimal,
   inputs,
-  pkg-config,
   lib,
-  hostPlatform,
-  darwin,
-  openssl,
   pkgsFor,
   process-compose,
   rust-toolchain,
@@ -58,16 +54,11 @@ in
 
         # runtime dependencies
         buildInputs =
-          [openssl.dev]
-          ++ lib.optional hostPlatform.isDarwin [
-            darwin.libiconv
-            darwin.apple_sdk.frameworks.SystemConfiguration
-          ];
+          rust-external-deps.buildInputs
+          ++ [];
 
         # build dependencies
-        nativeBuildInputs = [
-          pkg-config
-        ];
+        nativeBuildInputs = rust-external-deps.nativeBuildInputs ++ [];
 
         # Tests are disabled inside of the build because the sandbox prevents
         # internet access and there are tests that require internet access to

@@ -1,11 +1,6 @@
 {
-  darwin,
-  hostPlatform,
   inputs,
-  lib,
-  nix,
-  openssl,
-  pkg-config,
+  gnused,
   pkgsFor,
   rust-toolchain,
   rustfmt ? rust-toolchain.rustfmt,
@@ -37,16 +32,13 @@ in
       '';
 
       # runtime dependencies
-      buildInputs = [openssl.dev];
+      buildInputs = rust-internal-deps.buildInputs ++ [];
 
       # build dependencies
       nativeBuildInputs =
-        [
-          pkg-config
-        ]
-        ++ lib.optional hostPlatform.isDarwin [
-          darwin.libiconv
-          darwin.apple_sdk.frameworks.SystemConfiguration
+        rust-internal-deps.nativeBuildInputs
+        ++ [
+          gnused
         ];
 
       # https://github.com/ipetkov/crane/issues/385
@@ -70,9 +62,6 @@ in
       passthru = {
         inherit
           envs
-          rust-toolchain
-          pkgsFor
-          nix
           ;
 
         ciPackages = [];

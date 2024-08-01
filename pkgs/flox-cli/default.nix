@@ -12,8 +12,6 @@
   installShellFiles,
   lib,
   nix,
-  openssl,
-  pkg-config,
   pkgsFor,
   process-compose,
   rust-toolchain,
@@ -93,18 +91,14 @@ in
       cargoArtifacts = rust-internal-deps;
 
       # runtime dependencies
-      buildInputs = [openssl.dev];
+      buildInputs = rust-internal-deps.buildInputs ++ [];
 
       # build dependencies
       nativeBuildInputs =
-        [
-          pkg-config
+        rust-internal-deps.nativeBuildInputs
+        ++ [
           installShellFiles
           gnused
-        ]
-        ++ lib.optional hostPlatform.isDarwin [
-          darwin.libiconv
-          darwin.apple_sdk.frameworks.SystemConfiguration
         ];
 
       # https://github.com/ipetkov/crane/issues/385
@@ -143,9 +137,6 @@ in
       passthru = {
         inherit
           envs
-          rust-toolchain
-          pkgsFor
-          nix
           flox-pkgdb
           flox-klaus
           ;
