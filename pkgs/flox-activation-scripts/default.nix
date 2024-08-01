@@ -3,6 +3,7 @@
   coreutils,
   findutils,
   gnused,
+  util-linux,
   ld-floxlib,
   runCommand,
   shellcheck,
@@ -22,6 +23,7 @@ in
     substituteInPlace $out/activate \
       --replace "@coreutils@" "${coreutils}" \
       --replace "@gnused@" "${gnused}" \
+      --replace "@setsid@" "${util-linux}/bin/setsid" \
       --replace "@out@" "$out" \
       --replace "@process-compose@" "${process-compose}/bin/process-compose" \
       --replace "/usr/bin/env bash" "${bash}/bin/bash"
