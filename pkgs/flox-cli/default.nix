@@ -129,6 +129,7 @@ in
           --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
           --zsh <( "$out/bin/flox" --bpaf-complete-style-zsh; );
 
+        rm -f $out/bin/crane-*
         for target in "$(basename ${rust-toolchain.rust.outPath} | cut -f1 -d- )" ; do
           sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/flox
         done
