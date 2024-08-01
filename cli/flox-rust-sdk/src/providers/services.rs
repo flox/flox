@@ -258,6 +258,11 @@ impl ProcessStates {
             .map(|state| state.name.clone())
             .collect()
     }
+
+    /// Mutate self so that it only contains the processes provided in `names`.
+    pub fn filter_names(&mut self, names: Vec<String>) {
+        self.0.retain(|proc| names.contains(&proc.name))
+    }
 }
 
 impl Display for ProcessStates {
@@ -842,6 +847,48 @@ mod tests {
             proc_running         Running        1000
             proc_stopped         Completed     10000
             zzz_last             Completed    100000
+        "});
+    }
+
+    #[test]
+    fn test_processstates_filter_names() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: [
+                ("aaa".to_string(), ProcessConfig {
+                    command: "true".to_string(),
+                    vars: None,
+                }),
+                ("bbb".to_string(), ProcessConfig {
+                    command: "true".to_string(),
+                    vars: None,
+                }),
+                ("ccc".to_string(), ProcessConfig {
+                    command: "true".to_string(),
+                    vars: None,
+                }),
+                ("ddd".to_string(), ProcessConfig {
+                    command: "true".to_string(),
+                    vars: None,
+                }),
+            ]
+            .into(),
+        });
+        let mut states = ProcessStates::read(instance.socket()).unwrap();
+        states.filter_names(vec![
+            "aaa".to_string(),
+            "ccc".to_string(),
+            "unknown".to_string(),
+        ]);
+
+        // Use a predictable PID.
+        for proc in &mut states.0 {
+            proc.pid = 12345;
+        }
+
+        assert_eq!(format!("{states}"), indoc! {"
+            NAME                 STATUS          PID
+            aaa                  Completed     12345
+            ccc                  Completed     12345
         "});
     }
 }
