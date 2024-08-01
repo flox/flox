@@ -19,7 +19,7 @@ use regex::Regex;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::NamedTempFile;
-use tracing::{debug, trace};
+use tracing::debug;
 
 use crate::flox::Flox;
 use crate::models::lockfile::LockedManifestCatalog;
@@ -505,34 +505,31 @@ impl ProcessComposeLogReader {
                 };
             }
 
-            // Here, either sending to the receiver failed i.e. the receiver was dropped,
-            // or the child process died.
-            // If the child process ended, that's unexpected
-            // and we'll try to communicate that through the channel.
+            // Here, either the receiver end was dropped,
+            // or process-compose has closed stdout.
+            // kill the child because in both cases we want it to stop.
+            child.kill().map_err(ServiceError::ProcessComposeCmd)?;
+
+            // Return an error when the the thread handle is joined.
+            // Note that if the receiver was dropped, this error won't ever be handled.
+            // But we still want to wait so we don't leave a zombie.
             // The most likely error is that the socket doesn't exist,
             // trying to read logs for a non existent process
             // unfortunately just blocks indefinitely without any error message.
+            let exit_status = child.wait().map_err(ServiceError::ProcessComposeCmd)?;
+            if !exit_status.success() {
+                let mut output = String::new();
+                child
+                    .stderr
+                    .take()
+                    .unwrap()
+                    .read_to_string(&mut output)
+                    .map_err(ServiceError::ProcessComposeCmd)?;
 
-            if let Some(exit_status) = child.try_wait().map_err(ServiceError::ProcessComposeCmd)? {
-                debug!(?exit_status, "child process exited");
+                debug!(output, "child process quit with error");
 
-                if !exit_status.success() {
-                    let mut output = String::new();
-                    child
-                        .stderr
-                        .take()
-                        .unwrap()
-                        .read_to_string(&mut output)
-                        .map_err(ServiceError::ProcessComposeCmd)?;
-
-                    trace!(output, "child process quit with error");
-
-                    let err = ServiceError::from_process_compose_log(output);
-                    Err(err)?;
-                }
-            } else {
-                // The child process is still running, so we can kill it.
-                child.kill().map_err(ServiceError::ProcessComposeCmd)?;
+                let err = ServiceError::from_process_compose_log(output);
+                Err(err)?;
             }
             Ok(())
         });
@@ -624,7 +621,7 @@ mod tests {
 
             let max_tries = 5;
             for backoff in 1..max_tries {
-                println!("waiting for socket to exist");
+                debug!("waiting for socket to exist");
                 thread::sleep(Duration::from_millis(100 * backoff));
 
                 // For now just check if the socket exists.
