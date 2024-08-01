@@ -171,7 +171,6 @@ in
           if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             PATH="$( git rev-parse --show-toplevel; )/cli/target/debug":$PATH;
             REPO_ROOT="$( git rev-parse --show-toplevel; )";
-            KLAUS_BIN="$REPO_ROOT/cli/target/debug/klaus";
           fi
 
         '';
