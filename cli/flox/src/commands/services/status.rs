@@ -30,10 +30,11 @@ impl Status {
         let env = supported_environment(&flox, self.environment)?;
         let socket = env.services_socket_path(&flox)?;
 
-        let mut states = ProcessStates::read(socket)?;
-        if !self.names.is_empty() {
-            states.filter_names(self.names);
-        }
+        let states = if self.names.is_empty() {
+            ProcessStates::read(socket)?
+        } else {
+            ProcessStates::read_names(socket, self.names)?
+        };
 
         if self.json {
             println!("{:#}", states);

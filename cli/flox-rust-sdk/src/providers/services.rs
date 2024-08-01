@@ -256,6 +256,16 @@ impl ProcessStates {
         Ok(processes)
     }
 
+    /// Query the status of all processes and filter for the named processes.
+    pub fn read_names(
+        socket: impl AsRef<Path>,
+        names: Vec<String>,
+    ) -> Result<ProcessStates, ServiceError> {
+        let mut processes = ProcessStates::read(socket)?;
+        processes.0.retain(|state| names.contains(&state.name));
+        Ok(processes)
+    }
+
     /// Get the names of processes that are currently running.
     pub fn running_process_names(&self) -> Vec<String> {
         self.0
@@ -263,11 +273,6 @@ impl ProcessStates {
             .filter(|state| state.is_running)
             .map(|state| state.name.clone())
             .collect()
-    }
-
-    /// Mutate self so that it only contains the processes provided in `names`.
-    pub fn filter_names(&mut self, names: Vec<String>) {
-        self.0.retain(|proc| names.contains(&proc.name))
     }
 
     fn fmt_table(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -883,7 +888,7 @@ mod tests {
     }
 
     #[test]
-    fn test_processstates_filter_names() {
+    fn test_processstates_read_names() {
         let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
             processes: [
                 ("aaa".to_string(), ProcessConfig {
@@ -905,12 +910,12 @@ mod tests {
             ]
             .into(),
         });
-        let mut states = ProcessStates::read(instance.socket()).unwrap();
-        states.filter_names(vec![
+        let mut states = ProcessStates::read_names(instance.socket(), vec![
             "aaa".to_string(),
             "ccc".to_string(),
             "unknown".to_string(),
-        ]);
+        ])
+        .unwrap();
 
         // Use a predictable PID.
         for proc in &mut states.0 {
