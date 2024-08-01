@@ -361,4 +361,8 @@ EOF
   run "$FLOX_BIN" services logs hello --remote "flox/test"
   assert_failure
   assert_output --partial "❌ ERROR: services are not currently supported for remote environments"
+
+  run "$FLOX_BIN" services status hello --remote "flox/test"
+  assert_failure
+  assert_output --partial "❌ ERROR: services are not currently supported for remote environments"
 }
