@@ -84,16 +84,17 @@ impl Edit {
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("edit");
 
+        // Ensure the user is logged in for the following remote operations
+        if let EnvironmentSelect::Remote(_) = self.environment {
+            ensure_floxhub_token(&mut flox).await?;
+        };
+
         let mut detected_environment =
             match self.environment.detect_concrete_environment(&flox, "Edit") {
                 Ok(concrete_env) => concrete_env,
                 Err(EnvironmentSelectError::Anyhow(e)) => Err(e)?,
                 Err(e) => Err(e)?,
             };
-        // Ensure the user is logged in for the following remote operations
-        if let ConcreteEnvironment::Remote(_) = detected_environment {
-            ensure_floxhub_token(&mut flox).await?;
-        };
 
         match self.action {
             EditAction::EditManifest { file } => {
