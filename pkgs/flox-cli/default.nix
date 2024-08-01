@@ -84,11 +84,21 @@ in
       pname = "flox";
       version = envs.FLOX_VERSION;
       src = flox-src;
-      cargoExtraArgs = "--locked -p flox";
+
+      # Set up incremental compilation
+      #
+      # Cargo artifacts are built for the union of features used transitively
+      # by `flox` and `klaus`.
+      # Compiling either separately would result in a different set of features
+      # and thus cache misses.
+      cargoArtifacts = rust-internal-deps;
+      cargoExtraArgs = "--locked -p flox -p klaus";
+      postPatch = ''
+        rm -rf ./klaus/*
+        cp -rf --no-preserve=mode ${craneLib.mkDummySrc {src = flox-src;}}/klaus/* ./klaus
+      '';
 
       CARGO_LOG = "cargo::core::compiler::fingerprint=info";
-
-      cargoArtifacts = rust-internal-deps;
 
       # runtime dependencies
       buildInputs = rust-internal-deps.buildInputs ++ [];

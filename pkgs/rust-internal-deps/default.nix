@@ -44,9 +44,15 @@ in
         pname = "flox-internal-deps";
         version = envs.FLOX_VERSION;
         src = flox-src;
-        cargoExtraArgs = "--locked -p flox -p klaus";
 
-        # Compile the **non-dummy** lib crates only
+        # `buildDepsOnly` replaces the source of _all_ crates in the workspace
+        # with "dummy" packages, essentially empty {lib,main}.rs files.
+        # The effect is that cargo will build all required dependencies
+        # but not the actual crates in the workspace -- hence "depsOnly".
+        # In this case we do want to build some of the crates in the workspace,
+        # i.e. flox-rust-sdk and catalog-api-v1 as dependencies of flox and klaus.
+        # To achieve this, we copy the source of these crates back into the workspace.
+        cargoExtraArgs = "--locked -p flox -p klaus";
         postPatch = ''
           cp -rf --no-preserve=mode ${flox-src}/flox-rust-sdk/* ./flox-rust-sdk
           cp -rf --no-preserve=mode ${flox-src}/catalog-api-v1/* ./catalog-api-v1
