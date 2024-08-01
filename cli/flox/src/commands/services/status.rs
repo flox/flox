@@ -13,6 +13,10 @@ pub struct Status {
     #[bpaf(external(environment_select), fallback(Default::default()))]
     environment: EnvironmentSelect,
 
+    /// Display output as JSON
+    #[bpaf(long)]
+    json: bool,
+
     /// Names of the services to query
     #[bpaf(positional("name"))]
     names: Vec<String>,
@@ -31,7 +35,11 @@ impl Status {
             states.filter_names(self.names);
         }
 
-        println!("{}", states);
+        if self.json {
+            println!("{:#}", states);
+        } else {
+            println!("{}", states);
+        }
 
         Ok(())
     }

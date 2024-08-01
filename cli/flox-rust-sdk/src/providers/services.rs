@@ -207,18 +207,24 @@ pub fn maybe_make_service_config_file(
 }
 
 /// The parsed output of `process-compose process list` for a single process.
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 struct ProcessState {
     name: String,
+    #[serde(skip_serializing)]
     namespace: String,
     status: String,
+    #[serde(skip_serializing)]
     system_time: String,
+    #[serde(skip_serializing)]
     age: u64,
+    #[serde(skip_serializing)]
     is_ready: String,
+    #[serde(skip_serializing)]
     restarts: u64,
+    #[serde(skip_serializing)]
     exit_code: i32,
     pid: u64,
-    #[serde(rename = "IsRunning")]
+    #[serde(skip_serializing, rename = "IsRunning")]
     is_running: bool,
 }
 
@@ -263,15 +269,31 @@ impl ProcessStates {
     pub fn filter_names(&mut self, names: Vec<String>) {
         self.0.retain(|proc| names.contains(&proc.name))
     }
-}
 
-impl Display for ProcessStates {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt_table(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{:<20} {:<10} {:>8}", "NAME", "STATUS", "PID")?;
         for proc in &self.0 {
             writeln!(f, "{:<20} {:<10} {:>8}", proc.name, proc.status, proc.pid)?;
         }
         Ok(())
+    }
+
+    fn fmt_json_lines(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for proc in &self.0 {
+            let line = serde_json::to_string(proc).map_err(|_| std::fmt::Error)?;
+            writeln!(f, "{line}")?;
+        }
+        Ok(())
+    }
+}
+
+impl Display for ProcessStates {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if f.alternate() {
+            self.fmt_json_lines(f)
+        } else {
+            self.fmt_table(f)
+        }
     }
 }
 
@@ -840,6 +862,7 @@ mod tests {
             next_pid *= 10;
         }
 
+        // Table output.
         assert_eq!(format!("{states}"), indoc! {"
             NAME                 STATUS          PID
             aaa_first            Completed        10
@@ -848,6 +871,15 @@ mod tests {
             proc_stopped         Completed     10000
             zzz_last             Completed    100000
         "});
+
+        // JSON lines output.
+        assert_eq!(format!("{:#}", states), indoc! {r#"
+            {"name":"aaa_first","status":"Completed","pid":10}
+            {"name":"proc_completed","status":"Completed","pid":100}
+            {"name":"proc_running","status":"Running","pid":1000}
+            {"name":"proc_stopped","status":"Completed","pid":10000}
+            {"name":"zzz_last","status":"Completed","pid":100000}
+        "#});
     }
 
     #[test]
@@ -885,10 +917,17 @@ mod tests {
             proc.pid = 12345;
         }
 
+        // Table output
         assert_eq!(format!("{states}"), indoc! {"
             NAME                 STATUS          PID
             aaa                  Completed     12345
             ccc                  Completed     12345
         "});
+
+        // JSON lines output.
+        assert_eq!(format!("{:#}", states), indoc! {r#"
+            {"name":"aaa","status":"Completed","pid":12345}
+            {"name":"ccc","status":"Completed","pid":12345}
+        "#});
     }
 }
