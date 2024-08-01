@@ -19,7 +19,7 @@ use regex::Regex;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tempfile::NamedTempFile;
-use tracing::{debug, trace};
+use tracing::debug;
 
 use crate::flox::Flox;
 use crate::models::lockfile::LockedManifestCatalog;
@@ -526,7 +526,7 @@ impl ProcessComposeLogReader {
                     .read_to_string(&mut output)
                     .map_err(ServiceError::ProcessComposeCmd)?;
 
-                trace!(output, "child process quit with error");
+                debug!(output, "child process quit with error");
 
                 let err = ServiceError::from_process_compose_log(output);
                 Err(err)?;
