@@ -498,20 +498,21 @@ impl ProcessComposeLogReader {
                 let line = line.map_err(ServiceError::ReadLogLine)?;
 
                 // The receiver end was dropped, so we can't send any more messages.
-                // Might as well kill the child process.
+                // Might as well break out of the loop and kill the child process.
                 let Ok(_) = sender.send(ProcessComposeLogLine::new(&process, line)) else {
                     debug!("receiver dropped, stopping log reader");
-                    child.kill().map_err(ServiceError::ProcessComposeCmd)?;
-                    return Ok(());
+                    break;
                 };
             }
 
-            // Here, process-compose has closed stdout.
-            // It should have exited or be about to exit.
-            // kill() it just to be sure
+            // Here, either the receiver end was dropped,
+            // or process-compose has closed stdout.
+            // kill the child because in both cases we want it to stop.
             child.kill().map_err(ServiceError::ProcessComposeCmd)?;
 
-            // Communicate why it exited through the channel.
+            // Return an error when the the thread handle is joined.
+            // Note that if the receiver was dropped, this error won't ever be handled.
+            // But we still want to wait so we don't leave a zombie.
             // The most likely error is that the socket doesn't exist,
             // trying to read logs for a non existent process
             // unfortunately just blocks indefinitely without any error message.
