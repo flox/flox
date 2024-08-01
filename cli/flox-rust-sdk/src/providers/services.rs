@@ -7,6 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::env;
+use std::fmt::{Display, Formatter};
 use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -256,6 +257,16 @@ impl ProcessStates {
             .filter(|state| state.is_running)
             .map(|state| state.name.clone())
             .collect()
+    }
+}
+
+impl Display for ProcessStates {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{:<20} {:<10} {:>8}", "NAME", "STATUS", "PID")?;
+        for proc in &self.0 {
+            writeln!(f, "{:<20} {:<10} {:>8}", proc.name, proc.status, proc.pid)?;
+        }
+        Ok(())
     }
 }
 
@@ -549,6 +560,7 @@ mod tests {
 
     use indoc::indoc;
     use itertools::Itertools;
+    use pretty_assertions::assert_eq;
     use proptest::prelude::*;
     use tempfile::TempDir;
 
@@ -784,5 +796,52 @@ mod tests {
             "expected no more messages, got: {:?}",
             remaining_messages
         );
+    }
+
+    #[test]
+    fn test_processstates_display() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: [
+                ("proc_running".to_string(), ProcessConfig {
+                    command: "sleep 2".to_string(),
+                    vars: None,
+                }),
+                ("proc_stopped".to_string(), ProcessConfig {
+                    command: "sleep 2".to_string(),
+                    vars: None,
+                }),
+                ("proc_completed".to_string(), ProcessConfig {
+                    command: "true".to_string(),
+                    vars: None,
+                }),
+                ("aaa_first".to_string(), ProcessConfig {
+                    command: "false".to_string(),
+                    vars: None,
+                }),
+                ("zzz_last".to_string(), ProcessConfig {
+                    command: "false".to_string(),
+                    vars: None,
+                }),
+            ]
+            .into(),
+        });
+        stop_services(instance.socket(), &vec!["proc_stopped"]).unwrap();
+        let mut states = ProcessStates::read(instance.socket()).unwrap();
+
+        // Use predictable PIDs and exercise right alignment of the column.
+        let mut next_pid = 10;
+        for proc in &mut states.0 {
+            proc.pid = next_pid;
+            next_pid *= 10;
+        }
+
+        assert_eq!(format!("{states}"), indoc! {"
+            NAME                 STATUS          PID
+            aaa_first            Completed        10
+            proc_completed       Completed       100
+            proc_running         Running        1000
+            proc_stopped         Completed     10000
+            zzz_last             Completed    100000
+        "});
     }
 }
