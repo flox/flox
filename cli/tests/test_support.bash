@@ -174,6 +174,25 @@ common_file_teardown() {
 teardown_file() { common_file_teardown; }
 
 common_test_teardown() {
+  # wait for any running klaus proceses to finish
+  if [[ -n "${FLOX_DATA_DIR:-}" ]]; then
+    if pids="$(pgrep -f klaus.*${FLOX_DATA_DIR?})"; then
+      tries=0
+      while true; do
+        tries=$((tries + 1))
+        if ! kill -0 $pids > /dev/null 2>&1; then
+          break
+        else
+          if [[ $tries -gt 1000 ]]; then
+            echo "ERROR: klaus processes did not finish after 10 seconds."
+            break
+          fi
+          sleep 0.01;
+        fi
+      done
+    fi
+  fi
+
   # Delete test tmpdir unless the user requests to preserve them.
   # XXX: We do not attempt to delete envs here.
   if [[ -z "${FLOX_TEST_KEEP_TMP:-}" ]]; then rm -rf "$BATS_TEST_TMPDIR"; fi
