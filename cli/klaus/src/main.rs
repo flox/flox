@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,11 +15,11 @@ use flox_rust_sdk::models::env_registry::{
 use flox_rust_sdk::providers::services::PROCESS_COMPOSE_BIN;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
 use logger::init_logger;
-use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
+use nix::libc::{SIGINT, SIGQUIT, SIGTERM};
 use nix::unistd::{getpgid, getpid, setsid};
 use once_cell::sync::Lazy;
 use sentry::init_sentry;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, trace};
 
 mod logger;
 mod sentry;
@@ -81,12 +81,10 @@ fn main() -> Result<(), Error> {
     span.record("dot_flox_hash", &args.dot_flox_hash);
     span.record("socket", traceable_path(&args.socket_path));
     span.record("log", maybe_traceable_path(&args.log_path));
+
     debug!("starting");
 
-    // Set the signal handler
-    let should_proceed = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(SIGUSR1, Arc::clone(&should_proceed))
-        .context("failed to set SIGUSR1 signal handler")?;
+    // Set signal handlers for graceful shutdown
     let should_stop = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(SIGINT, Arc::clone(&should_stop))
         .context("failed to set SIGINT signal handler")?;
@@ -94,24 +92,6 @@ fn main() -> Result<(), Error> {
         .context("failed to set SIGTERM signal handler")?;
     signal_hook::flag::register(SIGQUIT, Arc::clone(&should_stop))
         .context("failed to set SIGQUIT signal handler")?;
-
-    // Ensure that we'll get sent SIGUSR1 on Linux when the parent terminates
-    #[cfg(target_os = "linux")]
-    nix::sys::prctl::set_pdeathsig(Some(nix::sys::signal::Signal::SIGUSR1))
-        .context("set_pdeathsig failed")?;
-
-    #[cfg(target_os = "macos")]
-    let watcher = {
-        let mut watcher = kqueue::Watcher::new()?;
-        watcher.add_pid(
-            args.pid,
-            kqueue::EventFilter::EVFILT_PROC,
-            kqueue::FilterFlag::NOTE_EXIT,
-        )?;
-        watcher.watch().context("failed to register watcher")?;
-        watcher
-    };
-    debug!("registered termination interest");
 
     debug!(
         path = traceable_path(&args.socket_path),
@@ -132,23 +112,26 @@ fn main() -> Result<(), Error> {
         "watchdog is on duty"
     );
 
-    // Listen for a notification
-    #[cfg(target_os = "macos")]
-    let res = wait_for_termination(watcher, should_proceed, should_stop);
-
-    #[cfg(target_os = "linux")]
-    let res = wait_for_termination(flag, should_stop);
-
-    if res.is_err() {
-        error!("received stop signal, exiting");
-        return res;
+    // Wait for the target process to terminate
+    loop {
+        trace!(pid = args.pid, "checking whether process is alive");
+        if !activation.is_running() {
+            info!("target process terminated");
+            break;
+        }
+        // If we got a SIGINT/SIGTERM/SIGQUIT we exit gracefully and leave the activation in the registry,
+        // but there's not much we can do about that because we don't know who sent us the signal
+        // or why. If this is the last activation, then services won't get cleaned up. If it's _not_
+        // the last activation, then we're fine because another watchdog will remove any stale entries
+        // from the registry and eventually the services will get cleaned up.
+        if should_stop.load(Ordering::SeqCst) {
+            info!("received signal, exiting");
+            return Ok(());
+        }
+        std::thread::sleep(CHECK_INTERVAL);
     }
 
-    // Now we proceed assuming we've gotten a termination notification.
-    // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
-    // but there's not much we can do about that because we don't know who sent us one of those
-    // signals or why.
-
+    // Now we proceed assuming that the target process terminated.
     let remaining_activations =
         deregister_activation(&args.registry_path, &args.dot_flox_hash, activation)
             .context("failed to deregister activation")?;
@@ -208,43 +191,4 @@ fn ensure_process_group_leader() -> Result<(), Error> {
         setsid().context("failed to create new session")?;
     }
     Ok(())
-}
-
-#[cfg(target_os = "macos")]
-fn wait_for_termination(
-    watcher: kqueue::Watcher,
-    proceed_flag: Arc<AtomicBool>,
-    stop_flag: Arc<AtomicBool>,
-) -> Result<(), Error> {
-    loop {
-        if proceed_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            debug!("observed proceed flag");
-            break Ok(());
-        }
-        if stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            break Err(anyhow!("received stop signal"));
-        }
-        if let Some(_event) = watcher.poll(None) {
-            debug!("received termination event, will proceed");
-            break Ok(());
-        }
-        std::thread::sleep(CHECK_INTERVAL);
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn wait_for_termination(
-    proceed_flag: Arc<AtomicBool>,
-    stop_flag: Arc<AtomicBool>,
-) -> Result<(), Error> {
-    loop {
-        if flag.load(std::sync::atomic::Ordering::SeqCst) {
-            debug!("observed flag, will proceed");
-            break Ok(());
-        }
-        if stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            break Err(anyhow!("received stop signal"));
-        }
-        std::thread::sleep(CHECK_INTERVAL);
-    }
 }
