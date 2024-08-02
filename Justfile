@@ -76,7 +76,13 @@ build: build-cli
 
 # Run the CLI integration test suite
 @integ-tests +bats_args="": build
-    bash -c 'i=0; while flox-cli-tests  --pkgdb "{{PKGDB_BIN}}"  --flox "{{FLOX_BIN}}" --klaus "{{KLAUS_BIN}}" --input-data "{{INPUT_DATA}}" --generated-data "{{GENERATED_DATA}}" -- -x -f "unsets environment variables in nested activation \(bash\)" && [ $i -lt 30 ]; do (( i++ )); done'
+    flox-cli-tests \
+        --pkgdb "{{PKGDB_BIN}}" \
+        --flox "{{FLOX_BIN}}" \
+        --klaus "{{KLAUS_BIN}}" \
+        --input-data "{{INPUT_DATA}}" \
+        --generated-data "{{GENERATED_DATA}}" \
+        {{bats_args}}
 
 # Run the CLI unit tests
 @unit-tests regex="": build
