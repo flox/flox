@@ -176,7 +176,13 @@ teardown_file() { common_file_teardown; }
 common_test_teardown() {
   # wait for any running klaus proceses to finish
   if [[ -n "${FLOX_DATA_DIR:-}" ]]; then
-    if pids="$(pgrep -f klaus.*${FLOX_DATA_DIR?})"; then
+    # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
+    # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
+    # grep command itself doesn't get listed when we search for the data dir.
+    # The `cut` just extracts the PID.
+    local pids
+    pids="$(ps -eo pid,args | grep klaus | grep ${FLOX_DATA_DIR?} | cut -d' ' -f1)"
+    if [ -n "${pids?}" ]; then
       tries=0
       while true; do
         tries=$((tries + 1))
