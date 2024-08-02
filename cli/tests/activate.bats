@@ -1609,7 +1609,6 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=bbbbb,activate:scripts:on-activate
 @test "'hook.on-activate' unsets environment variables in nested activation (bash)" {
   project_setup
 
@@ -1625,13 +1624,12 @@ EOF
   echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
 
   cat << 'EOF' | bash
-
     export foo=baz
     eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
     [[ -z "${foo:-}" ]]
-    # export foo=baz
-    # eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
-    # [[ -z "${foo:-}" ]]
+    export foo=baz
+    eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
+    [[ -z "${foo:-}" ]]
 EOF
 }
 
