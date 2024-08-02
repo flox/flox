@@ -82,7 +82,7 @@ build: build-cli
         --klaus "{{KLAUS_BIN}}" \
         --input-data "{{INPUT_DATA}}" \
         --generated-data "{{GENERATED_DATA}}" \
-        -- -x -f "unsets environment variables in nested activation \(bash\)"
+        -- --filter-tags "activate:scripts:on-activate"
 
 # Run the CLI unit tests
 @unit-tests regex="": build
