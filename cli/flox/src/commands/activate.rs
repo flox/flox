@@ -273,6 +273,10 @@ impl Activate {
                 exports.insert("_FLOX_ENV_CUDA_DETECTION", "1".to_string());
             }
 
+            // TODO: we should clean up the different conditionals here
+            if in_place && self.start_services {
+                message::warning("Skipped starting services. Services are not yet supported for in place activations.");
+            }
             if flox.features.services && !manifest.services.is_empty() && !in_place {
                 if self.start_services {
                     supported_environment(&flox, self.environment)?; // Error for remote envs.
