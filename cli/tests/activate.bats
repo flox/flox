@@ -1623,14 +1623,14 @@ EOF
 
   echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
 
-  cat << 'EOF' | bash
+  {
     export foo=baz
     eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
     [[ -z "${foo:-}" ]]
     export foo=baz
     eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
     [[ -z "${foo:-}" ]]
-EOF
+  }
 }
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:fish
