@@ -1,17 +1,17 @@
 #
 # This makefile implements Tom's stepladder from manifest to Nix builds:
 #
-# 1. "local": sets $out in the environment, invokes the build commands in a subshell
-#    (using bash), then turns the $out directory into a Nix package with all outpath
-#    references replaced with the real $out and all bin/* commands wrapped with
-#    $FLOX_ENV/activate
-# 2. "sandbox": invokes that same script from within the runCommand builder, with no
-#    network and filesystem access and a fake home directory
-# 3. "sandbox with buildCache": does as above, with the build directory persisted
-#    across builds
-# 4. "staged": splits the builds into stages, each of which can be any of the above,
-#    and whose "locked" values are stored as a result symlink or as a storePath
-#    within the manifest
+# 1. "local" (aka in-situ): sets $out in the environment, invokes the build
+#    commands in a subshell (using bash), then turns the $out directory into
+#    a Nix package with all outpath references replaced with the real $out
+#    and all bin/* commands wrapped with $FLOX_ENV/activate
+# 2. "sandbox": invokes that same script from within the runCommand builder,
+#    with no network and filesystem access and a fake home directory
+# 3. "sandbox with buildCache": does as above, with the build directory
+#    persisted across builds
+# 4. "staged": splits the builds into stages, each of which can be any of
+#    the above, and whose "locked" values are stored as a result symlink or
+#    as a storePath within the manifest
 #
 
 # Start by checking that the FLOX_ENV environment variable is set.
@@ -25,10 +25,10 @@ endif
 # Set a default TMPDIR variable if one is not already defined.
 TMPDIR ?= /tmp
 
-# Use the wildcard operator to identify targets in the provided $FLOX_ENV.
+# Use the wildcard operator to identify builds in the provided $FLOX_ENV.
 BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
 
-# The `nix build` command will rebuild the source in every instance,
+# The `nix build` command will attempt a rebuild in every instance,
 # and we will presumably want `flox build` to do the same. However,
 # we cannot just mark the various build targets as PHONY because they
 # must be INTERMEDIATE to prevent `flox build foo` from rebuilding
@@ -47,53 +47,119 @@ $(foreach _build,$(BUILDGOALS),\
 define DEPENDS_template =
   # Infer pname from script path.
   $(eval _pname = $(notdir $(build)))
-  # Target names cannot have "-" in them so replace with "_" in the target name.
+  # We want to create build-specific variables, and variable names cannot
+  # have "-" in them so we create a version of the build "pname" replacing
+  # this with "_" for use in variable names.
   $(eval _pvarname = $(subst -,_,$(_pname)))
+  # Compute 32-character stable string for use in stable path generation
+  # based on hash of pname, current working directory and FLOX_ENV.
+  $(eval $(_pvarname)_hash = $(shell ( \
+    ( echo $(_pname) $(realpath $(FLOX_ENV)) && pwd ) | sha256sum | head -c32)))
+  # Render a shorter 8-character version as well.
+  $(eval $(_pvarname)_shortHash = $(shell echo $($(_pvarname)_hash) | head -c8))
+  # And while we're at it, set a temporary basename using the short hash.
+  $(eval $(_pvarname)_tmpBasename = $(TMPDIR)/$($(_pvarname)_shortHash)-$(_pname))
 
-  # Render the build script with the package prerequisites replaced with their
-  # corresponding outpaths, using a temporary path that is stable across builds
-  # so that we only perform a Nix rebuild when the contents actually change.
-  $(eval _buildScript_checksum := $(shell sha256sum $(build) | head -c8))
-  $(eval $(_pvarname)_buildScript := $(TMPDIR)/$(_buildScript_checksum)-build-$(_pname).bash)
+  # We need to render a version of the build script with package prerequisites
+  # replaced with their corresponding outpaths, and we create that at a stable
+  # temporary path so that we only perform Nix rebuilds when necessary.
+  $(eval $(_pvarname)_buildScript = $($(_pvarname)_tmpBasename)-build.bash)
 
   # Iterate over each possible {build,package} pair looking for references to
   # ${package} in the build script, being careful to avoid looking for references
-  # to the package in its own build. If found add dependency from the build
+  # to the package in its own build. If found, declare dependency from the build
   # script to the package.
-  $(foreach package,$(notdir $(BUILDS)),\
-    $(if $(filter-out $(package),$(notdir $(build))),\
-      $(if $(shell grep '\$${$(package)}' $(build)),\
-        $(eval _dep = result-$(package))\
-        $(eval $(_pvarname)_buildDeps += $(realpath $(_dep)))\
-        $($(_pvarname)_buildScript): $(_dep))))
+  $(foreach package,$(filter-out $(notdir $(build)),$(notdir $(BUILDS))),\
+    $(if $(shell grep '\$${$(package)}' $(build)),\
+      $(eval _dep = result-$(package))\
+      $(eval $(_pvarname)_buildDeps += $(realpath $(_dep)))\
+      $($(_pvarname)_buildScript): $(_dep)))
 endef
 
 $(foreach build,$(BUILDS),$(eval $(call DEPENDS_template)))
 
-# Template for rendering temporary stable buildcache symlink. We use
-# the shorter relative result symlink path rather than the absolute
-# nix storePath so it looks better on the graph. Marking it as
-# INTERMEDIATE ensures that make will delete the link once it has
-# been used.
-define BUILDCACHE_template =
-  .INTERMEDIATE: $(_buildCache)
-  $(_buildCache): $(_result)-buildCache
-	-rm -f $$@
-	@# Copy, don't link to the previous buildCache because we want
-	@# nix to import it as a content-addressed input rather than an
-	@# ever-changing series of storePaths.
-	cp $(_result)-buildCache $$@
+# Define macro containing single space character for use in string substitution.
+space := $(subst x,,x x)
+
+# The following template renders targets for the in-situ build mode.
+define BUILD_local_template =
+  .INTERMEDIATE: $(_pname)_local_build
+  $(_pname)_local_build: $($(_pvarname)_buildScript)
+	@echo "Building $(_name) in local mode"
+	MAKEFLAGS= FLOX_TURBO=1 out=$(_out) $(FLOX_ENV)/activate bash -e $($(_pvarname)_buildScript)
+	nix --extra-experimental-features nix-command \
+	  build -L --file __FLOX_CLI_OUTPATH__/libexec/build-manifest.nix \
+	    --argstr name "$(_name)" \
+	    --argstr flox-env "$(FLOX_ENV)" \
+	    --argstr install-prefix "$(_out)" \
+	    --out-link "result-$(_pname)" \
+	    --offline 2>&1 | tee $($(_pvarname)_logfile)
+
 endef
 
-# The following template renders targets for each of the build modes.
-# We render all the possible build modes here and then below we select
-# the actual targets to be evaluated based on the build types observed.
-space := $(subst x,,x x)
+# The following template renders targets for the sandbox build mode.
+define BUILD_sandbox_template =
+  # Again, it is expected that the sandbox and caching modes will be specified
+  # on a per-build basis within the manifest, but in the meantime while we wait
+  # for the manifest parser to be implemented we will grep for the explicit
+  # "buildCache" setting within the build script itself. (See below)
+  $(eval _do_buildCache = $(if $(shell grep -E '\.buildCache = true$$' $(build)),true))
+
+  # The sourceTarball value needs to be stable when nothing changes across builds,
+  # so we create a tarball at a stable TMPDIR path and pass that to the derivation
+  # instead.
+  $(eval $(_pvarname)_src_tgz = $($(_pvarname)_tmpBasename)-src.tgz)
+  $($(_pvarname)_src_tgz): FORCE
+	tar -czf - --no-recursion -T <(git ls-files) > $$@
+
+  # The buildCache value needs to be similarly stable when nothing changes across
+  # builds.  Note that realpath doubles as an existence check.
+  $(eval $(_pvarname)_buildCache = $($(_pvarname)_tmpBasename)-buildCache.tgz)
+  $($(_pvarname)_buildCache): FORCE
+	-rm -f $$@
+	@# If a previous buildCache exists, then copy, don't link to the
+	@# previous buildCache because we want nix to import it as a
+	@# content-addressed input rather than an ever-changing series
+	@# of storePaths. And if it does not exist, then create a new
+	@# tarball containing only a single file indicating the time that
+	@# the buildCache was created to differentiate it from other
+	@# prior otherwise-empty buildCaches.
+	@if [ -f "$(_result)-buildCache" ]; then \
+	  cp $(_result)-buildCache $$@; \
+	else \
+	  tmpdir=$$(mktemp -d); \
+	  echo "Build cache initialized on $$(date)" > $$tmpdir/.buildCache.init; \
+	  tar -czf $$@ -C $$tmpdir .buildCache.init; \
+	  rm -rf $$tmpdir; \
+	fi
+
+  .PHONY: $(_pname)_sandbox_build
+  $(_pname)_sandbox_build: $($(_pvarname)_buildScript) $($(_pvarname)_src_tgz) \
+		$(if $(_do_buildCache),$($(_pvarname)_buildCache))
+	@echo "Building $(_name) in sandbox mode"
+	@# N.B. realpath returns empty string if path does not exist.
+	nix --extra-experimental-features nix-command \
+	  build -L --file __FLOX_CLI_OUTPATH__/libexec/build-manifest.nix \
+	    --argstr name "$(_name)" \
+	    --argstr srcTarball "$($(_pvarname)_src_tgz)" \
+	    --argstr flox-env "$(FLOX_ENV)" \
+	    --argstr install-prefix "$(_out)" \
+	    $(if $($(_pvarname)_buildDeps),--arg buildDeps $($(_pvarname)_buildDeps_arg)) \
+	    --argstr buildScript "$($(_pvarname)_buildScript)" \
+	    $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
+	    --out-link "result-$(_pname)" \
+	    '^*' 2>&1 | tee $($(_pvarname)_logfile)
+
+endef
+
 define BUILD_template =
-  # Infer pname from script path.
+  # build mode passed as $(1)
+  $(eval _build_mode = $(1))
+  # Infer pname from script path.)
   $(eval _pname = $(notdir $(build)))
-  # Variable names cannot have "-" in them so create a copy of _pname replacing
-  # "-" characters with "_".
+  # We want to create build-specific variables, and variable names cannot
+  # have "-" in them so we create a version of the build "pname" replacing
+  # this with "_" for use in variable names.
   $(eval _pvarname = $(subst -,_,$(_pname)))
   # Identify result symlink basename.
   $(eval _result = result-$(_pname))
@@ -102,37 +168,16 @@ define BUILD_template =
   # Calculate name.
   $(eval _name = $(_pname)-$(_version))
   # Short variable name for buildDependencies derived in the DEPENDS step.
-  $(eval _buildDeps = $(strip \
+  $(eval $(_pvarname)_buildDeps_arg = $(strip \
     $(if $($(_pvarname)_buildDeps),\
       '["$(subst $(space),",$($(_pvarname)_buildDeps))"]')))
 
-  # Set temp outpath of same strlen as eventual package storePath using sha256sum
-  # derived from the package name, the current working directory and the $(FLOX_ENV)
-  # package to provide a stable random seed to avoid collisions.
-  $(eval _tmphash = $(shell ( \
-    echo $(_name) && pwd && realpath "$$FLOX_ENV") | sha256sum | head -c32))
-  $(eval _out = /tmp/store_$(_tmphash)-$(_name))
+  # Set temp outpath of same strlen as eventual package storePath using the
+  # 32-char hash previously derived from the package name, current working
+  # directory and FLOX_ENV.
+  $(eval _out = /tmp/store_$($(_pvarname)_hash)-$(_name))
 
-  # It is expected that the sandbox and caching modes will be specified on a
-  # per-build basis within the manifest, but in the meantime while we wait for
-  # the manifest parser to be implemented we will grep for explicit "buildCache"
-  # and "sandbox" settings within the build script for setting the build and
-  # caching modes.
-  $(eval _build_mode = $(if $(shell grep -E '\.sandbox = true$$' $(build)),sandbox,local))
-
-  # The buildCache value needs to be stable when nothing changes across builds,
-  # so we create a symlink from a stable TMPDIR path and pass that to the
-  # derivation instead. Note that realpath doubles as an existence check.
-  $(eval _do_buildCache =)
-  $(if $(shell grep -E '\.buildCache = true$$' $(build)), \
-    $(eval _do_buildCache = 1) \
-    $(eval _buildCache =) \
-    $(if $(realpath $(_result)-buildCache), \
-      $(eval _buildCache_checksum = $(shell sha256sum $(_result)-buildCache | head -c8)) \
-      $(eval _buildCache = $(TMPDIR)/$(_buildCache_checksum)-$(_name)-buildCache) \
-      $(eval $(call BUILDCACHE_template))))
-
-  # By the time this rule will be evaluated all of the package dependencies
+  # By the time this rule will be evaluated all of its package dependencies
   # will have been added to the set of rule prerequisites in $^, using their
   # "safe" name (with "-" characters replaced with "_"), and these targets
   # will have successfully built the corresponding result-$(_pname) symlinks.
@@ -155,35 +200,8 @@ define BUILD_template =
   # Prepare temporary log file for capturing build output for inspection.
   $(eval $(_pvarname)_logfile := $(shell mktemp --dry-run --suffix=-build-$(_pname).log))
 
-  # Type 1 "local" build
-  .INTERMEDIATE: $(_pname)_local_build
-  $(_pname)_local_build: $($(_pvarname)_buildScript)
-	@echo "Building $(_name) in local mode"
-	MAKEFLAGS= FLOX_TURBO=1 out=$(_out) $(FLOX_ENV)/activate bash -e $($(_pvarname)_buildScript)
-	nix --extra-experimental-features nix-command \
-	  build -L --file __FLOX_CLI_OUTPATH__/libexec/build-manifest.nix \
-	    --argstr name "$(_name)" \
-	    --argstr flox-env "$(FLOX_ENV)" \
-	    --argstr install-prefix "$(_out)" \
-	    --out-link "result-$(_pname)" \
-	    --offline 2>&1 | tee $($(_pvarname)_logfile)
-
-  # Type 2 "sandbox" build
-  .INTERMEDIATE: $(_pname)_sandbox_build
-  $(_pname)_sandbox_build: $($(_pvarname)_buildScript) $(if $(_do_buildCache),$(_buildCache))
-	@echo "Building $(_name) in sandbox mode"
-	@# N.B. realpath returns empty string if path does not exist.
-	nix --extra-experimental-features nix-command \
-	  build -L --file __FLOX_CLI_OUTPATH__/libexec/build-manifest.nix \
-	    --argstr name "$(_name)" \
-	    --argstr srcdir "$(realpath .)" \
-	    --argstr flox-env "$(FLOX_ENV)" \
-	    --argstr install-prefix "$(_out)" \
-	    $(if $(_buildDeps),--arg buildDeps $(_buildDeps)) \
-	    --argstr buildScript "$($(_pvarname)_buildScript)" \
-	    $(if $(_do_buildCache),--argstr buildCache "$(_buildCache)") \
-	    --out-link "result-$(_pname)" \
-	    '^*' 2>&1 | tee $($(_pvarname)_logfile)
+  # Insert mode-specific template.
+  $(call BUILD_$(_build_mode)_template)
 
   # Select the desired build mode as we declare the result symlink target.
   $(_result): $(_pname)_$(_build_mode)
@@ -202,7 +220,15 @@ define BUILD_template =
   all += $(_pname)
 endef
 
-$(foreach build,$(BUILDS),$(eval $(call BUILD_template)))
+# It is expected that the sandbox and caching modes will be specified on a
+# per-build basis within the manifest, but in the meantime while we wait for
+# the manifest parser to be implemented we will grep for explicit "buildCache"
+# and "sandbox" settings within the build script for setting the build and
+# caching modes.
+$(foreach build,$(BUILDS), \
+  $(if $(shell grep -E '\.sandbox = true$$' $(build)),\
+    $(eval $(call BUILD_template,sandbox)),\
+    $(eval $(call BUILD_template,local))))
 
 # Finally, we create the "all" target to build all known packages.
 all: $(all)

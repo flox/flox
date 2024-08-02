@@ -3,7 +3,7 @@
   name,
   flox-env,
   install-prefix,
-  srcdir ? null, # optional
+  srcTarball ? null, # optional
   buildDeps ? [], # optional
   buildScript ? null, # optional
   buildCache ? null, # optional
@@ -13,8 +13,8 @@
 
 # buildCache is only meaningful with a build script
 assert (buildCache != null) -> (buildScript != null);
-# srcdir is only required with a build script
-assert (srcdir != null) -> (buildScript != null);
+# srcTarball is only required with a build script
+assert (srcTarball != null) -> (buildScript != null);
 
 let
 
@@ -23,26 +23,12 @@ let
     map (d: builtins.storePath d) buildDeps
   ) ++ [flox-env-package];
   install-prefix-contents = /. + install-prefix;
-  src =
-    if (srcdir == null)
-    then null
-    else builtins.fetchGit srcdir;
   buildScript-contents = /. + buildScript;
-  buildCache-init = pkgs.runCommand "buildCache-init" {
-    nativeBuildInputs = with pkgs; [gnutar];
-  } ( ''
-    cd $(mktemp -d)
-    echo ${builtins.toString builtins.currentTime} > .buildCache.init
-    find . -type f | tar -c -z --no-recursion -f $out -T -
-  '' );
-  buildCache-tgz =
-    if (buildCache == null) then null else (
-      if (buildCache == "") then buildCache-init else (/. + buildCache)
-    );
+  buildCache-tgz-contents = if (buildCache == null) then null else (/. + buildCache);
 
 in
   pkgs.runCommand name {
-    inherit buildInputs src;
+    inherit buildInputs srcTarball;
     nativeBuildInputs = with pkgs; [findutils gnutar gnused makeWrapper];
     outputs = [ "out" ] ++ pkgs.lib.optionals ( buildCache != null ) [ "buildCache" ];
   } ( (
@@ -70,12 +56,22 @@ in
         # invoke it from within the sandbox to create $out. The choice of
         # pure or impure mode occurs outside of this script as the derivation
         # is instantiated.
-        source $stdenv/setup
-        unpackPhase
-        cd "$sourceRoot"
+        source $stdenv/setup # is this necessary?
+
+        # We are currently in /build, and TMPDIR is also set to /build, so
+        # we need to extract the source to a subdirectory to avoid populating
+        # our build cache with a bunch of temporary files.
+        mkdir $name && cd $name
+
+        # We pass and extract the source as a tarball to preserve timestamps.
+        # Passing the source as a directory would cause the timestamps to be
+        # set to the UNIX epoch as happens with all files in the Nix store,
+        # which would be older than the intermediate compilation artifacts.
+        tar -xzpf ${/. + srcTarball}
+
         # Extract contents of the cache, if it exists.
-        ${ if buildCache-tgz == null then ":" else
-          "tar --skip-old-files -xpzf ${buildCache-tgz}" }
+        ${ if buildCache-tgz-contents == null then ":" else
+          "tar --skip-old-files -xpzf ${buildCache-tgz-contents}" }
         ${ if buildCache == null then ''
           # When not preserving a cache we just run the build normally.
           FLOX_TURBO=1 ${flox-env-package}/activate bash -e ${buildScript-contents}
