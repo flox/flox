@@ -366,7 +366,7 @@ Semver ::= {
 ```
 
 `systems`
-:   The whitelist of systems that this environment supports.
+:   The allowlist of systems that this environment supports.
     Valid values are `x86_64-linux`, `aarch64-linux`,
     `x86_64-darwin`, and `aarch64-darwin`.
     [`flox init`](./flox-init.md) automatically populates this list with the
@@ -388,7 +388,7 @@ Semver ::= {
     The default is `false`.
 
 `allow.licenses`
-:   A whitelist of software licenses to allow in search results in installs.
+:   An allowlist of software licenses to allow in search results in installs.
     Valid entries are [SPDX Identifiers](https://spdx.org/licenses).
 
 `semver.allow-pre-releases`
