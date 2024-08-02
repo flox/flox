@@ -273,7 +273,7 @@ impl Activate {
                 exports.insert("_FLOX_ENV_CUDA_DETECTION", "1".to_string());
             }
 
-            if flox.features.services && !manifest.services.is_empty() {
+            if flox.features.services && !manifest.services.is_empty() && !in_place {
                 if self.start_services {
                     supported_environment(&flox, self.environment)?; // Error for remote envs.
                 }
@@ -297,12 +297,14 @@ impl Activate {
         exports.extend(default_nix_env_vars());
 
         // Launch the watchdog process
-        Activate::launch_watchdog(
-            &flox,
-            environment.cache_path()?.to_path_buf(),
-            &path_hash(environment.dot_flox_path()),
-            socket_path,
-        )?;
+        if !in_place {
+            Activate::launch_watchdog(
+                &flox,
+                environment.cache_path()?.to_path_buf(),
+                &path_hash(environment.dot_flox_path()),
+                socket_path,
+            )?;
+        }
 
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
