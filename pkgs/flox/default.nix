@@ -9,6 +9,7 @@
   flox-cli,
   flox-manpages,
   process-compose,
+  pkgsFor,
   SENTRY_DSN ? null,
   SENTRY_ENV ? null,
   FLOX_VERSION ? null,
@@ -40,4 +41,5 @@ in
         --set PROCESS_COMPOSE_BIN "${process-compose}/bin/process-compose" \
         --set FLOX_VERSION    "${version}"
     '';
+    passthru = {inherit pkgsFor;};
   }
