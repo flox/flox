@@ -43,7 +43,7 @@ Fields:
     - Default is `false`.
     - Associated with the `nixpkgs` `meta.broken` field.
     - Packages without this field are assumed not to be broken.
-  - `licenses`: A whitelist of software licenses to allow in search results and installs.
+  - `licenses`: An allowlist of software licenses to allow in search results and installs.
     - Default is to allow any license. This default is used if the attribute is missing or `null`.
     - Valid entries are [SPDX Identifiers](https://spdx.org/licenses).
 - `SemVer`
