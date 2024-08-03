@@ -6,8 +6,8 @@ edition = "2021"
 [dependencies]
 futures.workspace = true
 progenitor-client.workspace = true
-reqwest = { workspace = true, features = ["json", "stream"] }
-serde = { workspace = true, features = ["derive"] }
+reqwest.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 regress.workspace = true

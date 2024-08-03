@@ -126,7 +126,7 @@
       # which would avoid the need to pull another channel altogether.
       rustfmt-nightly = final.fenix.default.withComponents ["rustfmt"];
       rust-toolchain = final.fenix.stable;
-    in rec {
+    in {
       # Generates a `.git/hooks/pre-commit' script.
       pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
         src = builtins.path {path = ./.;};
@@ -179,21 +179,18 @@
       # Package activation scripts.
       flox-activation-scripts = callPackage ./pkgs/flox-activation-scripts {};
 
+      flox-src = callPackage ./pkgs/flox-src {};
+
       # Package Database Utilities: scrape, search, and resolve.
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
 
       # Flox Command Line Interface ( development build ).
-      flox-klaus = callPackage ./pkgs/rust-pkg {
-        crateName = "klaus";
-        pname = "flox-klaus";
+      flox-klaus = callPackage ./pkgs/flox-klaus {
         rust-toolchain = rust-toolchain;
         rustfmt = rustfmt-nightly;
       };
 
-      flox-cli = callPackage ./pkgs/rust-pkg {
-        crateName = "flox";
-        pname = "flox-cli";
-        KLAUS_BIN = "${flox-klaus}/bin/klaus";
+      flox-cli = callPackage ./pkgs/flox-cli {
         rust-toolchain = rust-toolchain;
         rustfmt = rustfmt-nightly;
       };
@@ -211,6 +208,9 @@
 
       # (Linux-only) LD_AUDIT library for using dynamic libraries in Flox envs.
       ld-floxlib = callPackage ./pkgs/ld-floxlib {};
+
+      rust-external-deps = callPackage ./pkgs/rust-external-deps {rust-toolchain = rust-toolchain;};
+      rust-internal-deps = callPackage ./pkgs/rust-internal-deps {rust-toolchain = rust-toolchain;};
     };
 
     # Composes dependency overlays and the overlay defined here.
@@ -253,6 +253,8 @@
         flox
         ld-floxlib
         pre-commit-check
+        rust-external-deps
+        rust-internal-deps
         ;
       default = pkgs.flox;
     });
@@ -269,7 +271,10 @@
           FLOX_BIN = null;
           KLAUS_BIN = null;
         };
-        flox-cli = prev.flox-cli.override {flox-pkgdb = null;};
+        flox-cli = prev.flox-cli.override {
+          flox-pkgdb = null;
+          flox-klaus = null;
+        };
       });
       checksFor = builtins.getAttr system checks;
     in {
