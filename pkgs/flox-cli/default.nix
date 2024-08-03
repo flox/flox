@@ -150,6 +150,7 @@ in
           envs
           flox-pkgdb
           flox-klaus
+          pkgsFor # Needed to build installers
           ;
 
         ciPackages = [
