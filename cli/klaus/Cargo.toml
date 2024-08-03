@@ -10,7 +10,6 @@ anyhow.workspace = true
 clap.workspace = true
 clap_derive.workspace = true
 flox-rust-sdk.workspace = true
-futures.workspace = true
 nix.workspace = true
 once_cell.workspace = true
 sentry.workspace = true
@@ -18,6 +17,3 @@ serde.workspace = true
 signal-hook.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-
-[target.'cfg(target_os = "macos")'.dependencies]
-kqueue.workspace = true
