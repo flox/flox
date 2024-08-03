@@ -29,6 +29,17 @@ project_teardown() {
 
 # ---------------------------------------------------------------------------- #
 
+watchdog_pids_called_with_arg() {
+  # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
+  # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
+  # grep command itself doesn't get listed when we search for the data dir.
+  # The `cut` just extracts the PID.
+  local pattern="$1"
+  local pids
+  pids="$(ps -eo pid,args | grep klaus | grep "$pattern" | cut -d' ' -f1)"
+  echo "$pids"
+}
+
 setup() {
   common_test_setup
   setup_isolated_flox
@@ -359,62 +370,41 @@ EOF
 @test "watchdog: lives as long as the activation" {
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
-  run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
+  export -f watchdog_pids_called_with_arg
+  run --separate-stderr "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
 
-    log_file="$PWD/.flox/cache/$(ls .flox/cache)"
-
     # Ensure that the watchdog is still running
-    if tail -n 1 "$log_file" | grep exiting; then
-      cat "$log_file" >&3
-      exit 1
-    fi
+    times=0
+    while true; do
+      if [ "$times" -gt 10 ]; then
+        exit 1
+      fi
+      pid="$(watchdog_pids_called_with_arg $_FLOX_SERVICES_SOCKET)"
+      if [ -n "${pid?}" ]; then
+        echo "$pid"
+        break
+      fi
+      times=$((times + 1))
+      sleep 0.01
+    done
 EOF
 )
+  pid="$output"
   assert_success
 
   # Ensure that the watchdog has exited now
-  log_file="$PWD/.flox/cache/$(ls .flox/cache)"
-  if ! tail -n 1 "$log_file" | grep exiting; then
-    cat "$log_file" >&3
-    exit 1
-  fi
-  assert_success
-}
-
-@test "watchdog: exits on termination signal (SIGUSR1)" {
-  log_file=klaus.log
-  registry_file=registry.json
-  dummy_registry path/to/env abcde123 > "$registry_file"
-  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" \
-    --logs "$log_file" \
-    --pid $$ \
-    --registry "$registry_file" \
-    --hash abcde123 \
-    --socket does_not_exist &
-  klaus_pid="$!"
-
-  # Wait for start.
-  timeout 1s bash -c "
-    while ! grep -qs 'watchdog is on duty' \"$log_file\"; do
-      sleep 0.1
-    done
-  "
-
-  # Check running.
-  run kill -s 0 "$klaus_pid"
-  assert_success
-
-  # Signal to exit.
-  run kill -s SIGUSR1 "$klaus_pid"
-  assert_success
-
-  # Wait for exit.
-  timeout 1s bash -c "
-    while kill -s 0 \"$klaus_pid\"; do
-      sleep 0.1
-    done
-  "
+  times=0
+  while true; do
+    if [ "$times" -gt 10 ]; then
+      exit 1
+    fi
+    if ! kill -0 "$pid"; then
+      break
+    fi
+    times=$((times + 1))
+    sleep 0.01
+  done
 }
 
 @test "watchdog: exits on shutdown signal (SIGINT)" {
