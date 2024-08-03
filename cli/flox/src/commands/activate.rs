@@ -295,6 +295,7 @@ impl Activate {
 
             // TODO: we should clean up the different conditionals here
             if in_place && self.start_services {
+                debug!("not starting services for in-place activation");
                 message::warning("Skipped starting services. Services are not yet supported for in place activations.");
             }
             if flox.features.services && !manifest.services.is_empty() && !in_place {
