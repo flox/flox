@@ -72,7 +72,6 @@ EOF
   export __FT_RAN_USER_DOTFILES_SETUP=:
 }
 
-
 setup_file() {
   common_file_setup
   user_dotfiles_setup
@@ -82,14 +81,31 @@ setup_file() {
 
 # Helpers for project based tests.
 
-project_setup() {
+project_setup_common() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/project-${BATS_TEST_NUMBER?}"
   export PROJECT_NAME="${PROJECT_DIR##*/}"
 
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" > /dev/null || return
+  pushd "$PROJECT_DIR" >/dev/null || return
+
+}
+
+# setup with catalog
+project_setup() {
+  project_setup_common
   "$FLOX_BIN" init -d "$PROJECT_DIR"
+}
+
+# project setup with pkgdb
+project_setup_pkgdb() {
+  project_setup_common
+  mkdir -p "$PROJECT_DIR/.flox/env"
+  cp --no-preserve=mode "$MANUALLY_GENERATED"/hello_v0/* "$PROJECT_DIR/.flox/env"
+  echo '{
+    "name": "'$PROJECT_NAME'",
+    "version": 1
+  }' >>"$PROJECT_DIR/.flox/env.json"
 }
 
 project_teardown() {
