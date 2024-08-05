@@ -23,20 +23,22 @@ user_dotfiles_setup() {
   if [[ -n ${__FT_RAN_USER_DOTFILES_SETUP-} ]]; then return 0; fi
   # N.B. $HOME is set to the test user's home directory by flox_vars_setup
   # so none of these should exist, and we abort if we find otherwise.
-  if [ -f "$HOME/.bashrc" -o -f "$HOME/.zshrc" -o -f "$HOME/.zshenv" -o
-       -f "$HOME/.zlogin" -o -f "$HOME/.zlogout" -o -f "$HOME/.zprofile" -o
-       -f "$HOME/.profile" -o -f "$HOME/.login" -o -f "$HOME/.logout" -o
-       -f "$HOME/.config/fish/config.fish" -o
-       -f "$HOME/.cshrc" -o -f "$HOME/.tcshrc" ]; then
-        echo "user_dotfiles_setup: found preexisting dotfile(s) in $HOME" >&2
-        return 1
+  if
+    [ -f "$HOME/.bashrc" -o -f "$HOME/.zshrc" -o -f "$HOME/.zshenv" -o
+    -f "$HOME/.zlogin" -o -f "$HOME/.zlogout" -o -f "$HOME/.zprofile" -o
+    -f "$HOME/.profile" -o -f "$HOME/.login" -o -f "$HOME/.logout" -o
+    -f "$HOME/.config/fish/config.fish" -o
+    -f "$HOME/.cshrc" -o -f "$HOME/.tcshrc" ]
+  then
+    echo "user_dotfiles_setup: found preexisting dotfile(s) in $HOME" >&2
+    return 1
   fi
   BADPATH="/usr/local/bin:/usr/bin:/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin"
 
   # Posix-compliant shells
   for i in "profile" "bashrc" \
-           "zshrc" "zshenv" "zlogin" "zlogout" "zprofile"; do
-    cat > "$HOME/.$i" <<EOF
+    "zshrc" "zshenv" "zlogin" "zlogout" "zprofile"; do
+    cat >"$HOME/.$i" <<EOF
 echo "Sourcing .$i" >&2
 echo "Setting PATH from .$i" >&2
 export PATH="$BADPATH"
@@ -48,7 +50,7 @@ EOF
 
   # Fish
   mkdir -p "$HOME/.config/fish"
-  cat > "$HOME/.config/fish/config.fish" <<EOF
+  cat >"$HOME/.config/fish/config.fish" <<EOF
 echo "Sourcing config.fish" >&2
 echo "Setting PATH from config.fish" >&2
 set -gx PATH "$BADPATH"
@@ -59,7 +61,7 @@ EOF
 
   # Csh-based shells
   for i in "cshrc" "tcshrc" "login" "logout"; do
-    cat > "$HOME/.$i" <<EOF
+    cat >"$HOME/.$i" <<EOF
 sh -c "echo 'Sourcing .$i' >&2"
 sh -c "echo 'Setting PATH from .$i' >&2"
 setenv PATH "$BADPATH"
@@ -109,7 +111,7 @@ project_setup_pkgdb() {
 }
 
 project_teardown() {
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
   unset PROJECT_NAME
@@ -119,7 +121,6 @@ project_teardown() {
     "$HOME/.config/fish/config.fish.extra" \
     "$HOME/.zshrc.extra"
 }
-
 
 # ---------------------------------------------------------------------------- #
 
@@ -133,20 +134,19 @@ teardown() {
   common_test_teardown
 }
 
-
 # ---------------------------------------------------------------------------- #
 
 # Some constants
 
 export VARS=$(
-  cat << EOF
+  cat <<EOF
 [vars]
 foo = "baz"
 EOF
-  )
+)
 
 export HELLO_PROFILE_SCRIPT=$(
-  cat <<- EOF
+  cat <<-EOF
 [profile]
 common = """
   echo "sourcing profile.common";
@@ -164,27 +164,26 @@ zsh = """
   echo "sourcing profile.zsh";
 """
 EOF
-  )
+)
 
 export VARS_HOOK_SCRIPT=$(
-  cat << EOF
+  cat <<EOF
 [hook]
 on-activate = """
   echo "sourcing hook.on-activate";
 """
 EOF
-  )
+)
 
 export VARS_HOOK_SCRIPT_ECHO_FOO=$(
-  cat << EOF
+  cat <<EOF
 [hook]
 on-activate = """
   echo "sourcing hook.on-activate";
   echo \$foo;
 """
 EOF
-  )
-
+)
 
 # ---------------------------------------------------------------------------- #
 
@@ -284,12 +283,7 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:zsh
 @test "zsh: interactive activate puts package in path" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
-  run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
-  assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  project_setup_pkgdb
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
@@ -544,7 +538,7 @@ EOF
 
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
-  cat << 'EOF' | bash
+  cat <<'EOF' | bash
     eval "$("$FLOX_BIN" activate 2>"$PROJECT_DIR/stderr_1")"
     [[ "$(cat "$PROJECT_DIR/stderr_1")" == *"sourcing hook.on-activate"* ]]
     eval "$("$FLOX_BIN" activate 2>"$PROJECT_DIR/stderr_2")"
@@ -569,7 +563,7 @@ EOF
 
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
-  cat << 'EOF' | fish
+  cat <<'EOF' | fish
     eval "$("$FLOX_BIN" activate 2>"$PROJECT_DIR/stderr_1")"
     grep -q "sourcing hook.on-activate" "$PROJECT_DIR/stderr_1"
     eval "$("$FLOX_BIN" activate 2>"$PROJECT_DIR/stderr_2")"
@@ -596,7 +590,7 @@ EOF
 
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
-  cat << 'EOF' | tcsh
+  cat <<'EOF' | tcsh
     eval "`$FLOX_BIN activate`" >& "$PROJECT_DIR/stderr_1"
     grep -q "sourcing hook.on-activate" "$PROJECT_DIR/stderr_1"
     "$FLOX_BIN" activate | grep -q "sourcing hook.on-activate"
@@ -623,7 +617,7 @@ EOF
 
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
-  cat << 'EOF' | zsh
+  cat <<'EOF' | zsh
     eval "$("$FLOX_BIN" activate 2>"$PROJECT_DIR/stderr_1")"
     [[ "$(cat "$PROJECT_DIR/stderr_1")" == *"sourcing hook.on-activate"* ]]
     eval "$("$FLOX_BIN" activate 2>"$PROJECT_DIR/stderr_2")"
@@ -674,7 +668,7 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # TODO: this gives unhelpful failures
-  cat << 'EOF' | fish
+  cat <<'EOF' | fish
     set output "$(eval "$("$FLOX_BIN" activate)")"
     echo "$output" | string match "sourcing profile.fish"
     set output "$(eval "$("$FLOX_BIN" activate)")"
@@ -699,7 +693,7 @@ EOF
 
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
-  cat << 'EOF' | tcsh
+  cat <<'EOF' | tcsh
     eval "`$FLOX_BIN activate`" |& grep -q "sourcing profile.tcsh"
     eval "`$FLOX_BIN activate`" |& grep -q "sourcing profile.tcsh"
 EOF
@@ -721,14 +715,13 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # TODO: this gives unhelpful failures
-  cat << 'EOF' | zsh
+  cat <<'EOF' | zsh
     output="$(FLOX_SHELL="zsh" eval "$("$FLOX_BIN" activate)")"
     [[ "$output" == *"sourcing profile.zsh"* ]]
     output="$(FLOX_SHELL="zsh" eval "$("$FLOX_BIN" activate)")"
     [[ "$output" == *"sourcing profile.zsh"* ]]
 EOF
 }
-
 
 # ---------------------------------------------------------------------------- #
 
@@ -775,7 +768,7 @@ EOF
 # bats test_tags=activate,activate:rc:bash
 @test "bash: activate respects ~/.bashrc" {
   project_setup
-  echo "alias test_alias='echo testing'" > "$HOME/.bashrc.extra"
+  echo "alias test_alias='echo testing'" >"$HOME/.bashrc.extra"
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
@@ -786,7 +779,7 @@ EOF
 # bats test_tags=activate,activate:fish,activate:rc:fish
 @test "fish: activate respects ~/.config/fish/config.fish" {
   project_setup
-  echo "alias test_alias='echo testing'" > "$HOME/.config/fish/config.fish.extra"
+  echo "alias test_alias='echo testing'" >"$HOME/.config/fish/config.fish.extra"
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
@@ -805,7 +798,7 @@ EOF
 # bats test_tags=activate,activate:rc:tcsh
 @test "tcsh: activate respects ~/.tcshrc" {
   project_setup
-  echo 'alias test_alias "echo testing"' > "$HOME/.tcshrc.extra"
+  echo 'alias test_alias "echo testing"' >"$HOME/.tcshrc.extra"
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
@@ -816,7 +809,7 @@ EOF
 # bats test_tags=activate,activate:rc:zsh
 @test "zsh: activate respects ~/.zshrc" {
   project_setup
-  echo "alias test_alias='echo testing'" > "$HOME/.zshrc.extra"
+  echo "alias test_alias='echo testing'" >"$HOME/.zshrc.extra"
   # TODO: flox will set HOME if it doesn't match the home of the user with
   # current euid. I'm not sure if we should change that, but for now just set
   # USER to REAL_USER.
@@ -1090,8 +1083,8 @@ EOF
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:bash
 @test "'flox activate' modifies the current shell (bash)" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
+  project_setup_pkgdb
+
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set a hook
@@ -1136,8 +1129,7 @@ EOF
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:fish
 @test "'flox activate' modifies the current shell (fish)" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
+  project_setup_pkgdb
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set a hook
@@ -1184,8 +1176,7 @@ EOF
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:tcsh
 @test "'flox activate' modifies the current shell (tcsh)" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
+  project_setup_pkgdb
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set a hook
@@ -1232,8 +1223,7 @@ EOF
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:zsh
 @test "'flox activate' modifies the current shell (zsh)" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
+  project_setup_pkgdb
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   # set a hook
@@ -1291,7 +1281,7 @@ EOF
   project_setup
   FLOX_SHELL="bash" run -- \
     "$FLOX_BIN" activate -- \
-      bash -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
+    bash -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
   assert_success
 }
 
@@ -1300,7 +1290,7 @@ EOF
   project_setup
   FLOX_SHELL="fish" run -- \
     "$FLOX_BIN" activate -- \
-      fish -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
+    fish -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
   assert_success
 }
 
@@ -1312,7 +1302,7 @@ EOF
   #       because it works ...
   FLOX_SHELL="tcsh" run -- \
     "$FLOX_BIN" activate -- \
-      tcsh -c "$FLOX_BIN activate | source /dev/stdin; bash $TESTS_DIR/activate/verify_PATH.bash"
+    tcsh -c "$FLOX_BIN activate | source /dev/stdin; bash $TESTS_DIR/activate/verify_PATH.bash"
   assert_success
 }
 
@@ -1321,7 +1311,7 @@ EOF
   project_setup
   FLOX_SHELL="zsh" run -- \
     "$FLOX_BIN" activate -- \
-      zsh -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
+    zsh -c 'eval "$($FLOX_BIN activate)"; bash "$TESTS_DIR"/activate/verify_PATH.bash'
   assert_success
 }
 
@@ -1391,13 +1381,13 @@ EOF
 @test "'flox *' uses local environment over 'default' environment" {
   project_setup # TODO: we need PROJECT_DIR, but not flox init
   "$FLOX_BIN" delete -f
-  export FLOX_FEATURES_USE_CATALOG=false
+  export FLOX_FEATURES_USE_CATALOG=false # todo: port
 
   mkdir default
-  pushd default > /dev/null || return
+  pushd default >/dev/null || return
   "$FLOX_BIN" init
   "$FLOX_BIN" install vim
-  popd > /dev/null || return
+  popd >/dev/null || return
 
   "$FLOX_BIN" init
   "$FLOX_BIN" install emacs
@@ -1419,11 +1409,11 @@ EOF
   project_setup # TODO: we need PROJECT_DIR, but not flox init
   "$FLOX_BIN" delete -f
   mkdir default
-  pushd default > /dev/null || return
+  pushd default >/dev/null || return
   "$FLOX_BIN" init
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim.json"
   "$FLOX_BIN" install vim
-  popd > /dev/null || return
+  popd >/dev/null || return
 
   "$FLOX_BIN" init
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/emacs.json"
@@ -1537,7 +1527,7 @@ EOF
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
-  cat << 'EOF' | fish
+  cat <<'EOF' | fish
     eval "$("$FLOX_BIN" activate)"
     echo "$foo" | string match "baz"
     set -e foo
@@ -1551,7 +1541,7 @@ EOF
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
-  cat << 'EOF' | tcsh -v
+  cat <<'EOF' | tcsh -v
     eval "`$FLOX_BIN activate`"
     if ( "$foo" != baz ) then
       exit 1
@@ -1570,7 +1560,7 @@ EOF
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
   # TODO: this gives unhelpful failures
-  cat << 'EOF' | zsh
+  cat <<'EOF' | zsh
     eval "$("$FLOX_BIN" activate)"
     [[ "$foo" == baz ]]
     unset foo
@@ -1621,7 +1611,7 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # TODO: this gives unhelpful failures
-  cat << 'EOF' | fish
+  cat <<'EOF' | fish
     set -gx foo baz
     eval "$("$FLOX_BIN" activate)"
     if set -q foo
@@ -1651,7 +1641,7 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # TODO: this gives unhelpful failures
-  cat << 'EOF' | tcsh
+  cat <<'EOF' | tcsh
     setenv foo baz
     eval "`$FLOX_BIN activate`"
     if ( $?foo ) then
@@ -1681,7 +1671,7 @@ EOF
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   # TODO: this gives unhelpful failures
-  cat << 'EOF' | zsh
+  cat <<'EOF' | zsh
     export foo=baz
     eval "$("$FLOX_BIN" activate)"
     [[ -z "${foo:-}" ]]
@@ -1848,7 +1838,7 @@ EOF
   project_setup
   # The bash -ic invocation sources .bashrc, and then the activate sources it a
   # second time and disables further sourcing.
-  cat > "$HOME/.bashrc.extra" <<EOF
+  cat >"$HOME/.bashrc.extra" <<EOF
 if [ -z "\$ALREADY_SOURCED" ]; then
   export ALREADY_SOURCED=1
 elif [ "\$ALREADY_SOURCED" == 1 ]; then
@@ -1865,7 +1855,7 @@ EOF
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:fish
 @test "fish: test for infinite source loop" {
   project_setup
-  cat > "$HOME/.config/fish/config.fish.extra" <<EOF
+  cat >"$HOME/.config/fish/config.fish.extra" <<EOF
 if set -q ALREADY_SOURCED
   exit 2
 end
@@ -1879,7 +1869,7 @@ EOF
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:tcsh
 @test "tcsh: test for infinite source loop" {
   project_setup
-  cat > "$HOME/.tcshrc.extra" <<EOF
+  cat >"$HOME/.tcshrc.extra" <<EOF
 if ( \$?ALREADY_SOURCED ) then
   exit 2
 endif
@@ -1893,7 +1883,7 @@ EOF
 # bats test_tags=activate,activate:infinite_source,activate:infinite_source:zsh
 @test "zsh: test for infinite source loop" {
   project_setup
-  cat > "$HOME/.zshrc.extra" <<EOF
+  cat >"$HOME/.zshrc.extra" <<EOF
 if [ -n "\$ALREADY_SOURCED" ]; then
   exit 2
 else
@@ -2083,7 +2073,7 @@ EOF
 
   # Start by adding logic to create semaphore files for all shells.
   for i in "$HOME/.bashrc.extra" "$HOME/.config/fish/config.fish.extra" "$HOME/.tcshrc.extra" "$HOME/.zshrc.extra"; do
-    cat > "$i" <<EOF
+    cat >"$i" <<EOF
 touch "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
 test -n "\$_flox_activate_tracelevel" || touch "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
 EOF
@@ -2091,9 +2081,9 @@ EOF
 
   # Finish by appending shell-specific flox activation syntax.
   for i in "$HOME/.bashrc.extra" "$HOME/.config/fish/config.fish.extra" "$HOME/.zshrc.extra"; do
-    echo "eval \"\$($FLOX_BIN activate --dir $PROJECT_DIR)\"" >> "$i"
+    echo "eval \"\$($FLOX_BIN activate --dir $PROJECT_DIR)\"" >>"$i"
   done
-  echo "eval \"\`$FLOX_BIN activate --dir $PROJECT_DIR\`\"" >> "$HOME/.tcshrc.extra"
+  echo "eval \"\`$FLOX_BIN activate --dir $PROJECT_DIR\`\"" >>"$HOME/.tcshrc.extra"
 
   # Create a test environment.
   _temp_env="$(mktemp -d)"
