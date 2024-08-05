@@ -1,0 +1,30 @@
+[install]
+hello.pkg-path = "hello"
+
+[vars]
+foo = "baz"
+
+[hook]
+on-activate = """
+  echo "sourcing hook.on-activate";
+"""
+
+[profile]
+common = """
+  echo "sourcing profile.common";
+"""
+bash = """
+  echo "sourcing profile.bash";
+"""
+fish = """
+  echo "sourcing profile.fish";
+"""
+tcsh = """
+  echo "sourcing profile.tcsh";
+"""
+zsh = """
+  echo "sourcing profile.zsh";
+"""
+
+[options]
+systems = ["x86_64-linux", "x86_64-darwin", "aarch64-linux", "aarch64-darwin"]

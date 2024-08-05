@@ -1085,13 +1085,7 @@ EOF
 @test "'flox activate' modifies the current shell (bash)" {
   project_setup_pkgdb
 
-  # set profile scripts
-  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  # set a hook
-  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  # set vars
-  sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  "$FLOX_BIN" install hello
+  cp -r "$MANUALLY_GENERATED"/hello_for_activate_v0/* .flox/env/
 
   run bash -c 'eval "$($FLOX_BIN activate)"; type hello; echo $foo'
   assert_success
@@ -1130,13 +1124,8 @@ EOF
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:fish
 @test "'flox activate' modifies the current shell (fish)" {
   project_setup_pkgdb
-  # set profile scripts
-  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  # set a hook
-  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  # set vars
-  sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  "$FLOX_BIN" install hello
+
+  cp -r "$MANUALLY_GENERATED"/hello_for_activate_v0/* .flox/env/
 
   run fish -c 'eval "$($FLOX_BIN activate)"; type hello; echo $foo'
   assert_success
@@ -1177,13 +1166,8 @@ EOF
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:tcsh
 @test "'flox activate' modifies the current shell (tcsh)" {
   project_setup_pkgdb
-  # set profile scripts
-  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  # set a hook
-  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  # set vars
-  sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  "$FLOX_BIN" install hello
+
+  cp -r "$MANUALLY_GENERATED"/hello_for_activate_v0/* .flox/env/
 
   run tcsh -c 'eval "`$FLOX_BIN activate`"; echo hello is `which hello`; echo $foo'
   assert_success
@@ -1224,13 +1208,8 @@ EOF
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:zsh
 @test "'flox activate' modifies the current shell (zsh)" {
   project_setup_pkgdb
-  # set profile scripts
-  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  # set a hook
-  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  # set vars
-  sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
-  "$FLOX_BIN" install hello
+
+  cp -r "$MANUALLY_GENERATED"/hello_for_activate_v0/* .flox/env/
 
   run zsh -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
   assert_success
