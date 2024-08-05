@@ -51,9 +51,20 @@ teardown() {
 
 # ---------------------------------------------------------------------------- #
 
+# init path environment and push to remote
 function make_empty_remote_env() {
-  # init path environment and push to remote
   "$FLOX_BIN" init
+  "$FLOX_BIN" push --owner "$OWNER"
+}
+
+# create path env from pre-generated locked manifest v0
+function make_remote_env_with_hello() {
+  mkdir -p "$PROJECT_DIR/.flox/env"
+  cp "$MANUALLY_GENERATED"/hello_v0/* "$PROJECT_DIR/.flox/env"
+  echo '{
+    "name": "'$PROJECT_NAME'",
+    "version": 1
+  }' >>"$PROJECT_DIR/.flox/env.json"
   "$FLOX_BIN" push --owner "$OWNER"
 }
 
@@ -278,9 +289,7 @@ EOF
 # Make sure we haven't activate
 # bats test_tags=managed,activate,managed:activate
 @test "m9: activate works in managed environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  make_empty_remote_env
-  "$FLOX_BIN" install hello
+  make_remote_env_with_hello
 
   run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- command -v hello
   assert_success

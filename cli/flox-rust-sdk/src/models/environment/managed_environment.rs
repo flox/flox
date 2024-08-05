@@ -1338,7 +1338,7 @@ impl ManagedEnvironment {
         // ensure_locked is avoiding locking of v0 manifests,
         // but we don't need to support pushing old manifests.
         core_environment
-            .lock(flox)
+            .ensure_locked(flox)
             .map_err(ManagedEnvironmentError::Lock)?;
 
         // Ensure the environment builds before we push it
