@@ -80,17 +80,6 @@ function make_empty_remote_env() {
 }
 
 # bats test_tags=hermetic,remote,remote:outlink
-@test "r0: building a remote environment creates outlink" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  make_empty_remote_env
-
-  run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
-  assert_success
-
-  assert [ -h "$FLOX_CACHE_DIR/run/$OWNER/test" ]
-}
-
-# bats test_tags=hermetic,remote,remote:outlink
 @test "catalog: r0: building a remote environment creates outlink" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
