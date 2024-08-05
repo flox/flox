@@ -4,10 +4,9 @@ use std::path::PathBuf;
 use openapiv3::OpenAPI;
 
 fn main() {
-    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let generate_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("src");
 
-    let spec_src = manifest_dir.join("openapi.json");
+    let spec_src = PathBuf::from("openapi.json");
 
     let file = std::fs::File::open(&spec_src).unwrap();
     let spec = serde_json::from_reader(file).expect("Failed to parse openapi spec");

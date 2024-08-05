@@ -12,7 +12,6 @@ use crate::commands::{
     ensure_floxhub_token,
     environment_description,
     maybe_migrate_environment_to_v1,
-    ConcreteEnvironment,
     EnvironmentSelectError,
 };
 use crate::subcommand_metric;
@@ -44,6 +43,12 @@ impl Uninstall {
             self.packages.as_slice().join(", "),
             self.environment
         );
+
+        // Ensure the user is logged in for the following remote operations
+        if let EnvironmentSelect::Remote(_) = self.environment {
+            ensure_floxhub_token(&mut flox).await?;
+        };
+
         let mut concrete_environment = match self
             .environment
             .detect_concrete_environment(&flox, "Uninstall from")
@@ -67,11 +72,6 @@ impl Uninstall {
                 self.packages.join(" ")})
             },
             Err(e) => Err(e)?,
-        };
-
-        // Ensure the user is logged in for the following remote operations
-        if let ConcreteEnvironment::Remote(_) = concrete_environment {
-            ensure_floxhub_token(&mut flox).await?;
         };
 
         maybe_migrate_environment_to_v1(&flox, &mut concrete_environment).await?;

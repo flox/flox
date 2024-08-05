@@ -70,7 +70,7 @@ setup_sleeping_services() {
 @test "can call process-compose" {
   run "$PROCESS_COMPOSE_BIN" version
   assert_success
-  assert_output --partial "v1.6.1"
+  assert_output --partial "v1.9"
 }
 
 @test "process-compose can run generated config file" {
@@ -293,18 +293,8 @@ EOF
   # Close FD 3 so bats doesn't hang forever.
   # Kill sleep for now just to be safe.
 
-  # pgrep is not in procps for some reason
-  pgrep_sleep() {
-    ps -o comm -o pid | grep sleep | sed "s/sleep\s*//"
-  }
-  pgrep_sleep > sleeping_before || echo > sleeping_before
-  run "$FLOX_BIN" activate -s -- true 3>&-
+  run "$FLOX_BIN" activate -s -- true
   assert_output --partial "❌ Failed to start services"
-  pgrep_sleep > sleeping_after
-  SLEEP_PID="$(comm -13 sleeping_before sleeping_after)"
-  if [ -n "$SLEEP_PID" ]; then
-    kill "$SLEEP_PID"
-  fi
 }
 
 @test "blocking: activation blocks on socket creation" {

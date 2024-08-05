@@ -174,6 +174,31 @@ common_file_teardown() {
 teardown_file() { common_file_teardown; }
 
 common_test_teardown() {
+  # wait for any running klaus proceses to finish
+  if [[ -n "${FLOX_DATA_DIR:-}" ]]; then
+    # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
+    # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
+    # grep command itself doesn't get listed when we search for the data dir.
+    # The `cut` just extracts the PID.
+    local pids
+    pids="$(ps -eo pid,args | grep klaus | grep ${FLOX_DATA_DIR?} | cut -d' ' -f1)"
+    if [ -n "${pids?}" ]; then
+      tries=0
+      while true; do
+        tries=$((tries + 1))
+        if ! kill -0 $pids > /dev/null 2>&1; then
+          break
+        else
+          if [[ $tries -gt 1000 ]]; then
+            echo "ERROR: klaus processes did not finish after 10 seconds."
+            break
+          fi
+          sleep 0.01;
+        fi
+      done
+    fi
+  fi
+
   # Delete test tmpdir unless the user requests to preserve them.
   # XXX: We do not attempt to delete envs here.
   if [[ -z "${FLOX_TEST_KEEP_TMP:-}" ]]; then rm -rf "$BATS_TEST_TMPDIR"; fi
