@@ -91,9 +91,9 @@ const UPDATE_NOTIFICATION_FILE_NAME: &str = "update-notification.json";
 const UPDATE_NOTIFICATION_EXPIRY: Duration = Duration::days(1);
 
 static FLOX_DESCRIPTION: &'_ str = indoc! {"
-    flox is a virtual environment and package manager all in one.\n\n
+    Flox is a virtual environment and package manager all in one.\n\n
 
-    With flox you create environments that layer and replace dependencies just where it matters,
+    With Flox you create environments that layer and replace dependencies just where it matters,
     making them portable across the full software lifecycle."
 };
 
