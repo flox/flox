@@ -19,7 +19,7 @@ project_setup() {
 
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" > /dev/null || return
+  pushd "$PROJECT_DIR" >/dev/null || return
 
 }
 
@@ -33,7 +33,7 @@ floxmeta_setup() {
 }
 
 project_teardown() {
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -145,7 +145,7 @@ make_remote_pkgdb_env_with_hello() {
 
   TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
 
-  cat << "EOF" >> "$TMP_MANIFEST_PATH"
+  cat <<"EOF" >>"$TMP_MANIFEST_PATH"
 version = 1
 
 [install]
@@ -300,7 +300,6 @@ EOF
   assert_output --partial "Environment not found in FloxHub."
 }
 
-
 # bats test_tags=remote,remote:not-found
 @test "install --remote fails on a non existent environment" {
   run "$FLOX_BIN" install -r "$OWNER/i-dont-exist"
@@ -317,7 +316,6 @@ EOF
   assert_failure
   assert_output --partial "You are not logged in to FloxHub."
 }
-
 
 # bats test_tags=remote,remote:auth-required,remote:auth-required:uninstall
 @test "'uninstall --remote' fails if not authenticated" {
@@ -354,7 +352,7 @@ EOF
 
   TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
 
-  cat << "EOF" >> "$TMP_MANIFEST_PATH"
+  cat <<"EOF" >>"$TMP_MANIFEST_PATH"
 version = 1
 
 [services.hello]
