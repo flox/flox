@@ -64,6 +64,25 @@ function make_empty_remote_env() {
   rm -rf local
 }
 
+# create remote a pkgdb environment with hello installed
+# from pre-generated lock
+make_remote_pkgdb_env_with_hello() {
+  mkdir local
+  pushd local
+
+  # init path environment and push to remote
+  mkdir -p .flox/env
+  cp "$MANUALLY_GENERATED"/hello_v0/* .flox/env
+  echo '{
+    "name": "test",
+    "version": 1
+  }' >.flox/env.json
+  "$FLOX_BIN" push --owner "$OWNER"
+  "$FLOX_BIN" delete -f
+  popd
+  rm -rf local
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=hermetic,remote,remote:hermetic
@@ -146,9 +165,7 @@ EOF
 
 # bats test_tags=remote,activate,remote:activate
 @test "m9: activate works in remote environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  make_empty_remote_env
-  "$FLOX_BIN" install hello --remote "$OWNER/test"
+  make_remote_pkgdb_env_with_hello
 
   run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- command -v hello
   assert_success
