@@ -54,6 +54,7 @@ setup_sleeping_services() {
 # NOTE: The following functionality is tested elsewhere:
 #
 #   - logs: providers/services.rs
+#   - status: providers/services.rs
 #   - remote environments: tests/environment-remotes.bats
 #
 # ---------------------------------------------------------------------------- #
@@ -154,14 +155,14 @@ EOF
     exit_code=0
     source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one invalid || exit_code=$?
-    "$PROCESS_COMPOSE_BIN" process list --output wide
+    "$FLOX_BIN" services status
     exit $exit_code
 EOF
 )
   assert_failure
   assert_output --partial "❌ ERROR: service 'invalid' is not running"
-  assert_output --regexp " +one +default +Completed +"
-  assert_output --regexp " +two +default +Running +"
+  assert_output --regexp "one +Completed"
+  assert_output --regexp "two +Running"
 }
 
 # bats test_tags=services:stop
@@ -173,14 +174,14 @@ EOF
     exit_code=0
     source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop invalid one || exit_code=$?
-    "$PROCESS_COMPOSE_BIN" process list --output wide
+    "$FLOX_BIN" services status
     exit $exit_code
 EOF
 )
   assert_failure
   assert_output --partial "❌ ERROR: service 'invalid' is not running"
-  assert_output --regexp " +one +default +Running +"
-  assert_output --regexp " +two +default +Running +"
+  assert_output --regexp "one +Running"
+  assert_output --regexp "two +Running"
 }
 
 # bats test_tags=services:stop
@@ -205,14 +206,14 @@ EOF
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop
-    "$PROCESS_COMPOSE_BIN" process list --output wide
+    "$FLOX_BIN" services status
 EOF
 )
   assert_success
   assert_output --partial "✅ Service 'one' stopped"
   assert_output --partial "✅ Service 'two' stopped"
-  assert_output --regexp " +one +default +Completed +"
-  assert_output --regexp " +two +default +Completed +"
+  assert_output --regexp "one +Completed"
+  assert_output --regexp "two +Completed"
 }
 
 # bats test_tags=services:stop
@@ -223,13 +224,13 @@ EOF
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one
-    "$PROCESS_COMPOSE_BIN" process list --output wide
+    "$FLOX_BIN" services status
 EOF
 )
   assert_success
   assert_output --partial "✅ Service 'one' stopped"
-  assert_output --regexp " +one +default +Completed +"
-  assert_output --regexp " +two +default +Running +"
+  assert_output --regexp "one +Completed"
+  assert_output --regexp "two +Running"
 }
 
 # bats test_tags=services:stop
@@ -240,14 +241,14 @@ EOF
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one two
-    "$PROCESS_COMPOSE_BIN" process list --output wide
+    "$FLOX_BIN" services status
 EOF
 )
   assert_success
   assert_output --partial "✅ Service 'one' stopped"
   assert_output --partial "✅ Service 'two' stopped"
-  assert_output --regexp " +one +default +Completed +"
-  assert_output --regexp " +two +default +Completed +"
+  assert_output --regexp "one +Completed"
+  assert_output --regexp "two +Completed"
 }
 
 # bats test_tags=services:stop
@@ -258,12 +259,12 @@ EOF
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one
-    "$PROCESS_COMPOSE_BIN" process list --output wide
+    "$FLOX_BIN" services status
     "$FLOX_BIN" services stop one
 EOF
 )
   assert_failure
-  assert_output --regexp " +one +default +Completed +"
+  assert_output --regexp "one +Completed"
   assert_output --partial "❌ ERROR: service 'one' is not running"
 }
 
