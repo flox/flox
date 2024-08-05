@@ -36,7 +36,9 @@ watchdog_pids_called_with_arg() {
   # The `cut` just extracts the PID.
   local pattern="$1"
   local pids
-  pids="$(ps -eo pid,args | grep klaus | grep "$pattern" | cut -d' ' -f1)"
+  # This is a load-bearing 'xargs', it strips leading/trailing whitespace that
+  # trips up 'cut'
+  pids="$(ps -eo pid,args | grep klaus | grep $pattern | xargs | cut -d' ' -f1)"
   echo "$pids"
 }
 
