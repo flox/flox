@@ -24,7 +24,7 @@ fs_extra = "1.3.0"
 futures = "0.3"
 httpmock = { version = "0.7.0", default-features = false }
 indent = "0.1.1"
-indexmap = { version = "2.2.6", features = ["serde"] }
+indexmap = { version = "2.3.0", features = ["serde"] }
 indoc = "2.0.1"
 inquire = "0.6.0"
 indicatif = "0.17"
@@ -59,12 +59,12 @@ sysinfo = "0.30.13"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
-tempfile = "3.4.0"
+tempfile = "3.11.0"
 textwrap = { version = "0.16.0", features = ["terminal_size"] }
 thiserror = "1"
 time = { version = "0.3", features = ["serde", "formatting"] }
 tokio = { version = "1", features = ["full"] }
-toml = "0.8.16"
+toml = "0.8.19"
 toml_edit = { version = "0.22", features = ["serde"] }
 tracing = "0.1"
 tracing-log = { version = "0.2", features = [] }
