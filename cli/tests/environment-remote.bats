@@ -120,27 +120,6 @@ function make_empty_remote_env() {
 }
 
 # bats test_tags=edit,remote,remote:edit
-@test "m3: edit a package from a managed environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  make_empty_remote_env
-
-  TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
-
-  cat << "EOF" >> "$TMP_MANIFEST_PATH"
-[install]
-hello = {}
-EOF
-
-  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH" --remote "$OWNER/test"
-  assert_success
-  assert_output --partial "✅ Environment successfully updated."
-
-  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
-  assert_success
-  assert_output "hello"
-}
-
-# bats test_tags=edit,remote,remote:edit
 @test "catalog: m3: edit a package from a managed environment" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
