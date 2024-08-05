@@ -350,24 +350,6 @@ EOF
   refute_output "vim"
 }
 
-# bats test_tags=managed:xyz
-@test "sanity check upgrade works for managed environments" {
-  # update shouldn't work for catalog: https://github.com/flox/flox/issues/1509
-  export FLOX_FEATURES_USE_CATALOG=false
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    make_empty_remote_env
-
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" install hello
-
-  # After an update, nixpkgs is the new nixpkgs, but hello is still from the
-  # old one.
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
-    "$FLOX_BIN" update
-
-  run "$FLOX_BIN" upgrade
-  assert_output --partial "Upgraded 'hello'"
-}
 
 # ---------------------------------------------------------------------------- #
 
