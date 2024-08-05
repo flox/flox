@@ -5,6 +5,7 @@
 //! Note that `process-compose` terminates when all services are stopped. To prevent this, we inject
 //! a dummy service (`flox_never_exit`) that sleeps indefinitely.
 
+use std::cmp::max;
 use std::collections::BTreeMap;
 use std::env;
 use std::fmt::Display;
@@ -311,9 +312,18 @@ impl IntoIterator for ProcessStatesDisplay {
 
 impl Display for ProcessStatesDisplay {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{:<20} {:<10} {:>8}", "NAME", "STATUS", "PID")?;
+        let name_width_min = 10;
+        let name_width = max(
+            name_width_min,
+            self.0.iter().map(|proc| proc.name.len()).max().unwrap_or(0),
+        );
+        writeln!(f, "{:<name_width$} {:<10} {:>8}", "NAME", "STATUS", "PID")?;
         for proc in &self.0 {
-            writeln!(f, "{:<20} {:<10} {:>8}", proc.name, proc.status, proc.pid)?;
+            writeln!(
+                f,
+                "{:<name_width$} {:<10} {:>8}",
+                proc.name, proc.status, proc.pid
+            )?;
         }
         Ok(())
     }
@@ -875,11 +885,11 @@ mod tests {
         };
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME                 STATUS          PID
-            aaa                  Running         123
-            bbb                  Running         123
-            ccc                  Running         123
-            zzz                  Running         123
+            NAME       STATUS          PID
+            aaa        Running         123
+            bbb        Running         123
+            ccc        Running         123
+            zzz        Running         123
         "});
     }
 
@@ -910,10 +920,10 @@ mod tests {
         };
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME                 STATUS          PID
-            aaa                  Running         123
-            bbb                  Stopped         123
-            ccc                  Completed       123
+            NAME       STATUS          PID
+            aaa        Running         123
+            bbb        Stopped         123
+            ccc        Completed       123
         "});
     }
 
@@ -930,12 +940,12 @@ mod tests {
         };
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME                 STATUS          PID
-            aaa                  Running           1
-            bbb                  Running          12
-            ccc                  Running         123
-            ddd                  Running        1234
-            eee                  Running       12345
+            NAME       STATUS          PID
+            aaa        Running           1
+            bbb        Running          12
+            ccc        Running         123
+            ddd        Running        1234
+            eee        Running       12345
         "});
     }
 }
