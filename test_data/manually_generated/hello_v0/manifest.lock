@@ -6,6 +6,14 @@
         "pkg-path": "hello"
       }
     },
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "aarch64-linux",
+        "x86_64-darwin",
+        "x86_64-linux"
+      ]
+    },
     "registry": {
       "defaults": {
         "subtrees": null
@@ -46,15 +54,105 @@
         },
         "input": {
           "attrs": {
-            "lastModified": 1718132686,
-            "narHash": "sha256-JRinkq+FeAkYnrrK8+Bh+jtLHJBN5jDzSimk1ye00EE=",
+            "lastModified": 1706666764,
+            "narHash": "sha256-M59UCWsadEFO+DMdZFMtTlxpFyT3RQIpBLuEX8oziVc=",
             "owner": "NixOS",
             "repo": "nixpkgs",
-            "rev": "96b3dae4f8753c1f5ce0d06b57fe250fb5d9b0e0",
+            "rev": "7731670498f0a22c361c9d68f73d382bce05d7dc",
             "type": "github"
           },
-          "fingerprint": "d00f00cc0b4a10cd832ce3f73a3fcdfbab77482451eeabfd99c2f0fb1ada3cb0",
-          "url": "github:NixOS/nixpkgs/96b3dae4f8753c1f5ce0d06b57fe250fb5d9b0e0"
+          "fingerprint": "bbc93a7d71106b6b24a3444467780d709b0f0ef8a07ed6c1c8af638e6765443e",
+          "url": "github:NixOS/nixpkgs/7731670498f0a22c361c9d68f73d382bce05d7dc"
+        },
+        "priority": 5
+      }
+    },
+    "aarch64-linux": {
+      "hello": {
+        "attr-path": [
+          "legacyPackages",
+          "aarch64-linux",
+          "hello"
+        ],
+        "info": {
+          "broken": false,
+          "description": "A program that produces a familiar, friendly greeting",
+          "license": "GPL-3.0-or-later",
+          "pname": "hello",
+          "unfree": false,
+          "version": "2.12.1"
+        },
+        "input": {
+          "attrs": {
+            "lastModified": 1706666764,
+            "narHash": "sha256-M59UCWsadEFO+DMdZFMtTlxpFyT3RQIpBLuEX8oziVc=",
+            "owner": "NixOS",
+            "repo": "nixpkgs",
+            "rev": "7731670498f0a22c361c9d68f73d382bce05d7dc",
+            "type": "github"
+          },
+          "fingerprint": "bbc93a7d71106b6b24a3444467780d709b0f0ef8a07ed6c1c8af638e6765443e",
+          "url": "github:NixOS/nixpkgs/7731670498f0a22c361c9d68f73d382bce05d7dc"
+        },
+        "priority": 5
+      }
+    },
+    "x86_64-darwin": {
+      "hello": {
+        "attr-path": [
+          "legacyPackages",
+          "x86_64-darwin",
+          "hello"
+        ],
+        "info": {
+          "broken": false,
+          "description": "A program that produces a familiar, friendly greeting",
+          "license": "GPL-3.0-or-later",
+          "pname": "hello",
+          "unfree": false,
+          "version": "2.12.1"
+        },
+        "input": {
+          "attrs": {
+            "lastModified": 1706666764,
+            "narHash": "sha256-M59UCWsadEFO+DMdZFMtTlxpFyT3RQIpBLuEX8oziVc=",
+            "owner": "NixOS",
+            "repo": "nixpkgs",
+            "rev": "7731670498f0a22c361c9d68f73d382bce05d7dc",
+            "type": "github"
+          },
+          "fingerprint": "bbc93a7d71106b6b24a3444467780d709b0f0ef8a07ed6c1c8af638e6765443e",
+          "url": "github:NixOS/nixpkgs/7731670498f0a22c361c9d68f73d382bce05d7dc"
+        },
+        "priority": 5
+      }
+    },
+    "x86_64-linux": {
+      "hello": {
+        "attr-path": [
+          "legacyPackages",
+          "x86_64-linux",
+          "hello"
+        ],
+        "info": {
+          "broken": false,
+          "description": "A program that produces a familiar, friendly greeting",
+          "license": "GPL-3.0-or-later",
+          "pname": "hello",
+          "unfree": false,
+          "version": "2.12.1"
+        },
+        "input": {
+          "attrs": {
+            "lastModified": 1706666764,
+            "narHash": "sha256-M59UCWsadEFO+DMdZFMtTlxpFyT3RQIpBLuEX8oziVc=",
+            "owner": "NixOS",
+            "repo": "nixpkgs",
+            "rev": "7731670498f0a22c361c9d68f73d382bce05d7dc",
+            "type": "github"
+          },
+          "fingerprint": "bbc93a7d71106b6b24a3444467780d709b0f0ef8a07ed6c1c8af638e6765443e",
+          "url": "github:NixOS/nixpkgs/7731670498f0a22c361c9d68f73d382bce05d7dc"
         },
         "priority": 5
       }
@@ -67,11 +165,11 @@
     "inputs": {
       "nixpkgs": {
         "from": {
-          "lastModified": 1718132686,
-          "narHash": "sha256-JRinkq+FeAkYnrrK8+Bh+jtLHJBN5jDzSimk1ye00EE=",
+          "lastModified": 1706666764,
+          "narHash": "sha256-M59UCWsadEFO+DMdZFMtTlxpFyT3RQIpBLuEX8oziVc=",
           "owner": "NixOS",
           "repo": "nixpkgs",
-          "rev": "96b3dae4f8753c1f5ce0d06b57fe250fb5d9b0e0",
+          "rev": "7731670498f0a22c361c9d68f73d382bce05d7dc",
           "type": "github"
         },
         "subtrees": [
