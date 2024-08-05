@@ -7,6 +7,7 @@
   buildDeps ? [], # optional
   buildScript ? null, # optional
   buildCache ? null, # optional
+  virtualSandbox ? "off", # optional
 }:
 
 # First a few assertions to ensure that the inputs are consistent.
@@ -59,8 +60,8 @@ in
         source $stdenv/setup # is this necessary?
 
         # We are currently in /build, and TMPDIR is also set to /build, so
-        # we need to extract the source to a subdirectory to avoid populating
-        # our build cache with a bunch of temporary files.
+        # we need to extract the source and work in a subdirectory to avoid
+        # populating our build cache with a bunch of temporary files.
         mkdir $name && cd $name
 
         # We pass and extract the source as a tarball to preserve timestamps.
@@ -85,6 +86,12 @@ in
       ''
     )
     + ''
+      # Start by patching shebangs in bin and sbin directories.
+      for dir in $out/bin $out/sbin; do
+        if [ -d "$dir" ]; then
+          patchShebangs $dir
+        fi
+      done
       # Wrap contents of files in bin with ${flox-env-package}/activate
       for prog in $out/bin/* $out/sbin/*; do
         if [ -L "$prog" ]; then
@@ -97,6 +104,9 @@ in
             --inherit-argv0 \
             --set FLOX_ENV "${flox-env-package}" \
             --set FLOX_TURBO 1 \
+            --set LD_FLOXLIB_SANDBOX warn \
+            --set FLOX_MANIFEST_BUILD_OUT "$out" \
+            --set FLOX_VIRTUAL_SANDBOX "${virtualSandbox}" \
             --run 'export FLOX_SET_ARG0="$0"' \
             --add-flags "$hidden"
         fi

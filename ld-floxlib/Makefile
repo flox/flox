@@ -5,8 +5,11 @@ REDCROSS = ❌
 # Define LD_FLOXLIB with macro to allow testing builds from other hosts.
 LD_FLOXLIB ?= $(abspath ld-floxlib.so)
 
-ld-floxlib.so: ld-floxlib.c
-	$(CC) -shared -fPIC $< -o $@
+virtual-sandbox.o: virtual-sandbox.c virtual-sandbox.h
+	$(CC) -fPIC -c $<
+
+ld-floxlib.so: ld-floxlib.c virtual-sandbox.o
+	$(CC) -shared -fPIC $^ -o $@
 	# The ld-floxlib.so library only requires libc, which is guaranteed
 	# to either be already loaded or available by way of a default provided
 	# by the linker itself, so to avoid loading a different libc than the

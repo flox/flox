@@ -92,6 +92,7 @@ define BUILD_local_template =
 	    --argstr name "$(_name)" \
 	    --argstr flox-env "$(FLOX_ENV)" \
 	    --argstr install-prefix "$(_out)" \
+	    $(if $(_virtualSandbox),--argstr virtualSandbox "$(strip $(_virtualSandbox))") \
 	    --out-link "result-$(_pname)" \
 	    --offline 2>&1 | tee $($(_pvarname)_logfile)
 
@@ -147,6 +148,7 @@ define BUILD_sandbox_template =
 	    $(if $($(_pvarname)_buildDeps),--arg buildDeps $($(_pvarname)_buildDeps_arg)) \
 	    --argstr buildScript "$($(_pvarname)_buildScript)" \
 	    $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
+	    $(if $(_virtualSandbox),--argstr virtualSandbox "$(strip $(_virtualSandbox))") \
 	    --out-link "result-$(_pname)" \
 	    '^*' 2>&1 | tee $($(_pvarname)_logfile)
 
@@ -226,8 +228,9 @@ endef
 # and "sandbox" settings within the build script for setting the build and
 # caching modes.
 $(foreach build,$(BUILDS), \
-  $(if $(shell grep -E '\.sandbox = true$$' $(build)),\
-    $(eval $(call BUILD_template,sandbox)),\
+  $(eval _virtualSandbox = $(shell grep -E '\.virtual-sandbox = ' $(build) | cut -d= -f2)) \
+  $(if $(shell grep -E '\.sandbox = true$$' $(build)), \
+    $(eval $(call BUILD_template,sandbox)), \
     $(eval $(call BUILD_template,local))))
 
 # Finally, we create the "all" target to build all known packages.
