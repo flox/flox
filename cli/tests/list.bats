@@ -137,12 +137,12 @@ EOF
 # https://github.com/flox/flox/issues/1039
 # bats test_tags=list,list:tolerates-missing-version
 @test "'flox list' tolerates missing version" {
-  export FLOX_FEATURES_USE_CATALOG=false # todo: port
+  init_pkgdb_env
 
-  "$FLOX_BIN" init
-  # `influxdb does not have a version attribute set in nixpkgs (2024-02-19)
+  # `influxdb2 does not have a version attribute set in nixpkgs (2024-02-19)
   # todo: replace with a more predicatable/smaller example
-  "$FLOX_BIN" install influxdb2
+  cp "$MANUALLY_GENERATED"/influxdb2_v0/* "$PROJECT_DIR/.flox/env"
+
   run "$FLOX_BIN" list
   assert_success
   assert_output "influxdb2: influxdb2 (N/A)"

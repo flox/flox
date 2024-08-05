@@ -1,0 +1,11 @@
+# A lock was generated for this manifest with
+# FLOX_FEATURES_USE_CATALOG=false flox init
+# FLOX_FEATURES_USE_CATALOG=false flox edit -f ./test_data/manually_generated/hello_v0/manifest.toml
+# cp .flox/env/manifest.lock test_data/manually_generated/hello_v0/manifest.lock
+
+[install]
+influxdb2.pkg-path = "influxdb2"
+
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
