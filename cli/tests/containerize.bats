@@ -18,11 +18,11 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" > /dev/null || return
+  pushd "$PROJECT_DIR" >/dev/null || return
 }
 
 project_teardown() {
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -60,7 +60,7 @@ setup() {
   project_setup
 
   mkdir -p $HOME/.config/containers
-  echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$HOME/.config/containers/policy.json"
+  echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' >"$HOME/.config/containers/policy.json"
 }
 
 teardown() {
