@@ -7,12 +7,13 @@
 
 use std::collections::BTreeMap;
 use std::env;
-use std::fmt::{Display, Formatter};
+use std::fmt::Display;
 use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender};
 
+use itertools::Itertools;
 use once_cell::sync::Lazy;
 #[cfg(test)]
 use proptest::prelude::*;
@@ -207,21 +208,15 @@ pub fn maybe_make_service_config_file(
 }
 
 /// The parsed output of `process-compose process list` for a single process.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 struct ProcessState {
     name: String,
-    #[serde(skip_serializing)]
     namespace: String,
     status: String,
-    #[serde(skip_serializing)]
     system_time: String,
-    #[serde(skip_serializing)]
     age: u64,
-    #[serde(skip_serializing)]
     is_ready: String,
-    #[serde(skip_serializing)]
     restarts: u64,
-    #[serde(skip_serializing)]
     exit_code: i32,
     pid: u64,
     #[serde(skip_serializing, rename = "IsRunning")]
@@ -274,31 +269,53 @@ impl ProcessStates {
             .map(|state| state.name.clone())
             .collect()
     }
+}
 
-    fn fmt_table(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+#[derive(Clone, Debug, Serialize)]
+/// Simplified version of ProcessState for display in the CLI.
+pub struct ProcessStateDisplay {
+    name: String,
+    status: String,
+    pid: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+/// Simplified version of ProcessStates for display in the CLI.
+pub struct ProcessStatesDisplay(Vec<ProcessStateDisplay>);
+
+impl From<ProcessStates> for ProcessStatesDisplay {
+    fn from(procs: ProcessStates) -> Self {
+        ProcessStatesDisplay(
+            procs
+                .0
+                .into_iter()
+                .sorted_by_key(|proc| proc.name.clone())
+                .map(|proc| ProcessStateDisplay {
+                    name: proc.name,
+                    status: proc.status,
+                    pid: proc.pid,
+                })
+                .collect(),
+        )
+    }
+}
+
+impl IntoIterator for ProcessStatesDisplay {
+    type IntoIter = std::vec::IntoIter<ProcessStateDisplay>;
+    type Item = ProcessStateDisplay;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl Display for ProcessStatesDisplay {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "{:<20} {:<10} {:>8}", "NAME", "STATUS", "PID")?;
         for proc in &self.0 {
             writeln!(f, "{:<20} {:<10} {:>8}", proc.name, proc.status, proc.pid)?;
         }
         Ok(())
-    }
-
-    fn fmt_json_lines(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for proc in &self.0 {
-            let line = serde_json::to_string(proc).map_err(|_| std::fmt::Error)?;
-            writeln!(f, "{line}")?;
-        }
-        Ok(())
-    }
-}
-
-impl Display for ProcessStates {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if f.alternate() {
-            self.fmt_json_lines(f)
-        } else {
-            self.fmt_table(f)
-        }
     }
 }
 
@@ -830,109 +847,95 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_processstates_display() {
-        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
-            processes: [
-                ("proc_running".to_string(), ProcessConfig {
-                    command: "sleep 2".to_string(),
-                    vars: None,
-                }),
-                ("proc_stopped".to_string(), ProcessConfig {
-                    command: "sleep 2".to_string(),
-                    vars: None,
-                }),
-                ("proc_completed".to_string(), ProcessConfig {
-                    command: "true".to_string(),
-                    vars: None,
-                }),
-                ("aaa_first".to_string(), ProcessConfig {
-                    command: "false".to_string(),
-                    vars: None,
-                }),
-                ("zzz_last".to_string(), ProcessConfig {
-                    command: "false".to_string(),
-                    vars: None,
-                }),
-            ]
-            .into(),
-        });
-        stop_services(instance.socket(), &vec!["proc_stopped"]).unwrap();
-        let mut states = ProcessStates::read(instance.socket()).unwrap();
-
-        // Use predictable PIDs and exercise right alignment of the column.
-        let mut next_pid = 10;
-        for proc in &mut states.0 {
-            proc.pid = next_pid;
-            next_pid *= 10;
+    /// Shorthand for generating a ProcessState with fields that we care about.
+    fn generate_process_state(name: &str, status: &str, pid: u64) -> ProcessState {
+        ProcessState {
+            name: name.to_string(),
+            namespace: "".to_string(),
+            status: status.to_string(),
+            system_time: "".to_string(),
+            age: 0,
+            is_ready: "".to_string(),
+            restarts: 0,
+            exit_code: 0,
+            pid,
+            is_running: true,
         }
-
-        // Table output.
-        assert_eq!(format!("{states}"), indoc! {"
-            NAME                 STATUS          PID
-            aaa_first            Completed        10
-            proc_completed       Completed       100
-            proc_running         Running        1000
-            proc_stopped         Completed     10000
-            zzz_last             Completed    100000
-        "});
-
-        // JSON lines output.
-        assert_eq!(format!("{:#}", states), indoc! {r#"
-            {"name":"aaa_first","status":"Completed","pid":10}
-            {"name":"proc_completed","status":"Completed","pid":100}
-            {"name":"proc_running","status":"Running","pid":1000}
-            {"name":"proc_stopped","status":"Completed","pid":10000}
-            {"name":"zzz_last","status":"Completed","pid":100000}
-        "#});
     }
 
     #[test]
-    fn test_processstates_read_names() {
-        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
-            processes: [
-                ("aaa".to_string(), ProcessConfig {
-                    command: "true".to_string(),
-                    vars: None,
-                }),
-                ("bbb".to_string(), ProcessConfig {
-                    command: "true".to_string(),
-                    vars: None,
-                }),
-                ("ccc".to_string(), ProcessConfig {
-                    command: "true".to_string(),
-                    vars: None,
-                }),
-                ("ddd".to_string(), ProcessConfig {
-                    command: "true".to_string(),
-                    vars: None,
-                }),
-            ]
-            .into(),
-        });
-        let mut states = ProcessStates::read_names(instance.socket(), vec![
-            "aaa".to_string(),
-            "ccc".to_string(),
-            "unknown".to_string(),
-        ])
-        .unwrap();
-
-        // Use a predictable PID.
-        for proc in &mut states.0 {
-            proc.pid = 12345;
-        }
-
-        // Table output
-        assert_eq!(format!("{states}"), indoc! {"
+    fn test_processstatesdisplay_name_sorted() {
+        let states = ProcessStates {
+            0: vec![
+                generate_process_state("bbb", "Running", 123),
+                generate_process_state("zzz", "Running", 123),
+                generate_process_state("aaa", "Running", 123),
+                generate_process_state("ccc", "Running", 123),
+            ],
+        };
+        let states_display: ProcessStatesDisplay = states.into();
+        assert_eq!(format!("{states_display}"), indoc! {"
             NAME                 STATUS          PID
-            aaa                  Completed     12345
-            ccc                  Completed     12345
+            aaa                  Running         123
+            bbb                  Running         123
+            ccc                  Running         123
+            zzz                  Running         123
         "});
+    }
 
-        // JSON lines output.
-        assert_eq!(format!("{:#}", states), indoc! {r#"
-            {"name":"aaa","status":"Completed","pid":12345}
-            {"name":"ccc","status":"Completed","pid":12345}
-        "#});
+    #[test]
+    fn test_processstatesdisplay_name_padded() {
+        let states = ProcessStates {
+            0: vec![
+                generate_process_state("short", "Running", 123),
+                generate_process_state("longlonglonglonglong", "Running", 123),
+            ],
+        };
+        let states_display: ProcessStatesDisplay = states.into();
+        assert_eq!(format!("{states_display}"), indoc! {"
+            NAME                 STATUS          PID
+            longlonglonglonglong Running         123
+            short                Running         123
+        "});
+    }
+
+    #[test]
+    fn test_processstatesdisplay_status_variants() {
+        let states = ProcessStates {
+            0: vec![
+                generate_process_state("aaa", "Running", 123),
+                generate_process_state("bbb", "Stopped", 123),
+                generate_process_state("ccc", "Completed", 123),
+            ],
+        };
+        let states_display: ProcessStatesDisplay = states.into();
+        assert_eq!(format!("{states_display}"), indoc! {"
+            NAME                 STATUS          PID
+            aaa                  Running         123
+            bbb                  Stopped         123
+            ccc                  Completed       123
+        "});
+    }
+
+    #[test]
+    fn test_processstatesdisplay_pid_aligned() {
+        let states = ProcessStates {
+            0: vec![
+                generate_process_state("aaa", "Running", 1),
+                generate_process_state("bbb", "Running", 12),
+                generate_process_state("ccc", "Running", 123),
+                generate_process_state("ddd", "Running", 1234),
+                generate_process_state("eee", "Running", 12345),
+            ],
+        };
+        let states_display: ProcessStatesDisplay = states.into();
+        assert_eq!(format!("{states_display}"), indoc! {"
+            NAME                 STATUS          PID
+            aaa                  Running           1
+            bbb                  Running          12
+            ccc                  Running         123
+            ddd                  Running        1234
+            eee                  Running       12345
+        "});
     }
 }

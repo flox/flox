@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::services::ProcessStates;
+use flox_rust_sdk::providers::services::{ProcessStates, ProcessStatesDisplay};
 use tracing::instrument;
 
 use super::supported_environment;
@@ -30,16 +30,19 @@ impl Status {
         let env = supported_environment(&flox, self.environment)?;
         let socket = env.services_socket_path(&flox)?;
 
-        let states = if self.names.is_empty() {
-            ProcessStates::read(socket)?
+        let procs: ProcessStatesDisplay = if self.names.is_empty() {
+            ProcessStates::read(socket)?.into()
         } else {
-            ProcessStates::read_names(socket, self.names)?
+            ProcessStates::read_names(socket, self.names)?.into()
         };
 
         if self.json {
-            println!("{:#}", states);
+            for proc in procs {
+                let line = serde_json::to_string(&proc)?;
+                println!("{line}");
+            }
         } else {
-            println!("{}", states);
+            println!("{procs}");
         }
 
         Ok(())
