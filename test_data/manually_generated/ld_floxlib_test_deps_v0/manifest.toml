@@ -7,3 +7,6 @@ glibc.pkg-path = "glibc"
 libarchive.pkg-path = "libarchive"
 nix = { pkg-path = "nix", priority = 4 }
 patchelf.pkg-path = "patchelf"
+
+[options]
+systems = ["x86_64-linux", "aarch64-linux"]
