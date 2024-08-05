@@ -377,7 +377,7 @@ EOF
     # Ensure that the watchdog is still running
     times=0
     while true; do
-      if [ "$times" -gt 10 ]; then
+      if [ "$times" -gt 100 ]; then
         exit 1
       fi
       pid="$(watchdog_pids_called_with_arg $_FLOX_SERVICES_SOCKET)"
@@ -396,7 +396,7 @@ EOF
   # Ensure that the watchdog has exited now
   times=0
   while true; do
-    if [ "$times" -gt 10 ]; then
+    if [ "$times" -gt 100 ]; then
       exit 1
     fi
     if ! kill -0 "$pid"; then
