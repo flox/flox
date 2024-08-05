@@ -228,11 +228,7 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "bash: interactive activate puts package in path" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
-  run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
-  assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  project_setup_pkgdb
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
@@ -252,11 +248,7 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:fish
 @test "fish: interactive activate puts package in path" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
-  run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
-  assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  project_setup_pkgdb
   FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
@@ -264,11 +256,7 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:fish
 @test "catalog: fish: interactive activate puts package in path" {
-  project_setup
-  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
-  run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
-  assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  project_setup_pkgdb
   FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
@@ -276,11 +264,7 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:tcsh
 @test "tcsh: interactive activate puts package in path" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
-  run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
-  assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  project_setup_pkgdb
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
@@ -926,19 +910,12 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "'flox activate' modifies path (bash)" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
-  original_path="$PATH"
-  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- echo '$PATH'
-  assert_success
-  assert_not_equal "$original_path" "$output"
+  project_setup_pkgdb
 
   # hello is not on the path
   run -1 type hello
 
-  run "$FLOX_BIN" install hello
-  assert_success
-
+  # project_setup_pkgdb sets up an environment with hello installed
   FLOX_SHELL="bash" run "$FLOX_BIN" activate -- hello
   assert_success
   assert_output --partial "Hello, world!"
@@ -966,19 +943,12 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:fish
 @test "'flox activate' modifies path (fish)" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
-  original_path="$PATH"
-  FLOX_SHELL="fish" run "$FLOX_BIN" activate -- echo '$PATH'
-  assert_success
-  assert_not_equal "$original_path" "$output"
+  project_setup_pkgdb
 
   # hello is not on the path
   run -1 type hello
 
-  run "$FLOX_BIN" install hello
-  assert_success
-
+  # project_setup_pkgdb sets up an environment with hello installed
   FLOX_SHELL="fish" run "$FLOX_BIN" activate -- hello
   assert_success
   assert_output --partial "Hello, world!"
@@ -1006,19 +976,12 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:tcsh
 @test "'flox activate' modifies path (tcsh)" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
-  original_path="$PATH"
-  FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- echo '$PATH'
-  assert_success
-  assert_not_equal "$original_path" "$output"
+  project_setup_pkgdb
 
   # hello is not on the path
   run -1 type hello
 
-  run "$FLOX_BIN" install hello
-  assert_success
-
+  # project_setup_pkgdb sets up an environment with hello installed
   FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- hello
   assert_success
   assert_output --partial "Hello, world!"
@@ -1046,19 +1009,12 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:zsh
 @test "'flox activate' modifies path (zsh)" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
-  original_path="$PATH"
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- echo '$PATH'
-  assert_success
-  assert_not_equal "$original_path" "$output"
+  project_setup_pkgdb
 
   # hello is not on the path
   run -1 type hello
 
-  run "$FLOX_BIN" install hello
-  assert_success
-
+  # project_setup_pkgdb sets up an environment with hello installed
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- hello
   assert_success
   assert_output --partial "Hello, world!"
@@ -1373,14 +1329,14 @@ EOF
 
 # bats test_tags=activate,activate:python-detects-installed-python
 @test "'flox activate' sets python vars if python is installed" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  project_setup
+  project_setup_pkgdb
+
+  # Mock flox install of python311Packages.pip
+  cp "$MANUALLY_GENERATED"/python_v0/* "$PROJECT_DIR/.flox/env/"
+
   # unset python vars if any
   unset PYTHONPATH
   unset PIP_CONFIG_FILE
-
-  # install python and pip
-  "$FLOX_BIN" install python311Packages.pip
 
   run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
   assert_success
