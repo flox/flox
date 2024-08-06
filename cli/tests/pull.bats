@@ -359,9 +359,10 @@ function add_incompatible_package() {
 # bats test_tags=pull:up-to-date
 # updating an up-to-date environment should return with an info message
 @test "pull up-to-date env returns info message" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
   make_dummy_env "owner" "name"
+
+  # dummy environment has no packages to resolve
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 
   # pull a fresh environment
   "$FLOX_BIN" pull --remote owner/name
