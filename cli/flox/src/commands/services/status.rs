@@ -112,6 +112,8 @@ impl Display for ProcessStatesDisplay {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use flox_rust_sdk::providers::services::test_helpers::generate_process_state;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
@@ -184,5 +186,26 @@ mod tests {
             ddd        Running        1234
             eee        Running       12345
         "});
+    }
+
+    #[test]
+    fn test_processstatedisplay_json_lines() {
+        let states = ProcessStates::from(vec![
+            generate_process_state("aaa", "Running", 123),
+            generate_process_state("bbb", "Stopped", 123),
+            generate_process_state("ccc", "Completed", 123),
+        ]);
+        let states_display: ProcessStatesDisplay = states.into();
+        let mut buffer = Vec::new();
+        for proc in states_display {
+            let line = serde_json::to_string(&proc).unwrap();
+            writeln!(buffer, "{line}").unwrap();
+        }
+        let buffer_str = String::from_utf8(buffer).unwrap();
+        assert_eq!(buffer_str, indoc! {r#"
+            {"name":"aaa","status":"Running","pid":123}
+            {"name":"bbb","status":"Stopped","pid":123}
+            {"name":"ccc","status":"Completed","pid":123}
+        "#});
     }
 }
