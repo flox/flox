@@ -465,14 +465,31 @@ impl Connection for AWSDatalakeConnection {
         debug!("Sending metrics to {}", &self.endpoint_url);
         debug!("Metrics: {events:#}");
 
-        reqwest::blocking::Client::new()
-            .put(&self.endpoint_url)
-            .header("content-type", "application/json")
-            .header("x-api-key", &self.api_key)
-            .header("user-agent", format!("flox-cli/{}", &*FLOX_VERSION))
-            .json(&events)
-            .timeout(self.timeout)
-            .send()?;
+        let thread_timeout = self.timeout;
+        let thread_endpoint_url = self.endpoint_url.clone();
+        let thread_api_key = self.api_key.clone();
+
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        std::thread::spawn(move || {
+            let result = reqwest::blocking::ClientBuilder::new()
+                .timeout(thread_timeout)
+                .build()
+                .unwrap()
+                .put(thread_endpoint_url)
+                .header("content-type", "application/json")
+                .header("x-api-key", thread_api_key)
+                .header("user-agent", format!("flox-cli/{}", &*FLOX_VERSION))
+                .json(&events)
+                .send();
+            let _ = sender.send(result); // ignore if the receiver is dropped
+        });
+
+        let result = receiver
+            .recv_timeout(self.timeout)
+            .context("metrics api request")??;
+
+        tracing::debug!(?result, "Metrics sent");
+
         Ok(())
     }
 
