@@ -189,7 +189,7 @@ teardown() {
 @test "upgrade for flake installable" {
   "$FLOX_BIN" init
 
-  MANIFEST_CONTENT="$(cat << "EOF"
+  MANIFEST_CONTENTS="$(cat << "EOF"
   version = 1
 
   [install]
@@ -197,7 +197,7 @@ teardown() {
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   run "$FLOX_BIN" upgrade
   assert_success

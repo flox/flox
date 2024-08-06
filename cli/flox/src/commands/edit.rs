@@ -265,7 +265,7 @@ impl Edit {
             .prefix("manifest.")
             .suffix(".toml")
             .tempfile_in(&flox.temp_dir)?;
-        std::fs::write(&tmp_manifest, environment.manifest_content(flox)?)?;
+        std::fs::write(&tmp_manifest, environment.manifest_contents(flox)?)?;
 
         let should_continue_dialog = Dialog {
             message: "Continue editing?",
@@ -478,7 +478,7 @@ mod tests {
 
         let actual_contents = concrete_environment
             .into_dyn_environment()
-            .manifest_content(&flox)
+            .manifest_contents(&flox)
             .unwrap();
         assert_eq!(actual_contents, "version = 1\n");
     }
@@ -515,7 +515,7 @@ mod tests {
 
         let actual_contents = concrete_environment
             .into_dyn_environment()
-            .manifest_content(&flox)
+            .manifest_contents(&flox)
             .unwrap();
         assert!(!actual_contents.contains("version = 1"));
     }
@@ -550,7 +550,7 @@ mod tests {
 
         let actual_contents = concrete_environment
             .dyn_environment_ref_mut()
-            .manifest_content(&flox)
+            .manifest_contents(&flox)
             .unwrap();
         assert!(actual_contents.contains("version = 1"));
     }
@@ -586,7 +586,7 @@ mod tests {
 
         let actual_contents = concrete_environment
             .into_dyn_environment()
-            .manifest_content(&flox)
+            .manifest_contents(&flox)
             .unwrap();
         assert!(actual_contents.contains("version = 1"));
     }

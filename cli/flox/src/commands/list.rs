@@ -63,7 +63,7 @@ impl List {
             .detect_concrete_environment(&flox, "List using")?
             .into_dyn_environment();
 
-        let manifest_contents = env.manifest_content(&flox)?;
+        let manifest_contents = env.manifest_contents(&flox)?;
         if self.list_mode == ListMode::Config {
             tracing::Span::current().record("mode", "config");
             println!("{}", manifest_contents);

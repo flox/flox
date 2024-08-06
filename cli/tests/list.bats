@@ -95,7 +95,7 @@ EOF
   export FLOX_FEATURES_USE_CATALOG=false
 
   "$FLOX_BIN" init
-  MANIFEST_CONTENT="$(
+  MANIFEST_CONTENTS="$(
     cat <<-EOF
     [install]
 
@@ -105,11 +105,11 @@ EOF
 
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   run "$FLOX_BIN" list --config
   assert_success
-  assert_output "$MANIFEST_CONTENT"
+  assert_output "$MANIFEST_CONTENTS"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -119,7 +119,7 @@ EOF
   export FLOX_FEATURES_USE_CATALOG=false
 
   "$FLOX_BIN" init
-  MANIFEST_CONTENT="$(
+  MANIFEST_CONTENTS="$(
     cat <<-EOF
     [options]
     systems = [ "$NIX_SYSTEM" ]
@@ -130,7 +130,7 @@ EOF
 
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   run "$FLOX_BIN" list -n
   assert_success
@@ -170,7 +170,7 @@ EOF
 # bats test_tags=list,list:catalog,list:config
 @test "catalog: 'flox list --config' shows manifest content" {
   "$FLOX_BIN" init
-  MANIFEST_CONTENT="$(
+  MANIFEST_CONTENTS="$(
     cat <<-EOF
     version = 1
 
@@ -181,11 +181,11 @@ EOF
 EOF
   )"
 
-  echo "$MANIFEST_CONTENT" | "$FLOX_BIN" edit -f -
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
   run "$FLOX_BIN" list --config
   assert_success
-  assert_output "$MANIFEST_CONTENT"
+  assert_output "$MANIFEST_CONTENTS"
 }
 
 # ---------------------------------------------------------------------------- #

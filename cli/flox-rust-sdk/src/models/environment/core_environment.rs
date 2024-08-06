@@ -96,7 +96,7 @@ impl<State> CoreEnvironment<State> {
     }
 
     /// Read the manifest file
-    pub fn manifest_content(&self) -> Result<String, CoreEnvironmentError> {
+    pub fn manifest_contents(&self) -> Result<String, CoreEnvironmentError> {
         fs::read_to_string(self.manifest_path()).map_err(CoreEnvironmentError::OpenManifest)
     }
 
@@ -129,7 +129,8 @@ impl<State> CoreEnvironment<State> {
     }
 
     pub fn manifest(&self) -> Result<TypedManifest, CoreEnvironmentError> {
-        toml::from_str(&self.manifest_content()?).map_err(CoreEnvironmentError::DeserializeManifest)
+        toml::from_str(&self.manifest_contents()?)
+            .map_err(CoreEnvironmentError::DeserializeManifest)
     }
 
     /// Return a [LockedManifest] if the environment is already locked and has
@@ -143,8 +144,8 @@ impl<State> CoreEnvironment<State> {
             return Ok(None);
         };
 
-        let manifest_content = self.manifest_content()?;
-        let manifest: TypedManifest = toml::from_str(&self.manifest_content()?)
+        let manifest_contents = self.manifest_contents()?;
+        let manifest: TypedManifest = toml::from_str(&self.manifest_contents()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
         let lockfile = LockedManifest::read_from_file(&lockfile_path)
             .map_err(CoreEnvironmentError::LockedManifest)?;
@@ -161,7 +162,7 @@ impl<State> CoreEnvironment<State> {
             (TypedManifest::Catalog(_), LockedManifest::Pkgdb(_)) => false,
             (TypedManifest::Pkgdb(_), LockedManifest::Pkgdb(locked)) => {
                 // Try to deserialize TOML content into a JSON value
-                let manifest_value = toml::from_str::<serde_json::Value>(&manifest_content).ok();
+                let manifest_value = toml::from_str::<serde_json::Value>(&manifest_contents).ok();
                 let manifest_object = manifest_value
                     .as_ref()
                     .and_then(|manifest_value| manifest_value.as_object());
@@ -508,7 +509,7 @@ impl CoreEnvironment<ReadOnly> {
         packages: &[PackageToInstall],
         flox: &Flox,
     ) -> Result<InstallationAttempt, CoreEnvironmentError> {
-        let current_manifest_contents = self.manifest_content()?;
+        let current_manifest_contents = self.manifest_contents()?;
         let mut installation = insert_packages(&current_manifest_contents, packages)
             .map(|insertion| InstallationAttempt {
                 new_manifest: insertion.new_toml.map(|toml| toml.to_string()),
@@ -533,7 +534,7 @@ impl CoreEnvironment<ReadOnly> {
         packages: Vec<String>,
         flox: &Flox,
     ) -> Result<UninstallationAttempt, CoreEnvironmentError> {
-        let current_manifest_contents = self.manifest_content()?;
+        let current_manifest_contents = self.manifest_contents()?;
 
         let install_ids = Self::get_install_ids_to_uninstall(&self.manifest()?, packages)?;
 
@@ -619,7 +620,7 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         contents: String,
     ) -> Result<EditResult, CoreEnvironmentError> {
-        let old_contents = self.manifest_content()?;
+        let old_contents = self.manifest_contents()?;
 
         // skip the edit if the contents are unchanged
         // note: consumers of this function may call [Self::link] separately,
@@ -643,7 +644,7 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
         contents: String,
     ) -> Result<Result<EditResult, CoreEnvironmentError>, CoreEnvironmentError> {
-        let old_contents = self.manifest_content()?;
+        let old_contents = self.manifest_contents()?;
 
         // skip the edit if the contents are unchanged
         // note: consumers of this function may call [Self::link] separately,
@@ -1662,7 +1663,7 @@ mod tests {
 
         env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
-        assert_eq!(env_view.manifest_content().unwrap(), new_env_str);
+        assert_eq!(env_view.manifest_contents().unwrap(), new_env_str);
         assert!(env_view.env_dir.join(LOCKFILE_FILENAME).exists());
     }
 

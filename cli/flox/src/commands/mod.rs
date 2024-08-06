@@ -1549,7 +1549,7 @@ pub(super) async fn ensure_environment_trust(
                 return Ok(());
             },
             Choices::Abort => bail!("Denied {env_ref} (temporary)"),
-            Choices::ShowConfig => eprintln!("{}", environment.manifest_content(flox)?),
+            Choices::ShowConfig => eprintln!("{}", environment.manifest_contents(flox)?),
         }
     }
 }
@@ -2008,7 +2008,7 @@ mod tests {
 
         assert!(environment
             .dyn_environment_ref_mut()
-            .manifest_content(&flox)
+            .manifest_contents(&flox)
             .unwrap()
             .contains("version = 1"));
     }
@@ -2079,7 +2079,7 @@ mod tests {
 
         assert!(!environment
             .dyn_environment_ref_mut()
-            .manifest_content(&flox)
+            .manifest_contents(&flox)
             .unwrap()
             .contains("version = 1"));
     }
@@ -2124,7 +2124,7 @@ mod tests {
 
         assert!(environment
             .dyn_environment_ref_mut()
-            .manifest_content(&flox)
+            .manifest_contents(&flox)
             .unwrap()
             .contains("version = 1"));
 

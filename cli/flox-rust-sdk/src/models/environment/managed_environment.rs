@@ -401,15 +401,15 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Extract the current content of the manifest
-    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError> {
+    fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError> {
         let local_checkout = self.local_env_or_copy_current_generation(flox)?;
-        let manifest = local_checkout.manifest_content()?;
+        let manifest = local_checkout.manifest_contents()?;
         Ok(manifest)
     }
 
     /// Return the deserialized manifest
     fn manifest(&self, flox: &Flox) -> Result<TypedManifest, EnvironmentError> {
-        Ok(toml::from_str(&self.manifest_content(flox)?)
+        Ok(toml::from_str(&self.manifest_contents(flox)?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?)
     }
 
@@ -1117,11 +1117,11 @@ impl ManagedEnvironment {
         }
 
         let local_manifest_bytes = local
-            .manifest_content()
+            .manifest_contents()
             .map_err(ManagedEnvironmentError::ReadLocalManifest)?;
 
         let remote_manifest_bytes = remote
-            .manifest_content()
+            .manifest_contents()
             .map_err(ManagedEnvironmentError::ReadGenerationManifest)?;
 
         Ok(local_manifest_bytes == remote_manifest_bytes)
@@ -2342,7 +2342,7 @@ mod test {
         let local_manifest = managed_env
             .local_env_or_copy_current_generation(&flox)
             .unwrap()
-            .manifest_content()
+            .manifest_contents()
             .unwrap();
         assert_eq!(local_manifest, locally_edited_content);
     }
@@ -2370,11 +2370,11 @@ mod test {
         let generation_manifest = managed_env
             .get_current_generation(&flox)
             .unwrap()
-            .manifest_content()
+            .manifest_contents()
             .unwrap();
 
         assert_eq!(
-            local_checkout.manifest_content().unwrap(),
+            local_checkout.manifest_contents().unwrap(),
             generation_manifest
         );
 
@@ -2387,7 +2387,7 @@ mod test {
 
         // sanity check that before synching, the manifest is now different
         assert_ne!(
-            local_checkout.manifest_content().unwrap(),
+            local_checkout.manifest_contents().unwrap(),
             generation_manifest
         );
 
@@ -2397,11 +2397,11 @@ mod test {
         let generation_manifest = managed_env
             .get_current_generation(&flox)
             .unwrap()
-            .manifest_content()
+            .manifest_contents()
             .unwrap();
 
         assert_eq!(
-            local_checkout.manifest_content().unwrap(),
+            local_checkout.manifest_contents().unwrap(),
             generation_manifest
         );
     }

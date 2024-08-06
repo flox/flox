@@ -166,7 +166,7 @@ pub trait Environment: Send {
     ///
     /// Implementations may use process context from [Flox]
     /// to determine the current content of the manifest.
-    fn manifest_content(&self, flox: &Flox) -> Result<String, EnvironmentError>;
+    fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError>;
 
     /// Return the deserialized manifest
     fn manifest(&self, flox: &Flox) -> Result<TypedManifest, EnvironmentError>;
@@ -240,7 +240,7 @@ pub trait Environment: Send {
         &self,
         flox: &Flox,
     ) -> Result<Option<MigrationInfo>, EnvironmentError> {
-        let raw_manifest = RawManifest::from_str(&self.manifest_content(flox)?).map_err(|e| {
+        let raw_manifest = RawManifest::from_str(&self.manifest_contents(flox)?).map_err(|e| {
             EnvironmentError::Core(CoreEnvironmentError::ModifyToml(
                 TomlEditError::ParseManifest(e),
             ))
