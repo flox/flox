@@ -1,16 +1,20 @@
 {
   bashInteractive,
   cacert,
+  coreutils,
   darwin,
   flox-activation-scripts,
   flox-pkgdb,
   gitMinimal,
   glibcLocalesUtf8,
+  gnumake,
+  gnugrep,
   gnused,
   hostPlatform,
   inputs,
   installShellFiles,
   lib,
+  makeWrapper,
   nix,
   openssl,
   pkg-config,
@@ -19,6 +23,7 @@
   rust-toolchain,
   rustfmt ? rust-toolchain.rustfmt,
   targetPlatform,
+  writeShellApplication,
 }: let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
 
@@ -148,6 +153,7 @@ in
         ++ [
           installShellFiles
           gnused
+          makeWrapper
         ];
 
       # https://github.com/ipetkov/crane/issues/385
@@ -162,16 +168,27 @@ in
       #
       # sed: Removes rust-toolchain from binary. Likely due to toolchain overriding.
       #   unclear about the root cause, so this is a hotfix.
-      postInstall = ''
-        installShellCompletion --cmd flox                         \
-          --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
-          --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
-          --zsh <( "$out/bin/flox" --bpaf-complete-style-zsh; );
+      postInstall =
+        ''
+          installShellCompletion --cmd flox                         \
+            --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
+            --fish <( "$out/bin/flox" --bpaf-complete-style-fish; ) \
+            --zsh <( "$out/bin/flox" --bpaf-complete-style-zsh; );
 
-        for target in "$(basename ${rust-toolchain.rust.outPath} | cut -f1 -d- )" ; do
-          sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/flox
-        done
-      '';
+          for target in "$(basename ${rust-toolchain.rust.outPath} | cut -f1 -d- )" ; do
+            sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/flox
+          done
+        ''
+        + ''
+          makeWrapper ${gnumake}/bin/make $out/bin/flox-build \
+            --prefix PATH : "${lib.makeBinPath [bashInteractive coreutils gitMinimal gnugrep gnused nix]}" \
+            --add-flags "--no-builtin-rules --no-builtin-variables --makefile $out/libexec/flox-build.mk"
+          mkdir -p $out/libexec
+          cp ${../../libexec/build-manifest.nix} $out/libexec/build-manifest.nix
+          cp ${../../libexec/flox-build.mk} $out/libexec/flox-build.mk
+          substituteInPlace $out/libexec/flox-build.mk \
+            --replace "__FLOX_CLI_OUTPATH__" "$out"
+        '';
 
       doInstallCheck = false;
       postInstallCheck = ''

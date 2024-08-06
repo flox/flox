@@ -111,6 +111,11 @@ enum error_category {
    * due to file I/O failing.
    */
   EC_ACTIVATION_SCRIPT_BUILD_ERROR,
+  /**
+   * A failure encountered while building requisites.txt. This could be
+   * due to file I/O failing.
+   */
+  EC_REQUISITES_TXT_BUILD_ERROR,
 
   /**
    * Attempted lock of a local flake, which is not allowed for floxhub
