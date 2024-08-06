@@ -107,16 +107,25 @@ impl IntoIterator for ProcessStatesDisplay {
 
 impl Display for ProcessStatesDisplay {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO: Use a table writer library if we add any more variable width calculations.
         let name_width_min = 10;
         let name_width = max(
             name_width_min,
             self.0.iter().map(|proc| proc.name.len()).max().unwrap_or(0),
         );
-        writeln!(f, "{:<name_width$} {:<10} {:>8}", "NAME", "STATUS", "PID")?;
+        // Max value based on the possible states in:
+        // https://github.com/F1bonacc1/process-compose/blob/v1.9.0/src/types/process.go#L125-L137
+        let status_width = 12;
+
+        writeln!(
+            f,
+            "{:<name_width$} {:<status_width$} {:>8}",
+            "NAME", "STATUS", "PID"
+        )?;
         for proc in &self.0 {
             writeln!(
                 f,
-                "{:<name_width$} {:<10} {:>8}",
+                "{:<name_width$} {:<status_width$} {:>8}",
                 proc.name,
                 proc.status,
                 proc.pid_display()
@@ -146,11 +155,11 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS          PID
-            aaa        Running         123
-            bbb        Running         123
-            ccc        Running         123
-            zzz        Running         123
+            NAME       STATUS            PID
+            aaa        Running           123
+            bbb        Running           123
+            ccc        Running           123
+            zzz        Running           123
         "});
     }
 
@@ -162,9 +171,9 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME                 STATUS          PID
-            longlonglonglonglong Running         123
-            short                Running         123
+            NAME                 STATUS            PID
+            longlonglonglonglong Running           123
+            short                Running           123
         "});
     }
 
@@ -177,10 +186,10 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS          PID
-            aaa        Running         123
-            bbb        Stopped       [123]
-            ccc        Completed     [123]
+            NAME       STATUS            PID
+            aaa        Running           123
+            bbb        Stopped         [123]
+            ccc        Completed       [123]
         "});
     }
 
@@ -195,12 +204,12 @@ mod tests {
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
-            NAME       STATUS          PID
-            aaa        Running           1
-            bbb        Running          12
-            ccc        Running         123
-            ddd        Running        1234
-            eee        Running       12345
+            NAME       STATUS            PID
+            aaa        Running             1
+            bbb        Running            12
+            ccc        Running           123
+            ddd        Running          1234
+            eee        Running         12345
         "});
     }
 
