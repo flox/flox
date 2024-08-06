@@ -105,6 +105,7 @@ impl IntoIterator for ProcessStatesDisplay {
     }
 }
 
+/// Formats `ProcessStates` as a table for display in the CLI.
 impl Display for ProcessStatesDisplay {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // TODO: Use a table writer library if we add any more variable width calculations.
