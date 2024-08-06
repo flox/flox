@@ -58,6 +58,20 @@ teardown() {
   common_test_teardown
 }
 
+# create a deprecated v0 environment from prepared data
+setup_pkgdb_env() {
+  NAME=$1
+  shift
+
+  mkdir -p "$PROJECT_DIR/.flox/env"
+  cp --no-preserve=mode "$MANUALLY_GENERATED"/empty_v0/* "$PROJECT_DIR/.flox/env"
+
+  echo '{
+    "name": "'$NAME'",
+    "version": 1
+  }' >>"$PROJECT_DIR/.flox/env.json"
+}
+
 # ---------------------------------------------------------------------------- #
 # catalog tests
 
@@ -210,20 +224,26 @@ EOF
   assert_output --partial "Upgraded 'hello'"
 }
 
+# bats test_tags=upgrade:migrate:manifest
 @test "upgrade performs manifest migration" {
   NAME="name"
-  FLOX_FEATURES_USE_CATALOG=false "$FLOX_BIN" init -n "$NAME"
+
+  setup_pkgdb_env "$NAME"
+  # Updating an locked environment produces a different message.
+  # Here we want to test the migration message for migrating manifests only.
+  rm -f "$PROJECT_DIR/.flox/env/manifest.lock"
+
   run "$FLOX_BIN" upgrade
   assert_output --partial "Detected an old environment version. Attempting to migrate to version 1."
   assert_output --partial "ℹ️  No packages need to be upgraded in environment '$NAME'"
   assert_output --partial "⬆️  Migrated environment '$NAME' to version 1."
 }
 
+# bats test_tags=upgrade:migrate:lockfile
 @test "upgrade performs lockfile migration" {
   NAME="name"
-  FLOX_FEATURES_USE_CATALOG=false "$FLOX_BIN" init -n "$NAME"
-  # Perform a no-op upgrade to create a lockfile
-  FLOX_FEATURES_USE_CATALOG=false "$FLOX_BIN" upgrade
+  setup_pkgdb_env "$NAME"
+
   run "$FLOX_BIN" upgrade
   assert_output --partial "Detected an old environment version. Attempting to migrate to version 1 and upgrade packages."
   assert_output --partial "⬆️  Migrated environment to version 1 and upgraded all packages for environment '$NAME'."
