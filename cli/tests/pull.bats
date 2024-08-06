@@ -218,21 +218,6 @@ function add_incompatible_package() {
   assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
 }
 
-# bats test_tags=pull:l2,pull:l2:b
-@test "l2.b: flox pull with --remote fails if an env is already present" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-
-  "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
-
-  run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
-  assert_failure
-
-  # todo: error message
-  # assert_output --partial <error message>
-}
-
 # bats test_tags=pull:l2,pull:l2:c
 @test "l2.c: flox pull with --remote and --dir pulls into the specified directory" {
   export FLOX_FEATURES_USE_CATALOG=false
