@@ -204,19 +204,6 @@ function add_incompatible_package() {
   assert_success
 }
 
-# bats test_tags=pull:l2,pull:l2:a,pull:l4
-@test "l2.a/l4: flox pull accepts a floxhub namespace/environment, creates .flox if it does not exist" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-
-  run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
-  assert_success
-  assert [ -e ".flox/env.json" ]
-  assert [ -e ".flox/env.lock" ]
-  assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
-  assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
-}
 
 # bats test_tags=pull:floxhub
 # try pulling from floxhub authenticated with a test token
@@ -362,6 +349,31 @@ function add_incompatible_package() {
   assert_success
   assert_line --partial "already up to date."
 }
+
+# pull a pkgdb based environment to ensure we didn't break compatibility
+# bats test_tags=pull:deprecated-pkgdb
+@test "flox pull of deprecated pkgdb based environment succeeds" {
+  # single test for pulling pkgdb based environments, so do the setup inline once
+  mkdir -p "$PROJECT_DIR/.flox/env"
+  cp -r "$MANUALLY_GENERATED"/hello_v0/* "$PROJECT_DIR/.flox/env"
+  echo '{
+    "name": "name",
+    "version": 1
+  }' >>"$PROJECT_DIR/.flox/env.json"
+  "$FLOX_BIN" push --owner owner
+  "$FLOX_BIN" delete --force
+
+  run "$FLOX_BIN" pull --remote owner/name
+  assert_success
+  assert [ -e ".flox/env.json" ]
+  assert [ -e ".flox/env.lock" ]
+  assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
+  assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
+
+  # v0 manifest does not have a version field
+  assert [ $(cat .flox/env/manifest.toml | tomlq -r '.version') == "null" ]
+}
+
 
 # ----------------------------- Catalog Tests -------------------------------- #
 # ---------------------------------------------------------------------------- #
