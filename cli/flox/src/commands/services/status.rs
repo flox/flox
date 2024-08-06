@@ -60,6 +60,19 @@ struct ProcessStateDisplay {
     name: String,
     status: String,
     pid: u64,
+    #[serde(skip_serializing)]
+    is_running: bool,
+}
+
+impl ProcessStateDisplay {
+    /// Formats the PID for display to indicate whether it's currently running.
+    fn pid_display(&self) -> String {
+        if self.is_running {
+            self.pid.to_string()
+        } else {
+            format!("[{}]", self.pid)
+        }
+    }
 }
 
 /// Simplified version of ProcessStates for display in the CLI.
@@ -76,6 +89,7 @@ impl From<ProcessStates> for ProcessStatesDisplay {
                     name: proc.name,
                     status: proc.status,
                     pid: proc.pid,
+                    is_running: proc.is_running,
                 })
                 .collect(),
         )
@@ -103,7 +117,9 @@ impl Display for ProcessStatesDisplay {
             writeln!(
                 f,
                 "{:<name_width$} {:<10} {:>8}",
-                proc.name, proc.status, proc.pid
+                proc.name,
+                proc.status,
+                proc.pid_display()
             )?;
         }
         Ok(())
@@ -123,10 +139,10 @@ mod tests {
     #[test]
     fn test_processstatesdisplay_name_sorted() {
         let states = ProcessStates::from(vec![
-            generate_process_state("bbb", "Running", 123),
-            generate_process_state("zzz", "Running", 123),
-            generate_process_state("aaa", "Running", 123),
-            generate_process_state("ccc", "Running", 123),
+            generate_process_state("bbb", "Running", 123, true),
+            generate_process_state("zzz", "Running", 123, true),
+            generate_process_state("aaa", "Running", 123, true),
+            generate_process_state("ccc", "Running", 123, true),
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
@@ -141,8 +157,8 @@ mod tests {
     #[test]
     fn test_processstatesdisplay_name_padded() {
         let states = ProcessStates::from(vec![
-            generate_process_state("short", "Running", 123),
-            generate_process_state("longlonglonglonglong", "Running", 123),
+            generate_process_state("short", "Running", 123, true),
+            generate_process_state("longlonglonglonglong", "Running", 123, true),
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
@@ -155,27 +171,27 @@ mod tests {
     #[test]
     fn test_processstatesdisplay_status_variants() {
         let states = ProcessStates::from(vec![
-            generate_process_state("aaa", "Running", 123),
-            generate_process_state("bbb", "Stopped", 123),
-            generate_process_state("ccc", "Completed", 123),
+            generate_process_state("aaa", "Running", 123, true),
+            generate_process_state("bbb", "Stopped", 123, false),
+            generate_process_state("ccc", "Completed", 123, false),
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
             NAME       STATUS          PID
             aaa        Running         123
-            bbb        Stopped         123
-            ccc        Completed       123
+            bbb        Stopped       [123]
+            ccc        Completed     [123]
         "});
     }
 
     #[test]
     fn test_processstatesdisplay_pid_aligned() {
         let states = ProcessStates::from(vec![
-            generate_process_state("aaa", "Running", 1),
-            generate_process_state("bbb", "Running", 12),
-            generate_process_state("ccc", "Running", 123),
-            generate_process_state("ddd", "Running", 1234),
-            generate_process_state("eee", "Running", 12345),
+            generate_process_state("aaa", "Running", 1, true),
+            generate_process_state("bbb", "Running", 12, true),
+            generate_process_state("ccc", "Running", 123, true),
+            generate_process_state("ddd", "Running", 1234, true),
+            generate_process_state("eee", "Running", 12345, true),
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         assert_eq!(format!("{states_display}"), indoc! {"
@@ -191,9 +207,9 @@ mod tests {
     #[test]
     fn test_processstatedisplay_json_lines() {
         let states = ProcessStates::from(vec![
-            generate_process_state("aaa", "Running", 123),
-            generate_process_state("bbb", "Stopped", 123),
-            generate_process_state("ccc", "Completed", 123),
+            generate_process_state("aaa", "Running", 123, true),
+            generate_process_state("bbb", "Stopped", 123, false),
+            generate_process_state("ccc", "Completed", 123, false),
         ]);
         let states_display: ProcessStatesDisplay = states.into();
         let mut buffer = Vec::new();

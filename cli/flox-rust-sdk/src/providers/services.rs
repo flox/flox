@@ -218,7 +218,7 @@ pub struct ProcessState {
     exit_code: i32,
     pub pid: u64,
     #[serde(skip_serializing, rename = "IsRunning")]
-    is_running: bool,
+    pub is_running: bool,
 }
 
 #[derive(Deserialize, Debug, Clone, PartialEq)]
@@ -567,7 +567,12 @@ pub mod test_helpers {
     use super::*;
 
     /// Shorthand for generating a ProcessState with fields that we care about.
-    pub fn generate_process_state(name: &str, status: &str, pid: u64) -> ProcessState {
+    pub fn generate_process_state(
+        name: &str,
+        status: &str,
+        pid: u64,
+        is_running: bool,
+    ) -> ProcessState {
         ProcessState {
             name: name.to_string(),
             namespace: "".to_string(),
@@ -578,7 +583,7 @@ pub mod test_helpers {
             restarts: 0,
             exit_code: 0,
             pid,
-            is_running: true,
+            is_running,
         }
     }
 }
