@@ -33,20 +33,17 @@ impl Logs {
         let env = supported_environment(&flox, self.environment)?;
         let socket = env.services_socket_path(&flox)?;
 
-        let names = if self.names.is_empty() {
-            tracing::debug!("no service names provided");
-            ProcessStates::read(&socket)?.running_process_names()
-        } else {
-            self.names
-        };
+        let processes = ProcessStates::read(&socket)?;
+        let named_processes = super::processes_by_name_or_default_to_all(&processes, &self.names)?;
+        let names = named_processes.iter().map(|state| &state.name);
 
         if !self.follow {
             bail!("printing logs without following is not yet implemented");
         }
 
-        let log_stream = ProcessComposeLogStream::new(socket, &names)?;
+        let log_stream = ProcessComposeLogStream::new(socket, names.clone())?;
 
-        let max_name_length = names.iter().map(|name| name.len()).max().unwrap_or(0);
+        let max_name_length = names.map(|name| name.len()).max().unwrap_or(0);
         for log in log_stream {
             let ProcessComposeLogLine { process, message } = log?;
             println!("{process:<max_name_length$}: {message}",);

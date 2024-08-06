@@ -143,11 +143,11 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: service 'invalid' is not running"
+  assert_output --partial "❌ ERROR: service 'invalid' not found"
 }
 
 # bats test_tags=services:stop
-@test "stop: errors after stopping one service if subsequent service doesn't exist" {
+@test "stop: errors before stopping if any service doesn't exist" {
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
@@ -160,8 +160,8 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: service 'invalid' is not running"
-  assert_output --regexp "one +Completed"
+  assert_output --partial "❌ ERROR: service 'invalid' not found"
+  assert_output --regexp "one +Running"
   assert_output --regexp "two +Running"
 }
 
@@ -179,7 +179,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: service 'invalid' is not running"
+  assert_output --partial "❌ ERROR: service 'invalid' not found"
   assert_output --regexp "one +Running"
   assert_output --regexp "two +Running"
 }
@@ -210,8 +210,8 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' stopped"
-  assert_output --partial "✅ Service 'two' stopped"
+  assert_output --partial "✅ service 'one' stopped"
+  assert_output --partial "✅ service 'two' stopped"
   assert_output --regexp "one +Completed"
   assert_output --regexp "two +Completed"
 }
@@ -228,7 +228,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' stopped"
+  assert_output --partial "✅ service 'one' stopped"
   assert_output --regexp "one +Completed"
   assert_output --regexp "two +Running"
 }
@@ -245,8 +245,8 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' stopped"
-  assert_output --partial "✅ Service 'two' stopped"
+  assert_output --partial "✅ service 'one' stopped"
+  assert_output --partial "✅ service 'two' stopped"
   assert_output --regexp "one +Completed"
   assert_output --regexp "two +Completed"
 }
@@ -263,9 +263,9 @@ EOF
     "$FLOX_BIN" services stop one
 EOF
 )
-  assert_failure
+  assert_success
   assert_output --regexp "one +Completed"
-  assert_output --partial "❌ ERROR: service 'one' is not running"
+  assert_output --partial "⚠️  service 'one' is not running"
 }
 
 # ---------------------------------------------------------------------------- #

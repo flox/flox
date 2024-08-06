@@ -4,7 +4,7 @@ use std::fmt::Display;
 use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::services::ProcessStates;
+use flox_rust_sdk::providers::services::{ProcessState, ProcessStates};
 use itertools::Itertools;
 use serde::Serialize;
 use tracing::instrument;
@@ -35,19 +35,21 @@ impl Status {
         let env = supported_environment(&flox, self.environment)?;
         let socket = env.services_socket_path(&flox)?;
 
-        let procs: ProcessStatesDisplay = if self.names.is_empty() {
-            ProcessStates::read(socket)?.into()
-        } else {
-            ProcessStates::read_names(socket, self.names)?.into()
-        };
+        let processes = ProcessStates::read(socket)?;
+        let named_processes = super::processes_by_name_or_default_to_all(&processes, &self.names)?;
+
+        let process_states_display = named_processes
+            .into_iter()
+            .cloned()
+            .collect::<ProcessStatesDisplay>();
 
         if self.json {
-            for proc in procs {
+            for proc in process_states_display {
                 let line = serde_json::to_string(&proc)?;
                 println!("{line}");
             }
         } else {
-            println!("{procs}");
+            println!("{process_states_display}");
         }
 
         Ok(())
@@ -81,18 +83,7 @@ struct ProcessStatesDisplay(Vec<ProcessStateDisplay>);
 
 impl From<ProcessStates> for ProcessStatesDisplay {
     fn from(procs: ProcessStates) -> Self {
-        ProcessStatesDisplay(
-            procs
-                .into_iter()
-                .sorted_by_key(|proc| proc.name.clone())
-                .map(|proc| ProcessStateDisplay {
-                    name: proc.name,
-                    status: proc.status,
-                    pid: proc.pid,
-                    is_running: proc.is_running,
-                })
-                .collect(),
-        )
+        ProcessStatesDisplay::from_iter(procs)
     }
 }
 
@@ -102,6 +93,22 @@ impl IntoIterator for ProcessStatesDisplay {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+impl FromIterator<ProcessState> for ProcessStatesDisplay {
+    fn from_iter<T: IntoIterator<Item = ProcessState>>(iter: T) -> Self {
+        ProcessStatesDisplay(
+            iter.into_iter()
+                .sorted_by_key(|proc| proc.name.clone())
+                .map(|proc| ProcessStateDisplay {
+                    name: proc.name,
+                    status: proc.status,
+                    pid: proc.pid,
+                    is_running: proc.is_running,
+                })
+                .collect(),
+        )
     }
 }
 
