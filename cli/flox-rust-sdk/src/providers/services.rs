@@ -267,6 +267,11 @@ impl ProcessStates {
         self.0.iter().find(|state| state.name == name)
     }
 
+    /// Iterater over references to the contained [ProcessState]s.
+    pub fn iter(&self) -> impl Iterator<Item = &ProcessState> {
+        self.0.iter()
+    }
+
     /// Get the names of processes that are currently running.
     pub fn running_process_names(&self) -> Vec<String> {
         self.0
