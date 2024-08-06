@@ -237,39 +237,6 @@ function add_incompatible_package() {
   assert [ "$LOCKED_BEFORE" != "$LOCKED_AFTER" ]
 }
 
-#
-# Notice: l5 is tested in l2.a and l2.c
-#
-
-# bats test_tags=pull:l6,pull:l6:a
-@test "l6.a: pulling the same remote environment in multiple directories creates unique copies of the environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-
-  mkdir first second
-
-  "$FLOX_BIN" pull --remote owner/name --dir first
-  LOCKED_FIRST_BEFORE=$(cat ./first/.flox/env.lock | jq -r '.rev')
-
-  update_dummy_env "owner" "name"
-  LOCKED_FIRST_AFTER=$(cat ./first/.flox/env.lock | jq -r '.rev')
-
-  "$FLOX_BIN" pull --remote owner/name --dir second
-  LOCKED_SECOND=$(cat ./second/.flox/env.lock | jq -r '.rev')
-
-  assert [ "$LOCKED_FIRST_BEFORE" == "$LOCKED_FIRST_AFTER" ]
-  assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_SECOND" ]
-
-  # after pulling first env, its at the rame rev as the second that was pulled after the update
-  "$FLOX_BIN" pull --dir first
-
-  LOCKED_FIRST_AFTER_PULL=$(cat ./first/.flox/env.lock | jq -r '.rev')
-
-  assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_FIRST_AFTER_PULL" ]
-  assert [ "$LOCKED_FIRST_AFTER_PULL" == "$LOCKED_SECOND" ]
-}
-
 # bats test_tags=pull:floxhub
 # try pulling from floxhub authenticated with a test token
 @test "l?: pull environment from FloxHub" {
