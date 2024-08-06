@@ -276,7 +276,17 @@ function add_incompatible_package() {
 
   make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
-  make_incompatible "owner" "name"
+
+  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
+    ENV_FILES_DIR="$MANUALLY_GENERATED/ps_v0_aarch64-darwin"
+  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
+    ENV_FILES_DIR="$MANUALLY_GENERATED/glibc_v0_x86_64-linux"
+  else
+    echo "unknown system: '$NIX_SYSTEM'"
+    exit 1
+  fi
+
+  copy_manifest_and_lockfile_to_remote "owner" "name" "$ENV_FILES_DIR"
 
   run "$FLOX_BIN" activate --remote owner/name --trust
   assert_failure
