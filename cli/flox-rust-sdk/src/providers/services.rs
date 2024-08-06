@@ -221,7 +221,8 @@ pub struct ProcessState {
     pub is_running: bool,
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Debug, Clone, PartialEq, derive_more::From)]
+#[from(forward)]
 pub struct ProcessStates(Vec<ProcessState>);
 
 impl ProcessStates {
@@ -275,12 +276,6 @@ impl IntoIterator for ProcessStates {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
-    }
-}
-
-impl From<Vec<ProcessState>> for ProcessStates {
-    fn from(procs: Vec<ProcessState>) -> Self {
-        ProcessStates(procs)
     }
 }
 
