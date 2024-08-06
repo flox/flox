@@ -118,8 +118,7 @@ teardown() {
   assert_success
 }
 
-# This is the current, rather than necessarily desired, behaviour.
-@test "cuda enabled when nested activation attempts to opt-out" {
+@test "cuda enabled when nested activation opts-out" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
   mkdir -p "${FAKE_FHS_ROOT}/run/opengl-drivers"
   touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libcuda.so.1"
@@ -130,6 +129,6 @@ teardown() {
 
   FLOX_SHELL=bash run "$FLOX_BIN" activate -- \
     "$FLOX_BIN" activate -d "$NESTED_PROJECT_DIR" -- \
-    bash "$TESTS_DIR/cuda/cuda-enabled.sh" "${FAKE_FHS_ROOT}"
+    bash "$TESTS_DIR/cuda/cuda-disabled.sh" "${FAKE_FHS_ROOT}"
   assert_success
 }
