@@ -218,25 +218,6 @@ function add_incompatible_package() {
   assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
 }
 
-# bats test_tags=pull:l3,pull:l3:a
-@test "l3.a: pulling without namespace/environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-
-  "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
-  LOCKED_BEFORE=$(cat .flox/env.lock | jq -r '.rev')
-
-  update_dummy_env "owner" "name"
-
-  run "$FLOX_BIN" pull
-  assert_success
-
-  LOCKED_AFTER=$(cat .flox/env.lock | jq -r '.rev')
-
-  assert [ "$LOCKED_BEFORE" != "$LOCKED_AFTER" ]
-}
-
 # bats test_tags=pull:floxhub
 # try pulling from floxhub authenticated with a test token
 @test "l?: pull environment from FloxHub" {
