@@ -313,6 +313,41 @@ pub fn stop_services(
     }
 }
 
+/// Start service using `process-compose process start`.
+///
+/// This will error if the service is already running,
+/// so the caller is responsible for skipping starting services that are already
+/// running.
+pub fn start_service(socket: impl AsRef<Path>, name: impl AsRef<str>) -> Result<(), ServiceError> {
+    let name = name.as_ref();
+    tracing::debug!(name = name, "starting service");
+
+    let mut cmd = base_process_compose_command(socket);
+    let output = cmd
+        .arg("start")
+        .arg(name)
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped())
+        .output()
+        .map_err(ServiceError::ProcessComposeCmd)?;
+
+    if output.status.success() {
+        tracing::debug!("service started");
+        Ok(())
+    } else {
+        // Note that process compose treats an already running service as an
+        // error
+        // https://github.com/F1bonacc1/process-compose/blob/v1.9.0/src/app/project_runner.go#L262
+        // As far as I can tell, it doesn't error for anything else other than a
+        // process not existing.
+        // Exec failures are just treated as the process having an exit code of
+        // 1
+        tracing::debug!("starting services failed");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(ServiceError::from_process_compose_log(stderr))
+    }
+}
+
 /// Strings extracted from a process-compose error log.
 ///
 /// This is just raw data intended to be interpreted into a specific kind of error
