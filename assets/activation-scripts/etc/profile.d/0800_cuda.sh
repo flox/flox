@@ -10,8 +10,8 @@ export _findutils="@findutils@"
 
 # Only run if _FLOX_ENV_CUDA_DETECTION is set
 activate_cuda(){
-  # Strip any trailing slash so that we can construct it later.
-  local fhs_root_prefix="${1%/:-}"
+  # Strip a trailing or lone slash so that we can construct it later.
+  local fhs_root_prefix="${1%/}"
 
   if [[ "${_FLOX_ENV_CUDA_DETECTION:-}" != 1 ]]; then
     return 0
