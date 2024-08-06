@@ -260,6 +260,13 @@ impl ProcessStates {
         Ok(processes)
     }
 
+    /// Get the state of a single process by name.
+    ///
+    /// Returns `None` if the process is not found.
+    pub fn process(&self, name: &str) -> Option<&ProcessState> {
+        self.0.iter().find(|state| state.name == name)
+    }
+
     /// Get the names of processes that are currently running.
     pub fn running_process_names(&self) -> Vec<String> {
         self.0
@@ -827,5 +834,34 @@ mod tests {
             "expected no more messages, got: {:?}",
             remaining_messages
         );
+    }
+
+    /// Test that [ProcessStates] are read and can be retrieved by name.
+    ///
+    /// Names of processes that are not found should return `None`.
+    #[test]
+    fn get_process_state_by_name() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: [
+                ("foo".to_string(), ProcessConfig {
+                    command: String::from("sleep 1"),
+                    vars: None,
+                }),
+                ("bar".to_string(), ProcessConfig {
+                    command: String::from("true"),
+                    vars: None,
+                }),
+                ("baz".to_string(), ProcessConfig {
+                    command: String::from("false"),
+                    vars: None,
+                }),
+            ]
+            .into(),
+        });
+
+        let states = ProcessStates::read(instance.socket()).expect("failed to read process states");
+
+        assert!(states.process("foo").is_some(), "foo not found");
+        assert!(states.process("not_found").is_none(), "not_found found");
     }
 }
