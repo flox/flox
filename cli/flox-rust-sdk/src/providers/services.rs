@@ -864,4 +864,45 @@ mod tests {
         assert!(states.process("foo").is_some(), "foo not found");
         assert!(states.process("not_found").is_none(), "not_found found");
     }
+
+    /// Test that [ProcessStates] reads and parses.
+    #[test]
+    fn test_process_states_read() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: [
+                ("foo".to_string(), ProcessConfig {
+                    command: String::from("sleep 1"),
+                    vars: None,
+                }),
+                ("bar".to_string(), ProcessConfig {
+                    command: String::from("true"),
+                    vars: None,
+                }),
+                ("baz".to_string(), ProcessConfig {
+                    command: String::from("false"),
+                    vars: None,
+                }),
+            ]
+            .into(),
+        });
+
+        let states = ProcessStates::read(instance.socket()).expect("failed to read process states");
+
+        let foo = states.process("foo").expect("foo not found");
+        assert_eq!(foo.name, "foo");
+        assert_eq!(foo.status, "Running");
+        assert!(foo.is_running);
+
+        let bar = states.process("bar").expect("bar not found");
+        assert_eq!(bar.name, "bar");
+        assert_eq!(bar.status, "Completed");
+        assert!(!bar.is_running);
+        assert_eq!(bar.exit_code, 0);
+
+        let baz = states.process("baz").expect("baz not found");
+        assert_eq!(baz.name, "baz");
+        assert_eq!(baz.status, "Completed");
+        assert!(!baz.is_running);
+        assert_eq!(baz.exit_code, 1);
+    }
 }
