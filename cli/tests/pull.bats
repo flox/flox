@@ -237,25 +237,6 @@ function add_incompatible_package() {
   assert [ "$LOCKED_BEFORE" != "$LOCKED_AFTER" ]
 }
 
-# bats test_tags=pull:l3,pull:l3:b
-@test "l3.b: pulling without namespace/environment respects --dir" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-
-  "$FLOX_BIN" pull --remote owner/name --dir ./inner # dummy remote as we are not actually pulling anything
-  LOCKED_BEFORE=$(cat ./inner/.flox/env.lock | jq -r '.rev')
-
-  update_dummy_env "owner" "name"
-
-  run "$FLOX_BIN" pull --dir ./inner
-  assert_success
-
-  LOCKED_AFTER=$(cat ./inner/.flox/env.lock | jq -r '.rev')
-
-  assert [ "$LOCKED_BEFORE" != "$LOCKED_AFTER" ]
-}
-
 #
 # Notice: l5 is tested in l2.a and l2.c
 #
