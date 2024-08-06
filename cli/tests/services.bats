@@ -268,6 +268,25 @@ EOF
   assert_output --partial "❌ ERROR: service 'one' is not running"
 }
 
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=services:status
+@test "status: lists the statuses for services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services status
+EOF
+)
+  assert_success
+  assert_output --regexp "NAME +STATUS +PID"
+  assert_output --regexp "one +Running +[0-9]+"
+  assert_output --regexp "two +Running +[0-9]+"
+}
+
+# ---------------------------------------------------------------------------- #
+
 @test "activate services: shows warning when services already running" {
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
