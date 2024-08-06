@@ -84,6 +84,8 @@ fn main() -> ExitCode {
             .unwrap_or_default()
     };
 
+    // Sentry client must be initialized before starting an async runtime or spawning threads
+    // https://docs.sentry.io/platforms/rust/#async-main-function
     let _sentry_guard = init_sentry();
     init_logger(Some(verbosity));
 
@@ -128,6 +130,7 @@ fn main() -> ExitCode {
     // Errors handled above
     let FloxCli(args) = args.unwrap();
 
+    // Runtime creates our SIGINT/Ctrl-C handler, so care must be taken to drop it last
     let runtime = tokio::runtime::Runtime::new().unwrap();
 
     // Run flox. Print errors and exit with status 1 on failure
@@ -177,7 +180,12 @@ fn main() -> ExitCode {
         },
     };
 
+    drop(_metrics_guard);
+    drop(_sentry_guard);
+
     exit_code
+
+    // drop(runtime) should implicilty be last
 }
 
 #[derive(Debug)]
