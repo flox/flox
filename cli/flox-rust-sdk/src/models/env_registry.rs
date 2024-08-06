@@ -256,7 +256,7 @@ impl ActivationPid {
     }
 
     /// Check whether an activation is still running.
-    pub fn is_running(&self) -> bool {
+    fn is_running(&self) -> bool {
         // TODO: Compare name or check for watchdog child to see if it's a real activation?
         let pid = NixPid::from(*self);
         match kill(pid, None) {
