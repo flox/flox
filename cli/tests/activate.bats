@@ -1357,33 +1357,6 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate:flox-uses-default-env
-@test "'flox *' uses local environment over 'default' environment" {
-  project_setup # TODO: we need PROJECT_DIR, but not flox init
-  "$FLOX_BIN" delete -f
-  export FLOX_FEATURES_USE_CATALOG=false # todo: port
-
-  mkdir default
-  pushd default >/dev/null || return
-  "$FLOX_BIN" init
-  "$FLOX_BIN" install vim
-  popd >/dev/null || return
-
-  "$FLOX_BIN" init
-  "$FLOX_BIN" install emacs
-
-  # sanity check that flox list lists the local environment
-  run -- "$FLOX_BIN" list -n
-  assert_success
-  assert_line "emacs"
-
-  # Run flox list within the default environment.
-  # Flox should choose the local environment over the default environment.
-  run -- "$FLOX_BIN" activate --dir default -- "$FLOX_BIN" list -n
-  assert_success
-  assert_line "emacs"
-}
-
-# bats test_tags=activate:flox-uses-default-env
 @test "catalog: 'flox *' uses local environment over 'default' environment" {
   project_setup # TODO: we need PROJECT_DIR, but not flox init
   "$FLOX_BIN" delete -f
