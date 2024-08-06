@@ -221,6 +221,17 @@ pub struct ProcessState {
     pub is_running: bool,
 }
 
+impl ProcessState {
+    /// We restart `process-compose` with updated config after all services are stopped.
+    /// We treat Disabled, Completed, Skipped, and Error as stopped.
+    /// This means Foreground, Pending, Running, Launching, Launched,
+    /// Restarting, and Terminating are treated as not stopped.
+    /// https://github.com/F1bonacc1/process-compose/blob/8d6a662c71d24608daf93b51ca1d462a0d5725f9/src/types/process.go#L125-L137
+    pub fn is_stopped(&self) -> bool {
+        ["Disabled", "Completed", "Skipped", "Error"].contains(&self.status.as_str())
+    }
+}
+
 #[derive(Deserialize, Debug, Clone, PartialEq, derive_more::From)]
 #[from(forward)]
 pub struct ProcessStates(Vec<ProcessState>);
