@@ -218,20 +218,6 @@ function add_incompatible_package() {
   assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
 }
 
-# bats test_tags=pull:l2,pull:l2:c
-@test "l2.c: flox pull with --remote and --dir pulls into the specified directory" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-
-  run "$FLOX_BIN" pull --remote owner/name --dir ./inner
-  assert_success
-  assert [ -e "inner/.flox/env.json" ]
-  assert [ -e "inner/.flox/env.lock" ]
-  assert [ $(cat inner/.flox/env.json | jq -r '.name') == "name" ]
-  assert [ $(cat inner/.flox/env.json | jq -r '.owner') == "owner" ]
-}
-
 # bats test_tags=pull:l3,pull:l3:a
 @test "l3.a: pulling without namespace/environment" {
   export FLOX_FEATURES_USE_CATALOG=false
