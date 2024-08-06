@@ -104,17 +104,24 @@ impl Activate {
             Err(e) => Err(e)?,
         };
 
-        self.activate(config, flox, concrete_environment, true, None)
+        self.activate(config, flox, concrete_environment, true, &[])
             .await
     }
 
+    /// This function contains the bulk of the implementation for
+    /// Activate::handle,
+    /// but it allows us to create an activation for use by `services start` or
+    /// `services-restart`.
+    ///
+    /// If self.start_services is true and services_to_start is empty, all
+    /// services will be started.
     pub async fn activate(
         self,
         mut config: Config,
         flox: Flox,
         mut concrete_environment: ConcreteEnvironment,
         start_watchdog: bool,
-        services_to_start: Option<Vec<String>>,
+        services_to_start: &[String],
     ) -> Result<()> {
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
             if !self.trust {
@@ -303,7 +310,7 @@ impl Activate {
                         FLOX_ACTIVATE_START_SERVICES_VAR,
                         self.start_services.to_string(),
                     );
-                    if let Some(services_to_start) = services_to_start {
+                    if !services_to_start.is_empty() {
                         exports.insert(
                             FLOX_SERVICES_TO_START_VAR,
                             // Store JSON in an env var because bash doesn't
