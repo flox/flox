@@ -27,17 +27,17 @@ impl Stop {
         let env = supported_environment(&flox, self.environment)?;
         let socket = env.services_socket_path(&flox)?;
 
-        let names = if self.names.is_empty() {
-            tracing::debug!("no service names provided");
-            ProcessStates::read(&socket)?.running_process_names()
-        } else {
-            self.names
-        };
+        let processes = ProcessStates::read(&socket)?;
+        let named_processes = super::processes_by_name_or_default_to_all(&processes, &self.names)?;
 
-        stop_services(socket, &names)?;
+        for process in named_processes {
+            if !process.is_running {
+                message::warning(format!("service '{}' is not running", process.name));
+                continue;
+            }
 
-        for name in names.iter() {
-            message::service_stopped(name);
+            stop_services(&socket, &[&process.name])?;
+            message::updated(format!("service '{}' stopped", process.name));
         }
 
         Ok(())
