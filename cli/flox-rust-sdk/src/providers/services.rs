@@ -250,16 +250,6 @@ impl ProcessStates {
         Ok(processes)
     }
 
-    /// Query the status of all processes and filter for the named processes.
-    pub fn read_names(
-        socket: impl AsRef<Path>,
-        names: Vec<String>,
-    ) -> Result<ProcessStates, ServiceError> {
-        let mut processes = ProcessStates::read(socket)?;
-        processes.0.retain(|state| names.contains(&state.name));
-        Ok(processes)
-    }
-
     /// Get the state of a single process by name.
     ///
     /// Returns `None` if the process is not found.
@@ -270,15 +260,6 @@ impl ProcessStates {
     /// Iterater over references to the contained [ProcessState]s.
     pub fn iter(&self) -> impl Iterator<Item = &ProcessState> {
         self.0.iter()
-    }
-
-    /// Get the names of processes that are currently running.
-    pub fn running_process_names(&self) -> Vec<String> {
-        self.0
-            .iter()
-            .filter(|state| state.is_running)
-            .map(|state| state.name.clone())
-            .collect()
     }
 }
 
