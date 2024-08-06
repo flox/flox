@@ -676,6 +676,12 @@ enum LocalDevelopmentCommands {
     #[bpaf(
         command,
         long("develop"),
+        header(indoc! {"
+            When called with no arguments 'flox activate' will look for a '.flox' directory
+            in the current directory. Calling 'flox activate' in your home directory will
+            activate a default environment. Environments in other directories and remote
+            environments are activated with the '-d' and '-r' flags respectively.
+        "}),
         footer("Run 'man flox-activate' for more details.")
     )]
     Activate(#[bpaf(external(activate::activate))] activate::Activate),

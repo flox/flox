@@ -58,10 +58,6 @@ pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES
 pub static KLAUS_BIN: Lazy<PathBuf> =
     Lazy::new(|| PathBuf::from(env::var("KLAUS_BIN").unwrap_or(env!("KLAUS_BIN").to_string())));
 
-/// When called with no arguments 'flox activate' will look for a '.flox' directory
-/// in the current directory. Calling 'flox activate' in your home directory will
-/// activate a default environment. Environments in other directories and remote
-/// environments are activated with the '-d' and '-r' flags respectively.
 #[derive(Bpaf, Clone)]
 pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
