@@ -62,23 +62,23 @@ pub static KLAUS_BIN: Lazy<PathBuf> =
 #[derive(Bpaf, Clone)]
 pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
+    pub environment: EnvironmentSelect,
 
     /// Trust a remote environment temporarily for this activation
     #[bpaf(long, short)]
-    trust: bool,
+    pub trust: bool,
 
     /// Print an activation script to stdout instead of spawning a subshell
     #[bpaf(long("print-script"), short, hide)]
-    print_script: bool,
+    pub print_script: bool,
 
     /// Whether to start services when activating the environment
     #[bpaf(long, short, hide)]
-    start_services: bool,
+    pub start_services: bool,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
-    run_args: Vec<String>,
+    pub run_args: Vec<String>,
 }
 
 impl Activate {
@@ -300,7 +300,7 @@ impl Activate {
             }
             if flox.features.services && !manifest.services.is_empty() && !in_place {
                 if self.start_services {
-                    supported_environment(&flox, self.environment)?; // Error for remote envs.
+                    supported_environment(&flox, &self.environment)?; // Error for remote envs.
                 }
                 tracing::debug!(
                     start = self.start_services,

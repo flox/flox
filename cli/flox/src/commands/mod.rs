@@ -741,7 +741,7 @@ impl LocalDevelopmentCommands {
             LocalDevelopmentCommands::Search(args) => args.handle(config, flox).await?,
             LocalDevelopmentCommands::Show(args) => args.handle(flox).await?,
             LocalDevelopmentCommands::Delete(args) => args.handle(flox).await?,
-            LocalDevelopmentCommands::Services(args) => args.handle(flox).await?,
+            LocalDevelopmentCommands::Services(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
