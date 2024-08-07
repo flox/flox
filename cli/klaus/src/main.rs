@@ -137,7 +137,7 @@ fn main() -> Result<(), Error> {
     let res = wait_for_termination(watcher, should_proceed, should_stop);
 
     #[cfg(target_os = "linux")]
-    let res = wait_for_termination(flag, should_stop);
+    let res = wait_for_termination(should_proceed, should_stop);
 
     if res.is_err() {
         error!("received stop signal, exiting");
@@ -238,7 +238,7 @@ fn wait_for_termination(
     stop_flag: Arc<AtomicBool>,
 ) -> Result<(), Error> {
     loop {
-        if flag.load(std::sync::atomic::Ordering::SeqCst) {
+        if proceed_flag.load(std::sync::atomic::Ordering::SeqCst) {
             debug!("observed flag, will proceed");
             break Ok(());
         }
