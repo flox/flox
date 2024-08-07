@@ -137,7 +137,7 @@ fn main() -> Result<(), Error> {
     let res = wait_for_termination(watcher, should_clean_up, should_terminate);
 
     #[cfg(target_os = "linux")]
-    let res = wait_for_termination(should_proceed, should_stop);
+    let res = wait_for_termination(should_clean_up, should_terminate);
 
     // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
     // but there's not much we can do about that because we don't know who sent us one of those
