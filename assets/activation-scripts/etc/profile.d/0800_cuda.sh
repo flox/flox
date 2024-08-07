@@ -1,6 +1,7 @@
 # shellcheck shell=bash
 export _coreutils="@coreutils@"
 export _gnused="@gnused@"
+export _fd="@fd@"
 export _findutils="@findutils@"
 export _ldconfig="@ldconfig@"
 export _nawk="@nawk@"
@@ -15,6 +16,8 @@ activate_cuda(){
   local fhs_root_prefix="${1%/}"
   # Path to ldconfig that can be substituted for testing.
   local ldconfig_bin="$2"
+  # Pattern of libraries that we support.
+  local lib_pattern="^lib(cuda|nvidia|dxcore).*\.so.*"
 
   # Only run if _FLOX_ENV_CUDA_DETECTION is set
   if [[ "${_FLOX_ENV_CUDA_DETECTION:-}" != 1 ]]; then
@@ -31,10 +34,16 @@ activate_cuda(){
     return 0
   fi
 
-  # $1 is intentionally single quoted.
-  # shellcheck disable=SC2016
+  # Use system library cache.
   SYSTEM_LIBS=$("$ldconfig_bin" --print-cache -C /etc/ld.so.cache 2>/dev/null \
-    | "$_nawk/bin/nawk" '$1 ~ /^lib(cuda|nvidia|dxcore).*\.so.*/ { print $4 }')
+    | "$_nawk/bin/nawk" "\$1 ~ /${lib_pattern}/ { print \$4 }")
+
+  # Fallback for NixOS.
+  if [ -z "$SYSTEM_LIBS" ]; then
+    SYSTEM_LIBS=$("$_fd/bin/fd" "$lib_pattern" "${fhs_root_prefix}/run/opengl-drivers" 2>/dev/null)
+  fi
+
+  # No matching libs from either results.
   if [ -z "$SYSTEM_LIBS" ]; then
     return 0
   fi

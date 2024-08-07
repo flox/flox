@@ -11,6 +11,7 @@
   process-compose,
   iconv,
   nawk,
+  fd,
 }: let
   ld-floxlib_so =
     if stdenv.isLinux
@@ -50,6 +51,7 @@ in
       substituteInPlace $i --replace "@ld-floxlib@" "${ld-floxlib_so}"
       substituteInPlace $i --replace "@ldconfig@" "${ldconfig}"
       substituteInPlace $i --replace "@nawk@" "${nawk}"
+      substituteInPlace $i --replace "@fd@" "${fd}"
     done
 
     ${shellcheck}/bin/shellcheck \
