@@ -55,6 +55,7 @@ pub static INTERACTIVE_BASH_BIN: Lazy<PathBuf> = Lazy::new(|| {
     )
 });
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
+pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
 pub static KLAUS_BIN: Lazy<PathBuf> =
     Lazy::new(|| PathBuf::from(env::var("KLAUS_BIN").unwrap_or(env!("KLAUS_BIN").to_string())));
 
@@ -81,12 +82,12 @@ pub struct Activate {
 }
 
 impl Activate {
-    pub async fn handle(self, mut config: Config, flox: Flox) -> Result<()> {
+    pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
         if !flox.features.services && self.start_services {
             bail!("Services are not enabled in this environment");
         }
-        let mut concrete_environment = match self.environment.to_concrete_environment(&flox) {
+        let concrete_environment = match self.environment.to_concrete_environment(&flox) {
             Ok(concrete_environment) => concrete_environment,
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
                 bail!(formatdoc! {"
@@ -99,6 +100,25 @@ impl Activate {
             Err(e) => Err(e)?,
         };
 
+        self.activate(config, flox, concrete_environment, true, &[])
+            .await
+    }
+
+    /// This function contains the bulk of the implementation for
+    /// Activate::handle,
+    /// but it allows us to create an activation for use by `services start` or
+    /// `services-restart`.
+    ///
+    /// If self.start_services is true and services_to_start is empty, all
+    /// services will be started.
+    pub async fn activate(
+        self,
+        mut config: Config,
+        flox: Flox,
+        mut concrete_environment: ConcreteEnvironment,
+        start_watchdog: bool,
+        services_to_start: &[String],
+    ) -> Result<()> {
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
             if !self.trust {
                 ensure_environment_trust(&mut config, &flox, env).await?;
@@ -290,6 +310,14 @@ impl Activate {
                         FLOX_ACTIVATE_START_SERVICES_VAR,
                         self.start_services.to_string(),
                     );
+                    if !services_to_start.is_empty() {
+                        exports.insert(
+                            FLOX_SERVICES_TO_START_VAR,
+                            // Store JSON in an env var because bash doesn't
+                            // support storing arrays in env vars
+                            serde_json::to_string(&services_to_start)?,
+                        );
+                    }
                 }
                 exports.insert(
                     FLOX_SERVICES_SOCKET_VAR,
@@ -301,7 +329,7 @@ impl Activate {
         exports.extend(default_nix_env_vars());
 
         // Launch the watchdog process
-        if !in_place {
+        if !in_place && start_watchdog {
             Activate::launch_watchdog(
                 &flox,
                 environment.cache_path()?.to_path_buf(),
