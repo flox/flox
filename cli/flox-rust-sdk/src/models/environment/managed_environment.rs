@@ -1334,9 +1334,8 @@ impl ManagedEnvironment {
         // Ensure the environment is locked
         // PathEnvironment may not have a lockfile or an outdated lockfile
         // if the environment was modified primarily through editing the manifest manually.
-        // Call lock rather than ensure_locked because the primary purpose of
-        // ensure_locked is avoiding locking of v0 manifests,
-        // but we don't need to support pushing old manifests.
+        // Call `ensure_locked` to avoid locking of v0 manifests,
+        // but permit pushing old manifests that are already locked.
         core_environment
             .ensure_locked(flox)
             .map_err(ManagedEnvironmentError::Lock)?;
