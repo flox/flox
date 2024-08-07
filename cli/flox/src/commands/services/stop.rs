@@ -36,6 +36,14 @@ impl Stop {
                 continue;
             }
 
+            if let Err(err) = stop_services(&socket, &[&process.name]) {
+                message::error(format!(
+                    "Failed to stop service '{}': {}",
+                    process.name, err
+                ));
+                continue;
+            }
+
             message::updated(format!("Service '{}' stopped", process.name));
         }
 
