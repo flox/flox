@@ -118,7 +118,7 @@ teardown() {
   assert_success
 }
 
-@test "cuda enabled when nested activation opts-out" {
+@test "cuda disabled when nested activation opts-out" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
   mkdir -p "${FAKE_FHS_ROOT}/run/opengl-drivers"
   touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libcuda.so.1"
