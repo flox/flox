@@ -84,6 +84,13 @@ build: build-cli
         --generated-data "{{GENERATED_DATA}}" \
         {{bats_args}}
 
+# Run the CLI integration test suite using Nix-built binaries
+@nix-integ-tests:
+    nix run \
+        --accept-flake-config \
+        --extra-experimental-features 'nix-command flakes' \
+        .#flox-cli-tests
+
 # Run the CLI unit tests
 @unit-tests regex="": build
      {{cargo_test_invocation}} {{regex}}
@@ -95,8 +102,11 @@ build: build-cli
 # Run the entire CLI test suite
 test-cli: impure-tests integ-tests
 
+# Run the test suite except for pkgdb
+@test-rust: impure-tests integ-tests nix-integ-tests
+
 # Run the entire test suite, including impure unit tests
-test-all: test-pkgdb impure-tests integ-tests
+test-all: test-pkgdb impure-tests integ-tests nix-integ-tests
 
 
 # ---------------------------------------------------------------------------- #

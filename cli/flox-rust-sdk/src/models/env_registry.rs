@@ -204,13 +204,13 @@ impl RegistryEntry {
 
     /// Register an activation for an existing enviroment.
     fn register_activation(&mut self, pid: ActivationPid) {
-        tracing::debug!(%pid, "registering activation");
+        tracing::debug!(%pid, hash = self.path_hash, "registering activation");
         self.activations.insert(pid);
     }
 
     /// Deregister an activation for an existing enviroment.
     fn deregister_activation(&mut self, pid: ActivationPid) {
-        tracing::debug!(%pid, "deregistering activation");
+        tracing::debug!(%pid, hash = self.path_hash, "deregistering activation");
         self.activations.remove(&pid);
     }
 
@@ -425,12 +425,13 @@ pub fn register_activation(
     Ok(())
 }
 
-/// Deregister an activation for an existing enviroment.
+/// Deregister an activation for an existing enviroment, returning the number of activations
+/// remaining after deregistering.
 pub fn deregister_activation(
     reg_path: impl AsRef<Path>,
     path_hash: &str,
     pid: ActivationPid,
-) -> Result<(), EnvRegistryError> {
+) -> Result<usize, EnvRegistryError> {
     // Acquire the lock before reading the registry so that we know there are no modifications while
     // we're editing it.
     let lock = acquire_env_registry_lock(&reg_path)?;
@@ -441,9 +442,10 @@ pub fn deregister_activation(
 
     entry.deregister_activation(pid);
     entry.remove_stale_activations();
+    let current_activations = entry.activations.len();
 
     write_environment_registry(&reg, &reg_path, lock)?;
-    Ok(())
+    Ok(current_activations)
 }
 
 #[cfg(test)]

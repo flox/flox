@@ -1,6 +1,8 @@
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{anyhow, Context};
 use clap::Parser;
@@ -10,15 +12,15 @@ use flox_rust_sdk::models::env_registry::{
     register_activation,
     ActivationPid,
 };
+use flox_rust_sdk::providers::services::PROCESS_COMPOSE_BIN;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
-use listen::{listen, signal_listener, spawn_signal_listener, spawn_termination_listener, Action};
 use logger::init_logger;
+use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
 use once_cell::sync::Lazy;
 use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
 
-mod listen;
 mod logger;
 mod sentry;
 
@@ -30,6 +32,7 @@ const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.
 The watchdog (klaus) is spawned during activation to aid in service cleanup
 when the final activation of an environment has terminated. This cleanup can
 be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
+const CHECK_INTERVAL: Duration = Duration::from_millis(10);
 
 #[derive(Debug, Parser)]
 #[command(version = Lazy::get(&FLOX_VERSION).map(|v| v.as_str()).unwrap_or("0.0.0"))]
@@ -56,7 +59,6 @@ pub struct Cli {
     pub log_path: Option<PathBuf>,
 }
 
-#[tokio::main]
 #[instrument("watchdog",
     skip_all,
     fields(
@@ -65,7 +67,7 @@ pub struct Cli {
         dot_flox_hash = tracing::field::Empty,
         socket = tracing::field::Empty,
         log = tracing::field::Empty))]
-async fn main() -> Result<(), Error> {
+fn main() -> Result<(), Error> {
     // Initialization
     let args = Cli::parse();
     init_logger(&args.log_path).context("failed to initialize logger")?;
@@ -79,8 +81,38 @@ async fn main() -> Result<(), Error> {
     span.record("dot_flox_hash", &args.dot_flox_hash);
     span.record("socket", traceable_path(&args.socket_path));
     span.record("log", maybe_traceable_path(&args.log_path));
-
     debug!("starting");
+
+    // Set the signal handler
+    let should_clean_up = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(SIGUSR1, Arc::clone(&should_clean_up))
+        .context("failed to set SIGUSR1 signal handler")?;
+    let should_terminate = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))
+        .context("failed to set SIGINT signal handler")?;
+    signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))
+        .context("failed to set SIGTERM signal handler")?;
+    signal_hook::flag::register(SIGQUIT, Arc::clone(&should_terminate))
+        .context("failed to set SIGQUIT signal handler")?;
+
+    // Ensure that we'll get sent SIGUSR1 on Linux when the parent terminates
+    #[cfg(target_os = "linux")]
+    nix::sys::prctl::set_pdeathsig(Some(nix::sys::signal::Signal::SIGUSR1))
+        .context("set_pdeathsig failed")?;
+
+    #[cfg(target_os = "macos")]
+    let watcher = {
+        let mut watcher = kqueue::Watcher::new()?;
+        watcher.add_pid(
+            args.pid,
+            kqueue::EventFilter::EVFILT_PROC,
+            kqueue::FilterFlag::NOTE_EXIT,
+        )?;
+        watcher.watch().context("failed to register watcher")?;
+        watcher
+    };
+    debug!("registered termination interest");
+
     debug!(
         path = traceable_path(&args.socket_path),
         exists = &args.socket_path.exists(),
@@ -94,31 +126,62 @@ async fn main() -> Result<(), Error> {
     }
     register_activation(&args.registry_path, &args.dot_flox_hash, activation)?;
 
-    // Start the listeners
-    let shutdown_flag = Arc::new(AtomicBool::new(false));
-    let signal_listener = signal_listener()?;
-    let signal_task = spawn_signal_listener(signal_listener, shutdown_flag.clone())?;
-    let termination_task = spawn_termination_listener(activation.into(), shutdown_flag.clone());
-
     info!(
         this_pid = nix::unistd::getpid().as_raw(),
         target_pid = args.pid,
         "watchdog is on duty"
     );
 
-    // Listen for a notification
-    let action = listen(signal_task, termination_task, shutdown_flag).await;
+    // Listen for a notification, getting an error if we should terminate
+    #[cfg(target_os = "macos")]
+    let res = wait_for_termination(watcher, should_clean_up, should_terminate);
 
-    match action {
-        Action::Cleanup => {
-            info!(pid = &args.pid, "deregistering activation");
-            deregister_activation(&args.registry_path, &args.dot_flox_hash, activation)
-                .context("failed to deregister activation")?;
-        },
-        Action::Terminate => {
-            // TODO: deregister if !is_running?
-            debug!("received termination action, exiting");
-        },
+    #[cfg(target_os = "linux")]
+    let res = wait_for_termination(should_clean_up, should_terminate);
+
+    // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
+    // but there's not much we can do about that because we don't know who sent us one of those
+    // signals or why.
+    if res.is_err() {
+        error!("received stop signal, exiting");
+        return res;
+    }
+
+    // Now we proceed with cleanup assuming we've gotten a notification that the target process
+    // has terminated.
+
+    let remaining_activations =
+        deregister_activation(&args.registry_path, &args.dot_flox_hash, activation)
+            .context("failed to deregister activation")?;
+    debug!(n = remaining_activations, "remaining activations");
+    if remaining_activations == 0 {
+        if args.socket_path.exists() {
+            let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
+            cmd.arg("down");
+            cmd.arg("--unix-socket");
+            cmd.arg(&args.socket_path);
+            cmd.env("NO_COLOR", "1");
+            match cmd.output() {
+                Ok(output) => {
+                    if !output.status.success() {
+                        error!(
+                            code = output.status.code(),
+                            "failed to run process-compose shutdown command"
+                        );
+                    }
+                },
+                Err(err) => {
+                    error!(%err, "failed to run process-compose shutdown command");
+                },
+            }
+        } else {
+            debug!(reason = "no socket", "did not shut down process-compose");
+        }
+    } else {
+        debug!(
+            reason = "remaining activations",
+            "did not shut down process-compose"
+        );
     }
 
     // Exit
@@ -146,4 +209,43 @@ fn ensure_process_group_leader() -> Result<(), Error> {
         setsid().context("failed to create new session")?;
     }
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn wait_for_termination(
+    watcher: kqueue::Watcher,
+    proceed_flag: Arc<AtomicBool>,
+    stop_flag: Arc<AtomicBool>,
+) -> Result<(), Error> {
+    loop {
+        if proceed_flag.load(std::sync::atomic::Ordering::SeqCst) {
+            debug!("observed proceed flag");
+            break Ok(());
+        }
+        if stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
+            break Err(anyhow!("received stop signal"));
+        }
+        if let Some(_event) = watcher.poll(None) {
+            debug!("received termination event, will proceed");
+            break Ok(());
+        }
+        std::thread::sleep(CHECK_INTERVAL);
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_termination(
+    proceed_flag: Arc<AtomicBool>,
+    stop_flag: Arc<AtomicBool>,
+) -> Result<(), Error> {
+    loop {
+        if proceed_flag.load(std::sync::atomic::Ordering::SeqCst) {
+            debug!("observed flag, will proceed");
+            break Ok(());
+        }
+        if stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
+            break Err(anyhow!("received stop signal"));
+        }
+        std::thread::sleep(CHECK_INTERVAL);
+    }
 }

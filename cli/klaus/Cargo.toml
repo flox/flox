@@ -10,15 +10,11 @@ anyhow.workspace = true
 clap.workspace = true
 clap_derive.workspace = true
 flox-rust-sdk.workspace = true
-futures.workspace = true
 nix.workspace = true
 once_cell.workspace = true
-proctitle.workspace = true
 sentry.workspace = true
 serde.workspace = true
 signal-hook.workspace = true
-signal-hook-tokio.workspace = true
-tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 

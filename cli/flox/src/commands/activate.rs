@@ -4,7 +4,7 @@ use std::env;
 use std::io::stdout;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
@@ -295,17 +295,28 @@ impl Activate {
 
             // TODO: we should clean up the different conditionals here
             if in_place && self.start_services {
+                debug!("not starting services for in-place activation");
                 message::warning("Skipped starting services. Services are not yet supported for in place activations.");
             }
             if flox.features.services && !manifest.services.is_empty() && !in_place {
                 if self.start_services {
                     supported_environment(&flox, self.environment)?; // Error for remote envs.
                 }
-                tracing::debug!(start = self.start_services, "setting service variables");
-                if socket_path.exists() {
+                tracing::debug!(
+                    start = self.start_services,
+                    socket_exists = socket_path.exists(),
+                    "setting service variables"
+                );
+                if self.start_services && socket_path.exists() {
                     debug!("detected existing services socket");
+                    debug!("will not start services");
                     message::warning("Skipped starting services, services are already running");
                 } else {
+                    if self.start_services {
+                        debug!("will start services");
+                    } else {
+                        debug!("will not start services");
+                    }
                     exports.insert(
                         FLOX_ACTIVATE_START_SERVICES_VAR,
                         self.start_services.to_string(),
@@ -398,6 +409,10 @@ impl Activate {
         let reg_path = env_registry_path(flox);
         cmd.arg("--registry");
         cmd.arg(reg_path);
+
+        // Redirect the output streams so watchdog output doesn't appear in the shell
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::null());
 
         // Launch the watchdog
         let _child = cmd.spawn().context("failed to spawn watchdog process")?;

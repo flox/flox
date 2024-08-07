@@ -34,6 +34,7 @@ log = "0.4.22"
 nix = { version = "0.28", features = ["signal", "process", "user"] }
 oauth2 = "4.4"
 once_cell = "1.16.0"
+path-dedot = "3.1.1"
 pollster = "0.3.0"
 progenitor-client = "0.6"
 proptest = "1.5.0"
@@ -74,7 +75,7 @@ url-escape = "0.1.1"
 uuid = { version = "1.10", features = ["serde", "v4"] }
 walkdir = "2"
 xdg = "2.4"
-path-dedot = "3.1.1"
+
 
 # dev dependencies
 pretty_assertions = "1.3"
@@ -83,12 +84,10 @@ temp-env = "0.3.2"
 
 # watchdog dependencies
 kqueue = "1.0.8"
-proctitle = "0.1.1"
 signal-hook = "0.3.17"
-signal-hook-tokio = { version = "0.3.1", features = ["futures-v0_3"] }
 
 # build(.rs) dependencies
+openapiv3 = "2.0"
 prettyplease = "0.2"
 progenitor = "0.6"
 syn = "2.0"
-openapiv3 = "2.0"
