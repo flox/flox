@@ -567,6 +567,89 @@ impl Iterator for ProcessComposeLogStream {
     }
 }
 
+/// Thin wrapper around the output of a single tailing [ProcessComposeLogReader].
+///
+/// This is an alternative to [ProcessComposeLogStream],
+/// which runs a single reader for a single process,
+/// and only collects the last up to `tail` lines.
+/// Unlike [ProcessComposeLogStream], this struct does not provide an [Iterator]
+/// to continuously read log lines.
+/// Because log lines are currently not timestamped,
+/// we can only meaningfully provide tail logs for a single process.
+pub struct ProcessComposeLogTail {
+    lines: Vec<ProcessComposeLogLine>,
+}
+
+impl ProcessComposeLogTail {
+    /// Create a new log tail for a single process.
+    ///
+    /// This will start a `process-compose process logs --tail` process.
+    /// The reader will read all lines from the process and return them as a vector.
+    /// Empirically, `process-compose` will **quit** after reading `tail` lines,
+    /// even if the process is still running.
+    /// Thus collecting logs rather than streaming will not block indefinitely,
+    /// unlike the streaming counterpart [ProcessComposeLogStream].
+    pub fn new(
+        socket: impl AsRef<Path>,
+        process: impl AsRef<str>,
+        tail: usize,
+    ) -> Result<ProcessComposeLogTail, ServiceError> {
+        let mut cmd = base_process_compose_command(socket);
+        cmd.arg("logs").arg(process.as_ref());
+        cmd.arg("--tail").arg(tail.to_string());
+
+        let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(ServiceError::from_process_compose_log(stderr));
+        }
+
+        let mut lines = Vec::with_capacity(tail);
+        for line in output.stdout.lines() {
+            let line = line.map_err(ServiceError::ReadLogLine)?;
+
+            // process-compose logs --tail will print an error message
+            // after the last line is read.
+            // ```
+            // write close: write unix ->/tmp/.tmpnYlCZ2/S.process-compose: write: broken pipe
+            // ```
+            // Unfortunately, this message is printed to stdout, not stderr,
+            // so we can't filter it out trivially.
+            // For now, assume it's the last line and break out of the loop.
+            // A change to print to stderr instead was proposed in
+            // <https://github.com/F1bonacc1/process-compose/pull/216>.
+            if line.starts_with("write close: write unix") {
+                debug!("last line read, stopping log reader");
+                break;
+            }
+
+            lines.push(ProcessComposeLogLine::new(process.as_ref(), line));
+        }
+
+        Ok(ProcessComposeLogTail { lines })
+    }
+
+    /// Get an iterator over the log lines.
+    pub fn iter(&self) -> impl Iterator<Item = &ProcessComposeLogLine> {
+        self.lines.iter()
+    }
+
+    /// Get the log lines as a vector.
+    pub fn into_inner(self) -> Vec<ProcessComposeLogLine> {
+        self.lines
+    }
+}
+
+impl IntoIterator for ProcessComposeLogTail {
+    type IntoIter = std::vec::IntoIter<ProcessComposeLogLine>;
+    type Item = ProcessComposeLogLine;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.lines.into_iter()
+    }
+}
+
 /// Representation of a thread reading logs from a `process-compose process logs` process.
 struct ProcessComposeLogReader {
     handle: std::thread::JoinHandle<Result<(), ServiceError>>,
@@ -593,11 +676,8 @@ impl ProcessComposeLogReader {
             let _guard = span.enter();
 
             let mut cmd = base_process_compose_command(socket);
-            cmd.arg("logs")
-                .arg(&process)
-                .arg("--follow")
-                .stderr(Stdio::piped())
-                .stdout(Stdio::piped());
+            cmd.arg("logs").arg(&process).arg("--follow");
+            cmd.stderr(Stdio::piped()).stdout(Stdio::piped());
 
             debug!(cmd = cmd.display().to_string(), "attaching to logs");
 
@@ -612,7 +692,6 @@ impl ProcessComposeLogReader {
             // Todo: add a heartbeat to stop receiving logs and kill log reader processes
             for line in reader.lines() {
                 let line = line.map_err(ServiceError::ReadLogLine)?;
-
                 // The receiver end was dropped, so we can't send any more messages.
                 // Might as well break out of the loop and kill the child process.
                 let Ok(_) = sender.send(ProcessComposeLogLine::new(&process, line)) else {
@@ -859,6 +938,136 @@ mod tests {
             ProcessComposeLogLine::new("foo", "foo 3"),
             ProcessComposeLogLine::new("foo", "foo 4"),
             ProcessComposeLogLine::new("foo", "foo 5"),
+        ]);
+    }
+
+    /// Test that [ProcessComposeLogReader] reads at most `tail` lines from the process.
+    ///
+    /// We rely on the `--tail` behavior of `process-compose process logs`,
+    /// thus this test specifically targets `process-compose`.
+    #[test]
+    fn test_process_compose_tail_n_lines_if_process_finished() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: [("foo".to_string(), ProcessConfig {
+                command: String::from("echo 1; echo 2; echo 3;"),
+                vars: None,
+            })]
+            .into(),
+        });
+
+        let tail = ProcessComposeLogTail::new(instance.socket(), "foo", 3).unwrap();
+
+        assert_eq!(tail.into_inner(), vec![
+            ProcessComposeLogLine::new("foo", "1"),
+            ProcessComposeLogLine::new("foo", "2"),
+            ProcessComposeLogLine::new("foo", "3"),
+        ]);
+    }
+
+    /// Test that [ProcessComposeLogReader] reads at most `tail` lines from the process,
+    /// even if the process logged more lines.
+    ///
+    /// We rely on the `--tail` behavior of `process-compose process logs`,
+    /// thus this test specifically targets `process-compose`.
+    #[test]
+    fn test_process_compose_tail_max_n_lines_if_finished_with_more() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: [("foo".to_string(), ProcessConfig {
+                command: String::from("echo 1; echo 2; echo 3; echo 4;"),
+                vars: None,
+            })]
+            .into(),
+        });
+
+        let tail = ProcessComposeLogTail::new(instance.socket(), "foo", 3).unwrap();
+
+        // The process should have logged 4 lines, but we only read 3.
+        // This assumes that the printing happens nearly instantaneously,
+        // i.e. that all lines are printed before the reader starts reading.
+        assert_eq!(tail.into_inner(), vec![
+            ProcessComposeLogLine::new("foo", "2"),
+            ProcessComposeLogLine::new("foo", "3"),
+            ProcessComposeLogLine::new("foo", "4"),
+        ]);
+    }
+
+    /// Test that [ProcessComposeLogReader] reads less than `tail` lines from the process,
+    /// even if the process logs less than `tail` lines.
+    ///
+    /// We rely on the `--tail` behavior of `process-compose process logs`,
+    /// thus this test specifically targets `process-compose`.
+    #[test]
+    fn test_process_compose_tail_stops_with_less_n_lines_when_stopped() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: [("foo".to_string(), ProcessConfig {
+                command: String::from("echo 1; echo 2; echo 3"),
+                vars: None,
+            })]
+            .into(),
+        });
+
+        let tail = ProcessComposeLogTail::new(instance.socket(), "foo", 4).unwrap();
+
+        // The only logs 3 lines, even though we request 4
+        assert_eq!(tail.into_inner(), vec![
+            ProcessComposeLogLine::new("foo", "1"),
+            ProcessComposeLogLine::new("foo", "2"),
+            ProcessComposeLogLine::new("foo", "3"),
+        ]);
+    }
+
+    /// Test that [ProcessComposeLogReader] reads at most `tail` lines from the process,
+    /// even if the process loggs more lines eventually,
+    /// but has yet only logged `tail` lines.
+    ///
+    /// We rely on the `--tail` behavior of `process-compose process logs`,
+    /// thus this test specifically targets `process-compose`.
+    #[test]
+    fn test_process_compose_tail_prints_n_lines_when_running() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: [("foo".to_string(), ProcessConfig {
+                command: String::from("echo 1; echo 2; echo 3; sleep 3; echo 4"),
+                vars: None,
+            })]
+            .into(),
+        });
+
+        let tail = ProcessComposeLogTail::new(instance.socket(), "foo", 3).unwrap();
+
+        // The process logs 4 lines, eventually, but we read before the 4th line is logged,
+        // thus we only expect the first 3 lines.
+        assert_eq!(tail.into_inner(), vec![
+            ProcessComposeLogLine::new("foo", "1"),
+            ProcessComposeLogLine::new("foo", "2"),
+            ProcessComposeLogLine::new("foo", "3"),
+        ]);
+    }
+
+    /// Test that [ProcessComposeLogReader] reads at less than `tail` lines from the process,
+    /// even if the process loggs more lines eventually,
+    /// but has yet only logged less than `tail` lines.
+    ///
+    /// We rely on the `--tail` behavior of `process-compose process logs`,
+    /// thus this test specifically targets `process-compose`.
+    #[test]
+    fn test_process_compose_tail_prints_less_n_lines_when_running() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: [("foo".to_string(), ProcessConfig {
+                command: String::from("echo 1; echo 2; echo 3; sleep 3; echo 4"),
+                vars: None,
+            })]
+            .into(),
+        });
+
+        let tail = ProcessComposeLogTail::new(instance.socket(), "foo", 4).unwrap();
+
+        // The process logs 4 lines, eventually, but we read before the 4th line is logged,
+        // thus we only expect the first 3 lines.
+        // The log command should not wait for the 4th line
+        assert_eq!(tail.into_inner(), vec![
+            ProcessComposeLogLine::new("foo", "1"),
+            ProcessComposeLogLine::new("foo", "2"),
+            ProcessComposeLogLine::new("foo", "3"),
         ]);
     }
 
