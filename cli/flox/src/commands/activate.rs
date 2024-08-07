@@ -268,10 +268,14 @@ impl Activate {
 
         let socket_path = environment.services_socket_path(&flox)?;
         if let TypedManifest::Catalog(manifest) = environment.manifest(&flox)? {
-            // default to enabling CUDA
-            if manifest.options.cuda_detection != Some(false) {
-                exports.insert("_FLOX_ENV_CUDA_DETECTION", "1".to_string());
-            }
+            exports.insert(
+                "_FLOX_ENV_CUDA_DETECTION",
+                match manifest.options.cuda_detection {
+                    Some(false) => "0", // manifest opts-out
+                    _ => "1",           // default to enabling CUDA
+                }
+                .to_string(),
+            );
 
             // TODO: we should clean up the different conditionals here
             if in_place && self.start_services {
