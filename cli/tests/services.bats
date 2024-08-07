@@ -424,6 +424,58 @@ EOF
   done
 }
 
+@test "watchdog: exits on termination signal (SIGUSR1)" {
+  # Don't forget to export this so that it's set in the subshells
+  export registry_file="$PWD/registry.json"
+
+  log_file="$PWD/klaus.log"
+  dummy_registry path/to/env abcde123 > "$registry_file"
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" \
+    --logs "$log_file" \
+    --pid $$ \
+    --registry "$registry_file" \
+    --hash abcde123 \
+    --socket does_not_exist &
+  klaus_pid="$!"
+
+  # Make our watchdog query command available in subshells
+  export -f watchdog_pids_called_with_arg
+
+  # Wait for start.
+  run timeout 1s bash <(cat <<'EOF'
+    while true; do
+      pid="$(watchdog_pids_called_with_arg "$registry_file")"
+      if [ -n "${pid?}" ]; then
+        break
+      fi
+      sleep 0.01
+    done
+EOF
+)
+  assert_success
+
+  # Check running.
+  run kill -s 0 "$klaus_pid"
+  assert_success
+
+  # Signal to exit.
+  run kill -s SIGUSR1 "$klaus_pid"
+  assert_success
+
+  # Wait for exit.
+  run timeout 1s bash <(cat <<'EOF'
+    while true; do
+      pid="$(watchdog_pids_called_with_arg "$registry_file")"
+      if [ -z "${pid?}" ]; then
+        break
+      fi
+      sleep 0.01
+    done
+EOF
+)
+  assert_success
+}
+
 @test "watchdog: exits on shutdown signal (SIGINT)" {
   # Don't forget to export this so that it's set in the subshells
   export log_file="$PWD/klaus.log"
