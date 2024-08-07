@@ -72,7 +72,7 @@ fn processes_by_name_or_default_to_all<'a>(
             .map(|name| {
                 processes
                     .process(name)
-                    .ok_or_else(|| anyhow!("service '{name}' not found"))
+                    .ok_or_else(|| anyhow!("Service '{name}' not found"))
             })
             .collect::<Result<Vec<_>>>()
     } else {
