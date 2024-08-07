@@ -58,6 +58,9 @@ impl Start {
         } else {
             let processes = ProcessStates::read(&socket)?;
             let all_processes_stopped = processes.iter().all(|p| p.is_stopped());
+            if all_processes_stopped {
+                process_compose_down(&socket)?;
+            }
             all_processes_stopped
         };
 
