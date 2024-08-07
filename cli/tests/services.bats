@@ -488,7 +488,7 @@ EOF
     --registry "$registry_file" \
     --hash abcde123 \
     --socket does_not_exist &
-  
+
   # Don't forget to export this so that it's set in the subshells
   export klaus_pid="$!"
 
@@ -536,7 +536,7 @@ EOF
     --registry "$registry_file" \
     --hash abcde123 \
     --socket does_not_exist &
-  
+
   # Don't forget to export this so that it's set in the subshells
   export klaus_pid="$!"
 
@@ -553,4 +553,92 @@ EOF
       sleep 0.1
     done
   "
+}
+
+# Also tests service names with spaces in them, because starting them is handled
+# in Bash
+@test "start: only starts specified services" {
+
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    no_space.command = "sleep infinity"
+    "with space".command = "sleep infinity"
+    skip.command = "sleep infinity"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start no_space "with space"
+    "$FLOX_BIN" services status
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial "no_space   Running"
+  assert_output --partial "with space Running"
+  assert_output --partial "skip       Disabled"
+}
+
+@test "start: defaults to all services" {
+
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+    two.command = "sleep infinity"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start
+    "$FLOX_BIN" services status
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial "one        Running"
+  assert_output --partial "two        Running"
+}
+
+@test "start: picks up changes after environment modification" {
+
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS_1="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo $FOO"
+
+    [hook]
+    on-activate = "export FOO=foo_one"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
+
+  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_picks_up_modifications.sh"
+  assert_success
+  run cat one.log
+  assert_output --partial "baz"
 }
