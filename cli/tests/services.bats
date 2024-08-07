@@ -143,7 +143,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: service 'invalid' not found"
+  assert_output --partial "❌ ERROR: Service 'invalid' not found"
 }
 
 # bats test_tags=services:stop
@@ -160,7 +160,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: service 'invalid' not found"
+  assert_output --partial "❌ ERROR: Service 'invalid' not found"
   assert_output --regexp "one +Running"
   assert_output --regexp "two +Running"
 }
@@ -179,7 +179,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: service 'invalid' not found"
+  assert_output --partial "❌ ERROR: Service 'invalid' not found"
   assert_output --regexp "one +Running"
   assert_output --regexp "two +Running"
 }
@@ -210,8 +210,8 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ service 'one' stopped"
-  assert_output --partial "✅ service 'two' stopped"
+  assert_output --partial "✅ Service 'one' stopped"
+  assert_output --partial "✅ Service 'two' stopped"
   assert_output --regexp "one +Completed"
   assert_output --regexp "two +Completed"
 }
@@ -228,7 +228,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ service 'one' stopped"
+  assert_output --partial "✅ Service 'one' stopped"
   assert_output --regexp "one +Completed"
   assert_output --regexp "two +Running"
 }
@@ -245,8 +245,8 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ service 'one' stopped"
-  assert_output --partial "✅ service 'two' stopped"
+  assert_output --partial "✅ Service 'one' stopped"
+  assert_output --partial "✅ Service 'two' stopped"
   assert_output --regexp "one +Completed"
   assert_output --regexp "two +Completed"
 }
@@ -265,7 +265,7 @@ EOF
 )
   assert_success
   assert_output --regexp "one +Completed"
-  assert_output --partial "⚠️  service 'one' is not running"
+  assert_output --partial "⚠️  Service 'one' is not running"
 }
 
 # ---------------------------------------------------------------------------- #

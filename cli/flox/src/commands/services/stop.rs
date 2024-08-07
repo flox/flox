@@ -32,12 +32,19 @@ impl Stop {
 
         for process in named_processes {
             if !process.is_running {
-                message::warning(format!("service '{}' is not running", process.name));
+                message::warning(format!("Service '{}' is not running", process.name));
                 continue;
             }
 
-            stop_services(&socket, &[&process.name])?;
-            message::updated(format!("service '{}' stopped", process.name));
+            if let Err(err) = stop_services(&socket, &[&process.name]) {
+                message::error(format!(
+                    "Failed to stop service '{}': {}",
+                    process.name, err
+                ));
+                continue;
+            }
+
+            message::updated(format!("Service '{}' stopped", process.name));
         }
 
         Ok(())
