@@ -274,7 +274,7 @@ impl IntoIterator for ProcessStates {
 
 /// Constructs a base `process-compose process` command to which additional
 /// arguments can be appended.
-pub fn base_process_compose_command(socket: impl AsRef<Path>) -> Command {
+fn base_process_compose_command(socket: impl AsRef<Path>) -> Command {
     let path = Path::new(&*PROCESS_COMPOSE_BIN);
     let mut cmd = Command::new(path);
     cmd.env("PATH", path)
