@@ -84,15 +84,15 @@ fn main() -> Result<(), Error> {
     debug!("starting");
 
     // Set the signal handler
-    let should_proceed = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(SIGUSR1, Arc::clone(&should_proceed))
+    let should_clean_up = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(SIGUSR1, Arc::clone(&should_clean_up))
         .context("failed to set SIGUSR1 signal handler")?;
-    let should_stop = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(SIGINT, Arc::clone(&should_stop))
+    let should_terminate = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(SIGINT, Arc::clone(&should_terminate))
         .context("failed to set SIGINT signal handler")?;
-    signal_hook::flag::register(SIGTERM, Arc::clone(&should_stop))
+    signal_hook::flag::register(SIGTERM, Arc::clone(&should_terminate))
         .context("failed to set SIGTERM signal handler")?;
-    signal_hook::flag::register(SIGQUIT, Arc::clone(&should_stop))
+    signal_hook::flag::register(SIGQUIT, Arc::clone(&should_terminate))
         .context("failed to set SIGQUIT signal handler")?;
 
     // Ensure that we'll get sent SIGUSR1 on Linux when the parent terminates
@@ -132,22 +132,23 @@ fn main() -> Result<(), Error> {
         "watchdog is on duty"
     );
 
-    // Listen for a notification
+    // Listen for a notification, getting an error if we should terminate
     #[cfg(target_os = "macos")]
-    let res = wait_for_termination(watcher, should_proceed, should_stop);
+    let res = wait_for_termination(watcher, should_clean_up, should_terminate);
 
     #[cfg(target_os = "linux")]
     let res = wait_for_termination(should_proceed, should_stop);
 
+    // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
+    // but there's not much we can do about that because we don't know who sent us one of those
+    // signals or why.
     if res.is_err() {
         error!("received stop signal, exiting");
         return res;
     }
 
-    // Now we proceed assuming we've gotten a termination notification.
-    // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
-    // but there's not much we can do about that because we don't know who sent us one of those
-    // signals or why.
+    // Now we proceed with cleanup assuming we've gotten a notification that the target process
+    // has terminated.
 
     let remaining_activations =
         deregister_activation(&args.registry_path, &args.dot_flox_hash, activation)
