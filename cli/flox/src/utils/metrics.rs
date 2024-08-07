@@ -465,14 +465,40 @@ impl Connection for AWSDatalakeConnection {
         debug!("Sending metrics to {}", &self.endpoint_url);
         debug!("Metrics: {events:#}");
 
-        reqwest::blocking::Client::new()
-            .put(&self.endpoint_url)
-            .header("content-type", "application/json")
-            .header("x-api-key", &self.api_key)
-            .header("user-agent", format!("flox-cli/{}", &*FLOX_VERSION))
-            .json(&events)
-            .timeout(self.timeout)
-            .send()?;
+        // Wrap the blocking reqwest client in a thread where we can provide our
+        // own timeout to kill the thread.
+        // The blocking reqwest client makes a call to getaddrinfo which uses the
+        // system libc. This doesn't respect the timeout of the reqwest client
+        // and can block our program for however long it can take DNS to timeout:
+        // https://github.com/flox/flox/pull/1769#issuecomment-2260675622
+        // This can often be greater than 15 or 30 seconds. It shows up often when
+        // a local resolver is configured to forward to the internet, but Wi-Fi
+        // is disabled, but also could occur whenever DNS doesn't respond.
+        let thread_timeout = self.timeout;
+        let thread_endpoint_url = self.endpoint_url.clone();
+        let thread_api_key = self.api_key.clone();
+
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        std::thread::spawn(move || {
+            let result = reqwest::blocking::ClientBuilder::new()
+                .timeout(thread_timeout)
+                .build()
+                .unwrap()
+                .put(thread_endpoint_url)
+                .header("content-type", "application/json")
+                .header("x-api-key", thread_api_key)
+                .header("user-agent", format!("flox-cli/{}", &*FLOX_VERSION))
+                .json(&events)
+                .send();
+            let _ = sender.send(result); // ignore if the receiver is dropped
+        });
+
+        let result = receiver
+            .recv_timeout(self.timeout)
+            .context("metrics api request")??;
+
+        tracing::debug!(?result, "Metrics sent");
+
         Ok(())
     }
 
