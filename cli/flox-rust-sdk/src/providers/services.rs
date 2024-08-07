@@ -7,6 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::env;
+use std::ffi::OsStr;
 use std::io::{BufRead, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -354,6 +355,22 @@ pub fn start_service(socket: impl AsRef<Path>, name: impl AsRef<str>) -> Result<
         // Exec failures are just treated as the process having an exit code of
         // 1
         tracing::debug!("starting services failed");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(ServiceError::from_process_compose_log(stderr))
+    }
+}
+
+pub fn process_compose_down(socket_path: impl AsRef<OsStr>) -> Result<(), ServiceError> {
+    let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
+    cmd.arg("down");
+    cmd.arg("--unix-socket");
+    cmd.arg(socket_path);
+    cmd.env("NO_COLOR", "1");
+    let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        tracing::debug!("'process-compose down' failed");
         let stderr = String::from_utf8_lossy(&output.stderr);
         Err(ServiceError::from_process_compose_log(stderr))
     }
