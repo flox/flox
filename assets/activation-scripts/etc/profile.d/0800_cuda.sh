@@ -3,6 +3,7 @@ export _coreutils="@coreutils@"
 export _gnused="@gnused@"
 export _findutils="@findutils@"
 export _ldconfig="@ldconfig@"
+export _nawk="@nawk@"
 # ============================================================================ #
 #
 # Setup CUDA
@@ -30,8 +31,10 @@ activate_cuda(){
     return 0
   fi
 
+  # $1 is intentionally single quoted.
+  # shellcheck disable=SC2016
   SYSTEM_LIBS=$("$ldconfig_bin" --print-cache -C /etc/ld.so.cache 2>/dev/null \
-    | awk '$1 ~ /^lib(cuda|nvidia|dxcore).*\.so.*/ { print $4 }')
+    | "$_nawk/bin/nawk" '$1 ~ /^lib(cuda|nvidia|dxcore).*\.so.*/ { print $4 }')
   if [ -z "$SYSTEM_LIBS" ]; then
     return 0
   fi
