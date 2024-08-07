@@ -41,6 +41,7 @@ pub const SERVICE_CONFIG_FILENAME: &str = "service-config.yaml";
 pub static PROCESS_COMPOSE_BIN: Lazy<String> = Lazy::new(|| {
     env::var("PROCESS_COMPOSE_BIN").unwrap_or(env!("PROCESS_COMPOSE_BIN").to_string())
 });
+pub const DEFAULT_TAIL: usize = 15;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServiceError {
@@ -521,12 +522,15 @@ impl ProcessComposeLogStream {
     pub fn new(
         socket: impl AsRef<Path>,
         processes: impl IntoIterator<Item = impl AsRef<str>>,
+        tail: usize,
     ) -> Result<ProcessComposeLogStream, ServiceError> {
         let (sender, receiver) = std::sync::mpsc::channel();
 
         let readers = processes
             .into_iter()
-            .map(|process| ProcessComposeLogReader::start(socket.as_ref(), process, sender.clone()))
+            .map(|process| {
+                ProcessComposeLogReader::start(sender.clone(), socket.as_ref(), process, tail)
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(ProcessComposeLogStream { readers, receiver })
@@ -664,9 +668,10 @@ impl ProcessComposeLogReader {
     /// [ProcessComposeLogReader] is meant to be used in conjunction with [ProcessComposeLogStream],
     /// which holds the receiver end of the channel, receiving log lines from multiple readers.
     fn start(
+        sender: Sender<ProcessComposeLogLine>,
         socket: impl AsRef<Path>,
         process: impl AsRef<str>,
-        sender: Sender<ProcessComposeLogLine>,
+        tail: usize,
     ) -> Result<ProcessComposeLogReader, ServiceError> {
         let socket = socket.as_ref().to_path_buf();
         let process = process.as_ref().to_string();
@@ -677,6 +682,7 @@ impl ProcessComposeLogReader {
 
             let mut cmd = base_process_compose_command(socket);
             cmd.arg("logs").arg(&process).arg("--follow");
+            cmd.arg("--tail").arg(tail.to_string());
             cmd.stderr(Stdio::piped()).stdout(Stdio::piped());
 
             debug!(cmd = cmd.display().to_string(), "attaching to logs");
@@ -928,7 +934,9 @@ mod tests {
         });
 
         let (sender, receiver) = std::sync::mpsc::channel();
-        let _ = ProcessComposeLogReader::start(instance.socket(), "foo", sender).unwrap();
+        // Start a log reader for the process, set a tail of DEFAULT_TAIL lines, to ensure we get all logs.
+        let _ =
+            ProcessComposeLogReader::start(sender, instance.socket(), "foo", DEFAULT_TAIL).unwrap();
 
         let logs = receiver.iter().take(5).collect::<Vec<_>>();
 
@@ -1093,7 +1101,8 @@ mod tests {
             .into(),
         });
 
-        let stream = ProcessComposeLogStream::new(instance.socket(), ["foo", "bar"])
+        // set a tail of 0 to ensure we only get live logs
+        let stream = ProcessComposeLogStream::new(instance.socket(), ["foo", "bar"], 0)
             .unwrap()
             .map(|line| line.unwrap())
             .take(10);
@@ -1133,7 +1142,7 @@ mod tests {
         let socket = instance.socket().to_path_buf();
         instance.stop();
 
-        let mut stream = ProcessComposeLogStream::new(socket, ["foo"]).unwrap();
+        let mut stream = ProcessComposeLogStream::new(socket, ["foo"], DEFAULT_TAIL).unwrap();
 
         let first_message = stream.next().unwrap();
         // the only error in the stream should be that the socket doesn't exist
