@@ -2,8 +2,8 @@
   "lockfile-version": 0,
   "manifest": {
     "install": {
-      "hello": {
-        "pkg-path": "hello"
+      "influxdb2": {
+        "pkg-path": "influxdb2"
       }
     },
     "options": {
@@ -22,8 +22,8 @@
         "nixpkgs": {
           "from": {
             "owner": "NixOS",
-            "ref": "release-23.11",
             "repo": "nixpkgs",
+            "rev": "ab5fd150146dcfe41fda501134e6503932cc8dfd",
             "type": "github"
           },
           "subtrees": [
@@ -38,19 +38,19 @@
   },
   "packages": {
     "aarch64-darwin": {
-      "hello": {
+      "influxdb2": {
         "attr-path": [
           "legacyPackages",
           "aarch64-darwin",
-          "hello"
+          "influxdb2"
         ],
         "info": {
           "broken": false,
-          "description": "A program that produces a familiar, friendly greeting",
-          "license": "GPL-3.0-or-later",
-          "pname": "hello",
+          "description": null,
+          "license": null,
+          "pname": "influxdb2",
           "unfree": false,
-          "version": "2.12.1"
+          "version": null
         },
         "input": {
           "attrs": {
@@ -68,19 +68,19 @@
       }
     },
     "aarch64-linux": {
-      "hello": {
+      "influxdb2": {
         "attr-path": [
           "legacyPackages",
           "aarch64-linux",
-          "hello"
+          "influxdb2"
         ],
         "info": {
           "broken": false,
-          "description": "A program that produces a familiar, friendly greeting",
-          "license": "GPL-3.0-or-later",
-          "pname": "hello",
+          "description": null,
+          "license": null,
+          "pname": "influxdb2",
           "unfree": false,
-          "version": "2.12.1"
+          "version": null
         },
         "input": {
           "attrs": {
@@ -98,19 +98,19 @@
       }
     },
     "x86_64-darwin": {
-      "hello": {
+      "influxdb2": {
         "attr-path": [
           "legacyPackages",
           "x86_64-darwin",
-          "hello"
+          "influxdb2"
         ],
         "info": {
           "broken": false,
-          "description": "A program that produces a familiar, friendly greeting",
-          "license": "GPL-3.0-or-later",
-          "pname": "hello",
+          "description": null,
+          "license": null,
+          "pname": "influxdb2",
           "unfree": false,
-          "version": "2.12.1"
+          "version": null
         },
         "input": {
           "attrs": {
@@ -128,19 +128,19 @@
       }
     },
     "x86_64-linux": {
-      "hello": {
+      "influxdb2": {
         "attr-path": [
           "legacyPackages",
           "x86_64-linux",
-          "hello"
+          "influxdb2"
         ],
         "info": {
           "broken": false,
-          "description": "A program that produces a familiar, friendly greeting",
-          "license": "GPL-3.0-or-later",
-          "pname": "hello",
+          "description": null,
+          "license": null,
+          "pname": "influxdb2",
           "unfree": false,
-          "version": "2.12.1"
+          "version": null
         },
         "input": {
           "attrs": {

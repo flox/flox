@@ -50,23 +50,12 @@ project_setup_common() {
 }
 
 project_setup_pkgdb() {
-  # Create environment (verbosely for the logs), specifying a pinned
-  # nixpkgs revision, although it has no effect (see below).
-  sh -xc "_PKGDB_GA_REGISTRY_REF_OR_REV=${PKGDB_NIXPKGS_REV_OLDER?} \
-    $FLOX_BIN init"
-
-  # "Update" lock for this one environment to use a pinned nixpkgs revision
-  # containing old versions of nix (2.10.3) and glibc (2.34) for use in tests.
-  # (Would be preferable if the previous init could honor the revision.)
-  sh -xc "_PKGDB_GA_REGISTRY_REF_OR_REV=${PKGDB_NIXPKGS_REV_OLDER?} \
-    $FLOX_BIN update"
-
-  # Install packages, including boost, curl and libarchive that are
-  # compilation and runtime dependencies of libnixmain.so. Use `flox edit`
-  # so that we can bump the priority of the nix package to avoid a path
-  # clash with boost.
-  sh -xc "_PKGDB_GA_REGISTRY_REF_OR_REV=${PKGDB_NIXPKGS_REV_OLDER?} \
-    $FLOX_BIN edit -f ./manifest-pkgdb.toml"
+  mkdir -p "$PROJECT_DIR/.flox/env"
+  cp "$MANUALLY_GENERATED"/ld_floxlib_test_deps_v0/* "$PROJECT_DIR/.flox/env"
+  echo '{
+    "name": "env",
+    "version": 1
+  }' >>"$PROJECT_DIR/.flox/env.json"
 }
 
 project_setup_catalog() {
@@ -112,7 +101,6 @@ teardown() {
 # ---------------------------------------------------------------------------- #
 #
 @test "test ld-floxlib.so on Linux only" {
-  export FLOX_FEATURES_USE_CATALOG=false
   project_setup_pkgdb
 
   # Revision PKGDB_NIXPKGS_REV_OLDER is expected to provide glibc 2.34.

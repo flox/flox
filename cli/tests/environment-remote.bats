@@ -19,7 +19,7 @@ project_setup() {
 
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" > /dev/null || return
+  pushd "$PROJECT_DIR" >/dev/null || return
 
 }
 
@@ -33,7 +33,7 @@ floxmeta_setup() {
 }
 
 project_teardown() {
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -64,6 +64,25 @@ function make_empty_remote_env() {
   rm -rf local
 }
 
+# create remote a pkgdb environment with hello installed
+# from pre-generated lock
+make_remote_pkgdb_env_with_hello() {
+  mkdir local
+  pushd local
+
+  # init path environment and push to remote
+  mkdir -p .flox/env
+  cp "$MANUALLY_GENERATED"/hello_v0/* .flox/env
+  echo '{
+    "name": "test",
+    "version": 1
+  }' >.flox/env.json
+  "$FLOX_BIN" push --owner "$OWNER"
+  "$FLOX_BIN" delete -f
+  popd
+  rm -rf local
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=hermetic,remote,remote:hermetic
@@ -77,17 +96,6 @@ function make_empty_remote_env() {
   run ls -lA .
   assert_success
   assert_output "total 0"
-}
-
-# bats test_tags=hermetic,remote,remote:outlink
-@test "r0: building a remote environment creates outlink" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  make_empty_remote_env
-
-  run --separate-stderr "$FLOX_BIN" install hello --remote "$OWNER/test"
-  assert_success
-
-  assert [ -h "$FLOX_CACHE_DIR/run/$OWNER/test" ]
 }
 
 # bats test_tags=hermetic,remote,remote:outlink
@@ -131,34 +139,13 @@ function make_empty_remote_env() {
 }
 
 # bats test_tags=edit,remote,remote:edit
-@test "m3: edit a package from a managed environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  make_empty_remote_env
-
-  TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
-
-  cat << "EOF" >> "$TMP_MANIFEST_PATH"
-[install]
-hello = {}
-EOF
-
-  run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH" --remote "$OWNER/test"
-  assert_success
-  assert_output --partial "✅ Environment successfully updated."
-
-  run --separate-stderr "$FLOX_BIN" list --name --remote "$OWNER/test"
-  assert_success
-  assert_output "hello"
-}
-
-# bats test_tags=edit,remote,remote:edit
 @test "catalog: m3: edit a package from a managed environment" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
 
   TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
 
-  cat << "EOF" >> "$TMP_MANIFEST_PATH"
+  cat <<"EOF" >>"$TMP_MANIFEST_PATH"
 version = 1
 
 [install]
@@ -178,9 +165,7 @@ EOF
 
 # bats test_tags=remote,activate,remote:activate
 @test "m9: activate works in remote environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  make_empty_remote_env
-  "$FLOX_BIN" install hello --remote "$OWNER/test"
+  make_remote_pkgdb_env_with_hello
 
   run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- command -v hello
   assert_success
@@ -315,7 +300,6 @@ EOF
   assert_output --partial "Environment not found in FloxHub."
 }
 
-
 # bats test_tags=remote,remote:not-found
 @test "install --remote fails on a non existent environment" {
   run "$FLOX_BIN" install -r "$OWNER/i-dont-exist"
@@ -332,7 +316,6 @@ EOF
   assert_failure
   assert_output --partial "You are not logged in to FloxHub."
 }
-
 
 # bats test_tags=remote,remote:auth-required,remote:auth-required:uninstall
 @test "'uninstall --remote' fails if not authenticated" {
@@ -369,7 +352,7 @@ EOF
 
   TMP_MANIFEST_PATH="$BATS_TEST_TMPDIR/manifest.toml"
 
-  cat << "EOF" >> "$TMP_MANIFEST_PATH"
+  cat <<"EOF" >>"$TMP_MANIFEST_PATH"
 version = 1
 
 [services.hello]

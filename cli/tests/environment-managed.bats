@@ -51,9 +51,20 @@ teardown() {
 
 # ---------------------------------------------------------------------------- #
 
+# init path environment and push to remote
 function make_empty_remote_env() {
-  # init path environment and push to remote
   "$FLOX_BIN" init
+  "$FLOX_BIN" push --owner "$OWNER"
+}
+
+# create path env from pre-generated locked manifest v0
+function make_remote_env_with_hello() {
+  mkdir -p "$PROJECT_DIR/.flox/env"
+  cp "$MANUALLY_GENERATED"/hello_v0/* "$PROJECT_DIR/.flox/env"
+  echo '{
+    "name": "'$PROJECT_NAME'",
+    "version": 1
+  }' >>"$PROJECT_DIR/.flox/env.json"
   "$FLOX_BIN" push --owner "$OWNER"
 }
 
@@ -278,9 +289,7 @@ EOF
 # Make sure we haven't activate
 # bats test_tags=managed,activate,managed:activate
 @test "m9: activate works in managed environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  make_empty_remote_env
-  "$FLOX_BIN" install hello
+  make_remote_env_with_hello
 
   run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- command -v hello
   assert_success
@@ -350,24 +359,6 @@ EOF
   refute_output "vim"
 }
 
-# bats test_tags=managed:xyz
-@test "sanity check upgrade works for managed environments" {
-  # update shouldn't work for catalog: https://github.com/flox/flox/issues/1509
-  export FLOX_FEATURES_USE_CATALOG=false
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    make_empty_remote_env
-
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_OLD?}" \
-    "$FLOX_BIN" install hello
-
-  # After an update, nixpkgs is the new nixpkgs, but hello is still from the
-  # old one.
-  _PKGDB_GA_REGISTRY_REF_OR_REV="${PKGDB_NIXPKGS_REV_NEW?}" \
-    "$FLOX_BIN" update
-
-  run "$FLOX_BIN" upgrade
-  assert_output --partial "Upgraded 'hello'"
-}
 
 # ---------------------------------------------------------------------------- #
 

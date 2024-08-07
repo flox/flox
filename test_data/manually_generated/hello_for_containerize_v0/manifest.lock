@@ -1,6 +1,9 @@
 {
   "lockfile-version": 0,
   "manifest": {
+    "hook": {
+      "on-activate": "    command -v hello\n    hello\n"
+    },
     "install": {
       "hello": {
         "pkg-path": "hello"
@@ -22,8 +25,8 @@
         "nixpkgs": {
           "from": {
             "owner": "NixOS",
-            "ref": "release-23.11",
             "repo": "nixpkgs",
+            "rev": "ab5fd150146dcfe41fda501134e6503932cc8dfd",
             "type": "github"
           },
           "subtrees": [
@@ -34,6 +37,9 @@
       "priority": [
         "nixpkgs"
       ]
+    },
+    "vars": {
+      "foo": "bar"
     }
   },
   "packages": {

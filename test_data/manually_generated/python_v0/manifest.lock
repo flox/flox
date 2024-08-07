@@ -2,8 +2,8 @@
   "lockfile-version": 0,
   "manifest": {
     "install": {
-      "hello": {
-        "pkg-path": "hello"
+      "pip": {
+        "pkg-path": "python311Packages.pip"
       }
     },
     "options": {
@@ -38,19 +38,20 @@
   },
   "packages": {
     "aarch64-darwin": {
-      "hello": {
+      "pip": {
         "attr-path": [
           "legacyPackages",
           "aarch64-darwin",
-          "hello"
+          "python311Packages",
+          "pip"
         ],
         "info": {
           "broken": false,
-          "description": "A program that produces a familiar, friendly greeting",
-          "license": "GPL-3.0-or-later",
-          "pname": "hello",
+          "description": "The PyPA recommended tool for installing Python packages",
+          "license": null,
+          "pname": "pip",
           "unfree": false,
-          "version": "2.12.1"
+          "version": "23.2.1"
         },
         "input": {
           "attrs": {
@@ -68,19 +69,20 @@
       }
     },
     "aarch64-linux": {
-      "hello": {
+      "pip": {
         "attr-path": [
           "legacyPackages",
           "aarch64-linux",
-          "hello"
+          "python311Packages",
+          "pip"
         ],
         "info": {
           "broken": false,
-          "description": "A program that produces a familiar, friendly greeting",
-          "license": "GPL-3.0-or-later",
-          "pname": "hello",
+          "description": "The PyPA recommended tool for installing Python packages",
+          "license": null,
+          "pname": "pip",
           "unfree": false,
-          "version": "2.12.1"
+          "version": "23.2.1"
         },
         "input": {
           "attrs": {
@@ -98,19 +100,20 @@
       }
     },
     "x86_64-darwin": {
-      "hello": {
+      "pip": {
         "attr-path": [
           "legacyPackages",
           "x86_64-darwin",
-          "hello"
+          "python311Packages",
+          "pip"
         ],
         "info": {
           "broken": false,
-          "description": "A program that produces a familiar, friendly greeting",
-          "license": "GPL-3.0-or-later",
-          "pname": "hello",
+          "description": "The PyPA recommended tool for installing Python packages",
+          "license": null,
+          "pname": "pip",
           "unfree": false,
-          "version": "2.12.1"
+          "version": "23.2.1"
         },
         "input": {
           "attrs": {
@@ -128,19 +131,20 @@
       }
     },
     "x86_64-linux": {
-      "hello": {
+      "pip": {
         "attr-path": [
           "legacyPackages",
           "x86_64-linux",
-          "hello"
+          "python311Packages",
+          "pip"
         ],
         "info": {
           "broken": false,
-          "description": "A program that produces a familiar, friendly greeting",
-          "license": "GPL-3.0-or-later",
-          "pname": "hello",
+          "description": "The PyPA recommended tool for installing Python packages",
+          "license": null,
+          "pname": "pip",
           "unfree": false,
-          "version": "2.12.1"
+          "version": "23.2.1"
         },
         "input": {
           "attrs": {

@@ -2,7 +2,7 @@
   "lockfile-version": 0,
   "manifest": {
     "install": {
-      "hello": {
+      "greeting": {
         "pkg-path": "hello"
       }
     },
@@ -38,7 +38,7 @@
   },
   "packages": {
     "aarch64-darwin": {
-      "hello": {
+      "greeting": {
         "attr-path": [
           "legacyPackages",
           "aarch64-darwin",
@@ -68,7 +68,7 @@
       }
     },
     "aarch64-linux": {
-      "hello": {
+      "greeting": {
         "attr-path": [
           "legacyPackages",
           "aarch64-linux",
@@ -98,7 +98,7 @@
       }
     },
     "x86_64-darwin": {
-      "hello": {
+      "greeting": {
         "attr-path": [
           "legacyPackages",
           "x86_64-darwin",
@@ -128,7 +128,7 @@
       }
     },
     "x86_64-linux": {
-      "hello": {
+      "greeting": {
         "attr-path": [
           "legacyPackages",
           "x86_64-linux",

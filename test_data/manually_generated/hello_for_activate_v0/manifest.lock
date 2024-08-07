@@ -1,6 +1,9 @@
 {
   "lockfile-version": 0,
   "manifest": {
+    "hook": {
+      "on-activate": "  echo \"sourcing hook.on-activate\";\n"
+    },
     "install": {
       "hello": {
         "pkg-path": "hello"
@@ -8,11 +11,18 @@
     },
     "options": {
       "systems": [
-        "aarch64-darwin",
-        "aarch64-linux",
+        "x86_64-linux",
         "x86_64-darwin",
-        "x86_64-linux"
+        "aarch64-linux",
+        "aarch64-darwin"
       ]
+    },
+    "profile": {
+      "bash": "  echo \"sourcing profile.bash\";\n",
+      "common": "  echo \"sourcing profile.common\";\n",
+      "fish": "  echo \"sourcing profile.fish\";\n",
+      "tcsh": "  echo \"sourcing profile.tcsh\";\n",
+      "zsh": "  echo \"sourcing profile.zsh\";\n"
     },
     "registry": {
       "defaults": {
@@ -22,8 +32,8 @@
         "nixpkgs": {
           "from": {
             "owner": "NixOS",
-            "ref": "release-23.11",
             "repo": "nixpkgs",
+            "rev": "ab5fd150146dcfe41fda501134e6503932cc8dfd",
             "type": "github"
           },
           "subtrees": [
@@ -34,6 +44,9 @@
       "priority": [
         "nixpkgs"
       ]
+    },
+    "vars": {
+      "foo": "baz"
     }
   },
   "packages": {
