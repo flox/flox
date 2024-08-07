@@ -5,6 +5,7 @@ use flox_rust_sdk::providers::services::{
     ProcessComposeLogLine,
     ProcessComposeLogStream,
     ProcessStates,
+    DEFAULT_TAIL,
 };
 use tracing::instrument;
 
@@ -19,6 +20,10 @@ pub struct Logs {
 
     /// Follow log output
     follow: bool,
+
+    /// Number of lines to show from the end of the logs
+    #[bpaf(short('n'), long, argument("num"), fallback(DEFAULT_TAIL))]
+    tail: usize,
 
     /// Which services' logs to view
     #[bpaf(positional("name"))]
@@ -41,7 +46,7 @@ impl Logs {
             bail!("printing logs without following is not yet implemented");
         }
 
-        let log_stream = ProcessComposeLogStream::new(socket, names.clone())?;
+        let log_stream = ProcessComposeLogStream::new(socket, names.clone(), self.tail)?;
 
         let max_name_length = names.map(|name| name.len()).max().unwrap_or(0);
         for log in log_stream {
