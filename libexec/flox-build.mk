@@ -86,6 +86,7 @@ define BUILD_local_template =
   .INTERMEDIATE: $(_pname)_local_build
   $(_pname)_local_build: $($(_pvarname)_buildScript)
 	@echo "Building $(_name) in local mode"
+	$(if $(_virtualSandbox),FLOX_VIRTUAL_SANDBOX=$(strip $(_virtualSandbox))) \
 	MAKEFLAGS= FLOX_TURBO=1 out=$(_out) $(FLOX_ENV)/activate bash -e $($(_pvarname)_buildScript)
 	nix --extra-experimental-features nix-command \
 	  build -L --file __FLOX_CLI_OUTPATH__/libexec/build-manifest.nix \

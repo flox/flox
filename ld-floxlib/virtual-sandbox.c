@@ -96,6 +96,27 @@ bool hash_table_lookup(hash_table_t *table, const char *key) {
 
 bool in_closure(const char *path) {
     static hash_table_t *table = NULL;
+
+    // The `/usr/bin/env` path is ubiquitous and hardcoded to an extent that
+    // we are faced with the choice of forcing developers to replace it in
+    // code, or simply let it be an allowed exception.
+    //
+    // Once requested by way of the la_version() call, we know that all
+    // libraries requested by this PID are similarly linked from /usr/bin/env
+    // so we can simply give all lookups a free pass.
+    //
+    // TODO: make this list of allowed exceptions configurable.
+    if ( freepass ) {
+        return true;
+    } else if (
+        strcmp(path, "/usr/bin/env") == 0 ||
+        strcmp(path, "/bin/sh") == 0 ||
+        strcmp(path, "/usr/bin/dash") == 0
+    ) {
+        freepass = true;
+        return true;
+    }
+
     if (!table) {
         const char *env_path = getenv("FLOX_ENV");
         if (!env_path) {

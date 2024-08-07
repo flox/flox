@@ -30,5 +30,10 @@ int hash_table_store(hash_table_t *table, const char *key);
 bool hash_table_lookup(hash_table_t *table, const char *key);
 bool in_closure(const char *path);
 
+// Once set to true, in_closure() will always return true. We use this for
+// programs like `/usr/bin/env` that are ubiquitous across Linux distributions
+// and hardcoded throughout countless codebases.
+static bool freepass = false;
+
 #endif // VIRTUAL_SANDBOX_H
 

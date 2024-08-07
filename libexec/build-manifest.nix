@@ -104,7 +104,6 @@ in
             --inherit-argv0 \
             --set FLOX_ENV "${flox-env-package}" \
             --set FLOX_TURBO 1 \
-            --set LD_FLOXLIB_SANDBOX warn \
             --set FLOX_MANIFEST_BUILD_OUT "$out" \
             --set FLOX_VIRTUAL_SANDBOX "${virtualSandbox}" \
             --run 'export FLOX_SET_ARG0="$0"' \
