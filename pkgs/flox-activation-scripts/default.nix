@@ -9,10 +9,15 @@
   shellcheck,
   stdenv,
   process-compose,
+  iconv,
 }: let
   ld-floxlib_so =
     if stdenv.isLinux
     then "${ld-floxlib}/lib/ld-floxlib.so"
+    else "__LINUX_ONLY__";
+  ldconfig =
+    if stdenv.isLinux
+    then "${iconv}/bin/ldconfig"
     else "__LINUX_ONLY__";
 in
   runCommand "flox-activation-scripts" {
@@ -42,6 +47,7 @@ in
       substituteInPlace $i --replace "@gnused@" "${gnused}"
       substituteInPlace $i --replace "@findutils@" "${findutils}"
       substituteInPlace $i --replace "@ld-floxlib@" "${ld-floxlib_so}"
+      substituteInPlace $i --replace "@ldconfig@" "${ldconfig}"
     done
 
     ${shellcheck}/bin/shellcheck \
