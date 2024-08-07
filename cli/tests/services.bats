@@ -135,6 +135,14 @@ EOF
   assert_output --partial "PONG"
 }
 
+@test "services aren't started unless requested" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_sleeping_services
+
+  RUST_LOG=debug run "$FLOX_BIN" activate -- true
+  assert_output --partial "start=false"
+  assert_output --partial "will not start services"
+}
 
 # ---------------------------------------------------------------------------- #
 

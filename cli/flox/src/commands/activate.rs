@@ -302,11 +302,21 @@ impl Activate {
                 if self.start_services {
                     supported_environment(&flox, self.environment)?; // Error for remote envs.
                 }
-                tracing::debug!(start = self.start_services, "setting service variables");
+                tracing::debug!(
+                    start = self.start_services,
+                    socket_exists = socket_path.exists(),
+                    "setting service variables"
+                );
                 if self.start_services && socket_path.exists() {
                     debug!("detected existing services socket");
+                    debug!("will not start services");
                     message::warning("Skipped starting services, services are already running");
-                } else if self.start_services {
+                } else {
+                    if self.start_services {
+                        debug!("will start services");
+                    } else {
+                        debug!("will not start services");
+                    }
                     exports.insert(
                         FLOX_ACTIVATE_START_SERVICES_VAR,
                         self.start_services.to_string(),
