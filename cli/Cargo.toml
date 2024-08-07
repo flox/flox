@@ -83,6 +83,7 @@ temp-env = "0.3.2"
 
 # watchdog dependencies
 signal-hook = "0.3.17"
+kqueue = "1.0.8"
 
 # build(.rs) dependencies
 prettyplease = "0.2"

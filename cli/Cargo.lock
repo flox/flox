@@ -1828,6 +1828,7 @@ dependencies = [
  "clap",
  "clap_derive",
  "flox-rust-sdk",
+ "kqueue",
  "nix",
  "once_cell",
  "sentry",
@@ -1835,6 +1836,26 @@ dependencies = [
  "signal-hook",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "kqueue"
+version = "1.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7447f1ca1b7b563588a205fe93dea8df60fd981423a768bc1c0ded35ed147d0c"
+dependencies = [
+ "kqueue-sys",
+ "libc",
+]
+
+[[package]]
+name = "kqueue-sys"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed9625ffda8729b85e45cf04090035ac368927b8cebc34898e7c120f52e4838b"
+dependencies = [
+ "bitflags 1.3.2",
+ "libc",
 ]
 
 [[package]]

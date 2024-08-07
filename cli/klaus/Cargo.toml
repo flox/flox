@@ -17,3 +17,6 @@ serde.workspace = true
 signal-hook.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+kqueue.workspace = true

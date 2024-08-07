@@ -363,7 +363,7 @@ impl<State> CoreEnvironment<State> {
     /// Each should be done explicitly if necessary by the caller
     /// using [Self::lock] and [Self::link]:
     ///
-    /// ```no_run
+    /// ```ignore
     /// # use flox_rust_sdk::models::environment::CoreEnvironment;
     /// # use flox_rust_sdk::flox::Flox;
     /// let flox: Flox = unimplemented!();
