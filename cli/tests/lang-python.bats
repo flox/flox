@@ -49,60 +49,6 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
-
-# bats test_tags=python:activate:poetry
-@test "flox activate works with poetry" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
-  cp -r "$INPUT_DATA"/init/python/poetry/* "$PROJECT_DIR/"
-  # Files copied from the store are read-only
-  chmod -R +w .
-
-  run "$FLOX_BIN" init --auto-setup
-  assert_success
-  assert_output --partial "'poetry' installed"
-
-  "$FLOX_BIN" install zlib
-  run "$FLOX_BIN" activate -- python -m project
-  assert_success
-  assert_line "<class 'numpy.ndarray'>"
-}
-
-# bats test_tags=python:activate:pyproject:pip
-@test "flox activate works with pyproject and pip" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
-  cp -r "$INPUT_DATA"/init/python/pyproject-pip/* "$PROJECT_DIR/"
-  # Files copied from the store are read-only
-  chmod -R +w .
-
-  run "$FLOX_BIN" init --auto-setup
-  assert_success
-
-  "$FLOX_BIN" install zlib
-  run "$FLOX_BIN" activate -- python -m project
-  assert_success
-  assert_line "<class 'numpy.ndarray'>"
-}
-
-# bats test_tags=python:activate:requirements
-@test "flox activate works with requirements.txt and pip" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
-  cp -r "$INPUT_DATA"/init/python/requirements/* "$PROJECT_DIR/"
-  # Files copied from the store are read-only
-  chmod -R +w .
-
-  run "$FLOX_BIN" init --auto-setup
-  assert_success
-
-  "$FLOX_BIN" install zlib
-  run "$FLOX_BIN" activate -- python -m project
-  assert_success
-  assert_line "<class 'numpy.ndarray'>"
-}
-
-# ---------------------------------------------------------------------------- #
 # catalog tests
 
 # bats test_tags=catalog

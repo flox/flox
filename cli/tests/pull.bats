@@ -204,119 +204,6 @@ function add_incompatible_package() {
   assert_success
 }
 
-# bats test_tags=pull:l2,pull:l2:a,pull:l4
-@test "l2.a/l4: flox pull accepts a floxhub namespace/environment, creates .flox if it does not exist" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-
-  run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
-  assert_success
-  assert [ -e ".flox/env.json" ]
-  assert [ -e ".flox/env.lock" ]
-  assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
-  assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
-}
-
-# bats test_tags=pull:l2,pull:l2:b
-@test "l2.b: flox pull with --remote fails if an env is already present" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-
-  "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
-
-  run "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
-  assert_failure
-
-  # todo: error message
-  # assert_output --partial <error message>
-}
-
-# bats test_tags=pull:l2,pull:l2:c
-@test "l2.c: flox pull with --remote and --dir pulls into the specified directory" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-
-  run "$FLOX_BIN" pull --remote owner/name --dir ./inner
-  assert_success
-  assert [ -e "inner/.flox/env.json" ]
-  assert [ -e "inner/.flox/env.lock" ]
-  assert [ $(cat inner/.flox/env.json | jq -r '.name') == "name" ]
-  assert [ $(cat inner/.flox/env.json | jq -r '.owner') == "owner" ]
-}
-
-# bats test_tags=pull:l3,pull:l3:a
-@test "l3.a: pulling without namespace/environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-
-  "$FLOX_BIN" pull --remote owner/name # dummy remote as we are not actually pulling anything
-  LOCKED_BEFORE=$(cat .flox/env.lock | jq -r '.rev')
-
-  update_dummy_env "owner" "name"
-
-  run "$FLOX_BIN" pull
-  assert_success
-
-  LOCKED_AFTER=$(cat .flox/env.lock | jq -r '.rev')
-
-  assert [ "$LOCKED_BEFORE" != "$LOCKED_AFTER" ]
-}
-
-# bats test_tags=pull:l3,pull:l3:b
-@test "l3.b: pulling without namespace/environment respects --dir" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-
-  "$FLOX_BIN" pull --remote owner/name --dir ./inner # dummy remote as we are not actually pulling anything
-  LOCKED_BEFORE=$(cat ./inner/.flox/env.lock | jq -r '.rev')
-
-  update_dummy_env "owner" "name"
-
-  run "$FLOX_BIN" pull --dir ./inner
-  assert_success
-
-  LOCKED_AFTER=$(cat ./inner/.flox/env.lock | jq -r '.rev')
-
-  assert [ "$LOCKED_BEFORE" != "$LOCKED_AFTER" ]
-}
-
-#
-# Notice: l5 is tested in l2.a and l2.c
-#
-
-# bats test_tags=pull:l6,pull:l6:a
-@test "l6.a: pulling the same remote environment in multiple directories creates unique copies of the environment" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-
-  mkdir first second
-
-  "$FLOX_BIN" pull --remote owner/name --dir first
-  LOCKED_FIRST_BEFORE=$(cat ./first/.flox/env.lock | jq -r '.rev')
-
-  update_dummy_env "owner" "name"
-  LOCKED_FIRST_AFTER=$(cat ./first/.flox/env.lock | jq -r '.rev')
-
-  "$FLOX_BIN" pull --remote owner/name --dir second
-  LOCKED_SECOND=$(cat ./second/.flox/env.lock | jq -r '.rev')
-
-  assert [ "$LOCKED_FIRST_BEFORE" == "$LOCKED_FIRST_AFTER" ]
-  assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_SECOND" ]
-
-  # after pulling first env, its at the rame rev as the second that was pulled after the update
-  "$FLOX_BIN" pull --dir first
-
-  LOCKED_FIRST_AFTER_PULL=$(cat ./first/.flox/env.lock | jq -r '.rev')
-
-  assert [ "$LOCKED_FIRST_BEFORE" != "$LOCKED_FIRST_AFTER_PULL" ]
-  assert [ "$LOCKED_FIRST_AFTER_PULL" == "$LOCKED_SECOND" ]
-}
 
 # bats test_tags=pull:floxhub
 # try pulling from floxhub authenticated with a test token
@@ -328,35 +215,6 @@ function add_incompatible_package() {
 }
 
 # ---------------------------------------------------------------------------- #
-
-# bats test_tags=pull:add-system-flag
-# pulling an environment without packages for the current platform
-#should fail with an error
-@test "pull environment inside the same environment without the '--force' flag" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-  update_dummy_env "owner" "name"
-
-  run "$FLOX_BIN" pull --remote owner/name
-  assert_success
-  run "$FLOX_BIN" pull --remote owner/name
-  assert_failure
-}
-
-# bats test_tags=pull:add-system-flag
-# pulling an environment without packages for the current platform
-@test "pull environment inside the same environment with '--force' flag" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
-  make_dummy_env "owner" "name"
-  update_dummy_env "owner" "name"
-
-  run "$FLOX_BIN" pull --remote owner/name
-  assert_success
-  run "$FLOX_BIN" pull --remote owner/name --force
-  assert_success
-}
 
 # bats test_tags=pull:unsupported:warning
 # An environment that is not compatible with the current ssystem
@@ -405,7 +263,17 @@ function add_incompatible_package() {
 
   make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
-  make_incompatible "owner" "name"
+
+  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
+    ENV_FILES_DIR="$MANUALLY_GENERATED/ps_v0_aarch64-darwin"
+  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
+    ENV_FILES_DIR="$MANUALLY_GENERATED/glibc_v0_x86_64-linux"
+  else
+    echo "unknown system: '$NIX_SYSTEM'"
+    exit 1
+  fi
+
+  copy_manifest_and_lockfile_to_remote "owner" "name" "$ENV_FILES_DIR"
 
   run "$FLOX_BIN" activate --remote owner/name --trust
   assert_failure
@@ -469,9 +337,10 @@ function add_incompatible_package() {
 # bats test_tags=pull:up-to-date
 # updating an up-to-date environment should return with an info message
 @test "pull up-to-date env returns info message" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
   make_dummy_env "owner" "name"
+
+  # dummy environment has no packages to resolve
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 
   # pull a fresh environment
   "$FLOX_BIN" pull --remote owner/name
@@ -480,6 +349,31 @@ function add_incompatible_package() {
   assert_success
   assert_line --partial "already up to date."
 }
+
+# pull a pkgdb based environment to ensure we didn't break compatibility
+# bats test_tags=pull:deprecated-pkgdb
+@test "flox pull of deprecated pkgdb based environment succeeds" {
+  # single test for pulling pkgdb based environments, so do the setup inline once
+  mkdir -p "$PROJECT_DIR/.flox/env"
+  cp -r "$MANUALLY_GENERATED"/hello_v0/* "$PROJECT_DIR/.flox/env"
+  echo '{
+    "name": "name",
+    "version": 1
+  }' >>"$PROJECT_DIR/.flox/env.json"
+  "$FLOX_BIN" push --owner owner
+  "$FLOX_BIN" delete --force
+
+  run "$FLOX_BIN" pull --remote owner/name
+  assert_success
+  assert [ -e ".flox/env.json" ]
+  assert [ -e ".flox/env.lock" ]
+  assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
+  assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
+
+  # v0 manifest does not have a version field
+  assert [ $(cat .flox/env/manifest.toml | tomlq -r '.version') == "null" ]
+}
+
 
 # ----------------------------- Catalog Tests -------------------------------- #
 # ---------------------------------------------------------------------------- #

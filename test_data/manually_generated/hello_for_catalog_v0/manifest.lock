@@ -1,6 +1,9 @@
 {
   "lockfile-version": 0,
   "manifest": {
+    "hook": {
+      "on-activate": "    command -v hello\n    hello\n"
+    },
     "install": {
       "hello": {
         "pkg-path": "hello"
@@ -8,10 +11,8 @@
     },
     "options": {
       "systems": [
-        "aarch64-darwin",
-        "aarch64-linux",
-        "x86_64-darwin",
-        "x86_64-linux"
+        "x86_64-linux",
+        "aarch64-linux"
       ]
     },
     "registry": {
@@ -34,74 +35,17 @@
       "priority": [
         "nixpkgs"
       ]
+    },
+    "vars": {
+      "foo": "bar"
     }
   },
   "packages": {
-    "aarch64-darwin": {
-      "hello": {
-        "attr-path": [
-          "legacyPackages",
-          "aarch64-darwin",
-          "hello"
-        ],
-        "info": {
-          "broken": false,
-          "description": "A program that produces a familiar, friendly greeting",
-          "license": "GPL-3.0-or-later",
-          "pname": "hello",
-          "unfree": false,
-          "version": "2.12.1"
-        },
-        "input": {
-          "attrs": {
-            "lastModified": 1706666764,
-            "narHash": "sha256-M59UCWsadEFO+DMdZFMtTlxpFyT3RQIpBLuEX8oziVc=",
-            "owner": "NixOS",
-            "repo": "nixpkgs",
-            "rev": "7731670498f0a22c361c9d68f73d382bce05d7dc",
-            "type": "github"
-          },
-          "fingerprint": "bbc93a7d71106b6b24a3444467780d709b0f0ef8a07ed6c1c8af638e6765443e",
-          "url": "github:NixOS/nixpkgs/7731670498f0a22c361c9d68f73d382bce05d7dc"
-        },
-        "priority": 5
-      }
-    },
     "aarch64-linux": {
       "hello": {
         "attr-path": [
           "legacyPackages",
           "aarch64-linux",
-          "hello"
-        ],
-        "info": {
-          "broken": false,
-          "description": "A program that produces a familiar, friendly greeting",
-          "license": "GPL-3.0-or-later",
-          "pname": "hello",
-          "unfree": false,
-          "version": "2.12.1"
-        },
-        "input": {
-          "attrs": {
-            "lastModified": 1706666764,
-            "narHash": "sha256-M59UCWsadEFO+DMdZFMtTlxpFyT3RQIpBLuEX8oziVc=",
-            "owner": "NixOS",
-            "repo": "nixpkgs",
-            "rev": "7731670498f0a22c361c9d68f73d382bce05d7dc",
-            "type": "github"
-          },
-          "fingerprint": "bbc93a7d71106b6b24a3444467780d709b0f0ef8a07ed6c1c8af638e6765443e",
-          "url": "github:NixOS/nixpkgs/7731670498f0a22c361c9d68f73d382bce05d7dc"
-        },
-        "priority": 5
-      }
-    },
-    "x86_64-darwin": {
-      "hello": {
-        "attr-path": [
-          "legacyPackages",
-          "x86_64-darwin",
           "hello"
         ],
         "info": {

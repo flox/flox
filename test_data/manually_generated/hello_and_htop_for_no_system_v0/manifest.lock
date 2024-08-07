@@ -4,6 +4,10 @@
     "install": {
       "hello": {
         "pkg-path": "hello"
+      },
+      "htop": {
+        "pkg-path": "htop",
+        "systems": []
       }
     },
     "options": {
@@ -65,7 +69,8 @@
           "url": "github:NixOS/nixpkgs/7731670498f0a22c361c9d68f73d382bce05d7dc"
         },
         "priority": 5
-      }
+      },
+      "htop": null
     },
     "aarch64-linux": {
       "hello": {
@@ -95,7 +100,8 @@
           "url": "github:NixOS/nixpkgs/7731670498f0a22c361c9d68f73d382bce05d7dc"
         },
         "priority": 5
-      }
+      },
+      "htop": null
     },
     "x86_64-darwin": {
       "hello": {
@@ -125,7 +131,8 @@
           "url": "github:NixOS/nixpkgs/7731670498f0a22c361c9d68f73d382bce05d7dc"
         },
         "priority": 5
-      }
+      },
+      "htop": null
     },
     "x86_64-linux": {
       "hello": {
@@ -155,7 +162,8 @@
           "url": "github:NixOS/nixpkgs/7731670498f0a22c361c9d68f73d382bce05d7dc"
         },
         "priority": 5
-      }
+      },
+      "htop": null
     }
   },
   "registry": {

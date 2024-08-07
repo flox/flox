@@ -9,6 +9,7 @@
   shellcheck,
   stdenv,
   process-compose,
+  jq,
   iconv,
   nawk,
   fd,
@@ -33,6 +34,7 @@ in
       --replace "@setsid@" "${util-linux}/bin/setsid" \
       --replace "@out@" "$out" \
       --replace "@process-compose@" "${process-compose}/bin/process-compose" \
+      --replace "@jq@" "${jq}/bin/jq" \
       --replace "/usr/bin/env bash" "${bash}/bin/bash"
 
     substituteInPlace $out/activate.d/bash \

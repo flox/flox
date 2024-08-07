@@ -18,11 +18,11 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" > /dev/null || return
+  pushd "$PROJECT_DIR" >/dev/null || return
 }
 
 project_teardown() {
-  popd > /dev/null || return
+  popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -33,9 +33,13 @@ env_setup_catalog() {
   "$FLOX_BIN" edit -f "$TESTS_DIR/container/manifest1.toml"
 }
 
-env_setup() {
-  "$FLOX_BIN" init
-  "$FLOX_BIN" edit -f "$TESTS_DIR/container/manifest0.toml"
+env_setup_pkgdb() {
+  mkdir -p "$PROJECT_DIR/.flox/env"
+  cp --no-preserve=mode "$MANUALLY_GENERATED"/hello_for_containerize_v0/* "$PROJECT_DIR/.flox/env"
+  echo '{
+    "name": "test",
+    "version": 1
+  }' >>"$PROJECT_DIR/.flox/env.json"
 }
 
 # podman writes containers to ~/.local/share/containers/storage
@@ -56,7 +60,7 @@ setup() {
   project_setup
 
   mkdir -p $HOME/.config/containers
-  echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$HOME/.config/containers/policy.json"
+  echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' >"$HOME/.config/containers/policy.json"
 }
 
 teardown() {
@@ -102,10 +106,9 @@ function skip_if_linux() {
 
 # bats test_tags=containerize:default-to-file
 @test "container is written to a file by default" {
-  export FLOX_FEATURES_USE_CATALOG=false
   skip_if_not_linux
 
-  env_setup
+  env_setup_pkgdb
 
   run "$FLOX_BIN" containerize
   assert_success
@@ -139,10 +142,9 @@ function skip_if_linux() {
 
 # bats test_tags=containerize:piped-to-stdout
 @test "container is written to stdout when '-o -' is passed" {
-  export FLOX_FEATURES_USE_CATALOG=false
   skip_if_not_linux
 
-  env_setup
+  env_setup_pkgdb
 
   run bash -c '"$FLOX_BIN" containerize -o - | podman load'
   assert_success
@@ -162,10 +164,9 @@ function skip_if_linux() {
 
 # bats test_tags=containerize:run-container-i
 @test "container can be run with 'podman/docker run -i'" {
-  export FLOX_FEATURES_USE_CATALOG=false
   skip_if_not_linux
 
-  env_setup
+  env_setup_pkgdb
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
   run --separate-stderr podman run -q -i "$CONTAINER_ID" -c 'echo $foo'
@@ -233,8 +234,7 @@ function skip_if_linux() {
 @test "container can be run with 'podman/docker run'" {
   skip_if_not_linux
 
-  export FLOX_FEATURES_USE_CATALOG=false
-  env_setup
+  env_setup_pkgdb
 
   CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
   run --separate-stderr podman run "$CONTAINER_ID" -c 'echo $foo'

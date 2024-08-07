@@ -48,35 +48,6 @@ teardown() {
 }
 
 # ---------------------------------------------------------------------------- #
-
-@test "flox activate works with npm" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$INPUT_DATA/init/node/common/." .
-  cp -r "$INPUT_DATA/init/node/npm/." .
-  # Files copied from the store are read-only
-  chmod -R +w .
-
-  run "$FLOX_BIN" init --auto-setup
-  assert_output --partial "'nodejs' installed"
-  run "$FLOX_BIN" activate -- npm run start
-  assert_output --partial "86400000"
-}
-
-@test "flox activate works with yarn" {
-  export FLOX_FEATURES_USE_CATALOG=false
-  cp -r "$INPUT_DATA/init/node/common/." .
-  cp -r "$INPUT_DATA/init/node/yarn/." .
-  # Files copied from the store are read-only
-  chmod -R +w .
-
-  run "$FLOX_BIN" init --auto-setup
-  assert_output --partial "'yarn' installed"
-  refute_output "nodejs"
-  run "$FLOX_BIN" activate -- yarn run start
-  assert_output --partial "86400000"
-}
-
-# ---------------------------------------------------------------------------- #
 # catalog tests
 
 # bats test_tags=catalog
