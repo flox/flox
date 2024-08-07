@@ -30,7 +30,8 @@ activate_cuda(){
     return 0
   fi
 
-  SYSTEM_LIBS=$("$ldconfig_bin" --print-cache 2>/dev/null | awk '$1 ~ /^lib(cuda|nvidia|dxcore).*\.so.*/ { print $4 }')
+  SYSTEM_LIBS=$("$ldconfig_bin" --print-cache -C /etc/ld.so.cache 2>/dev/null \
+    | awk '$1 ~ /^lib(cuda|nvidia|dxcore).*\.so.*/ { print $4 }')
   if [ -z "$SYSTEM_LIBS" ]; then
     return 0
   fi
