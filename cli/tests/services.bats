@@ -34,11 +34,18 @@ watchdog_pids_called_with_arg() {
   # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
   # grep command itself doesn't get listed when we search for the data dir.
   # The `cut` just extracts the PID.
-  local pattern="$1"
-  local pids
+  pattern="$1"
+  # echo "PATTERN: $pattern" >&3
+  ps_output="$(ps -eo pid,args)"
+  # echo "PS: $ps_output" >&3
+  klauses="$(echo "$ps_output" | grep klaus)"
+  # echo "KLAUSES: $klauses" >&3
+  matches="$(echo "$klauses" | grep "$pattern")"
+  # echo "MATCHES: $matches" >&3
   # This is a load-bearing 'xargs', it strips leading/trailing whitespace that
   # trips up 'cut'
-  pids="$(ps -eo pid,args | grep klaus | grep $pattern | xargs | cut -d' ' -f1)"
+  pids="$(echo "$matches" | xargs | cut -d' ' -f1)"
+  # echo "PIDS: $pids" >&3
   echo "$pids"
 }
 
@@ -390,7 +397,7 @@ EOF
       if [ "$times" -gt 100 ]; then
         exit 1
       fi
-      pid="$(watchdog_pids_called_with_arg $_FLOX_SERVICES_SOCKET)"
+      pid="$(watchdog_pids_called_with_arg "$_FLOX_SERVICES_SOCKET")"
       if [ -n "${pid?}" ]; then
         echo "$pid"
         break
@@ -418,8 +425,10 @@ EOF
 }
 
 @test "watchdog: exits on shutdown signal (SIGINT)" {
-  log_file=klaus.log
-  registry_file=registry.json
+  # Don't forget to export this so that it's set in the subshells
+  export log_file="$PWD/klaus.log"
+
+  registry_file="$PWD/registry.json"
   dummy_registry path/to/env abcde123 > "$registry_file"
   _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" \
     --logs "$log_file" \
@@ -427,7 +436,9 @@ EOF
     --registry "$registry_file" \
     --hash abcde123 \
     --socket does_not_exist &
-  klaus_pid="$!"
+  
+  # Don't forget to export this so that it's set in the subshells
+  export klaus_pid="$!"
 
   # Wait for start.
   timeout 1s bash -c "
@@ -453,7 +464,8 @@ EOF
 }
 
 @test "watchdog: exits when provided PID isn't running" {
-  log_file=klaus.log
+  # Don't forget to export this so that it's set in the subshells
+  export log_file="$PWD/klaus.log"
 
   # We need a test PID, but PIDs can be reused. There's also no delay on reusing
   # PIDs, so you can't create and kill a process to use its PID during that
@@ -464,7 +476,7 @@ EOF
     skip "test PID is in use"
   fi
 
-  registry_file=registry.json
+  registry_file="$PWD/registry.json"
   dummy_registry path/to/env abcde123 > "$registry_file"
   _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" \
     --logs "$log_file" \
@@ -472,7 +484,9 @@ EOF
     --registry "$registry_file" \
     --hash abcde123 \
     --socket does_not_exist &
-  klaus_pid="$!"
+  
+  # Don't forget to export this so that it's set in the subshells
+  export klaus_pid="$!"
 
   # Wait for start.
   timeout 1s bash -c "
