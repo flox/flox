@@ -676,3 +676,25 @@ EOF
   assert_failure
   assert_output --partial "Service 'two' not found."
 }
+
+
+@test "start: shuts down existing process-compose" {
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS_1="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "true"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
+
+  # Call flox services start and check if the prior process-compose gets shutdown
+  # This also appears to hang forever if process-compose doesn't get shutdown
+  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_shuts_down_process_compose.sh"
+  assert_success
+}
+
