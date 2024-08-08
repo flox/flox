@@ -654,3 +654,25 @@ EOF
   # run cat one.log
   # assert_output --partial "one: foo_two"
 }
+
+@test "start: does not pick up changes after environment modification when some services still running" {
+
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS_1="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
+
+  # Edit the manifest adding a second service.
+  # Then try to start the second service.
+  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_does_not_pick_up_modifications.sh"
+  assert_failure
+  assert_output --partial "Service 'two' not found."
+}
