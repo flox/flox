@@ -99,7 +99,7 @@ impl Start {
             start_services: true,
             run_args: vec!["true".to_string()],
         }
-        .activate(config, flox, concrete_environment, false, &self.names)
+        .activate(config, flox, concrete_environment, true, &self.names)
         .await?;
         // We don't know if the service actually started because we don't have
         // healthchecks.
