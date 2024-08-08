@@ -8,22 +8,27 @@ use tracing::instrument;
 use super::{ConcreteEnvironment, EnvironmentSelect};
 
 mod logs;
+mod start;
 mod status;
 mod stop;
 
 /// Services Commands.
 #[derive(Debug, Clone, Bpaf)]
 pub enum ServicesCommands {
+    /// Ensure a service or services are running
+    #[bpaf(command, footer("Run 'man flox-services-start' for more details."))]
+    Start(#[bpaf(external(start::start))] start::Start),
+
     /// Status of a service or services
-    #[bpaf(command)]
+    #[bpaf(command, footer("Run 'man flox-services-status' for more details."))]
     Status(#[bpaf(external(status::status))] status::Status),
 
-    /// Stop a service or services
-    #[bpaf(command)]
+    /// Ensure a service or services are stopped
+    #[bpaf(command, footer("Run 'man flox-services-stop' for more details."))]
     Stop(#[bpaf(external(stop::stop))] stop::Stop),
 
     /// Print logs of services
-    #[bpaf(command)]
+    #[bpaf(command, footer("Run 'man flox-services-logs' for more details."))]
     Logs(#[bpaf(external(logs::logs))] logs::Logs),
 }
 
@@ -35,6 +40,7 @@ impl ServicesCommands {
         }
 
         match self {
+            ServicesCommands::Start(args) => args.handle(flox).await?,
             ServicesCommands::Status(args) => args.handle(flox).await?,
             ServicesCommands::Stop(args) => args.handle(flox).await?,
             ServicesCommands::Logs(args) => args.handle(flox).await?,
