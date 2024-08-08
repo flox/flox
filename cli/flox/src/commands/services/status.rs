@@ -32,7 +32,7 @@ impl Status {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("services::status");
 
-        let env = supported_environment(&flox, self.environment)?;
+        let env = supported_environment(&flox, &self.environment)?;
         let socket = env.services_socket_path(&flox)?;
 
         let processes = ProcessStates::read(socket)?;
