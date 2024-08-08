@@ -646,6 +646,29 @@ HookRaw::check() const
     }
 }
 
+/* -------------------------------------------------------------------------- */
+
+void
+from_json( const nlohmann::json & jfrom, BuildDescriptorRaw & build )
+{
+  for ( const auto & [key, value] : jfrom.items() )
+    {
+      if ( key == "command" ) { value.get_to( build.command ); }
+      else
+        {
+          throw InvalidManifestFileException(
+            "unrecognized manifest field 'build." + key + "'." );
+        }
+    }
+}
+
+void
+to_json( nlohmann::json & jto, const BuildDescriptorRaw & build )
+{
+  jto            = nlohmann::json::object();
+  jto["command"] = build.command;
+}
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -744,6 +767,7 @@ from_json( const nlohmann::json & jfrom, ManifestRaw & manifest )
           manifest.vars = varsFromJSON( value );
         }
       else if ( key == "profile" ) { value.get_to( manifest.profile ); }
+      else if ( key == "build" ) { value.get_to( manifest.build ); }
       else if ( key == "hook" ) { value.get_to( manifest.hook ); }
       else if ( key == "options" ) { value.get_to( manifest.options ); }
       else if ( key == "env-base" ) { value.get_to( manifest.envBase ); }
@@ -774,6 +798,8 @@ to_json( nlohmann::json & jto, const ManifestRaw & manifest )
   if ( manifest.vars.has_value() ) { jto["vars"] = *manifest.vars; }
 
   if ( manifest.profile.has_value() ) { jto["profile"] = *manifest.profile; }
+
+  if ( manifest.build.has_value() ) { jto["build"] = *manifest.build; }
 
   if ( manifest.hook.has_value() ) { jto["hook"] = *manifest.hook; }
 }

@@ -361,8 +361,10 @@ pub struct TypedManifestCatalog {
     pub options: ManifestOptions,
     /// Service definitions
     #[serde(default)]
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub services: ManifestServices,
+    /// Package build definitions
+    #[serde(default)]
+    pub build: ManifestBuild,
 }
 
 impl TypedManifestCatalog {
@@ -712,40 +714,6 @@ pub struct ManifestPackageDescriptorStorePath {
     store_path: String,
 }
 
-/// A map of service names to service definitions
-#[derive(
-    Debug,
-    Clone,
-    Serialize,
-    Deserialize,
-    Default,
-    PartialEq,
-    derive_more::Deref,
-    derive_more::DerefMut,
-)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ManifestServices(
-    #[cfg_attr(
-        test,
-        proptest(
-            strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
-        )
-    )]
-    pub(crate) BTreeMap<String, ManifestServiceDescriptor>,
-);
-
-/// The definition of a service in a manifest
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[serde(rename_all = "kebab-case")]
-#[serde(deny_unknown_fields)]
-pub struct ManifestServiceDescriptor {
-    /// The command to run to start the service
-    pub command: String,
-    /// Service-specific environment variables
-    pub vars: Option<ManifestVariables>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ManifestVariables(
@@ -834,6 +802,72 @@ pub struct SemverOptions {
     /// Whether to allow pre-release versions when resolving
     #[serde(default)]
     pub allow_pre_releases: Option<bool>,
+}
+
+/// A map of service names to service definitions
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Default,
+    PartialEq,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ManifestServices(
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
+        )
+    )]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) BTreeMap<String, ManifestServiceDescriptor>,
+);
+
+/// The definition of a service in a manifest
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ManifestServiceDescriptor {
+    /// The command to run to start the service
+    pub command: String,
+    /// Service-specific environment variables
+    pub vars: Option<ManifestVariables>,
+}
+
+/// A map of package ids to package build descriptors
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Default,
+    PartialEq,
+    derive_more::Deref,
+    derive_more::DerefMut,
+)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ManifestBuild(
+    #[cfg_attr(
+        test,
+        proptest(strategy = "proptest_btree_map_alphanum_keys::<ManifestBuildDescriptor>(10, 3)")
+    )]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) BTreeMap<String, ManifestBuildDescriptor>,
+);
+
+/// The definition of a package built from within the environment
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
+pub struct ManifestBuildDescriptor {
+    /// The command to run build a package
+    pub command: String,
 }
 
 /// Deserialize the manifest as a [serde_json::Value],
@@ -1337,6 +1371,7 @@ pub(super) mod test {
             profile: ManifestProfile::default(),
             options: ManifestOptions::default(),
             services: ManifestServices::default(),
+            build: ManifestBuild::default(),
         }
     }
 
