@@ -5,6 +5,7 @@
   gnused,
   util-linux,
   ld-floxlib,
+  netcat,
   runCommand,
   shellcheck,
   stdenv,
@@ -46,6 +47,9 @@ in
     substituteInPlace $out/activate.d/zsh \
       --replace "@gnused@" "${gnused}"
 
+    substituteInPlace $out/activate.d/helper-functions.bash \
+      --replace "@netcat@" "${netcat}"
+
     for i in $out/etc/profile.d/*; do
       substituteInPlace $i --replace "@coreutils@" "${coreutils}"
       substituteInPlace $i --replace "@gnused@" "${gnused}"
@@ -59,6 +63,7 @@ in
     ${shellcheck}/bin/shellcheck \
       $out/activate \
       $out/activate.d/bash \
+      $out/activate.d/helper-functions.bash \
       $out/activate.d/set-prompt.bash \
       $out/etc/profile.d/*
   ''
