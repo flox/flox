@@ -372,7 +372,7 @@ EOF
   assert_failure
   assert_output --partial "❌ ERROR: services are not currently supported for remote environments"
 
-  unsupported_commands=("logs" "status" "stop")
+  unsupported_commands=("logs" "restart" "status" "stop")
   for command in "${unsupported_commands[@]}"; do
     run "$FLOX_BIN" services "$command" hello --remote "flox/test"
     assert_failure

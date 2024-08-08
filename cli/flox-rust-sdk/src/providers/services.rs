@@ -313,6 +313,31 @@ pub fn stop_services(
     }
 }
 
+/// Restart service using `process-compose process restart`.
+pub fn restart_service(
+    socket: impl AsRef<Path>,
+    name: impl AsRef<str>,
+) -> Result<(), ServiceError> {
+    tracing::debug!(name = name.as_ref().to_string(), "restarting service");
+
+    let mut cmd = base_process_compose_command(socket);
+    let output = cmd
+        .args(["restart", name.as_ref()])
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped())
+        .output()
+        .map_err(ServiceError::ProcessComposeCmd)?;
+
+    if output.status.success() {
+        tracing::debug!("service restarted");
+        Ok(())
+    } else {
+        tracing::debug!("restarting service failed");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(ServiceError::from_process_compose_log(stderr))
+    }
+}
+
 /// Strings extracted from a process-compose error log.
 ///
 /// This is just raw data intended to be interpreted into a specific kind of error

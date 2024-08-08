@@ -1,0 +1,18 @@
+version = 1
+
+# These services increment a value in a file each time they start.
+[vars]
+FILE_ONE = "start_counter.one"
+FILE_TWO = "start_counter.two"
+FILE_SLEEPING = "start_counter.sleeping"
+
+[services.one]
+command = 'echo $(($(cat "$FILE_ONE") + 1)) > "$FILE_ONE"'
+
+[services.two]
+command = 'echo $(($(cat "$FILE_TWO") + 1)) > "$FILE_TWO"'
+
+# Restarting a `Running` service is slower than a `Completed` service because of
+# blocking operations so we don't exercise it in all tests.
+[services.sleeping]
+command = 'echo $(($(cat "$FILE_SLEEPING") + 1)) > "$FILE_SLEEPING" && sleep infinity'
