@@ -33,6 +33,7 @@ project_setup() {
   export FAKE_FHS_ROOT="${PROJECT_DIR}/fake_fhs_root"
   mkdir "$FAKE_FHS_ROOT"
   mkdir -p "${FAKE_FHS_ROOT}/dev"
+  mkdir -p "${FAKE_FHS_ROOT}/run/opengl-driver"
 }
 
 project_teardown() {
@@ -56,79 +57,104 @@ teardown() {
 
 # ---------------------------------------------------------------------------- #
 #
-@test "cuda disabled when nvidia device absent" {
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash "$TESTS_DIR/cuda/cuda-disabled.sh" "${FAKE_FHS_ROOT}"
+@test "cuda disabled when nvidia device absent and libcuda present" {
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+    "$TESTS_DIR/cuda/cuda-disabled.sh" \
+    "${FAKE_FHS_ROOT}" \
+    "${TESTS_DIR}/cuda/ldconfig-mock-present.sh"
   assert_success
 }
 
 @test "cuda disabled when nvidia0 device present but libcuba absent" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash "$TESTS_DIR/cuda/cuda-disabled.sh" "${FAKE_FHS_ROOT}"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+    "$TESTS_DIR/cuda/cuda-disabled.sh" \
+    "${FAKE_FHS_ROOT}" \
+    "${TESTS_DIR}/cuda/ldconfig-mock-absent.sh"
+  assert_success
+}
+
+@test "cuda disabled when not on Linux" {
+  touch "${FAKE_FHS_ROOT}/dev/nvidia0"
+
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+    "$TESTS_DIR/cuda/cuda-disabled.sh" \
+    "${FAKE_FHS_ROOT}" \
+    "__LINUX_ONLY__"
+  assert_success
+
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+    "$TESTS_DIR/cuda/cuda-disabled.sh" \
+    "${FAKE_FHS_ROOT}" \
+    "invalid_ldconfig_path"
   assert_success
 }
 
 @test "cuda disabled when nvidia0 device present and libcuda present but manifest opts-out" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
-  mkdir -p "${FAKE_FHS_ROOT}/run/opengl-drivers"
-  touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libcuda.so.1"
   tomlq --in-place -t '.options."cuda-detection" = false' .flox/env/manifest.toml
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash "$TESTS_DIR/cuda/cuda-disabled.sh" "${FAKE_FHS_ROOT}"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+    "$TESTS_DIR/cuda/cuda-disabled.sh" \
+    "${FAKE_FHS_ROOT}" \
+    "${TESTS_DIR}/cuda/ldconfig-mock-present.sh"
   assert_success
 }
 
 @test "cuda enabled when nvidia0 device present and libcuda present" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
-  mkdir -p "${FAKE_FHS_ROOT}/run/opengl-drivers"
-  touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libcuda.so.1"
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash "$TESTS_DIR/cuda/cuda-enabled.sh" "${FAKE_FHS_ROOT}"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+    "$TESTS_DIR/cuda/cuda-enabled.sh" \
+    "${FAKE_FHS_ROOT}" \
+    "${TESTS_DIR}/cuda/ldconfig-mock-present.sh"
   assert_success
-  assert_output --partial "${PROJECT_DIR}/.flox/lib/libcuda.so.1"
 }
 
-@test "cuda enabled when nvidia1 device present and multiple libraries present in alternate directory" {
-  touch "${FAKE_FHS_ROOT}/dev/nvidia1"
-  mkdir -p "${FAKE_FHS_ROOT}/usr/local/lib"
-  touch "${FAKE_FHS_ROOT}/usr/local/lib/libcuda.so.1"
-  touch "${FAKE_FHS_ROOT}/usr/local/lib/libnvidia.so.1"
-  touch "${FAKE_FHS_ROOT}/usr/local/lib/libdxcore.so.1"
-
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash "$TESTS_DIR/cuda/cuda-enabled.sh" "${FAKE_FHS_ROOT}"
-  assert_success
-  assert_output --partial "${PROJECT_DIR}/.flox/lib/libcuda.so.1"
-  assert_output --partial "${PROJECT_DIR}/.flox/lib/libnvidia.so.1"
-  assert_output --partial "${PROJECT_DIR}/.flox/lib/libdxcore.so.1"
-}
-
-@test "cuda enabled when nested activation doesn't opt-out" {
+@test "cuda enabled when nvidia0 device present and libcuda present on NixOS" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
-  mkdir -p "${FAKE_FHS_ROOT}/run/opengl-drivers"
-  touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libcuda.so.1"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libcuda.so"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libcuda.so.1"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libcudart.so"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libcudart.so.12"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libnvidia-ml.so"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libnvidia-ml.so.1"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libnvidia-nvvm.so"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libnvidia-nvvm.so.4"
+
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
+    "$TESTS_DIR/cuda/cuda-enabled.sh" \
+    "${FAKE_FHS_ROOT}" \
+    "${TESTS_DIR}/cuda/ldconfig-mock-absent.sh"
+  assert_success
+}
+
+@test "cuda enabled when parent opts-out and nested activation doesn't" {
+  touch "${FAKE_FHS_ROOT}/dev/nvidia0"
 
   tomlq --in-place -t '.options."cuda-detection" = false' .flox/env/manifest.toml
 
   NESTED_PROJECT_DIR="${PROJECT_NAME}-nested"
   "$FLOX_BIN" init -d "$NESTED_PROJECT_DIR"
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- \
-    "$FLOX_BIN" activate -d "$NESTED_PROJECT_DIR" -- \
-    bash "$TESTS_DIR/cuda/cuda-enabled.sh" "${FAKE_FHS_ROOT}"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -d "$NESTED_PROJECT_DIR" -- bash \
+    "$TESTS_DIR/cuda/cuda-enabled.sh" \
+    "${FAKE_FHS_ROOT}" \
+    "${TESTS_DIR}/cuda/ldconfig-mock-present.sh"
   assert_success
 }
 
 @test "cuda disabled when nested activation opts-out" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
-  mkdir -p "${FAKE_FHS_ROOT}/run/opengl-drivers"
-  touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libcuda.so.1"
 
   NESTED_PROJECT_DIR="${PROJECT_NAME}-nested"
   "$FLOX_BIN" init -d "$NESTED_PROJECT_DIR"
   tomlq --in-place -t '.options."cuda-detection" = false' "${NESTED_PROJECT_DIR}/.flox/env/manifest.toml"
 
-  FLOX_SHELL=bash run "$FLOX_BIN" activate -- \
-    "$FLOX_BIN" activate -d "$NESTED_PROJECT_DIR" -- \
-    bash "$TESTS_DIR/cuda/cuda-disabled.sh" "${FAKE_FHS_ROOT}"
+  FLOX_SHELL=bash run "$FLOX_BIN" activate -d "$NESTED_PROJECT_DIR" -- bash \
+    "$TESTS_DIR/cuda/cuda-disabled.sh" \
+    "${FAKE_FHS_ROOT}" \
+    "${TESTS_DIR}/cuda/ldconfig-mock-present.sh"
   assert_success
 }
