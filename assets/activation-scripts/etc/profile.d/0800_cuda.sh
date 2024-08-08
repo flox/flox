@@ -40,7 +40,8 @@ activate_cuda(){
 
   # Fallback for NixOS.
   if [ -z "$SYSTEM_LIBS" ]; then
-    SYSTEM_LIBS=$("$_fd/bin/fd" "$lib_pattern" "${fhs_root_prefix}/run/opengl-drivers" 2>/dev/null)
+    # LD_AUDIT workaround for Linux: https://github.com/flox/flox/issues/1341
+    SYSTEM_LIBS=$(LD_AUDIT="" "$_fd/bin/fd" "$lib_pattern" "${fhs_root_prefix}/run/opengl-drivers" 2>/dev/null)
   fi
 
   # No matching libs from either results.
