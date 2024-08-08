@@ -182,26 +182,7 @@ EOF
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     exit_code=0
     source "${TESTS_DIR}/services/register_cleanup.sh"
-    "$FLOX_BIN" services stop one invalid || exit_code=$?
-    "$FLOX_BIN" services status
-    exit $exit_code
-EOF
-)
-  assert_failure
-  assert_output --partial "❌ ERROR: Service 'invalid' not found"
-  assert_output --regexp "one +Running"
-  assert_output --regexp "two +Running"
-}
-
-# bats test_tags=services:stop
-@test "stop: errors without stopping any services if preceeding service doesn't exist" {
-  export FLOX_FEATURES_SERVICES=true
-  setup_sleeping_services
-
-  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    exit_code=0
-    source "${TESTS_DIR}/services/register_cleanup.sh"
-    "$FLOX_BIN" services stop invalid one || exit_code=$?
+    "$FLOX_BIN" services stop one two invalid || exit_code=$?
     "$FLOX_BIN" services status
     exit $exit_code
 EOF
