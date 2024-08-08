@@ -659,6 +659,17 @@ pub mod test_helpers {
         ///
         /// Panics if the socket doesn't appear after 5 tries with backoff.
         pub fn start(config: &ProcessComposeConfig) -> Self {
+            Self::start_services(config, &[])
+        }
+
+        /// Start a `process-compose` instance with the given [ProcessComposeConfig].
+        /// Wait for the socket to appear before returning.
+        ///
+        /// Panics if the socket doesn't appear after 5 tries with backoff.
+        ///
+        /// Only starts specified services,
+        /// or if none are specified starts all services.
+        pub fn start_services(config: &ProcessComposeConfig, services: &[String]) -> Self {
             let temp_dir = TempDir::new_in("/tmp").unwrap();
 
             let config_path = temp_dir.path().join("config.yaml");
@@ -677,6 +688,10 @@ pub mod test_helpers {
                 .arg("up")
                 .stdout(Stdio::null())
                 .stderr(Stdio::inherit());
+
+            if !services.is_empty() {
+                cmd.args(services);
+            }
 
             // Dropping the child as stopping is handled via a process-compose command.
             let child = cmd.spawn().unwrap();
