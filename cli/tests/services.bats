@@ -571,6 +571,33 @@ EOF
   "
 }
 
+@test "start: errors if service doesn't exist" {
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    # don't set -euo pipefail because we expect these to fail
+    "$FLOX_BIN" services start one invalid
+    "$FLOX_BIN" services status
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial "Service 'invalid' not found."
+  assert_output --partial "couldn't connect to service manager"
+}
+
 # Also tests service names with spaces in them, because starting them is handled
 # in Bash
 @test "start: only starts specified services" {
