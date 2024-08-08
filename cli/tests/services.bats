@@ -49,6 +49,22 @@ watchdog_pids_called_with_arg() {
   echo "$pids"
 }
 
+# TODO: not very DRY, but I just copied this into start_shuts_down_process_compose.sh
+process_compose_pids_called_with_arg() {
+  # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
+  # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
+  # grep command itself doesn't get listed when we search for the data dir.
+  # The `cut` just extracts the PID.
+  pattern="$1"
+  ps_output="$(ps -eo pid,args)"
+  process_composes="$(echo "$ps_output" | grep process-compose)"
+  matches="$(echo "$process_composes" | grep "$pattern")"
+  # This is a load-bearing 'xargs', it strips leading/trailing whitespace that
+  # trips up 'cut'
+  pids="$(echo "$matches" | xargs | cut -d' ' -f1)"
+  echo "$pids"
+}
+
 setup() {
   common_test_setup
   setup_isolated_flox
@@ -696,5 +712,44 @@ EOF
   # This also appears to hang forever if process-compose doesn't get shutdown
   run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_shuts_down_process_compose.sh"
   assert_success
+}
+
+
+@test "start: watchdog shuts down process-compose started by start" {
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial "Service 'one' started."
+
+  # Wait in case the watchdog doesn't shut down process-compose immediately
+  for i in {1..5}; do
+    if [ -z "$(process_compose_pids_called_with_arg "$(pwd)/.flox/run")" ]; then
+      break
+    fi
+    sleep .1
+  done
+  if [ "$i" -eq 5 ]; then
+    echo "process-compose is still running"
+    return 1
+  fi
 }
 
