@@ -14,9 +14,17 @@ EOF
 
 echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -f -
 
-# TODO: don't use follow once logs without follow are implemented
-"$FLOX_BIN" services logs one --follow > one.log &
-LOGS_PID="$!"
+# Make sure we avoid a race of service one failing to complete
+for i in {1..5}; do
+  if "$FLOX_BIN" services status | grep "Completed"; then
+    break
+  fi
+  sleep .1
+done
+if [ "$i" -eq 5 ]; then
+  exit 1
+fi
+
 "$FLOX_BIN" services start
-kill "$LOGS_PID"
 "$FLOX_BIN" services status
+# TODO: check logs once implemented without --follow

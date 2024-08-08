@@ -623,7 +623,7 @@ EOF
   assert_output --partial "two        Running"
 }
 
-@test "start: picks up changes after environment modification" {
+@test "start: picks up changes after environment modification when all services have stopped" {
 
   export FLOX_FEATURES_SERVICES=true
 
@@ -651,7 +651,6 @@ EOF
 
   # TODO: once https://github.com/flox/flox/issues/1910 is resolved, the
   # modified value of FOO should be printed.
+  # run cat one.log
   # assert_output --partial "one: foo_two"
-  run cat one.log
-  assert_output --partial "one: foo_one"
 }
