@@ -593,7 +593,7 @@ EOF
   )"
 
   run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
-  assert_success
+  assert_failure
   assert_output --partial "Service 'invalid' not found."
   assert_output --partial "couldn't connect to service manager"
 }
