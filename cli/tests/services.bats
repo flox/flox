@@ -584,6 +584,8 @@ EOF
 
   run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
   assert_success
+  assert_output --partial "Service 'no_space' started."
+  assert_output --partial "Service 'with space' started."
   assert_output --partial "no_space   Running"
   assert_output --partial "with space Running"
   assert_output --partial "skip       Disabled"
@@ -615,6 +617,8 @@ EOF
 
   run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
   assert_success
+  assert_output --partial "Service 'one' started."
+  assert_output --partial "Service 'two' started."
   assert_output --partial "one        Running"
   assert_output --partial "two        Running"
 }
