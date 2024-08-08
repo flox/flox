@@ -101,6 +101,13 @@ setup_sleeping_services() {
   assert_success
 }
 
+setup_logging_services() {
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/logging_services.toml"
+  assert_success
+}
+
 setup_start_counter_services() {
   run "$FLOX_BIN" init
   assert_success
@@ -573,6 +580,168 @@ EOF
   assert_success
   assert_output --regexp "one +Completed"
   assert_output --partial "⚠️  Service 'one' is not running"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=services:logs:tail:exactly-one-service
+@test "logs: tail: requires exactly one service" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+  run "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services logs one
+EOF
+  )
+  assert_success
+}
+
+# bats test_tags=services:logs:tail:exactly-one-service
+@test "logs: tail: requires exactly one service - error on multiple services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  # try running with multiple services specified
+  run "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services logs one two
+EOF
+  )
+  assert_failure
+  assert_line "❌ ERROR: When not following logs, exactly one service name must be provided"
+}
+
+# bats test_tags=services:logs:tail:exactly-one-service
+@test "logs: tail: requires exactly one service - error without services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  # Try running without services specified
+  run "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services logs
+EOF
+  )
+  assert_failure
+  assert_line "❌ ERROR: When not following logs, exactly one service name must be provided"
+}
+
+# bats test_tags=services:logs:tail:no-such-service
+@test "logs: tail: requires exactly one service - error if service doesn't exist" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  # Try running with a nonexisting services specified
+  run "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services logs doesnotexist
+EOF
+  )
+  assert_failure
+  assert_line "❌ ERROR: No such service: doesnotexist"
+}
+
+# Runs a service that will sleep after printing a few lines of logs.
+# Assert that flox is _not_ waitinf for the service to finish.
+# bats test_tags=services:logs:tail:instant
+@test "logs: tail does not wait" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  run --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    # calling process-compose takes about ~1 second
+    # even though process-compose will print the logs immediately,
+    # it will block for around a second before exiting :)
+
+    timeout 2 "$FLOX_BIN" services logs mostly-deterministic
+EOF
+  )
+
+  assert_success
+  assert_output - <<EOF
+1
+2
+3
+EOF
+}
+
+# ---------------------------------------------------------------------------- #
+
+# NOTE: this test will wait out the sleep in the `mostly-deterministic` service.
+# We generally avoid sleeping and exit as quickly as possible!
+# This is an exception to explicitly test the blocking behavior of `logs --follow`
+# bats test_tags=services:logs:follow:blocks
+@test "logs: follow will wait for logs" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  # We expect flox to block and be killed by `timeout`
+  run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+
+    # At the time of writing, the `mostly-deterministic` service sleeps for 3 seconds
+    # Give flox a 4 second timeout to ensure the service has time to wake and log.
+    timeout 4 "$FLOX_BIN" services logs --follow mostly-deterministic
+EOF
+  )
+
+  # assert that the process was still running and had to be stopped
+  [ "$status" -eq 124 ]
+  assert_output - <<EOF
+mostly-deterministic: 1
+mostly-deterministic: 2
+mostly-deterministic: 3
+mostly-deterministic: 4
+EOF
+}
+
+# bats test_tags=services:logs:follow:combines
+@test "logs: follow shows logs for multiple services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  # We expect flox to block and be killed by `timeout`
+  run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+
+    # ensure some logs are printed for both services then stop the log reader
+    timeout 0.25 "$FLOX_BIN" services logs --follow one mostly-deterministic
+EOF
+  )
+
+  # assert that the process was still running and had to be stopped
+  [ "$status" -eq 124 ]
+  assert_line --regexp "^mostly-deterministic: "
+  assert_line --regexp "^one                 : "
+}
+
+# bats test_tags=services:logs:follow:combines
+@test "logs: follow shows logs for all services if no names provided" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  # We expect flox to block and be killed by `timeout`
+  run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+
+    # ensure some logs are printed for both services then stop the log reader
+    timeout 0.25 "$FLOX_BIN" services logs --follow
+EOF
+  )
+
+  # assert that the process was still running and had to be stopped
+  [ "$status" -eq 124 ]
+  assert_line --regexp "^mostly-deterministic: "
+  assert_line --regexp "^one                 : "
 }
 
 # ---------------------------------------------------------------------------- #
@@ -1070,4 +1239,3 @@ EOF
     return 1
   fi
 }
-
