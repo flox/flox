@@ -150,3 +150,26 @@ impl Start {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use flox_rust_sdk::providers::services::test_helpers::TestProcessComposeInstance;
+    use flox_rust_sdk::providers::services::ProcessComposeConfig;
+
+    use super::*;
+
+    /// start_with_existing_process_compose errors when called with a nonexistent service
+    #[test]
+    fn start_errors_for_nonexistent_service() {
+        let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
+            processes: BTreeMap::new(),
+        });
+
+        let err =
+            Start::start_with_existing_process_compose(instance.socket(), &["one".to_string()])
+                .unwrap_err();
+        assert!(err.to_string().contains("Service 'one' not found."));
+    }
+}
