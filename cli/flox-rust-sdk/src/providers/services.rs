@@ -615,6 +615,12 @@ impl ProcessComposeLogReader {
 }
 
 pub mod test_helpers {
+
+    use std::thread;
+    use std::time::Duration;
+
+    use tempfile::TempDir;
+
     use super::*;
 
     /// Shorthand for generating a ProcessState with fields that we care about.
@@ -637,57 +643,11 @@ pub mod test_helpers {
             is_running,
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-    use std::thread;
-    use std::time::Duration;
-
-    use indoc::indoc;
-    use itertools::Itertools;
-    use pretty_assertions::assert_eq;
-    use proptest::prelude::*;
-    use tempfile::TempDir;
-
-    use super::*;
-
-    proptest! {
-        #[test]
-        fn test_process_compose_config_roundtrip(config: ProcessComposeConfig) {
-            let temp_dir = TempDir::new().unwrap();
-            let path = service_config_write_location(&temp_dir).unwrap();
-            write_process_compose_config(&config, &path).unwrap();
-            let contents = std::fs::read_to_string(&path).unwrap();
-            let deserialized: ProcessComposeConfig = serde_yaml::from_str(&contents).unwrap();
-            prop_assert_eq!(config, deserialized);
-        }
-    }
-
-    #[test]
-    fn test_process_compose_config_injects_never_exit_process() {
-        // This is complimentary to the round-trip test above which doesn't see the injected process.
-        let config_in = ProcessComposeConfig {
-            processes: BTreeMap::from([("foo".to_string(), ProcessConfig {
-                command: String::from("bar"),
-                vars: None,
-            })]),
-        };
-        let config_out = serde_yaml::to_string(&config_in).unwrap();
-        assert_eq!(config_out, indoc! { "
-            processes:
-              flox_never_exit:
-                command: sleep infinity
-              foo:
-                command: bar
-        "})
-    }
 
     /// A test helper that starts a `process-compose` instance with a given [ProcessComposeConfig].
     /// The process is stopped when the instance is dropped or [TestProcessComposeInstance::stop]
     /// is called.
-    struct TestProcessComposeInstance {
+    pub struct TestProcessComposeInstance {
         _temp_dir: TempDir,
         socket: PathBuf,
         child: std::process::Child,
@@ -698,7 +658,7 @@ mod tests {
         /// Wait for the socket to appear before returning.
         ///
         /// Panics if the socket doesn't appear after 5 tries with backoff.
-        fn start(config: &ProcessComposeConfig) -> Self {
+        pub fn start(config: &ProcessComposeConfig) -> Self {
             let temp_dir = TempDir::new_in("/tmp").unwrap();
 
             let config_path = temp_dir.path().join("config.yaml");
@@ -749,12 +709,12 @@ mod tests {
         }
 
         /// Get the path to the socket.
-        fn socket(&self) -> &Path {
+        pub fn socket(&self) -> &Path {
             self.socket.as_ref()
         }
 
         /// Stop the `process-compose` instance.
-        fn stop(self) {
+        pub fn stop(self) {
             drop(self)
         }
     }
@@ -773,6 +733,51 @@ mod tests {
                 debug!("failed to send SIGTERM to process-compose: {:?}", e);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use indoc::indoc;
+    use itertools::Itertools;
+    use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
+    use tempfile::TempDir;
+    use test_helpers::TestProcessComposeInstance;
+
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn test_process_compose_config_roundtrip(config: ProcessComposeConfig) {
+            let temp_dir = TempDir::new().unwrap();
+            let path = service_config_write_location(&temp_dir).unwrap();
+            write_process_compose_config(&config, &path).unwrap();
+            let contents = std::fs::read_to_string(&path).unwrap();
+            let deserialized: ProcessComposeConfig = serde_yaml::from_str(&contents).unwrap();
+            prop_assert_eq!(config, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_process_compose_config_injects_never_exit_process() {
+        // This is complimentary to the round-trip test above which doesn't see the injected process.
+        let config_in = ProcessComposeConfig {
+            processes: BTreeMap::from([("foo".to_string(), ProcessConfig {
+                command: String::from("bar"),
+                vars: None,
+            })]),
+        };
+        let config_out = serde_yaml::to_string(&config_in).unwrap();
+        assert_eq!(config_out, indoc! { "
+            processes:
+              flox_never_exit:
+                command: sleep infinity
+              foo:
+                command: bar
+        "})
     }
 
     /// Test that [ProcessComposeLogReader] reads logs in order and sends them to the receiver.
