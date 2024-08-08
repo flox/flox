@@ -156,7 +156,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use flox_rust_sdk::providers::services::test_helpers::TestProcessComposeInstance;
-    use flox_rust_sdk::providers::services::ProcessComposeConfig;
+    use flox_rust_sdk::providers::services::{ProcessComposeConfig, ProcessConfig};
 
     use super::*;
 
@@ -171,5 +171,40 @@ mod tests {
             Start::start_with_existing_process_compose(instance.socket(), &["one".to_string()])
                 .unwrap_err();
         assert!(err.to_string().contains("Service 'one' not found."));
+    }
+
+    /// start_with_existing_process_compose can start a specified service
+    #[test]
+    fn start_specified_service() {
+        let instance = TestProcessComposeInstance::start_services(
+            &ProcessComposeConfig {
+                processes: [
+                    ("one".to_string(), ProcessConfig {
+                        command: String::from("sleep infinity"),
+                        vars: None,
+                    }),
+                    ("two".to_string(), ProcessConfig {
+                        command: String::from("sleep infinity"),
+                        vars: None,
+                    }),
+                ]
+                .into(),
+            },
+            &["one".to_string()],
+        );
+
+        let states = ProcessStates::read(instance.socket()).unwrap();
+        let one_state = states.process("one").unwrap();
+        assert!(one_state.is_running);
+        let two_state = states.process("two").unwrap();
+        assert!(!two_state.is_running);
+
+        Start::start_with_existing_process_compose(instance.socket(), &["two".to_string()])
+            .unwrap();
+        let states = ProcessStates::read(instance.socket()).unwrap();
+        let one_state = states.process("one").unwrap();
+        assert!(one_state.is_running);
+        let two_state = states.process("two").unwrap();
+        assert!(two_state.is_running);
     }
 }
