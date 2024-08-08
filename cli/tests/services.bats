@@ -69,6 +69,13 @@ setup_sleeping_services() {
   assert_success
 }
 
+setup_start_counter_services() {
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/start_counter_services.toml"
+  assert_success
+}
+
 # ---------------------------------------------------------------------------- #
 #
 # NOTE: The following functionality is tested elsewhere:
@@ -149,6 +156,114 @@ EOF
   RUST_LOG=debug run "$FLOX_BIN" activate -- true
   assert_output --partial "start=false"
   assert_output --partial "will not start services"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=services:restart
+@test "restart: errors before restarting if any service doesn't exist" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services restart one two invalid
+EOF
+)
+  assert_failure
+  assert_output --partial "❌ ERROR: Service 'invalid' not found"
+
+  run cat start_counter.one
+  assert_output "1"
+  run cat start_counter.two
+  assert_output "1"
+  run cat start_counter.sleeping
+  assert_output "1"
+}
+
+# bats test_tags=services:restart
+@test "restart: restarts a single service" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services restart one
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'one' restarted"
+
+  run cat start_counter.one
+  assert_output "2"
+  run cat start_counter.two
+  assert_output "1"
+  run cat start_counter.sleeping
+  assert_output "1"
+}
+
+# bats test_tags=services:restart
+@test "restart: restarts multiple services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services restart one two
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'one' restarted"
+  assert_output --partial "✅ Service 'two' restarted"
+
+  run cat start_counter.one
+  assert_output "2"
+  run cat start_counter.two
+  assert_output "2"
+  run cat start_counter.sleeping
+  assert_output "1"
+}
+
+# bats test_tags=services:restart
+@test "restart: restarts all services (incl. running and completed)" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services restart
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'one' restarted"
+  assert_output --partial "✅ Service 'two' restarted"
+  assert_output --partial "✅ Service 'sleeping' restarted"
+
+  run cat start_counter.one
+  assert_output "2"
+  run cat start_counter.two
+  assert_output "2"
+  run cat start_counter.sleeping
+  assert_output "2"
+}
+
+# bats test_tags=services:restart
+@test "restart: restarts stopped services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services stop sleeping
+    "$FLOX_BIN" services restart sleeping
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'sleeping' stopped"
+  assert_output --partial "✅ Service 'sleeping' restarted"
+
+  run cat start_counter.sleeping
+  assert_output "2"
 }
 
 # ---------------------------------------------------------------------------- #
