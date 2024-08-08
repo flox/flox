@@ -641,8 +641,17 @@ EOF
   "$FLOX_BIN" init
   echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
 
+  # Edit the manifest adding a second service and changing the value of FOO.
+  # Then start services again.
   run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_picks_up_modifications.sh"
   assert_success
+
+  # The added service should be running.
+  assert_output --partial "two        Running"
+
+  # TODO: once https://github.com/flox/flox/issues/1910 is resolved, the
+  # modified value of FOO should be printed.
+  # assert_output --partial "one: foo_two"
   run cat one.log
-  assert_output --partial "baz"
+  assert_output --partial "one: foo_one"
 }
