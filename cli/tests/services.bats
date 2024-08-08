@@ -388,7 +388,7 @@ EOF
   export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
   export -f watchdog_pids_called_with_arg
-  run --separate-stderr "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+  SHELL="bash" run --separate-stderr "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
 
     # Ensure that the watchdog is still running
