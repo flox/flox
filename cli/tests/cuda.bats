@@ -33,7 +33,7 @@ project_setup() {
   export FAKE_FHS_ROOT="${PROJECT_DIR}/fake_fhs_root"
   mkdir "$FAKE_FHS_ROOT"
   mkdir -p "${FAKE_FHS_ROOT}/dev"
-  mkdir -p "${FAKE_FHS_ROOT}/run/opengl-drivers"
+  mkdir -p "${FAKE_FHS_ROOT}/run/opengl-driver"
 }
 
 project_teardown() {
@@ -114,14 +114,14 @@ teardown() {
 
 @test "cuda enabled when nvidia0 device present and libcuda present on NixOS" {
   touch "${FAKE_FHS_ROOT}/dev/nvidia0"
-  touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libcuda.so"
-  touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libcuda.so.1"
-  touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libcudart.so"
-  touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libcudart.so.12"
-  touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libnvidia-ml.so"
-  touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libnvidia-ml.so.1"
-  touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libnvidia-nvvm.so"
-  touch "${FAKE_FHS_ROOT}/run/opengl-drivers/libnvidia-nvvm.so.4"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libcuda.so"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libcuda.so.1"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libcudart.so"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libcudart.so.12"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libnvidia-ml.so"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libnvidia-ml.so.1"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libnvidia-nvvm.so"
+  touch "${FAKE_FHS_ROOT}/run/opengl-driver/libnvidia-nvvm.so.4"
 
   FLOX_SHELL=bash run "$FLOX_BIN" activate -- bash \
     "$TESTS_DIR/cuda/cuda-enabled.sh" \
