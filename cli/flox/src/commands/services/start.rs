@@ -207,39 +207,4 @@ mod tests {
         let two_state = states.process("two").unwrap();
         assert!(two_state.is_running);
     }
-
-    // #[test]
-    // fn errors_for_failure_to_start() {
-    //     let instance = TestProcessComposeInstance::start_services(
-    //         &ProcessComposeConfig {
-    //             processes: [
-    //                 ("one".to_string(), ProcessConfig {
-    //                     command: String::from("sleep infinity"),
-    //                     vars: None,
-    //                 }),
-    //                 ("fails".to_string(), ProcessConfig {
-    //                     command: String::from("false"),
-    //                     vars: Some(
-    //                         [(
-    //                             String::from("FOO"),
-    //                             String::from_utf8(vec![b'X'; 1]).unwrap(),
-    //                         )]
-    //                         .into(),
-    //                     ),
-    //                 }),
-    //             ]
-    //             .into(),
-    //         },
-    //         &["one".to_string()],
-    //     );
-
-    //     Start::start_with_existing_process_compose(instance.socket(), &["fails".to_string()])
-    //         .unwrap();
-    //     let processes = ProcessStates::read(instance.socket()).unwrap();
-    //     for p in processes {
-    //         println!("{:?}", p);
-    //     }
-    //     assert!(false)
-    //     // assert_eq!(err.to_string(), "hi");
-    // }
 }
