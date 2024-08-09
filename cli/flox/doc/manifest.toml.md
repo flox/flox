@@ -292,8 +292,15 @@ Currently, environment variables set by the first run of the `on-activate`
 script are captured and then later set by the nested activation,
 but this behavior may change.
 
-It is best to write hooks defensively, assuming the user is using the
-environment from any directory on their machine.
+The `on-activate` script may be re-run by other commands;
+we may create ephemeral activations and thus run the script multiple times for
+commands such as `services start`.
+For this reason, it's best practice to make `on-activate` idempotent.
+However, the environment of your current shell is only affected by the initial
+run of the script for the first activation for your shell.
+
+It's also best practice to write hooks defensively, assuming the user is using
+the environment from any directory on their machine.
 
 ### `script` - DEPRECATED
 This field was deprecated in favor of the `profile` section.

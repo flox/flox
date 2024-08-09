@@ -283,6 +283,10 @@ impl Activate {
             ),
         ]);
 
+        if is_ephemeral {
+            exports.insert("_FLOX_ACTIVATE_FORCE_REACTIVATE", "true".to_string());
+        }
+
         let socket_path = environment.services_socket_path(&flox)?;
         if let TypedManifest::Catalog(manifest) = environment.manifest(&flox)? {
             exports.insert(
