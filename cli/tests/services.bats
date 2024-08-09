@@ -642,7 +642,7 @@ EOF
 EOF
   )
   assert_failure
-  assert_line "❌ ERROR: No such service: doesnotexist"
+  assert_line "❌ ERROR: Service 'doesnotexist' not found."
 }
 
 # Runs a service that will sleep after printing a few lines of logs.
