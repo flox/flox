@@ -54,7 +54,7 @@ impl Logs {
             }
         } else {
             let [ref name] = self.names.as_slice() else {
-                bail!("When not following logs, exactly one service name must be provided");
+                bail!("A single service name is required when the --follow flag is not specified");
             };
 
             // Ensure the service exists
