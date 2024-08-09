@@ -2,14 +2,20 @@ version = 1
 
 [services.one]
 command = '''
-i=1; while [ $i -lt 10 ]; do echo "$(i)"; sleep 0.1; i=$((i+1)); done
+echo 0
+echo >> ./resume-one.pipe
+
+i=1; while [ $i -lt 10 ]; do echo "${i}"; sleep 0.1; i=$((i+1)); done
 '''
 
 [services.mostly-deterministic]
 command = '''
+
 echo 1
 echo 2
 echo 3
+
+echo >> ./resume-mostly-deterministic.pipe
 
 # Asserting any output past this is prone to race conditions,
 # since we cant guarantee that tests will run before the sleep ends
