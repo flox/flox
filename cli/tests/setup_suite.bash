@@ -150,6 +150,9 @@ misc_vars_setup() {
   # If $ZDOTDIR is set, setting $HOME to a different location won't prevent
   # rc files from getting loaded.
   unset ZDOTDIR
+
+  # Used to check if metrics are coming form the CI
+  export CI=true
 }
 
 # ---------------------------------------------------------------------------- #
