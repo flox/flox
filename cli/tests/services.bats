@@ -630,7 +630,7 @@ EOF
 EOF
   )
   assert_failure
-  assert_line "❌ ERROR: When not following logs, exactly one service name must be provided"
+  assert_line "❌ ERROR: A single service name is required when the --follow flag is not specified"
 }
 
 # bats test_tags=services:logs:tail:exactly-one-service
@@ -646,7 +646,7 @@ EOF
 EOF
   )
   assert_failure
-  assert_line "❌ ERROR: When not following logs, exactly one service name must be provided"
+  assert_line "❌ ERROR: A single service name is required when the --follow flag is not specified"
 }
 
 # bats test_tags=services:logs:tail:no-such-service
