@@ -355,7 +355,7 @@ EOF
   export FLOX_FEATURES_SERVICES=true
   setup_logging_services
 
-  # Try running without services specified
+  # Try running with a nonexisting services specified
   run "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
