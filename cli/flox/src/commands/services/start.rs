@@ -95,6 +95,8 @@ impl Start {
         }
         Activate {
             environment: self.environment.clone(),
+            // We currently only check for trust for remote environments,
+            // but set this to false in case that changes.
             trust: false,
             print_script: false,
             start_services: true,
@@ -105,15 +107,18 @@ impl Start {
         // We don't know if the service actually started because we don't have
         // healthchecks.
         // But we do know that activate blocks until `process-compose` is running.
-        // mytodo: test
-        if self.names.is_empty() {
-            for name in lockfile.manifest.services.keys() {
-                message::updated(format!("Service '{name}' started."));
-            }
+        let names = if self.names.is_empty() {
+            lockfile
+                .manifest
+                .services
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
         } else {
-            for name in &self.names {
-                message::updated(format!("Service '{name}' started."));
-            }
+            self.names.clone()
+        };
+        for name in names {
+            message::updated(format!("Service '{name}' started."));
         }
         Ok(())
     }
@@ -123,7 +128,7 @@ impl Start {
     fn start_with_existing_process_compose(
         socket: impl AsRef<Path>,
         names: &[String],
-        stderr: &mut impl std::io::Write,
+        err_stream: &mut impl std::io::Write,
     ) -> Result<()> {
         let processes = ProcessStates::read(&socket)?;
         let named_processes = super::processes_by_name_or_default_to_all(&processes, names)?;
@@ -132,7 +137,7 @@ impl Start {
         for process in named_processes {
             if process.is_running {
                 message::warning_to_buffer(
-                    stderr,
+                    err_stream,
                     format!("Service '{}' is already running.", process.name),
                 );
                 continue;
@@ -168,7 +173,7 @@ mod tests {
 
     /// start_with_existing_process_compose errors when called with a nonexistent service
     #[test]
-    fn start_errors_for_nonexistent_service() {
+    fn error_starting_nonexistent_service_with_existing_process_compose() {
         let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
             processes: BTreeMap::new(),
         });
