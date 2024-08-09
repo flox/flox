@@ -62,23 +62,23 @@ pub static KLAUS_BIN: Lazy<PathBuf> =
 #[derive(Bpaf, Clone)]
 pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
-    environment: EnvironmentSelect,
+    pub environment: EnvironmentSelect,
 
     /// Trust a remote environment temporarily for this activation
     #[bpaf(long, short)]
-    trust: bool,
+    pub trust: bool,
 
     /// Print an activation script to stdout instead of spawning a subshell
     #[bpaf(long("print-script"), short, hide)]
-    print_script: bool,
+    pub print_script: bool,
 
     /// Whether to start services when activating the environment
     #[bpaf(long, short, hide)]
-    start_services: bool,
+    pub start_services: bool,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
-    run_args: Vec<String>,
+    pub run_args: Vec<String>,
 }
 
 impl Activate {
@@ -100,7 +100,7 @@ impl Activate {
             Err(e) => Err(e)?,
         };
 
-        self.activate(config, flox, concrete_environment, true, &[])
+        self.activate(config, flox, concrete_environment, false, &[])
             .await
     }
 
@@ -111,12 +111,15 @@ impl Activate {
     ///
     /// If self.start_services is true and services_to_start is empty, all
     /// services will be started.
+    // TODO: there's probably a cleaner way to extract the functionality we need
+    // for start and restart,
+    // but for now just hack through the is_ephemeral bool.
     pub async fn activate(
         self,
         mut config: Config,
         flox: Flox,
         mut concrete_environment: ConcreteEnvironment,
-        start_watchdog: bool,
+        is_ephemeral: bool,
         services_to_start: &[String],
     ) -> Result<()> {
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
@@ -198,7 +201,7 @@ impl Activate {
         // Detect if the current environment is already active
         if flox_active_environments.is_active(&now_active) {
             debug!(
-                "Environment is already active: environment={}. Ignoring activation",
+                "Environment is already active: environment={}. Not adding to active environments",
                 now_active.bare_description()?
             );
         } else {
@@ -300,7 +303,7 @@ impl Activate {
             }
             if flox.features.services && !manifest.services.is_empty() && !in_place {
                 if self.start_services {
-                    supported_environment(&flox, self.environment)?; // Error for remote envs.
+                    supported_environment(&flox, &self.environment)?; // Error for remote envs.
                 }
                 tracing::debug!(
                     start = self.start_services,
@@ -340,7 +343,7 @@ impl Activate {
         exports.extend(default_nix_env_vars());
 
         // Launch the watchdog process
-        if !in_place && start_watchdog {
+        if !in_place && !is_ephemeral {
             Activate::launch_watchdog(
                 &flox,
                 environment.cache_path()?.to_path_buf(),
@@ -366,7 +369,7 @@ impl Activate {
         let shell = Self::detect_shell_for_subshell();
         // These functions will only return if exec fails
         if !self.run_args.is_empty() {
-            Self::activate_command(self.run_args, shell, exports, activation_path)
+            Self::activate_command(self.run_args, shell, exports, activation_path, is_ephemeral)
         } else {
             Self::activate_interactive(shell, exports, activation_path, now_active)
         }
@@ -461,6 +464,7 @@ impl Activate {
         shell: Shell,
         exports: HashMap<&str, String>,
         activation_path: PathBuf,
+        is_ephemeral: bool,
     ) -> Result<()> {
         // Previous versions of pkgdb rendered activation scripts into a
         // subdirectory called "activate", but now that path is occupied by
@@ -494,8 +498,22 @@ impl Activate {
 
         debug!("running activation command: {:?}", command);
 
-        // exec should never return
-        Err(command.exec().into())
+        if is_ephemeral {
+            let output = command
+                .stderr(Stdio::piped())
+                .stdout(Stdio::piped())
+                .output()?;
+            if !output.status.success() {
+                Err(anyhow!(
+                    "failed to run activation script: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                ))?;
+            }
+            Ok(())
+        } else {
+            // exec should never return
+            Err(command.exec().into())
+        }
     }
 
     /// Activate the environment interactively by spawning a new shell

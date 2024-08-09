@@ -221,6 +221,17 @@ pub struct ProcessState {
     pub is_running: bool,
 }
 
+impl ProcessState {
+    /// We restart `process-compose` with updated config after all services are stopped.
+    /// We treat Disabled, Completed, Skipped, and Error as stopped.
+    /// This means Foreground, Pending, Running, Launching, Launched,
+    /// Restarting, and Terminating are treated as not stopped.
+    /// https://github.com/F1bonacc1/process-compose/blob/8d6a662c71d24608daf93b51ca1d462a0d5725f9/src/types/process.go#L125-L137
+    pub fn is_stopped(&self) -> bool {
+        ["Disabled", "Completed", "Skipped", "Error"].contains(&self.status.as_str())
+    }
+}
+
 #[derive(Deserialize, Debug, Clone, PartialEq, derive_more::From)]
 #[from(forward)]
 pub struct ProcessStates(Vec<ProcessState>);
@@ -308,6 +319,57 @@ pub fn stop_services(
         Ok(())
     } else {
         tracing::debug!("stopping services failed");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(ServiceError::from_process_compose_log(stderr))
+    }
+}
+
+/// Start service using `process-compose process start`.
+///
+/// This will error if the service is already running,
+/// so the caller is responsible for skipping starting services that are already
+/// running.
+pub fn start_service(socket: impl AsRef<Path>, name: impl AsRef<str>) -> Result<(), ServiceError> {
+    let name = name.as_ref();
+    tracing::debug!(%name, "starting service");
+
+    let mut cmd = base_process_compose_command(socket);
+    let output = cmd
+        .arg("start")
+        .arg(name)
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped())
+        .output()
+        .map_err(ServiceError::ProcessComposeCmd)?;
+
+    if output.status.success() {
+        tracing::debug!("service started");
+        Ok(())
+    } else {
+        // Note that process compose treats an already running service as an
+        // error
+        // https://github.com/F1bonacc1/process-compose/blob/v1.9.0/src/app/project_runner.go#L262
+        // As far as I can tell, it doesn't error for anything else other than a
+        // process not existing.
+        // Exec failures are just treated as the process having an exit code of
+        // 1
+        tracing::debug!("starting service '{}' failed", name);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(ServiceError::from_process_compose_log(stderr))
+    }
+}
+
+pub fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<(), ServiceError> {
+    let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
+    cmd.arg("down");
+    cmd.arg("--unix-socket");
+    cmd.arg(socket_path.as_ref());
+    cmd.env("NO_COLOR", "1");
+    let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        tracing::debug!("'process-compose down' failed");
         let stderr = String::from_utf8_lossy(&output.stderr);
         Err(ServiceError::from_process_compose_log(stderr))
     }
@@ -552,6 +614,12 @@ impl ProcessComposeLogReader {
 }
 
 pub mod test_helpers {
+
+    use std::thread;
+    use std::time::Duration;
+
+    use tempfile::TempDir;
+
     use super::*;
 
     /// Shorthand for generating a ProcessState with fields that we care about.
@@ -574,57 +642,11 @@ pub mod test_helpers {
             is_running,
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::HashMap;
-    use std::thread;
-    use std::time::Duration;
-
-    use indoc::indoc;
-    use itertools::Itertools;
-    use pretty_assertions::assert_eq;
-    use proptest::prelude::*;
-    use tempfile::TempDir;
-
-    use super::*;
-
-    proptest! {
-        #[test]
-        fn test_process_compose_config_roundtrip(config: ProcessComposeConfig) {
-            let temp_dir = TempDir::new().unwrap();
-            let path = service_config_write_location(&temp_dir).unwrap();
-            write_process_compose_config(&config, &path).unwrap();
-            let contents = std::fs::read_to_string(&path).unwrap();
-            let deserialized: ProcessComposeConfig = serde_yaml::from_str(&contents).unwrap();
-            prop_assert_eq!(config, deserialized);
-        }
-    }
-
-    #[test]
-    fn test_process_compose_config_injects_never_exit_process() {
-        // This is complimentary to the round-trip test above which doesn't see the injected process.
-        let config_in = ProcessComposeConfig {
-            processes: BTreeMap::from([("foo".to_string(), ProcessConfig {
-                command: String::from("bar"),
-                vars: None,
-            })]),
-        };
-        let config_out = serde_yaml::to_string(&config_in).unwrap();
-        assert_eq!(config_out, indoc! { "
-            processes:
-              flox_never_exit:
-                command: sleep infinity
-              foo:
-                command: bar
-        "})
-    }
 
     /// A test helper that starts a `process-compose` instance with a given [ProcessComposeConfig].
     /// The process is stopped when the instance is dropped or [TestProcessComposeInstance::stop]
     /// is called.
-    struct TestProcessComposeInstance {
+    pub struct TestProcessComposeInstance {
         _temp_dir: TempDir,
         socket: PathBuf,
         child: std::process::Child,
@@ -635,7 +657,18 @@ mod tests {
         /// Wait for the socket to appear before returning.
         ///
         /// Panics if the socket doesn't appear after 5 tries with backoff.
-        fn start(config: &ProcessComposeConfig) -> Self {
+        pub fn start(config: &ProcessComposeConfig) -> Self {
+            Self::start_services(config, &[])
+        }
+
+        /// Start a `process-compose` instance with the given [ProcessComposeConfig].
+        /// Wait for the socket to appear before returning.
+        ///
+        /// Panics if the socket doesn't appear after 5 tries with backoff.
+        ///
+        /// Only starts specified services,
+        /// or if none are specified starts all services.
+        pub fn start_services(config: &ProcessComposeConfig, services: &[String]) -> Self {
             let temp_dir = TempDir::new_in("/tmp").unwrap();
 
             let config_path = temp_dir.path().join("config.yaml");
@@ -654,6 +687,10 @@ mod tests {
                 .arg("up")
                 .stdout(Stdio::null())
                 .stderr(Stdio::inherit());
+
+            if !services.is_empty() {
+                cmd.args(services);
+            }
 
             // Dropping the child as stopping is handled via a process-compose command.
             let child = cmd.spawn().unwrap();
@@ -686,12 +723,12 @@ mod tests {
         }
 
         /// Get the path to the socket.
-        fn socket(&self) -> &Path {
+        pub fn socket(&self) -> &Path {
             self.socket.as_ref()
         }
 
         /// Stop the `process-compose` instance.
-        fn stop(self) {
+        pub fn stop(self) {
             drop(self)
         }
     }
@@ -710,6 +747,51 @@ mod tests {
                 debug!("failed to send SIGTERM to process-compose: {:?}", e);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use indoc::indoc;
+    use itertools::Itertools;
+    use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
+    use tempfile::TempDir;
+    use test_helpers::TestProcessComposeInstance;
+
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn test_process_compose_config_roundtrip(config: ProcessComposeConfig) {
+            let temp_dir = TempDir::new().unwrap();
+            let path = service_config_write_location(&temp_dir).unwrap();
+            write_process_compose_config(&config, &path).unwrap();
+            let contents = std::fs::read_to_string(&path).unwrap();
+            let deserialized: ProcessComposeConfig = serde_yaml::from_str(&contents).unwrap();
+            prop_assert_eq!(config, deserialized);
+        }
+    }
+
+    #[test]
+    fn test_process_compose_config_injects_never_exit_process() {
+        // This is complimentary to the round-trip test above which doesn't see the injected process.
+        let config_in = ProcessComposeConfig {
+            processes: BTreeMap::from([("foo".to_string(), ProcessConfig {
+                command: String::from("bar"),
+                vars: None,
+            })]),
+        };
+        let config_out = serde_yaml::to_string(&config_in).unwrap();
+        assert_eq!(config_out, indoc! { "
+            processes:
+              flox_never_exit:
+                command: sleep infinity
+              foo:
+                command: bar
+        "})
     }
 
     /// Test that [ProcessComposeLogReader] reads logs in order and sends them to the receiver.
