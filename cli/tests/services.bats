@@ -666,7 +666,7 @@ EOF
 }
 
 # Runs a service that will sleep after printing a few lines of logs.
-# Assert that flox is _not_ waitinf for the service to finish.
+# Assert that flox is _not_ waiting for the service to finish.
 # bats test_tags=services:logs:tail:instant
 @test "logs: tail does not wait" {
   export FLOX_FEATURES_SERVICES=true
@@ -675,11 +675,8 @@ EOF
   run --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
-    # calling process-compose takes about ~1 second
-    # even though process-compose will print the logs immediately,
-    # it will block for around a second before exiting :)
 
-    timeout 2 "$FLOX_BIN" services logs mostly-deterministic
+    timeout 1 "$FLOX_BIN" services logs mostly-deterministic
 EOF
   )
 

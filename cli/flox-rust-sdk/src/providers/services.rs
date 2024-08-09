@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::env;
-use std::io::{BufRead, Read};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender};
@@ -594,15 +594,14 @@ impl ProcessComposeLogTail {
         cmd.arg("logs").arg(process.as_ref());
         cmd.arg("--tail").arg(tail.to_string());
 
-        let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
+        cmd.stdout(Stdio::piped());
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(ServiceError::from_process_compose_log(stderr));
-        }
+        let mut child = cmd.spawn().map_err(ServiceError::ProcessComposeCmd)?;
+
+        let stdout = BufReader::new(child.stdout.take().unwrap());
 
         let mut lines = Vec::with_capacity(tail);
-        for line in output.stdout.lines() {
+        for line in stdout.lines() {
             let line = line.map_err(ServiceError::ReadLogLine)?;
 
             // process-compose logs --tail will print an error message
@@ -615,6 +614,15 @@ impl ProcessComposeLogTail {
             // For now, assume it's the last line and break out of the loop.
             // A change to print to stderr instead was proposed in
             // <https://github.com/F1bonacc1/process-compose/pull/216>.
+            //
+            // Calling process-compose takes about ~1 second
+            // even though process-compose will print the logs immediately,
+            // it will block for around a second before exiting :)
+            // Hence we read from the output stream directly,
+            // and break once we see the last line.
+            // This relies on the assumption that the last line is always
+            // the aforementioned error message,
+            // and that this is printed to stdout, incorrectly as that may be.
             if line.starts_with("write close: write unix") {
                 debug!("last line read, stopping log reader");
                 break;
@@ -622,6 +630,13 @@ impl ProcessComposeLogTail {
 
             lines.push(ProcessComposeLogLine::new(process.as_ref(), line));
         }
+
+        // finished reading, either by reading all lines or by breaking out of the loop early
+        // kill the child process and wait for it to exit to avoid 🧟.
+        child
+            .kill()
+            .and_then(|_| child.wait())
+            .map_err(ServiceError::ProcessComposeCmd)?;
 
         Ok(ProcessComposeLogTail { lines })
     }
@@ -1017,7 +1032,7 @@ mod tests {
     }
 
     /// Test that [ProcessComposeLogReader] reads at most `tail` lines from the process,
-    /// even if the process loggs more lines eventually,
+    /// even if the process logs more lines eventually,
     /// but has yet only logged `tail` lines.
     ///
     /// We rely on the `--tail` behavior of `process-compose process logs`,
