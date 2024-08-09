@@ -61,7 +61,7 @@ impl Logs {
             // Avoids attaching to a log of a non-existent service, in which case `process-compose`
             // will block indefinitely.
             if processes.process(name).is_none() {
-                bail!("No such service: {}", name);
+                return Err(super::service_does_not_exist_error(name));
             }
 
             let tail = ProcessComposeLogTail::new(socket, name, self.tail)?;
