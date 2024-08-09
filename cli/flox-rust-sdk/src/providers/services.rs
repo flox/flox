@@ -23,7 +23,7 @@ use tracing::debug;
 
 use crate::flox::Flox;
 use crate::models::lockfile::LockedManifestCatalog;
-use crate::models::manifest::ManifestServices;
+use crate::models::manifest::{ManifestServiceShutdown, ManifestServices};
 use crate::utils::{traceable_path, CommandExt};
 
 const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
@@ -59,6 +59,8 @@ pub enum ServiceError {
     ParseOutput(#[source] serde_json::Error),
     #[error("failed to read process log line")]
     ReadLogLine(#[source] std::io::Error),
+    #[error("{0}")] // just pass through whatever the message is
+    InvalidConfig(String),
 }
 
 impl ServiceError {
@@ -96,6 +98,25 @@ pub struct ProcessConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, proptest(strategy = "arbitrary_process_config_environment()"))]
     pub vars: Option<BTreeMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_daemon: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub shutdown: Option<ProcessShutdown>,
+}
+
+/// How to shut down a service
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ProcessShutdown {
+    pub command: String,
+}
+
+impl From<ManifestServiceShutdown> for ProcessShutdown {
+    fn from(value: ManifestServiceShutdown) -> Self {
+        Self {
+            command: value.command,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -125,6 +146,8 @@ pub fn generate_never_exit_process() -> ProcessConfig {
     ProcessConfig {
         command: format!("{} infinity", &*SLEEP_BIN),
         vars: None,
+        is_daemon: None,
+        shutdown: None,
     }
 }
 
@@ -139,6 +162,8 @@ impl From<ManifestServices> for ProcessComposeConfig {
                 (name, ProcessConfig {
                     command,
                     vars: environment,
+                    is_daemon: service.is_daemon,
+                    shutdown: service.shutdown.map(|s| s.into()),
                 })
             })
             .collect();
@@ -915,6 +940,8 @@ mod tests {
             processes: BTreeMap::from([("foo".to_string(), ProcessConfig {
                 command: String::from("bar"),
                 vars: None,
+                is_daemon: None,
+                shutdown: None,
             })]),
         };
         let config_out = serde_yaml::to_string(&config_in).unwrap();
@@ -936,6 +963,8 @@ mod tests {
                     "i=0; while true; do i=$((i+1)); echo foo \"$((i))\"; sleep 0.1; done",
                 ),
                 vars: None,
+                is_daemon: None,
+                shutdown: None,
             })]
             .into(),
         });
@@ -966,6 +995,8 @@ mod tests {
             processes: [("foo".to_string(), ProcessConfig {
                 command: String::from("echo 1; echo 2; echo 3;"),
                 vars: None,
+                is_daemon: None,
+                shutdown: None,
             })]
             .into(),
         });
@@ -990,6 +1021,8 @@ mod tests {
             processes: [("foo".to_string(), ProcessConfig {
                 command: String::from("echo 1; echo 2; echo 3; echo 4;"),
                 vars: None,
+                is_daemon: None,
+                shutdown: None,
             })]
             .into(),
         });
@@ -1017,6 +1050,8 @@ mod tests {
             processes: [("foo".to_string(), ProcessConfig {
                 command: String::from("echo 1; echo 2; echo 3"),
                 vars: None,
+                is_daemon: None,
+                shutdown: None,
             })]
             .into(),
         });
@@ -1043,6 +1078,8 @@ mod tests {
             processes: [("foo".to_string(), ProcessConfig {
                 command: String::from("echo 1; echo 2; echo 3; sleep 3; echo 4"),
                 vars: None,
+                is_daemon: None,
+                shutdown: None,
             })]
             .into(),
         });
@@ -1070,6 +1107,8 @@ mod tests {
             processes: [("foo".to_string(), ProcessConfig {
                 command: String::from("echo 1; echo 2; echo 3; sleep 3; echo 4"),
                 vars: None,
+                is_daemon: None,
+                shutdown: None,
             })]
             .into(),
         });
@@ -1098,11 +1137,15 @@ mod tests {
                     command: "i=0; while true; do i=$((i+1)); echo \"$((i))\"; sleep 0.1; done"
                         .to_string(),
                     vars: None,
+                    is_daemon: None,
+                    shutdown: None,
                 }),
                 ("bar".to_string(), ProcessConfig {
                     command: "i=0; while true; do i=$((i+1)); echo \"$((i))\"; sleep 0.1; done"
                         .to_string(),
                     vars: None,
+                    is_daemon: None,
+                    shutdown: None,
                 }),
             ]
             .into(),
@@ -1142,6 +1185,8 @@ mod tests {
                     "i=0; while true; do i=$((i+1)); echo foo \"$((i))\"; sleep 0.1; done",
                 ),
                 vars: None,
+                is_daemon: None,
+                shutdown: None,
             })]
             .into(),
         });
@@ -1180,14 +1225,20 @@ mod tests {
                 ("foo".to_string(), ProcessConfig {
                     command: String::from("sleep 1"),
                     vars: None,
+                    is_daemon: None,
+                    shutdown: None,
                 }),
                 ("bar".to_string(), ProcessConfig {
                     command: String::from("true"),
                     vars: None,
+                    is_daemon: None,
+                    shutdown: None,
                 }),
                 ("baz".to_string(), ProcessConfig {
                     command: String::from("false"),
                     vars: None,
+                    is_daemon: None,
+                    shutdown: None,
                 }),
             ]
             .into(),
@@ -1207,14 +1258,20 @@ mod tests {
                 ("foo".to_string(), ProcessConfig {
                     command: String::from("sleep 1"),
                     vars: None,
+                    is_daemon: None,
+                    shutdown: None,
                 }),
                 ("bar".to_string(), ProcessConfig {
                     command: String::from("true"),
                     vars: None,
+                    is_daemon: None,
+                    shutdown: None,
                 }),
                 ("baz".to_string(), ProcessConfig {
                     command: String::from("false"),
                     vars: None,
+                    is_daemon: None,
+                    shutdown: None,
                 }),
             ]
             .into(),

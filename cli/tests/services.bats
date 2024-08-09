@@ -1268,3 +1268,42 @@ EOF
     return 1
   fi
 }
+
+@test "kills daemon process" {
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS="$(cat <<"EOF"
+    version = 1
+
+    [install]
+    overmind.pkg-path = "overmind"
+    
+    [services.overmind]
+    command = "overmind start -D"
+    is-daemon = true
+    shutdown.command = "overmind quit"
+EOF
+)"
+
+  "$FLOX_BIN" init
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/overmind.json"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+  echo "sleep: sleep 999999" > ./Procfile
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    sleep 0.1 # small delay to let the services start
+    overmind status
+
+    "$FLOX_BIN" services status
+    "$FLOX_BIN" services stop
+    sleep 0.1 # small delay to make sure services have stopped
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -s -- bash -c "$SCRIPT"
+  assert_success
+  run [ ! -e "$PWD/overmind.sock" ]
+  assert_success
+}
