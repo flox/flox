@@ -27,4 +27,4 @@ fi
 
 "$FLOX_BIN" services start
 "$FLOX_BIN" services status
-# TODO: check logs once implemented without --follow
+"$FLOX_BIN" services logs one

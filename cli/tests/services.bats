@@ -1110,11 +1110,8 @@ EOF
 
   # The added service should be running.
   assert_output --partial "two        Running"
-
-  # TODO: once https://github.com/flox/flox/issues/1910 is resolved, the
-  # modified value of FOO should be printed.
-  # run cat one.log
-  # assert_output --partial "one: foo_two"
+  # The updated value of FOO should be printed
+  assert_output --partial "foo_two"
 }
 
 @test "start: does not pick up changes after environment modification when some services still running" {
