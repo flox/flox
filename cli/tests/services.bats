@@ -69,6 +69,13 @@ setup_sleeping_services() {
   assert_success
 }
 
+setup_logging_services() {
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/logging_services.toml"
+  assert_success
+}
+
 # ---------------------------------------------------------------------------- #
 #
 # NOTE: The following functionality is tested elsewhere:
@@ -279,6 +286,177 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=services:logs:tail:exactly-one-service
+@test "logs: tail: requires exactly one service" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+  run "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services logs one
+EOF
+  )
+  assert_success
+}
+
+# bats test_tags=services:logs:tail:exactly-one-service
+@test "logs: tail: requires exactly one service - error on multiple services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  # try running with multiple services specified
+  run "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services logs one two
+EOF
+  )
+  assert_failure
+  assert_line "❌ ERROR: A single service name is required when the --follow flag is not specified"
+}
+
+# bats test_tags=services:logs:tail:exactly-one-service
+@test "logs: tail: requires exactly one service - error without services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  # Try running without services specified
+  run "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services logs
+EOF
+  )
+  assert_failure
+  assert_line "❌ ERROR: A single service name is required when the --follow flag is not specified"
+}
+
+# bats test_tags=services:logs:tail:no-such-service
+@test "logs: tail: requires exactly one service - error if service doesn't exist" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  # Try running with a nonexisting services specified
+  run "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services logs doesnotexist
+EOF
+  )
+  assert_failure
+  assert_line "❌ ERROR: Service 'doesnotexist' not found."
+}
+
+# Runs a service that will sleep after printing a few lines of logs.
+# Assert that flox is _not_ waiting for the service to finish.
+# bats test_tags=services:logs:tail:instant
+@test "logs: tail does not wait" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  run --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+
+    timeout 1 "$FLOX_BIN" services logs mostly-deterministic
+EOF
+  )
+
+  assert_success
+  assert_output - <<EOF
+1
+2
+3
+EOF
+}
+
+# ---------------------------------------------------------------------------- #
+
+# NOTE: this test will wait out the sleep in the `mostly-deterministic` service.
+# We generally avoid sleeping and exit as quickly as possible!
+# This is an exception to explicitly test the blocking behavior of `logs --follow`
+# bats test_tags=services:logs:follow:blocks
+@test "logs: follow will wait for logs" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  # We expect flox to block and be killed by `timeout`
+  run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+
+    # At the time of writing, the `mostly-deterministic` service sleeps for 3 seconds
+    # Give flox a 4 second timeout to ensure the service has time to wake and log.
+    timeout 4 "$FLOX_BIN" services logs --follow mostly-deterministic
+EOF
+  )
+
+  assert_output - <<EOF
+mostly-deterministic: 1
+mostly-deterministic: 2
+mostly-deterministic: 3
+mostly-deterministic: 4
+EOF
+}
+
+# bats test_tags=services:logs:follow:combines
+@test "logs: follow shows logs for multiple services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  mkfifo ./resume-one.pipe
+  mkfifo ./resume-mostly-deterministic.pipe
+
+  # We expect flox to block and be killed by `timeout`, which will return a 124 exit code
+  run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+
+    # ensure some logs are printed for both services then stop the log reader
+    # both processes write to the pipe once to signal they have written _something_
+    # (they will also _wait_ until the pipe is read)
+    read < ./resume-one.pipe
+    read < ./resume-mostly-deterministic.pipe
+
+    # kill log reading, because with `--follow` the process wil block indefinitely
+    timeout 0.25 "$FLOX_BIN" services logs --follow one mostly-deterministic
+EOF
+  )
+
+  assert_line --regexp "^mostly-deterministic: "
+  assert_line --regexp "^one                 : "
+}
+
+# bats test_tags=services:logs:follow:combines
+@test "logs: follow shows logs for all services if no names provided" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_logging_services
+
+  mkfifo ./resume-one.pipe
+  mkfifo ./resume-mostly-deterministic.pipe
+
+  # We expect flox to block and be killed by `timeout`
+  run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
+    cat << 'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+
+    # ensure some logs are printed for both services then stop the log reader
+    # both processes write to the pipe once to signal they have written _something_
+    # (they will also _wait_ until the pipe is read)
+    read < ./resume-one.pipe
+    read < ./resume-mostly-deterministic.pipe
+
+    # kill log reading, because with `--follow` the process wil block indefinitely
+    timeout 0.25 "$FLOX_BIN" services logs --follow
+EOF
+  )
+
+  assert_line --regexp "^mostly-deterministic: "
+  assert_line --regexp "^one                 : "
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=services:status
 @test "status: lists the statuses for services" {
   export FLOX_FEATURES_SERVICES=true
@@ -469,7 +647,7 @@ EOF
     --registry "$registry_file" \
     --hash abcde123 \
     --socket does_not_exist &
-  
+
   # Don't forget to export this so that it's set in the subshells
   export klaus_pid="$!"
 
@@ -517,7 +695,7 @@ EOF
     --registry "$registry_file" \
     --hash abcde123 \
     --socket does_not_exist &
-  
+
   # Don't forget to export this so that it's set in the subshells
   export klaus_pid="$!"
 

@@ -72,13 +72,19 @@ fn processes_by_name_or_default_to_all<'a>(
             .map(|name| {
                 processes
                     .process(name)
-                    .ok_or_else(|| anyhow!("Service '{name}' not found"))
+                    .ok_or_else(|| service_does_not_exist_error(name))
             })
             .collect::<Result<Vec<_>>>()
     } else {
         tracing::debug!("No service names provided, defaulting to all services");
         Ok(Vec::from_iter(processes.iter()))
     }
+}
+
+/// Error to return when a service doesn't exist, either in the lockfile or the
+/// current process-compose config.
+pub(crate) fn service_does_not_exist_error(name: &str) -> anyhow::Error {
+    anyhow!(format!("Service '{name}' not found."))
 }
 
 #[cfg(test)]
