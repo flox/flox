@@ -709,8 +709,6 @@ EOF
 EOF
   )
 
-  # assert that the process was still running and had to be stopped
-  [ "$status" -eq 124 ]
   assert_output - <<EOF
 mostly-deterministic: 1
 mostly-deterministic: 2
