@@ -17,6 +17,7 @@ use flox_rust_sdk::models::environment::{
     Environment,
     EnvironmentError,
 };
+use flox_rust_sdk::providers::services::ServiceError;
 use itertools::Itertools;
 use log::debug;
 use tracing::instrument;
@@ -313,9 +314,10 @@ impl Edit {
         match result {
             Err(EnvironmentError::Core(e @ CoreEnvironmentError::LockedManifest(_)))
             | Err(EnvironmentError::Core(e @ CoreEnvironmentError::DeserializeManifest(_)))
-            | Err(EnvironmentError::Core(e @ CoreEnvironmentError::Version0NotSupported)) => {
-                Ok(Err(e))
-            },
+            | Err(EnvironmentError::Core(e @ CoreEnvironmentError::Version0NotSupported))
+            | Err(EnvironmentError::Core(
+                e @ CoreEnvironmentError::Services(ServiceError::InvalidConfig(_)),
+            )) => Ok(Err(e)),
             Err(e) => Err(e),
             Ok(result) => Ok(Ok(result)),
         }

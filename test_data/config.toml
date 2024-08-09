@@ -138,6 +138,10 @@ pre_cmd = "flox init"
 cmd = "flox install nodejs@14.16.1"
 ignore_cmd_errors = true
 
+[resolve.overmind]
+pre_cmd = "flox init"
+cmd = "flox install overmind"
+
 # Try to install a package that doesn't exist, but that *does* have suggestions
 [resolve.package_suggestions]
 pre_cmd = "flox init"

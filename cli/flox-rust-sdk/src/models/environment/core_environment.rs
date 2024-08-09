@@ -1051,8 +1051,15 @@ impl CoreEnvironment<ReadOnly> {
         if flox.catalog_client.is_some() {
             let manifest: TypedManifest = toml::from_str(manifest_contents.as_ref())
                 .map_err(CoreEnvironmentError::DeserializeManifest)?;
-            if let TypedManifest::Pkgdb(_) = manifest {
-                Err(CoreEnvironmentError::Version0NotSupported)?;
+            match manifest {
+                TypedManifest::Catalog(manifest) => {
+                    if flox.features.services {
+                        manifest.services.validate()?;
+                    }
+                },
+                TypedManifest::Pkgdb(_) => {
+                    Err(CoreEnvironmentError::Version0NotSupported)?;
+                },
             }
         }
 
@@ -2354,5 +2361,31 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], "testInstallID");
+    }
+
+    #[test]
+    fn edit_fails_when_daemon_has_no_shutdown_command() {
+        let (mut flox, _dir) = flox_instance_with_optional_floxhub_and_client(None, true);
+        flox.features.services = true;
+        let initial_manifest = r#"
+            version = 1
+        "#;
+        let mut env = new_core_environment(&flox, initial_manifest);
+        let bad_manifest = r#"
+            version = 1
+
+            [services.bad]
+            command = "cmd"
+            is-daemon = true
+            # missing shutdown.command = "..."
+        "#;
+        let res = env.transact_with_manifest_contents(bad_manifest, &flox);
+        eprintln!("{res:?}");
+        assert!(matches!(
+            res,
+            Err(CoreEnvironmentError::Services(ServiceError::InvalidConfig(
+                _
+            )))
+        ));
     }
 }
