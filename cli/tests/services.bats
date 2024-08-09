@@ -707,18 +707,25 @@ EOF
   export FLOX_FEATURES_SERVICES=true
   setup_logging_services
 
-  # We expect flox to block and be killed by `timeout`
+  mkfifo ./resume-one.pipe
+  mkfifo ./resume-mostly-deterministic.pipe
+
+  # We expect flox to block and be killed by `timeout`, which will return a 124 exit code
   run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
 
     # ensure some logs are printed for both services then stop the log reader
+    # both processes write to the pipe once to signal they have written _something_
+    # (they will also _wait_ until the pipe is read)
+    read < ./resume-one.pipe
+    read < ./resume-mostly-deterministic.pipe
+
+    # kill log reading, because with `--follow` the process wil block indefinitely
     timeout 0.25 "$FLOX_BIN" services logs --follow one mostly-deterministic
 EOF
   )
 
-  # assert that the process was still running and had to be stopped
-  [ "$status" -eq 124 ]
   assert_line --regexp "^mostly-deterministic: "
   assert_line --regexp "^one                 : "
 }
@@ -728,18 +735,25 @@ EOF
   export FLOX_FEATURES_SERVICES=true
   setup_logging_services
 
+  mkfifo ./resume-one.pipe
+  mkfifo ./resume-mostly-deterministic.pipe
+
   # We expect flox to block and be killed by `timeout`
   run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
 
     # ensure some logs are printed for both services then stop the log reader
+    # both processes write to the pipe once to signal they have written _something_
+    # (they will also _wait_ until the pipe is read)
+    read < ./resume-one.pipe
+    read < ./resume-mostly-deterministic.pipe
+
+    # kill log reading, because with `--follow` the process wil block indefinitely
     timeout 0.25 "$FLOX_BIN" services logs --follow
 EOF
   )
 
-  # assert that the process was still running and had to be stopped
-  [ "$status" -eq 124 ]
   assert_line --regexp "^mostly-deterministic: "
   assert_line --regexp "^one                 : "
 }
