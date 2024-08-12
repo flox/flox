@@ -49,6 +49,22 @@ watchdog_pids_called_with_arg() {
   echo "$pids"
 }
 
+# TODO: not very DRY, but I just copied this into start_shuts_down_process_compose.sh
+process_compose_pids_called_with_arg() {
+  # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
+  # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
+  # grep command itself doesn't get listed when we search for the data dir.
+  # The `cut` just extracts the PID.
+  pattern="$1"
+  ps_output="$(ps -eo pid,args)"
+  process_composes="$(echo "$ps_output" | grep process-compose)"
+  matches="$(echo "$process_composes" | grep "$pattern")"
+  # This is a load-bearing 'xargs', it strips leading/trailing whitespace that
+  # trips up 'cut'
+  pids="$(echo "$matches" | xargs | cut -d' ' -f1)"
+  echo "$pids"
+}
+
 setup() {
   common_test_setup
   setup_isolated_flox
@@ -469,7 +485,7 @@ EOF
     --registry "$registry_file" \
     --hash abcde123 \
     --socket does_not_exist &
-  
+
   # Don't forget to export this so that it's set in the subshells
   export klaus_pid="$!"
 
@@ -517,7 +533,7 @@ EOF
     --registry "$registry_file" \
     --hash abcde123 \
     --socket does_not_exist &
-  
+
   # Don't forget to export this so that it's set in the subshells
   export klaus_pid="$!"
 
@@ -535,3 +551,213 @@ EOF
     done
   "
 }
+
+@test "start: errors if service doesn't exist" {
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    # don't set -euo pipefail because we expect these to fail
+    "$FLOX_BIN" services start one invalid
+    "$FLOX_BIN" services status
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_failure
+  assert_output --partial "Service 'invalid' not found."
+  assert_output --partial "couldn't connect to service manager"
+}
+
+# Also tests service names with spaces in them, because starting them is handled
+# in Bash
+@test "start: only starts specified services" {
+
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    no_space.command = "sleep infinity"
+    "with space".command = "sleep infinity"
+    skip.command = "sleep infinity"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start no_space "with space"
+    "$FLOX_BIN" services status
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial "Service 'no_space' started."
+  assert_output --partial "Service 'with space' started."
+  assert_output --partial "no_space   Running"
+  assert_output --partial "with space Running"
+  assert_output --partial "skip       Disabled"
+}
+
+@test "start: defaults to all services" {
+
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+    two.command = "sleep infinity"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start
+    "$FLOX_BIN" services status
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial "Service 'one' started."
+  assert_output --partial "Service 'two' started."
+  assert_output --partial "one        Running"
+  assert_output --partial "two        Running"
+}
+
+@test "start: picks up changes after environment modification when all services have stopped" {
+
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS_1="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo $FOO"
+
+    [hook]
+    on-activate = "export FOO=foo_one"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
+
+  # Edit the manifest adding a second service and changing the value of FOO.
+  # Then start services again.
+  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_picks_up_modifications.sh"
+  assert_success
+
+  # The added service should be running.
+  assert_output --partial "two        Running"
+
+  # TODO: once https://github.com/flox/flox/issues/1910 is resolved, the
+  # modified value of FOO should be printed.
+  # run cat one.log
+  # assert_output --partial "one: foo_two"
+}
+
+@test "start: does not pick up changes after environment modification when some services still running" {
+
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS_1="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
+
+  # Edit the manifest adding a second service.
+  # Then try to start the second service.
+  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_does_not_pick_up_modifications.sh"
+  assert_failure
+  assert_output --partial "Service 'two' not found."
+}
+
+
+@test "start: shuts down existing process-compose" {
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS_1="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "true"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
+
+  # Call flox services start and check if the prior process-compose gets shutdown
+  # This also appears to hang forever if process-compose doesn't get shutdown
+  run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_shuts_down_process_compose.sh"
+  assert_success
+}
+
+
+@test "start: watchdog shuts down process-compose started by start" {
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial "Service 'one' started."
+
+  # Wait in case the watchdog doesn't shut down process-compose immediately
+  for i in {1..5}; do
+    if [ -z "$(process_compose_pids_called_with_arg "$(pwd)/.flox/run")" ]; then
+      break
+    fi
+    sleep .1
+  done
+  if [ "$i" -eq 5 ]; then
+    echo "process-compose is still running"
+    return 1
+  fi
+}
+
