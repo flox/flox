@@ -717,7 +717,7 @@ EOF
     read < ./resume-mostly-deterministic.pipe
 
     # kill log reading, because with `--follow` the process wil block indefinitely
-    timeout 0.25 "$FLOX_BIN" services logs --follow one mostly-deterministic
+    timeout 0.5 "$FLOX_BIN" services logs --follow one mostly-deterministic
 EOF
   )
 
@@ -745,7 +745,7 @@ EOF
     read < ./resume-mostly-deterministic.pipe
 
     # kill log reading, because with `--follow` the process wil block indefinitely
-    timeout 0.25 "$FLOX_BIN" services logs --follow
+    timeout 0.5 "$FLOX_BIN" services logs --follow
 EOF
   )
 
