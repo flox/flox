@@ -2,10 +2,12 @@ use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::lockfile::LockedManifest;
 use flox_rust_sdk::providers::services::{ProcessState, ProcessStates, ServiceError};
 use tracing::instrument;
 
 use super::{ConcreteEnvironment, EnvironmentSelect};
+use crate::commands::activate::Activate;
 use crate::config::Config;
 
 mod logs;
@@ -101,6 +103,56 @@ fn processes_by_name_or_default_to_all<'a>(
         tracing::debug!("No service names provided, defaulting to all services");
         Ok(Vec::from_iter(processes.iter()))
     }
+}
+
+/// Note that this must be called within an existing activation, otherwise it
+/// will leave behind a process-compose since it doesn't start a watchdog.
+pub async fn start_with_new_process_compose(
+    config: Config,
+    flox: Flox,
+    environment_select: EnvironmentSelect,
+    mut concrete_environment: ConcreteEnvironment,
+    names: &[String],
+) -> Result<Vec<String>> {
+    let environment = concrete_environment.dyn_environment_ref_mut();
+    let lockfile = environment.lockfile(&flox)?;
+    let LockedManifest::Catalog(lockfile) = lockfile else {
+        unreachable!("at least it should be after https://github.com/flox/flox/issues/1858")
+    };
+    for name in names {
+        // Check any specified names against the locked manifest that we'll use
+        // for starting `process-compose`. This does a similar job as
+        // `processes_by_name_or_default_to_all` where we don't yet have a
+        // running `process-compose` instance.
+        if !lockfile.manifest.services.contains_key(name) {
+            return Err(service_does_not_exist_error(name));
+        }
+    }
+    Activate {
+        environment: environment_select,
+        // We currently only check for trust for remote environments,
+        // but set this to false in case that changes.
+        trust: false,
+        print_script: false,
+        start_services: true,
+        run_args: vec!["true".to_string()],
+    }
+    .activate(config, flox, concrete_environment, true, &names)
+    .await?;
+    // We don't know if the service actually started because we don't have
+    // healthchecks.
+    // But we do know that activate blocks until `process-compose` is running.
+    let names = if names.is_empty() {
+        lockfile
+            .manifest
+            .services
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>()
+    } else {
+        names.to_vec()
+    };
+    Ok(names)
 }
 
 /// Error to return when a service doesn't exist, either in the lockfile or the
