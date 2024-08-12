@@ -49,6 +49,22 @@ watchdog_pids_called_with_arg() {
   echo "$pids"
 }
 
+# Wait, with a poll and timeout, for a file to match some contents.
+#
+# This can be used to prevent race conditions where we expect something to
+# happen _at least_ N times.
+wait_for_file_content() {
+  file="$1"
+  expected="$2"
+
+  run timeout 1s bash -c '
+    while [ "$(cat '$file')" != "'$expected'" ]; do
+      sleep 0.1s
+    done
+  '
+  assert_success
+}
+
 setup() {
   common_test_setup
   setup_isolated_flox
@@ -173,12 +189,13 @@ EOF
   assert_failure
   assert_output --partial "❌ ERROR: Service 'invalid' not found"
 
-  run cat start_counter.one
-  assert_output "1"
-  run cat start_counter.two
-  assert_output "1"
-  run cat start_counter.sleeping
-  assert_output "1"
+  # This doesn't guarantee that the services haven't been restarted _after_
+  # we've read the counter files. So an intermittent failure could indicate that
+  # our error handling is wrong or that the behaviour of `process-compose` has
+  # changed.
+  wait_for_file_content start_counter.one 1
+  wait_for_file_content start_counter.two 1
+  wait_for_file_content start_counter.sleeping 1
 }
 
 # bats test_tags=services:restart
@@ -194,12 +211,9 @@ EOF
   assert_success
   assert_output --partial "✅ Service 'one' restarted"
 
-  run cat start_counter.one
-  assert_output "2"
-  run cat start_counter.two
-  assert_output "1"
-  run cat start_counter.sleeping
-  assert_output "1"
+  wait_for_file_content start_counter.one 2
+  wait_for_file_content start_counter.two 1
+  wait_for_file_content start_counter.sleeping 1
 }
 
 # bats test_tags=services:restart
@@ -216,12 +230,9 @@ EOF
   assert_output --partial "✅ Service 'one' restarted"
   assert_output --partial "✅ Service 'two' restarted"
 
-  run cat start_counter.one
-  assert_output "2"
-  run cat start_counter.two
-  assert_output "2"
-  run cat start_counter.sleeping
-  assert_output "1"
+  wait_for_file_content start_counter.one 2
+  wait_for_file_content start_counter.two 2
+  wait_for_file_content start_counter.sleeping 1
 }
 
 # bats test_tags=services:restart
@@ -239,12 +250,9 @@ EOF
   assert_output --partial "✅ Service 'two' restarted"
   assert_output --partial "✅ Service 'sleeping' restarted"
 
-  run cat start_counter.one
-  assert_output "2"
-  run cat start_counter.two
-  assert_output "2"
-  run cat start_counter.sleeping
-  assert_output "2"
+  wait_for_file_content start_counter.one 2
+  wait_for_file_content start_counter.two 2
+  wait_for_file_content start_counter.sleeping 2
 }
 
 # bats test_tags=services:restart
@@ -262,8 +270,7 @@ EOF
   assert_output --partial "✅ Service 'sleeping' stopped"
   assert_output --partial "✅ Service 'sleeping' restarted"
 
-  run cat start_counter.sleeping
-  assert_output "2"
+  wait_for_file_content start_counter.sleeping 2
 }
 
 # ---------------------------------------------------------------------------- #
