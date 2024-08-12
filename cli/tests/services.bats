@@ -320,6 +320,27 @@ EOF
 }
 
 # bats test_tags=services:restart
+@test "restart: status still works when activation (re)starts a single shortlived service" {
+  export FLOX_FEATURES_SERVICES=true
+
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+  assert_success
+
+  # NB: No --start-services.
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services restart touch_file
+    "$FLOX_BIN" services status
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'touch_file' restarted"
+  assert_output --regexp "touch_file +Completed"
+}
+
+# bats test_tags=services:restart
 @test "restart: starts all services when activation hasn't already started services" {
   export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
@@ -906,6 +927,34 @@ EOF
   assert_output --partial "Service 'two' started."
   assert_output --partial "one        Running"
   assert_output --partial "two        Running"
+}
+
+@test "start: status still works when activation starts a single shortlived service" {
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo done"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    set -euo pipefail
+
+    "$FLOX_BIN" services start one
+    "$FLOX_BIN" services status
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_success
+  assert_output --partial "Service 'one' started."
+  assert_output --regexp "one +Completed"
 }
 
 @test "start: picks up changes after environment modification when all services have stopped" {

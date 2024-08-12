@@ -3,7 +3,12 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::lockfile::LockedManifest;
-use flox_rust_sdk::providers::services::{ProcessState, ProcessStates, ServiceError};
+use flox_rust_sdk::providers::services::{
+    new_services_to_start,
+    ProcessState,
+    ProcessStates,
+    ServiceError,
+};
 use tracing::instrument;
 
 use super::{ConcreteEnvironment, EnvironmentSelect};
@@ -137,7 +142,13 @@ pub async fn start_with_new_process_compose(
         start_services: true,
         run_args: vec!["true".to_string()],
     }
-    .activate(config, flox, concrete_environment, true, &names)
+    .activate(
+        config,
+        flox,
+        concrete_environment,
+        true,
+        &new_services_to_start(names),
+    )
     .await?;
     // We don't know if the service actually started because we don't have
     // healthchecks.
