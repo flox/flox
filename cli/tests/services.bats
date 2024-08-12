@@ -299,6 +299,135 @@ EOF
   wait_for_file_content start_counter.sleeping 2
 }
 
+# bats test_tags=services:restart
+@test "restart: starts a specified service when activation hasn't already started services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  # NB: No --start-services.
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services restart one
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'one' restarted"
+  refute_output --partial "✅ Service 'two' restarted"
+  refute_output --partial "✅ Service 'sleeping' restarted"
+
+  # Can't reliably assert that the other services didn't start.
+  wait_for_file_content start_counter.one 1
+}
+
+# bats test_tags=services:restart
+@test "restart: starts all services when activation hasn't already started services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  # NB: No --start-services.
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services restart
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'one' restarted"
+  assert_output --partial "✅ Service 'two' restarted"
+  assert_output --partial "✅ Service 'sleeping' restarted"
+
+  wait_for_file_content start_counter.one 1
+  wait_for_file_content start_counter.two 1
+  wait_for_file_content start_counter.sleeping 1
+}
+
+# bats test_tags=services:restart
+@test "restart: does not reload config when some services are still running" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart one
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'one' restarted"
+  refute_output --partial "Service 'two' restarted"
+  refute_output --partial "Service 'sleeping' restarted"
+  refute_output --partial "Service 'touch_file' restarted"
+
+  wait_for_file_content start_counter.one 2
+}
+
+# bats test_tags=services:restart
+@test "restart: reloads config when all services are restarted" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'touch_file' restarted"
+  [ -e hello.txt ]
+}
+
+# bats test_tags=services:restart
+@test "restart: reloads config when given no service and all services are stopped" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services stop
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'touch_file' restarted"
+  [ -e hello.txt ]
+}
+
+# bats test_tags=services:restart
+@test "restart: reloads config when given single service and all services are stopped" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services stop
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart touch_file
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'touch_file' restarted"
+  [ -e hello.txt ]
+}
+
+# bats test_tags=services:restart
+@test "restart: errors when given service isn't in reloaded config" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services stop
+    "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
+    "$FLOX_BIN" services restart one
+EOF
+)
+  assert_failure
+  assert_output --partial "❌ ERROR: Service 'one' not found"
+  refute_output --partial "Service 'touch_file' restarted"
+  [ ! -e hello.txt ]
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=services:stop

@@ -48,7 +48,7 @@ impl ServicesCommands {
         }
 
         match self {
-            ServicesCommands::Restart(args) => args.handle(flox).await?,
+            ServicesCommands::Restart(args) => args.handle(config, flox).await?,
             ServicesCommands::Start(args) => args.handle(config, flox).await?,
             ServicesCommands::Status(args) => args.handle(flox).await?,
             ServicesCommands::Stop(args) => args.handle(flox).await?,
