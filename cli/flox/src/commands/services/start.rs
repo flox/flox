@@ -43,7 +43,7 @@ impl Start {
             return Err(anyhow!(indoc! {"
                 Cannot start services for an environment that is not activated.
 
-                To activate and start services, run 'flox activate -s'
+                To activate and start services, run 'flox activate --start-services'
             "}));
         }
 
