@@ -1,11 +1,17 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::{restart_service, ProcessStates};
+use indoc::indoc;
 use tracing::instrument;
 
-use super::supported_environment;
-use crate::commands::{environment_select, EnvironmentSelect};
+use super::supported_concrete_environment;
+use crate::commands::{
+    activated_environments,
+    environment_select,
+    EnvironmentSelect,
+    UninitializedEnvironment,
+};
 use crate::subcommand_metric;
 use crate::utils::message;
 
@@ -24,7 +30,20 @@ impl Restart {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("services::restart");
 
-        let env = supported_environment(&flox, &self.environment)?;
+        let concrete_environment = supported_concrete_environment(&flox, &self.environment)?;
+        let activated_environments = activated_environments();
+
+        if !activated_environments.is_active(&UninitializedEnvironment::from_concrete_environment(
+            &concrete_environment,
+        )?) {
+            return Err(anyhow!(indoc! {"
+                Cannot restart services for an environment that is not activated.
+
+                To activate and start services, run 'flox activate -s'
+            "}));
+        }
+
+        let env = concrete_environment.into_dyn_environment();
         let socket = env.services_socket_path(&flox)?;
 
         let processes = ProcessStates::read(&socket)?;

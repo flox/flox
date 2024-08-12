@@ -215,6 +215,16 @@ EOF
 }
 
 # bats test_tags=services:restart
+@test "restart: errors when used outside an activation" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" services restart one
+  assert_failure
+  assert_line "❌ ERROR: Cannot restart services for an environment that is not activated."
+}
+
+# bats test_tags=services:restart
 @test "restart: restarts a single service" {
   export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
