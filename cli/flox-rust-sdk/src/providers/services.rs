@@ -106,6 +106,18 @@ fn arbitrary_process_config_environment(
     ))
 }
 
+/// Appends the `flox_never_exit` service to a non-empty list of services that
+/// will be started by a new `process-compose` instance in order to prevent it
+/// from exiting (and no longer serving `logs`, `status`, etc) if the specified
+/// services finish of their own accord.
+pub fn new_services_to_start(names: &[String]) -> Vec<String> {
+    let mut names_modified = names.to_vec();
+    if !names.is_empty() {
+        names_modified.push(PROCESS_NEVER_EXIT_NAME.to_string());
+    }
+    names_modified
+}
+
 fn generate_never_exit_process() -> ProcessConfig {
     ProcessConfig {
         command: String::from("sleep infinity"),
