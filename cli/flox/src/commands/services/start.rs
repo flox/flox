@@ -4,17 +4,14 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::lockfile::LockedManifest;
 use flox_rust_sdk::providers::services::{process_compose_down, start_service, ProcessStates};
 use indoc::indoc;
 use tracing::{debug, instrument};
 
-use crate::commands::activate::Activate;
-use crate::commands::services::{service_does_not_exist_error, supported_concrete_environment};
+use crate::commands::services::{start_with_new_process_compose, supported_concrete_environment};
 use crate::commands::{
     activated_environments,
     environment_select,
-    ConcreteEnvironment,
     EnvironmentSelect,
     UninitializedEnvironment,
 };
@@ -67,60 +64,22 @@ impl Start {
 
         if start_new_process_compose {
             debug!("starting services in new process-compose instance");
-            self.start_with_new_process_compose(config, flox, concrete_environment)
-                .await
+            let names = start_with_new_process_compose(
+                config,
+                flox,
+                self.environment,
+                concrete_environment,
+                &self.names,
+            )
+            .await?;
+            for name in names {
+                message::updated(format!("Service '{name}' started."));
+            }
+            Ok(())
         } else {
             debug!("starting services with existing process-compose instance");
             Self::start_with_existing_process_compose(socket, &self.names, &mut stderr())
         }
-    }
-
-    /// Note that this must be called within an existing activation, otherwise it
-    /// will leave behind a process-compose since it doesn't start a watchdog.
-    async fn start_with_new_process_compose(
-        &self,
-        config: Config,
-        flox: Flox,
-        mut concrete_environment: ConcreteEnvironment,
-    ) -> Result<()> {
-        let environment = concrete_environment.dyn_environment_ref_mut();
-        let lockfile = environment.lockfile(&flox)?;
-        let LockedManifest::Catalog(lockfile) = lockfile else {
-            unreachable!("at least it should be after https://github.com/flox/flox/issues/1858")
-        };
-        for name in &self.names {
-            if !lockfile.manifest.services.contains_key(name) {
-                return Err(service_does_not_exist_error(name));
-            }
-        }
-        Activate {
-            environment: self.environment.clone(),
-            // We currently only check for trust for remote environments,
-            // but set this to false in case that changes.
-            trust: false,
-            print_script: false,
-            start_services: true,
-            run_args: vec!["true".to_string()],
-        }
-        .activate(config, flox, concrete_environment, true, &self.names)
-        .await?;
-        // We don't know if the service actually started because we don't have
-        // healthchecks.
-        // But we do know that activate blocks until `process-compose` is running.
-        let names = if self.names.is_empty() {
-            lockfile
-                .manifest
-                .services
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>()
-        } else {
-            self.names.clone()
-        };
-        for name in names {
-            message::updated(format!("Service '{name}' started."));
-        }
-        Ok(())
     }
 
     // Starts services using an already running process-compose.
