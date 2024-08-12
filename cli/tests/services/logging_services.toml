@@ -5,7 +5,7 @@ command = '''
 echo 0
 echo >> ./resume-one.pipe
 
-i=1; while [ $i -lt 10 ]; do echo "${i}"; sleep 0.1; i=$((i+1)); done
+i=1; while [ $((i)) -lt 10 ]; do echo "$((i))"; sleep 0.1; i=$((i+1)); done
 '''
 
 [services.mostly-deterministic]
