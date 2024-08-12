@@ -9,6 +9,7 @@ use super::{ConcreteEnvironment, EnvironmentSelect};
 use crate::config::Config;
 
 mod logs;
+mod restart;
 mod start;
 mod status;
 mod stop;
@@ -16,6 +17,10 @@ mod stop;
 /// Services Commands.
 #[derive(Debug, Clone, Bpaf)]
 pub enum ServicesCommands {
+    /// Restart a service or services
+    #[bpaf(command)]
+    Restart(#[bpaf(external(restart::restart))] restart::Restart),
+
     /// Ensure a service or services are running
     #[bpaf(command, footer("Run 'man flox-services-start' for more details."))]
     Start(#[bpaf(external(start::start))] start::Start),
@@ -41,6 +46,7 @@ impl ServicesCommands {
         }
 
         match self {
+            ServicesCommands::Restart(args) => args.handle(flox).await?,
             ServicesCommands::Start(args) => args.handle(config, flox).await?,
             ServicesCommands::Status(args) => args.handle(flox).await?,
             ServicesCommands::Stop(args) => args.handle(flox).await?,

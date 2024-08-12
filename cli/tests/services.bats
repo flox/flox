@@ -49,6 +49,22 @@ watchdog_pids_called_with_arg() {
   echo "$pids"
 }
 
+# Wait, with a poll and timeout, for a file to match some contents.
+#
+# This can be used to prevent race conditions where we expect something to
+# happen _at least_ N times.
+wait_for_file_content() {
+  file="$1"
+  expected="$2"
+
+  run timeout 1s bash -c '
+    while [ "$(cat '$file')" != "'$expected'" ]; do
+      sleep 0.1s
+    done
+  '
+  assert_success
+}
+
 # TODO: not very DRY, but I just copied this into start_shuts_down_process_compose.sh
 process_compose_pids_called_with_arg() {
   # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
@@ -82,6 +98,13 @@ setup_sleeping_services() {
   run "$FLOX_BIN" init
   assert_success
   run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/sleeping_services.toml"
+  assert_success
+}
+
+setup_start_counter_services() {
+  run "$FLOX_BIN" init
+  assert_success
+  run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/start_counter_services.toml"
   assert_success
 }
 
@@ -165,6 +188,105 @@ EOF
   RUST_LOG=debug run "$FLOX_BIN" activate -- true
   assert_output --partial "start=false"
   assert_output --partial "will not start services"
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=services:restart
+@test "restart: errors before restarting if any service doesn't exist" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services restart one two invalid
+EOF
+)
+  assert_failure
+  assert_output --partial "❌ ERROR: Service 'invalid' not found"
+
+  # This doesn't guarantee that the services haven't been restarted _after_
+  # we've read the counter files. So an intermittent failure could indicate that
+  # our error handling is wrong or that the behaviour of `process-compose` has
+  # changed.
+  wait_for_file_content start_counter.one 1
+  wait_for_file_content start_counter.two 1
+  wait_for_file_content start_counter.sleeping 1
+}
+
+# bats test_tags=services:restart
+@test "restart: restarts a single service" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services restart one
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'one' restarted"
+
+  wait_for_file_content start_counter.one 2
+  wait_for_file_content start_counter.two 1
+  wait_for_file_content start_counter.sleeping 1
+}
+
+# bats test_tags=services:restart
+@test "restart: restarts multiple services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services restart one two
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'one' restarted"
+  assert_output --partial "✅ Service 'two' restarted"
+
+  wait_for_file_content start_counter.one 2
+  wait_for_file_content start_counter.two 2
+  wait_for_file_content start_counter.sleeping 1
+}
+
+# bats test_tags=services:restart
+@test "restart: restarts all services (incl. running and completed)" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services restart
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'one' restarted"
+  assert_output --partial "✅ Service 'two' restarted"
+  assert_output --partial "✅ Service 'sleeping' restarted"
+
+  wait_for_file_content start_counter.one 2
+  wait_for_file_content start_counter.two 2
+  wait_for_file_content start_counter.sleeping 2
+}
+
+# bats test_tags=services:restart
+@test "restart: restarts stopped services" {
+  export FLOX_FEATURES_SERVICES=true
+  setup_start_counter_services
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services stop sleeping
+    "$FLOX_BIN" services restart sleeping
+EOF
+)
+  assert_success
+  assert_output --partial "✅ Service 'sleeping' stopped"
+  assert_output --partial "✅ Service 'sleeping' restarted"
+
+  wait_for_file_content start_counter.sleeping 2
 }
 
 # ---------------------------------------------------------------------------- #
