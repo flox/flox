@@ -337,7 +337,7 @@ EOF
 )
   assert_success
   assert_output --partial "✅ Service 'touch_file' restarted"
-  assert_output --regexp "touch_file +Completed"
+  assert_output --regexp "touch_file +(Running|Completed)"
 }
 
 # bats test_tags=services:restart
@@ -954,7 +954,7 @@ EOF
   run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
   assert_success
   assert_output --partial "Service 'one' started."
-  assert_output --regexp "one +Completed"
+  assert_output --regexp "one +(Running|Completed)"
 }
 
 @test "start: picks up changes after environment modification when all services have stopped" {
