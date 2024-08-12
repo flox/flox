@@ -66,6 +66,16 @@ in
         # build dependencies
         nativeBuildInputs = rust-external-deps.nativeBuildInputs ++ [];
 
+        propagatedBuildInputs =
+          rust-external-deps.propagatedBuildInputs
+          ++ [
+            gitMinimal
+            process-compose
+          ]
+          ++ lib.optional (flox-pkgdb != null) [
+            flox-pkgdb
+          ];
+
         # Tests are disabled inside of the build because the sandbox prevents
         # internet access and there are tests that require internet access to
         # resolve flake references among other things.

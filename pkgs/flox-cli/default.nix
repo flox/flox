@@ -111,6 +111,19 @@ in
           gnused
         ];
 
+      # Ensure all referenced packages are available in the closure.
+      # In the past we had issues with rust optimizing away some constants
+      # referencing 3rd party crates causing runtime failures.
+      #
+      # See: <https://github.com/flox/flox/issues/1820>
+      propagatedBuildInputs =
+        rust-internal-deps.propagatedBuildInputs
+        ++ [
+          bashInteractive
+          nix
+          flox-activation-scripts
+        ];
+
       # https://github.com/ipetkov/crane/issues/385
       # doNotLinkInheritedArtifacts = true;
 
