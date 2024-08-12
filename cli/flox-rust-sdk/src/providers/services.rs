@@ -321,8 +321,6 @@ pub fn stop_services(
     let output = cmd
         .arg("stop")
         .args(names)
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .output()
         .map_err(ServiceError::ProcessComposeCmd)?;
 
@@ -349,8 +347,6 @@ pub fn start_service(socket: impl AsRef<Path>, name: impl AsRef<str>) -> Result<
     let output = cmd
         .arg("start")
         .arg(name)
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .output()
         .map_err(ServiceError::ProcessComposeCmd)?;
 
@@ -381,8 +377,6 @@ pub fn restart_service(
     let mut cmd = base_process_compose_command(socket);
     let output = cmd
         .args(["restart", name.as_ref()])
-        .stderr(Stdio::piped())
-        .stdout(Stdio::piped())
         .output()
         .map_err(ServiceError::ProcessComposeCmd)?;
 
