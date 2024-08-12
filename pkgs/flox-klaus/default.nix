@@ -45,6 +45,8 @@ in
           gnused
         ];
 
+      propagatedBuildInputs = rust-internal-deps.propagatedBuildInputs ++ [];
+
       # https://github.com/ipetkov/crane/issues/385
       # doNotLinkInheritedArtifacts = true;
 
