@@ -155,7 +155,7 @@ EOF
   unset output
   run "$FLOX_BIN" activate -s
   assert_failure
-  assert_output --partial "Services are not enabled in this environment"
+  assert_line "❌ ERROR: Services are not enabled in this environment."
 }
 
 @test "can start redis-server and access it using redis-cli" {
@@ -201,6 +201,19 @@ EOF
     run "$FLOX_BIN" activate -- "$FLOX_BIN" services "$command"
     assert_failure
     assert_line "❌ ERROR: Environment doesn't have any services defined."
+  done
+}
+
+@test "all imperative commands error without feature flag" {
+  run "$FLOX_BIN" init
+
+  commands=("logs" "restart" "start" "status" "stop")
+  for command in "${commands[@]}"; do
+    echo "Testing: flox services $command"
+    # NB: No --start-services.
+    run "$FLOX_BIN" activate -- "$FLOX_BIN" services "$command"
+    assert_failure
+    assert_line "❌ ERROR: Services are not enabled in this environment."
   done
 }
 
@@ -464,13 +477,6 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
-
-# bats test_tags=services:stop
-@test "stop: can't be used without feature flag" {
-  run "$FLOX_BIN" services stop
-  assert_failure
-  assert_output "❌ ERROR: services are not enabled"
-}
 
 # bats test_tags=services:stop
 @test "stop: errors if a service doesn't exist" {
