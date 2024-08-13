@@ -2,6 +2,7 @@
   flox-pkgdb,
   gitMinimal,
   inputs,
+  coreutils,
   lib,
   pkgsFor,
   process-compose,
@@ -25,6 +26,8 @@
       if flox-pkgdb == null
       then "pkgdb"
       else "${flox-pkgdb}/bin/pkgdb";
+
+    SLEEP_BIN = "${coreutils}/bin/sleep";
 
     PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
 
@@ -71,6 +74,7 @@ in
           ++ [
             gitMinimal
             process-compose
+            coreutils # for `sleep infinity`
           ]
           ++ lib.optional (flox-pkgdb != null) [
             flox-pkgdb
