@@ -66,8 +66,6 @@ To activate and start services, run 'flox activate --start-services'"
     LoggedError(#[from] LoggedError),
     #[error("failed to parse service manager output")]
     ParseOutput(#[source] serde_json::Error),
-    #[error("environment doesn't have any running services")]
-    NoRunningServices,
     #[error("Environment doesn't have any services defined.")]
     NoDefinedServices,
     #[error("failed to read process log line")]
