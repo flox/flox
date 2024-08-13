@@ -41,7 +41,7 @@ pub enum ServiceError {
     WriteConfig(#[source] std::io::Error),
     #[error("Services are not currently supported for remote environments.")]
     RemoteEnvsNotSupported,
-    #[error("services are not enabled")]
+    #[error("Services are not enabled in this environment.")]
     FeatureFlagDisabled,
     #[error(
         "Cannot {action} services for an environment that is not activated.

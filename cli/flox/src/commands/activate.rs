@@ -28,6 +28,7 @@ use flox_rust_sdk::models::environment::{
 };
 use flox_rust_sdk::models::manifest::TypedManifest;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
+use flox_rust_sdk::providers::services::ServiceError;
 use indexmap::IndexSet;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -85,7 +86,7 @@ impl Activate {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
         if !flox.features.services && self.start_services {
-            bail!("Services are not enabled in this environment");
+            return Err(ServiceError::FeatureFlagDisabled.into());
         }
         let concrete_environment = match self.environment.to_concrete_environment(&flox) {
             Ok(concrete_environment) => concrete_environment,
