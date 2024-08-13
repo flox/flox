@@ -169,7 +169,6 @@ EOF
   setup_sleeping_services
 
   RUST_LOG=debug run "$FLOX_BIN" activate -- true
-  assert_output --partial "start=false"
   assert_output --partial "will not start services"
 }
 
@@ -754,12 +753,26 @@ EOF
 
 @test "activate services: shows warning when services already running" {
   setup_sleeping_services
-  dummy_socket="$PWD/sock.sock"
-  touch "$dummy_socket"
-  _FLOX_SERVICES_SOCKET="$dummy_socket" run "$FLOX_BIN" activate -s -- true
+  "$FLOX_BIN" activate -s -- sleep infinity &
+  activate_pid="$!"
+  # Make sure the first `process-compose` gets up and running
+  for i in {1..5}; do
+    if "$FLOX_BIN" services status; then
+      break
+    fi
+    sleep .1
+  done
+  if [ "$i" -eq 5 ]; then
+    exit 1
+  fi
 
+  run "$FLOX_BIN" activate -s -- true
   assert_success
   assert_output --partial "⚠️  Skipped starting services, services are already running"
+
+  # Technically this should be a teardown step
+  # The test will hang forever if it fails and doesn't get here
+  kill -SIGINT "$activate_pid"
 }
 
 # ---------------------------------------------------------------------------- #
@@ -1249,4 +1262,90 @@ EOF
   assert_success
   run [ ! -e "$PWD/overmind.sock" ]
   assert_success
+}
+
+@test "activate: picks up changes after environment modification when all services have stopped" {
+
+  export FLOX_FEATURES_SERVICES=true
+
+  MANIFEST_CONTENTS_1="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo $FOO"
+
+    [hook]
+    on-activate = "export FOO=foo_one"
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -f -
+
+  # Edit the manifest adding a second service and changing the value of FOO.
+  # Then start services again.
+  "$FLOX_BIN" activate -s -- sleep infinity &
+  activate_pid="$!"
+
+  # Make sure we avoid a race of service one failing to complete
+  for i in {1..5}; do
+    if "$FLOX_BIN" services status | grep "Completed"; then
+      break
+    fi
+    sleep .1
+  done
+  if [ "$i" -eq 5 ]; then
+    exit 1
+  fi
+
+  run "$FLOX_BIN" services logs one
+  assert_success
+  assert_output "foo_one"
+
+  MANIFEST_CONTENTS_2="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo $FOO"
+    two.command = "sleep infinity"
+
+    [hook]
+    on-activate = "export FOO=foo_two"
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -f -
+
+  "$FLOX_BIN" activate -s -- true
+
+  # Make sure we avoid a race of service one failing to complete
+  for i in {1..5}; do
+    if "$FLOX_BIN" services status | grep "Completed"; then
+      break
+    fi
+    sleep .1
+  done
+  if [ "$i" -eq 5 ]; then
+    exit 1
+  fi
+
+  # The added service should be running.
+  for i in {1..5}; do
+    if "$FLOX_BIN" services status | grep "two        Running"; then
+      break
+    fi
+    sleep .1
+  done
+  if [ "$i" -eq 5 ]; then
+    exit 1
+  fi
+
+  # The modified value of FOO should be printed.
+  run "$FLOX_BIN" services logs one
+  assert_success
+  assert_output "foo_two"
+
+  # Technically this should be a teardown step
+  # The test will hang forever if it fails and doesn't get here
+  kill -SIGINT "$activate_pid"
 }

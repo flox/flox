@@ -28,6 +28,7 @@ use flox_rust_sdk::models::environment::{
 };
 use flox_rust_sdk::models::manifest::TypedManifest;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
+use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use indexmap::IndexSet;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -299,47 +300,52 @@ impl Activate {
                 .to_string(),
             );
 
-            // TODO: we should clean up the different conditionals here
             if in_place && self.start_services {
                 debug!("not starting services for in-place activation");
                 message::warning("Skipped starting services. Services are not yet supported for in place activations.");
             }
+            // We should error for remote environments even if they don't have
+            // services so that the user doesn't assume we're actually starting
+            // services.
+            if self.start_services {
+                supported_environment(&flox, &self.environment)?; // Error for remote envs.
+            }
             if !manifest.services.is_empty() && !in_place {
-                if self.start_services {
-                    supported_environment(&flox, &self.environment)?; // Error for remote envs.
-                }
-                tracing::debug!(
-                    start = self.start_services,
-                    socket_exists = socket_path.exists(),
-                    "setting service variables"
-                );
-                if self.start_services && socket_path.exists() {
-                    debug!("detected existing services socket");
-                    debug!("will not start services");
-                    message::warning("Skipped starting services, services are already running");
-                } else {
-                    if self.start_services {
-                        debug!("will start services");
-                    } else {
-                        debug!("will not start services");
-                    }
-                    exports.insert(
-                        FLOX_ACTIVATE_START_SERVICES_VAR,
-                        self.start_services.to_string(),
-                    );
-                    if !services_to_start.is_empty() {
-                        exports.insert(
-                            FLOX_SERVICES_TO_START_VAR,
-                            // Store JSON in an env var because bash doesn't
-                            // support storing arrays in env vars
-                            serde_json::to_string(&services_to_start)?,
-                        );
-                    }
-                }
+                // Always set the socket var because we use it to register
+                // cleanup in tests
+                // We can probably drop this extra conditional once we drop
+                // `register_cleanup.sh`
                 exports.insert(
                     FLOX_SERVICES_SOCKET_VAR,
                     socket_path.to_string_lossy().to_string(),
                 );
+                if self.start_services {
+                    let start_new_process_compose = if socket_path.exists() {
+                        // Returns `Ok(true)` if `process-compose` was shutdown
+                        shutdown_process_compose_if_all_processes_stopped(&socket_path)?
+                    } else {
+                        true
+                    };
+                    if start_new_process_compose {
+                        tracing::debug!(start = self.start_services, "setting service variables");
+                        exports.insert(
+                            FLOX_ACTIVATE_START_SERVICES_VAR,
+                            self.start_services.to_string(), // "true"
+                        );
+                        if !services_to_start.is_empty() {
+                            exports.insert(
+                                FLOX_SERVICES_TO_START_VAR,
+                                // Store JSON in an env var because bash doesn't
+                                // support storing arrays in env vars
+                                serde_json::to_string(&services_to_start)?,
+                            );
+                        }
+                    } else {
+                        message::warning("Skipped starting services, services are already running");
+                    }
+                } else {
+                    debug!("will not start services");
+                }
             }
         }
 
