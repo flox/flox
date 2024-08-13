@@ -126,7 +126,7 @@ mod tests {
     use std::io;
 
     use flox_rust_sdk::providers::services::test_helpers::TestProcessComposeInstance;
-    use flox_rust_sdk::providers::services::{ProcessComposeConfig, ProcessConfig};
+    use flox_rust_sdk::providers::services::{generate_never_exit_process, ProcessComposeConfig};
 
     use super::*;
 
@@ -152,14 +152,8 @@ mod tests {
         let instance = TestProcessComposeInstance::start_services(
             &ProcessComposeConfig {
                 processes: [
-                    ("one".to_string(), ProcessConfig {
-                        command: String::from("sleep infinity"),
-                        vars: None,
-                    }),
-                    ("two".to_string(), ProcessConfig {
-                        command: String::from("sleep infinity"),
-                        vars: None,
-                    }),
+                    ("one".to_string(), generate_never_exit_process()),
+                    ("two".to_string(), generate_never_exit_process()),
                 ]
                 .into(),
             },
@@ -192,18 +186,9 @@ mod tests {
         let instance = TestProcessComposeInstance::start_services(
             &ProcessComposeConfig {
                 processes: [
-                    ("one".to_string(), ProcessConfig {
-                        command: String::from("sleep infinity"),
-                        vars: None,
-                    }),
-                    ("two".to_string(), ProcessConfig {
-                        command: String::from("sleep infinity"),
-                        vars: None,
-                    }),
-                    ("three".to_string(), ProcessConfig {
-                        command: String::from("sleep infinity"),
-                        vars: None,
-                    }),
+                    ("one".to_string(), generate_never_exit_process()),
+                    ("two".to_string(), generate_never_exit_process()),
+                    ("three".to_string(), generate_never_exit_process()),
                 ]
                 .into(),
             },

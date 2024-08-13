@@ -27,6 +27,15 @@ use crate::models::manifest::ManifestServices;
 use crate::utils::{traceable_path, CommandExt};
 
 const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
+/// The path to the nix provided `sleep` binary.
+///
+/// This is used to prevent `process-compose` from exiting when all services are stopped,
+/// by running a dummy service that sleeps indefinitely.
+/// Not all systems have a `sleep` command that supports `sleep infinity`,
+/// so we use a nix provided `sleep` binary instead.
+static SLEEP_BIN: Lazy<String> =
+    Lazy::new(|| env::var("SLEEP_BIN").unwrap_or(env!("SLEEP_BIN").to_string()));
+
 pub const SERVICES_ENV_VAR: &str = "FLOX_FEATURES_SERVICES";
 pub const SERVICE_CONFIG_FILENAME: &str = "service-config.yaml";
 pub static PROCESS_COMPOSE_BIN: Lazy<String> = Lazy::new(|| {
@@ -118,9 +127,10 @@ pub fn new_services_to_start(names: &[String]) -> Vec<String> {
     names_modified
 }
 
-fn generate_never_exit_process() -> ProcessConfig {
+/// Cre
+pub fn generate_never_exit_process() -> ProcessConfig {
     ProcessConfig {
-        command: String::from("sleep infinity"),
+        command: format!("{} infinity", &*SLEEP_BIN),
         vars: None,
     }
 }
@@ -785,7 +795,7 @@ pub mod test_helpers {
 mod tests {
     use std::collections::HashMap;
 
-    use indoc::indoc;
+    use indoc::formatdoc;
     use itertools::Itertools;
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
@@ -816,13 +826,13 @@ mod tests {
             })]),
         };
         let config_out = serde_yaml::to_string(&config_in).unwrap();
-        assert_eq!(config_out, indoc! { "
+        assert_eq!(config_out, formatdoc! { "
             processes:
               flox_never_exit:
-                command: sleep infinity
+                command: {sleep} infinity
               foo:
                 command: bar
-        "})
+        ", sleep = &*SLEEP_BIN });
     }
 
     /// Test that [ProcessComposeLogReader] reads logs in order and sends them to the receiver.
