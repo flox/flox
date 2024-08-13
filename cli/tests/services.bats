@@ -269,7 +269,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' restarted"
+  assert_output --partial "✅ Service 'one' started"
 
   wait_for_file_content start_counter.one 2
   wait_for_file_content start_counter.two 1
@@ -287,8 +287,8 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' restarted"
-  assert_output --partial "✅ Service 'two' restarted"
+  assert_output --partial "✅ Service 'one' started"
+  assert_output --partial "✅ Service 'two' started"
 
   wait_for_file_content start_counter.one 2
   wait_for_file_content start_counter.two 2
@@ -306,8 +306,8 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' restarted"
-  assert_output --partial "✅ Service 'two' restarted"
+  assert_output --partial "✅ Service 'one' started"
+  assert_output --partial "✅ Service 'two' started"
   assert_output --partial "✅ Service 'sleeping' restarted"
 
   wait_for_file_content start_counter.one 2
@@ -328,7 +328,7 @@ EOF
 )
   assert_success
   assert_output --partial "✅ Service 'sleeping' stopped"
-  assert_output --partial "✅ Service 'sleeping' restarted"
+  assert_output --partial "✅ Service 'sleeping' started"
 
   wait_for_file_content start_counter.sleeping 2
 }
@@ -345,9 +345,9 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' restarted"
-  refute_output --partial "✅ Service 'two' restarted"
-  refute_output --partial "✅ Service 'sleeping' restarted"
+  assert_output --partial "✅ Service 'one' started"
+  refute_output --partial "Service 'two'"
+  refute_output --partial "Service 'sleeping'"
 
   # Can't reliably assert that the other services didn't start.
   wait_for_file_content start_counter.one 1
@@ -370,7 +370,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'touch_file' restarted"
+  assert_output --partial "✅ Service 'touch_file' started"
   assert_output --regexp "touch_file +(Running|Completed)"
 }
 
@@ -386,9 +386,9 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' restarted"
-  assert_output --partial "✅ Service 'two' restarted"
-  assert_output --partial "✅ Service 'sleeping' restarted"
+  assert_output --partial "✅ Service 'one' started"
+  assert_output --partial "✅ Service 'two' started"
+  assert_output --partial "✅ Service 'sleeping' started"
 
   wait_for_file_content start_counter.one 1
   wait_for_file_content start_counter.two 1
@@ -407,10 +407,10 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'one' restarted"
-  refute_output --partial "Service 'two' restarted"
-  refute_output --partial "Service 'sleeping' restarted"
-  refute_output --partial "Service 'touch_file' restarted"
+  assert_output --partial "✅ Service 'one' started"
+  refute_output --partial "Service 'two'"
+  refute_output --partial "Service 'sleeping'"
+  refute_output --partial "Service 'touch_file'"
 
   wait_for_file_content start_counter.one 2
 }
@@ -427,7 +427,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'touch_file' restarted"
+  assert_output --partial "✅ Service 'touch_file' started"
   [ -e hello.txt ]
 }
 
@@ -444,7 +444,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'touch_file' restarted"
+  assert_output --partial "✅ Service 'touch_file' started"
   [ -e hello.txt ]
 }
 
@@ -461,7 +461,7 @@ EOF
 EOF
 )
   assert_success
-  assert_output --partial "✅ Service 'touch_file' restarted"
+  assert_output --partial "✅ Service 'touch_file' started"
   [ -e hello.txt ]
 }
 
@@ -479,7 +479,7 @@ EOF
 )
   assert_failure
   assert_output --partial "❌ ERROR: Service 'one' not found"
-  refute_output --partial "Service 'touch_file' restarted"
+  refute_output --partial "Service 'touch_file'"
   [ ! -e hello.txt ]
 }
 
