@@ -48,16 +48,6 @@ pub enum ServiceError {
     GenerateConfig(#[source] serde_yaml::Error),
     #[error("failed to write service config")]
     WriteConfig(#[source] std::io::Error),
-    #[error("Services are not currently supported for remote environments.")]
-    RemoteEnvsNotSupported,
-    #[error("Services are not enabled in this environment.")]
-    FeatureFlagDisabled,
-    #[error(
-        "Cannot {action} services for an environment that is not activated.
-
-To activate and start services, run 'flox activate --start-services'"
-    )]
-    NotInActivation { action: String },
     #[error("there was a problem calling the service manager")]
     ProcessComposeCmd(#[source] std::io::Error),
     /// This variant is specifically for errors that are logged by process-compose as opposed to
@@ -66,8 +56,6 @@ To activate and start services, run 'flox activate --start-services'"
     LoggedError(#[from] LoggedError),
     #[error("failed to parse service manager output")]
     ParseOutput(#[source] serde_json::Error),
-    #[error("Environment doesn't have any services defined.")]
-    NoDefinedServices,
     #[error("failed to read process log line")]
     ReadLogLine(#[source] std::io::Error),
 }

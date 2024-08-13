@@ -28,7 +28,6 @@ use flox_rust_sdk::models::environment::{
 };
 use flox_rust_sdk::models::manifest::TypedManifest;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
-use flox_rust_sdk::providers::services::ServiceError;
 use indexmap::IndexSet;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -43,6 +42,7 @@ use super::{
     EnvironmentSelect,
     UninitializedEnvironment,
 };
+use crate::commands::services::ServicesCommandsError;
 use crate::commands::{ensure_environment_trust, ConcreteEnvironment, EnvironmentSelectError};
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::dialog::{Dialog, Spinner};
@@ -86,7 +86,7 @@ impl Activate {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
         if !flox.features.services && self.start_services {
-            return Err(ServiceError::FeatureFlagDisabled.into());
+            return Err(ServicesCommandsError::FeatureFlagDisabled.into());
         }
         let concrete_environment = match self.environment.to_concrete_environment(&flox) {
             Ok(concrete_environment) => concrete_environment,

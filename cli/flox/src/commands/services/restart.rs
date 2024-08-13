@@ -3,15 +3,14 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::services::{
-    process_compose_down,
-    restart_service,
-    ProcessStates,
-    ServiceError,
-};
+use flox_rust_sdk::providers::services::{process_compose_down, restart_service, ProcessStates};
 use tracing::{debug, instrument};
 
-use crate::commands::services::{start_with_new_process_compose, supported_concrete_environment};
+use crate::commands::services::{
+    start_with_new_process_compose,
+    supported_concrete_environment,
+    ServicesCommandsError,
+};
 use crate::commands::{
     activated_environments,
     environment_select,
@@ -43,7 +42,7 @@ impl Restart {
         if !activated_environments.is_active(&UninitializedEnvironment::from_concrete_environment(
             &concrete_environment,
         )?) {
-            return Err(ServiceError::NotInActivation {
+            return Err(ServicesCommandsError::NotInActivation {
                 action: "restart".to_string(),
             }
             .into());
