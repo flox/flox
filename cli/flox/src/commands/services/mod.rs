@@ -4,12 +4,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{CoreEnvironmentError, Environment};
 use flox_rust_sdk::models::lockfile::LockedManifest;
 use flox_rust_sdk::models::manifest::TypedManifest;
-use flox_rust_sdk::providers::services::{
-    new_services_to_start,
-    ProcessState,
-    ProcessStates,
-    ServiceError,
-};
+use flox_rust_sdk::providers::services::{new_services_to_start, ProcessState, ProcessStates};
 use tracing::instrument;
 
 use super::{ConcreteEnvironment, EnvironmentSelect};
@@ -21,6 +16,22 @@ mod restart;
 mod start;
 mod status;
 mod stop;
+
+#[derive(Debug, thiserror::Error)]
+pub enum ServicesCommandsError {
+    #[error("Services are not currently supported for remote environments.")]
+    RemoteEnvsNotSupported,
+    #[error("Services are not enabled in this environment.")]
+    FeatureFlagDisabled,
+    #[error(
+        "Cannot {action} services for an environment that is not activated.
+
+To activate and start services, run 'flox activate --start-services'"
+    )]
+    NotInActivation { action: String },
+    #[error("Environment doesn't have any services defined.")]
+    NoDefinedServices,
+}
 
 /// Services Commands.
 #[derive(Debug, Clone, Bpaf)]
@@ -50,7 +61,7 @@ impl ServicesCommands {
     #[instrument(name = "services", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         if !flox.features.services {
-            return Err(ServiceError::FeatureFlagDisabled.into());
+            return Err(ServicesCommandsError::FeatureFlagDisabled.into());
         }
 
         match self {
@@ -72,7 +83,7 @@ pub fn supported_concrete_environment(
 ) -> Result<ConcreteEnvironment> {
     let concrete_environment = environment.detect_concrete_environment(flox, "Services in")?;
     if let ConcreteEnvironment::Remote(_) = concrete_environment {
-        return Err(ServiceError::RemoteEnvsNotSupported.into());
+        return Err(ServicesCommandsError::RemoteEnvsNotSupported.into());
     }
 
     let manifest = concrete_environment.dyn_environment_ref().manifest(flox)?;
@@ -80,7 +91,7 @@ pub fn supported_concrete_environment(
         return Err(CoreEnvironmentError::ServicesWithV0.into());
     };
     if manifest.services.is_empty() {
-        return Err(ServiceError::NoDefinedServices.into());
+        return Err(ServicesCommandsError::NoDefinedServices.into());
     }
 
     Ok(concrete_environment)
