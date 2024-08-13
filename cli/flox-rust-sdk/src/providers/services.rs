@@ -434,6 +434,22 @@ pub fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<(), Service
     }
 }
 
+/// Check if all processes are stopped and shutdown `process-compose` if they
+/// are.
+///
+/// Returns true if process-compose was shutdown.
+pub fn shutdown_process_compose_if_all_processes_stopped(
+    socket: impl AsRef<Path>,
+) -> Result<bool, ServiceError> {
+    let processes = ProcessStates::read(&socket)?;
+    let all_processes_stopped = processes.iter().all(|p| p.is_stopped());
+    if all_processes_stopped {
+        tracing::debug!("all processes stopped; shutting down 'process-compose'");
+        process_compose_down(socket)?;
+    }
+    Ok(all_processes_stopped)
+}
+
 /// Strings extracted from a process-compose error log.
 ///
 /// This is just raw data intended to be interpreted into a specific kind of error
