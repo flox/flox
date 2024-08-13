@@ -41,7 +41,7 @@ wait_for_services_socket () {
   local status
   status=$(poll_services_status "$socket_file")
   while [ "$status" == "$NOT_READY" ]; do
-    sleep 0.02
+    "$_coreutils/bin/sleep" 0.02
     status=$(poll_services_status "$socket_file")
   done
 }
