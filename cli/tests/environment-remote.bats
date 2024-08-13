@@ -370,12 +370,12 @@ EOF
   # Everything else that explicitly uses services shouldn't work.
   run "$FLOX_BIN" activate --start-services --remote "flox/test" -- true
   assert_failure
-  assert_output --partial "❌ ERROR: services are not currently supported for remote environments"
+  assert_output --partial "❌ ERROR: Services are not currently supported for remote environments."
 
   unsupported_commands=("logs" "restart" "status" "stop")
   for command in "${unsupported_commands[@]}"; do
     run "$FLOX_BIN" services "$command" hello --remote "flox/test"
     assert_failure
-    assert_output --partial "❌ ERROR: services are not currently supported for remote environments"
+    assert_output --partial "❌ ERROR: Services are not currently supported for remote environments."
   done
 }
