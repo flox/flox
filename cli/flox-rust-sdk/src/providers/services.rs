@@ -64,6 +64,8 @@ pub enum ServiceError {
     ParseOutput(#[source] serde_json::Error),
     #[error("environment doesn't have any running services")]
     NoRunningServices,
+    #[error("Environment doesn't have any services defined.")]
+    NoDefinedServices,
     #[error("failed to read process log line")]
     ReadLogLine(#[source] std::io::Error),
 }

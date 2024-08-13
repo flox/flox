@@ -1,8 +1,9 @@
 use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::environment::{CoreEnvironmentError, Environment};
 use flox_rust_sdk::models::lockfile::LockedManifest;
+use flox_rust_sdk::models::manifest::TypedManifest;
 use flox_rust_sdk::providers::services::{
     new_services_to_start,
     ProcessState,
@@ -69,10 +70,21 @@ pub fn supported_concrete_environment(
     flox: &Flox,
     environment: &EnvironmentSelect,
 ) -> Result<ConcreteEnvironment> {
-    let concrete_environment = environment.detect_concrete_environment(flox, "Services in")?;
+    let mut concrete_environment = environment.detect_concrete_environment(flox, "Services in")?;
     if let ConcreteEnvironment::Remote(_) = concrete_environment {
         return Err(ServiceError::RemoteEnvsNotSupported.into());
     }
+
+    let manifest = concrete_environment
+        .dyn_environment_ref_mut()
+        .manifest(&flox)?;
+    let TypedManifest::Catalog(manifest) = manifest else {
+        return Err(CoreEnvironmentError::ServicesWithV0.into());
+    };
+    if manifest.services.is_empty() {
+        return Err(ServiceError::NoDefinedServices.into());
+    }
+
     Ok(concrete_environment)
 }
 
@@ -122,7 +134,9 @@ pub async fn start_with_new_process_compose(
     let environment = concrete_environment.dyn_environment_ref_mut();
     let lockfile = environment.lockfile(&flox)?;
     let LockedManifest::Catalog(lockfile) = lockfile else {
-        unreachable!("at least it should be after https://github.com/flox/flox/issues/1858")
+        // Checks for supported environments within the commands should prevent
+        // us ever getting here, but just in case.
+        return Err(CoreEnvironmentError::ServicesWithV0.into());
     };
     for name in names {
         // Check any specified names against the locked manifest that we'll use
