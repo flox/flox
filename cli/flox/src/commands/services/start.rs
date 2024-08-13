@@ -4,7 +4,11 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::services::{process_compose_down, start_service, ProcessStates};
+use flox_rust_sdk::providers::services::{
+    shutdown_process_compose_if_all_processes_stopped,
+    start_service,
+    ProcessStates,
+};
 use tracing::{debug, instrument};
 
 use crate::commands::services::{
@@ -55,12 +59,8 @@ impl Start {
         let start_new_process_compose = if !socket.exists() {
             true
         } else {
-            let processes = ProcessStates::read(&socket)?;
-            let all_processes_stopped = processes.iter().all(|p| p.is_stopped());
-            if all_processes_stopped {
-                process_compose_down(&socket)?;
-            }
-            all_processes_stopped
+            // Returns `Ok(true)` if `process-compose` was shutdown
+            shutdown_process_compose_if_all_processes_stopped(&socket)?
         };
 
         if start_new_process_compose {
