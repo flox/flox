@@ -1114,6 +1114,14 @@ impl ConcreteEnvironment {
         }
     }
 
+    pub fn dyn_environment_ref(&self) -> &dyn Environment {
+        match self {
+            ConcreteEnvironment::Path(path_env) => path_env,
+            ConcreteEnvironment::Managed(managed_env) => managed_env,
+            ConcreteEnvironment::Remote(remote_env) => remote_env,
+        }
+    }
+
     pub fn dyn_environment_ref_mut(&mut self) -> &mut dyn Environment {
         match self {
             ConcreteEnvironment::Path(path_env) => path_env,

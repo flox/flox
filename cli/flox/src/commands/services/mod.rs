@@ -70,14 +70,12 @@ pub fn supported_concrete_environment(
     flox: &Flox,
     environment: &EnvironmentSelect,
 ) -> Result<ConcreteEnvironment> {
-    let mut concrete_environment = environment.detect_concrete_environment(flox, "Services in")?;
+    let concrete_environment = environment.detect_concrete_environment(flox, "Services in")?;
     if let ConcreteEnvironment::Remote(_) = concrete_environment {
         return Err(ServiceError::RemoteEnvsNotSupported.into());
     }
 
-    let manifest = concrete_environment
-        .dyn_environment_ref_mut()
-        .manifest(&flox)?;
+    let manifest = concrete_environment.dyn_environment_ref().manifest(flox)?;
     let TypedManifest::Catalog(manifest) = manifest else {
         return Err(CoreEnvironmentError::ServicesWithV0.into());
     };

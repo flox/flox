@@ -34,7 +34,7 @@ impl Start {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("services::start");
 
-        let mut concrete_environment = supported_concrete_environment(&flox, &self.environment)?;
+        let concrete_environment = supported_concrete_environment(&flox, &self.environment)?;
         let activated_environments = activated_environments();
 
         if !activated_environments.is_active(&UninitializedEnvironment::from_concrete_environment(
@@ -47,8 +47,7 @@ impl Start {
             "}));
         }
 
-        // TODO: this doesn't need to be mut
-        let env = concrete_environment.dyn_environment_ref_mut();
+        let env = concrete_environment.dyn_environment_ref();
         let socket = env.services_socket_path(&flox)?;
 
         let start_new_process_compose = if !socket.exists() {
