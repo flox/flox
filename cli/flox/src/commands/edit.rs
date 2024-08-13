@@ -491,6 +491,7 @@ mod tests {
         Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
             .expect_err("should error with editor not found");
 
+        // ensure tempdir lifetimes do not drop -- require tempdir to exist on fs through the end of the test
         assert!(tmp1.path().is_dir());
         assert!(tmp2.path().is_dir());
         assert!(tmp3.path().is_dir());
@@ -516,9 +517,9 @@ mod tests {
         let vi = tmp2.path().join("vi");
         let emacs = tmp3.path().join("emacs");
         File::create(&nano).expect("should create file");
-        File::create(&vim).expect("should create file");
-        File::create(&vi).expect("should create file");
-        File::create(&emacs).expect("should create file");
+        File::create(vim).expect("should create file");
+        File::create(vi).expect("should create file");
+        File::create(emacs).expect("should create file");
 
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
@@ -526,6 +527,7 @@ mod tests {
             (nano, Vec::<String>::new())
         );
 
+        // ensure tempdir lifetimes do not drop -- require tempdir to exist on fs through the end of the test
         assert!(tmp1.path().is_dir());
         assert!(tmp2.path().is_dir());
         assert!(tmp3.path().is_dir());
@@ -551,11 +553,11 @@ mod tests {
         let vi = tmp2.path().join("vi");
         let emacs = tmp3.path().join("emacs");
 
-        fs::create_dir(&nano).expect("should create directory");
+        fs::create_dir(nano).expect("should create directory");
 
         File::create(&vim).expect("should create file");
-        File::create(&vi).expect("should create file");
-        File::create(&emacs).expect("should create file");
+        File::create(vi).expect("should create file");
+        File::create(emacs).expect("should create file");
 
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
@@ -563,6 +565,7 @@ mod tests {
             (vim, Vec::<String>::new())
         );
 
+        // ensure tempdir lifetimes do not drop -- require tempdir to exist on fs through the end of the test
         assert!(tmp1.path().is_dir());
         assert!(tmp2.path().is_dir());
         assert!(tmp3.path().is_dir());
@@ -587,10 +590,10 @@ mod tests {
         let vim = tmp2.path().join("vim");
         let vi = tmp2.path().join("vi");
         let emacs = tmp3.path().join("emacs");
-        File::create(&nano).expect("should create file");
-        File::create(&vim).expect("should create file");
-        File::create(&vi).expect("should create file");
-        File::create(&emacs).expect("should create file");
+        File::create(nano).expect("should create file");
+        File::create(vim).expect("should create file");
+        File::create(vi).expect("should create file");
+        File::create(emacs).expect("should create file");
 
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
@@ -598,6 +601,7 @@ mod tests {
             (PathBuf::from("micro"), Vec::<String>::new())
         );
 
+        // ensure tempdir lifetimes do not drop -- require tempdir to exist on fs through the end of the test
         assert!(tmp1.path().is_dir());
         assert!(tmp2.path().is_dir());
         assert!(tmp3.path().is_dir());
@@ -624,6 +628,7 @@ mod tests {
             (PathBuf::from("hx"), Vec::<String>::new())
         );
 
+        // ensure tempdir lifetimes do not drop -- require tempdir to exist on fs through the end of the test
         assert!(tmp1.path().is_dir());
         assert!(tmp2.path().is_dir());
         assert!(tmp3.path().is_dir());
@@ -685,8 +690,8 @@ mod tests {
 
         let nano = tmp1.path().join("nano");
         let vim = tmp2.path().join("vim");
-        File::create(&nano).expect("should create file");
-        File::create(&vim).expect("should create file");
+        File::create(nano).expect("should create file");
+        File::create(vim).expect("should create file");
 
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
@@ -697,6 +702,7 @@ mod tests {
             )
         );
 
+        // ensure tempdir lifetimes do not drop -- require tempdir to exist on fs through the end of the test
         assert!(tmp1.path().is_dir());
         assert!(tmp2.path().is_dir());
         assert!(tmp3.path().is_dir());
@@ -720,7 +726,7 @@ mod tests {
         let nano = tmp1.path().join("nano");
         let vim = tmp2.path().join("vim");
         File::create(&nano).expect("should create file");
-        File::create(&vim).expect("should create file");
+        File::create(vim).expect("should create file");
 
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
@@ -728,6 +734,7 @@ mod tests {
             (nano, Vec::new())
         );
 
+        // ensure tempdir lifetimes do not drop -- require tempdir to exist on fs through the end of the test
         assert!(tmp1.path().is_dir());
         assert!(tmp2.path().is_dir());
         assert!(tmp3.path().is_dir());
@@ -751,7 +758,7 @@ mod tests {
         let nano = tmp1.path().join("nano");
         let vim = tmp2.path().join("vim");
         File::create(&nano).expect("should create file");
-        File::create(&vim).expect("should create file");
+        File::create(vim).expect("should create file");
 
         assert_eq!(
             Edit::determine_editor_from_vars(visual_var, editor_var, path_var)
@@ -759,6 +766,7 @@ mod tests {
             (nano, Vec::<String>::new())
         );
 
+        // ensure tempdir lifetimes do not drop -- require tempdir to exist on fs through the end of the test
         assert!(tmp1.path().is_dir());
         assert!(tmp2.path().is_dir());
         assert!(tmp3.path().is_dir());
