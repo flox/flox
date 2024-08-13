@@ -52,8 +52,12 @@ pub enum ServiceError {
     RemoteEnvsNotSupported,
     #[error("services are not enabled")]
     FeatureFlagDisabled,
-    #[error("services have not been started in this activation")]
-    NotInActivation,
+    #[error(
+        "Cannot {action} services for an environment that is not activated.
+
+To activate and start services, run 'flox activate --start-services'"
+    )]
+    NotInActivation { action: String },
     #[error("there was a problem calling the service manager")]
     ProcessComposeCmd(#[source] std::io::Error),
     /// This variant is specifically for errors that are logged by process-compose as opposed to
