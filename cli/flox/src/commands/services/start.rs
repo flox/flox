@@ -4,8 +4,12 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::services::{process_compose_down, start_service, ProcessStates};
-use indoc::indoc;
+use flox_rust_sdk::providers::services::{
+    process_compose_down,
+    start_service,
+    ProcessStates,
+    ServiceError,
+};
 use tracing::{debug, instrument};
 
 use crate::commands::services::{start_with_new_process_compose, supported_concrete_environment};
@@ -40,11 +44,10 @@ impl Start {
         if !activated_environments.is_active(&UninitializedEnvironment::from_concrete_environment(
             &concrete_environment,
         )?) {
-            return Err(anyhow!(indoc! {"
-                Cannot start services for an environment that is not activated.
-
-                To activate and start services, run 'flox activate --start-services'
-            "}));
+            return Err(ServiceError::NotInActivation {
+                action: "start".to_string(),
+            }
+            .into());
         }
 
         let env = concrete_environment.dyn_environment_ref();
