@@ -190,6 +190,20 @@ EOF
   assert_output --partial "will not start services"
 }
 
+@test "all imperative commands error when no services are defined" {
+  export FLOX_FEATURES_SERVICES=true
+  run "$FLOX_BIN" init
+
+  commands=("logs" "restart" "start" "status" "stop")
+  for command in "${commands[@]}"; do
+    echo "Testing: flox services $command"
+    # NB: No --start-services.
+    run "$FLOX_BIN" activate -- "$FLOX_BIN" services "$command"
+    assert_failure
+    assert_line "❌ ERROR: Environment doesn't have any services defined."
+  done
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=services:restart
