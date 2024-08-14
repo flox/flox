@@ -163,6 +163,10 @@ jobs:
         if: ${{ failure() }}
         run: nix develop -L --no-update-lock-file --command pstree
 
+      - name: "Capture open files for failing tests"
+        if: ${{ failure() }}
+        run: nix develop -L --no-update-lock-file --command lsof
+
   nix-build:
     name: "Nix build"
     runs-on: "ubuntu-latest"

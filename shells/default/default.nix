@@ -5,6 +5,7 @@
   just,
   yq,
   lib,
+  lsof,
   mkShell,
   procps,
   pre-commit-check,
@@ -50,6 +51,7 @@
       cargo-nextest
       procps
       pstree
+      lsof
     ];
 in
   mkShell (
