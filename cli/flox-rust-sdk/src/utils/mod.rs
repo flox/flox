@@ -1,6 +1,6 @@
 pub mod errors;
 pub mod guard;
-#[cfg(any(test, feature = "test"))]
+#[cfg(any(test, feature = "tests"))]
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -8,7 +8,7 @@ use std::time::SystemTime;
 use std::{fs, io};
 
 use ::log::debug;
-#[cfg(any(test, feature = "test"))]
+#[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use thiserror::Error;
 use tokio::fs::OpenOptions;
@@ -176,7 +176,7 @@ pub fn maybe_traceable_path(maybe_path: &Option<PathBuf>) -> impl tracing::Value
     }
 }
 
-#[cfg(any(test, feature = "test"))]
+#[cfg(any(test, feature = "tests"))]
 pub fn proptest_chrono_strategy() -> impl Strategy<Value = chrono::DateTime<chrono::Utc>> {
     use chrono::TimeZone;
 
@@ -191,7 +191,7 @@ pub fn proptest_chrono_strategy() -> impl Strategy<Value = chrono::DateTime<chro
 ///
 /// This is handy when you want to generate valid TOML keys without worrying about quoting
 /// or escaping.
-#[cfg(any(test, feature = "test"))]
+#[cfg(any(test, feature = "tests"))]
 pub fn proptest_alphanum_string(max_size: usize) -> impl Strategy<Value = String> {
     let ranges = vec!['a'..='z', 'A'..='Z', '0'..='9'];
     prop::collection::vec(
@@ -202,7 +202,7 @@ pub fn proptest_alphanum_string(max_size: usize) -> impl Strategy<Value = String
 }
 
 /// Produces maps whose keys are strings that only contain alphanumeric characters.
-#[cfg(any(test, feature = "test"))]
+#[cfg(any(test, feature = "tests"))]
 pub fn proptest_btree_map_alphanum_keys<T: proptest::arbitrary::Arbitrary>(
     key_max_size: usize,
     max_keys: usize,

@@ -266,10 +266,6 @@ trait Provider: Debug {
 
     fn describe_customization(&self) -> Cow<'_, str>;
 
-    fn compatible(&self) -> bool {
-        true
-    }
-
     fn get_init_customization(&self) -> InitCustomization;
 }
 

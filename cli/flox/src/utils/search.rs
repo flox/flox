@@ -194,7 +194,6 @@ impl From<Vec<SearchResult>> for DisplayItems {
     }
 }
 
-///
 pub struct DisplaySearchResults {
     /// original search term
     search_term: String,

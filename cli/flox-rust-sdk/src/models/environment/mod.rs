@@ -740,6 +740,7 @@ pub fn path_hash(p: impl AsRef<Path>) -> String {
 /// - TMPDIR will often have a long path, e.g.
 ///   /var/folders/8q/spckhr654cv4xrcv0fxsrlvc0000gn/T/nix-shell.vfDA8u
 /// - /var/run is not writeable
+///
 /// So we use `flox.cache_dir.join("run")` which is typically
 /// `~/.cache/flox/run`
 ///

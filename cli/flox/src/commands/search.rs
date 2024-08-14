@@ -22,9 +22,6 @@ use crate::utils::search::{construct_search_params, manifest_and_lockfile, Displ
 pub(crate) const DEFAULT_SEARCH_LIMIT: Option<NonZeroU8> = NonZeroU8::new(10);
 const FLOX_SHOW_HINT: &str = "Use 'flox show <package>' to see available versions";
 
-#[derive(Bpaf, Clone)]
-pub struct ChannelArgs {}
-
 // Search for packages to install
 #[derive(Debug, Bpaf, Clone)]
 pub struct Search {

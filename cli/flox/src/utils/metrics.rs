@@ -379,6 +379,7 @@ pub trait Connection: Debug + Any + Send + Sync {
     /// A helper trampoline to downcast [Box<dyn Connection>] to a known type
     ///
     /// This is used in tests to retrieve [tests::TestConnection] from a [Client]
+    #[allow(unused)] // used in tests
     fn into_any(self: Box<Self>) -> Box<dyn Any>;
 }
 
