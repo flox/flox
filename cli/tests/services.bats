@@ -265,6 +265,8 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
+    # Wait for completion so that we indicate "start" instead of "restart"
+    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
     "$FLOX_BIN" services restart one
 EOF
 )
@@ -283,6 +285,8 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
+    # Wait for completion so that we indicate "start" instead of "restart"
+    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed two:Completed
     "$FLOX_BIN" services restart one two
 EOF
 )
@@ -302,6 +306,8 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
+    # Wait for completion so that we indicate "start" instead of "restart"
+    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed two:Completed sleeping:Running
     "$FLOX_BIN" services restart
 EOF
 )
@@ -402,6 +408,8 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
+    # Wait for completion so that we indicate "start" instead of "restart"
+    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
     "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
     "$FLOX_BIN" services restart one
 EOF
