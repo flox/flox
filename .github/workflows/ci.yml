@@ -153,6 +153,7 @@ jobs:
       #   - a cargo-built debug binary is used, like you would in local development
       #   - envrionment variables unskip some tests against live systems
       - name: "CLI Integration Tests"
+        timeout-minutes: 30
         env:
           RUST_BACKTRACE: 1
           AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.MANAGED_AUTH0_FLOX_DEV_CLIENT_SECRET }}"
@@ -368,6 +369,7 @@ jobs:
           nix copy --extra-experimental-features 'nix-command' --to "$CONFIGURE_NIX_SUBSTITUTER" ./result
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
+        timeout-minutes: 30
         run: |
           git clean -xfd
           ssh github@$REMOTE_SERVER \
