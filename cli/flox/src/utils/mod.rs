@@ -7,7 +7,6 @@ use std::time::Duration;
 use once_cell::sync::Lazy;
 
 pub mod colors;
-mod completion;
 pub mod dialog;
 pub mod didyoumean;
 pub mod errors;
