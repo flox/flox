@@ -159,6 +159,10 @@ jobs:
           AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.MANAGED_AUTH0_FLOX_DEV_CLIENT_SECRET }}"
         run: nix develop -L --no-update-lock-file --command just integ-tests
 
+      - name: "Capture process tree for failing tests"
+        if: ${{ failure() }}
+        run: nix develop -L --no-update-lock-file --command pstree
+
   nix-build:
     name: "Nix build"
     runs-on: "ubuntu-latest"
