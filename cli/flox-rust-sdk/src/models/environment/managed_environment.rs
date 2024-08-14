@@ -2160,6 +2160,7 @@ mod test {
     /// - branch at commit 1
     /// - rev at commit 1
     /// - local_rev at commit 2
+    ///
     /// ensure_branch resets the branch to commit 2
     #[test]
     fn test_ensure_branch_resets_branch() {
@@ -2204,6 +2205,7 @@ mod test {
     /// - branch_2 does not exist
     /// - rev at commit 1
     /// - local_rev at commit 1
+    ///
     /// ensure_branch creates branch_2 at commit 1
     #[test]
     fn test_ensure_branch_creates_branch() {

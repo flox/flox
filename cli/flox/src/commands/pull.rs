@@ -910,7 +910,7 @@ mod tests {
     /// When
     /// - the environment being pulled doesn't support the current system
     /// - the environment is v1
-    /// The user should be prompted to add the system but not migrate.
+    ///   The user should be prompted to add the system but not migrate.
     #[test]
     fn handle_pull_result_migration_skipped() {
         let owner = "owner".parse().unwrap();

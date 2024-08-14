@@ -425,7 +425,7 @@ impl Node {
 
     /// Returns:
     /// 1. A message describing what version of nodejs Flox found requested to
-    /// include in the prompt.
+    ///    include in the prompt.
     /// 2. The version of nodejs Flox would install
     /// 3. Whether the message says Flox detected package.json (to avoid
     ///    printing that message twice)

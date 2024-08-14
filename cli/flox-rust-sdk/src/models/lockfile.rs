@@ -106,9 +106,9 @@ impl LockedManifest {
     }
 }
 
-impl ToString for LockedManifest {
-    fn to_string(&self) -> String {
-        serde_json::json!(self).to_string()
+impl Display for LockedManifest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::json!(self))
     }
 }
 
@@ -823,7 +823,7 @@ impl LockedManifestCatalog {
             })
             .filter_map(|(install_id, system)| {
                 seed_locked_packages
-                    .get(&(&install_id, &system.to_string()))
+                    .get(&(install_id, &system.to_string()))
                     .map(|(_, locked_package)| (*locked_package).to_owned())
             })
             .collect::<Vec<_>>();
@@ -836,7 +836,7 @@ impl LockedManifestCatalog {
     /// * Flattens `Group(Page(PackageResolutionInfo+)+)` into `LockedPackageCatalog+`
     /// * Adds a `system` field to each locked package.
     /// * Converts [serde_json::Value] based `outputs` and `outputs_to_install` fields
-    /// into [`IndexMap<String, String>`] and [`Vec<String>`] respectively.
+    ///   into [`IndexMap<String, String>`] and [`Vec<String>`] respectively.
     ///
     /// TODO: handle results from multiple pages
     ///       currently there is no api to request packages from specific pages

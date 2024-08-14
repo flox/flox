@@ -65,21 +65,17 @@ pub enum EditAction {
         name: EnvironmentName,
     },
 
-    Sync {
-        /// Create a new generation from the current local environment
-        ///
-        /// (Only available for managed environments)
-        #[bpaf(long, short)]
-        sync: (),
-    },
+    /// Create a new generation from the current local environment
+    ///
+    /// (Only available for managed environments)
+    #[bpaf(long, short)]
+    Sync,
 
-    Reset {
-        /// Reset the environment to the current generation
-        ///
-        /// (Only available for managed environments)
-        #[bpaf(long)]
-        reset: (),
-    },
+    /// Reset the environment to the current generation
+    ///
+    /// (Only available for managed environments)
+    #[bpaf(long)]
+    Reset,
 }
 
 impl Edit {
