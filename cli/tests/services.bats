@@ -753,7 +753,8 @@ EOF
 
 @test "activate services: shows warning when services already running" {
   setup_sleeping_services
-  "$FLOX_BIN" activate -s -- sleep infinity &
+  mkfifo fifo
+  "$FLOX_BIN" activate -s -- echo \>\> fifo &
   activate_pid="$!"
   # Make sure the first `process-compose` gets up and running
   for i in {1..5}; do
@@ -772,7 +773,7 @@ EOF
 
   # Technically this should be a teardown step
   # The test will hang forever if it fails and doesn't get here
-  kill -SIGINT "$activate_pid"
+  read < fifo
 }
 
 # ---------------------------------------------------------------------------- #
@@ -1284,7 +1285,8 @@ EOF
 
   # Edit the manifest adding a second service and changing the value of FOO.
   # Then start services again.
-  "$FLOX_BIN" activate -s -- sleep infinity &
+  mkfifo fifo
+  "$FLOX_BIN" activate -s -- echo \>\> fifo &
   activate_pid="$!"
 
   # Make sure we avoid a race of service one failing to complete
@@ -1347,5 +1349,5 @@ EOF
 
   # Technically this should be a teardown step
   # The test will hang forever if it fails and doesn't get here
-  kill -SIGINT "$activate_pid"
+  read < fifo
 }
