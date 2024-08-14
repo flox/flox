@@ -21,8 +21,6 @@ mod stop;
 pub enum ServicesCommandsError {
     #[error("Services are not currently supported for remote environments.")]
     RemoteEnvsNotSupported,
-    #[error("Services are not enabled in this environment.")]
-    FeatureFlagDisabled,
     #[error(
         "Cannot {action} services for an environment that is not activated.
 
@@ -60,10 +58,6 @@ pub enum ServicesCommands {
 impl ServicesCommands {
     #[instrument(name = "services", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
-        if !flox.features.services {
-            return Err(ServicesCommandsError::FeatureFlagDisabled.into());
-        }
-
         match self {
             ServicesCommands::Restart(args) => args.handle(config, flox).await?,
             ServicesCommands::Start(args) => args.handle(config, flox).await?,

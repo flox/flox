@@ -36,7 +36,6 @@ const PROCESS_NEVER_EXIT_NAME: &str = "flox_never_exit";
 static SLEEP_BIN: Lazy<String> =
     Lazy::new(|| env::var("SLEEP_BIN").unwrap_or(env!("SLEEP_BIN").to_string()));
 
-pub const SERVICES_ENV_VAR: &str = "FLOX_FEATURES_SERVICES";
 pub const SERVICE_CONFIG_FILENAME: &str = "service-config.yaml";
 pub static PROCESS_COMPOSE_BIN: Lazy<String> = Lazy::new(|| {
     env::var("PROCESS_COMPOSE_BIN").unwrap_or(env!("PROCESS_COMPOSE_BIN").to_string())

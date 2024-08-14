@@ -1053,9 +1053,7 @@ impl CoreEnvironment<ReadOnly> {
                 .map_err(CoreEnvironmentError::DeserializeManifest)?;
             match manifest {
                 TypedManifest::Catalog(manifest) => {
-                    if flox.features.services {
-                        manifest.services.validate()?;
-                    }
+                    manifest.services.validate()?;
                 },
                 TypedManifest::Pkgdb(_) => {
                     Err(CoreEnvironmentError::Version0NotSupported)?;
@@ -1747,7 +1745,6 @@ mod tests {
     #[test]
     fn built_environments_generate_service_config() {
         let (mut flox, _dir) = flox_instance_with_optional_floxhub_and_client(None, true);
-        flox.features.services = true;
 
         // Manifest with a services section
         let contents = indoc! {r#"
@@ -2366,7 +2363,6 @@ mod tests {
     #[test]
     fn edit_fails_when_daemon_has_no_shutdown_command() {
         let (mut flox, _dir) = flox_instance_with_optional_floxhub_and_client(None, true);
-        flox.features.services = true;
         let initial_manifest = r#"
             version = 1
         "#;
