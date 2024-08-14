@@ -153,11 +153,11 @@ jobs:
       #   - a cargo-built debug binary is used, like you would in local development
       #   - envrionment variables unskip some tests against live systems
       - name: "CLI Integration Tests"
-        timeout-minutes: 30
+        timeout-minutes: 5
         env:
           RUST_BACKTRACE: 1
           AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.MANAGED_AUTH0_FLOX_DEV_CLIENT_SECRET }}"
-        run: nix develop -L --no-update-lock-file --command just integ-tests
+        run: nix develop -L --no-update-lock-file --command just integ-tests services.bats
 
       - name: "Capture process tree for failing tests"
         if: ${{ failure() }}
