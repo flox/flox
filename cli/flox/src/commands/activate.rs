@@ -42,7 +42,6 @@ use super::{
     EnvironmentSelect,
     UninitializedEnvironment,
 };
-use crate::commands::services::ServicesCommandsError;
 use crate::commands::{ensure_environment_trust, ConcreteEnvironment, EnvironmentSelectError};
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::dialog::{Dialog, Spinner};
@@ -85,9 +84,7 @@ pub struct Activate {
 impl Activate {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("activate");
-        if !flox.features.services && self.start_services {
-            return Err(ServicesCommandsError::FeatureFlagDisabled.into());
-        }
+
         let concrete_environment = match self.environment.to_concrete_environment(&flox) {
             Ok(concrete_environment) => concrete_environment,
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
@@ -302,7 +299,7 @@ impl Activate {
                 debug!("not starting services for in-place activation");
                 message::warning("Skipped starting services. Services are not yet supported for in place activations.");
             }
-            if flox.features.services && !manifest.services.is_empty() && !in_place {
+            if !manifest.services.is_empty() && !in_place {
                 if self.start_services {
                     supported_environment(&flox, &self.environment)?; // Error for remote envs.
                 }

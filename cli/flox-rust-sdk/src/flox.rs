@@ -64,9 +64,6 @@ pub struct Features {
     pub search_strategy: SearchStrategy,
     #[serde(default)]
     pub use_catalog: UseCatalog,
-    /// Whether to enable services
-    #[serde(default)]
-    pub services: bool,
 }
 
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, derive_more::Deref)]

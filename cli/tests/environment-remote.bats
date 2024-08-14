@@ -345,8 +345,6 @@ EOF
 
 # bats test_tags=remote,remote:services
 @test "services: not currently supported for remote environments" {
-  export FLOX_FEATURES_SERVICES=true
-
   floxhub_setup "flox"
   OWNER=flox make_empty_remote_env
 

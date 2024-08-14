@@ -125,15 +125,6 @@ setup_start_counter_services() {
 #
 # ---------------------------------------------------------------------------- #
 
-@test "feature flag works" {
-  RUST_LOG=flox=debug run "$FLOX_BIN" init
-  refute_output --partial "service management enabled"
-  unset output
-  "$FLOX_BIN" delete -f
-  RUST_LOG=flox=debug FLOX_FEATURES_SERVICES=true run "$FLOX_BIN" init
-  assert_output --partial "service management enabled"
-}
-
 @test "can call process-compose" {
   run "$PROCESS_COMPOSE_BIN" version
   assert_success
@@ -141,7 +132,6 @@ setup_start_counter_services() {
 }
 
 @test "process-compose can run generated config file" {
-  export FLOX_FEATURES_SERVICES=true
   "$FLOX_BIN" init
   run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
   assert_success
@@ -153,20 +143,7 @@ EOF
   [ -e hello.txt ]
 }
 
-@test "'flox activate -s' error without feature flag" {
-  export FLOX_FEATURES_SERVICES=false
-  "$FLOX_BIN" init
-  manifest_file="${TESTS_DIR}/services/touch_file.toml"
-  run "$FLOX_BIN" edit -f "$manifest_file"
-  assert_success
-  unset output
-  run "$FLOX_BIN" activate -s
-  assert_failure
-  assert_line "❌ ERROR: Services are not enabled in this environment."
-}
-
 @test "can start redis-server and access it using redis-cli" {
-  export FLOX_FEATURES_SERVICES=true
 
   run "$FLOX_BIN" init
   assert_success
@@ -189,7 +166,6 @@ EOF
 }
 
 @test "services aren't started unless requested" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   RUST_LOG=debug run "$FLOX_BIN" activate -- true
@@ -198,7 +174,6 @@ EOF
 }
 
 @test "all imperative commands error when no services are defined" {
-  export FLOX_FEATURES_SERVICES=true
   run "$FLOX_BIN" init
 
   commands=("logs" "restart" "start" "status" "stop")
@@ -211,24 +186,10 @@ EOF
   done
 }
 
-@test "all imperative commands error without feature flag" {
-  run "$FLOX_BIN" init
-
-  commands=("logs" "restart" "start" "status" "stop")
-  for command in "${commands[@]}"; do
-    echo "Testing: flox services $command"
-    # NB: No --start-services.
-    run "$FLOX_BIN" activate -- "$FLOX_BIN" services "$command"
-    assert_failure
-    assert_line "❌ ERROR: Services are not enabled in this environment."
-  done
-}
-
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=services:restart
 @test "restart: errors before restarting if any service doesn't exist" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -250,7 +211,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: errors when used outside an activation" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   run "$FLOX_BIN" services restart one
@@ -260,7 +220,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: restarts a single service" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -280,7 +239,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: restarts multiple services" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -301,7 +259,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: restarts all services (incl. running and completed)" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -323,7 +280,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: restarts stopped services" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -341,7 +297,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: starts a specified service when activation hasn't already started services" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   # NB: No --start-services.
@@ -361,7 +316,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: status still works when activation (re)starts a single shortlived service" {
-  export FLOX_FEATURES_SERVICES=true
 
   run "$FLOX_BIN" init
   assert_success
@@ -382,7 +336,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: starts all services when activation hasn't already started services" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   # NB: No --start-services.
@@ -403,7 +356,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: does not reload config when some services are still running" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -425,7 +377,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: reloads config when all services are restarted" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -441,7 +392,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: reloads config when given no service and all services are stopped" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -458,7 +408,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: reloads config when given single service and all services are stopped" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -475,7 +424,6 @@ EOF
 
 # bats test_tags=services:restart
 @test "restart: errors when given service isn't in reloaded config" {
-  export FLOX_FEATURES_SERVICES=true
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -495,7 +443,6 @@ EOF
 
 # bats test_tags=services:stop
 @test "stop: errors if a service doesn't exist" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -509,7 +456,6 @@ EOF
 
 # bats test_tags=services:stop
 @test "stop: errors before stopping if any service doesn't exist" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -528,7 +474,6 @@ EOF
 
 # bats test_tags=services:stop
 @test "stop: errors if service socket isn't responding" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
@@ -542,7 +487,6 @@ EOF
 
 # bats test_tags=services:stop
 @test "stop: stops all services" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -560,7 +504,6 @@ EOF
 
 # bats test_tags=services:stop
 @test "stop: stops a single service" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -577,7 +520,6 @@ EOF
 
 # bats test_tags=services:stop
 @test "stop: stops multiple services" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -595,7 +537,6 @@ EOF
 
 # bats test_tags=services:stop
 @test "stop: errors if service is already stopped" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
@@ -614,7 +555,6 @@ EOF
 
 # bats test_tags=services:logs:tail:exactly-one-service
 @test "logs: tail: requires exactly one service" {
-  export FLOX_FEATURES_SERVICES=true
   setup_logging_services
   run "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
@@ -627,7 +567,6 @@ EOF
 
 # bats test_tags=services:logs:tail:exactly-one-service
 @test "logs: tail: requires exactly one service - error on multiple services" {
-  export FLOX_FEATURES_SERVICES=true
   setup_logging_services
 
   # try running with multiple services specified
@@ -643,7 +582,6 @@ EOF
 
 # bats test_tags=services:logs:tail:exactly-one-service
 @test "logs: tail: requires exactly one service - error without services" {
-  export FLOX_FEATURES_SERVICES=true
   setup_logging_services
 
   # Try running without services specified
@@ -659,7 +597,6 @@ EOF
 
 # bats test_tags=services:logs:tail:no-such-service
 @test "logs: tail: requires exactly one service - error if service doesn't exist" {
-  export FLOX_FEATURES_SERVICES=true
   setup_logging_services
 
   # Try running with a nonexisting services specified
@@ -677,7 +614,6 @@ EOF
 # Assert that flox is _not_ waiting for the service to finish.
 # bats test_tags=services:logs:tail:instant
 @test "logs: tail does not wait" {
-  export FLOX_FEATURES_SERVICES=true
   setup_logging_services
 
   run --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
@@ -703,7 +639,6 @@ EOF
 # This is an exception to explicitly test the blocking behavior of `logs --follow`
 # bats test_tags=services:logs:follow:blocks
 @test "logs: follow will wait for logs" {
-  export FLOX_FEATURES_SERVICES=true
   setup_logging_services
 
   # We expect flox to block and be killed by `timeout`
@@ -727,7 +662,6 @@ EOF
 
 # bats test_tags=services:logs:follow:combines
 @test "logs: follow shows logs for multiple services" {
-  export FLOX_FEATURES_SERVICES=true
   setup_logging_services
 
   mkfifo ./resume-one.pipe
@@ -755,7 +689,6 @@ EOF
 
 # bats test_tags=services:logs:follow:combines
 @test "logs: follow shows logs for all services if no names provided" {
-  export FLOX_FEATURES_SERVICES=true
   setup_logging_services
 
   mkfifo ./resume-one.pipe
@@ -785,7 +718,6 @@ EOF
 
 # bats test_tags=services:status
 @test "status: lists the statuses for services" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
@@ -801,7 +733,6 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "activate services: shows warning when services already running" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
   dummy_socket="$PWD/sock.sock"
   touch "$dummy_socket"
@@ -814,7 +745,6 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 @test "blocking: error message when startup times out" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
   export _FLOX_SERVICES_ACTIVATE_TIMEOUT=0.1
   export _FLOX_SERVICES_LOG_FILE="$PROJECT_DIR/logs.txt"
@@ -831,7 +761,6 @@ EOF
 }
 
 @test "blocking: activation blocks on socket creation" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
   export _FLOX_SERVICES_LOG_FILE="$PROJECT_DIR/logs.txt"
   # This is run immediately after activation starts, which is about as good
@@ -848,7 +777,6 @@ EOF
 }
 
 @test "blocking: process-compose writes logs to file" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
   export _FLOX_SERVICES_LOG_FILE="$PROJECT_DIR/logs.txt"
   "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
@@ -870,7 +798,6 @@ EOF
 }
 
 @test "watchdog: lives as long as the activation" {
-  export FLOX_FEATURES_SERVICES=true
   setup_sleeping_services
   export -f watchdog_pids_called_with_arg
   SHELL="bash" run --separate-stderr "$FLOX_BIN" activate -- bash <(cat <<'EOF'
@@ -1041,7 +968,6 @@ EOF
 }
 
 @test "start: errors if service doesn't exist" {
-  export FLOX_FEATURES_SERVICES=true
 
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
@@ -1071,7 +997,6 @@ EOF
 # in Bash
 @test "start: only starts specified services" {
 
-  export FLOX_FEATURES_SERVICES=true
 
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
@@ -1105,7 +1030,6 @@ EOF
 
 @test "start: defaults to all services" {
 
-  export FLOX_FEATURES_SERVICES=true
 
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
@@ -1136,7 +1060,6 @@ EOF
 }
 
 @test "start: status still works when activation starts a single shortlived service" {
-  export FLOX_FEATURES_SERVICES=true
 
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
@@ -1165,7 +1088,6 @@ EOF
 
 @test "start: picks up changes after environment modification when all services have stopped" {
 
-  export FLOX_FEATURES_SERVICES=true
 
   MANIFEST_CONTENTS_1="$(cat << "EOF"
     version = 1
@@ -1197,7 +1119,6 @@ EOF
 
 @test "start: does not pick up changes after environment modification when some services still running" {
 
-  export FLOX_FEATURES_SERVICES=true
 
   MANIFEST_CONTENTS_1="$(cat << "EOF"
     version = 1
@@ -1219,7 +1140,6 @@ EOF
 
 
 @test "start: shuts down existing process-compose" {
-  export FLOX_FEATURES_SERVICES=true
 
   MANIFEST_CONTENTS_1="$(cat << "EOF"
     version = 1
@@ -1240,7 +1160,6 @@ EOF
 
 
 @test "start: watchdog shuts down process-compose started by start" {
-  export FLOX_FEATURES_SERVICES=true
 
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
@@ -1278,14 +1197,13 @@ EOF
 }
 
 @test "kills daemon process" {
-  export FLOX_FEATURES_SERVICES=true
 
   MANIFEST_CONTENTS="$(cat <<"EOF"
     version = 1
 
     [install]
     overmind.pkg-path = "overmind"
-    
+
     [services.overmind]
     command = "overmind start -D"
     is-daemon = true
