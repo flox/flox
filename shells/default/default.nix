@@ -8,6 +8,7 @@
   mkShell,
   procps,
   pre-commit-check,
+  pstree,
   shfmt,
   mitmproxy,
   cargo-nextest,
@@ -48,6 +49,7 @@
       yq
       cargo-nextest
       procps
+      pstree
     ];
 in
   mkShell (
