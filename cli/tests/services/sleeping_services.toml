@@ -1,7 +1,7 @@
 version = 1
 
 [services.one]
-command = "sleep infinity"
+command = "sleep 11111111"
 
 [services.two]
-command = "sleep infinity"
+command = "sleep 22222222"

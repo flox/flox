@@ -801,6 +801,9 @@ EOF
 
 @test "activate services: shows warning when services already running" {
   export FLOX_FEATURES_SERVICES=true
+  export FLOX_DATA_DIR=/tmp/flox-data
+  rm -rf "$FLOX_DATA_DIR"
+  mkdir "$FLOX_DATA_DIR"
   setup_sleeping_services
   mkfifo fifo
   "$FLOX_BIN" activate -s -- echo \>\> fifo &
