@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -9,8 +9,10 @@ use clap::Parser;
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::env_registry::{
     deregister_activation,
+    read_environment_registry,
     register_activation,
     ActivationPid,
+    EnvRegistryError,
 };
 use flox_rust_sdk::providers::services::PROCESS_COMPOSE_BIN;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
@@ -121,8 +123,20 @@ fn main() -> Result<(), Error> {
 
     // Register activation PID so that we can track last one out
     let activation = ActivationPid::from(args.pid);
+    // Check if our original parent has already exited.
+    // If it has, we can go ahead and cleanup.
+    // Note that this check should come after we call prctl or kqueue so that
+    // there isn't a race between checking ppid and calling prctl or kqueue.
     if !activation.is_current_process_parent() {
-        return Err(anyhow!("detected that watchdog had unexpected parent"));
+        debug!("parent has already exited");
+        let reg = read_environment_registry(&args.registry_path)?.unwrap_or_default();
+        let entry = reg
+            .entry_for_hash(&args.dot_flox_hash)
+            .ok_or(EnvRegistryError::UnknownKey(args.dot_flox_hash))?;
+        if entry.activations.is_empty() {
+            cleanup(args.socket_path);
+        }
+        return Ok(());
     }
     register_activation(&args.registry_path, &args.dot_flox_hash, activation)?;
 
@@ -155,28 +169,7 @@ fn main() -> Result<(), Error> {
             .context("failed to deregister activation")?;
     debug!(n = remaining_activations, "remaining activations");
     if remaining_activations == 0 {
-        if args.socket_path.exists() {
-            let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
-            cmd.arg("down");
-            cmd.arg("--unix-socket");
-            cmd.arg(&args.socket_path);
-            cmd.env("NO_COLOR", "1");
-            match cmd.output() {
-                Ok(output) => {
-                    if !output.status.success() {
-                        error!(
-                            code = output.status.code(),
-                            "failed to run process-compose shutdown command"
-                        );
-                    }
-                },
-                Err(err) => {
-                    error!(%err, "failed to run process-compose shutdown command");
-                },
-            }
-        } else {
-            debug!(reason = "no socket", "did not shut down process-compose");
-        }
+        cleanup(args.socket_path);
     } else {
         debug!(
             reason = "remaining activations",
@@ -187,6 +180,36 @@ fn main() -> Result<(), Error> {
     // Exit
     info!("exiting");
     Ok(())
+}
+
+// If the activation for a watchdog gets removed from the registry as stale by a different watchdog,
+// multiple watchdogs could perform cleanup.
+// The following can be run multiple times without issue.
+fn cleanup(socket_path: impl AsRef<Path>) {
+    debug!("running cleanup");
+    let socket_path = socket_path.as_ref();
+    if socket_path.exists() {
+        let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
+        cmd.arg("down");
+        cmd.arg("--unix-socket");
+        cmd.arg(socket_path);
+        cmd.env("NO_COLOR", "1");
+        match cmd.output() {
+            Ok(output) => {
+                if !output.status.success() {
+                    error!(
+                        code = output.status.code(),
+                        "failed to run process-compose shutdown command"
+                    );
+                }
+            },
+            Err(err) => {
+                error!(%err, "failed to run process-compose shutdown command");
+            },
+        }
+    } else {
+        debug!(reason = "no socket", "did not shut down process-compose");
+    }
 }
 
 /// We want to make sure that the watchdog is detached from the terminal in case it sends
