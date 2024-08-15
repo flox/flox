@@ -803,7 +803,7 @@ EOF
   assert_output --partial "flox_never_exit"
 }
 
-@test "blocking: process-compose writes logs to file" {
+@test "activate: child processes write logs to .flox/log" {
   setup_sleeping_services
   "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
@@ -811,8 +811,17 @@ EOF
     # start and write to logs
 EOF
 )
+
   # Check that a startup log line shows up in the logs
   run grep "process=flox_never_exit" "${PROJECT_DIR}"/.flox/log/services.*.log
+  assert_success
+
+  # Poll because watchdog may not have started by the time the activation finishes.
+  run timeout 1s bash -c "
+    while ! grep 'flox_watchdog: starting' \"$PROJECT_DIR\"/.flox/log/watchdog.*.log; do
+      sleep 0.1
+    done
+  "
   assert_success
 }
 

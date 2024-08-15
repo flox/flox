@@ -360,7 +360,7 @@ impl Activate {
         if !in_place && !is_ephemeral {
             Activate::launch_watchdog(
                 &flox,
-                environment.cache_path()?.to_path_buf(),
+                environment.log_path()?.to_path_buf(),
                 &path_hash(environment.dot_flox_path()),
                 socket_path,
             )?;
@@ -392,7 +392,7 @@ impl Activate {
     /// Launch the watchdog process
     fn launch_watchdog(
         flox: &Flox,
-        cache_path: PathBuf,
+        log_dir: PathBuf,
         path_hash: &str,
         socket_path: impl AsRef<Path>,
     ) -> Result<()> {
@@ -409,7 +409,7 @@ impl Activate {
 
         // Set the log path
         let pid = getpid();
-        let log_path = cache_path.join(format!("watchdog.{}.log", pid.as_raw()));
+        let log_path = log_dir.join(format!("watchdog.{}.log", pid.as_raw()));
         cmd.arg("--logs");
         cmd.arg(log_path);
         cmd.env("_FLOX_WATCHDOG_LOG_LEVEL", "debug"); // always write to log file
