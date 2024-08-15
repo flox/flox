@@ -169,8 +169,6 @@ impl Edit {
         Ok(())
     }
 
-    // TODO: having to pass environment + active_environment + description
-    // instead of just environment is a pain
     async fn edit_manifest(
         flox: &Flox,
         environment: &mut ConcreteEnvironment,
