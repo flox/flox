@@ -21,7 +21,7 @@
   targetPlatform,
   pname,
   crateName,
-  KLAUS_BIN ? null,
+  WATCHDOG_BIN ? null,
 }: let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
 
@@ -60,10 +60,10 @@
         if flox-pkgdb == null
         then "pkgdb"
         else "${flox-pkgdb}/bin/pkgdb";
-      KLAUS_BIN =
-        if KLAUS_BIN == null
-        then "klaus"
-        else KLAUS_BIN;
+      WATCHDOG_BIN =
+        if WATCHDOG_BIN == null
+        then "flox-watchdog"
+        else WATCHDOG_BIN;
       FLOX_ZDOTDIR = flox-activation-scripts + activate.d/zdotdir;
       PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
       # [sic] nix handles `BASH_` variables specially,
@@ -145,7 +145,7 @@ in
       src = flox-src;
       cargoExtraArgs = "-p ${crateName}";
 
-      inherit KLAUS_BIN;
+      inherit WATCHDOG_BIN;
 
       cargoArtifacts = cargoDepsArtifacts;
 
@@ -173,7 +173,7 @@ in
       # sed: Removes rust-toolchain from binary. Likely due to toolchain overriding.
       #   unclear about the root cause, so this is a hotfix.
       postInstall =
-        if KLAUS_BIN != null
+        if WATCHDOG_BIN != null
         then ''
           installShellCompletion --cmd flox                         \
             --bash <( "$out/bin/flox" --bpaf-complete-style-bash; ) \
@@ -188,7 +188,7 @@ in
 
       doInstallCheck = false;
       postInstallCheck =
-        if KLAUS_BIN != null
+        if WATCHDOG_BIN != null
         then ''
           # Quick unit test to ensure that we are not using any "naked"
           # commands within our scripts. Doesn't hit all codepaths but
@@ -229,7 +229,7 @@ in
           if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             PATH="$( git rev-parse --show-toplevel; )/cli/target/debug":$PATH;
             REPO_ROOT="$( git rev-parse --show-toplevel; )";
-            KLAUS_BIN="$REPO_ROOT/cli/target/debug/klaus";
+            WATCHDOG_BIN="$REPO_ROOT/cli/target/debug/flox-watchdog";
           fi
 
         '';

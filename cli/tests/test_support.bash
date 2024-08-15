@@ -174,14 +174,14 @@ common_file_teardown() {
 teardown_file() { common_file_teardown; }
 
 common_test_teardown() {
-  # wait for any running klaus proceses to finish
+  # wait for any running flox-watchdog proceses to finish
   if [[ -n "${FLOX_DATA_DIR:-}" ]]; then
     # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
     # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
     # grep command itself doesn't get listed when we search for the data dir.
     # The `cut` just extracts the PID.
     local pids
-    pids="$(ps -eo pid,args | grep klaus | grep ${FLOX_DATA_DIR?} | cut -d' ' -f1)"
+    pids="$(ps -eo pid,args | grep flox-watchdog | grep ${FLOX_DATA_DIR?} | cut -d' ' -f1)"
     if [ -n "${pids?}" ]; then
       tries=0
       while true; do
@@ -190,7 +190,7 @@ common_test_teardown() {
           break
         else
           if [[ $tries -gt 1000 ]]; then
-            echo "ERROR: klaus processes did not finish after 10 seconds."
+            echo "ERROR: flox-watchdog processes did not finish after 10 seconds."
             break
           fi
           sleep 0.01;

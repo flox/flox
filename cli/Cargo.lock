@@ -1135,6 +1135,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "flox-watchdog"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "clap_derive",
+ "flox-rust-sdk",
+ "kqueue",
+ "nix",
+ "once_cell",
+ "sentry",
+ "serde",
+ "signal-hook",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1818,24 +1836,6 @@ dependencies = [
  "serde",
  "serde_json",
  "simple_asn1",
-]
-
-[[package]]
-name = "klaus"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "clap_derive",
- "flox-rust-sdk",
- "kqueue",
- "nix",
- "once_cell",
- "sentry",
- "serde",
- "signal-hook",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

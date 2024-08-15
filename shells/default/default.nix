@@ -14,7 +14,7 @@
   cargo-nextest,
   flox-cli,
   flox-cli-tests,
-  flox-klaus,
+  flox-watchdog,
   flox-pkgdb,
   flox-manpages,
   ci ? false,
@@ -24,7 +24,7 @@
   # For use in GitHub Actions and local development.
   ciPackages =
     flox-pkgdb.ciPackages
-    ++ flox-klaus.ciPackages
+    ++ flox-watchdog.ciPackages
     ++ flox-pkgdb.ciPackages
     ++ flox-cli.ciPackages
     ++ [
@@ -32,7 +32,7 @@
         PROJECT_TESTS_DIR = "/cli/tests";
         PKGDB_BIN = null;
         FLOX_BIN = null;
-        KLAUS_BIN = null;
+        WATCHDOG_BIN = null;
       })
     ];
 
@@ -60,7 +60,7 @@ in
         flox-pkgdb
         (flox-cli.override {
           flox-pkgdb = null;
-          flox-klaus = null;
+          flox-watchdog = null;
         })
       ];
 
@@ -68,7 +68,7 @@ in
 
       shellHook =
         flox-pkgdb.devShellHook
-        + flox-klaus.devShellHook
+        + flox-watchdog.devShellHook
         + flox-cli.devShellHook
         + pre-commit-check.shellHook
         + ''
@@ -79,6 +79,6 @@ in
       inherit MANUALLY_GENERATED;
     }
     // flox-pkgdb.devEnvs
-    // flox-klaus.devEnvs
+    // flox-watchdog.devEnvs
     // flox-cli.devEnvs
   )

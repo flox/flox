@@ -15,7 +15,7 @@
   expect,
   findutils,
   flox-pkgdb,
-  flox-klaus,
+  flox-watchdog,
   flox-cli,
   gawk,
   git,
@@ -42,7 +42,7 @@
   NIX_BIN ? "${nix}/bin/nix",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   FLOX_BIN ? "${flox-cli}/bin/flox",
-  KLAUS_BIN ? "${flox-klaus}/bin/klaus",
+  WATCHDOG_BIN ? "${flox-watchdog}/bin/flox-watchdog",
 }: let
   batsWith = bats.withLibraries (p: [
     p.bats-assert
@@ -153,9 +153,9 @@ in
       else "export PKGDB_BIN='${PKGDB_BIN}';"
     }
     ${
-      if KLAUS_BIN == null
-      then "export KLAUS_BIN='klaus';"
-      else "export KLAUS_BIN='${KLAUS_BIN}';"
+      if WATCHDOG_BIN == null
+      then "export WATCHDOG_BIN='flox-watchdog';"
+      else "export WATCHDOG_BIN='${WATCHDOG_BIN}';"
     }
     ${
       if FLOX_BIN == null
@@ -167,7 +167,7 @@ in
     usage() {
           cat << EOF
     Usage: $0 [--flox <FLOX BINARY>| -F <FLOX BINARY>] \
-              [--klaus <KLAUS BINARY | -K <KLAUS BINARY>] \
+              [--watchdog <WATCHDOG BINARY | -K <WATCHDOG BINARY>] \
               [--pkgdb <PKGDB BINARY>| -P <PKGDB BINARY>] \
               [--nix <NIX BINARY>| -N <NIX BINARY>] \
               [--input-data <INPUT DATA> | -I <INPUT DATA>] \
@@ -178,7 +178,7 @@ in
 
     Available options:
         -F, --flox           Path to flox binary (Default: $FLOX_BIN)
-        -K, --klaus          Path to the klaus binary (Default: $KLAUS_BIN)
+        -K, --watchdog       Path to the watchdog binary (Default: $WATCHDOG_BIN)
         -P, --pkgdb          Path to pkgdb binary (Default: $PKGDB_BIN)
         -N, --nix            Path to nix binary (Default: $NIX_BIN)
         -I, --input-data     Path to the input data directory (Default: $INPUT_DATA)
@@ -196,7 +196,7 @@ in
     while [[ "$#" -gt 0 ]]; do
       case "$1" in
         -[fF]|--flox)           export FLOX_BIN="''${2?}"; shift; ;;
-        -[kK]|--klaus)          export KLAUS_BIN="''${2?}"; shift; ;;
+        -[kK]|--watchdog)       export WATCHDOG_BIN="''${2?}"; shift; ;;
         -[pP]|--pkgdb)          export PKGDB_BIN="''${2?}"; shift; ;;
         -[nN]|--nix)            export NIX_BIN="''${2?}"; shift; ;;
         -[iI]|--input-data)     export INPUT_DATA="''${2?}"; shift; ;;
@@ -241,7 +241,7 @@ in
     {
       echo "''${0##*/}: Running test suite with:";
       echo "  FLOX_BIN:                 $FLOX_BIN";
-      echo "  KLAUS_BIN:                $KLAUS_BIN";
+      echo "  WATCHDOG_BIN:             $WATCHDOG_BIN";
       echo "  PKGDB_BIN:                $PKGDB_BIN";
       echo "  NIX_BIN:                  $NIX_BIN";
       echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
@@ -254,7 +254,7 @@ in
 
     # Run basts either via entr or just a single run
     if [[ -n "''${WATCH:-}" ]]; then
-      find "$TESTS_DIR" "$NIX_BIN" "$PKGDB_BIN" "$KLAUS_BIN" "$FLOX_BIN"    \
+      find "$TESTS_DIR" "$NIX_BIN" "$PKGDB_BIN" "$WATCHDOG_BIN" "$FLOX_BIN"    \
         |${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
     else
       exec -a "$0" ${batsWith}/bin/bats "''${_BATS_ARGS[@]}"    \

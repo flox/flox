@@ -16,18 +16,18 @@
     // rust-internal-deps.passthru.envs;
 in
   craneLib.buildPackage ({
-      pname = "klaus";
+      pname = "flox-watchdog";
       version = envs.FLOX_VERSION;
       src = flox-src;
 
       # Set up incremental compilation
       #
       # Cargo artifacts are built for the union of features used transitively
-      # by `flox` and `klaus`.
+      # by `flox` and `flox-watchdog`.
       # Compiling either separately would result in a different set of features
       # and thus cache misses.
       cargoArtifacts = rust-internal-deps;
-      cargoExtraArgs = "--locked -p klaus -p flox";
+      cargoExtraArgs = "--locked -p flox-watchdog -p flox";
       postPatch = ''
         rm -rf ./flox/*
         cp -rf --no-preserve=mode ${craneLib.mkDummySrc {src = flox-src;}}/flox/* ./flox
@@ -62,7 +62,7 @@ in
       postInstall = ''
         rm -f $out/bin/crane-*
         for target in "$(basename ${rust-toolchain.rust.outPath} | cut -f1 -d- )" ; do
-          sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/klaus
+          sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/flox-watchdog
         done
       '';
 
@@ -89,7 +89,7 @@ in
           if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             PATH="$( git rev-parse --show-toplevel; )/cli/target/debug":$PATH;
             REPO_ROOT="$( git rev-parse --show-toplevel; )";
-            KLAUS_BIN="$REPO_ROOT/cli/target/debug/klaus";
+            WATCHDOG_BIN="$REPO_ROOT/cli/target/debug/flox-watchdog";
           fi
 
         '';
