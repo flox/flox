@@ -20,7 +20,7 @@ flox [<general-options>] activate
 
 # DESCRIPTION
 
-Sets environment variables and aliases, runs hooks,
+Sets environment variables and aliases, runs hooks, starts services,
 and adds `bin` directories to your `$PATH`.
 
 `flox activate` may run in one of three modes:
@@ -38,7 +38,7 @@ and adds `bin` directories to your `$PATH`.
   Flox will determine the parent shell from `$FLOX_SHELL` or otherwise
   automatically determine the parent shell and fall back to `$SHELL`.
 
-`flox activate` currently supports `bash`, `fish`, `tcsh` and `zsh` shells
+`flox activate` currently supports `bash`, `fish`, `tcsh`, and `zsh` shells
 for any of the detection mechanisms described above.
 
 When invoked interactively,
@@ -84,6 +84,18 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
    `flox` automatically knows when to print the activation script to `stdout`,
    so this command is just a debugging aid for users.
 
+`-s`, `--start-services`
+:  Start the services listed in the manifest when activating the environment.
+   If no services are running, the services from the manifest will be started,
+   otherwise a warning will displayed and activation will continue.
+
+   This flag is currently incompatible with "in-place" activations and remote
+   environnments, but these features will be added in the future.
+
+   The services started with this flag will be cleaned up once the last
+   activation of this environment terminates.
+ 
+
 ```{.include}
 ./include/environment-options.md
 ./include/general-options.md
@@ -125,6 +137,9 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
 :   A JSON array containing one object per active environment.
     This is currently an implementation detail
     and its contents are subject to change.
+
+`$FLOX_ACTIVATE_START_SERVICES`
+:   `"true"` if this activation started services, `"false"` otherwise.
 
 ## Variables used by `flox activate`
 

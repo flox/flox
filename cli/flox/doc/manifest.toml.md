@@ -29,6 +29,7 @@ tables:
 - [`[vars]`](#vars)
 - [`[hook]`](#hook)
 - [`[profile]`](#profile)
+- [`[services]`](#services)
 - [`[options]`](#options)
 
 ## `[install]`
@@ -346,6 +347,76 @@ A nested activation can occur when an environment is already active and either
 In this scenario, profile scripts are run a second time.
 Re-running profile scripts allows aliases to be set in subshells that inherit
 from a parent shell with an already active environment.
+
+## `[services]`
+
+The `[services]` section of the manifest allows you to describe the services
+you would like to run as part of your environment e.g. a web server or a
+database. The services you define here use the packages provided by the
+`[install]` section and any variables you've defined in the `[vars]` section or
+`hook.on-activate` script.
+
+The `[services]` section is a table of key-value pairs where the keys determine
+the service names, and the values (service descriptors) determine how to
+configure and run the services.
+
+An example service definition is shown below:
+```toml
+[services.database]
+command = "postgres start"
+vars.PGUSER = "myuser"
+vars.PGPASSWORD = "super-secret"
+vars.PGDATABASE = "mydb"
+vars.PGPORT = "9001"
+```
+
+This would define a service called `database` that configures and starts a
+PostgreSQL database.
+
+The full set of options is show below:
+```
+ServiceDescriptor ::= {
+  command    = STRING
+, vars       = null | Map[STRING, STRING]
+, is-daemon  = null | BOOL
+, shutdown   = null | Shutdown
+}
+
+Shutdown ::= {
+  command = STRING
+}
+```
+
+`command`
+:   The command to run (interpreted by a Bash shell) to start the service. This
+    command can use any environment variables that were set in the `[vars]`
+    section, the `hook.on-activate` script, or the service-specific `vars`
+    table.
+
+`vars`
+:   A table of environment variables to set for the invocation of this specific
+    service. Nothing outside of this service will observe these environment
+    variables.
+
+`is-daemon`
+:   Whether this service spawns a daemon when it starts. Some commands start a
+    background process and then terminate instead of themselves running for an
+    extended period of time. These programs need special handling when it comes
+    time to shut down the services, so you must mark them with the `is-daemon`
+    field. If this field is set to `true` you must also specify the
+    `shutdown.command` field, otherwise the process will continue to run after
+    calling `flox services stop` or after exiting the last activation of the
+    environment.
+
+`shutdown.command`
+:   A command to run to shut down the service instead of delivering the SIGTERM
+    signal to the process. Some programs require special handling to shut down
+    properly e.g. a program that spawns a server process and uses a client to
+    tell the server to shut down. Sending a SIGTERM to a client in that case
+    may not shut down the server. In those cases you may provide a specific
+    shutdown command to run instead of relying on the default behavior of
+    sending a SIGTERM to the service. This field is required if the `is-daemon`
+    field is `true`.
 
 ## `[options]`
 
