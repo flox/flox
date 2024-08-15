@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,7 +13,7 @@ use flox_rust_sdk::models::env_registry::{
     ActivationPid,
     EnvRegistryError,
 };
-use flox_rust_sdk::providers::services::PROCESS_COMPOSE_BIN;
+use flox_rust_sdk::providers::services::process_compose_down;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
 use logger::init_logger;
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
@@ -189,23 +188,8 @@ fn cleanup(socket_path: impl AsRef<Path>) {
     debug!("running cleanup");
     let socket_path = socket_path.as_ref();
     if socket_path.exists() {
-        let mut cmd = Command::new(&*PROCESS_COMPOSE_BIN);
-        cmd.arg("down");
-        cmd.arg("--unix-socket");
-        cmd.arg(socket_path);
-        cmd.env("NO_COLOR", "1");
-        match cmd.output() {
-            Ok(output) => {
-                if !output.status.success() {
-                    error!(
-                        code = output.status.code(),
-                        "failed to run process-compose shutdown command"
-                    );
-                }
-            },
-            Err(err) => {
-                error!(%err, "failed to run process-compose shutdown command");
-            },
+        if let Err(err) = process_compose_down(socket_path) {
+            error!(%err, "failed to run process-compose shutdown command");
         }
     } else {
         debug!(reason = "no socket", "did not shut down process-compose");
