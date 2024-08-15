@@ -18,7 +18,7 @@
   rustfmt ? rust-toolchain.rustfmt,
   targetPlatform,
   rust-internal-deps,
-  flox-klaus,
+  flox-watchdog,
   flox-src,
 }: let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
@@ -37,10 +37,10 @@
       NIX_BIN = "${nix}/bin/nix"; # only used for nix invocations in tests
       GIT_PKG = gitMinimal;
 
-      KLAUS_BIN =
-        if flox-klaus == null
-        then "klaus"
-        else "${flox-klaus}/bin/klaus";
+      WATCHDOG_BIN =
+        if flox-watchdog == null
+        then "flox-watchdog"
+        else "${flox-watchdog}/bin/flox-watchdog";
 
       FLOX_ZDOTDIR = flox-activation-scripts + activate.d/zdotdir;
 
@@ -88,14 +88,14 @@ in
       # Set up incremental compilation
       #
       # Cargo artifacts are built for the union of features used transitively
-      # by `flox` and `klaus`.
+      # by `flox` and `flox-watchdog`.
       # Compiling either separately would result in a different set of features
       # and thus cache misses.
       cargoArtifacts = rust-internal-deps;
-      cargoExtraArgs = "--locked -p flox -p klaus";
+      cargoExtraArgs = "--locked -p flox -p flox-watchdog";
       postPatch = ''
-        rm -rf ./klaus/*
-        cp -rf --no-preserve=mode ${craneLib.mkDummySrc {src = flox-src;}}/klaus/* ./klaus
+        rm -rf ./flox-watchdog/*
+        cp -rf --no-preserve=mode ${craneLib.mkDummySrc {src = flox-src;}}/flox-watchdog/* ./flox-watchdog
       '';
 
       CARGO_LOG = "cargo::core::compiler::fingerprint=info";
@@ -162,7 +162,7 @@ in
         inherit
           envs
           flox-pkgdb
-          flox-klaus
+          flox-watchdog
           pkgsFor # Needed to build installers
           ;
 

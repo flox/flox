@@ -56,8 +56,9 @@ pub static INTERACTIVE_BASH_BIN: Lazy<PathBuf> = Lazy::new(|| {
 });
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
-pub static KLAUS_BIN: Lazy<PathBuf> =
-    Lazy::new(|| PathBuf::from(env::var("KLAUS_BIN").unwrap_or(env!("KLAUS_BIN").to_string())));
+pub static WATCHDOG_BIN: Lazy<PathBuf> = Lazy::new(|| {
+    PathBuf::from(env::var("WATCHDOG_BIN").unwrap_or(env!("WATCHDOG_BIN").to_string()))
+});
 
 #[derive(Bpaf, Clone)]
 pub struct Activate {
@@ -384,7 +385,7 @@ impl Activate {
         path_hash: &str,
         socket_path: impl AsRef<Path>,
     ) -> Result<()> {
-        let mut cmd = Command::new(&*KLAUS_BIN);
+        let mut cmd = Command::new(&*WATCHDOG_BIN);
 
         // This process may terminate before the watchdog installs its signal handler,
         // so we pass it the PID of this process unconditionally (note that on Linux passing this
@@ -397,7 +398,7 @@ impl Activate {
 
         // Set the log path
         let pid = getpid();
-        let log_path = cache_path.join(format!("klaus.{}.log", pid.as_raw()));
+        let log_path = cache_path.join(format!("watchdog.{}.log", pid.as_raw()));
         cmd.arg("--logs");
         cmd.arg(log_path);
         cmd.env("_FLOX_WATCHDOG_LOG_LEVEL", "debug"); // always write to log file

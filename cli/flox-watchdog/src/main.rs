@@ -30,7 +30,7 @@ type Error = anyhow::Error;
 const SHORT_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.
 
-The watchdog (klaus) is spawned during activation to aid in service cleanup
+The watchdog (fka. klaus) is spawned during activation to aid in service cleanup
 when the final activation of an environment has terminated. This cleanup can
 be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
 const CHECK_INTERVAL: Duration = Duration::from_millis(10);

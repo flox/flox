@@ -185,7 +185,7 @@
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
 
       # Flox Command Line Interface ( development build ).
-      flox-klaus = callPackage ./pkgs/flox-klaus {
+      flox-watchdog = callPackage ./pkgs/flox-watchdog {
         rust-toolchain = rust-toolchain;
         rustfmt = rustfmt-nightly;
       };
@@ -246,7 +246,7 @@
         (pkgs)
         flox-activation-scripts
         flox-pkgdb
-        flox-klaus
+        flox-watchdog
         flox-cli
         flox-cli-tests
         flox-manpages
@@ -269,11 +269,11 @@
           PROJECT_TESTS_DIR = "/cli/tests";
           PKGDB_BIN = null;
           FLOX_BIN = null;
-          KLAUS_BIN = null;
+          WATCHDOG_BIN = null;
         };
         flox-cli = prev.flox-cli.override {
           flox-pkgdb = null;
-          flox-klaus = null;
+          flox-watchdog = null;
         };
       });
       checksFor = builtins.getAttr system checks;

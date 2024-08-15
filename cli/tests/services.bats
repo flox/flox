@@ -38,9 +38,9 @@ watchdog_pids_called_with_arg() {
   # echo "PATTERN: $pattern" >&3
   ps_output="$(ps -eo pid,args)"
   # echo "PS: $ps_output" >&3
-  klauses="$(echo "$ps_output" | grep klaus)"
-  # echo "KLAUSES: $klauses" >&3
-  matches="$(echo "$klauses" | grep "$pattern")"
+  watchdogs="$(echo "$ps_output" | grep flox-watchdog)"
+  # echo "WATCHDOGS: $watchdogs" >&3
+  matches="$(echo "$watchdogs" | grep "$pattern")"
   # echo "MATCHES: $matches" >&3
   # This is a load-bearing 'xargs', it strips leading/trailing whitespace that
   # trips up 'cut'
@@ -792,8 +792,8 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-@test "watchdog: can run klaus" {
-  run "$KLAUS_BIN" --help
+@test "watchdog: can run flox-watchdog" {
+  run "$WATCHDOG_BIN" --help
   assert_success
 }
 
@@ -840,15 +840,15 @@ EOF
   # Don't forget to export this so that it's set in the subshells
   export registry_file="$PWD/registry.json"
 
-  log_file="$PWD/klaus.log"
+  log_file="$PWD/flox-watchdog.log"
   dummy_registry path/to/env abcde123 > "$registry_file"
-  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" \
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
     --logs "$log_file" \
     --pid $$ \
     --registry "$registry_file" \
     --hash abcde123 \
     --socket does_not_exist &
-  klaus_pid="$!"
+  watchdog_pid="$!"
 
   # Make our watchdog query command available in subshells
   export -f watchdog_pids_called_with_arg
@@ -867,11 +867,11 @@ EOF
   assert_success
 
   # Check running.
-  run kill -s 0 "$klaus_pid"
+  run kill -s 0 "$watchdog_pid"
   assert_success
 
   # Signal to exit.
-  run kill -s SIGUSR1 "$klaus_pid"
+  run kill -s SIGUSR1 "$watchdog_pid"
   assert_success
 
   # Wait for exit.
@@ -890,11 +890,11 @@ EOF
 
 @test "watchdog: exits on shutdown signal (SIGINT)" {
   # Don't forget to export this so that it's set in the subshells
-  export log_file="$PWD/klaus.log"
+  export log_file="$PWD/flox-watchdog.log"
 
   registry_file="$PWD/registry.json"
   dummy_registry path/to/env abcde123 > "$registry_file"
-  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" \
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
     --logs "$log_file" \
     --pid $$ \
     --registry "$registry_file" \
@@ -902,7 +902,7 @@ EOF
     --socket does_not_exist &
 
   # Don't forget to export this so that it's set in the subshells
-  export klaus_pid="$!"
+  export watchdog_pid="$!"
 
   # Wait for start.
   timeout 1s bash -c "
@@ -912,16 +912,16 @@ EOF
   "
 
   # Check running.
-  run kill -s 0 "$klaus_pid"
+  run kill -s 0 "$watchdog_pid"
   assert_success
 
   # Signal to exit.
-  run kill -s SIGINT "$klaus_pid"
+  run kill -s SIGINT "$watchdog_pid"
   assert_success
 
   # Wait for exit.
   timeout 1s bash -c "
-    while kill -s 0 \"$klaus_pid\"; do
+    while kill -s 0 \"$watchdog_pid\"; do
       sleep 0.1
     done
   "
@@ -929,7 +929,7 @@ EOF
 
 @test "watchdog: exits when provided PID isn't running" {
   # Don't forget to export this so that it's set in the subshells
-  export log_file="$PWD/klaus.log"
+  export log_file="$PWD/flox-watchdog.log"
 
   # We need a test PID, but PIDs can be reused. There's also no delay on reusing
   # PIDs, so you can't create and kill a process to use its PID during that
@@ -942,7 +942,7 @@ EOF
 
   registry_file="$PWD/registry.json"
   dummy_registry path/to/env abcde123 > "$registry_file"
-  _FLOX_WATCHDOG_LOG_LEVEL=debug "$KLAUS_BIN" \
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
     --logs "$log_file" \
     --pid "$test_pid" \
     --registry "$registry_file" \
@@ -950,7 +950,7 @@ EOF
     --socket does_not_exist &
 
   # Don't forget to export this so that it's set in the subshells
-  export klaus_pid="$!"
+  export watchdog_pid="$!"
 
   # Wait for start.
   timeout 1s bash -c "
@@ -961,7 +961,7 @@ EOF
 
   # The watchdog should immediately exit, so wait for it to exit.
   timeout 1s bash -c "
-    while kill -s 0 \"$klaus_pid\"; do
+    while kill -s 0 \"$watchdog_pid\"; do
       sleep 0.1
     done
   "
