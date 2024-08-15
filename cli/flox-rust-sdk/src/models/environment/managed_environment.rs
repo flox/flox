@@ -26,6 +26,7 @@ use super::{
     CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
     ENV_DIR_NAME,
+    LOG_DIR_NAME,
     N_HASH_CHARS,
 };
 use crate::data::{CanonicalPath, Version};
@@ -444,6 +445,15 @@ impl Environment for ManagedEnvironment {
             std::fs::create_dir_all(&cache_dir).map_err(EnvironmentError::CreateCacheDir)?;
         }
         CanonicalPath::new(cache_dir).map_err(EnvironmentError::Canonicalize)
+    }
+
+    /// Returns .flox/log
+    fn log_path(&self) -> Result<CanonicalPath, EnvironmentError> {
+        let log_dir = self.path.join(LOG_DIR_NAME);
+        if !log_dir.exists() {
+            std::fs::create_dir_all(&log_dir).map_err(EnvironmentError::CreateLogDir)?;
+        }
+        CanonicalPath::new(log_dir).map_err(EnvironmentError::Canonicalize)
     }
 
     /// Returns parent of .flox

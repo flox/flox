@@ -280,6 +280,10 @@ impl Environment for RemoteEnvironment {
         CanonicalPath::new(tempdir.into_path()).map_err(EnvironmentError::Canonicalize)
     }
 
+    fn log_path(&self) -> Result<CanonicalPath, EnvironmentError> {
+        self.inner.log_path()
+    }
+
     fn project_path(&self) -> Result<PathBuf, EnvironmentError> {
         std::env::current_dir().map_err(EnvironmentError::GetCurrentDir)
     }

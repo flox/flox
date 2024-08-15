@@ -41,6 +41,7 @@ use super::{
     GCROOTS_DIR_NAME,
     LIB_DIR_NAME,
     LOCKFILE_FILENAME,
+    LOG_DIR_NAME,
 };
 use crate::data::{CanonicalPath, System};
 use crate::flox::Flox;
@@ -329,6 +330,15 @@ impl Environment for PathEnvironment {
         CanonicalPath::new(cache_dir).map_err(EnvironmentError::Canonicalize)
     }
 
+    /// Returns .flox/log
+    fn log_path(&self) -> Result<CanonicalPath, EnvironmentError> {
+        let log_dir = self.path.join(LOG_DIR_NAME);
+        if !log_dir.exists() {
+            std::fs::create_dir_all(&log_dir).map_err(EnvironmentError::CreateLogDir)?;
+        }
+        CanonicalPath::new(log_dir).map_err(EnvironmentError::Canonicalize)
+    }
+
     /// Returns parent path of .flox
     fn project_path(&self) -> Result<PathBuf, EnvironmentError> {
         self.parent_path()
@@ -502,11 +512,12 @@ impl PathEnvironment {
             return Err(e);
         }
 
-        // write "run" and "cache" to .flox/.gitignore
+        // Write stateful directories to .flox/.gitignore
         fs::write(dot_flox_path.join(".gitignore"), formatdoc! {"
             {GCROOTS_DIR_NAME}/
             {CACHE_DIR_NAME}/
             {LIB_DIR_NAME}/
+            {LOG_DIR_NAME}/
             "})
         .map_err(EnvironmentError::WriteGitignore)?;
 
