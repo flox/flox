@@ -21,6 +21,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_ENV_DESCRIPTION_VAR,
     FLOX_ENV_DIRS_VAR,
     FLOX_ENV_LIB_DIRS_VAR,
+    FLOX_ENV_LOG_DIR_VAR,
     FLOX_ENV_PROJECT_VAR,
     FLOX_ENV_VAR,
     FLOX_PROMPT_ENVIRONMENTS_VAR,
@@ -254,6 +255,10 @@ impl Activate {
             (
                 FLOX_ENV_LIB_DIRS_VAR,
                 flox_env_lib_dirs_joined.to_string_lossy().to_string(),
+            ),
+            (
+                FLOX_ENV_LOG_DIR_VAR,
+                environment.log_path()?.to_string_lossy().to_string(),
             ),
             (
                 FLOX_ENV_CACHE_VAR,

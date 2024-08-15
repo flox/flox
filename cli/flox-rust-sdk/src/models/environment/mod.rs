@@ -52,6 +52,7 @@ pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
 pub const CACHE_DIR_NAME: &str = "cache";
 pub const LIB_DIR_NAME: &str = "lib";
+pub const LOG_DIR_NAME: &str = "log";
 pub const ENV_DIR_NAME: &str = "env";
 pub const FLOX_ENV_VAR: &str = "FLOX_ENV";
 
@@ -70,6 +71,7 @@ pub const FLOX_ENV_CACHE_VAR: &str = "FLOX_ENV_CACHE";
 pub const FLOX_ENV_PROJECT_VAR: &str = "FLOX_ENV_PROJECT";
 pub const FLOX_ENV_DIRS_VAR: &str = "FLOX_ENV_DIRS";
 pub const FLOX_ENV_LIB_DIRS_VAR: &str = "FLOX_ENV_LIB_DIRS";
+pub const FLOX_ENV_LOG_DIR_VAR: &str = "_FLOX_ENV_LOG_DIR";
 pub const FLOX_ACTIVE_ENVIRONMENTS_VAR: &str = "_FLOX_ACTIVE_ENVIRONMENTS";
 pub const FLOX_PROMPT_ENVIRONMENTS_VAR: &str = "FLOX_PROMPT_ENVIRONMENTS";
 pub const FLOX_SERVICES_SOCKET_VAR: &str = "_FLOX_SERVICES_SOCKET";
@@ -182,6 +184,11 @@ pub trait Environment: Send {
     ///
     /// The returned path will exist.
     fn cache_path(&self) -> Result<CanonicalPath, EnvironmentError>;
+
+    /// Return a path that environment should use to store logs.
+    ///
+    /// The returned path will exist.
+    fn log_path(&self) -> Result<CanonicalPath, EnvironmentError>;
 
     /// Return a path that should be used as the project root for environment hooks.
     fn project_path(&self) -> Result<PathBuf, EnvironmentError>;
@@ -546,6 +553,9 @@ pub enum EnvironmentError {
 
     #[error("failed to create cache directory")]
     CreateCacheDir(#[source] std::io::Error),
+
+    #[error("failed to create log directory")]
+    CreateLogDir(#[source] std::io::Error),
 
     #[error("could not create temporary directory")]
     CreateTempDir(#[source] std::io::Error),

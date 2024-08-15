@@ -783,7 +783,9 @@ EOF
   # Kill sleep for now just to be safe.
 
   run "$FLOX_BIN" activate -s -- true
-  assert_output --partial "❌ Failed to start services"
+  assert_line "❌ Failed to start services:"
+  # Outputs process-compose log file on failure:
+  assert_output --partial "listening /no_permission.sock"
 }
 
 @test "blocking: activation blocks on socket creation" {
@@ -810,7 +812,7 @@ EOF
 EOF
 )
   # Check that a startup log line shows up in the logs
-  run grep "process=flox_never_exit" "$_FLOX_SERVICES_LOG_FILE"
+  run grep "process=flox_never_exit" "${PROJECT_DIR}"/.flox/log/services.*.log
   assert_success
 }
 

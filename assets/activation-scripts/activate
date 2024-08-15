@@ -48,9 +48,10 @@ wait_for_services_socket () {
 
 start_services_blocking () {
   local config_file="$1"; shift
-  local socket_file="$1";
+  local socket_file="$1"; shift
+  local log_dir="$1"
   local log_file
-  log_file="${_FLOX_SERVICES_LOG_FILE:-$(mktemp)}"
+  log_file="$(mktemp --tmpdir="$log_dir" services.XXXXXXXXXX.log)"
   # process-compose will vomit all over your log files unless you tell it otherwise
   local previous_no_color="${NO_COLOR:-}"
   export NO_COLOR=1
@@ -282,7 +283,7 @@ fi
 # Start services before the shell or command is invoked
 if [ "$FLOX_ACTIVATE_START_SERVICES" == "true" ]; then
   config_file="$FLOX_ENV/service-config.yaml"
-  start_services_blocking "$config_file" "$_FLOX_SERVICES_SOCKET"
+  start_services_blocking "$config_file" "$_FLOX_SERVICES_SOCKET" "$_FLOX_ENV_LOG_DIR"
 fi
 
 # From this point on the activation process depends on the mode:
