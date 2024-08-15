@@ -17,6 +17,7 @@ use flox_rust_sdk::models::environment::{
     Environment,
     EnvironmentError,
 };
+use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
 use flox_rust_sdk::providers::services::ServiceError;
 use itertools::Itertools;
 use log::debug;
@@ -316,6 +317,12 @@ impl Edit {
             | Err(EnvironmentError::Core(e @ CoreEnvironmentError::DeserializeManifest(_)))
             | Err(EnvironmentError::Core(e @ CoreEnvironmentError::Version0NotSupported))
             | Err(EnvironmentError::Core(
+                e @ CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
+                    exit_code: error_codes::BUILDENV_CONFLICT,
+                    ..
+                })),
+            )) => Ok(Err(e)),
+            Err(EnvironmentError::Core(
                 e @ CoreEnvironmentError::Services(ServiceError::InvalidConfig(_)),
             )) => Ok(Err(e)),
             Err(e) => Err(e),
