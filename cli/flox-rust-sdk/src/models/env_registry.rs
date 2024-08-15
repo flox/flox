@@ -209,6 +209,9 @@ impl RegistryEntry {
     }
 
     /// Deregister an activation for an existing enviroment.
+    ///
+    /// Doesn't error if the activation wasn't found, because another watchdog
+    /// may have already cleaned it up as stale.
     fn deregister_activation(&mut self, pid: ActivationPid) {
         tracing::debug!(%pid, hash = self.path_hash, "deregistering activation");
         self.activations.remove(&pid);
