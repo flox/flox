@@ -32,6 +32,8 @@ pub const MANIFEST_VARS_KEY: &str = "vars";
 pub const MANIFEST_HOOK_KEY: &str = "hook";
 /// Represents the `[profile]` table key in manifest.toml
 pub const MANIFEST_PROFILE_KEY: &str = "profile";
+/// Represents the `[services]` table key in manifest.toml
+pub const MANIFEST_SERVICES_KEY: &str = "services";
 /// Represents the `[options]` table key in manifest.toml
 pub const MANIFEST_OPTIONS_KEY: &str = "options";
 /// Represents the `systems = []` array key in manifest.toml
@@ -200,6 +202,24 @@ impl RawManifest {
         };
 
         manifest.insert(MANIFEST_PROFILE_KEY, Item::Table(profile_table));
+
+        if use_catalog {
+            // `[services]` table
+            let mut services_table = Table::new();
+
+            services_table.decor_mut().set_prefix(indoc! {r#"
+
+                # The `[services]` section of the manifest allows you to define services.
+                # Services defined here use the packages provided by the `[install]` section
+                # and any variables you've defined in the `[vars]` section or `hook.on-activate` script.
+            "#});
+
+            services_table.decor_mut().set_suffix(indoc! {r#"
+
+                # postgres.command = "postgres --config-file=pg.conf""#});
+
+            manifest.insert(MANIFEST_SERVICES_KEY, Item::Table(services_table));
+        }
 
         // `[options]` table
         let mut options_table = Table::new();
@@ -1550,6 +1570,12 @@ pub(super) mod test {
             # common = '''
             #   echo "it's gettin' flox in here"
             # '''
+
+            # The `[services]` section of the manifest allows you to define services.
+            # Services defined here use the packages provided by the `[install]` section
+            # and any variables you've defined in the `[vars]` section or `hook.on-activate` script.
+            [services]
+            # postgres.command = "postgres --config-file=pg.conf"
 
             # Additional options can be set in the `[options]` section. Refer to
             # manifest.toml(5) for a list of available options.
