@@ -85,7 +85,9 @@ setup_pkgdb_env() {
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade
-  assert_output --partial "Upgraded 'hello'"
+  assert_success
+  assert_output "⬆️  Upgraded 'hello' in environment 'test'."
+
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$hello_locked_drv" "$hello_response_drv"
@@ -108,10 +110,12 @@ setup_pkgdb_env() {
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade blue
+  assert_success
+  assert_output "⬆️  Upgraded 'hello' in environment 'test'."
+
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$hello_locked_drv" "$hello_response_drv"
-  assert_output --partial "Upgraded 'hello'"
 
   assert_not_equal "$old_hello_locked_drv" "$hello_locked_drv"
 }
@@ -126,7 +130,9 @@ setup_pkgdb_env() {
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade toplevel
-  assert_output --partial "Upgraded 'hello'"
+  assert_success
+  assert_output "⬆️  Upgraded 'hello' in environment 'test'."
+
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$hello_locked_drv" "$hello_response_drv"
@@ -144,7 +150,9 @@ setup_pkgdb_env() {
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade hello
-  assert_output --partial "Upgraded 'hello'"
+  assert_success
+  assert_output "⬆️  Upgraded 'hello' in environment 'test'."
+
   hello_response_drv=$(jq -r '.[0].[0].page.packages[0].derivation' "$GENERATED_DATA/resolve/hello.json")
   hello_locked_drv=$(jq -r '.packages.[0].derivation' "$LOCK_PATH")
   assert_equal "$hello_locked_drv" "$hello_response_drv"
@@ -158,7 +166,8 @@ setup_pkgdb_env() {
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json" \
     run "$FLOX_BIN" upgrade hello
-  assert_output --partial "package in the group 'toplevel' with multiple packages"
+  assert_failure
+  assert_line "❌ ERROR: 'hello' is a package in the group 'toplevel' with multiple packages."
 }
 
 @test "check confirmation when all packages are up to date" {
@@ -168,7 +177,7 @@ setup_pkgdb_env() {
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" \
     run "$FLOX_BIN" upgrade
   assert_success
-  assert_output --partial "No packages need to be upgraded"
+  assert_output "ℹ️  No packages need to be upgraded in environment 'test'."
 }
 
 @test "catalog: page changes should not be considered an upgrade" {
@@ -194,7 +203,7 @@ setup_pkgdb_env() {
   _FLOX_USE_CATALOG_MOCK="$BUMPED_REVS_RESPONE" \
     run "$FLOX_BIN" upgrade
   assert_success
-  assert_output --partial "No packages need to be upgraded"
+  assert_output "ℹ️  No packages need to be upgraded in environment 'test'."
 
   curr_lock_hash=$(jq --sort-keys --compact-output . "$LOCK_PATH" | sha256sum)
   assert_equal "$curr_lock_hash" "$prev_lock_hash"
@@ -221,7 +230,7 @@ EOF
 
   run "$FLOX_BIN" upgrade
   assert_success
-  assert_output --partial "Upgraded 'hello'"
+  assert_output "⬆️  Upgraded 'hello' in environment 'test'."
 }
 
 # bats test_tags=upgrade:migrate:manifest
@@ -255,6 +264,5 @@ EOF
     "$FLOX_BIN" install hello
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" upgrade hello
-  assert_output --partial "Upgraded 'hello'"
-  assert_equal "${#lines[@]}" 1
+  assert_output "⬆️  Upgraded 'hello' in environment 'test'."
 }
