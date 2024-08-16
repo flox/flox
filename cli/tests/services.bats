@@ -654,7 +654,7 @@ EOF
 
     # At the time of writing, the `mostly-deterministic` service sleeps for 3 seconds
     # Give flox a 4 second timeout to ensure the service has time to wake and log.
-    timeout 4 "$FLOX_BIN" services logs --follow mostly-deterministic
+    timeout 4 "$FLOX_BIN" -vvv services logs --follow mostly-deterministic
 EOF
   )
 

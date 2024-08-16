@@ -583,7 +583,10 @@ impl Iterator for ProcessComposeLogStream {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.receiver.recv() {
-            Ok(line) => Some(Ok(line)),
+            Ok(line) => {
+                debug!("received line: {}", line.message);
+                Some(Ok(line))
+            },
             // All senders have been dropped, so we wont't receive any more messages.
             // Drain remaining reader return values.
             Err(_) => {
