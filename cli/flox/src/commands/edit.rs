@@ -23,6 +23,7 @@ use itertools::Itertools;
 use log::debug;
 use tracing::instrument;
 
+use super::services::warn_manifest_changes_for_services;
 use super::{
     activated_environments,
     environment_select,
@@ -243,6 +244,11 @@ impl Edit {
             },
             EditResult::Success { .. } => message::updated("Environment successfully updated."),
         }
+
+        if result != EditResult::Unchanged {
+            warn_manifest_changes_for_services(flox, environment);
+        }
+
         Ok(())
     }
 
