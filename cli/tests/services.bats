@@ -187,6 +187,67 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=services:manifest-changes
+@test "install: warns about restarting services" {
+  setup_sleeping_services
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" install hello
+EOF
+)
+  assert_success
+  assert_line "⚠️  Your manifest has changes that may require running 'flox services restart'."
+}
+
+# bats test_tags=services:manifest-changes
+@test "uninstall: warns about restarting services" {
+  setup_sleeping_services
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  run "$FLOX_BIN" install hello
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" uninstall hello
+EOF
+)
+  assert_success
+  assert_line "⚠️  Your manifest has changes that may require running 'flox services restart'."
+}
+
+# bats test_tags=services:manifest-changes
+@test "upgrade: warns about restarting services" {
+  setup_sleeping_services
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" \
+    run "$FLOX_BIN" install hello
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+      "$FLOX_BIN" upgrade
+EOF
+)
+  assert_success
+  assert_line "⚠️  Your manifest has changes that may require running 'flox services restart'."
+}
+
+# bats test_tags=services:manifest-changes
+@test "edit: warns about restarting services" {
+  setup_sleeping_services
+  cat > manifest.toml << EOF
+version = 1
+EOF
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" edit -f manifest.toml
+EOF
+)
+  assert_success
+  assert_line "⚠️  Your manifest has changes that may require running 'flox services restart'."
+}
+
 # bats test_tags=services:restart
 @test "restart: errors before restarting if any service doesn't exist" {
   setup_start_counter_services

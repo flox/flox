@@ -7,6 +7,7 @@ use itertools::Itertools;
 use log::debug;
 use tracing::instrument;
 
+use super::services::warn_manifest_changes_for_services;
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{
     ensure_floxhub_token,
@@ -91,6 +92,9 @@ impl Uninstall {
         self.packages.iter().for_each(|p| {
             message::deleted(format!("'{p}' uninstalled from environment {description}"))
         });
+
+        warn_manifest_changes_for_services(&flox, environment.as_ref());
+
         Ok(())
     }
 }

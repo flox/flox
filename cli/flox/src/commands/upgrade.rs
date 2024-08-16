@@ -3,6 +3,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use tracing::instrument;
 
+use super::services::warn_manifest_changes_for_services;
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{ensure_floxhub_token, environment_description};
 use crate::subcommand_metric;
@@ -110,6 +111,8 @@ impl Upgrade {
                     "⬆️  Upgraded '{package}' in environment {description}."
                 ));
             }
+
+            warn_manifest_changes_for_services(&flox, environment.as_ref());
         }
 
         Ok(())

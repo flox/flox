@@ -25,6 +25,7 @@ use itertools::Itertools;
 use log::debug;
 use tracing::instrument;
 
+use super::services::warn_manifest_changes_for_services;
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{
     ensure_floxhub_token,
@@ -194,6 +195,11 @@ impl Install {
                 ));
             }
         }
+
+        if installation.new_manifest.is_some() {
+            warn_manifest_changes_for_services(&flox, environment.as_ref());
+        }
+
         Ok(())
     }
 
