@@ -90,7 +90,7 @@ EOF
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     run "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
   assert_success
-  assert_output --partial "✅ Environment successfully updated."
+  assert_output "✅ Environment successfully updated."
 }
 
 # ---------------------------------------------------------------------------- #
