@@ -44,6 +44,13 @@ hello.pkg-path = "hello"
 #   echo "it's gettin' flox in here"
 # '''
 
+# The `[services]` section of the manifest allows you to define services.
+# Services defined here use the packages provided by the `[install]` section
+# and any variables you've defined in the `[vars]` section or `hook.on-activate` script.
+[services]
+# [services.postgres]
+# command = "postgres --config-file=pg.conf"
+
 # Additional options can be set in the `[options]` section. Refer to
 # manifest.toml(5) for a list of available options.
 [options]
