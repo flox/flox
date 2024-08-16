@@ -49,7 +49,21 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  assert_output "✅ 'hello' installed to environment 'test'"
+}
+
+@test "'flox install' warns (preserving order) for already installed packages" {
+  "$FLOX_BIN" init
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    run "$FLOX_BIN" install hello
+  assert_success
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" \
+    run "$FLOX_BIN" install hello curl
+  assert_success
+  assert_output <<EOF
+⚠️  Package with id 'hello' already installed to environment 'test'"
+✅ 'curl' installed to environment 'test'
+EOF
 }
 
 @test "'flox install' edits manifest" {
@@ -66,12 +80,22 @@ teardown() {
   "$FLOX_BIN" init
   run "$FLOX_BIN" install hello
   assert_success
-  assert_output --partial "✅ 'hello' installed to environment"
+  assert_output "✅ 'hello' installed to environment 'test'"
 
   run "$FLOX_BIN" uninstall hello
   assert_success
   # Note that there's TWO spaces between the emoji and the package name
-  assert_output --partial "🗑️  'hello' uninstalled from environment"
+  assert_output "🗑️  'hello' uninstalled from environment 'test'"
+}
+
+@test "'flox uninstall' errors (without proceedign) for already uninstalled packages" {
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  "$FLOX_BIN" init
+  run "$FLOX_BIN" install hello
+  assert_success
+  run "$FLOX_BIN" uninstall hello curl
+  assert_failure
+  assert_output "❌ ERROR: couldn't uninstall 'curl', wasn't previously installed"
 }
 
 @test "'flox uninstall' edits manifest" {
