@@ -82,7 +82,7 @@ build: build-cli
         --watchdog "{{WATCHDOG_BIN}}" \
         --input-data "{{INPUT_DATA}}" \
         --generated-data "{{GENERATED_DATA}}" \
-        -- -f "logs: follow will wait for logs"
+        -- -f "logs:"
 
 # Run the CLI integration test suite using Nix-built binaries
 @nix-integ-tests:
