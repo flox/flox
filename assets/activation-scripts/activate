@@ -50,8 +50,10 @@ start_services_blocking () {
   local config_file="$1"; shift
   local socket_file="$1"; shift
   local log_dir="$1"
+  local timestamp_ms
+  timestamp_ms=$("$_coreutils/bin/date" "+%Y%m%d%H%M%S%6N")
   local log_file
-  log_file="$(mktemp --tmpdir="$log_dir" services.XXXXXXXXXX.log)"
+  log_file="${log_dir}/services.${timestamp_ms}.log"
   # process-compose will vomit all over your log files unless you tell it otherwise
   local previous_no_color="${NO_COLOR:-}"
   export NO_COLOR=1
