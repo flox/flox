@@ -641,10 +641,17 @@ EOF
 @test "logs: follow will wait for logs" {
   setup_logging_services
 
+  mkfifo ./resume-mostly-deterministic.pipe
+
   # We expect flox to block and be killed by `timeout`
   run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
+
+    # Ensure we wait until the service begins to sleep.
+    # That way, if the service is slow to start, we know the startup time isn't
+    # consuming part of the 4 second timeout below.
+    read < ./resume-mostly-deterministic.pipe
 
     # At the time of writing, the `mostly-deterministic` service sleeps for 3 seconds
     # Give flox a 4 second timeout to ensure the service has time to wake and log.
