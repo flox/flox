@@ -695,7 +695,7 @@ EOF
   mkfifo ./resume-mostly-deterministic.pipe
 
   # We expect flox to block and be killed by `timeout`
-  run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
+  "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
     source "${TESTS_DIR}/services/register_cleanup.sh"
 
@@ -705,13 +705,26 @@ EOF
     read < ./resume-one.pipe
     read < ./resume-mostly-deterministic.pipe
 
+    "$FLOX_BIN" services logs --follow > logs &
+    logs_pid="$!"
+
+    for i in {1..10}; do
+      if grep "^mostly-deterministic: " logs && grep "^one                 : " logs; then
+        break
+      fi
+      sleep .1
+    done
+    if [ "$i" -eq 10 ]; then
+      echo "didn't find expected logs"
+      # kill log reading, because with `--follow` the process wil block indefinitely
+      kill -SIGTERM "$logs_pid"
+      exit 1
+    fi
+
     # kill log reading, because with `--follow` the process wil block indefinitely
-    timeout 0.5 "$FLOX_BIN" services logs --follow
+    kill -SIGTERM "$logs_pid"
 EOF
   )
-
-  assert_line --regexp "^mostly-deterministic: "
-  assert_line --regexp "^one                 : "
 }
 
 # ---------------------------------------------------------------------------- #
