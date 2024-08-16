@@ -183,20 +183,11 @@ impl Install {
             },
         };
 
-        if installation.new_manifest.is_some() {
-            // Print which new packages were installed
-            for pkg in packages_to_install.iter() {
-                if let Some(false) = installation.already_installed.get(pkg.id()) {
-                    message::package_installed(pkg, &description);
-                } else {
-                    message::warning(format!(
-                        "Package with id '{}' already installed to environment {description}",
-                        pkg.id()
-                    ));
-                }
-            }
-        } else {
-            for pkg in packages_to_install.iter() {
+        // Print which new packages were installed
+        for pkg in packages_to_install.iter() {
+            if let Some(false) = installation.already_installed.get(pkg.id()) {
+                message::package_installed(pkg, &description);
+            } else {
                 message::warning(format!(
                     "Package with id '{}' already installed to environment {description}",
                     pkg.id()
