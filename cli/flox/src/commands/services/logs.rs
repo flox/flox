@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
@@ -51,6 +53,7 @@ impl Logs {
             for log in log_stream {
                 let ProcessComposeLogLine { process, message } = log?;
                 println!("{process:<max_name_length$}: {message}",);
+                io::stdout().flush().unwrap();
             }
         } else {
             let [ref name] = self.names.as_slice() else {
