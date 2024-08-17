@@ -80,6 +80,8 @@ impl ServiceError {
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ProcessComposeConfig {
+    pub log_level: ProcessComposeLogLevel,
+    pub log_configuration: ProcessComposeLoggerConfig,
     #[cfg_attr(
         test,
         proptest(
@@ -87,6 +89,38 @@ pub struct ProcessComposeConfig {
         )
     )]
     pub processes: BTreeMap<String, ProcessConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[serde(rename_all = "lowercase")]
+pub enum ProcessComposeLogLevel {
+    Debug,
+    Info,
+}
+
+impl Default for ProcessComposeConfig {
+    fn default() -> Self {
+        Self {
+            log_level: ProcessComposeLogLevel::Debug,
+            log_configuration: ProcessComposeLoggerConfig::default(),
+            processes: BTreeMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct ProcessComposeLoggerConfig {
+    /// Whether to enable color in the log output. We default this to `true` since it's
+    /// redirected to a file.
+    pub no_color: bool,
+}
+
+impl Default for ProcessComposeLoggerConfig {
+    fn default() -> Self {
+        Self { no_color: true }
+    }
 }
 
 /// The config for a single service
@@ -166,7 +200,10 @@ impl From<ManifestServices> for ProcessComposeConfig {
                 })
             })
             .collect();
-        ProcessComposeConfig { processes }
+        ProcessComposeConfig {
+            processes,
+            ..Default::default()
+        }
     }
 }
 
@@ -183,6 +220,8 @@ impl Serialize for ProcessComposeConfig {
         );
 
         let mut state = serializer.serialize_struct("ProcessComposeConfig", 1)?;
+        state.serialize_field("log_level", &self.log_level)?;
+        state.serialize_field("log_configuration", &self.log_configuration)?;
         state.serialize_field("processes", &processes)?;
         state.end()
     }
@@ -196,6 +235,8 @@ impl<'de> Deserialize<'de> for ProcessComposeConfig {
         #[derive(Deserialize)]
         struct Inner {
             processes: BTreeMap<String, ProcessConfig>,
+            log_level: ProcessComposeLogLevel,
+            log_configuration: ProcessComposeLoggerConfig,
         }
 
         let mut inner = Inner::deserialize(deserializer)?;
@@ -204,6 +245,8 @@ impl<'de> Deserialize<'de> for ProcessComposeConfig {
 
         Ok(ProcessComposeConfig {
             processes: inner.processes,
+            log_level: inner.log_level,
+            log_configuration: inner.log_configuration,
         })
     }
 }
@@ -938,7 +981,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn test_process_compose_config_roundtrip(config: ProcessComposeConfig) {
+        fn test_process_compose_config_round_trip(config: ProcessComposeConfig) {
             let temp_dir = TempDir::new().unwrap();
             let path = service_config_write_location(&temp_dir).unwrap();
             write_process_compose_config(&config, &path).unwrap();
@@ -958,9 +1001,13 @@ mod tests {
                 is_daemon: None,
                 shutdown: None,
             })]),
+            ..Default::default()
         };
         let config_out = serde_yaml::to_string(&config_in).unwrap();
         assert_eq!(config_out, formatdoc! { "
+            log_level: debug
+            log_configuration:
+              no_color: true
             processes:
               flox_never_exit:
                 command: {sleep} infinity
@@ -982,6 +1029,7 @@ mod tests {
                 shutdown: None,
             })]
             .into(),
+            ..Default::default()
         });
 
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -1014,6 +1062,7 @@ mod tests {
                 shutdown: None,
             })]
             .into(),
+            ..Default::default()
         });
 
         let tail = ProcessComposeLogTail::new(instance.socket(), "foo", 3).unwrap();
@@ -1040,6 +1089,7 @@ mod tests {
                 shutdown: None,
             })]
             .into(),
+            ..Default::default()
         });
 
         let tail = ProcessComposeLogTail::new(instance.socket(), "foo", 3).unwrap();
@@ -1069,6 +1119,7 @@ mod tests {
                 shutdown: None,
             })]
             .into(),
+            ..Default::default()
         });
 
         let tail = ProcessComposeLogTail::new(instance.socket(), "foo", 4).unwrap();
@@ -1097,6 +1148,7 @@ mod tests {
                 shutdown: None,
             })]
             .into(),
+            ..Default::default()
         });
 
         let tail = ProcessComposeLogTail::new(instance.socket(), "foo", 3).unwrap();
@@ -1126,6 +1178,7 @@ mod tests {
                 shutdown: None,
             })]
             .into(),
+            ..Default::default()
         });
 
         let tail = ProcessComposeLogTail::new(instance.socket(), "foo", 4).unwrap();
@@ -1164,6 +1217,7 @@ mod tests {
                 }),
             ]
             .into(),
+            ..Default::default()
         });
 
         // set a tail of 0 to ensure we only get live logs
@@ -1204,6 +1258,7 @@ mod tests {
                 shutdown: None,
             })]
             .into(),
+            ..Default::default()
         });
 
         let socket = instance.socket().to_path_buf();
@@ -1257,6 +1312,7 @@ mod tests {
                 }),
             ]
             .into(),
+            ..Default::default()
         });
 
         let states = ProcessStates::read(instance.socket()).expect("failed to read process states");
@@ -1290,6 +1346,7 @@ mod tests {
                 }),
             ]
             .into(),
+            ..Default::default()
         });
 
         let states = ProcessStates::read(instance.socket()).expect("failed to read process states");

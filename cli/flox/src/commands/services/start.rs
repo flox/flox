@@ -136,6 +136,7 @@ mod tests {
     fn error_starting_nonexistent_service_with_existing_process_compose() {
         let instance = TestProcessComposeInstance::start(&ProcessComposeConfig {
             processes: BTreeMap::new(),
+            ..Default::default()
         });
 
         let err = Start::start_with_existing_process_compose(
@@ -157,6 +158,7 @@ mod tests {
                     ("two".to_string(), generate_never_exit_process()),
                 ]
                 .into(),
+                ..Default::default()
             },
             &["one".to_string()],
         );
@@ -192,6 +194,7 @@ mod tests {
                     ("three".to_string(), generate_never_exit_process()),
                 ]
                 .into(),
+                ..Default::default()
             },
             &["one".to_string()],
         );

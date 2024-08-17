@@ -1744,7 +1744,7 @@ mod tests {
 
     #[test]
     fn built_environments_generate_service_config() {
-        let (mut flox, _dir) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _dir) = flox_instance_with_optional_floxhub_and_client(None, true);
 
         // Manifest with a services section
         let contents = indoc! {r#"
@@ -2362,7 +2362,7 @@ mod tests {
 
     #[test]
     fn edit_fails_when_daemon_has_no_shutdown_command() {
-        let (mut flox, _dir) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _dir) = flox_instance_with_optional_floxhub_and_client(None, true);
         let initial_manifest = r#"
             version = 1
         "#;
