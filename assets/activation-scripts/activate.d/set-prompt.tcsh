@@ -19,7 +19,7 @@ endif
 unset _esc colorReset colorBold colorPrompt1 colorPrompt2 _floxPrompt1 _floxPrompt2
 
 # Save the current 'tcsh_prompt' if not already saved.
-if ( $?prompt && $?FLOX_PROMPT_ENVIRONMENTS && "$FLOX_PROMPT_ENVIRONMENTS" != "" ) then
+if ( $?prompt && $?FLOX_PROMPT_ENVIRONMENTS && "$FLOX_PROMPT_ENVIRONMENTS" != ""  && "$_FLOX_SET_PROMPT" != false ) then
     if ( ! $?FLOX_SAVE_TCSH_PROMPT ) then
         setenv FLOX_SAVE_TCSH_PROMPT "$prompt"
     endif

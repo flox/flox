@@ -78,8 +78,15 @@ pub struct FloxConfig {
     // so just use a String.
     pub catalog_url: Option<String>,
 
-    /// Rule whether to change the shell prompt in activated environments
+    /// Rule whether to change the shell prompt in activated environments.
+    /// Deprecated in favor of set_prompt and hide_default_prompt.
     pub shell_prompt: Option<EnvironmentPromptConfig>,
+
+    /// Set shell prompt when activating an environment
+    pub set_prompt: Option<bool>,
+
+    /// Hide environments named 'default' from the shell prompt
+    pub hide_default_prompt: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

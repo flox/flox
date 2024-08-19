@@ -97,12 +97,20 @@ flox config --set 'trusted_environments."owner/name"' trust
 `floxhub_token`
 :   Token to authenticate on FloxHub.
 
+`hide_default_prompt`
+:   Hide environments named 'default' from the shell prompt,
+    and don't add environments named 'default' to `$FLOX_PROMPT_ENVIRONMENTS` (default: false).
+
 `search_limit`
 :   How many items `flox search` should show by default.
 
-`shell_prompt`
+`set_prompt`
+:   Set shell prompt when activating an environment (default: true).
+
+`shell_prompt` - DEPRECATED
 :   Rule whether to change the shell prompt in activated environments
     (default: "show-all").
+    This has been deprecated in favor of `set_prompt` and `hide_default_prompt`.
     Possible values are
     * "show-all": shows all active anvironments
     * "hide-all": disables the modification of the shell prompt

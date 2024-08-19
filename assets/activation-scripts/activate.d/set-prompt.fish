@@ -1,4 +1,4 @@
-if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS"
+if set -q FLOX_PROMPT_ENVIRONMENTS && test -n "$FLOX_PROMPT_ENVIRONMENTS" && [ "$_FLOX_SET_PROMPT" != false ]
     if not set -q FLOX_PROMPT
         set FLOX_PROMPT "flox"
     end

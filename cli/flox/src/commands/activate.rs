@@ -31,7 +31,7 @@ use flox_rust_sdk::models::manifest::TypedManifest;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use indexmap::IndexSet;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, warn};
 use nix::unistd::getpid;
@@ -226,16 +226,33 @@ impl Activate {
             (flox_env_dirs, flox_env_lib_dirs)
         };
 
-        let prompt_display_config = config
-            .flox
-            .shell_prompt
-            .unwrap_or(EnvironmentPromptConfig::ShowAll);
+        // Determine values for `set_prompt` and `hide_default_prompt`, taking
+        // deprecated `shell_prompt` into account
+        let (set_prompt, hide_default_prompt) = match (
+            config.flox.set_prompt,
+            config.flox.hide_default_prompt,
+            config.flox.shell_prompt,
+        ) {
+            (None, None, Some(EnvironmentPromptConfig::ShowAll)) => (true, false),
+            (None, None, Some(EnvironmentPromptConfig::HideDefault)) => (true, true),
+            (None, None, Some(EnvironmentPromptConfig::HideAll)) => (false, false),
+            (Some(_), _, Some(_)) | (_, Some(_), Some(_)) => bail!(indoc! {"
+                'shell_prompt' has been deprecated and cannot be set when 'set_prompt' or
+                'hide_default_prompt' is set.
+
+                Remove 'shell_prompt' with 'flox config --delete shell_prompt'
+            "}),
+            (set_prompt, hide_default_prompt, _) => (
+                set_prompt.unwrap_or(true),
+                hide_default_prompt.unwrap_or(false),
+            ),
+        };
 
         // We don't have access to the current PS1 (it's not exported), so we
         // can't modify it. Instead set FLOX_PROMPT_ENVIRONMENTS and let the
         // activation script set PS1 based on that.
         let flox_prompt_environments =
-            Self::make_environment_prompt(prompt_display_config, &flox_active_environments);
+            Self::make_prompt_environments(hide_default_prompt, &flox_active_environments);
 
         let prompt_color_1 = env::var("FLOX_PROMPT_COLOR_1")
             .unwrap_or(utils::colors::INDIGO_400.to_ansi256().to_string());
@@ -270,15 +287,10 @@ impl Activate {
             ),
             ("FLOX_PROMPT_COLOR_1", prompt_color_1),
             ("FLOX_PROMPT_COLOR_2", prompt_color_2),
-            // Set `FLOX_PROMPT_ENVIRONMENTS` to either the constructed prompt string
-            // or "" if the prompt is disabled.
-            //
-            // The latter is necessary for inner activations to be able to hide the prompt
-            // if the parent activation has it disabled.
-            (
-                FLOX_PROMPT_ENVIRONMENTS_VAR,
-                flox_prompt_environments.unwrap_or_default(),
-            ),
+            // Set `FLOX_PROMPT_ENVIRONMENTS` to the constructed prompt string,
+            // which may be ""
+            (FLOX_PROMPT_ENVIRONMENTS_VAR, flox_prompt_environments),
+            ("_FLOX_SET_PROMPT", set_prompt.to_string()),
             // Export FLOX_ENV_DESCRIPTION for this environment and let the
             // activation script take care of tracking active environments
             // and invoking the appropriate script to set the prompt.
@@ -799,20 +811,14 @@ impl Activate {
     /// Construct the envrionment list for the shell prompt
     ///
     /// [`None`] if the prompt is disabled, or filters removed all components.
-    fn make_environment_prompt(
-        prompt_display_config: EnvironmentPromptConfig,
+    fn make_prompt_environments(
+        hide_default_prompt: bool,
         flox_active_environments: &super::ActiveEnvironments,
-    ) -> Option<String> {
-        if prompt_display_config == EnvironmentPromptConfig::HideAll {
-            return None;
-        }
-
+    ) -> String {
         let prompt_envs: Vec<_> = flox_active_environments
             .iter()
             .filter_map(|env| {
-                if prompt_display_config == EnvironmentPromptConfig::HideDefault
-                    && env.name().as_ref() == DEFAULT_NAME
-                {
+                if hide_default_prompt && env.name().as_ref() == DEFAULT_NAME {
                     return None;
                 }
                 Some(
@@ -822,11 +828,7 @@ impl Activate {
             })
             .collect();
 
-        if prompt_envs.is_empty() {
-            return None;
-        }
-
-        Some(prompt_envs.join(" "))
+        prompt_envs.join(" ")
     }
 }
 
@@ -925,12 +927,9 @@ mod tests {
     #[test]
     fn test_shell_prompt_empty_without_active_environments() {
         let active_environments = ActiveEnvironments::default();
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::ShowAll,
-            &active_environments,
-        );
+        let prompt = Activate::make_prompt_environments(false, &active_environments);
 
-        assert_eq!(prompt, None);
+        assert_eq!(prompt, "");
     }
 
     #[test]
@@ -938,26 +937,13 @@ mod tests {
         let mut active_environments = ActiveEnvironments::default();
         active_environments.set_last_active(DEFAULT_ENV.clone());
 
-        // with `ShowAll` we should see the default environment
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::ShowAll,
-            &active_environments,
-        );
-        assert_eq!(prompt, Some("default".to_string()));
+        // with `hide_default_prompt = false` we should see the default environment
+        let prompt = Activate::make_prompt_environments(false, &active_environments);
+        assert_eq!(prompt, "default".to_string());
 
-        // with `HideDefault` we should not see the default environment
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::HideDefault,
-            &active_environments,
-        );
-        assert_eq!(prompt, None);
-
-        // with `HideAll` we should not see the default environment
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::HideAll,
-            &active_environments,
-        );
-        assert_eq!(prompt, None);
+        // with `hide_default_prompt = true` we should not see the default environment
+        let prompt = Activate::make_prompt_environments(true, &active_environments);
+        assert_eq!(prompt, "");
     }
 
     #[test]
@@ -966,25 +952,12 @@ mod tests {
         active_environments.set_last_active(DEFAULT_ENV.clone());
         active_environments.set_last_active(NON_DEFAULT_ENV.clone());
 
-        // with `ShowAll` we should see the default environment
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::ShowAll,
-            &active_environments,
-        );
-        assert_eq!(prompt, Some("wichtig default".to_string()));
+        // with `hide_default_prompt = false` we should see the default environment
+        let prompt = Activate::make_prompt_environments(false, &active_environments);
+        assert_eq!(prompt, "wichtig default".to_string());
 
-        // with `HideDefault` we should not see the default environment
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::HideDefault,
-            &active_environments,
-        );
-        assert_eq!(prompt, Some("wichtig".to_string()));
-
-        // with `HideAll` we should not see the default environment
-        let prompt = Activate::make_environment_prompt(
-            EnvironmentPromptConfig::HideAll,
-            &active_environments,
-        );
-        assert_eq!(prompt, None);
+        // with `hide_default_prompt = true` we should not see the default environment
+        let prompt = Activate::make_prompt_environments(true, &active_environments);
+        assert_eq!(prompt, "wichtig".to_string());
     }
 }
