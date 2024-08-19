@@ -10,7 +10,7 @@ fi
 
 _flox="${_floxPrompt1} ${_floxPrompt2} "
 
-if [ -n "$_flox" -a -n "${PS1:-}" -a "${FLOX_PROMPT_ENVIRONMENTS:-}" != "" ]
+if [ -n "$_flox" -a -n "${PS1:-}" -a "${FLOX_PROMPT_ENVIRONMENTS:-}" != "" -a "${_FLOX_SET_PROMPT:-}" != false ];
 then
     # Start by saving the original value of PS1.
     if [ -z "$FLOX_SAVE_ZSH_PS1" ]; then
