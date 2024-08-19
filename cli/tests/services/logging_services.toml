@@ -22,4 +22,7 @@ echo >> ./resume-mostly-deterministic.pipe
 sleep 3
 
 echo 4
+# It currently appears process-compose has a race in which it doesn't always
+# collect log output emitted right before the process exits
+sleep .1
 '''
