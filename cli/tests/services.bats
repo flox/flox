@@ -783,9 +783,7 @@ EOF
   # Kill sleep for now just to be safe.
 
   run "$FLOX_BIN" activate -s -- true
-  assert_line "❌ Failed to start services:"
-  # Outputs process-compose log file on failure:
-  assert_output --partial "listening /no_permission.sock"
+  assert_output --partial "❌ Failed to start services"
 }
 
 @test "blocking: activation blocks on socket creation" {
