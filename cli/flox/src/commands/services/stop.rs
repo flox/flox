@@ -5,6 +5,7 @@ use flox_rust_sdk::providers::services::{stop_services, ProcessStates};
 use tracing::instrument;
 
 use super::supported_environment;
+use crate::commands::services::handle_service_connection_error;
 use crate::commands::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
 use crate::utils::message;
@@ -27,7 +28,8 @@ impl Stop {
         let env = supported_environment(&flox, &self.environment)?;
         let socket = env.services_socket_path(&flox)?;
 
-        let processes = ProcessStates::read(&socket)?;
+        let processes = ProcessStates::read(&socket)
+            .map_err(|err| handle_service_connection_error(err, &socket))?;
         let named_processes = super::processes_by_name_or_default_to_all(&processes, &self.names)?;
 
         for process in named_processes {

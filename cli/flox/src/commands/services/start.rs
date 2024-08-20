@@ -11,6 +11,7 @@ use flox_rust_sdk::providers::services::{
 };
 use tracing::{debug, instrument};
 
+use super::handle_service_connection_error;
 use crate::commands::services::{
     start_with_new_process_compose,
     supported_concrete_environment,
@@ -90,7 +91,8 @@ impl Start {
         names: &[String],
         err_stream: &mut impl std::io::Write,
     ) -> Result<()> {
-        let processes = ProcessStates::read(&socket)?;
+        let processes = ProcessStates::read(&socket)
+            .map_err(|error| handle_service_connection_error(error, socket.as_ref()))?;
         let named_processes = super::processes_by_name_or_default_to_all(&processes, names)?;
 
         let mut failure_count = 0;
