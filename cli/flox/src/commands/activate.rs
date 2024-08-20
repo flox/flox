@@ -37,7 +37,7 @@ use log::{debug, warn};
 use nix::unistd::getpid;
 use once_cell::sync::Lazy;
 
-use super::services::supported_environment;
+use super::services::ServicesEnvironment;
 use super::{
     activated_environments,
     environment_select,
@@ -333,7 +333,8 @@ impl Activate {
             // services so that the user doesn't assume we're actually starting
             // services.
             if self.start_services {
-                supported_environment(&flox, &self.environment)?; // Error for remote envs.
+                // Error for remote envs and envs with v0 manifests, since they don't support services
+                ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
             }
 
             let should_have_services =

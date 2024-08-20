@@ -4,8 +4,11 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::providers::services::{stop_services, ProcessStates};
 use tracing::instrument;
 
-use super::supported_environment;
-use crate::commands::services::handle_service_connection_error;
+use crate::commands::services::{
+    guard_service_commands_available,
+    handle_service_connection_error,
+    ServicesEnvironment,
+};
 use crate::commands::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
 use crate::utils::message;
@@ -25,11 +28,13 @@ impl Stop {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("services::stop");
 
-        let env = supported_environment(&flox, &self.environment)?;
-        let socket = env.services_socket_path(&flox)?;
+        let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+        guard_service_commands_available(&env)?;
 
-        let processes = ProcessStates::read(&socket)
-            .map_err(|err| handle_service_connection_error(err, &socket))?;
+        let socket = env.socket();
+
+        let processes = ProcessStates::read(socket)
+            .map_err(|err| handle_service_connection_error(err, socket))?;
         let named_processes = super::processes_by_name_or_default_to_all(&processes, &self.names)?;
 
         for process in named_processes {
@@ -38,7 +43,7 @@ impl Stop {
                 continue;
             }
 
-            if let Err(err) = stop_services(&socket, &[&process.name]) {
+            if let Err(err) = stop_services(socket, &[&process.name]) {
                 message::error(format!(
                     "Failed to stop service '{}': {}",
                     process.name, err

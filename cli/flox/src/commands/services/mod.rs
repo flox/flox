@@ -5,7 +5,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{CoreEnvironmentError, Environment};
 use flox_rust_sdk::models::lockfile::LockedManifest;
-use flox_rust_sdk::models::manifest::TypedManifest;
+use flox_rust_sdk::models::manifest::{TypedManifest, TypedManifestCatalog};
 use flox_rust_sdk::providers::services::{
     new_services_to_start,
     LoggedError,
@@ -15,7 +15,12 @@ use flox_rust_sdk::providers::services::{
 };
 use tracing::instrument;
 
-use super::{ConcreteEnvironment, EnvironmentSelect};
+use super::{
+    activated_environments,
+    ConcreteEnvironment,
+    EnvironmentSelect,
+    UninitializedEnvironment,
+};
 use crate::commands::activate::Activate;
 use crate::config::Config;
 use crate::utils::message;
@@ -94,35 +99,108 @@ impl ServicesCommands {
     }
 }
 
-/// Return a ConcreteEnvironment for variants that support services.
-pub fn supported_concrete_environment(
-    flox: &Flox,
-    environment: &EnvironmentSelect,
-) -> Result<ConcreteEnvironment> {
-    let concrete_environment = environment.detect_concrete_environment(flox, "Services in")?;
-    if let ConcreteEnvironment::Remote(_) = concrete_environment {
-        return Err(ServicesCommandsError::RemoteEnvsNotSupported.into());
+/// An augmented [ConcreteEnvironment] that has been checked for services support.
+/// Constructing a [ServicesEnvironment] requires a _local_ [ConcreteEnvironment]
+/// that supports services, i.e. is defined in a v1 [TypedManifestCatalog].
+///
+/// Constructing a [ServicesEnvironment] for a remote environment is not supported.
+///
+/// The [ServicesEnvironment] provides methods to guard
+pub struct ServicesEnvironment {
+    environment: ConcreteEnvironment,
+    socket: PathBuf,
+    manifest: TypedManifestCatalog,
+}
+
+impl ServicesEnvironment {
+    /// Create a [ServicesEnvironment] from a [ConcreteEnvironment].
+    ///
+    /// Returns an error if the environment is remote or doesn't support services.
+    pub fn from_concrete_environment(
+        flox: &Flox,
+        environment: ConcreteEnvironment,
+    ) -> Result<Self> {
+        if let ConcreteEnvironment::Remote(_) = environment {
+            return Err(ServicesCommandsError::RemoteEnvsNotSupported.into());
+        }
+        let socket = environment
+            .dyn_environment_ref()
+            .services_socket_path(flox)?;
+
+        let TypedManifest::Catalog(manifest) = environment.dyn_environment_ref().manifest(flox)?
+        else {
+            return Err(CoreEnvironmentError::ServicesWithV0.into());
+        };
+
+        let manifest = *manifest;
+
+        Ok(Self {
+            environment,
+            socket,
+            manifest,
+        })
     }
 
-    let manifest = concrete_environment.dyn_environment_ref().manifest(flox)?;
-    let TypedManifest::Catalog(manifest) = manifest else {
-        return Err(CoreEnvironmentError::ServicesWithV0.into());
-    };
-    if manifest.services.is_empty() {
+    /// Create a [ServicesEnvironment] from an [EnvironmentSelect],
+    ///
+    /// Returns an error if the environment is remote or doesn't support services.
+    pub fn from_environment_selection(
+        flox: &Flox,
+        environment: &EnvironmentSelect,
+    ) -> Result<Self> {
+        let concrete_environment = environment.detect_concrete_environment(flox, "Services in")?;
+        Self::from_concrete_environment(flox, concrete_environment)
+    }
+
+    /// Unwrap the [ServicesEnvironment] into the underlying [ConcreteEnvironment].
+    pub fn into_inner(self) -> ConcreteEnvironment {
+        self.environment
+    }
+
+    /// Get the path to the service manager socket.
+    ///
+    /// The socket may not exist.
+    /// We currently use the existence of the socket to determine whether services are running,
+    /// but this may change in the future for a more robust solution.
+    pub fn socket(&self) -> &Path {
+        &self.socket
+    }
+}
+
+/// A guard method that can be used to ensure that services commands are available.
+///
+/// In this case, to use service commands, we require that the service manager socket exists
+/// or that there are services defined in the environment.
+///
+/// As described in [Self::socket] using the `socket` to determine whether services are running,
+/// may not be the most robust solution, but is currently used consistently.
+pub fn guard_service_commands_available(services_environment: &ServicesEnvironment) -> Result<()> {
+    if !services_environment.socket.exists() && services_environment.manifest.services.is_empty() {
         return Err(ServicesCommandsError::NoDefinedServices.into());
     }
 
-    Ok(concrete_environment)
+    Ok(())
 }
 
-/// Return an Environment for variants that support services.
-pub fn supported_environment(
-    flox: &Flox,
-    environment: &EnvironmentSelect,
-) -> Result<Box<dyn Environment>> {
-    let concrete_environment = supported_concrete_environment(flox, environment)?;
-    let dyn_environment = concrete_environment.into_dyn_environment();
-    Ok(dyn_environment)
+/// A guard method that can be used to ensure that the current process is running
+/// within an activation of the [ConcreteEnvironment].
+///
+/// This is currently required by the [start] and [restart] commands.
+pub fn guard_is_within_activation(
+    services_environment: &ServicesEnvironment,
+    action: &str,
+) -> Result<()> {
+    let activated_environments = activated_environments();
+
+    if !activated_environments.is_active(&UninitializedEnvironment::from_concrete_environment(
+        &services_environment.environment,
+    )?) {
+        return Err(ServicesCommandsError::NotInActivation {
+            action: action.to_string(),
+        }
+        .into());
+    }
+    Ok(())
 }
 
 /// Warn about manifest changes that may require services to be restarted, if

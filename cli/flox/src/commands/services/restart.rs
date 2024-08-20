@@ -7,17 +7,13 @@ use flox_rust_sdk::providers::services::{process_compose_down, restart_service, 
 use tracing::{debug, instrument};
 
 use crate::commands::services::{
+    guard_is_within_activation,
+    guard_service_commands_available,
     handle_service_connection_error,
     start_with_new_process_compose,
-    supported_concrete_environment,
-    ServicesCommandsError,
+    ServicesEnvironment,
 };
-use crate::commands::{
-    activated_environments,
-    environment_select,
-    EnvironmentSelect,
-    UninitializedEnvironment,
-};
+use crate::commands::{environment_select, EnvironmentSelect};
 use crate::config::Config;
 use crate::subcommand_metric;
 use crate::utils::message;
@@ -37,25 +33,16 @@ impl Restart {
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
         subcommand_metric!("services::restart");
 
-        let concrete_environment = supported_concrete_environment(&flox, &self.environment)?;
-        let activated_environments = activated_environments();
+        let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+        guard_is_within_activation(&env, "restart")?;
+        guard_service_commands_available(&env)?;
 
-        if !activated_environments.is_active(&UninitializedEnvironment::from_concrete_environment(
-            &concrete_environment,
-        )?) {
-            return Err(ServicesCommandsError::NotInActivation {
-                action: "restart".to_string(),
-            }
-            .into());
-        }
-
-        let env = concrete_environment.dyn_environment_ref();
-        let socket = env.services_socket_path(&flox)?;
+        let socket = env.socket();
 
         let existing_process_compose = socket.exists();
         let existing_processes = match existing_process_compose {
-            true => ProcessStates::read(&socket)
-                .map_err(|err| handle_service_connection_error(err, &socket))?,
+            true => ProcessStates::read(socket)
+                .map_err(|err| handle_service_connection_error(err, socket))?,
             false => ProcessStates::from(vec![]),
         };
         let all_processes_stopped = existing_processes.iter().all(|p| p.is_stopped());
@@ -67,14 +54,14 @@ impl Restart {
         if start_new_process_compose {
             if existing_process_compose {
                 debug!("stopping existing process-compose instance");
-                process_compose_down(&socket)?;
+                process_compose_down(socket)?;
             }
             debug!("restarting services in new process-compose instance");
             let names = start_with_new_process_compose(
                 config,
                 flox,
                 self.environment,
-                concrete_environment,
+                env.into_inner(),
                 &self.names,
             )
             .await?;
