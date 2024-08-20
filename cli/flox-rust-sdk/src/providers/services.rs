@@ -22,6 +22,7 @@ use tempfile::NamedTempFile;
 use tracing::debug;
 
 use crate::flox::Flox;
+use crate::models::environment::Environment;
 use crate::models::lockfile::LockedManifestCatalog;
 use crate::models::manifest::{ManifestServiceShutdown, ManifestServices};
 use crate::utils::{traceable_path, CommandExt};
@@ -490,6 +491,16 @@ pub fn shutdown_process_compose_if_all_processes_stopped(
         process_compose_down(socket)?;
     }
     Ok(all_processes_stopped)
+}
+
+/// Returns a bool indicating whether services have been started for an
+/// environment. This doesn't guarantee that the service manager is still
+/// working (e.g. hasn't crashed).
+pub fn services_probably_started(flox: &Flox, env: &dyn Environment) -> bool {
+    match env.services_socket_path(flox) {
+        Ok(socket) => socket.exists(),
+        Err(_) => false,
+    }
 }
 
 /// Strings extracted from a process-compose error log.

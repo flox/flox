@@ -2,12 +2,13 @@ use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::EnvironmentError;
+use flox_rust_sdk::providers::services::services_probably_started;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
 use tracing::instrument;
 
-use super::services::warn_manifest_changes_for_services;
+use super::services::manifest_has_changes_for_services_warning;
 use super::{environment_select, EnvironmentSelect};
 use crate::commands::{
     ensure_floxhub_token,
@@ -93,7 +94,9 @@ impl Uninstall {
             message::deleted(format!("'{p}' uninstalled from environment {description}"))
         });
 
-        warn_manifest_changes_for_services(&flox, environment.as_ref());
+        if services_probably_started(&flox, environment.as_ref()) {
+            message::warning(manifest_has_changes_for_services_warning());
+        };
 
         Ok(())
     }

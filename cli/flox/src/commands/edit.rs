@@ -18,12 +18,11 @@ use flox_rust_sdk::models::environment::{
     EnvironmentError,
 };
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
-use flox_rust_sdk::providers::services::ServiceError;
+use flox_rust_sdk::providers::services::{services_probably_started, ServiceError};
 use itertools::Itertools;
 use log::debug;
 use tracing::instrument;
 
-use super::services::warn_manifest_changes_for_services;
 use super::{
     activated_environments,
     environment_select,
@@ -245,9 +244,9 @@ impl Edit {
             EditResult::Success { .. } => message::updated("Environment successfully updated."),
         }
 
-        if result != EditResult::Unchanged {
-            warn_manifest_changes_for_services(flox, environment);
-        }
+        if result != EditResult::Unchanged && services_probably_started(flox, environment) {
+            message::warning(manifest_has_changes_for_services_warning());
+        };
 
         Ok(())
     }

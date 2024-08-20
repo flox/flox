@@ -20,12 +20,13 @@ use flox_rust_sdk::models::environment::{
     ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::manifest;
+use flox_rust_sdk::providers::services::services_probably_started;
 use indoc::formatdoc;
 use log::debug;
 use toml_edit::DocumentMut;
 use tracing::instrument;
 
-use super::services::warn_manifest_changes_for_services;
+use super::services::manifest_has_changes_for_services_warning;
 use super::{open_path, ConcreteEnvironment};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select, Spinner};
@@ -185,7 +186,9 @@ impl Pull {
                     suffix = if force { " (forced)" } else { "" }
                 });
 
-                warn_manifest_changes_for_services(flox, &env);
+                if services_probably_started(flox, &env) {
+                    message::warning(manifest_has_changes_for_services_warning());
+                };
             },
             PullResult::UpToDate => {
                 message::warning(formatdoc! {"

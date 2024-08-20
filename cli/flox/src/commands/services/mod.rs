@@ -10,7 +10,6 @@ use tracing::instrument;
 use super::{ConcreteEnvironment, EnvironmentSelect};
 use crate::commands::activate::Activate;
 use crate::config::Config;
-use crate::utils::message;
 
 mod logs;
 mod restart;
@@ -102,22 +101,6 @@ pub fn supported_environment(
     Ok(dyn_environment)
 }
 
-/// Warn about manifest changes that may require services to be restarted, if
-/// the Environment has a service manager running. It doesn't guarentee that the
-/// service manager is working (e.g. hasn't crashed). It is the caller's
-/// responsibility to determine what manifest changes would affect services.
-pub fn warn_manifest_changes_for_services(flox: &Flox, env: &dyn Environment) {
-    let has_service_manager = match env.services_socket_path(flox) {
-        Ok(socket) => socket.exists(),
-        Err(_) => false,
-    };
-    if has_service_manager {
-        message::warning(
-            "Your manifest has changes that may require running 'flox services restart'.",
-        );
-    }
-}
-
 /// Try to find processes by name, typically provided by the user via arguments,
 /// or default to all processes.
 ///
@@ -198,6 +181,12 @@ pub async fn start_with_new_process_compose(
         names.to_vec()
     };
     Ok(names)
+}
+
+/// Warning to print when there are changes to the manifest that might require
+/// restarting services.
+pub fn manifest_has_changes_for_services_warning() -> String {
+    "Your manifest has changes that may require running 'flox services restart'.".to_string()
 }
 
 /// Error to return when a service doesn't exist, either in the lockfile or the
