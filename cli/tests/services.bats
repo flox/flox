@@ -559,17 +559,42 @@ EOF
   assert_output --regexp "two +Running"
 }
 
-# bats test_tags=services:stop
-@test "stop: errors if service socket isn't responding" {
+# bats test_tags=services:detect-not-started
+@test "services: errors if services are not started" {
   setup_sleeping_services
 
-  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    export _FLOX_SERVICES_SOCKET=invalid
-    "$FLOX_BIN" services stop one invalid
+  commands=("logs" "status" "stop")
+  for command in "${commands[@]}"; do
+    echo "Testing: flox services $command"
+
+    command="$command" run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+      rm -f "$_FLOX_SERVICES_SOCKET"
+      "$FLOX_BIN" services "$command" one invalid
 EOF
 )
-  assert_failure
-  assert_output --partial "❌ ERROR: couldn't connect to service manager"
+    assert_failure
+    assert_output --partial "❌ ERROR: Services not started or quit unexpectedly."
+  done
+}
+
+# bats test_tags=services:permit-stopped-for-start-restart
+@test "start, restart: do not require active services" {
+
+  setup_sleeping_services
+
+  commands=("start" "restart")
+  for command in "${commands[@]}"; do
+    echo "Testing: flox services $command"
+    command="$command" run "$FLOX_BIN" activate -- bash <(cat <<EOF
+      source "${TESTS_DIR}/services/register_cleanup.sh"
+
+      [ ! -e "\$_FLOX_SERVICES_SOCKET" ] || exit 2
+
+      "$FLOX_BIN" services "$command"
+EOF
+)
+    assert_success
+  done
 }
 
 # bats test_tags=services:stop
@@ -1153,7 +1178,7 @@ EOF
   run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
   assert_failure
   assert_output --partial "Service 'invalid' not found."
-  assert_output --partial "couldn't connect to service manager"
+  assert_output --partial "Services not started or quit unexpectedly."
 }
 
 # Also tests service names with spaces in them, because starting them is handled

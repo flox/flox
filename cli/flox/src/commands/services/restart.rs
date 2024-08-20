@@ -7,6 +7,7 @@ use flox_rust_sdk::providers::services::{process_compose_down, restart_service, 
 use tracing::{debug, instrument};
 
 use crate::commands::services::{
+    handle_service_connection_error,
     start_with_new_process_compose,
     supported_concrete_environment,
     ServicesCommandsError,
@@ -53,7 +54,8 @@ impl Restart {
 
         let existing_process_compose = socket.exists();
         let existing_processes = match existing_process_compose {
-            true => ProcessStates::read(&socket)?,
+            true => ProcessStates::read(&socket)
+                .map_err(|err| handle_service_connection_error(err, &socket))?,
             false => ProcessStates::from(vec![]),
         };
         let all_processes_stopped = existing_processes.iter().all(|p| p.is_stopped());

@@ -1,10 +1,18 @@
+use std::path::{Path, PathBuf};
+
 use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{CoreEnvironmentError, Environment};
 use flox_rust_sdk::models::lockfile::LockedManifest;
 use flox_rust_sdk::models::manifest::TypedManifest;
-use flox_rust_sdk::providers::services::{new_services_to_start, ProcessState, ProcessStates};
+use flox_rust_sdk::providers::services::{
+    new_services_to_start,
+    LoggedError,
+    ProcessState,
+    ProcessStates,
+    ServiceError,
+};
 use tracing::instrument;
 
 use super::{ConcreteEnvironment, EnvironmentSelect};
@@ -30,6 +38,21 @@ To activate and start services, run 'flox activate --start-services'"
     NotInActivation { action: String },
     #[error("Environment doesn't have any services defined.")]
     NoDefinedServices,
+    #[error(
+"Service Manager unresponsive.
+
+Retry command or delete {socket}
+and restart services with 'flox activate --start-services'",
+    socket = socket.display())]
+    ServiceManagerQuitUnexpectedly { socket: PathBuf },
+
+    #[error(
+        "Services not started or quit unexpectedly.
+
+To start services, run 'flox services start' in an activated environment,
+or activate the environment with 'flox activate --start-services'."
+    )]
+    ServiceManagerQuitOrServicesNotRunning,
 }
 
 /// Services Commands.
@@ -204,6 +227,36 @@ pub async fn start_with_new_process_compose(
 /// current process-compose config.
 pub(crate) fn service_does_not_exist_error(name: &str) -> anyhow::Error {
     anyhow!(format!("Service '{name}' not found."))
+}
+
+/// Add more information to connection errors when talking to the service manager.
+///
+/// Process-Compose commands may fail with [LoggedError::SocketDoesntExist]
+/// if the specific socket doesn't exist,
+/// or if the service manager has quit without cleaning up the socket,
+/// i.e. the socket is unresponsive.
+///
+/// This function adds more context to the error in the latter case.
+///
+/// For practical purposes, we apply this to the [ProcessStates::read] call in
+/// all services commands, as that is typically the first call that can fail.
+/// For following commands, we can assume that the service manager is running.
+///
+/// TODO: we might move this into a `processes` method on [ServicesEnvironment],
+/// as that would bring error handling closer to the environment (i.e the origin of the `socket`).
+pub(super) fn handle_service_connection_error(error: ServiceError, socket: &Path) -> anyhow::Error {
+    let ServiceError::LoggedError(LoggedError::SocketDoesntExist) = error else {
+        return error.into();
+    };
+
+    if socket.exists() {
+        return ServicesCommandsError::ServiceManagerQuitUnexpectedly {
+            socket: socket.to_path_buf(),
+        }
+        .into();
+    }
+
+    ServicesCommandsError::ServiceManagerQuitOrServicesNotRunning.into()
 }
 
 #[cfg(test)]
