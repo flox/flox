@@ -9,8 +9,11 @@ use itertools::Itertools;
 use serde::Serialize;
 use tracing::instrument;
 
-use super::supported_environment;
-use crate::commands::services::handle_service_connection_error;
+use crate::commands::services::{
+    guard_service_commands_available,
+    handle_service_connection_error,
+    ServicesEnvironment,
+};
 use crate::commands::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
 
@@ -33,10 +36,12 @@ impl Status {
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("services::status");
 
-        let env = supported_environment(&flox, &self.environment)?;
-        let socket = env.services_socket_path(&flox)?;
-        let processes = ProcessStates::read(&socket)
-            .map_err(|err| handle_service_connection_error(err, &socket))?;
+        let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+        guard_service_commands_available(&env)?;
+
+        let socket = env.socket();
+        let processes = ProcessStates::read(socket)
+            .map_err(|err| handle_service_connection_error(err, socket))?;
 
         let named_processes = super::processes_by_name_or_default_to_all(&processes, &self.names)?;
 
