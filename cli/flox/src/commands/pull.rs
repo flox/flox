@@ -25,6 +25,7 @@ use log::debug;
 use toml_edit::DocumentMut;
 use tracing::instrument;
 
+use super::services::warn_manifest_changes_for_services;
 use super::{open_path, ConcreteEnvironment};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Select, Spinner};
@@ -183,6 +184,8 @@ impl Pull {
                     floxhub_host = flox.floxhub.base_url(),
                     suffix = if force { " (forced)" } else { "" }
                 });
+
+                warn_manifest_changes_for_services(flox, &env);
             },
             PullResult::UpToDate => {
                 message::warning(formatdoc! {"

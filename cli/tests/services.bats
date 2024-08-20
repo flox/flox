@@ -16,6 +16,7 @@ load test_support.bash
 
 project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
+  export PROJECT_NAME="${PROJECT_DIR##*/}"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
   pushd "$PROJECT_DIR" >/dev/null || return
@@ -247,6 +248,32 @@ EOF
   assert_success
   assert_line "⚠️  Your manifest has changes that may require running 'flox services restart'."
 }
+
+# bats test_tags=services:manifest-changes
+@test "pull: warns about restarting services" {
+  export OWNER="owner"
+
+  setup_isolated_flox
+  setup_sleeping_services
+  floxhub_setup "$OWNER"
+
+  run "$FLOX_BIN" push --owner "$OWNER"
+  assert_success
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
+    "$FLOX_BIN" install hello --remote "$OWNER/$PROJECT_NAME"
+  assert_success
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" pull
+EOF
+)
+  assert_success
+  assert_line "⚠️  Your manifest has changes that may require running 'flox services restart'."
+}
+
+# ---------------------------------------------------------------------------- #
 
 # bats test_tags=services:restart
 @test "restart: errors before restarting if any service doesn't exist" {
