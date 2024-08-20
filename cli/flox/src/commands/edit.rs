@@ -222,31 +222,50 @@ impl Edit {
             None => Self::interactive_edit(flox, environment).await?,
         };
 
-        // outside the match to avoid rustfmt falling on its face
-        let reactivate_required_note = indoc::indoc! {"
-            Your manifest has changes that cannot be automatically applied.
+        let is_active = activated_environments().is_active(&active_environment);
+        let has_services = services_probably_started(flox, environment);
 
-            Please 'exit' the environment and run 'flox activate' to see these changes.
-       "};
+        // outside the match to avoid rustfmt falling on its face
+        let warning_header =
+            "Your manifest changes were recorded but cannot be automatically applied:";
+        let warning_reactivate_with_services = indoc::formatdoc! {"
+            {warning_header}
+
+            - Please 'exit' the environment and run 'flox activate'.
+            - You may need to restart services with 'flox services restart'.
+        "};
+        let warning_reactivate = indoc::formatdoc! {"
+            {warning_header}
+
+            - Please 'exit' the environment and run 'flox activate'.
+        "};
+        let warning_services = indoc::formatdoc! {"
+            {warning_header}
+
+            - You may need to restart services with 'flox services restart'.
+        "};
 
         match result {
             EditResult::Unchanged => {
                 message::warning("No changes made to environment.");
             },
-            EditResult::ReActivateRequired { .. }
-                if activated_environments().is_active(&active_environment) =>
-            {
-                message::warning(reactivate_required_note)
+            EditResult::ReActivateRequired { .. } if is_active && has_services => {
+                message::warning(warning_reactivate_with_services)
+            },
+            EditResult::ReActivateRequired { .. } if is_active => {
+                message::warning(warning_reactivate)
+            },
+            EditResult::ReActivateRequired { .. } if has_services => {
+                message::warning(warning_services)
             },
             EditResult::ReActivateRequired { .. } => {
                 message::updated("Environment successfully updated.")
             },
+            EditResult::Success { .. } if has_services => {
+                message::warning(warning_services);
+            },
             EditResult::Success { .. } => message::updated("Environment successfully updated."),
         }
-
-        if result != EditResult::Unchanged && services_probably_started(flox, environment) {
-            message::warning(manifest_has_changes_for_services_warning());
-        };
 
         Ok(())
     }

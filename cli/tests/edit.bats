@@ -93,6 +93,27 @@ EOF
   assert_output "✅ Environment successfully updated."
 }
 
+@test "'flox edit' warns about changes that require re-activation" {
+  "$FLOX_BIN" init
+  cp "$MANIFEST_PATH" "$TMP_MANIFEST_PATH"
+  cat << "EOF" > "$TMP_MANIFEST_PATH"
+version = 1
+[vars]
+foo = "bar"
+EOF
+
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    "$FLOX_BIN" edit -f "$TMP_MANIFEST_PATH"
+EOF
+  )
+  assert_success
+  assert_output - <<EOF
+⚠️  Your manifest changes were recorded but cannot be automatically applied:
+
+- Please 'exit' the environment and run 'flox activate'.
+EOF
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=edit:manifest:file

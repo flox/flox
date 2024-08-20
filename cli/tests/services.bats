@@ -246,7 +246,38 @@ EOF
 EOF
 )
   assert_success
-  assert_line "⚠️  Your manifest has changes that may require running 'flox services restart'."
+  assert_output - <<EOF
+⚠️  Your manifest changes were recorded but cannot be automatically applied:
+
+- You may need to restart services with 'flox services restart'.
+
+Shutting down process-compose
+EOF
+}
+
+# bats test_tags=services:manifest-changes
+@test "edit: warns about restarting services with re-activation" {
+  setup_sleeping_services
+  cat > manifest.toml << EOF
+version = 1
+[vars]
+foo = "bar"
+EOF
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" edit -f manifest.toml
+EOF
+)
+  assert_success
+  assert_output - <<EOF
+⚠️  Your manifest changes were recorded but cannot be automatically applied:
+
+- Please 'exit' the environment and run 'flox activate'.
+- You may need to restart services with 'flox services restart'.
+
+Shutting down process-compose
+EOF
 }
 
 # bats test_tags=services:manifest-changes
