@@ -174,7 +174,7 @@ SRCS           = $(call rwildcard,src,*.cc)
 test_SRCS      = $(sort $(wildcard tests/*.cc))
 ALL_SRCS       = $(SRCS) $(test_SRCS)
 BINS           = bin/pkgdb
-TEST_UTILS     = $(addprefix tests/,is_sqlite3 search-params)
+TEST_UTILS     = $(addprefix tests/,is_sqlite3)
 TESTS          = $(filter-out $(TEST_UTILS),$(test_SRCS:.cc=))
 TEST_DATA      =
 ALL_BINS       = $(TESTS) $(TEST_UTILS) $(BINS)
