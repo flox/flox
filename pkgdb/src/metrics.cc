@@ -3,7 +3,6 @@
 #  include <sentry.h>
 #endif
 #include "flox/core/util.hh"
-#include "flox/pkgdb/read.hh"
 #include <string>
 
 namespace flox {

@@ -66,37 +66,6 @@ load setup_suite.bash
 
 
 # ---------------------------------------------------------------------------- #
-
-@test "locked fields on 'flox-nixpkgs' scheme" {
-  URL="flox-nixpkgs:v$FLOX_NIXPKGS_VERSION/flox/$NIXPKGS_REV";
-  run --separate-stderr "$PKGDB_BIN" get flake "$URL";
-  assert_success;
-  FLAKE_INFO="$output";
-
-  run --separate-stderr sh -c "echo '$FLAKE_INFO'|jq -r '.attrs.type';";
-  assert_success;
-  assert_output 'flox-nixpkgs'
-
-  run --separate-stderr sh -c "echo '$FLAKE_INFO'|jq -r '.attrs.owner';";
-  assert_success;
-  assert_output 'flox'
-
-  run --separate-stderr sh -c "echo '$FLAKE_INFO'|jq -r '.attrs.rev';";
-  assert_success;
-  assert_output "$NIXPKGS_REV";
-
-  run --separate-stderr sh -c "echo '$FLAKE_INFO'|jq -r '.attrs.version';";
-  assert_success;
-  assert_output "$FLOX_NIXPKGS_VERSION";
-
-  run --separate-stderr sh -c "echo '$FLAKE_INFO'|jq -r '.string';";
-  assert_success;
-  assert_output "$URL";
-
-}
-
-
-# ---------------------------------------------------------------------------- #
 #
 #
 #

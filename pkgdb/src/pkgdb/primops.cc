@@ -7,6 +7,7 @@
  *
  * -------------------------------------------------------------------------- */
 
+#include <nix/flake/flake.hh>
 #include <nix/json-to-value.hh>
 #include <nix/primops.hh>
 #include <nix/value-to-json.hh>
@@ -14,9 +15,7 @@
 
 #include "flox/core/expr.hh"
 #include "flox/core/nix-state.hh"
-#include "flox/pkgdb/pkg-query.hh"
 #include "flox/pkgdb/primops.hh"
-#include "flox/registry.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -40,16 +39,16 @@ prim_getFingerprint( nix::EvalState &  state,
     {
       state.forceValue( *args[0], pos );
     }
-  RegistryInput input( valueToFlakeRef(
+  nix::FlakeRef flakeRef = valueToFlakeRef(
     state,
     *args[0],
     pos,
-    "while processing 'flakeRef' argument to 'builtins.getFingerprint'" ) );
+    "while processing 'flakeRef' argument to 'builtins.getFingerprint'" );
 
-  FloxFlakeInput flake( state.store, input );
-  value.mkString(
-    flake.getFlake()->lockedFlake.getFingerprint().to_string( nix::Base16,
-                                                              false ) );
+  // nix::flake:: locked = nix::flake::lockFlake();
+  nix::flake::LockedFlake locked
+    = nix::flake::lockFlake( state, flakeRef, defaultLockFlags );
+  value.mkString( locked.getFingerprint().to_string( nix::Base16, false ) );
 }
 // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)
 

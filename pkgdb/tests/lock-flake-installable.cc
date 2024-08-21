@@ -341,7 +341,7 @@ test_priority( const nix::ref<nix::EvalState> & state,
   auto priority
     = flox::lockFlakeInstallable( state, system, localTestFlake + "#priority" );
 
-  EXPECT_EQ( priority.priority.value(), (unsigned long long)10 );
+  EXPECT_EQ( priority.priority.value(), (unsigned long long) 10 );
 
   return true;
 }

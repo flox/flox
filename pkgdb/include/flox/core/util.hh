@@ -309,13 +309,6 @@ tomlToJSON( std::string_view toml );
 
 /* -------------------------------------------------------------------------- */
 
-/** @brief Convert a YAML string to JSON. */
-[[nodiscard]] nlohmann::json
-yamlToJSON( std::string_view yaml );
-
-
-/* -------------------------------------------------------------------------- */
-
 /**
  * @brief Read a file and coerce its contents to JSON based on its extension.
  *

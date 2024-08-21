@@ -11,7 +11,6 @@
 #include "flox/core/util.hh"
 #include "flox/fetchers/wrapped-nixpkgs-input.hh"
 #include "flox/lock-flake-installable.hh"
-#include "flox/resolver/descriptor.hh"
 #include "flox/resolver/lockfile.hh"
 
 /* -------------------------------------------------------------------------- */

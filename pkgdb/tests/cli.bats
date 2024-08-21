@@ -18,8 +18,3 @@ load setup_suite.bash
   run "$PKGDB_BIN" --help
   assert_success
 }
-
-@test "pkgdb scrape --help" {
-  run "$PKGDB_BIN" scrape --help
-  assert_success
-}

@@ -26,12 +26,7 @@
 #include "flox/eval.hh"
 #include "flox/linkenv/command.hh"
 #include "flox/lock-flake-installable.hh"
-#include "flox/parse/command.hh"
-#include "flox/pkgdb/command.hh"
 #include "flox/pkgdb/metrics.hh"
-#include "flox/repl.hh"
-#include "flox/resolver/command.hh"
-#include "flox/search/command.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -100,33 +95,6 @@ run( int argc, char * argv[] )
   flox::command::VerboseParser prog( "pkgdb", FLOX_PKGDB_VERSION );
   prog.add_description( "CRUD operations for package metadata" );
 
-  flox::pkgdb::ScrapeCommand cmdScrape;
-  prog.add_subparser( cmdScrape.getParser() );
-
-  flox::pkgdb::GetCommand cmdGet;
-  prog.add_subparser( cmdGet.getParser() );
-
-  flox::pkgdb::ListCommand cmdList;
-  prog.add_subparser( cmdList.getParser() );
-
-  flox::pkgdb::GCCommand cmdGC;
-  prog.add_subparser( cmdGC.getParser() );
-
-  flox::search::SearchCommand cmdSearch;
-  prog.add_subparser( cmdSearch.getParser() );
-
-  flox::resolver::ManifestCommand cmdManifest;
-  prog.add_subparser( cmdManifest.getParser() );
-
-  flox::parse::ParseCommand cmdParse;
-  prog.add_subparser( cmdParse.getParser() );
-
-  flox::ReplCommand cmdRepl;
-  prog.add_subparser( cmdRepl.getParser() );
-
-  flox::EvalCommand cmdEval;
-  prog.add_subparser( cmdEval.getParser() );
-
   flox::buildenv::BuildEnvCommand cmdBuildEnv;
   prog.add_subparser( cmdBuildEnv.getParser() );
 
@@ -135,6 +103,10 @@ run( int argc, char * argv[] )
 
   flox::linkenv::LinkEnvCommand cmdLinkEnv;
   prog.add_subparser( cmdLinkEnv.getParser() );
+
+  // Only used in tests
+  flox::EvalCommand cmdEval;
+  prog.add_subparser( cmdEval.getParser() );
 
   /* Parse Args */
   try
@@ -153,15 +125,6 @@ run( int argc, char * argv[] )
   flox::sentryReporting.init( nix::verbosity >= nix::lvlDebug );
 
   /* Run subcommand */
-  if ( prog.is_subcommand_used( "scrape" ) ) { return cmdScrape.run(); }
-  if ( prog.is_subcommand_used( "get" ) ) { return cmdGet.run(); }
-  if ( prog.is_subcommand_used( "list" ) ) { return cmdList.run(); }
-  if ( prog.is_subcommand_used( "gc" ) ) { return cmdGC.run(); }
-  if ( prog.is_subcommand_used( "search" ) ) { return cmdSearch.run(); }
-  if ( prog.is_subcommand_used( "manifest" ) ) { return cmdManifest.run(); }
-  if ( prog.is_subcommand_used( "parse" ) ) { return cmdParse.run(); }
-  if ( prog.is_subcommand_used( "repl" ) ) { return cmdRepl.run(); }
-  if ( prog.is_subcommand_used( "eval" ) ) { return cmdEval.run(); }
   if ( prog.is_subcommand_used( "buildenv" ) ) { return cmdBuildEnv.run(); }
   if ( prog.is_subcommand_used( cmdLock.getParser() ) )
     {
@@ -171,6 +134,7 @@ run( int argc, char * argv[] )
     {
       return cmdLinkEnv.run();
     }
+  if ( prog.is_subcommand_used( "eval" ) ) { return cmdEval.run(); }
 
   // TODO: better error for this,
   // likely only occurs if we add a new command without handling it (?)

@@ -9,8 +9,6 @@
 #include "flox/buildenv/realise.hh"
 #include "flox/buildenv/buildenv-lockfile.hh"
 #include "flox/core/util.hh"
-#include "flox/resolver/environment.hh"
-#include "flox/resolver/manifest.hh"
 #include "test.hh"
 #include <fstream>
 #include <nix/flake/flake.hh>

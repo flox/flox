@@ -40,137 +40,6 @@ LockfileRaw::check() const
 /* -------------------------------------------------------------------------- */
 
 void
-Lockfile::checkGroups() const
-{
-  for ( const auto & [_, group] : this->getManifest().getGroupedDescriptors() )
-    {
-      for ( const auto & system : this->manifest.getSystems() )
-        {
-          std::optional<LockedInputRaw> groupInput;
-          for ( const auto & [iid, descriptor] : group )
-            {
-              /* Handle system skips.  */
-              if ( descriptor.systems.has_value()
-                   && ( std::find( this->manifest.getSystems().begin(),
-                                   this->manifest.getSystems().end(),
-                                   system )
-                        == descriptor.systems->end() ) )
-                {
-                  continue;
-                }
-
-              auto maybeSystem = this->lockfileRaw.packages.find( system );
-              if ( maybeSystem == this->lockfileRaw.packages.end() )
-                {
-                  continue;
-                }
-
-              auto maybeLocked = maybeSystem->second.at( iid );
-
-              /* Package was unresolved, we don't enforce `optional' here. */
-              if ( ! maybeLocked.has_value() ) { continue; }
-
-              if ( ! groupInput.has_value() )
-                {
-                  groupInput = maybeLocked->input;
-                }
-              else if ( groupInput->fingerprint
-                        != maybeLocked->input.fingerprint )
-                {
-                  if ( auto descriptor = group.begin();
-                       descriptor != group.end()
-                       && descriptor->second.group.has_value() )
-                    {
-                      throw InvalidLockfileException(
-                        "invalid group '" + *descriptor->second.group
-                        + "' uses multiple inputs" );
-                    }
-
-                  throw InvalidLockfileException(
-                    "invalid toplevel group uses multiple inputs" );
-                }
-            }
-        }
-    }
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-void
-Lockfile::check() const
-{
-  this->lockfileRaw.check();
-  if ( this->getManifestRaw().registry.has_value() )
-    {
-      for ( const auto & [name, input] :
-            this->getManifestRaw().registry->inputs )
-        {
-          if ( input.getFlakeRef()->input.getType() == "indirect" )
-            {
-              throw InvalidManifestFileException(
-                "manifest 'registry.inputs." + name
-                + ".from.type' may not be \"indirect\"." );
-            }
-        }
-    }
-  // TODO: check `optional' and `system' skips.
-  this->checkGroups();
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-void
-Lockfile::init()
-{
-  this->lockfileRaw.check();
-
-  /* Collect inputs from all locked packages into a registry keyed
-   * by fingerprints. */
-  for ( const auto & [system, sysPkgs] : this->lockfileRaw.packages )
-    {
-      for ( const auto & [pid, pkg] : sysPkgs )
-        {
-          if ( ! pkg.has_value() ) { continue; }
-          this->packagesRegistryRaw.inputs.try_emplace(
-            pkg->input.fingerprint.to_string( nix::Base16, false ),
-            static_cast<RegistryInput>( pkg->input ) );
-        }
-    }
-
-  this->manifest = EnvironmentManifest( this->lockfileRaw.manifest );
-
-  this->check();
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-/** @brief Read a flox::resolver::Lockfile from a file. */
-static LockfileRaw
-readLockfileFromPath( const std::filesystem::path & lockfilePath )
-{
-  if ( ! std::filesystem::exists( lockfilePath ) )
-    {
-      throw InvalidLockfileException( "no such path: "
-                                      + lockfilePath.string() );
-    }
-  return readAndCoerceJSON( lockfilePath );
-}
-
-/* -------------------------------------------------------------------------- */
-
-Lockfile::Lockfile( const std::filesystem::path & lockfilePath )
-  : lockfileRaw( readLockfileFromPath( lockfilePath ) )
-{
-  this->init();
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-void
 from_json( const nlohmann::json & jfrom, LockedInputRaw & raw )
 {
   assertIsJSONObject<InvalidLockfileException>( jfrom, "locked input" );
@@ -178,25 +47,7 @@ from_json( const nlohmann::json & jfrom, LockedInputRaw & raw )
   for ( const auto & [key, value] : jfrom.items() )
     {
       if ( key == "fingerprint" )
-        {
-          try
-            {
-              raw.fingerprint = pkgdb::Fingerprint::parseNonSRIUnprefixed(
-                value.get<std::string>(),
-                nix::htSHA256 );
-            }
-          catch ( nlohmann::json::exception & err )
-            {
-              throw InvalidLockfileException(
-                "couldn't parse locked input field '" + key + "'",
-                extract_json_errmsg( err ) );
-            }
-          catch ( nix::BadHash & err )
-            {
-              throw InvalidHashException(
-                "failed to parse locked input fingerprint",
-                err.what() );
-            }
+        { /* obsolete field */
         }
       else if ( key == "url" )
         {
@@ -236,9 +87,7 @@ from_json( const nlohmann::json & jfrom, LockedInputRaw & raw )
 void
 to_json( nlohmann::json & jto, const LockedInputRaw & raw )
 {
-  jto = { { "fingerprint", raw.fingerprint.to_string( nix::Base16, false ) },
-          { "url", raw.url },
-          { "attrs", raw.attrs } };
+  jto = { { "url", raw.url }, { "attrs", raw.attrs } };
 }
 
 
@@ -530,83 +379,6 @@ to_json( nlohmann::json & jto, const LockfileRaw & raw )
 
 
 /* -------------------------------------------------------------------------- */
-
-std::size_t
-Lockfile::removeUnusedInputs()
-{
-  /* Check to see if an input was declared in the manifest registry. */
-  auto inManifestRegistry = [&]( const std::string & name ) -> bool
-  {
-    const auto & maybeRegistry = this->getManifestRaw().registry;
-    return maybeRegistry.has_value()
-           && ( maybeRegistry->inputs.find( name )
-                != maybeRegistry->inputs.end() );
-  };
-
-  /* Check to see if an input is used by a package. */
-  auto inPackagesRegistry = [&]( const std::string & url ) -> bool
-  {
-    for ( const auto & [name, input] : this->getPackagesRegistryRaw().inputs )
-      {
-        if ( input.from->to_string() == url ) { return true; }
-      }
-    return false;
-  };
-
-  /* Counts the number of removed inputs. */
-  std::size_t count = 0;
-
-  /* Remove. */
-  for ( auto elem = this->getRegistryRaw().inputs.begin();
-        elem != this->getRegistryRaw().inputs.end(); )
-    {
-      if ( ( ! inManifestRegistry( elem->first ) )
-           && ( ! inPackagesRegistry( elem->second.from->to_string() ) ) )
-        {
-          lockfileRaw.registry.priority.erase(
-            std::remove( this->lockfileRaw.registry.priority.begin(),
-                         this->lockfileRaw.registry.priority.end(),
-                         elem->first ),
-            this->lockfileRaw.registry.priority.end() );
-          this->lockfileRaw.registry.inputs.erase( elem->first );
-          ++count;
-        }
-      else { ++elem; }
-    }
-
-  return count;
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-std::vector<CheckPackageWarning>
-Lockfile::checkPackages( const std::optional<flox::System> & system ) const
-{
-  std::vector<CheckPackageWarning> warnings;
-
-  auto allows = this->getLockfileRaw()
-                  .manifest.options.value_or( Options {} )
-                  .allow.value_or( Options::Allows {} );
-
-  for ( auto [system_, packages] : this->getLockfileRaw().packages )
-    {
-      if ( system.has_value() && system_ != system.value() ) { continue; }
-
-      for ( auto [pid, package] : packages )
-        {
-          // disabled for current system or optional
-          if ( ! package.has_value() ) { continue; }
-
-          auto packageWarnings = package.value().check( pid, allows );
-          warnings.insert( warnings.end(),
-                           packageWarnings.begin(),
-                           packageWarnings.end() );
-        }
-    }
-
-  return warnings;
-}
 
 
 }  // namespace flox::resolver
