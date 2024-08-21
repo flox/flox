@@ -5,3 +5,6 @@ hello.pkg-path = "hello-unfree"
 
 [options]
 allow.unfree = true
+
+[options]
+systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]

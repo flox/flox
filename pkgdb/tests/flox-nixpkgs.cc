@@ -7,6 +7,8 @@
 #include <fstream>
 #include <iostream>
 
+#include <nix/attrs.hh>
+#include <nix/url.hh>
 #include <nlohmann/json.hpp>
 
 #include "flox/core/nix-state.hh"
@@ -56,6 +58,28 @@ test_inputFromAttrs()
   return true;
 }
 
+
+/* -------------------------------------------------------------------------- */
+
+bool
+test_lockedFromUrl( nix::ref<nix::EvalState> & state )
+{
+  WrappedNixpkgsInputScheme inputScheme;
+  auto                      url = "flox-nixpkgs:v0/flox/" + nixpkgsRev;
+  auto                 input = inputScheme.inputFromURL( nix::parseURL( url ) );
+  nix::fetchers::Attrs attrs
+    = inputScheme.fetch( state->store, *input ).second.toAttrs();
+  auto owner      = nix::fetchers::getStrAttr( attrs, "owner" );
+  auto flake_type = nix::fetchers::getStrAttr( attrs, "type" );
+  auto rev        = nix::fetchers::getStrAttr( attrs, "rev" );
+  auto version    = nix::fetchers::getStrAttr( attrs, "version" );
+  EXPECT_EQ( owner, "flox" );
+  EXPECT_EQ( flake_type, "flox-nixpkgs" );
+  EXPECT_EQ( rev, nixpkgsRev );
+  EXPECT_EQ( version, "0" );
+
+  return true;
+}
 
 /* -------------------------------------------------------------------------- */
 

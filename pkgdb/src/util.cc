@@ -138,12 +138,7 @@ readAndCoerceJSON( const std::filesystem::path & path )
 
   /* Read file to buffer */
   std::ostringstream oss;
-  if ( ( ext == ".yaml" ) || ( ext == ".yml" ) )
-    {
-      oss << ifs.rdbuf();
-      return yamlToJSON( oss.str() );
-    }
-  else if ( ext == ".toml" )
+  if ( ext == ".toml" )
     {
       oss << ifs.rdbuf();
       return tomlToJSON( oss.str() );

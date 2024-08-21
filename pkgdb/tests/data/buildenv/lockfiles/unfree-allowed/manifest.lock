@@ -1,0 +1,1 @@
+{"category_message":"error converting TOML to JSON","caught_message":"[error] toml::insert_value: table (\"options\") already exists.\n --> tomlToJSON\n   |\n 6 | [options]\n   | ~~~~~~~~~ table already exists here\n ...\n 9 | [options]\n   | ~~~~~~~~~ table defined twice","context_message":"while parsing a TOML string","exit_code":116}

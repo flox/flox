@@ -17,10 +17,8 @@
 
 #include "flox/core/exceptions.hh"
 #include "flox/core/types.hh"
-#include "flox/pkgdb/input.hh"
-#include "flox/pkgdb/read.hh"
 #include "flox/registry.hh"
-#include "flox/resolver/manifest.hh"
+#include "flox/resolver/manifest-raw.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -55,13 +53,12 @@ FLOX_DEFINE_EXCEPTION( PackageCheckFailure,
 struct LockedInputRaw
 {
 
-  pkgdb::Fingerprint fingerprint; /**< Unique hash of associated flake. */
-  std::string        url;         /**< Locked URI string.  */
+  std::string url; /**< Locked URI string.  */
   /** Exploded form of URI as an attr-set. */
   nlohmann::json attrs;
 
-  ~LockedInputRaw() = default;
-  LockedInputRaw() : fingerprint( nix::htSHA256 ) {}
+  LockedInputRaw()                         = default;
+  ~LockedInputRaw()                        = default;
   LockedInputRaw( const LockedInputRaw & ) = default;
   LockedInputRaw( LockedInputRaw && )      = default;
 
@@ -71,16 +68,6 @@ struct LockedInputRaw
   LockedInputRaw &
   operator=( LockedInputRaw && )
     = default;
-
-  explicit LockedInputRaw( const pkgdb::PkgDbReadOnly & pdb )
-    : fingerprint( pdb.fingerprint )
-    , url( pdb.lockedRef.string )
-    , attrs( pdb.lockedRef.attrs )
-  {}
-
-  explicit LockedInputRaw( const pkgdb::PkgDbInput & input )
-    : LockedInputRaw( *input.getDbReadOnly() )
-  {}
 
   explicit operator nix::FlakeRef() const
   {
@@ -96,8 +83,7 @@ struct LockedInputRaw
   [[nodiscard]] bool
   operator==( const LockedInputRaw & other ) const
   {
-    return ( this->fingerprint == other.fingerprint )
-           && ( this->url == other.url ) && ( this->attrs == other.attrs );
+    return ( this->url == other.url ) && ( this->attrs == other.attrs );
   }
 
   [[nodiscard]] bool
@@ -169,7 +155,8 @@ struct LockedPackageRaw
 
 
   [[nodiscard]] std::vector<CheckPackageWarning>
-  check( const std::string & packageId, const Options::Allows & allows ) const;
+  check( const std::string &               packageId,
+         const resolver::Options::Allows & allows ) const;
 }; /* End struct `LockedPackageRaw' */
 
 
@@ -245,160 +232,6 @@ from_json( const nlohmann::json & jfrom, LockfileRaw & raw );
 /** @brief Convert a @a flox::resolver::LockfileRaw to a JSON object. */
 void
 to_json( nlohmann::json & jto, const LockfileRaw & raw );
-
-
-/* -------------------------------------------------------------------------- */
-
-/**
- * @brief A locked representation of an environment.
- *
- * Unlike the _raw_ form, this form is suitable for stashing temporary variables
- * and other information that is not needed for serializing/de-serializing.
- */
-class Lockfile
-{
-
-private:
-
-  /** Raw representation of the lockfile. */
-  LockfileRaw lockfileRaw;
-
-  /**
-   * Handle for the manifest used to create the lockfile.
-   * This reads the lockfile's `manifest`.
-   */
-  EnvironmentManifest manifest;
-  /** Maps `{ <FINGERPRINT>: <INPUT> }` for all `packages` members' inputs. */
-  RegistryRaw packagesRegistryRaw;
-
-
-  /**
-   * @brief Check the lockfile's `packages.**` locked inputs align with the
-   *        requested groups in `manifest.install.<INSTALL-ID>.pkgGroup`,
-   *        Throws an exception if two packages in the same group use
-   *        different inputs.
-   */
-  void
-  checkGroups() const;
-
-  /**
-   * @brief Check the lockfile's validity, throwing an exception for
-   *        invalid contents.
-   *
-   * This asserts that:
-   * - `lockfileVersion` is supported.
-   * - `packages` members' groups are enforced.
-   * - original _manifest_ is consistent with the lockfile's
-   *   `registry.*` and `packages.**` members for `optional` and
-   *   `systems` skipping.
-   * - `registry` inputs do not use indirect flake references.
-   */
-  void
-  check() const;
-
-  /**
-   * @brief Initialize @a manifest and @a packagesRegistryRaw from
-   *        @a lockfileRaw.
-   */
-  void
-  init();
-
-
-public:
-
-  ~Lockfile()                  = default;
-  Lockfile()                   = default;
-  Lockfile( const Lockfile & ) = default;
-  Lockfile( Lockfile && )      = default;
-
-  explicit Lockfile( LockfileRaw raw ) : lockfileRaw( std::move( raw ) )
-  {
-    this->init();
-  }
-
-  explicit Lockfile( const std::filesystem::path & lockfilePath );
-
-  Lockfile &
-  operator=( const Lockfile & )
-    = default;
-
-  Lockfile &
-  operator=( Lockfile && )
-    = default;
-
-  /** @brief Get the _raw_ representation of the lockfile. */
-  [[nodiscard]] const LockfileRaw &
-  getLockfileRaw() const
-  {
-    return this->lockfileRaw;
-  }
-
-  /** @brief Get the original _manifest_ used to create the lockfile. */
-  [[nodiscard]] const ManifestRaw &
-  getManifestRaw() const
-  {
-    return this->getLockfileRaw().manifest;
-  }
-
-  /** @brief Get the locked registry from the _raw_ lockfile. */
-  [[nodiscard]] const RegistryRaw &
-  getRegistryRaw() const
-  {
-    return this->getLockfileRaw().registry;
-  }
-
-  /** @brief Get old manifest. */
-  [[nodiscard]] const EnvironmentManifest &
-  getManifest() const
-  {
-    return this->manifest;
-  }
-
-  /** @brief Get old descriptors. */
-  [[nodiscard]] const std::unordered_map<InstallID, ManifestDescriptor> &
-  getDescriptors() const
-  {
-    return this->getManifest().getDescriptors();
-  }
-
-  /**
-   * @brief Get the @a packagesRegistryRaw, containing all inputs used by
-   *        `packages.**` members of the lockfile.
-   *
-   * This registry keys inputs by their fingerprints.
-   */
-  [[nodiscard]] const RegistryRaw &
-  getPackagesRegistryRaw() const
-  {
-    return this->packagesRegistryRaw;
-  }
-
-  /**
-   * @brief Drop any `registry.inputs` and `registry.priority` members that are
-   *        not explicitly declared in the manifest `registry` or used by
-   *        resolved packages.
-   *
-   * @return The number of removed inputs.
-   */
-  std::size_t
-  removeUnusedInputs();
-
-
-  /**
-   * @brief Check the lockfile's `packages.**` members for consistency with the
-   * `options.allow.*` policies
-   *
-   * @return A list of warnings of non-fatal issues.
-   * @throws PackageCheckFailure if a package is not consistent with a policy.
-   */
-  std::vector<CheckPackageWarning>
-  checkPackages( const std::optional<flox::System> & system
-                 = std::nullopt ) const;
-
-}; /* End class `Lockfile' */
-
-
-/* -------------------------------------------------------------------------- */
 
 }  // namespace flox::resolver
 

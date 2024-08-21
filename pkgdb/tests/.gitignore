@@ -1,11 +1,9 @@
 buildenv-lockfile
 exceptions
 flox-nixpkgs
-gc
 is_sqlite3
 lock-flake-installable
 lockfile
-pkgdb
 realise
 registry
 util
