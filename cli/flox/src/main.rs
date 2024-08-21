@@ -9,7 +9,9 @@ use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
 use flox_rust_sdk::models::environment::{init_global_manifest, EnvironmentError};
+use flox_rust_sdk::providers::services::ServiceError;
 use log::{debug, warn};
+use utils::errors::format_service_error;
 use utils::init::{init_logger, init_sentry};
 use utils::{message, populate_default_nix_env_vars};
 
@@ -156,7 +158,8 @@ fn main() -> ExitCode {
                 .or_else(|| {
                     e.downcast_ref::<MigrationError>()
                         .map(format_migration_error)
-                });
+                })
+                .or_else(|| e.downcast_ref::<ServiceError>().map(format_service_error));
 
             if let Some(message) = message {
                 message::error(message);

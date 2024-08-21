@@ -507,6 +507,8 @@ pub struct ProcessComposeLogContents {
 /// These are errors formed by interpreting strings extracted from process-compose logs.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum LoggedError {
+    #[error("service manager unresponsive")]
+    ServiceManagerUnresponsive(PathBuf),
     #[error("couldn't connect to service manager")]
     SocketDoesntExist,
     #[error("service '{0}' is not running")]
@@ -547,22 +549,38 @@ impl From<ProcessComposeLogContents> for LoggedError {
         let regex = Regex::new(r"process ([a-zA-Z0-9_-]+) is not running")
             .expect("failed to compile regex");
         if let Some(captures) = regex.captures(&contents.cause_msg) {
-            LoggedError::ServiceNotRunning(
+            return LoggedError::ServiceNotRunning(
                 // Unwrapping is safe here, the regex guarantees that this capture group exists
                 captures
                     .get(1)
                     .expect("failed to extract capture group")
                     .as_str()
                     .to_string(),
-            )
-        } else if contents
+            );
+        }
+
+        if contents
             .cause_msg
             .contains("connect: no such file or directory")
         {
-            LoggedError::SocketDoesntExist
-        } else {
-            LoggedError::Other(contents.cause_msg)
+            return LoggedError::SocketDoesntExist;
         }
+
+        let regex = Regex::new(r"dial unix (.+) connect: connection refused")
+            .expect("failed to compile regex");
+
+        if let Some(captures) = regex.captures(&contents.cause_msg) {
+            let socket_path = PathBuf::from(
+                captures
+                    .get(1)
+                    .expect("failed to extract capture group")
+                    .as_str(),
+            );
+
+            return LoggedError::ServiceManagerUnresponsive(socket_path);
+        }
+
+        LoggedError::Other(contents.cause_msg)
     }
 }
 

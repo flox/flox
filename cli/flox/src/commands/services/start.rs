@@ -11,7 +11,6 @@ use flox_rust_sdk::providers::services::{
 };
 use tracing::{debug, instrument};
 
-use super::handle_service_connection_error;
 use crate::commands::services::{
     guard_is_within_activation,
     guard_service_commands_available,
@@ -42,13 +41,11 @@ impl Start {
         guard_is_within_activation(&env, "start")?;
         guard_service_commands_available(&env)?;
 
-        let socket = env.socket();
-
-        let start_new_process_compose = if !socket.exists() {
+        let start_new_process_compose = if !env.expect_services_running() {
             true
         } else {
             // Returns `Ok(true)` if `process-compose` was shutdown
-            shutdown_process_compose_if_all_processes_stopped(socket)?
+            shutdown_process_compose_if_all_processes_stopped(env.socket())?
         };
 
         if start_new_process_compose {
@@ -67,19 +64,18 @@ impl Start {
             Ok(())
         } else {
             debug!("starting services with existing process-compose instance");
-            Self::start_with_existing_process_compose(socket, &self.names, &mut stderr())
+            Self::start_with_existing_process_compose(env.socket(), &self.names, &mut stderr())
         }
     }
 
-    // Starts services using an already running process-compose.
-    // Defaults to starting all services if no services are specified.
+    /// Starts services using an already running process-compose.
+    /// Defaults to starting all services if no services are specified.
     fn start_with_existing_process_compose(
         socket: impl AsRef<Path>,
         names: &[String],
         err_stream: &mut impl std::io::Write,
     ) -> Result<()> {
-        let processes = ProcessStates::read(&socket)
-            .map_err(|error| handle_service_connection_error(error, socket.as_ref()))?;
+        let processes = ProcessStates::read(&socket)?;
         let named_processes = super::processes_by_name_or_default_to_all(&processes, names)?;
 
         let mut failure_count = 0;

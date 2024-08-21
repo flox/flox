@@ -9,11 +9,7 @@ use itertools::Itertools;
 use serde::Serialize;
 use tracing::instrument;
 
-use crate::commands::services::{
-    guard_service_commands_available,
-    handle_service_connection_error,
-    ServicesEnvironment,
-};
+use crate::commands::services::{guard_service_commands_available, ServicesEnvironment};
 use crate::commands::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
 
@@ -39,9 +35,7 @@ impl Status {
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
         guard_service_commands_available(&env)?;
 
-        let socket = env.socket();
-        let processes = ProcessStates::read(socket)
-            .map_err(|err| handle_service_connection_error(err, socket))?;
+        let processes = ProcessStates::read(env.socket())?;
 
         let named_processes = super::processes_by_name_or_default_to_all(&processes, &self.names)?;
 
