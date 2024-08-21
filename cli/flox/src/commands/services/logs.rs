@@ -10,11 +10,7 @@ use flox_rust_sdk::providers::services::{
 };
 use tracing::instrument;
 
-use crate::commands::services::{
-    guard_service_commands_available,
-    handle_service_connection_error,
-    ServicesEnvironment,
-};
+use crate::commands::services::{guard_service_commands_available, ServicesEnvironment};
 use crate::commands::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
 
@@ -44,8 +40,7 @@ impl Logs {
         guard_service_commands_available(&env)?;
 
         let socket = env.socket();
-        let processes = ProcessStates::read(socket)
-            .map_err(|err| handle_service_connection_error(err, socket))?;
+        let processes = ProcessStates::read(socket)?;
 
         if self.follow {
             let named_processes =

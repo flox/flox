@@ -14,6 +14,7 @@ use flox_rust_sdk::models::floxmeta::FloxMetaError;
 use flox_rust_sdk::models::lockfile::LockedManifestError;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, ContextMsgError, PkgDbError};
 use flox_rust_sdk::providers::git::GitRemoteCommandError;
+use flox_rust_sdk::providers::services::{LoggedError, ServiceError};
 use indoc::{formatdoc, indoc};
 use log::{debug, trace};
 
@@ -880,6 +881,25 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         LockedManifestError::UnfreeNotAllowed(_) => display_chain(err),
         LockedManifestError::MissingPackageDescriptor(_) => display_chain(err),
         LockedManifestError::LockFlakeNixError(_) => display_chain(err),
+    }
+}
+
+pub fn format_service_error(err: &ServiceError) -> String {
+    match err {
+        ServiceError::LoggedError(LoggedError::ServiceManagerUnresponsive(socket)) => formatdoc! {"
+            The service manager is unresponsive, please retry later.
+
+            If the problem persists, delete {socket}
+            and restart services with 'flox activate --start-services'
+            or 'flox services start' from an existing activation.
+        ", socket = socket.display()},
+        ServiceError::LoggedError(LoggedError::SocketDoesntExist) => formatdoc! {"
+            Services not started or quit unexpectedly.
+
+            To start services, run 'flox services start' in an activated environment,
+            or activate the environment with 'flox activate --start-services'.
+        "},
+        _ => display_chain(err),
     }
 }
 

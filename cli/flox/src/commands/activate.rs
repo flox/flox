@@ -329,6 +329,7 @@ impl Activate {
                 debug!("not starting services for in-place activation");
                 message::warning("Skipped starting services. Services are not yet supported for in place activations.");
             }
+
             // We should error for remote environments even if they don't have
             // services so that the user doesn't assume we're actually starting
             // services.

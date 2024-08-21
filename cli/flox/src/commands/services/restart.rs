@@ -3,13 +3,18 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::providers::services::{process_compose_down, restart_service, ProcessStates};
+use flox_rust_sdk::providers::services::{
+    process_compose_down,
+    restart_service,
+    LoggedError,
+    ProcessStates,
+    ServiceError,
+};
 use tracing::{debug, instrument};
 
 use crate::commands::services::{
     guard_is_within_activation,
     guard_service_commands_available,
-    handle_service_connection_error,
     start_with_new_process_compose,
     ServicesEnvironment,
 };
@@ -38,13 +43,16 @@ impl Restart {
         guard_service_commands_available(&env)?;
 
         let socket = env.socket();
-
         let existing_process_compose = socket.exists();
-        let existing_processes = match existing_process_compose {
-            true => ProcessStates::read(socket)
-                .map_err(|err| handle_service_connection_error(err, socket))?,
-            false => ProcessStates::from(vec![]),
+
+        let existing_processes = match ProcessStates::read(socket) {
+            Ok(process_states) => process_states,
+            Err(ServiceError::LoggedError(LoggedError::SocketDoesntExist)) => {
+                ProcessStates::from(vec![])
+            },
+            Err(e) => return Err(e.into()),
         };
+
         let all_processes_stopped = existing_processes.iter().all(|p| p.is_stopped());
         let restart_all = self.names.is_empty();
 
