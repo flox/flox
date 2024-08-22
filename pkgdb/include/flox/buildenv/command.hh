@@ -39,7 +39,7 @@ private:
   std::optional<System>      system;
   std::optional<std::string> storePath;
   std::optional<std::string> serviceConfigPath;
-  bool                       buildContainer;
+  bool                       buildContainer = false;
 
 
 public:
