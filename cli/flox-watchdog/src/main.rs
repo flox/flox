@@ -58,6 +58,10 @@ pub struct Cli {
     /// Where to store watchdog logs
     #[arg(short, long = "logs", value_name = "PATH")]
     pub log_path: Option<PathBuf>,
+
+    /// Disable metric reporting
+    #[arg(long)]
+    pub disable_metrics: bool,
 }
 
 #[instrument("watchdog",
@@ -75,7 +79,7 @@ fn main() -> Result<(), Error> {
     if let Err(err) = ensure_process_group_leader() {
         error!(%err, "failed to ensure watchdog is detached from terminal");
     }
-    let _sentry_guard = init_sentry();
+    let _sentry_guard = (!args.disable_metrics).then(init_sentry);
     let span = tracing::Span::current();
     span.record("pid", args.pid);
     span.record("registry", traceable_path(&args.registry_path));
