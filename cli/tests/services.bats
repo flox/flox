@@ -170,7 +170,7 @@ EOF
   setup_sleeping_services
 
   RUST_LOG=debug run "$FLOX_BIN" activate -- true
-  assert_output --partial "will not start services"
+  assert_output --partial "setting service variables should_have_services=false start_new_process_compose=false"
 }
 
 @test "all imperative commands error when no services are defined" {
@@ -909,6 +909,48 @@ EOF
     done
   "
   assert_success
+}
+
+@test "activate: outer activation starts services and inner activation doesn't" {
+  setup_sleeping_services
+
+  export INNER_PROJECT_DIR="${PROJECT_NAME}-nested"
+  "$FLOX_BIN" init -d "$INNER_PROJECT_DIR"
+  assert_success
+
+  run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "${TESTS_DIR}/services/echo_activate_vars.sh" outer
+    "$FLOX_BIN" activate -d "$INNER_PROJECT_DIR" -- bash "${TESTS_DIR}/services/echo_activate_vars.sh" inner
+EOF
+)
+  assert_success
+  assert_line "outer FLOX_ACTIVATE_START_SERVICES=true"
+  assert_line "outer _FLOX_SERVICES_TO_START=unset"
+  assert_line "inner FLOX_ACTIVATE_START_SERVICES=false"
+  assert_line "inner _FLOX_SERVICES_TO_START=unset"
+}
+
+@test "activate: outer activation imperatively starts services and inner activation doesn't" {
+  setup_sleeping_services
+
+  export INNER_PROJECT_DIR="${PROJECT_NAME}-nested"
+  "$FLOX_BIN" init -d "$INNER_PROJECT_DIR"
+  assert_success
+
+  # NB: no --start-services
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    "$FLOX_BIN" services start
+    "${TESTS_DIR}/services/echo_activate_vars.sh" outer
+    "$FLOX_BIN" activate -d "$INNER_PROJECT_DIR" -- bash "${TESTS_DIR}/services/echo_activate_vars.sh" inner
+EOF
+)
+  assert_success
+  assert_line "outer FLOX_ACTIVATE_START_SERVICES=false"
+  assert_line "outer _FLOX_SERVICES_TO_START=unset"
+  assert_line "inner FLOX_ACTIVATE_START_SERVICES=false"
+  assert_line "inner _FLOX_SERVICES_TO_START=unset"
 }
 
 # ---------------------------------------------------------------------------- #

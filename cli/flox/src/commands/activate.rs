@@ -304,6 +304,14 @@ impl Activate {
 
         if is_ephemeral {
             exports.insert("_FLOX_ACTIVATE_FORCE_REACTIVATE", "true".to_string());
+            if !services_to_start.is_empty() {
+                exports.insert(
+                    FLOX_SERVICES_TO_START_VAR,
+                    // Store JSON in an env var because bash doesn't
+                    // support storing arrays in env vars
+                    serde_json::to_string(&services_to_start)?,
+                );
+            }
         }
 
         let socket_path = environment.services_socket_path(&flox)?;
@@ -327,42 +335,31 @@ impl Activate {
             if self.start_services {
                 supported_environment(&flox, &self.environment)?; // Error for remote envs.
             }
-            if !manifest.services.is_empty() && !in_place {
-                // Always set the socket var because we use it to register
-                // cleanup in tests
-                // We can probably drop this extra conditional once we drop
-                // `register_cleanup.sh`
-                exports.insert(
-                    FLOX_SERVICES_SOCKET_VAR,
-                    socket_path.to_string_lossy().to_string(),
-                );
-                if self.start_services {
-                    let start_new_process_compose = if socket_path.exists() {
-                        // Returns `Ok(true)` if `process-compose` was shutdown
-                        shutdown_process_compose_if_all_processes_stopped(&socket_path)?
-                    } else {
-                        true
-                    };
-                    if start_new_process_compose {
-                        tracing::debug!(start = self.start_services, "setting service variables");
-                        exports.insert(
-                            FLOX_ACTIVATE_START_SERVICES_VAR,
-                            self.start_services.to_string(), // "true"
-                        );
-                        if !services_to_start.is_empty() {
-                            exports.insert(
-                                FLOX_SERVICES_TO_START_VAR,
-                                // Store JSON in an env var because bash doesn't
-                                // support storing arrays in env vars
-                                serde_json::to_string(&services_to_start)?,
-                            );
-                        }
-                    } else {
-                        message::warning("Skipped starting services, services are already running");
-                    }
+
+            let should_have_services =
+                self.start_services && !manifest.services.is_empty() && !in_place;
+            let start_new_process_compose = should_have_services
+                && if socket_path.exists() {
+                    // Returns `Ok(true)` if `process-compose` was shutdown
+                    shutdown_process_compose_if_all_processes_stopped(&socket_path)?
                 } else {
-                    debug!("will not start services");
-                }
+                    true
+                };
+            tracing::debug!(
+                should_have_services,
+                start_new_process_compose,
+                "setting service variables"
+            );
+            exports.insert(
+                FLOX_ACTIVATE_START_SERVICES_VAR,
+                start_new_process_compose.to_string(),
+            );
+            exports.insert(
+                FLOX_SERVICES_SOCKET_VAR,
+                socket_path.to_string_lossy().to_string(),
+            );
+            if should_have_services && !start_new_process_compose {
+                message::warning("Skipped starting services, services are already running");
             }
         }
 
