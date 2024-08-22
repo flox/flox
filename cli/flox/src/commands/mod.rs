@@ -445,6 +445,21 @@ enum UpdateNotificationError {
     WeMayHaveMessedUp(#[from] anyhow::Error),
 }
 
+#[derive(Debug, PartialEq)]
+enum UpdateCheckResult {
+    /// Updates we're not checked.
+    /// Either because the check cooldown hasn't expired,
+    /// the user is in development mode,
+    /// or we can't prompt the user.
+    Skipped,
+    /// No update available, but the notification file is or expired
+    /// Used to cause a refresh of the notification file
+    /// and reset
+    RefreshNotificationFile(PathBuf),
+    /// An update is available
+    UpdateAvailable(UpdateNotification),
+}
+
 impl UpdateNotification {
     pub async fn check_for_and_print_update_notification(cache_dir: impl AsRef<Path>) {
         Self::handle_update_result(Self::check_for_update(cache_dir).await)
@@ -454,20 +469,26 @@ impl UpdateNotification {
     /// UPDATE_NOTIFICATION_EXPIRY time has passed, check for an update.
     pub async fn check_for_update(
         cache_dir: impl AsRef<Path>,
-    ) -> Result<Option<Self>, UpdateNotificationError> {
+    ) -> Result<UpdateCheckResult, UpdateNotificationError> {
         let notification_file = cache_dir.as_ref().join(UPDATE_NOTIFICATION_FILE_NAME);
         // FLOX_SENTRY_ENV won't be set for development builds.
         // Skip printing an update notification.
-        if let Some(ref sentry_env) = *FLOX_SENTRY_ENV {
-            Self::check_for_update_inner(
-                notification_file,
-                Self::get_latest_version(sentry_env),
-                UPDATE_NOTIFICATION_EXPIRY,
-            )
-            .await
-        } else {
-            Ok(None)
+        let Some(ref sentry_env) = *FLOX_SENTRY_ENV else {
+            debug!("Skipping update check in development mode");
+            return Ok(UpdateCheckResult::Skipped);
+        };
+
+        if !Dialog::can_prompt() {
+            debug!("Skipping update check because we can't prompt the user");
+            return Ok(UpdateCheckResult::Skipped);
         }
+
+        Self::check_for_update_inner(
+            notification_file,
+            Self::get_latest_version(sentry_env),
+            UPDATE_NOTIFICATION_EXPIRY,
+        )
+        .await
     }
 
     /// If the user hasn't been notified of an update after `expiry` time has
@@ -476,7 +497,7 @@ impl UpdateNotification {
         notification_file: PathBuf,
         get_latest_version_future: impl Future<Output = Result<String, UpdateNotificationError>>,
         expiry: Duration,
-    ) -> Result<Option<Self>, UpdateNotificationError> {
+    ) -> Result<UpdateCheckResult, UpdateNotificationError> {
         // Return early if we find a notification_file with a last_notification
         // that hasn't expired
         match fs::read_to_string(&notification_file) {
@@ -489,7 +510,7 @@ impl UpdateNotification {
 
                 let now = OffsetDateTime::now_utc();
                 if now - update_notification.last_notification < expiry {
-                    return Ok(None);
+                    return Ok(UpdateCheckResult::Skipped);
                 }
             },
             Err(e) => Err(UpdateNotificationError::Io(e))?,
@@ -505,10 +526,12 @@ impl UpdateNotification {
         }
 
         if *FLOX_VERSION == new_version {
-            return Ok(None);
+            return Ok(UpdateCheckResult::RefreshNotificationFile(
+                notification_file,
+            ));
         };
 
-        Ok(Some(UpdateNotification {
+        Ok(UpdateCheckResult::UpdateAvailable(UpdateNotification {
             new_version,
             notification_file,
         }))
@@ -517,11 +540,15 @@ impl UpdateNotification {
     /// Print if there's a new version available,
     /// or handle an error
     pub fn handle_update_result(
-        update_notification: Result<Option<Self>, UpdateNotificationError>,
+        update_notification: Result<UpdateCheckResult, UpdateNotificationError>,
     ) {
         match update_notification {
-            Ok(None) => {},
-            Ok(Some(update_notification)) => {
+            Ok(UpdateCheckResult::Skipped) => {},
+            Ok(UpdateCheckResult::RefreshNotificationFile(notification_file)) => {
+                Self::write_notification_file(notification_file);
+            },
+            Ok(UpdateCheckResult::UpdateAvailable(update_notification)) => {
+                Self::write_notification_file(&update_notification.notification_file);
                 update_notification.print_new_version_available();
             },
             Err(UpdateNotificationError::WeMayHaveMessedUp(e)) => {
@@ -574,16 +601,28 @@ impl UpdateNotification {
             self.new_version,
             Self::update_instructions(UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH),
         });
+    }
 
-        if let Err(e) = serde_json::to_string_pretty(&LastUpdateNotification {
+    fn write_notification_file(notification_file: impl AsRef<Path>) {
+        let last_notification = LastUpdateNotification {
             last_notification: OffsetDateTime::now_utc(),
-        })
-        .map(|contents| {
-            fs::write(&self.notification_file, contents).map_err(UpdateNotificationError::Io)
-        }) {
-            // Ignore serialization and write errors
-            debug!("Failed to write update notification file: {e}");
         };
+
+        let notification_file_contents = match serde_json::to_string(&last_notification) {
+            Ok(contents) => contents,
+            Err(e) => {
+                debug!("Failed to serialize update notification file: {e}");
+                return;
+            },
+        };
+
+        match fs::write(notification_file, notification_file_contents) {
+            Ok(_) => {},
+            Err(e) => {
+                let e = UpdateNotificationError::Io(e);
+                debug!("Failed to write update notification file: {e}");
+            },
+        }
     }
 
     /// Get latest version from downloads.flox.dev
@@ -1819,16 +1858,36 @@ mod tests {
         assert_eq!(last_active.unwrap(), env2)
     }
 
-    /// [UpdateNotification::print_new_version_available] should write notification_file
+    /// [UpdateNotification::handle_update_result] should write notification_file,
+    /// if an update is available
     #[test]
-    fn test_print_new_version_available_writes_file() {
+    fn handle_update_result_writes_file_if_update_available() {
         let temp_dir = tempdir().unwrap();
         let notification_file = temp_dir.path().join("notification_file");
-        UpdateNotification {
-            new_version: "new_version".to_string(),
-            notification_file: notification_file.clone(),
-        }
-        .print_new_version_available();
+
+        UpdateNotification::handle_update_result(Ok(UpdateCheckResult::UpdateAvailable(
+            UpdateNotification {
+                new_version: "new_version".to_string(),
+                notification_file: notification_file.clone(),
+            },
+        )));
+
+        serde_json::from_str::<LastUpdateNotification>(
+            &fs::read_to_string(notification_file).unwrap(),
+        )
+        .unwrap();
+    }
+
+    /// [UpdateNotification::handle_update_result] should write notification_file,
+    /// if no file has been written before
+    #[test]
+    fn handle_update_result_writes_file_if_file_missing() {
+        let temp_dir = tempdir().unwrap();
+        let notification_file = temp_dir.path().join("notification_file");
+
+        UpdateNotification::handle_update_result(Ok(UpdateCheckResult::RefreshNotificationFile(
+            notification_file.clone(),
+        )));
 
         serde_json::from_str::<LastUpdateNotification>(
             &fs::read_to_string(notification_file).unwrap(),
@@ -1884,7 +1943,7 @@ mod tests {
         )
         .await;
 
-        assert!(result.unwrap().is_none());
+        assert_eq!(result.unwrap(), UpdateCheckResult::Skipped);
     }
 
     /// When notification_file contains an old timestamp,
@@ -1911,10 +1970,13 @@ mod tests {
         )
         .await;
 
-        assert_eq!(result.unwrap().unwrap(), UpdateNotification {
-            notification_file,
-            new_version: "0.0.0".to_string()
-        });
+        assert_eq!(
+            result.unwrap(),
+            UpdateCheckResult::UpdateAvailable(UpdateNotification {
+                notification_file,
+                new_version: "0.0.0".to_string()
+            })
+        );
     }
 
     /// When there's no existing notification_file,
@@ -1931,10 +1993,13 @@ mod tests {
         )
         .await;
 
-        assert_eq!(result.unwrap().unwrap(), UpdateNotification {
-            notification_file,
-            new_version: "0.0.0".to_string()
-        });
+        assert_eq!(
+            result.unwrap(),
+            UpdateCheckResult::UpdateAvailable(UpdateNotification {
+                notification_file,
+                new_version: "0.0.0".to_string()
+            })
+        );
     }
 
     /// testable_check_for_update fails when get_latest_version_function doesn't
@@ -1959,10 +2024,31 @@ mod tests {
         }
     }
 
-    /// testable_check_for_update fails when get_latest_version_function doesn't
-    /// return something that looks like a version
+    /// [UpdateNotification::check_for_update_inner] fails when `get_latest_version_function`
+    /// doesn't return something that looks like a version
     #[tokio::test]
-    async fn test_check_for_update_returns_none_for_flox_version() {
+    async fn test_check_for_update_returns_no_update_for_invalid_version() {
+        let temp_dir = tempdir().unwrap();
+        let notification_file = temp_dir.path().join(UPDATE_NOTIFICATION_FILE_NAME);
+
+        let result = UpdateNotification::check_for_update_inner(
+            notification_file.clone(),
+            async { Ok("not-a-version".into()) },
+            UPDATE_NOTIFICATION_EXPIRY,
+        )
+        .await;
+
+        assert!(
+            matches!(result, Err(UpdateNotificationError::WeMayHaveMessedUp(_))),
+            "{result:?}"
+        );
+    }
+
+    /// [UpdateNotification::check_for_update_inner] returns
+    /// [UpdateCheckResult::MissingNotificationFile] if no update is available
+    ///  but the nitification file is missing
+    #[tokio::test]
+    async fn test_check_for_update_returns_missing_notification_file() {
         let temp_dir = tempdir().unwrap();
         let notification_file = temp_dir.path().join(UPDATE_NOTIFICATION_FILE_NAME);
 
@@ -1973,7 +2059,10 @@ mod tests {
         )
         .await;
 
-        assert!(result.unwrap().is_none());
+        assert_eq!(
+            result.unwrap(),
+            UpdateCheckResult::RefreshNotificationFile(notification_file)
+        );
     }
 
     // test that update_instructions provides default message when update-instructions.txt file
