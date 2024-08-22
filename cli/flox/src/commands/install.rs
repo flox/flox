@@ -38,6 +38,7 @@ use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
 use crate::utils::errors::apply_doc_link_for_unsupported_packages;
 use crate::utils::message;
+use crate::utils::tracing::sentry_set_tag;
 
 // Install a package into an environment
 #[derive(Bpaf, Clone)]
@@ -73,7 +74,7 @@ pub struct PkgWithIdOption {
 }
 
 impl Install {
-    #[instrument(name = "install", fields(packages), skip_all)]
+    #[instrument(name = "install", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("install");
 
@@ -140,7 +141,7 @@ impl Install {
         }
 
         // We don't know the contents of the packages field when the span is created
-        tracing::Span::current().record(
+        sentry_set_tag(
             "packages",
             Install::format_packages_for_tracing(&packages_to_install),
         );

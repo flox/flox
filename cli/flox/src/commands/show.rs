@@ -21,6 +21,7 @@ use tracing::instrument;
 
 use crate::subcommand_metric;
 use crate::utils::search::{manifest_and_lockfile, DEFAULT_DESCRIPTION, SEARCH_INPUT_SEPARATOR};
+use crate::utils::tracing::sentry_set_tag;
 
 // Show detailed package information
 #[derive(Debug, Bpaf, Clone)]
@@ -32,9 +33,10 @@ pub struct Show {
 }
 
 impl Show {
-    #[instrument(name = "show", fields(pkg_path = self.pkg_path), skip_all)]
+    #[instrument(name = "show", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("show");
+        sentry_set_tag("pkg_path", &self.pkg_path);
 
         if let Some(client) = flox.catalog_client {
             tracing::debug!("using catalog client for show");

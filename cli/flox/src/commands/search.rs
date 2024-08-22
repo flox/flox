@@ -18,6 +18,7 @@ use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
 use crate::utils::message;
 use crate::utils::search::{construct_search_params, manifest_and_lockfile, DisplaySearchResults};
+use crate::utils::tracing::sentry_set_tag;
 
 pub(crate) const DEFAULT_SEARCH_LIMIT: Option<NonZeroU8> = NonZeroU8::new(10);
 const FLOX_SHOW_HINT: &str = "Use 'flox show <package>' to see available versions";
@@ -49,8 +50,11 @@ pub struct Search {
 // which is TODO.
 // Luckily most flakes don't.
 impl Search {
-    #[instrument(name = "search", fields(json = self.json, show_all = self.all, search_term = self.search_term), skip_all)]
+    #[instrument(name = "search", skip_all)]
     pub async fn handle(self, config: Config, flox: Flox) -> Result<()> {
+        sentry_set_tag("json", self.json);
+        sentry_set_tag("show_all", self.all);
+        sentry_set_tag("search_term", &self.search_term);
         subcommand_metric!("search", search_term = &self.search_term);
 
         debug!("performing search for term: {}", self.search_term);
