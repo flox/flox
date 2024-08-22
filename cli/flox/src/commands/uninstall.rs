@@ -18,6 +18,7 @@ use crate::commands::{
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
+use crate::utils::tracing::sentry_set_tag;
 
 // Uninstall installed packages from an environment
 #[derive(Bpaf, Clone)]
@@ -31,13 +32,10 @@ pub struct Uninstall {
 }
 
 impl Uninstall {
-    #[instrument(name = "uninstall", fields(packages), skip_all)]
+    #[instrument(name = "uninstall", skip_all)]
     pub async fn handle(self, mut flox: Flox) -> Result<()> {
         subcommand_metric!("uninstall");
-
-        // Vec<T> doesn't implement tracing::Value, so you have to join the strings
-        // yourself.
-        tracing::Span::current().record("packages", self.packages.iter().join(","));
+        sentry_set_tag("packages", self.packages.iter().join(","));
 
         debug!(
             "uninstalling packages [{}] from {:?}",

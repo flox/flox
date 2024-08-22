@@ -23,6 +23,7 @@ use super::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
+use crate::utils::tracing::sentry_set_tag;
 
 // List packages installed in an environment
 #[derive(Bpaf, Clone)]
@@ -54,7 +55,7 @@ pub enum ListMode {
 }
 
 impl List {
-    #[instrument(name = "list", fields(mode), skip_all)]
+    #[instrument(name = "list", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
         subcommand_metric!("list");
 
@@ -65,7 +66,8 @@ impl List {
 
         let manifest_contents = env.manifest_contents(&flox)?;
         if self.list_mode == ListMode::Config {
-            tracing::Span::current().record("mode", "config");
+            sentry_set_tag("mode", "config");
+
             println!("{}", manifest_contents);
             return Ok(());
         }
@@ -91,15 +93,15 @@ impl List {
 
         match self.list_mode {
             ListMode::NameOnly => {
-                tracing::Span::current().record("mode", "name");
+                sentry_set_tag("mode", "name");
                 Self::print_name_only(stdout().lock(), &packages)?;
             },
             ListMode::Extended => {
-                tracing::Span::current().record("mode", "extended");
+                sentry_set_tag("mode", "extended");
                 Self::print_extended(stdout().lock(), &packages)?;
             },
             ListMode::All => {
-                tracing::Span::current().record("mode", "all");
+                sentry_set_tag("mode", "all");
                 Self::print_detail(stdout().lock(), &packages)?;
             },
             ListMode::Config => unreachable!(),
