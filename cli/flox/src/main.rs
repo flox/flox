@@ -79,11 +79,10 @@ fn main() -> ExitCode {
             .unwrap_or_default()
     };
 
+    init_logger(Some(verbosity));
     // Sentry client must be initialized before starting an async runtime or spawning threads
     // https://docs.sentry.io/platforms/rust/#async-main-function
     let _sentry_guard = init_sentry();
-    init_logger(Some(verbosity));
-
     let _metrics_guard = Hub::global().try_guard().ok();
 
     // Pass down the verbosity level to all pkgdb calls
