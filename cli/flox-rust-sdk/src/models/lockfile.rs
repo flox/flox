@@ -101,6 +101,13 @@ impl LockedManifest {
         let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
         serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
     }
+
+    pub fn version(&self) -> u8 {
+        match self {
+            LockedManifest::Pkgdb(_) => 0,
+            LockedManifest::Catalog(_) => 1,
+        }
+    }
 }
 
 impl Display for LockedManifest {

@@ -175,6 +175,13 @@ impl Activate {
             other => other?,
         };
 
+        // Must come after getting an activation path to prevent premature
+        // locking or migration.
+        subcommand_metric!(
+            "activate#version",
+            lockfile_version = environment.lockfile(&flox)?.version()
+        );
+
         // read the currently active environments from the environment
         let mut flox_active_environments = activated_environments();
 
