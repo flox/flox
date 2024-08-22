@@ -57,6 +57,7 @@ pub enum ListMode {
 impl List {
     #[instrument(name = "list", skip_all)]
     pub async fn handle(self, flox: Flox) -> Result<()> {
+        sentry_set_tag("list_mode", format!("{:?}", &self.list_mode));
         subcommand_metric!("list");
 
         let mut env = self
@@ -66,8 +67,6 @@ impl List {
 
         let manifest_contents = env.manifest_contents(&flox)?;
         if self.list_mode == ListMode::Config {
-            sentry_set_tag("mode", "config");
-
             println!("{}", manifest_contents);
             return Ok(());
         }
@@ -93,15 +92,12 @@ impl List {
 
         match self.list_mode {
             ListMode::NameOnly => {
-                sentry_set_tag("mode", "name");
                 Self::print_name_only(stdout().lock(), &packages)?;
             },
             ListMode::Extended => {
-                sentry_set_tag("mode", "extended");
                 Self::print_extended(stdout().lock(), &packages)?;
             },
             ListMode::All => {
-                sentry_set_tag("mode", "all");
                 Self::print_detail(stdout().lock(), &packages)?;
             },
             ListMode::Config => unreachable!(),
