@@ -1,5 +1,7 @@
+use std::borrow::Cow;
+
 use anyhow::anyhow;
-use flox_rust_sdk::flox::FLOX_SENTRY_ENV;
+use flox_rust_sdk::flox::{FLOX_SENTRY_ENV, FLOX_VERSION};
 use sentry::{ClientInitGuard, IntoDsn};
 use tracing::{debug, warn};
 
@@ -38,8 +40,7 @@ pub fn init_sentry() -> Option<ClientInitGuard> {
         dsn: Some(sentry_dsn),
 
         // https://docs.sentry.io/platforms/rust/configuration/releases/
-        // TODO: should we maybe just use commit hash
-        release: sentry::release_name!(),
+        release: Some(Cow::Owned(format!("flox-watchdog@{}", &*FLOX_VERSION))),
 
         // https://docs.sentry.io/platforms/rust/configuration/environments/
         environment: Some(sentry_env.into()),
