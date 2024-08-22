@@ -28,14 +28,6 @@ pub fn init_sentry() -> Option<ClientInitGuard> {
         .clone()
         .unwrap_or_else(|| "development".to_string());
 
-    // TODO: configure user
-    // https://docs.sentry.io/platforms/rust/enriching-events/identify-user/
-    // sentry::configure_scope(|scope| {
-    //     scope.set_user(Some(sentry::User {
-    //     ..
-    //    }));
-    // });
-
     let sentry = sentry::init(sentry::ClientOptions {
         dsn: Some(sentry_dsn),
 
