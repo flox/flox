@@ -79,10 +79,15 @@ fn main() -> ExitCode {
             .unwrap_or_default()
     };
 
+    let disable_metrics = config::Config::parse()
+        .unwrap_or_default()
+        .flox
+        .disable_metrics;
+
     init_logger(Some(verbosity));
     // Sentry client must be initialized before starting an async runtime or spawning threads
     // https://docs.sentry.io/platforms/rust/#async-main-function
-    let _sentry_guard = init_sentry();
+    let _sentry_guard = (!disable_metrics).then(init_sentry);
     let _metrics_guard = Hub::global().try_guard().ok();
 
     // Pass down the verbosity level to all pkgdb calls

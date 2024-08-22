@@ -372,6 +372,7 @@ impl Activate {
                 environment.log_path()?.to_path_buf(),
                 &path_hash(environment.dot_flox_path()),
                 socket_path,
+                config.flox.disable_metrics,
             )?;
         }
 
@@ -404,8 +405,12 @@ impl Activate {
         log_dir: PathBuf,
         path_hash: &str,
         socket_path: impl AsRef<Path>,
+        disable_metrics: bool,
     ) -> Result<()> {
         let mut cmd = Command::new(&*WATCHDOG_BIN);
+        if disable_metrics {
+            cmd.arg("--disable-metrics");
+        }
 
         // This process may terminate before the watchdog installs its signal handler,
         // so we pass it the PID of this process unconditionally (note that on Linux passing this
