@@ -179,6 +179,21 @@ setup_file() {
   assert "$TEST" -f "${store_path}/package-builds.d/hello"
 }
 
+# bats test_tags=buildenv:include-lockfile
+@test "Built environment contains lockfile" {
+
+  orginalLockfile="$GENERATED_DATA/envs/hello/manifest.lock"
+  run "$PKGDB_BIN" buildenv "${orginalLockfile}"
+  assert_success
+  store_path=$(echo "$output" | jq -er '.store_path')
+  assert "$TEST" -f "${store_path}/manifest.lock"
+
+  assert diff \
+    <(jq --sort-keys . "${store_path}/manifest.lock" ) \
+    <(jq --sort-keys . "${orginalLockfile}")
+}
+
+
 # ---------------------------------------------------------------------------- #
 
 # With '--container' produces a script that can be used to build a container.
