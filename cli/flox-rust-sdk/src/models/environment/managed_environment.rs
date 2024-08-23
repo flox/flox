@@ -1596,6 +1596,9 @@ pub mod test_helpers {
     ///
     /// If a [ManagedEnvironment] will be unused in tests, use
     /// [unusable_mock_managed_environment] instead.
+    ///
+    /// TODO: currently this doesn't lock the environment, which puts us in what
+    /// should be an unreachable state compared to normal use.
     pub fn mock_managed_environment(
         flox: &Flox,
         contents: &str,
