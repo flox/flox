@@ -1650,10 +1650,7 @@ mod test {
     use url::Url;
 
     use super::*;
-    use crate::flox::test_helpers::{
-        flox_instance,
-        flox_instance_with_optional_floxhub_and_client,
-    };
+    use crate::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use crate::models::env_registry::{
         env_registry_lock_path,
         env_registry_path,
@@ -2228,8 +2225,7 @@ mod test {
     #[test]
     fn reset_local_checkout_discards_local_changes() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         flox.catalog_client = Some(MockClient::new(None::<&str>).unwrap().into());
 
@@ -2276,8 +2272,7 @@ mod test {
     #[test]
     fn test_local_checkout_recreates_env_dir() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let managed_env = test_helpers::mock_managed_environment(
             &flox,
@@ -2320,8 +2315,7 @@ mod test {
     #[test]
     fn test_local_checkout_keeps_local_modifications() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let managed_env = test_helpers::mock_managed_environment(
             &flox,
@@ -2355,8 +2349,7 @@ mod test {
     #[test]
     fn test_sync_local() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let client = MockClient::new(None::<&str>).unwrap();
         flox.catalog_client = Some(client.into());
@@ -2416,8 +2409,7 @@ mod test {
     #[test]
     fn create_generation_from_local_env_builds_and_locks() {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let mut managed_env = test_helpers::mock_managed_environment(
             &flox,

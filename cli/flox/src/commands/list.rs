@@ -275,7 +275,7 @@ impl List {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
@@ -584,7 +584,7 @@ mod tests {
     #[tokio::test]
     async fn list_v0_environment() {
         // We want a catalog client so we know we aren't calling pkgdb lock
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
 
         let environment =
             new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
@@ -600,7 +600,7 @@ mod tests {
     /// Attempting to `flox list` on a v0 environment without a lockfile should fail
     #[tokio::test]
     async fn list_v0_environment_fails_without_lockfile() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
 
         let manifest_contents =
             std::fs::read_to_string(MANUALLY_GENERATED.join("hello_v0").join(MANIFEST_FILENAME))

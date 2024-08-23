@@ -421,7 +421,7 @@ impl Edit {
 mod tests {
     use std::fs;
 
-    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
+    use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
     use flox_rust_sdk::models::environment::test_helpers::MANIFEST_V0_FIELDS;
@@ -792,7 +792,7 @@ mod tests {
     /// but the edit should fail.
     #[tokio::test]
     async fn migration_successful_migration_unsuccessful_edit() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let mut concrete_environment = ConcreteEnvironment::Path(new_path_environment(&flox, ""));
         let new_contents = indoc! {r#"
             [options]
@@ -826,7 +826,7 @@ mod tests {
     /// and the edit should fail.
     #[tokio::test]
     async fn migration_unsuccessful_migration_unsuccessful_edit() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
 
         let mut concrete_environment =
             ConcreteEnvironment::Path(new_path_environment(&flox, MANIFEST_V0_FIELDS));
@@ -863,7 +863,7 @@ mod tests {
     /// but the edit should succeed.
     #[tokio::test]
     async fn migration_unsuccessful_migration_successful_edit() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
 
         let mut concrete_environment =
             ConcreteEnvironment::Path(new_path_environment(&flox, MANIFEST_V0_FIELDS));
@@ -898,7 +898,7 @@ mod tests {
     /// and the edit should succeed.
     #[tokio::test]
     async fn migration_successful_migration_successful_edit() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let old_contents = indoc! {r#"
             [options]
             allow.broken = false
@@ -934,8 +934,7 @@ mod tests {
     #[tokio::test]
     async fn edit_requires_sync_checkout() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
         let old_contents = indoc! {r#"
             version = 1
         "#};
@@ -967,8 +966,7 @@ mod tests {
     #[tokio::test]
     async fn edit_with_file_ignores_local_changes() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
         let old_contents = indoc! {r#"
             version = 1
         "#};

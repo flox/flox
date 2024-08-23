@@ -592,10 +592,7 @@ mod tests {
     use test_helpers::{new_path_environment, new_path_environment_from_env_files};
 
     use super::*;
-    use crate::flox::test_helpers::{
-        flox_instance,
-        flox_instance_with_optional_floxhub_and_client,
-    };
+    use crate::flox::test_helpers::flox_instance;
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
     use crate::models::environment::CoreEnvironmentError;
     use crate::providers::catalog::MANUALLY_GENERATED;
@@ -635,7 +632,7 @@ mod tests {
     /// Write a manifest file with invalid toml to ensure we can catch
     #[test]
     fn cache_activation_path() {
-        let (flox, temp_dir) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, temp_dir) = flox_instance();
 
         let environment_temp_dir = tempfile::tempdir_in(&temp_dir).unwrap();
         let pointer = PathPointer::new("test".parse().unwrap());
@@ -744,7 +741,7 @@ mod tests {
     #[test]
     fn build_container_for_v0_environment() {
         // We want a catalog client so we know we aren't calling pkgdb lock
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
 
         let mut environment =
             new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
@@ -754,7 +751,7 @@ mod tests {
     /// Attempting to build a container for a v0 environment without a lockfile should fail
     #[test]
     fn build_container_for_v0_environment_fails_without_lockfile() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
 
         let manifest_contents =
             std::fs::read_to_string(MANUALLY_GENERATED.join("hello_v0").join(MANIFEST_FILENAME))
@@ -771,7 +768,7 @@ mod tests {
     #[test]
     fn activation_path_for_v0_environment() {
         // We want a catalog client so we know we aren't calling pkgdb lock
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
 
         let mut environment =
             new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
@@ -781,7 +778,7 @@ mod tests {
     /// Attempting to build a v0 environment without a lockfile should fail
     #[test]
     fn activation_path_for_v0_environment_fails_without_lockfile() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
 
         let manifest_contents =
             std::fs::read_to_string(MANUALLY_GENERATED.join("hello_v0").join(MANIFEST_FILENAME))

@@ -228,15 +228,14 @@ pub mod test_helpers {
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
     pub fn flox_instance() -> (Flox, TempDir) {
-        flox_instance_with_optional_floxhub_and_client(None, true)
+        flox_instance_with_optional_floxhub(None)
     }
 
     /// If owner is None, no mock FloxHub is setup.
     /// If it is Some, a mock FloxHub with a repo for that owner will be setup,
     /// but no other owners will work.
-    pub fn flox_instance_with_optional_floxhub_and_client(
+    pub fn flox_instance_with_optional_floxhub(
         owner: Option<&EnvironmentOwner>,
-        use_client: bool,
     ) -> (Flox, TempDir) {
         // Use /tmp instead of std::env::temp_dir since we store sockets in cache_dir,
         // and std::env::temp_dir may return a path that is too long.
@@ -273,11 +272,7 @@ pub mod test_helpers {
             )
             .unwrap(),
             floxhub_token: None,
-            catalog_client: if use_client {
-                Some(MockClient::default().into())
-            } else {
-                None
-            },
+            catalog_client: Some(MockClient::default().into()),
             installable_locker: Default::default(),
             features: Default::default(),
         };

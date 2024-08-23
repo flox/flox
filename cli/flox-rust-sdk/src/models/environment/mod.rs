@@ -791,10 +791,7 @@ mod test {
     use pretty_assertions::assert_eq;
 
     use super::*;
-    use crate::flox::test_helpers::{
-        flox_instance,
-        flox_instance_with_optional_floxhub_and_client,
-    };
+    use crate::flox::test_helpers::flox_instance;
     use crate::flox::DEFAULT_FLOXHUB_URL;
     use crate::providers::catalog::MANUALLY_GENERATED;
     use crate::providers::git::GitProvider;
@@ -1068,7 +1065,7 @@ mod test {
     /// upgrade
     #[test]
     fn needs_manifest_migration_0_0() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let environment =
             new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
         assert!(matches!(
@@ -1085,7 +1082,7 @@ mod test {
     /// upgrade
     #[test]
     fn needs_manifest_migration_0_1() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let environment = new_path_environment(&flox, "version = 1");
         let mut env_view = CoreEnvironment::new(environment.path.join(ENV_DIR_NAME));
         env_view.lock(&flox).unwrap();
@@ -1114,7 +1111,7 @@ mod test {
     /// When manifest is v1 and there's no lockfile, don't do anything
     #[test]
     fn needs_manifest_migration_1_none() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let environment = new_path_environment(&flox, "version = 1");
         assert!(environment.needs_migration_to_v1(&flox).unwrap().is_none());
     }
@@ -1122,7 +1119,7 @@ mod test {
     /// When manifest is v1 and lockfile is v0, we need upgrade
     #[test]
     fn needs_manifest_migration_1_0() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let environment =
             new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
         fs::write(environment.manifest_path(&flox).unwrap(), "version = 1").unwrap();
@@ -1139,7 +1136,7 @@ mod test {
     /// When manifest is v1 and lockfile is v0, we need upgrade
     #[test]
     fn needs_manifest_migration_1_1() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let environment = new_path_environment(&flox, "version = 1");
         let mut env_view = CoreEnvironment::new(environment.path.join(ENV_DIR_NAME));
         env_view.lock(&flox).unwrap();

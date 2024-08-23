@@ -610,10 +610,7 @@ impl Pull {
 
 #[cfg(test)]
 mod tests {
-    use flox_rust_sdk::flox::test_helpers::{
-        flox_instance,
-        flox_instance_with_optional_floxhub_and_client,
-    };
+    use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::{
         mock_managed_environment,
         unusable_mock_managed_environment,
@@ -695,8 +692,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_pull_result_2() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
@@ -719,8 +715,7 @@ mod tests {
     #[test]
     fn test_handle_pull_result_3() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
@@ -750,8 +745,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_pull_result_4() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
@@ -837,8 +831,7 @@ mod tests {
     #[tokio::test]
     async fn handle_pull_result_migration_success() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
@@ -881,8 +874,7 @@ mod tests {
     #[tokio::test]
     async fn handle_pull_result_migration_errors() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
@@ -920,8 +912,7 @@ mod tests {
     #[test]
     fn handle_pull_result_migration_skipped() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
