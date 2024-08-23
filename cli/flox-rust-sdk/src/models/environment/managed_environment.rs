@@ -22,7 +22,6 @@ use super::{
     ManagedPointer,
     MigrationInfo,
     UninstallationAttempt,
-    UpdateResult,
     CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
     ENV_DIR_NAME,
@@ -318,44 +317,6 @@ impl Environment for ManagedEnvironment {
             if let Some(ref store_path) = result.store_path() {
                 self.link(store_path)?;
             }
-        }
-
-        Ok(result)
-    }
-
-    /// Atomically update this environment's inputs
-    fn update(
-        &mut self,
-        flox: &Flox,
-        inputs: Vec<String>,
-    ) -> Result<UpdateResult, EnvironmentError> {
-        let mut generations = self
-            .generations()
-            .writable(flox.temp_dir.clone())
-            .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
-        let remote = generations
-            .get_current_generation()
-            .map_err(ManagedEnvironmentError::CreateGenerationFiles)?;
-
-        let mut temporary = self.local_env_or_copy_current_generation(flox)?;
-
-        if !Self::validate_checkout(&temporary, &remote)? {
-            Err(EnvironmentError::ManagedEnvironment(
-                ManagedEnvironmentError::CheckoutOutOfSync,
-            ))?
-        }
-
-        let result = temporary.update(flox, inputs)?;
-
-        // TODO: better message
-        let metadata = "updated environment".to_string();
-
-        generations
-            .add_generation(&mut temporary, metadata)
-            .map_err(ManagedEnvironmentError::CommitGeneration)?;
-        self.lock_pointer()?;
-        if let Some(ref store_path) = result.store_path {
-            self.link(store_path)?;
         }
 
         Ok(result)

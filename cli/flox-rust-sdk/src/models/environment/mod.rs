@@ -15,7 +15,7 @@ use self::remote_environment::RemoteEnvironmentError;
 use super::container_builder::ContainerBuilder;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
-use super::lockfile::{LockedManifest, LockedManifestError, LockedManifestPkgdb};
+use super::lockfile::{LockedManifest, LockedManifestError};
 use super::manifest::{ManifestError, PackageToInstall, RawManifest, TomlEditError, TypedManifest};
 use super::pkgdb::UpgradeResult;
 use crate::data::{CanonicalPath, CanonicalizeError, Version};
@@ -78,13 +78,6 @@ pub const FLOX_SERVICES_SOCKET_VAR: &str = "_FLOX_SERVICES_SOCKET";
 
 pub const N_HASH_CHARS: usize = 8;
 
-#[derive(Debug)]
-pub struct UpdateResult {
-    pub new_lockfile: LockedManifestPkgdb,
-    pub old_lockfile: Option<LockedManifestPkgdb>,
-    pub store_path: Option<PathBuf>,
-}
-
 /// The result of an installation attempt that contains the new manifest contents
 /// along with whether each package was already installed
 #[derive(Debug)]
@@ -143,13 +136,6 @@ pub trait Environment: Send {
 
     /// Atomically edit this environment, ensuring that it still builds
     fn edit(&mut self, flox: &Flox, contents: String) -> Result<EditResult, EnvironmentError>;
-
-    /// Atomically update this environment's inputs
-    fn update(
-        &mut self,
-        flox: &Flox,
-        inputs: Vec<String>,
-    ) -> Result<UpdateResult, EnvironmentError>;
 
     /// Atomically upgrade packages in this environment
     fn upgrade(

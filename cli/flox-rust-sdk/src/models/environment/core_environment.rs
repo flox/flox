@@ -15,7 +15,6 @@ use super::{
     InstallationAttempt,
     MigrationInfo,
     UninstallationAttempt,
-    UpdateResult,
     UpgradeError,
     LOCKFILE_FILENAME,
     MANIFEST_FILENAME,
@@ -646,37 +645,6 @@ impl CoreEnvironment<ReadOnly> {
             Ok(store_path) => Ok(EditResult::new(&old_contents, &contents, Some(store_path))),
             Err(err) => Ok(Err(err)),
         }
-    }
-
-    /// Update the inputs of an environment atomically.
-    pub fn update(
-        &mut self,
-        flox: &Flox,
-        inputs: Vec<String>,
-    ) -> Result<UpdateResult, CoreEnvironmentError> {
-        // TODO: double check canonicalization
-        let UpdateResult {
-            new_lockfile,
-            old_lockfile,
-            ..
-        } = LockedManifestPkgdb::update_manifest(
-            flox,
-            Some(self.manifest_path()),
-            self.lockfile_path(),
-            inputs,
-        )
-        .map_err(CoreEnvironmentError::LockedManifest)?;
-
-        let store_path = self.transact_with_lockfile_contents(
-            serde_json::to_string_pretty(&new_lockfile).unwrap(),
-            flox,
-        )?;
-
-        Ok(UpdateResult {
-            new_lockfile,
-            old_lockfile,
-            store_path: Some(store_path),
-        })
     }
 
     /// Atomically upgrade packages in this environment

@@ -17,7 +17,6 @@ use super::{
     ManagedPointer,
     MigrationInfo,
     UninstallationAttempt,
-    UpdateResult,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
     GCROOTS_DIR_NAME,
@@ -218,21 +217,6 @@ impl Environment for RemoteEnvironment {
         if result == EditResult::Unchanged {
             return Ok(result);
         }
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
-
-        Ok(result)
-    }
-
-    /// Atomically update this environment's inputs
-    fn update(
-        &mut self,
-        flox: &Flox,
-        inputs: Vec<String>,
-    ) -> Result<UpdateResult, EnvironmentError> {
-        let result = self.inner.update(flox, inputs)?;
         self.inner
             .push(flox, false)
             .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
