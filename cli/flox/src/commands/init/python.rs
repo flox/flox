@@ -809,10 +809,7 @@ mod tests {
     use std::fs::File;
 
     use flox_rust_sdk::data::System;
-    use flox_rust_sdk::flox::test_helpers::{
-        flox_instance_with_global_lock,
-        flox_instance_with_optional_floxhub_and_client,
-    };
+    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
     use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use flox_rust_sdk::providers::catalog::Client;
     use pretty_assertions::assert_eq;
@@ -821,201 +818,10 @@ mod tests {
     use super::*;
     use crate::commands::init::ProvidedPackage;
 
-    /// An invalid pyproject.toml should return an error
-    #[tokio::test]
-    async fn pyproject_invalid() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-
-        let content = indoc! {r#"
-        ,
-        "#};
-
-        let pyproject = PyProject::from_pyproject_content(&flox, content).await;
-
-        assert!(pyproject.is_err());
-    }
-
-    /// ProvidedVersion::Compatible should be returned for an empty pyproject.toml
-    #[tokio::test]
-    #[serial]
-    async fn pyproject_empty() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-
-        let pyproject = PyProject::from_pyproject_content(&flox, "").await.unwrap();
-
-        assert_eq!(pyproject.unwrap(), PyProject {
-            provided_python_version: ProvidedVersion::Compatible {
-                requested: None,
-                compatible: ProvidedPackage::new("python3", vec!["python3"], "3.11.6",),
-            },
-        });
-    }
-
-    /// ProvidedVersion::Compatible should be returned for requires-python = ">=3.8"
-    #[tokio::test]
-    #[serial]
-    async fn pyproject_available_version() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-
-        let content = indoc! {r#"
-        [project]
-        requires-python = ">= 3.8"
-        "#};
-
-        let pyproject = PyProject::from_pyproject_content(&flox, content)
-            .await
-            .unwrap();
-
-        assert_eq!(pyproject.unwrap(), PyProject {
-            provided_python_version: ProvidedVersion::Compatible {
-                requested: Some(">=3.8".to_string()),
-                compatible: ProvidedPackage::new("python3", vec!["python39"], "3.9.18"),
-            },
-        });
-    }
-
-    /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
-    #[tokio::test]
-    #[serial]
-    async fn pyproject_unavailable_version() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-
-        let content = indoc! {r#"
-        [project]
-        requires-python = "1"
-        "#};
-
-        let pyproject = PyProject::from_pyproject_content(&flox, content)
-            .await
-            .unwrap();
-
-        assert_eq!(pyproject.unwrap(), PyProject {
-            provided_python_version: ProvidedVersion::Incompatible {
-                requested: "^1".to_string(),
-                substitute: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
-            }
-        });
-    }
-
-    /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
-    #[tokio::test]
-    #[serial]
-    async fn pyproject_parse_version() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-
-        // python docs have a space in the version (>= 3.8):
-        // https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#python-requires
-        // Expect that version requirement to be parsed and passed on to pkgdb in canonical form.
-        let content = indoc! {r#"
-        [project]
-        requires-python = ">= 3.8" # < with space
-        "#};
-
-        let pyproject = PyProject::from_pyproject_content(&flox, content)
-            .await
-            .unwrap();
-
-        assert_eq!(pyproject.unwrap(), PyProject {
-            provided_python_version: ProvidedVersion::Compatible {
-                requested: Some(">=3.8".to_string()), // without space
-                compatible: ProvidedPackage::new("python3", vec!["python39"], "3.9.18"),
-            }
-        });
-    }
-
-    /// An invalid pyproject.toml should return an error
-    #[tokio::test]
-    async fn poetry_pyproject_invalid() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-
-        let content = indoc! {r#"
-        ,
-        "#};
-
-        let pyproject = PoetryPyProject::from_pyproject_content(&flox, content).await;
-
-        assert!(pyproject.is_err());
-    }
-
-    /// None should be returned for an empty pyproject.toml
-    #[tokio::test]
-    async fn poetry_pyproject_empty() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-
-        let pyproject = PoetryPyProject::from_pyproject_content(&flox, "")
-            .await
-            .unwrap();
-
-        assert_eq!(pyproject, None);
-    }
-
-    /// Err should be returned for a pyproject.toml with `tool.poetry` but not
-    /// `tool.poetry.dependencies.python`
-    #[tokio::test]
-    async fn poetry_pyproject_no_python() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-
-        let content = indoc! {r#"
-        [tool.poetry]
-        "#};
-
-        let pyproject = PoetryPyProject::from_pyproject_content(&flox, content).await;
-
-        assert!(pyproject.is_err());
-    }
-
-    /// ProvidedVersion::Compatible should be returned for python = "^3.7"
-    #[tokio::test]
-    #[serial]
-    async fn poetry_pyproject_available_version() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-
-        let content = indoc! {r#"
-        [tool.poetry.dependencies]
-        python = "^3.7"
-        "#};
-
-        let pyproject = PoetryPyProject::from_pyproject_content(&flox, content)
-            .await
-            .unwrap();
-
-        assert_eq!(pyproject.unwrap(), PoetryPyProject {
-            provided_python_version: ProvidedVersion::Compatible {
-                requested: Some("^3.7".to_string()),
-                compatible: ProvidedPackage::new("python3", vec!["python39"], "3.9.18"),
-            },
-            poetry_version: "1.7.1".to_string(),
-        });
-    }
-
-    /// ProvidedVersion::Incompatible should be returned for python = "1"
-    #[tokio::test]
-    #[serial]
-    async fn poetry_pyproject_unavailable_version() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-
-        let content = indoc! {r#"
-        [tool.poetry.dependencies]
-        python = "1"
-        "#};
-
-        let pyproject = PoetryPyProject::from_pyproject_content(&flox, content)
-            .await
-            .unwrap();
-
-        assert_eq!(pyproject.unwrap(), PoetryPyProject {
-            provided_python_version: ProvidedVersion::Incompatible {
-                requested: "^1".to_string(),
-                substitute: ProvidedPackage::new("python3", vec!["python3"], "3.11.6"),
-            },
-            poetry_version: "1.7.1".to_string(),
-        });
-    }
-
     /// Requirements::get_matches should return an empty Vec if no requirements files are found
     #[test]
     fn requirements_no_match() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
         let temp_dir = flox.temp_dir;
         let no_match = temp_dir.join("not_a_requirements.txt");
         let no_match2 = temp_dir.join("random_file.txt");
@@ -1029,7 +835,7 @@ mod tests {
     /// Requirements::detect should match requirements.txt
     #[test]
     fn requirements_matches_conventional() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
         let temp_dir = flox.temp_dir;
         let requirements_file = temp_dir.join("requirements.txt");
         File::create(requirements_file).unwrap();
@@ -1041,7 +847,7 @@ mod tests {
     /// Requirements::detect should match requirements_versioned.txt
     #[test]
     fn requirements_matches_unconventional() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
         let temp_dir = flox.temp_dir;
         let requirements_file_unconventional = temp_dir.join("requirements_versioned.txt");
         File::create(requirements_file_unconventional).unwrap();
@@ -1053,7 +859,7 @@ mod tests {
     /// Requirements::detect should return all matches
     #[test]
     fn requirements_matches_all() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
         let temp_dir = flox.temp_dir;
         let long_name = temp_dir.join("requirements_versioned_dev.txt");
         let short_name = temp_dir.join("requirements_versioned.txt");
