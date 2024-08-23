@@ -168,6 +168,10 @@ cmd = "flox install redis netcat"
 pre_cmd = "flox init"
 cmd = "flox install rubyPackages_3_2.rails"
 
+[resolve.rust-lib-src]
+pre_cmd = "flox init"
+cmd = "flox install rustPlatform.rustLibSrc"
+
 [resolve.tabula]
 pre_cmd = "flox init"
 cmd = "flox install tabula"

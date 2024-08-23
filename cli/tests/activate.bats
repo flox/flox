@@ -2058,3 +2058,23 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+@test "profile: RUST_SRC_PATH set when rustPlatform.rustLibSrc installed" {
+  project_setup
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rust-lib-src.json" \
+    "$FLOX_BIN" install rustPlatform.rustLibSrc
+  
+  run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
+    if ! [ -e "$FLOX_ENV/etc/profile.d/0501_rust.sh" ]; then
+      echo "profile script did not exist" >&3
+      exit 1
+    fi
+    if ! [ "$RUST_SRC_PATH" == "$FLOX_ENV" ]; then
+      echo "variable was not set" >&3
+      exit 1
+    fi
+EOF
+)
+  assert_success
+}
