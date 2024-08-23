@@ -718,7 +718,9 @@ mod tests {
     /// When the user does not confirm, the environment should be removed
     #[test]
     fn test_handle_pull_result_3() {
-        let (flox, _temp_dir_handle) = flox_instance();
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
@@ -727,7 +729,7 @@ mod tests {
             incompatible_system_result(),
             &dot_flox_path,
             false,
-            &mut unusable_mock_managed_environment(),
+            &mut mock_managed_environment(&flox, MANIFEST_INCOMPATIBLE_SYSTEM, owner),
             Some(QueryFunctions {
                 query_add_system: |_| Ok(false),
                 query_ignore_build_errors: || panic!(),

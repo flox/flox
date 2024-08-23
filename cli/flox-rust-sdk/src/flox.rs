@@ -228,7 +228,7 @@ pub mod test_helpers {
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
     pub fn flox_instance() -> (Flox, TempDir) {
-        flox_instance_with_optional_floxhub_and_client(None, false)
+        flox_instance_with_optional_floxhub_and_client(None, true)
     }
 
     /// If owner is None, no mock FloxHub is setup.
