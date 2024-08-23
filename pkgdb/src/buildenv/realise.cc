@@ -774,6 +774,25 @@ makePackageBuildScripts( nix::EvalState &         state,
   return { realised, references };
 }
 
+std::pair<buildenv::RealisedPackage, nix::StorePathSet>
+makeLockfilePackage( nix::EvalState &       state,
+                     const nlohmann::json & lockfileContent )
+{
+  auto tempDir = std::filesystem::path( nix::createTempDir() );
+
+  addScriptToScriptsDir( lockfileContent.dump( 2 ), tempDir, "manifest.lock" );
+
+  auto lockfileStorePath = state.store->addToStore( "lockfile", tempDir );
+
+  RealisedPackage realised( state.store->printStorePath( lockfileStorePath ),
+                            true,
+                            buildenv::Priority() );
+  auto            references = nix::StorePathSet();
+  references.insert( lockfileStorePath );
+  return { realised, references };
+
+}  // namespace flox::buildenv
+
 
 /* -------------------------------------------------------------------------- */
 
@@ -873,6 +892,12 @@ createFloxEnv( nix::ref<nix::EvalState> &         state,
   pkgs.push_back( packageBuildsPackage );
   references.insert( packageBuildsReferences.begin(),
                      packageBuildsReferences.end() );
+
+  auto [lockfilePackage, lockfileReferences]
+    = makeLockfilePackage( *state, lockfileContent );
+
+  pkgs.push_back( lockfilePackage );
+  references.insert( lockfileReferences.begin(), lockfileReferences.end() );
 
   return createEnvironmentStorePath( *state,
                                      pkgs,
