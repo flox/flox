@@ -194,7 +194,7 @@ impl Node {
             Some(PackageJSONVersions {
                 node: Some(ref node_version),
                 ..
-            }) => match try_find_compatible_version(flox, "nodejs", node_version, None).await? {
+            }) => match try_find_compatible_version(flox, "nodejs", node_version).await? {
                 None => Some(PackageJSONVersion::Unavailable),
                 Some(result) => Some(PackageJSONVersion::Found(result)),
             },
@@ -310,9 +310,7 @@ impl Node {
         // We assume that yarn is built with found_node, which is currently true
         // in nixpkgs
         let found_yarn: Option<ProvidedPackage> = match yarn {
-            Some(yarn_version) => {
-                try_find_compatible_version(flox, "yarn", yarn_version, None).await?
-            },
+            Some(yarn_version) => try_find_compatible_version(flox, "yarn", yarn_version).await?,
             _ => Some(get_default_package(flox, &"yarn".into()).await?),
         };
 
@@ -338,7 +336,7 @@ impl Node {
             RequestedNVMRCVersion::None => None,
             RequestedNVMRCVersion::Unsure => Some(NVMRCVersion::Unsure),
             RequestedNVMRCVersion::Found(version) => {
-                match try_find_compatible_version(flox, "nodejs", &version, None).await? {
+                match try_find_compatible_version(flox, "nodejs", &version).await? {
                     None => Some(NVMRCVersion::Unavailable),
                     Some(result) => Some(NVMRCVersion::Found(result)),
                 }

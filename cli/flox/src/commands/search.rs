@@ -2,11 +2,10 @@ use std::fmt::Write;
 use std::num::NonZeroU8;
 use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::global_manifest_path;
-use flox_rust_sdk::models::search::{do_search, PathOrJson, SearchResults};
+use flox_rust_sdk::models::search::SearchResults;
 use flox_rust_sdk::providers::catalog::{ClientTrait, SearchTerm};
 use indoc::formatdoc;
 use log::debug;
@@ -17,7 +16,7 @@ use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::didyoumean::{DidYouMean, SearchSuggestion};
 use crate::utils::message;
-use crate::utils::search::{construct_search_params, manifest_and_lockfile, DisplaySearchResults};
+use crate::utils::search::DisplaySearchResults;
 use crate::utils::tracing::sentry_set_tag;
 
 pub(crate) const DEFAULT_SEARCH_LIMIT: Option<NonZeroU8> = NonZeroU8::new(10);
@@ -59,13 +58,6 @@ impl Search {
 
         debug!("performing search for term: {}", self.search_term);
 
-        let (manifest, lockfile) = manifest_and_lockfile(&flox, "Search using")
-            .context("failed while looking for manifest and lockfile")?;
-
-        let manifest = manifest.map(|p| p.try_into()).transpose()?;
-        let lockfile = PathOrJson::Path(lockfile);
-        let global_manifest: PathOrJson = global_manifest_path(&flox).try_into()?;
-
         let limit = if self.all {
             None
         } else {
@@ -97,25 +89,7 @@ impl Search {
             }
             .spin_with_delay(Duration::from_secs(1))?
         } else {
-            tracing::debug!("using pkgdb for search");
-
-            let search_params = construct_search_params(
-                &self.search_term,
-                limit,
-                manifest.clone(),
-                global_manifest.clone(),
-                lockfile.clone(),
-                flox.features.search_strategy,
-            )?;
-
-            let (results, exit_status) = Dialog {
-                message: "Searching for packages...",
-                help_message: Some("This may take a while the first time you run it."),
-                typed: Spinner::new(|| do_search(&search_params)),
-            }
-            .spin_with_delay(Duration::from_secs(1))?;
-            tracing::debug!("search call exit status: {}", exit_status.to_string());
-            results
+            unimplemented!("remove pkgdb")
         };
 
         // Render what we have no matter what, then indicate whether we encountered an error.
@@ -132,10 +106,6 @@ impl Search {
                 &self.search_term,
                 flox.catalog_client,
                 flox.system,
-                manifest,
-                global_manifest,
-                lockfile,
-                flox.features.search_strategy,
             );
 
             if results.results.is_empty() {

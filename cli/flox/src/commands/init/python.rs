@@ -327,13 +327,9 @@ impl PoetryPyProject {
             .to_string();
 
         let provided_python_version = 'version: {
-            let compatible = try_find_compatible_version(
-                flox,
-                "python3",
-                required_python_version.as_ref(),
-                None::<Vec<String>>,
-            )
-            .await?;
+            let compatible =
+                try_find_compatible_version(flox, "python3", required_python_version.as_ref())
+                    .await?;
 
             if let Some(found_version) = compatible {
                 break 'version ProvidedVersion::Compatible {
@@ -539,13 +535,9 @@ impl PyProject {
                 };
             };
 
-            let compatible = try_find_compatible_version(
-                flox,
-                "python3",
-                required_python_version.as_ref(),
-                None::<Vec<String>>,
-            )
-            .await?;
+            let compatible =
+                try_find_compatible_version(flox, "python3", required_python_version.as_ref())
+                    .await?;
 
             if let Some(found_version) = compatible {
                 break 'version ProvidedVersion::Compatible {
