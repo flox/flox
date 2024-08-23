@@ -232,14 +232,6 @@ pub mod test_helpers {
     use crate::models::lockfile::LockedManifestPkgdb;
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
-    /// Get an instance of Flox that has a locked global manifest.
-    ///
-    /// This means any operations that use pkgdb should use the same nixpkgs
-    /// revision.
-    pub fn flox_instance_with_global_lock() -> (Flox, TempDir) {
-        flox_instance_with_global_lock_with_optional_floxhub(None)
-    }
-
     /// If owner is None, no mock FloxHub is setup.
     /// If it is Some, a mock FloxHub with a repo for that owner will be setup,
     /// but no other owners will work.
