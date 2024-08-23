@@ -34,7 +34,6 @@ use super::{
     MigrationInfo,
     PathPointer,
     UninstallationAttempt,
-    UpdateResult,
     CACHE_DIR_NAME,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
@@ -245,21 +244,6 @@ impl Environment for PathEnvironment {
                 self.link(flox, store_path)?;
             };
         }
-        Ok(result)
-    }
-
-    /// Atomically update this environment's inputs
-    fn update(
-        &mut self,
-        flox: &Flox,
-        inputs: Vec<String>,
-    ) -> Result<UpdateResult, EnvironmentError> {
-        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
-        let result = env_view.update(flox, inputs)?;
-        if let Some(ref store_path) = result.store_path {
-            self.link(flox, store_path)?;
-        }
-
         Ok(result)
     }
 

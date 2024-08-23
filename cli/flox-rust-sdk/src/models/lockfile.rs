@@ -19,7 +19,6 @@ use std::str::FromStr;
 use log::debug;
 use thiserror::Error;
 
-use super::environment::UpdateResult;
 use super::manifest::{
     Allows,
     ManifestPackageDescriptor,
@@ -32,7 +31,7 @@ use super::manifest::{
 use super::pkgdb::CallPkgDbError;
 use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
 use crate::flox::Flox;
-use crate::models::environment::{global_manifest_lockfile_path, global_manifest_path};
+use crate::models::environment::global_manifest_lockfile_path;
 use crate::models::pkgdb::{call_pkgdb, PKGDB_BIN};
 use crate::providers::catalog::{
     self,
@@ -1232,94 +1231,20 @@ pub struct LockedManifestPkgdb(Value);
 
 // region: pkgdb lockfile operations
 
+#[derive(Debug)]
+pub struct UpdateResult {
+    pub new_lockfile: LockedManifestPkgdb,
+    pub old_lockfile: Option<LockedManifestPkgdb>,
+    pub store_path: Option<PathBuf>,
+}
+
 impl LockedManifestPkgdb {
-
-    /// Wrapper around `pkgdb update`
-    ///
-    /// lockfile_path does not need to exist
-    /// TODO: lockfile_path should probably be an Option<CanonicalPath>
-    pub fn update_manifest(
-        flox: &Flox,
-        manifest_path: Option<impl AsRef<Path>>,
-        lockfile_path: impl AsRef<Path>,
-        inputs: Vec<String>,
-    ) -> Result<UpdateResult, LockedManifestError> {
-        let lockfile_path = lockfile_path.as_ref();
-        let maybe_lockfile = if lockfile_path.exists() {
-            debug!("found existing lockfile: {}", lockfile_path.display());
-            Some(lockfile_path)
-        } else {
-            debug!("no existing lockfile found");
-            None
-        };
-
-        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_cmd
-            .args(["manifest", "update"])
-            .arg("--ga-registry")
-            .arg("--global-manifest")
-            .arg(global_manifest_path(flox));
-        // Optionally add --manifest argument
-        if let Some(manifest) = manifest_path {
-            pkgdb_cmd.arg("--manifest").arg(manifest.as_ref());
-        }
-        // Add --lockfile argument if lockfile exists, and parse the old lockfile.
-        let old_lockfile = maybe_lockfile
-            .map(|lf_path| {
-                let canonical_lockfile_path =
-                    CanonicalPath::new(lf_path).map_err(LockedManifestError::BadLockfilePath)?;
-                pkgdb_cmd.arg("--lockfile").arg(&canonical_lockfile_path);
-                LockedManifest::read_from_file(&canonical_lockfile_path)
-            })
-            .transpose()?;
-
-        // ensure the current lockfile is a Pkgdb lockfile
-        let old_lockfile = match old_lockfile {
-            Some(LockedManifest::Catalog(_)) => {
-                return Err(LockedManifestError::UnsupportedLockfileForUpdate);
-            },
-            Some(LockedManifest::Pkgdb(locked)) => Some(locked),
-            None => None,
-        };
-
-        pkgdb_cmd.args(inputs);
-
-        debug!("updating lockfile with command: {}", pkgdb_cmd.display());
-        let lockfile: LockedManifestPkgdb = LockedManifestPkgdb(
-            call_pkgdb(pkgdb_cmd, true).map_err(LockedManifestError::UpdateFailed)?,
-        );
-
-        Ok(UpdateResult {
-            new_lockfile: lockfile,
-            old_lockfile,
-            store_path: None,
-        })
-    }
-
     /// Update global manifest lockfile and write it.
     pub fn update_global_manifest(
-        flox: &Flox,
-        inputs: Vec<String>,
+        _flox: &Flox,
+        _inputs: Vec<String>,
     ) -> Result<UpdateResult, LockedManifestError> {
-        let lockfile_path = global_manifest_lockfile_path(flox);
-        let UpdateResult {
-            new_lockfile,
-            old_lockfile,
-            store_path,
-        } = Self::update_manifest(flox, None::<PathBuf>, &lockfile_path, inputs)?;
-
-        debug!("writing lockfile to {}", lockfile_path.display());
-        std::fs::write(
-            lockfile_path,
-            serde_json::to_string_pretty(&new_lockfile)
-                .map_err(LockedManifestError::SerializeGlobalLockfile)?,
-        )
-        .map_err(LockedManifestError::WriteGlobalLockfile)?;
-        Ok(UpdateResult {
-            new_lockfile,
-            old_lockfile,
-            store_path,
-        })
+        unimplemented!("remove pkgdb")
     }
 
     /// Creates the global lockfile if it doesn't exist and returns its path.
