@@ -1771,11 +1771,14 @@ mod tests {
 
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
     use flox_rust_sdk::flox::EnvironmentName;
-    use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment;
+    use flox_rust_sdk::models::environment::managed_environment::test_helpers::{
+        mock_managed_environment,
+        mock_managed_environment_from_env_files,
+    };
     use flox_rust_sdk::models::environment::test_helpers::MANIFEST_V0_FIELDS;
     use flox_rust_sdk::models::environment::{CoreEnvironmentError, PathPointer};
     use flox_rust_sdk::models::lockfile::LockedManifest;
-    use flox_rust_sdk::providers::catalog::MockClient;
+    use flox_rust_sdk::providers::catalog::MANUALLY_GENERATED;
     use sentry::test::with_captured_events;
     use tempfile::tempdir;
 
@@ -2123,32 +2126,15 @@ mod tests {
     #[tokio::test]
     async fn maybe_migrate_managed_environment_bails() {
         let owner = "owner".parse().unwrap();
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), false);
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
 
         let mut environment =
-            ConcreteEnvironment::Managed(mock_managed_environment(&flox, "", owner));
-
-        // Lock in a transaction with a no-op upgrade without the catalog and
-        // double check we got a pkgdb lockfile
-        environment
-            .dyn_environment_ref_mut()
-            .upgrade(&flox, &[])
-            .unwrap();
-        assert!(matches!(
-            LockedManifest::read_from_file(
-                &CanonicalPath::new(
-                    environment
-                        .dyn_environment_ref_mut()
-                        .lockfile_path(&flox)
-                        .unwrap()
-                )
-                .unwrap(),
-            )
-            .unwrap(),
-            LockedManifest::Pkgdb(_)
-        ));
-        flox.catalog_client = Some(MockClient::default().into());
+            ConcreteEnvironment::Managed(mock_managed_environment_from_env_files(
+                &flox,
+                MANUALLY_GENERATED.join("empty_v0"),
+                owner,
+            ));
 
         let err = maybe_migrate_environment_to_v1_inner(
             &flox,
@@ -2157,27 +2143,6 @@ mod tests {
         )
         .await
         .unwrap_err();
-        // Lock in a transaction with a no-op upgrade without the catalog and
-        // double check we got a pkgdb lockfile
-        environment
-            .dyn_environment_ref_mut()
-            .upgrade(&flox, &[])
-            .unwrap();
-        assert!(matches!(
-            LockedManifest::read_from_file(
-                &CanonicalPath::new(
-                    environment
-                        .dyn_environment_ref_mut()
-                        .lockfile_path(&flox)
-                        .unwrap()
-                )
-                .unwrap(),
-            )
-            .unwrap(),
-            LockedManifest::Pkgdb(_)
-        ));
-        flox.catalog_client = Some(MockClient::default().into());
-
         assert!(err.to_string().contains("Migration cancelled"));
 
         assert!(!environment
@@ -2194,32 +2159,15 @@ mod tests {
     #[tokio::test]
     async fn maybe_migrate_managed_environment_lock() {
         let owner = "owner".parse().unwrap();
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), false);
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
 
         let mut environment =
-            ConcreteEnvironment::Managed(mock_managed_environment(&flox, "", owner));
-
-        // Lock in a transaction with a no-op upgrade without the catalog and
-        // double check we got a pkgdb lockfile
-        environment
-            .dyn_environment_ref_mut()
-            .upgrade(&flox, &[])
-            .unwrap();
-        assert!(matches!(
-            LockedManifest::read_from_file(
-                &CanonicalPath::new(
-                    environment
-                        .dyn_environment_ref_mut()
-                        .lockfile_path(&flox)
-                        .unwrap()
-                )
-                .unwrap(),
-            )
-            .unwrap(),
-            LockedManifest::Pkgdb(_)
-        ));
-        flox.catalog_client = Some(MockClient::default().into());
+            ConcreteEnvironment::Managed(mock_managed_environment_from_env_files(
+                &flox,
+                MANUALLY_GENERATED.join("empty_v0"),
+                owner,
+            ));
 
         maybe_migrate_environment_to_v1_inner(&flox, &mut environment, Some(async { Ok(true) }))
             .await
@@ -2253,32 +2201,15 @@ mod tests {
     #[tokio::test]
     async fn maybe_migrate_managed_environment_migration_cancelled() {
         let owner = "owner".parse().unwrap();
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), false);
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
 
         let mut environment =
-            ConcreteEnvironment::Managed(mock_managed_environment(&flox, "", owner));
-
-        // Lock in a transaction with a no-op upgrade without the catalog and
-        // double check we got a pkgdb lockfile
-        environment
-            .dyn_environment_ref_mut()
-            .upgrade(&flox, &[])
-            .unwrap();
-        assert!(matches!(
-            LockedManifest::read_from_file(
-                &CanonicalPath::new(
-                    environment
-                        .dyn_environment_ref_mut()
-                        .lockfile_path(&flox)
-                        .unwrap()
-                )
-                .unwrap(),
-            )
-            .unwrap(),
-            LockedManifest::Pkgdb(_)
-        ));
-        flox.catalog_client = Some(MockClient::default().into());
+            ConcreteEnvironment::Managed(mock_managed_environment_from_env_files(
+                &flox,
+                MANUALLY_GENERATED.join("empty_v0"),
+                owner,
+            ));
 
         let err = maybe_migrate_environment_to_v1_inner(
             &flox,
@@ -2299,35 +2230,15 @@ mod tests {
     #[tokio::test]
     async fn maybe_migrate_managed_environment_failed_upgrade() {
         let owner = "owner".parse().unwrap();
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), false);
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
 
-        let mut environment = ConcreteEnvironment::Managed(mock_managed_environment(
-            &flox,
-            MANIFEST_V0_FIELDS,
-            owner,
-        ));
-
-        // Lock in a transaction with a no-op upgrade without the catalog and
-        // double check we got a pkgdb lockfile
-        environment
-            .dyn_environment_ref_mut()
-            .upgrade(&flox, &[])
-            .unwrap();
-        assert!(matches!(
-            LockedManifest::read_from_file(
-                &CanonicalPath::new(
-                    environment
-                        .dyn_environment_ref_mut()
-                        .lockfile_path(&flox)
-                        .unwrap()
-                )
-                .unwrap(),
-            )
-            .unwrap(),
-            LockedManifest::Pkgdb(_)
-        ));
-        flox.catalog_client = Some(MockClient::default().into());
+        let mut environment =
+            ConcreteEnvironment::Managed(mock_managed_environment_from_env_files(
+                &flox,
+                MANUALLY_GENERATED.join("v0_fields"),
+                owner,
+            ));
 
         let err = maybe_migrate_environment_to_v1_inner(
             &flox,
@@ -2397,7 +2308,7 @@ mod tests {
     async fn maybe_migrate_managed_environment_blocked_only_if_migration_needed() {
         let owner = "owner".parse().unwrap();
         let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), false);
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
 
         let mut environment = ConcreteEnvironment::Managed(mock_managed_environment(
             &flox,

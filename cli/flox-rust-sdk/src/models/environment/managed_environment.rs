@@ -1566,6 +1566,7 @@ pub mod test_helpers {
     use super::*;
     use crate::flox::{Floxhub, DEFAULT_FLOXHUB_URL};
     use crate::models::environment::core_environment::test_helpers::new_core_environment;
+    use crate::models::environment::test_helpers::new_core_environment_from_env_files;
     use crate::models::floxmeta::test_helpers::unusable_mock_floxmeta;
 
     /// Get a [ManagedEnvironment] that is invalid but can be used in tests
@@ -1607,6 +1608,30 @@ pub mod test_helpers {
             false,
             CanonicalPath::new(tempdir_in(&flox.temp_dir).unwrap().into_path()).unwrap(),
             new_core_environment(flox, contents),
+        )
+        .unwrap()
+    }
+
+    /// Get a [ManagedEnvironment] that has been pushed to (a mock) FloxHub and
+    /// can be built.
+    ///
+    /// This should be passed a [Flox] instance created with
+    /// flox_instance_with_global_lock_and_floxhub()
+    ///
+    /// If a [ManagedEnvironment] will be unused in tests, use
+    /// [unusable_mock_managed_environment] instead.
+    pub fn mock_managed_environment_from_env_files(
+        flox: &Flox,
+        env_files_dir: impl AsRef<Path>,
+        owner: EnvironmentOwner,
+    ) -> ManagedEnvironment {
+        ManagedEnvironment::push_new_without_building(
+            flox,
+            owner,
+            "name".parse().unwrap(),
+            false,
+            CanonicalPath::new(tempdir_in(&flox.temp_dir).unwrap().into_path()).unwrap(),
+            new_core_environment_from_env_files(flox, env_files_dir),
         )
         .unwrap()
     }
