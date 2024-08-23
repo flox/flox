@@ -331,7 +331,7 @@ impl GoVersion {
 #[cfg(test)]
 mod tests {
     use flox_rust_sdk::data::System;
-    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use flox_rust_sdk::providers::catalog::Client;
 
@@ -340,7 +340,7 @@ mod tests {
 
     #[tokio::test]
     async fn go_version_from_content_returns_error_on_invalid_version() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let content = indoc! {r#"
                 // invalid go version
                 go invalid
@@ -383,7 +383,7 @@ mod tests {
 
     #[tokio::test]
     async fn go_mod_system_returns_none_if_gomod_is_dir_with_catalog() {
-        let (flox, temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, temp_dir_handle) = flox_instance();
 
         std::fs::create_dir_all(temp_dir_handle.path().join("go.mod/")).unwrap();
 
@@ -395,7 +395,7 @@ mod tests {
 
     #[tokio::test]
     async fn go_work_system_returns_none_if_gowork_is_dir_with_catalog() {
-        let (flox, temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, temp_dir_handle) = flox_instance();
 
         std::fs::create_dir_all(temp_dir_handle.path().join("go.work/")).unwrap();
 
@@ -407,8 +407,7 @@ mod tests {
 
     #[tokio::test]
     async fn go_version_from_content_returns_compatible_version_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for go 1.21.4
@@ -439,8 +438,7 @@ mod tests {
 
     #[tokio::test]
     async fn go_version_from_content_returns_none_on_incompatible_version_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for incompatible go version

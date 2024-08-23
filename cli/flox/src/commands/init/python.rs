@@ -809,7 +809,7 @@ mod tests {
     use std::fs::File;
 
     use flox_rust_sdk::data::System;
-    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use flox_rust_sdk::providers::catalog::Client;
     use pretty_assertions::assert_eq;
@@ -821,7 +821,7 @@ mod tests {
     /// Requirements::get_matches should return an empty Vec if no requirements files are found
     #[test]
     fn requirements_no_match() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let temp_dir = flox.temp_dir;
         let no_match = temp_dir.join("not_a_requirements.txt");
         let no_match2 = temp_dir.join("random_file.txt");
@@ -835,7 +835,7 @@ mod tests {
     /// Requirements::detect should match requirements.txt
     #[test]
     fn requirements_matches_conventional() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let temp_dir = flox.temp_dir;
         let requirements_file = temp_dir.join("requirements.txt");
         File::create(requirements_file).unwrap();
@@ -847,7 +847,7 @@ mod tests {
     /// Requirements::detect should match requirements_versioned.txt
     #[test]
     fn requirements_matches_unconventional() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let temp_dir = flox.temp_dir;
         let requirements_file_unconventional = temp_dir.join("requirements_versioned.txt");
         File::create(requirements_file_unconventional).unwrap();
@@ -859,7 +859,7 @@ mod tests {
     /// Requirements::detect should return all matches
     #[test]
     fn requirements_matches_all() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let temp_dir = flox.temp_dir;
         let long_name = temp_dir.join("requirements_versioned_dev.txt");
         let short_name = temp_dir.join("requirements_versioned.txt");
@@ -881,7 +881,7 @@ mod tests {
     /// An invalid pyproject.toml should return an error
     #[tokio::test]
     async fn pyproject_invalid_with_catalog() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
 
         let content = indoc! {r#"
             ,
@@ -896,8 +896,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn pyproject_empty_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for unconstrained python version
@@ -924,8 +923,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn pyproject_available_version_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for python >= 3.8
@@ -959,8 +957,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn pyproject_unavailable_version_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for python version 1 (resolution failure)
@@ -996,8 +993,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn pyproject_parse_version_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for python >= 3.8
@@ -1033,8 +1029,7 @@ mod tests {
     /// An invalid pyproject.toml should return an error
     #[tokio::test]
     async fn poetry_pyproject_invalid_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for no package groups
@@ -1053,8 +1048,7 @@ mod tests {
     /// None should be returned for an empty pyproject.toml
     #[tokio::test]
     async fn poetry_pyproject_empty_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for no package groups
@@ -1072,8 +1066,7 @@ mod tests {
     /// `tool.poetry.dependencies.python`
     #[tokio::test]
     async fn poetry_pyproject_no_python_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for no package groups
@@ -1093,8 +1086,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn poetry_pyproject_available_version_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for python ^3.7
@@ -1137,8 +1129,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn poetry_pyproject_unavailable_version_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for python version 1

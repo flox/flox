@@ -693,7 +693,7 @@ impl InitHook for Node {
 #[cfg(test)]
 mod tests {
     use flox_rust_sdk::data::System;
-    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
+    use flox_rust_sdk::flox::test_helpers::flox_instance;
     use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use flox_rust_sdk::providers::catalog::Client;
     use pretty_assertions::assert_eq;
@@ -880,8 +880,7 @@ mod tests {
     /// Test finding yarn with no constraints succeeds
     #[tokio::test]
     async fn try_find_compatible_yarn_no_constraints_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for unconstrained nodejs version
@@ -916,8 +915,7 @@ mod tests {
     /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
     #[tokio::test]
     async fn try_find_compatible_yarn_node_available_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response when nodejs 18 is requested
@@ -954,8 +952,7 @@ mod tests {
     /// nixpkgs#nodejs fails
     #[tokio::test]
     async fn try_find_compatible_yarn_node_unavailable_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // The default version is something other than "20",
@@ -975,8 +972,7 @@ mod tests {
     /// Test finding yarn with the version nixpkgs#yarn specified succeeds
     #[tokio::test]
     async fn try_find_compatible_yarn_yarn_available_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for unconstrained nodejs version
@@ -1013,8 +1009,7 @@ mod tests {
     /// nixpkgs#yarn fails
     #[tokio::test]
     async fn try_find_compatible_yarn_yarn_unavailable_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for unconstrained nodejs version
@@ -1042,8 +1037,7 @@ mod tests {
     /// specified succeeds
     #[tokio::test]
     async fn try_find_compatible_yarn_both_available_with_catalog() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
 
         if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
             // Response for nodejs version 18

@@ -250,7 +250,7 @@ mod tests {
     use url::Url;
 
     use super::*;
-    use crate::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
+    use crate::flox::test_helpers::flox_instance;
     use crate::models::environment::path_environment::test_helpers::new_path_environment;
     use crate::models::environment::Environment;
     use crate::models::manifest::{FlakePackage, PackageToInstall};
@@ -332,7 +332,7 @@ mod tests {
 
     #[test]
     fn catches_nix_eval_errors() {
-        let (flox, _temp_dir) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir) = flox_instance();
         let manifest = formatdoc! {r#"
         version =  1
         "#};

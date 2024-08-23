@@ -1769,7 +1769,7 @@ async fn confirm_migration_upgrade(description: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
 
-    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
+    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
     use flox_rust_sdk::flox::EnvironmentName;
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::{
         mock_managed_environment,
@@ -2097,8 +2097,7 @@ mod tests {
     #[tokio::test]
     async fn maybe_migrate_managed_environment_manifest() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let mut environment =
             ConcreteEnvironment::Managed(mock_managed_environment(&flox, "", owner));
@@ -2126,8 +2125,7 @@ mod tests {
     #[tokio::test]
     async fn maybe_migrate_managed_environment_bails() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let mut environment =
             ConcreteEnvironment::Managed(mock_managed_environment_from_env_files(
@@ -2159,8 +2157,7 @@ mod tests {
     #[tokio::test]
     async fn maybe_migrate_managed_environment_lock() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let mut environment =
             ConcreteEnvironment::Managed(mock_managed_environment_from_env_files(
@@ -2201,8 +2198,7 @@ mod tests {
     #[tokio::test]
     async fn maybe_migrate_managed_environment_migration_cancelled() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let mut environment =
             ConcreteEnvironment::Managed(mock_managed_environment_from_env_files(
@@ -2230,8 +2226,7 @@ mod tests {
     #[tokio::test]
     async fn maybe_migrate_managed_environment_failed_upgrade() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let mut environment =
             ConcreteEnvironment::Managed(mock_managed_environment_from_env_files(
@@ -2260,8 +2255,7 @@ mod tests {
     #[tokio::test]
     async fn maybe_migrate_managed_environment_blocked() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let mut environment = ConcreteEnvironment::Managed(mock_managed_environment(
             &flox,
@@ -2307,8 +2301,7 @@ mod tests {
     #[tokio::test]
     async fn maybe_migrate_managed_environment_blocked_only_if_migration_needed() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let mut environment = ConcreteEnvironment::Managed(mock_managed_environment(
             &flox,

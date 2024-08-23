@@ -1503,10 +1503,7 @@ mod tests {
     use self::test_helpers::new_core_environment;
     use super::*;
     use crate::data::Version;
-    use crate::flox::test_helpers::{
-        flox_instance,
-        flox_instance_with_optional_floxhub_and_client,
-    };
+    use crate::flox::test_helpers::flox_instance;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::ResolutionFailures;
     use crate::models::manifest::{
@@ -1520,7 +1517,7 @@ mod tests {
 
     /// Create a CoreEnvironment with an empty manifest (with version = 1)
     fn empty_core_environment() -> (CoreEnvironment, Flox, TempDir) {
-        let (flox, tempdir) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, tempdir) = flox_instance();
 
         (new_core_environment(&flox, "version = 1"), flox, tempdir)
     }
@@ -1530,7 +1527,7 @@ mod tests {
     #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn edit_env_creates_manifest_and_lockfile() {
-        let (mut flox, tempdir) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, tempdir) = flox_instance();
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
         fs::write(env_path.path().join(MANIFEST_FILENAME), "").unwrap();
@@ -1560,7 +1557,7 @@ mod tests {
     #[test]
     #[serial]
     fn edit_no_op_returns_unchanged() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let mut env_view = new_core_environment(&flox, "version = 1");
 
         let result = env_view.edit(&flox, "version = 1".to_string()).unwrap();
@@ -1573,7 +1570,7 @@ mod tests {
     #[test]
     #[serial]
     fn build_incompatible_system() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let mut env_view = new_core_environment(&flox, "");
         let mut temp_env = env_view
             .writable(tempdir_in(&flox.temp_dir).unwrap().into_path())
@@ -1600,7 +1597,7 @@ mod tests {
         #[cfg(target_os = "linux")]
         let env_files_dirname = "ps_incompatible_v0_both_linux";
 
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
 
         let mut env_view =
             new_core_environment_from_env_files(&flox, MANUALLY_GENERATED.join(env_files_dirname));
@@ -1615,7 +1612,7 @@ mod tests {
     #[test]
     #[serial]
     fn build_insecure_package() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let mut env_view = new_core_environment_from_env_files(
             &flox,
             MANUALLY_GENERATED.join("python2_insecure_v0"),
@@ -1628,7 +1625,7 @@ mod tests {
 
     #[test]
     fn built_environments_generate_service_config() {
-        let (flox, _dir) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _dir) = flox_instance();
 
         // Manifest with a services section
         let contents = indoc! {r#"
@@ -1848,7 +1845,7 @@ mod tests {
     #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn build_flox_environment_and_links() {
-        let (mut flox, tempdir) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, tempdir) = flox_instance();
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
         fs::write(
@@ -1913,8 +1910,7 @@ mod tests {
 
     #[test]
     fn migrate_to_v1_error_for_locking() {
-        let (mut flox, _temp_dir_handle) =
-            flox_instance_with_optional_floxhub_and_client(None, true);
+        let (mut flox, _temp_dir_handle) = flox_instance();
         // The v0 lockfile should get ignored,
         // but create it just to keep this more realistic
         let mut environment = new_core_environment_from_env_files(
@@ -2080,7 +2076,7 @@ mod tests {
 
     #[test]
     fn v0_does_not_need_relock() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let environment =
             new_core_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
         assert!(environment.lockfile_if_up_to_date().unwrap().is_some());
@@ -2088,7 +2084,7 @@ mod tests {
 
     #[test]
     fn modified_v0_errors() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let manifest_contents =
             fs::read_to_string(MANUALLY_GENERATED.join("empty_v0").join(MANIFEST_FILENAME))
                 .unwrap();
@@ -2106,7 +2102,7 @@ mod tests {
 
     #[test]
     fn v1_does_not_need_relock() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let environment =
             new_core_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
         assert!(environment.lockfile_if_up_to_date().unwrap().is_some());
@@ -2114,7 +2110,7 @@ mod tests {
 
     #[test]
     fn modified_v1_needs_relock() {
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _temp_dir_handle) = flox_instance();
         let manifest_contents =
             fs::read_to_string(MANUALLY_GENERATED.join("empty").join(MANIFEST_FILENAME)).unwrap();
         let lockfile_contents =
@@ -2246,7 +2242,7 @@ mod tests {
 
     #[test]
     fn edit_fails_when_daemon_has_no_shutdown_command() {
-        let (flox, _dir) = flox_instance_with_optional_floxhub_and_client(None, true);
+        let (flox, _dir) = flox_instance();
         let initial_manifest = r#"
             version = 1
         "#;
