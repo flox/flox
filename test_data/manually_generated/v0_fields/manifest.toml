@@ -1,0 +1,9 @@
+# A lock was generated for this manifest with
+# flox init
+# OUTPUT_DIRNAME=v0_fields
+# FLOX_FEATURES_USE_CATALOG=false flox edit -f ./test_data/manually_generated/$OUTPUT_DIRNAME/manifest.toml
+# cp .flox/env/manifest.lock "test_data/manually_generated/$OUTPUT_DIRNAME/manifest.lock"
+
+[options]
+systems = ["aarch64-darwin", "aarch64-linux", "x86_64-darwin", "x86_64-linux"]
+semver.prefer-pre-releases = true
