@@ -259,8 +259,6 @@ function add_incompatible_package() {
 # bats test_tags=activate:remote:incompatible
 # activating an incompatible environment should fail gracefully
 @test "activate incompatible environment fails gracefully" {
-  export FLOX_FEATURES_USE_CATALOG=false
-
   make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
 
