@@ -5,7 +5,7 @@ use anyhow::{anyhow, bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{CoreEnvironmentError, Environment, EnvironmentError};
+use flox_rust_sdk::models::environment::{CoreEnvironmentError, EnvironmentError};
 use flox_rust_sdk::models::lockfile::{
     LockedManifest,
     LockedManifestError,
@@ -152,7 +152,7 @@ impl Install {
             typed: Spinner::new(|| environment.install(&packages_to_install, &flox)),
         }
         .spin()
-        .map_err(|err| Self::handle_error(err, &flox, &*environment, &packages_to_install))?;
+        .map_err(|err| Self::handle_error(err, &flox, &packages_to_install))?;
 
         let lockfile_path = environment.lockfile_path(&flox)?;
         let lockfile_path = CanonicalPath::new(lockfile_path)?;
@@ -217,7 +217,6 @@ impl Install {
     fn handle_error(
         err: EnvironmentError,
         flox: &Flox,
-        environment: &dyn Environment,
         packages: &[PackageToInstall],
     ) -> anyhow::Error {
         debug!("install error: {:?}", err);
@@ -254,7 +253,7 @@ impl Install {
 
                 let head = format!("Could not find package '{path}'.");
 
-                let suggestion = DidYouMean::<InstallSuggestion>::new(flox, environment, &path);
+                let suggestion = DidYouMean::<InstallSuggestion>::new(flox, &path);
                 if !suggestion.has_suggestions() {
                     break 'error anyhow!("{head}\nTry 'flox search' with a broader search term.");
                 }
@@ -281,8 +280,7 @@ impl Install {
                     let ResolutionFailure::PackageNotFound { attr_path, .. } = failure else {
                         unreachable!("already checked that these failures are 'package not found'")
                     };
-                    let suggestion =
-                        DidYouMean::<InstallSuggestion>::new(flox, environment, &attr_path);
+                    let suggestion = DidYouMean::<InstallSuggestion>::new(flox, &attr_path);
                     let head = format!("Could not find package '{attr_path}'.");
                     let msg = if suggestion.has_suggestions() {
                         tracing::debug!(query = attr_path, "found suggestions for package");

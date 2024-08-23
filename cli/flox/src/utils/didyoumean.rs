@@ -4,15 +4,12 @@ use std::time::Duration;
 
 use anyhow::Result;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{global_manifest_path, Environment};
-use flox_rust_sdk::models::lockfile::LockedManifestPkgdb;
-use flox_rust_sdk::models::search::{do_search, PathOrJson, SearchResults, SearchStrategy};
+use flox_rust_sdk::models::search::SearchResults;
 use flox_rust_sdk::providers::catalog::{Client, ClientTrait};
 use log::debug;
 
 use super::search::{DisplayItems, DisplaySearchResults};
 use crate::utils::dialog::{Dialog, Spinner};
-use crate::utils::search::construct_search_params;
 
 pub const SUGGESTION_SEARCH_LIMIT: u8 = 3;
 
@@ -58,55 +55,16 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
         Some(suggestion)
     }
 
-    fn suggest_searched_packages(
-        flox: &Flox,
-        environment: &dyn Environment,
-        term: &str,
-    ) -> Result<SearchResults> {
+    fn suggest_searched_packages(flox: &Flox, term: &str) -> Result<SearchResults> {
         match flox.catalog_client {
             Some(ref client) => {
                 tracing::debug!("using client for install suggestions");
                 Self::suggest_searched_packages_catalog(client, term, flox.system.clone())
             },
             None => {
-                tracing::debug!("using pkgdb for install suggestions");
-                Self::suggest_searched_packages_pkgdb(flox, environment, term)
+                unreachable!("remove pkgdb")
             },
         }
-    }
-
-    /// Collects installation suggestions for a given query using pkgdb
-    fn suggest_searched_packages_pkgdb(
-        flox: &Flox,
-        environment: &dyn Environment,
-        term: &str,
-    ) -> Result<SearchResults> {
-        let lockfile_path = environment.lockfile_path(flox)?;
-
-        // Use the global lock if we don't have a lock yet
-        let lockfile = if lockfile_path.exists() {
-            PathOrJson::Path(lockfile_path)
-        } else {
-            PathOrJson::Path(LockedManifestPkgdb::ensure_global_lockfile(flox)?)
-        };
-
-        let search_params = construct_search_params(
-            term,
-            NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
-            Some(environment.manifest_path(flox)?.try_into()?),
-            global_manifest_path(flox).try_into()?,
-            lockfile,
-            flox.features.search_strategy,
-        )?;
-
-        let (results, _) = Dialog {
-            message: &format!("Could not find package for {term}. Looking for suggestions..."),
-            help_message: None,
-            typed: Spinner::new(|| do_search(&search_params)),
-        }
-        .spin()?;
-
-        Ok(results)
     }
 
     /// Collects installation suggestions for a given query using the catalog
@@ -135,11 +93,10 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
     ///
     /// This will attempt to find curated suggestions for the given term,
     /// based on the lockfile of the given environment.
-    pub fn new(flox: &Flox, environment: &dyn Environment, term: &'a str) -> Self {
+    pub fn new(flox: &Flox, term: &'a str) -> Self {
         let curated = Self::suggest_curated_package(term);
         let searched_term = curated.unwrap_or(term);
-        let search_results = match Self::suggest_searched_packages(flox, environment, searched_term)
-        {
+        let search_results = match Self::suggest_searched_packages(flox, searched_term) {
             Ok(results) => results,
             Err(err) => {
                 debug!("failed to search for suggestions: {}", err);
@@ -214,35 +171,6 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         Some(suggestion)
     }
 
-    /// `search` may run without a (local) manifest,
-    /// but still needs to be able to suggest search results
-    /// based on an existing (global) manifest/lockfile.
-    fn suggest_searched_packages_pkgdb(
-        term: &str,
-        manifest: Option<PathOrJson>,
-        global_manifest: PathOrJson,
-        lockfile: PathOrJson,
-        search_strategy: SearchStrategy,
-    ) -> Result<SearchResults> {
-        let search_params = construct_search_params(
-            term,
-            NonZeroU8::new(SUGGESTION_SEARCH_LIMIT),
-            manifest,
-            global_manifest,
-            lockfile,
-            search_strategy,
-        )?;
-
-        let (results, _) = Dialog {
-            message: "Looking for alternative suggestions...",
-            help_message: None,
-            typed: Spinner::new(|| do_search(&search_params)),
-        }
-        .spin()?;
-
-        Ok(results)
-    }
-
     fn suggest_searched_packages_catalog(
         client: &Client,
         term: &str,
@@ -269,15 +197,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
     /// and then query for related search results.
     /// Either of these may fail, in which case we will return with empty [SearchResults]
     /// and log the error.
-    pub fn new(
-        term: &'a str,
-        catalog_client: Option<Client>,
-        system: String,
-        manifest: Option<PathOrJson>,
-        global_manifest: PathOrJson,
-        lockfile: PathOrJson,
-        search_strategy: SearchStrategy,
-    ) -> Self {
+    pub fn new(term: &'a str, catalog_client: Option<Client>, system: String) -> Self {
         let curated = Self::suggest_curated_package(term);
 
         let default_results = SearchResults {
@@ -289,13 +209,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
             let res = if let Some(ref client) = catalog_client {
                 Self::suggest_searched_packages_catalog(client, curated, system)
             } else {
-                Self::suggest_searched_packages_pkgdb(
-                    curated,
-                    manifest,
-                    global_manifest,
-                    lockfile,
-                    search_strategy,
-                )
+                unreachable!("remove pkgdb")
             };
             match res {
                 Ok(results) => results,

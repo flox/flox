@@ -291,13 +291,8 @@ impl GoVersion {
             return Ok(None);
         };
 
-        let provided_go_version = try_find_compatible_version(
-            flox,
-            "go",
-            required_go_version.as_ref(),
-            None::<Vec<String>>,
-        )
-        .await?;
+        let provided_go_version =
+            try_find_compatible_version(flox, "go", required_go_version.as_ref()).await?;
 
         if let Some(found_go_version) = provided_go_version {
             let found_go_version = TryInto::<ProvidedPackage>::try_into(found_go_version)?;

@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::num::NonZeroU8;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -8,14 +7,9 @@ use bpaf::Bpaf;
 use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
-use flox_rust_sdk::models::environment::{
-    global_manifest_lockfile_path,
-    global_manifest_path,
-    Environment,
-    PathPointer,
-};
+use flox_rust_sdk::models::environment::{Environment, PathPointer};
 use flox_rust_sdk::models::manifest::{insert_packages, CatalogPackage, PackageToInstall};
-use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
+use flox_rust_sdk::models::search::SearchResult;
 use flox_rust_sdk::providers::catalog::{
     ClientTrait,
     PackageDescriptor,
@@ -553,28 +547,7 @@ async fn get_default_package_if_compatible(
         };
         pkg
     } else {
-        tracing::debug!("using pkgdb to find default compatible package");
-        let query = Query {
-            rel_path: Some(rel_path),
-            semver: version,
-            limit: NonZeroU8::new(1),
-            deduplicate: false,
-            ..Default::default()
-        };
-        let params = SearchParams {
-            manifest: None,
-            global_manifest: PathOrJson::Path(global_manifest_path(flox)),
-            lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
-            query,
-        };
-
-        let (mut results, _) = do_search(&params)?;
-        if results.results.is_empty() {
-            tracing::debug!("no compatible default package version found");
-            return Ok(None);
-        }
-        let pkg = results.results.swap_remove(0);
-        pkg.try_into()?
+        unimplemented!("remove pkgdb")
     };
     tracing::debug!(
         version = pkg.version.as_ref().unwrap_or(&"null".to_string()),
@@ -621,28 +594,7 @@ async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<Provided
         };
         pkg
     } else {
-        tracing::debug!(
-            package = package.to_string(),
-            "using pkgdb to find default package"
-        );
-        let query = Query::new(
-            package.to_string().as_ref(),
-            flox.features.search_strategy,
-            NonZeroU8::new(1),
-            false,
-        )?;
-        let params = SearchParams {
-            manifest: None,
-            global_manifest: PathOrJson::Path(global_manifest_path(flox)),
-            lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
-            query,
-        };
-
-        let (mut results, _) = do_search(&params)?;
-        if results.results.is_empty() {
-            Err(anyhow!("Flox couldn't find any versions of {package}"))?
-        }
-        results.results.swap_remove(0).try_into()?
+        unimplemented!("remove pkgdb")
     };
 
     tracing::debug!(
@@ -653,12 +605,11 @@ async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<Provided
     Ok(pkg)
 }
 
-/// Searches for a given pname and version, optionally restricting rel_path
+/// Searches for a given pname and version
 async fn try_find_compatible_version(
     flox: &Flox,
     pname: &str,
     version: &str,
-    rel_path: Option<Vec<String>>,
 ) -> Result<Option<ProvidedPackage>> {
     let pkg = if let Some(client) = flox.catalog_client.as_ref() {
         tracing::debug!(
@@ -697,28 +648,7 @@ async fn try_find_compatible_version(
         };
         pkg
     } else {
-        tracing::debug!("using pkgdb to find default node version");
-        let query = Query {
-            pname: Some(pname.to_string()),
-            semver: Some(version.to_string()),
-            limit: NonZeroU8::new(1),
-            deduplicate: false,
-            rel_path,
-            ..Default::default()
-        };
-        let params = SearchParams {
-            manifest: None,
-            global_manifest: PathOrJson::Path(global_manifest_path(flox)),
-            lockfile: PathOrJson::Path(global_manifest_lockfile_path(flox)),
-            query,
-        };
-
-        let (mut results, _) = do_search(&params)?;
-        if results.results.is_empty() {
-            return Ok(None);
-        }
-        let matching_package = results.results.swap_remove(0);
-        matching_package.try_into()?
+        unimplemented!("remove pkgdb")
     };
 
     tracing::debug!(

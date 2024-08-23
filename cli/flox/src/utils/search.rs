@@ -1,105 +1,14 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::io::stdout;
-use std::path::PathBuf;
 
 use anyhow::Result;
 use crossterm::style::Stylize;
 use crossterm::tty::IsTty;
-use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::lockfile::LockedManifestPkgdb;
-use flox_rust_sdk::models::search::{
-    PathOrJson,
-    Query,
-    SearchLimit,
-    SearchParams,
-    SearchResult,
-    SearchResults,
-    SearchStrategy,
-};
-use log::debug;
-
-use crate::commands::{detect_environment, UninitializedEnvironment};
+use flox_rust_sdk::models::search::{SearchResult, SearchResults};
 
 pub const SEARCH_INPUT_SEPARATOR: &'_ str = ":";
 pub const DEFAULT_DESCRIPTION: &'_ str = "<no description provided>";
-
-/// Return an optional manifest and a lockfile to use for search and show.
-///
-/// This searches for an environment to use,
-/// and if one is found, it returns the path to its manifest and optionally the
-/// path to its lockfile.
-///
-/// If no environment is found, or if environment does not have a lockfile, the
-/// global lockfile is used.
-/// The global lockfile is created if it does not exist.
-///
-/// Note that this may perform network operations to pull a
-/// [ManagedEnvironment],
-/// since a freshly cloned user repo with a [ManagedEnvironment] may not have a
-/// manifest or lockfile in floxmeta unless the environment is initialized.
-pub fn manifest_and_lockfile(flox: &Flox, message: &str) -> Result<(Option<PathBuf>, PathBuf)> {
-    manifest_and_lockfile_from_detected_environment(flox, detect_environment(message)?)
-}
-
-/// Helper function for [manifest_and_lockfile] that can be unit tested.
-fn manifest_and_lockfile_from_detected_environment(
-    flox: &Flox,
-    detected_environment: Option<UninitializedEnvironment>,
-) -> Result<(Option<PathBuf>, PathBuf)> {
-    let (manifest_path, lockfile_path) = match detected_environment {
-        None => {
-            debug!("no environment found");
-            (None, None)
-        },
-        Some(uninitialized) => {
-            debug!("using environment {}", uninitialized.bare_description()?);
-
-            let environment = uninitialized
-                .into_concrete_environment(flox)?
-                .into_dyn_environment();
-
-            let lockfile_path = environment.lockfile_path(flox)?;
-            debug!("checking lockfile: path={}", lockfile_path.display());
-            let lockfile = if lockfile_path.exists() {
-                debug!("lockfile exists");
-                Some(lockfile_path)
-            } else {
-                debug!("lockfile doesn't exist");
-                None
-            };
-            (Some(environment.manifest_path(flox)?), lockfile)
-        },
-    };
-
-    // Use the global lock if we don't have a lock yet
-    let lockfile_path = match lockfile_path {
-        Some(lockfile_path) => lockfile_path,
-        None => LockedManifestPkgdb::ensure_global_lockfile(flox)?,
-    };
-    Ok((manifest_path, lockfile_path))
-}
-
-/// Create [SearchParams] from the given search term
-/// using available manifests and lockfiles for resolution.
-pub(crate) fn construct_search_params(
-    search_term: &str,
-    results_limit: SearchLimit,
-    manifest: Option<PathOrJson>,
-    global_manifest: PathOrJson,
-    lockfile: PathOrJson,
-    search_strategy: SearchStrategy,
-) -> Result<SearchParams> {
-    let query = Query::new(search_term, search_strategy, results_limit, true)?;
-    let params = SearchParams {
-        manifest,
-        global_manifest,
-        lockfile,
-        query,
-    };
-    debug!("search params raw: {:?}", params);
-    Ok(params)
-}
 
 /// An intermediate representation of a search result used for rendering
 #[derive(Debug, PartialEq, Clone)]
@@ -302,17 +211,61 @@ impl DisplaySearchResults {
 
 #[cfg(test)]
 mod tests {
+
+    use std::path::PathBuf;
+
     use flox_rust_sdk::flox::test_helpers::flox_instance_with_global_lock;
+    use flox_rust_sdk::flox::Flox;
     use flox_rust_sdk::models::environment::global_manifest_lockfile_path;
     use flox_rust_sdk::models::environment::path_environment::test_helpers::{
         new_path_environment,
         new_path_environment_from_env_files,
     };
+    use flox_rust_sdk::models::lockfile::LockedManifestPkgdb;
     use flox_rust_sdk::providers::catalog::MANUALLY_GENERATED;
     use serial_test::serial;
+    use tracing::debug;
 
     use super::*;
-    use crate::commands::ConcreteEnvironment;
+    use crate::commands::{ConcreteEnvironment, UninitializedEnvironment};
+
+    /// Helper function for [manifest_and_lockfile] that can be unit tested.
+    fn manifest_and_lockfile_from_detected_environment(
+        flox: &Flox,
+        detected_environment: Option<UninitializedEnvironment>,
+    ) -> Result<(Option<PathBuf>, PathBuf)> {
+        let (manifest_path, lockfile_path) = match detected_environment {
+            None => {
+                debug!("no environment found");
+                (None, None)
+            },
+            Some(uninitialized) => {
+                debug!("using environment {}", uninitialized.bare_description()?);
+
+                let environment = uninitialized
+                    .into_concrete_environment(flox)?
+                    .into_dyn_environment();
+
+                let lockfile_path = environment.lockfile_path(flox)?;
+                debug!("checking lockfile: path={}", lockfile_path.display());
+                let lockfile = if lockfile_path.exists() {
+                    debug!("lockfile exists");
+                    Some(lockfile_path)
+                } else {
+                    debug!("lockfile doesn't exist");
+                    None
+                };
+                (Some(environment.manifest_path(flox)?), lockfile)
+            },
+        };
+
+        // Use the global lock if we don't have a lock yet
+        let lockfile_path = match lockfile_path {
+            Some(lockfile_path) => lockfile_path,
+            None => LockedManifestPkgdb::ensure_global_lockfile(flox)?,
+        };
+        Ok((manifest_path, lockfile_path))
+    }
 
     /// When no environment has been detected, the global lockfile is used.
     #[test]
