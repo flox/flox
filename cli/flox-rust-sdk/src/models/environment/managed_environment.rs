@@ -5,7 +5,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::core_environment::CoreEnvironment;
+use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::generations::{Generations, GenerationsError};
 use super::path_environment::PathEnvironment;
 use super::{
@@ -44,7 +44,6 @@ use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
 use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::{PackageToInstall, TypedManifest};
-use crate::models::pkgdb::UpgradeResult;
 use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandError,

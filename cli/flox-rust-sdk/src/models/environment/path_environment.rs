@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use indoc::formatdoc;
 use log::debug;
 
-use super::core_environment::CoreEnvironment;
+use super::core_environment::{CoreEnvironment, UpgradeResult};
 use super::{
     path_hash,
     services_socket_path,
@@ -50,7 +50,6 @@ use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::{CatalogPackage, PackageToInstall, RawManifest, TypedManifest};
-use crate::models::pkgdb::UpgradeResult;
 use crate::utils::mtime_of;
 
 /// Struct representing a local environment
