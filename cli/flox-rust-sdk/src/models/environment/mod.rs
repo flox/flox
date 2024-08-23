@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{env, fs, io};
 
+use core_environment::UpgradeResult;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -17,7 +18,6 @@ use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::{LockedManifest, LockedManifestError};
 use super::manifest::{ManifestError, PackageToInstall, RawManifest, TomlEditError, TypedManifest};
-use super::pkgdb::UpgradeResult;
 use crate::data::{CanonicalPath, CanonicalizeError, Version};
 use crate::flox::{Flox, Floxhub};
 use crate::providers::git::{

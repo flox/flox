@@ -22,12 +22,10 @@ use super::{
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
-use crate::models::environment::global_manifest_path;
 use crate::models::lockfile::{
     LockedManifest,
     LockedManifestCatalog,
     LockedManifestError,
-    LockedManifestPkgdb,
     LockedPackage,
     ResolutionFailure,
 };
@@ -49,14 +47,11 @@ use crate::models::pkgdb::{
     BuildEnvResult,
     CallPkgDbError,
     PkgDbError,
-    UpgradeResult,
-    UpgradeResultJSON,
     PKGDB_BIN,
 };
 use crate::providers::catalog::{self, ClientTrait};
 use crate::providers::flox_cpp_utils::InstallableLocker;
 use crate::providers::services::{maybe_make_service_config_file, ServiceError};
-use crate::utils::CommandExt;
 
 pub struct ReadOnly {}
 struct ReadWrite {}
@@ -662,9 +657,7 @@ impl CoreEnvironment<ReadOnly> {
 
         let (lockfile, upgraded) = match manifest {
             TypedManifest::Pkgdb(_) => {
-                tracing::debug!("using pkgdb to upgrade");
-                let (lockfile, upgraded) = self.upgrade_with_pkgdb(flox, groups_or_iids)?;
-                (LockedManifest::Pkgdb(lockfile), upgraded)
+                return Err(CoreEnvironmentError::LockingVersion0NotSupported);
             },
             TypedManifest::Catalog(catalog) => {
                 Self::ensure_valid_upgrade(groups_or_iids, &catalog)?;
@@ -753,47 +746,6 @@ impl CoreEnvironment<ReadOnly> {
             }
         }
         Ok(())
-    }
-
-    fn upgrade_with_pkgdb(
-        &mut self,
-        flox: &Flox,
-        groups_or_iids: &[&str],
-    ) -> Result<(LockedManifestPkgdb, Vec<String>), CoreEnvironmentError> {
-        let manifest_path = self.manifest_path();
-        let lockfile_path = self.lockfile_path();
-        let maybe_lockfile = if lockfile_path.exists() {
-            debug!("found existing lockfile: {}", lockfile_path.display());
-            Some(lockfile_path)
-        } else {
-            debug!("no existing lockfile found");
-            None
-        };
-        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_cmd
-            .args(["manifest", "upgrade"])
-            .arg("--ga-registry")
-            .arg("--global-manifest")
-            .arg(global_manifest_path(flox))
-            .arg("--manifest")
-            .arg(manifest_path);
-        if let Some(lf_path) = maybe_lockfile {
-            let canonical_lockfile_path =
-                CanonicalPath::new(lf_path).map_err(CoreEnvironmentError::BadLockfilePath)?;
-            pkgdb_cmd.arg("--lockfile").arg(canonical_lockfile_path);
-        }
-        pkgdb_cmd.args(groups_or_iids);
-
-        debug!(
-            "upgrading environment with command: {}",
-            pkgdb_cmd.display()
-        );
-        let json: UpgradeResultJSON = serde_json::from_value(
-            call_pkgdb(pkgdb_cmd, true).map_err(CoreEnvironmentError::UpgradeFailedPkgDb)?,
-        )
-        .map_err(CoreEnvironmentError::ParseUpgradeOutput)?;
-
-        Ok((json.lockfile, json.result.0))
     }
 
     /// Upgrade the given groups or install ids in the environment using the catalog client.
@@ -1286,6 +1238,12 @@ impl EditResult {
             EditResult::Success { store_path } => store_path.clone(),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct UpgradeResult {
+    pub packages: Vec<String>,
+    pub store_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Error)]

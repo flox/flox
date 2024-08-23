@@ -5,6 +5,7 @@ use log::debug;
 use tempfile::TempDir;
 use thiserror::Error;
 
+use super::core_environment::UpgradeResult;
 use super::managed_environment::{remote_branch_name, ManagedEnvironment, ManagedEnvironmentError};
 use super::{
     gcroots_dir,
@@ -27,7 +28,6 @@ use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
 use crate::models::lockfile::LockedManifest;
 use crate::models::manifest::{PackageToInstall, TypedManifest};
-use crate::models::pkgdb::UpgradeResult;
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
 

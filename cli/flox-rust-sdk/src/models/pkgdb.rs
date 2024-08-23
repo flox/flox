@@ -2,7 +2,6 @@ use std::env;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::io::{BufRead, BufReader, Read};
-use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use log::debug;
@@ -11,7 +10,6 @@ use serde::Deserialize;
 use serde_json::Value;
 use thiserror::Error;
 
-use super::lockfile::LockedManifestPkgdb;
 use crate::utils::CommandExt;
 
 // This is the `PKGDB` path that we actually use.
@@ -57,26 +55,10 @@ pub mod error_codes {
     pub const LOCK_LOCAL_FLAKE: u64 = 129;
 }
 
-/// The JSON output of a `pkgdb upgrade` call
-#[derive(Deserialize)]
-pub struct UpgradeResultJSON {
-    pub result: UpgradeResultInner,
-    pub lockfile: LockedManifestPkgdb,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UpgradeResultInner(pub Vec<String>);
-
 /// The JSON output of a `pkgdb buildenv` call
 #[derive(Deserialize)]
 pub struct BuildEnvResult {
     pub store_path: String,
-}
-
-#[derive(Debug)]
-pub struct UpgradeResult {
-    pub packages: Vec<String>,
-    pub store_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Error)]
