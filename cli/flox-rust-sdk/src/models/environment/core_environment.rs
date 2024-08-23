@@ -244,8 +244,7 @@ impl<State> CoreEnvironment<State> {
                 if *flox.features.use_catalog {
                     return Err(CoreEnvironmentError::LockingVersion0NotSupported);
                 } else {
-                    tracing::debug!("using pkgdb to lock");
-                    LockedManifest::Pkgdb(self.lock_with_pkgdb(flox)?)
+                    unimplemented!()
                 }
             },
             TypedManifest::Catalog(manifest) => {
@@ -274,43 +273,6 @@ impl<State> CoreEnvironment<State> {
         )
         .map_err(CoreEnvironmentError::WriteLockfile)?;
 
-        Ok(lockfile)
-    }
-
-    /// Lock the environment with the pkgdb
-    ///
-    /// Passes the manifest and the existing lockfile to `pkgdb manifest lock`.
-    /// The lockfile is used to lock the underlying package registry.
-    /// If the environment has no lockfile, the global lockfile is used as a base instead.
-    fn lock_with_pkgdb(
-        &mut self,
-        flox: &Flox,
-    ) -> Result<LockedManifestPkgdb, CoreEnvironmentError> {
-        let manifest_path = self.manifest_path();
-        let environment_lockfile_path = self.lockfile_path();
-        let existing_lockfile_path = if environment_lockfile_path.exists() {
-            debug!(
-                "found existing lockfile: {}",
-                environment_lockfile_path.display()
-            );
-            environment_lockfile_path.clone()
-        } else {
-            debug!("no existing lockfile found, using the global lockfile as a base");
-            // Use the global lock so we're less likely to kick off a pkgdb
-            // scrape in e.g. an install.
-            LockedManifestPkgdb::ensure_global_lockfile(flox)
-                .map_err(CoreEnvironmentError::LockedManifest)?
-        };
-        let lockfile_path = CanonicalPath::new(existing_lockfile_path)
-            .map_err(CoreEnvironmentError::BadLockfilePath)?;
-
-        let lockfile = LockedManifestPkgdb::lock_manifest(
-            Path::new(&*PKGDB_BIN),
-            &manifest_path,
-            &lockfile_path,
-            &global_manifest_path(flox),
-        )
-        .map_err(CoreEnvironmentError::LockedManifest)?;
         Ok(lockfile)
     }
 
