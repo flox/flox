@@ -612,7 +612,6 @@ impl Pull {
 mod tests {
     use flox_rust_sdk::flox::test_helpers::{
         flox_instance,
-        flox_instance_with_global_lock_and_floxhub,
         flox_instance_with_optional_floxhub_and_client,
     };
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::{
@@ -696,7 +695,8 @@ mod tests {
     #[tokio::test]
     async fn test_handle_pull_result_2() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
@@ -748,7 +748,8 @@ mod tests {
     #[tokio::test]
     async fn test_handle_pull_result_4() {
         let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock_and_floxhub(&owner);
+        let (flox, _temp_dir_handle) =
+            flox_instance_with_optional_floxhub_and_client(Some(&owner), true);
 
         let dot_flox_path = tempdir_in(&flox.temp_dir).unwrap().into_path();
 
