@@ -793,7 +793,6 @@ mod test {
     use super::*;
     use crate::flox::test_helpers::{
         flox_instance,
-        flox_instance_with_global_lock,
         flox_instance_with_optional_floxhub_and_client,
     };
     use crate::flox::DEFAULT_FLOXHUB_URL;
@@ -1069,7 +1068,7 @@ mod test {
     /// upgrade
     #[test]
     fn needs_manifest_migration_0_0() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
         let environment =
             new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
         assert!(matches!(
@@ -1123,7 +1122,7 @@ mod test {
     /// When manifest is v1 and lockfile is v0, we need upgrade
     #[test]
     fn needs_manifest_migration_1_0() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
         let environment =
             new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
         fs::write(environment.manifest_path(&flox).unwrap(), "version = 1").unwrap();

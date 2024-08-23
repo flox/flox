@@ -1505,7 +1505,6 @@ mod tests {
     use crate::data::Version;
     use crate::flox::test_helpers::{
         flox_instance,
-        flox_instance_with_global_lock,
         flox_instance_with_optional_floxhub_and_client,
     };
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
@@ -1520,9 +1519,6 @@ mod tests {
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
     /// Create a CoreEnvironment with an empty manifest (with version = 1)
-    ///
-    /// This calls flox_instance_with_global_lock(),
-    /// so the resulting environment can be built without incurring a pkgdb scrape.
     fn empty_core_environment() -> (CoreEnvironment, Flox, TempDir) {
         let (flox, tempdir) = flox_instance_with_optional_floxhub_and_client(None, true);
 
@@ -2084,7 +2080,7 @@ mod tests {
 
     #[test]
     fn v0_does_not_need_relock() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
         let environment =
             new_core_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
         assert!(environment.lockfile_if_up_to_date().unwrap().is_some());
@@ -2092,7 +2088,7 @@ mod tests {
 
     #[test]
     fn modified_v0_errors() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
         let manifest_contents =
             fs::read_to_string(MANUALLY_GENERATED.join("empty_v0").join(MANIFEST_FILENAME))
                 .unwrap();
@@ -2110,7 +2106,7 @@ mod tests {
 
     #[test]
     fn v1_does_not_need_relock() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
         let environment =
             new_core_environment_from_env_files(&flox, GENERATED_DATA.join("envs/hello"));
         assert!(environment.lockfile_if_up_to_date().unwrap().is_some());
@@ -2118,7 +2114,7 @@ mod tests {
 
     #[test]
     fn modified_v1_needs_relock() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub_and_client(None, true);
         let manifest_contents =
             fs::read_to_string(MANUALLY_GENERATED.join("empty").join(MANIFEST_FILENAME)).unwrap();
         let lockfile_contents =
