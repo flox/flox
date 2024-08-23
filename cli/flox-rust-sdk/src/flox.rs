@@ -224,44 +224,8 @@ pub mod test_helpers {
 
     use self::catalog::MockClient;
     use super::*;
-    use crate::models::environment::{
-        global_manifest_lockfile_path,
-        global_manifest_path,
-        init_global_manifest,
-    };
-    use crate::models::lockfile::LockedManifestPkgdb;
+    use crate::models::environment::{global_manifest_path, init_global_manifest};
     use crate::providers::git::{GitCommandProvider, GitProvider};
-
-    /// If owner is None, no mock FloxHub is setup.
-    /// If it is Some, a mock FloxHub with a repo for that owner will be setup,
-    /// but no other owners will work.
-    fn flox_instance_with_global_lock_with_optional_floxhub(
-        owner: Option<&EnvironmentOwner>,
-    ) -> (Flox, TempDir) {
-        // Scrape nixpkgs once and then store the resulting global lockfile in memory
-        static GLOBAL_LOCKFILE: Lazy<LockedManifestPkgdb> = Lazy::new(|| {
-            let (flox, _temp_dir_handle) = flox_instance();
-            let pkgdb_nixpkgs_rev_new = "ab5fd150146dcfe41fda501134e6503932cc8dfd";
-            std::env::set_var("_PKGDB_GA_REGISTRY_REF_OR_REV", pkgdb_nixpkgs_rev_new);
-            LockedManifestPkgdb::update_global_manifest(&flox, vec![])
-                .unwrap()
-                .new_lockfile
-        });
-
-        let (flox, tempdir_handle) = flox_instance_with_optional_floxhub_and_client(owner, false);
-
-        // All Flox instances created by flox_instance() have the same global
-        // manifest,
-        // so we can use the same lockfile.
-        let lockfile_path = global_manifest_lockfile_path(&flox);
-        std::fs::write(
-            lockfile_path,
-            serde_json::to_string_pretty(&*GLOBAL_LOCKFILE).unwrap(),
-        )
-        .unwrap();
-
-        (flox, tempdir_handle)
-    }
 
     pub fn flox_instance() -> (Flox, TempDir) {
         flox_instance_with_optional_floxhub_and_client(None, false)
