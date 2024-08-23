@@ -2,11 +2,10 @@ use std::collections::HashSet;
 use std::num::NonZeroU8;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::time::Duration;
 
 use anyhow::{anyhow, Context, Error, Result};
 use bpaf::Bpaf;
-use flox_rust_sdk::data::{AttrPath, CanonicalPath};
+use flox_rust_sdk::data::AttrPath;
 use flox_rust_sdk::flox::{EnvironmentName, Flox, DEFAULT_NAME};
 use flox_rust_sdk::models::environment::path_environment::{InitCustomization, PathEnvironment};
 use flox_rust_sdk::models::environment::{
@@ -15,13 +14,7 @@ use flox_rust_sdk::models::environment::{
     Environment,
     PathPointer,
 };
-use flox_rust_sdk::models::lockfile::{
-    LockedManifest,
-    LockedManifestPkgdb,
-    TypedLockedManifestPkgdb,
-};
 use flox_rust_sdk::models::manifest::{insert_packages, CatalogPackage, PackageToInstall};
-use flox_rust_sdk::models::pkgdb::scrape_input;
 use flox_rust_sdk::models::search::{do_search, PathOrJson, Query, SearchParams, SearchResult};
 use flox_rust_sdk::providers::catalog::{
     ClientTrait,
@@ -123,34 +116,6 @@ impl Init {
 
         // Don't run language hooks in home dir
         let customization = if dir != home_dir || self.auto_setup {
-            // Some language hooks run searches, so scrape with pkgdb if necessary
-            if flox.catalog_client.is_none() {
-                tracing::debug!("using pkgdb for init");
-                Dialog {
-                    message: "Generating database for flox packages...",
-                    help_message: None,
-                    typed: Spinner::new(|| {
-                        let global_lockfile = LockedManifestPkgdb::ensure_global_lockfile(&flox)?;
-
-                        let lockfile: LockedManifest =
-                            LockedManifest::read_from_file(&CanonicalPath::new(global_lockfile)?)?;
-
-                        let LockedManifest::Pkgdb(lockfile) = lockfile else {
-                            return Err(anyhow!("Expected a Pkgdb lockfile"));
-                        };
-
-                        let lockfile = TypedLockedManifestPkgdb::try_from(lockfile)?;
-
-                        // --ga-registry forces a single input
-                        if let Some((_, input)) = lockfile.registry().inputs.iter().next() {
-                            scrape_input(&input.from)?;
-                        };
-                        Ok::<(), Error>(())
-                    }),
-                }
-                .spin_with_delay(Duration::from_secs_f32(0.25))?;
-            };
-
             self.run_language_hooks(&flox, &dir)
                 .await
                 .unwrap_or_else(|e| {
