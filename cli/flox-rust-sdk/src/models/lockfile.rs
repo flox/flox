@@ -1233,35 +1233,6 @@ pub struct LockedManifestPkgdb(Value);
 // region: pkgdb lockfile operations
 
 impl LockedManifestPkgdb {
-    /// Use pkgdb to lock a manifest
-    ///
-    /// `existing_lockfile_path` can be either the global lock or an environment's
-    /// lockfile
-    pub fn lock_manifest(
-        pkgdb: &Path,
-        manifest_path: &Path,
-        existing_lockfile_path: &CanonicalPath,
-        global_manifest_path: &Path,
-    ) -> Result<Self, LockedManifestError> {
-        let canonical_manifest_path =
-            CanonicalPath::new(manifest_path).map_err(LockedManifestError::BadManifestPath)?;
-
-        let mut pkgdb_cmd = Command::new(pkgdb);
-        pkgdb_cmd
-            .args(["manifest", "lock"])
-            .arg("--ga-registry")
-            .arg("--global-manifest")
-            .arg(global_manifest_path)
-            .arg("--manifest")
-            .arg(canonical_manifest_path)
-            .arg("--lockfile")
-            .arg(existing_lockfile_path);
-
-        debug!("locking manifest with command: {}", pkgdb_cmd.display());
-        call_pkgdb(pkgdb_cmd, true)
-            .map_err(LockedManifestError::LockManifest)
-            .map(Self)
-    }
 
     /// Wrapper around `pkgdb update`
     ///
