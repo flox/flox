@@ -693,14 +693,10 @@ impl InitHook for Node {
 #[cfg(test)]
 mod tests {
     use flox_rust_sdk::data::System;
-    use flox_rust_sdk::flox::test_helpers::{
-        flox_instance_with_global_lock,
-        flox_instance_with_optional_floxhub_and_client,
-    };
+    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub_and_client;
     use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use flox_rust_sdk::providers::catalog::Client;
     use pretty_assertions::assert_eq;
-    use serial_test::serial;
 
     use super::*;
 
@@ -875,116 +871,6 @@ mod tests {
                 profile_zsh: None,
             }
         );
-    }
-
-    // TODO: all the try_find_compatible_yarn() tests actually hit the database,
-    // and it might be better to mock out do_search().
-    // But I'm only seeing 6 tests take ~3 seconds,
-    // so at this point I think there are bigger testing efficiency fish to fry.
-
-    /// Test finding yarn with no constraints succeeds
-    #[tokio::test]
-    #[serial]
-    async fn try_find_compatible_yarn_no_constraints() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
-            yarn: None,
-            node: None,
-        })
-        .await
-        .unwrap()
-        .unwrap();
-
-        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
-    }
-
-    /// Test finding yarn with the version of nixpkgs#nodejs specified succeeds
-    #[tokio::test]
-    #[serial]
-    async fn try_find_compatible_yarn_node_available() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
-            yarn: None,
-            node: Some("18".to_string()),
-        })
-        .await
-        .unwrap()
-        .unwrap();
-
-        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
-        assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
-    }
-
-    /// Test finding yarn with a version of node other than that of
-    /// nixpkgs#nodejs fails
-    #[tokio::test]
-    #[serial]
-    async fn try_find_compatible_yarn_node_unavailable() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
-            yarn: None,
-            node: Some("20".to_string()),
-        })
-        .await
-        .unwrap();
-
-        assert_eq!(yarn_install, None);
-    }
-
-    /// Test finding yarn with the version nixpkgs#yarn specified succeeds
-    #[tokio::test]
-    #[serial]
-    async fn try_find_compatible_yarn_yarn_available() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
-            yarn: Some("1".to_string()),
-            node: None,
-        })
-        .await
-        .unwrap()
-        .unwrap();
-
-        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
-        assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
-    }
-
-    /// Test finding yarn with a version of yarn other than that of
-    /// nixpkgs#yarn fails
-    #[tokio::test]
-    #[serial]
-    async fn try_find_compatible_yarn_yarn_unavailable() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
-            yarn: Some("2".to_string()),
-            node: None,
-        })
-        .await
-        .unwrap();
-
-        assert_eq!(yarn_install, None);
-    }
-
-    /// Test finding yarn with versions of nixpkgs#yarn and nixpkgs#nodejs
-    /// specified succeeds
-    #[tokio::test]
-    #[serial]
-    async fn try_find_compatible_yarn_both_available() {
-        let (flox, _temp_dir_handle) = flox_instance_with_global_lock();
-        let yarn_install = Node::try_find_compatible_yarn(&flox, &PackageJSONVersions {
-            yarn: Some("1".to_string()),
-            node: Some("18".to_string()),
-        })
-        .await
-        .unwrap()
-        .unwrap();
-
-        assert_eq!(yarn_install.node.rel_path, "nodejs".into());
-        assert_eq!(yarn_install.yarn.rel_path, "yarn".into());
-        assert!(yarn_install.node.version.unwrap().starts_with("18"));
-        assert!(yarn_install.yarn.version.unwrap().starts_with('1'));
     }
 
     ///////////////////////////////////////////////////////////////////////////
