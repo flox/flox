@@ -1293,10 +1293,6 @@ pub enum CoreEnvironmentError {
     BadLockfilePath(CanonicalizeError),
 
     // todo: refactor upgrade to use `LockedManifest`
-    #[error("unexpected output from pkgdb upgrade")]
-    ParseUpgradeOutput(#[source] serde_json::Error),
-    #[error("failed to upgrade environment")]
-    UpgradeFailedPkgDb(#[source] CallPkgDbError),
     #[error("failed to upgrade environment")]
     UpgradeFailedCatalog(#[source] UpgradeError),
     // endregion

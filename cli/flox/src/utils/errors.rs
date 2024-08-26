@@ -408,12 +408,6 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             format_pkgdb_error(pkgdb_error, err, "Failed to build environment.")
         },
 
-        CoreEnvironmentError::UpgradeFailedPkgDb(pkgdb_error) => {
-            format_pkgdb_error(pkgdb_error, err, "Failed to upgrade environment.")
-        },
-        // other pkgdb call errors are unexpected
-        CoreEnvironmentError::ParseUpgradeOutput(_) => display_chain(err),
-
         CoreEnvironmentError::LockedManifest(locked_manifest_error) => {
             format_locked_manifest_error(locked_manifest_error)
         },
@@ -784,49 +778,6 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
         // already user friendly.
         // some commands catch these errors and process them separately
         // e.g. `flox pull`, `flox push`
-
-        // 105: invalid lockfile, just print the error message
-        // https://github.com/flox/flox/issues/852
-        LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: error_codes::INVALID_MANIFEST_FILE,
-            context_message: Some(ContextMsgError { message, .. }),
-            ..
-        })) => formatdoc! {"
-            {message}
-        "},
-
-        // 116: toml parsing error, just print the error message
-        // https://github.com/flox/flox/issues/852
-        LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: error_codes::TOML_TO_JSON,
-            context_message:
-                Some(ContextMsgError {
-                    caught: Some(caught),
-                    ..
-                }),
-            ..
-        })) => {
-            let message = &caught.message;
-            let un_prefixed = message.strip_prefix("[error] ").unwrap_or(message);
-            formatdoc! {"
-                {un_prefixed}
-            "}
-        },
-        // 127: bad package, forbidden by options
-        // https://github.com/flox/flox/issues/492
-        LockedManifestError::LockManifest(CallPkgDbError::PkgDbError(PkgDbError {
-            exit_code: error_codes::BAD_PACKAGE_FAILURE,
-            context_message: Some(ContextMsgError { message, .. }),
-            ..
-        })) => message.to_string(),
-
-        LockedManifestError::LockManifest(pkgdb_error) => {
-            format_pkgdb_error(pkgdb_error, err, "Failed to lock environment manifest.")
-        },
-
-        LockedManifestError::UpdateFailed(pkgdb_error) => {
-            format_pkgdb_error(pkgdb_error, err, "Failed to update environment.")
-        },
         LockedManifestError::CheckLockfile(pkgdb_error) => {
             format_pkgdb_error(pkgdb_error, err, "Failed to check environment.")
         },
