@@ -87,7 +87,7 @@ const DEFAULT_UPDATE_INSTRUCTIONS: &str =
     "Get the latest at https://flox.dev/docs/install-flox/#upgrade-existing-flox-installation";
 const UPDATE_INSTRUCTIONS_RELATIVE_FILE_PATH: &str =
     "../../share/flox/files/update-instructions.txt";
-const UPDATE_NOTIFICATION_FILE_NAME: &str = "update-notification.json";
+const UPDATE_NOTIFICATION_FILE_NAME: &str = "update-check-timestamp.json";
 const UPDATE_NOTIFICATION_EXPIRY: Duration = Duration::days(1);
 
 static FLOX_DESCRIPTION: &'_ str = indoc! {"
@@ -406,12 +406,12 @@ fn print_welcome_message(envs: EnvRegistry, active_environments: ActiveEnvironme
     }
 }
 
-/// Timestamp we serialize to a file to track when the user was last notified an
-/// update is available
+/// Timestamp we serialize to a file to trackwhen we last checked
+/// whether an update is available
 #[derive(Deserialize, Serialize)]
-struct LastUpdateNotification {
+struct LastUpdateCheck {
     #[serde(with = "time::serde::iso8601")]
-    last_notification: OffsetDateTime,
+    last_update_check: OffsetDateTime,
 }
 
 /// [UpdateNotification] stores a version that the user should be notified is
@@ -504,12 +504,11 @@ impl UpdateNotification {
             // If the file doesn't it exist, it means we haven't shown the notification recently
             Err(e) if e.kind() == io::ErrorKind::NotFound => {},
             Ok(contents) => {
-                let update_notification: LastUpdateNotification =
-                    serde_json::from_str(&contents)
-                        .map_err(|e| UpdateNotificationError::WeMayHaveMessedUp(anyhow!(e)))?;
+                let update_notification: LastUpdateCheck = serde_json::from_str(&contents)
+                    .map_err(|e| UpdateNotificationError::WeMayHaveMessedUp(anyhow!(e)))?;
 
                 let now = OffsetDateTime::now_utc();
-                if now - update_notification.last_notification < expiry {
+                if now - update_notification.last_update_check < expiry {
                     return Ok(UpdateCheckResult::Skipped);
                 }
             },
@@ -604,8 +603,8 @@ impl UpdateNotification {
     }
 
     fn write_notification_file(notification_file: impl AsRef<Path>) {
-        let last_notification = LastUpdateNotification {
-            last_notification: OffsetDateTime::now_utc(),
+        let last_notification = LastUpdateCheck {
+            last_update_check: OffsetDateTime::now_utc(),
         };
 
         let notification_file_contents = match serde_json::to_string(&last_notification) {
@@ -1872,10 +1871,8 @@ mod tests {
             },
         )));
 
-        serde_json::from_str::<LastUpdateNotification>(
-            &fs::read_to_string(notification_file).unwrap(),
-        )
-        .unwrap();
+        serde_json::from_str::<LastUpdateCheck>(&fs::read_to_string(notification_file).unwrap())
+            .unwrap();
     }
 
     /// [UpdateNotification::handle_update_result] should write notification_file,
@@ -1889,10 +1886,8 @@ mod tests {
             notification_file.clone(),
         )));
 
-        serde_json::from_str::<LastUpdateNotification>(
-            &fs::read_to_string(notification_file).unwrap(),
-        )
-        .unwrap();
+        serde_json::from_str::<LastUpdateCheck>(&fs::read_to_string(notification_file).unwrap())
+            .unwrap();
     }
 
     /// [UpdateNotificationError::WeMayHaveMessedUp] errors should be sent to sentry
@@ -1929,8 +1924,8 @@ mod tests {
         let notification_file = temp_dir.path().join(UPDATE_NOTIFICATION_FILE_NAME);
         fs::write(
             &notification_file,
-            serde_json::to_string(&LastUpdateNotification {
-                last_notification: OffsetDateTime::now_utc(),
+            serde_json::to_string(&LastUpdateCheck {
+                last_update_check: OffsetDateTime::now_utc(),
             })
             .unwrap(),
         )
@@ -1954,8 +1949,8 @@ mod tests {
         let notification_file = temp_dir.path().join(UPDATE_NOTIFICATION_FILE_NAME);
         fs::write(
             &notification_file,
-            serde_json::to_string(&LastUpdateNotification {
-                last_notification: OffsetDateTime::now_utc()
+            serde_json::to_string(&LastUpdateCheck {
+                last_update_check: OffsetDateTime::now_utc()
                     - UPDATE_NOTIFICATION_EXPIRY
                     - Duration::seconds(1),
             })
