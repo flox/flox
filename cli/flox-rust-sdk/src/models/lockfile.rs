@@ -30,8 +30,6 @@ use super::manifest::{
 };
 use super::pkgdb::CallPkgDbError;
 use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
-use crate::flox::Flox;
-use crate::models::environment::global_manifest_lockfile_path;
 use crate::models::pkgdb::{call_pkgdb, PKGDB_BIN};
 use crate::providers::catalog::{
     self,
@@ -1239,24 +1237,6 @@ pub struct UpdateResult {
 }
 
 impl LockedManifestPkgdb {
-    /// Update global manifest lockfile and write it.
-    pub fn update_global_manifest(
-        _flox: &Flox,
-        _inputs: Vec<String>,
-    ) -> Result<UpdateResult, LockedManifestError> {
-        unimplemented!("remove pkgdb")
-    }
-
-    /// Creates the global lockfile if it doesn't exist and returns its path.
-    pub fn ensure_global_lockfile(flox: &Flox) -> Result<PathBuf, LockedManifestError> {
-        let global_lockfile_path = global_manifest_lockfile_path(flox);
-        if !global_lockfile_path.exists() {
-            debug!("Global lockfile does not exist, updating to create one");
-            Self::update_global_manifest(flox, vec![])?;
-        }
-        Ok(global_lockfile_path)
-    }
-
     /// Check the integrity of a lockfile using `pkgdb manifest check`
     pub fn check_lockfile(
         path: &CanonicalPath,
@@ -1435,10 +1415,6 @@ pub enum LockedManifestError {
     /// when parsing a [LockedManifest] into a [TypedLockedManifest]
     #[error("failed to parse contents of locked manifest")]
     ParseLockedManifest(#[source] serde_json::Error),
-    #[error("could not serialize global lockfile")]
-    SerializeGlobalLockfile(#[source] serde_json::Error),
-    #[error("could not write global lockfile")]
-    WriteGlobalLockfile(#[source] std::io::Error),
 
     // todo: this should probably part of some validation logic of the manifest file
     //       rather than occurring during the locking process creation

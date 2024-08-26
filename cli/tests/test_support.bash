@@ -132,7 +132,6 @@ setup_isolated_flox() {
   # `common_suite_teardown`.
   FLOX_CACHE_DIR="$(mktemp -d -p "$FLOX_CACHE_DIR")"
   export FLOX_CACHE_DIR
-  export GLOBAL_MANIFEST_LOCK="$FLOX_CONFIG_DIR/global-manifest.lock"
 }
 
 

@@ -38,7 +38,6 @@ project_teardown() {
 setup() {
   common_test_setup
   setup_isolated_flox
-  rm -f "$GLOBAL_MANIFEST_LOCK"
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 

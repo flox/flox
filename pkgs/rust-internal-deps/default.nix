@@ -31,10 +31,6 @@
 
     PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
 
-    GLOBAL_MANIFEST_TEMPLATE = builtins.path {
-      path = ../../assets/global_manifest_template.toml;
-    };
-
     # The current version of flox being built
     inherit FLOX_VERSION;
 
