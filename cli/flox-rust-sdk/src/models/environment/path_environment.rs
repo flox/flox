@@ -419,11 +419,9 @@ impl PathEnvironment {
             &System::from("x86_64-darwin"),
             &System::from("x86_64-linux"),
         ];
-        let manifest = if flox.catalog_client.is_some() {
+        let manifest = {
             tracing::debug!("creating raw catalog manifest");
             RawManifest::new_documented(all_systems.as_slice(), customization)
-        } else {
-            unimplemented!("remove pkgdb")
         };
 
         let mut environment = Self::write_new_unchecked(

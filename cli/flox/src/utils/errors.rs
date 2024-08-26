@@ -422,11 +422,6 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             'containerize' is currently only supported on linux (found {system}).
         "},
 
-        CoreEnvironmentError::CatalogClientMissing => formatdoc! {"
-            The current manifest requires the (experimental) catalog feature.
-
-            Please enable the catalog feature and try again.
-        "},
         CoreEnvironmentError::UpgradeFailedCatalog(err) => match err {
             UpgradeError::PkgNotFound(err) => err.to_string(),
             UpgradeError::NonEmptyNamedGroup { pkg, group } => formatdoc! {"

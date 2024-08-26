@@ -21,13 +21,7 @@ pub const DEFAULT_CATALOG_URL: &str = "https://api.flox.dev";
 /// - Return [None] if the Catalog API is disabled through the feature flag
 /// - Initialize a mock client if the `_FLOX_USE_CATALOG_MOCK` environment variable is set to `true`
 /// - Initialize a real client otherwise
-pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Error> {
-    // Do not initialize a client if the Catalog API is disabled
-    if !*config.features.clone().unwrap_or_default().use_catalog {
-        debug!("catalog feature is disabled, skipping client initialization");
-        return Ok(None);
-    }
-
+pub fn init_catalog_client(config: &Config) -> Result<Client, anyhow::Error> {
     // if $_FLOX_USE_CATALOG_MOCK is set to a path to mock data, use the mock client
     if let Ok(path_str) = std::env::var(FLOX_CATALOG_MOCK_DATA_VAR) {
         let path = PathBuf::from(path_str);
@@ -39,7 +33,7 @@ pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Er
             mock_data_path = traceable_path(&path),
             "using mock catalog client"
         );
-        Ok(Some(Client::Mock(MockClient::new(Some(path))?)))
+        Ok(MockClient::new(Some(path))?.into())
     } else {
         let mut extra_headers: BTreeMap<String, String> = BTreeMap::new();
 
@@ -70,9 +64,6 @@ pub fn init_catalog_client(config: &Config) -> Result<Option<Client>, anyhow::Er
         }
 
         debug!("using catalog client with url: {}", catalog_url);
-        Ok(Some(Client::Catalog(CatalogClient::new(
-            &catalog_url,
-            Some(extra_headers),
-        ))))
+        Ok(CatalogClient::new(&catalog_url, Some(extra_headers)).into())
     }
 }

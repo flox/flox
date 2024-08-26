@@ -50,15 +50,11 @@ impl RawManifest {
     ///
     /// Additionally, this method prefixes each table with documentation on its usage, and
     /// and inserts commented configuration examples for tables left empty.
-    pub fn new_documented(
-        systems: &[&System],
-        customization: &InitCustomization,
-    ) -> RawManifest {
+    pub fn new_documented(systems: &[&System], customization: &InitCustomization) -> RawManifest {
         let mut manifest = DocumentMut::new();
 
         // `version` number
         manifest.insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
-
 
         // `[install]` table
         let packages_vec = vec![];
@@ -201,23 +197,21 @@ impl RawManifest {
 
         manifest.insert(MANIFEST_PROFILE_KEY, Item::Table(profile_table));
 
+        // `[services]` table
+        let mut services_table = Table::new();
 
-            // `[services]` table
-            let mut services_table = Table::new();
-
-            services_table.decor_mut().set_prefix(indoc! {r#"
+        services_table.decor_mut().set_prefix(indoc! {r#"
 
                 # The `[services]` section of the manifest allows you to define services.
                 # Services defined here use the packages provided by the `[install]` section
                 # and any variables you've defined in the `[vars]` section or `hook.on-activate` script.
             "#});
 
-            services_table.decor_mut().set_suffix(indoc! {r#"
+        services_table.decor_mut().set_suffix(indoc! {r#"
 
                 # postgres.command = "postgres --config-file=pg.conf""#});
 
-            manifest.insert(MANIFEST_SERVICES_KEY, Item::Table(services_table));
-
+        manifest.insert(MANIFEST_SERVICES_KEY, Item::Table(services_table));
 
         // `[options]` table
         let mut options_table = Table::new();
@@ -1567,7 +1561,7 @@ pub(super) mod test {
         assert_eq!(manifest.to_string(), expected_string.to_string());
     }
 
-     #[test]
+    #[test]
     fn create_documented_manifest_with_packages() {
         let systems = [];
         let customization = InitCustomization {

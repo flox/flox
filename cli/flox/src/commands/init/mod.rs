@@ -508,13 +508,14 @@ async fn get_default_package_if_compatible(
     rel_path: Vec<String>,
     version: Option<String>,
 ) -> Result<Option<ProvidedPackage>> {
-    let pkg = if let Some(client) = flox.catalog_client.as_ref() {
+    let pkg = {
         tracing::debug!(
             pkg = rel_path.join("."),
             version = version.as_ref().unwrap_or(&"null".to_string()),
             "using catalog client to find default compatible package"
         );
-        let resolved_groups = client
+        let resolved_groups = flox
+            .catalog_client
             .resolve(vec![PackageGroup {
                 descriptors: vec![PackageDescriptor {
                     attr_path: rel_path.join("."),
@@ -544,9 +545,8 @@ async fn get_default_package_if_compatible(
             return Ok(None);
         };
         pkg
-    } else {
-        unimplemented!("remove pkgdb")
     };
+
     tracing::debug!(
         version = pkg.version.as_ref().unwrap_or(&"null".to_string()),
         "found default package version"
@@ -556,12 +556,14 @@ async fn get_default_package_if_compatible(
 
 /// Get a package as if installed with `flox install {package}`
 async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<ProvidedPackage> {
-    let pkg = if let Some(client) = flox.catalog_client.as_ref() {
+    let pkg = {
         tracing::debug!(
             package = package.to_string(),
             "using catalog client to find default package"
         );
-        let resolved_groups = client
+
+        let resolved_groups = flox
+            .catalog_client
             .resolve(vec![PackageGroup {
                 descriptors: vec![PackageDescriptor {
                     attr_path: package.to_string(),
@@ -591,8 +593,6 @@ async fn get_default_package(flox: &Flox, package: &AttrPath) -> Result<Provided
             return Err(anyhow!("Flox couldn't find any versions of {package}"))?;
         };
         pkg
-    } else {
-        unimplemented!("remove pkgdb")
     };
 
     tracing::debug!(
@@ -609,13 +609,15 @@ async fn try_find_compatible_version(
     pname: &str,
     version: &str,
 ) -> Result<Option<ProvidedPackage>> {
-    let pkg = if let Some(client) = flox.catalog_client.as_ref() {
+    let pkg = {
         tracing::debug!(
             pname,
             version,
             "using catalog client to find compatible package version"
         );
-        let resolved_groups = client
+
+        let resolved_groups = flox
+            .catalog_client
             .resolve(vec![PackageGroup {
                 descriptors: vec![PackageDescriptor {
                     attr_path: pname.to_string(),
@@ -645,8 +647,6 @@ async fn try_find_compatible_version(
             return Ok(None);
         };
         pkg
-    } else {
-        unimplemented!("remove pkgdb")
     };
 
     tracing::debug!(

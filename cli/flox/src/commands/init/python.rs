@@ -898,7 +898,7 @@ mod tests {
     async fn pyproject_empty_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for unconstrained python version
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "python3_group",
@@ -925,7 +925,7 @@ mod tests {
     async fn pyproject_available_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for python >= 3.8
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "python3_group",
@@ -959,7 +959,7 @@ mod tests {
     async fn pyproject_unavailable_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for python version 1 (resolution failure)
             client.push_resolve_response(vec![]);
             // Response for unconstrained python version
@@ -995,7 +995,7 @@ mod tests {
     async fn pyproject_parse_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for python >= 3.8
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "python3_group",
@@ -1031,7 +1031,7 @@ mod tests {
     async fn poetry_pyproject_invalid_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for no package groups
             client.push_resolve_response(vec![]);
         }
@@ -1050,7 +1050,7 @@ mod tests {
     async fn poetry_pyproject_empty_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for no package groups
             client.push_resolve_response(vec![]);
         }
@@ -1068,7 +1068,7 @@ mod tests {
     async fn poetry_pyproject_no_python_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for no package groups
             client.push_resolve_response(vec![]);
         }
@@ -1088,7 +1088,7 @@ mod tests {
     async fn poetry_pyproject_available_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for python ^3.7
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "python3_group",
@@ -1131,7 +1131,7 @@ mod tests {
     async fn poetry_pyproject_unavailable_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for python version 1
             client.push_resolve_response(vec![]);
             // Response for unconstrained python version

@@ -409,7 +409,7 @@ mod tests {
     async fn go_version_from_content_returns_compatible_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for go 1.21.4
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "go_group",
@@ -440,7 +440,7 @@ mod tests {
     async fn go_version_from_content_returns_none_on_incompatible_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for incompatible go version
             client.push_resolve_response(vec![]);
         }

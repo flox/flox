@@ -64,7 +64,7 @@ impl Search {
             config.flox.search_limit.or(DEFAULT_SEARCH_LIMIT)
         };
 
-        let results = if let Some(client) = &flox.catalog_client {
+        let results = {
             tracing::debug!("using catalog client for search");
             let parsed_search = match SearchTerm::from_arg(&self.search_term) {
                 SearchTerm::Clean(term) => term,
@@ -80,7 +80,7 @@ impl Search {
                 message: "Searching for packages...",
                 help_message: None,
                 typed: Spinner::new(|| {
-                    tokio::runtime::Handle::current().block_on(client.search(
+                    tokio::runtime::Handle::current().block_on(flox.catalog_client.search(
                         parsed_search,
                         flox.system.clone(),
                         limit,
@@ -88,8 +88,6 @@ impl Search {
                 }),
             }
             .spin_with_delay(Duration::from_secs(1))?
-        } else {
-            unimplemented!("remove pkgdb")
         };
 
         // Render what we have no matter what, then indicate whether we encountered an error.
@@ -104,7 +102,7 @@ impl Search {
 
             let suggestion = DidYouMean::<SearchSuggestion>::new(
                 &self.search_term,
-                flox.catalog_client,
+                &flox.catalog_client,
                 flox.system,
             );
 

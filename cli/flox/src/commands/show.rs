@@ -27,36 +27,32 @@ impl Show {
         subcommand_metric!("show");
         sentry_set_tag("pkg_path", &self.pkg_path);
 
-        if let Some(client) = flox.catalog_client {
-            tracing::debug!("using catalog client for show");
-            let results = match client.package_versions(&self.pkg_path).await {
-                Ok(results) => results,
-                // Below, results.is_empty() is used to mean the search_term
-                // didn't match a package.
-                // So translate 404 into an empty vec![].
-                // Once we drop the pkgdb code path, we can clean this up.
-                Err(VersionsError::Versions(e)) if e.status() == 404 => SearchResults {
-                    results: vec![],
-                    count: None::<u64>,
-                },
-                Err(e) => Err(e)?,
-            };
-            if results.results.is_empty() {
-                bail!("no packages matched this pkg-path: '{}'", self.pkg_path);
-            }
-            let expected_systems = [
-                "aarch64-darwin",
-                "aarch64-linux",
-                "x86_64-darwin",
-                "x86_64-linux",
-            ]
-            .iter()
-            .map(|s| s.to_string())
-            .collect::<HashSet<_>>();
-            render_show_catalog(&results.results, &expected_systems)?;
-        } else {
-            unimplemented!("remove pkgdb")
+        tracing::debug!("using catalog client for show");
+        let results = match flox.catalog_client.package_versions(&self.pkg_path).await {
+            Ok(results) => results,
+            // Below, results.is_empty() is used to mean the search_term
+            // didn't match a package.
+            // So translate 404 into an empty vec![].
+            // Once we drop the pkgdb code path, we can clean this up.
+            Err(VersionsError::Versions(e)) if e.status() == 404 => SearchResults {
+                results: vec![],
+                count: None::<u64>,
+            },
+            Err(e) => Err(e)?,
         };
+        if results.results.is_empty() {
+            bail!("no packages matched this pkg-path: '{}'", self.pkg_path);
+        }
+        let expected_systems = [
+            "aarch64-darwin",
+            "aarch64-linux",
+            "x86_64-darwin",
+            "x86_64-linux",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<HashSet<_>>();
+        render_show_catalog(&results.results, &expected_systems)?;
 
         Ok(())
     }
@@ -143,7 +139,7 @@ mod test {
     #[tokio::test]
     async fn show_handles_404() {
         let (mut flox, _temp_dir_handle) = flox_instance();
-        let Client::Mock(ref mut client) = flox.catalog_client.as_mut().unwrap() else {
+        let Client::Mock(ref mut client) = flox.catalog_client else {
             panic!()
         };
         client.push_error_response(
