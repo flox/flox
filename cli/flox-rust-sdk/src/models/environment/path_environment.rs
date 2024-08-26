@@ -397,12 +397,9 @@ impl PathEnvironment {
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
         temp_dir: impl AsRef<Path>,
-        system: impl AsRef<str>,
         customization: &InitCustomization,
         flox: &Flox,
     ) -> Result<Self, EnvironmentError> {
-        let system: &str = system.as_ref();
-
         // Ensure that the .flox directory does not already exist
         match DotFlox::open_in(dot_flox_parent_path.as_ref()) {
             // continue if the .flox directory does not exist, as it's being created by this method
@@ -424,10 +421,9 @@ impl PathEnvironment {
         ];
         let manifest = if flox.catalog_client.is_some() {
             tracing::debug!("creating raw catalog manifest");
-            RawManifest::new_documented(all_systems.as_slice(), customization, true)
+            RawManifest::new_documented(all_systems.as_slice(), customization)
         } else {
-            tracing::debug!("creating raw pkgdb manifest");
-            RawManifest::new_documented(&[&system.to_string()], customization, false)
+            unimplemented!("remove pkgdb")
         };
 
         let mut environment = Self::write_new_unchecked(
@@ -607,7 +603,6 @@ mod tests {
             pointer,
             environment_temp_dir.path(),
             temp_dir.path(),
-            &flox.system,
             &InitCustomization::default(),
             &flox,
         )
@@ -641,7 +636,6 @@ mod tests {
             pointer,
             environment_temp_dir.path(),
             temp_dir.path(),
-            &flox.system,
             &InitCustomization::default(),
             &flox,
         )
@@ -673,7 +667,6 @@ mod tests {
             ptr,
             environment_temp_dir.path(),
             tmp_dir.path(),
-            &flox.system,
             &InitCustomization::default(),
             &flox,
         )
@@ -697,7 +690,6 @@ mod tests {
             ptr.clone(),
             environment_temp_dir.path(),
             tmp_dir.path(),
-            &flox.system,
             &InitCustomization::default(),
             &flox,
         )
@@ -724,7 +716,6 @@ mod tests {
             ptr.clone(),
             environment_temp_dir.path(),
             tmp_dir.path(),
-            &flox.system,
             &InitCustomization::default(),
             &flox,
         )
