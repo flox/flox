@@ -1395,14 +1395,10 @@ pub enum LockedManifestError {
     CatalogResolve(#[from] catalog::ResolveError),
     #[error("didn't find packages on the first page of the group {0} for system {1}")]
     NoPackagesOnFirstPage(String, String),
-    #[error("failed to lock manifest")]
-    LockManifest(#[source] CallPkgDbError),
     #[error("failed to check lockfile")]
     CheckLockfile(#[source] CallPkgDbError),
     #[error("failed to parse check warnings")]
     ParseCheckWarnings(#[source] serde_json::Error),
-    #[error("failed to update environment")]
-    UpdateFailed(#[source] CallPkgDbError),
     #[error(transparent)]
     BadManifestPath(CanonicalizeError),
     #[error(transparent)]

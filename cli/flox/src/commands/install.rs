@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::str::FromStr;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::Flox;
@@ -19,7 +19,6 @@ use flox_rust_sdk::models::manifest::{
     CatalogPackage,
     PackageToInstall,
 };
-use flox_rust_sdk::models::pkgdb::error_codes;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
@@ -228,41 +227,6 @@ impl Install {
 
         match err {
             // Try to make suggestions when a package isn't found
-            EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
-                LockedManifestError::LockManifest(
-                    flox_rust_sdk::models::pkgdb::CallPkgDbError::PkgDbError(pkgdberr),
-                ),
-            )) if pkgdberr.exit_code == error_codes::RESOLUTION_FAILURE => 'error: {
-                let packages = packages
-                    .iter()
-                    .filter_map(|p| match p {
-                        PackageToInstall::Catalog(pkg) => Some(pkg),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>();
-                debug!("attempting to make install suggestion");
-                let paths = packages.iter().map(|p| p.pkg_path.clone()).join(", ");
-
-                if packages.len() > 1 {
-                    break 'error anyhow!(formatdoc! {"
-                        Could not install {paths}.
-                        One or more of the packages you are trying to install does not exist.
-                    "});
-                }
-                let path = packages[0].pkg_path.clone();
-
-                let head = format!("Could not find package '{path}'.");
-
-                let suggestion = DidYouMean::<InstallSuggestion>::new(flox, &path);
-                if !suggestion.has_suggestions() {
-                    break 'error anyhow!("{head}\nTry 'flox search' with a broader search term.");
-                }
-
-                anyhow!(formatdoc! {"
-                    {head}
-                    {suggestion}
-                "})
-            },
             EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::ResolutionFailed(failures),
             )) => {
