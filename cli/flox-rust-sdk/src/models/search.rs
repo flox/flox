@@ -40,26 +40,6 @@ pub enum ShowError {
     InvalidSearchTerm(String),
 }
 
-/// The input parameters for the `pkgdb search` command
-///
-/// C++ docs: https://flox.github.io/pkgdb/structflox_1_1pkgdb_1_1PkgQueryArgs.html
-///
-/// Note that `pkgdb` uses inheritance/mixins to construct the search parameters, so some fields
-/// are on `PkgQueryArgs` and some are on `PkgDescriptorBase`.
-#[skip_serializing_none]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct SearchParams {
-    /// Either an absolute path to a manifest or an inline JSON manifest
-    pub manifest: Option<PathOrJson>,
-    /// Either an absolute path to a manifest or an inline JSON manifest
-    pub global_manifest: PathOrJson,
-    /// An existing lockfile
-    pub lockfile: PathOrJson,
-    /// Parameters for the actual search query
-    pub query: Query,
-}
-
 /// Either an absolute path to a manifest or an inline JSON manifest
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(untagged)]
@@ -332,20 +312,6 @@ pub struct SearchResult {
 mod test {
     use super::*;
 
-    const EXAMPLE_SEARCH_TERM: &str = "hello@2.12.1";
-
-    const EXAMPLE_PARAMS: &str = r#"{
-        "manifest": "/path/to/manifest",
-        "global-manifest": "/path/to/manifest",
-        "lockfile": "/path/to/lockfile",
-        "query": {
-            "semver": "2.12.1",
-            "match": "hello",
-            "limit": 10,
-            "deduplicate": true
-        }
-    }"#;
-
     const EXAMPLE_RESULT_COUNT: &str = r#"{"result-count": 15}"#;
 
     // This is illegible when put on a single line, but the deserializer will fail due to
@@ -372,27 +338,6 @@ mod test {
         "version": "2.12.1",
         "id": 420
     }"#;
-
-    #[test]
-    fn serializes_search_params() {
-        let params = SearchParams {
-            manifest: Some(PathOrJson::Path("/path/to/manifest".into())),
-            global_manifest: PathOrJson::Path("/path/to/manifest".into()),
-            lockfile: PathOrJson::Path("/path/to/lockfile".into()),
-            query: Query::new(
-                EXAMPLE_SEARCH_TERM,
-                SearchStrategy::Match,
-                NonZeroU8::new(10),
-                true,
-            )
-            .unwrap(),
-        };
-        let json = serde_json::to_string(&params).unwrap();
-        // Convert both to `serde_json::Value` to test equality without worrying about whitespace
-        let params_value: serde_json::Value = serde_json::from_str(&json).unwrap();
-        let example_value: serde_json::Value = serde_json::from_str(EXAMPLE_PARAMS).unwrap();
-        pretty_assertions::assert_eq!(params_value, example_value);
-    }
 
     #[test]
     fn deserializes_search_results() {
