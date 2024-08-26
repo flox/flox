@@ -846,15 +846,6 @@ pub fn format_locked_manifest_error(err: &LockedManifestError) -> String {
             This is likely due to a corrupt environment.
         "},
 
-        LockedManifestError::SerializeGlobalLockfile(_) => display_chain(err),
-
-        // todo: add global-manifest.lock(1) manual entry and reference it here
-        LockedManifestError::WriteGlobalLockfile(_) => formatdoc! {"
-            Failed to write global lockfile: {err}
-
-            Please ensure that you have write permissions to '~/.config/flox/global-manifest.lock'.
-        "},
-
         LockedManifestError::ParseCheckWarnings(_) => display_chain(err),
         LockedManifestError::UnsupportedLockfileForUpdate => display_chain(err),
         LockedManifestError::NoPackagesOnFirstPage(_, _) => display_chain(err),

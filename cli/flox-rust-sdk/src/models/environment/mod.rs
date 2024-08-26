@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::{env, fs, io};
+use std::{fs, io};
 
 use core_environment::UpgradeResult;
 use log::debug;
@@ -44,9 +44,6 @@ pub const DEFAULT_MAX_AGE_DAYS: u32 = 90;
 
 pub const DOT_FLOX: &str = ".flox";
 pub const ENVIRONMENT_POINTER_FILENAME: &str = "env.json";
-pub const GLOBAL_MANIFEST_TEMPLATE: &str = env!("GLOBAL_MANIFEST_TEMPLATE");
-pub const GLOBAL_MANIFEST_FILENAME: &str = "global-manifest.toml";
-pub const GLOBAL_MANIFEST_LOCKFILE_FILENAME: &str = "global-manifest.lock";
 pub const MANIFEST_FILENAME: &str = "manifest.toml";
 pub const LOCKFILE_FILENAME: &str = "manifest.lock";
 pub const GCROOTS_DIR_NAME: &str = "run";
@@ -623,32 +620,6 @@ fn copy_dir_recursive(
         }
     }
     Ok(())
-}
-
-/// Initialize the global manifest if it doesn't exist already
-pub fn init_global_manifest(global_manifest_path: &Path) -> Result<(), EnvironmentError> {
-    if !global_manifest_path.exists() {
-        let global_manifest_template_contents =
-            std::fs::read_to_string(Path::new(GLOBAL_MANIFEST_TEMPLATE))
-                .map_err(EnvironmentError::ReadGlobalManifestTemplate)?;
-        std::fs::write(global_manifest_path, global_manifest_template_contents)
-            .map_err(EnvironmentError::InitGlobalManifest)?;
-    }
-    Ok(())
-}
-
-/// Returns the path to the global manifest
-pub fn global_manifest_path(flox: &Flox) -> PathBuf {
-    let path = flox.config_dir.join(GLOBAL_MANIFEST_FILENAME);
-    debug!("global manifest path is {}", path.display());
-    path
-}
-
-/// Returns the path to the global manifest's lockfile
-pub fn global_manifest_lockfile_path(flox: &Flox) -> PathBuf {
-    let path = flox.config_dir.join(GLOBAL_MANIFEST_LOCKFILE_FILENAME);
-    debug!("global manifest lockfile path is {}", path.display());
-    path
 }
 
 /// Searches for a `.flox` directory and attempts to parse env.json

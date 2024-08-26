@@ -8,7 +8,7 @@ use commands::{EnvironmentSelectError, FloxArgs, FloxCli, MigrationError, Prefix
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
-use flox_rust_sdk::models::environment::{init_global_manifest, EnvironmentError};
+use flox_rust_sdk::models::environment::EnvironmentError;
 use flox_rust_sdk::providers::services::ServiceError;
 use log::{debug, warn};
 use utils::errors::format_service_error;
@@ -44,7 +44,6 @@ async fn run(args: FloxArgs) -> Result<()> {
             ..Default::default()
         }));
     });
-    init_global_manifest(&config.flox.config_dir.join("global-manifest.toml"))?;
     args.handle(config).await?;
     Ok(())
 }

@@ -224,7 +224,6 @@ pub mod test_helpers {
 
     use self::catalog::MockClient;
     use super::*;
-    use crate::models::environment::{global_manifest_path, init_global_manifest};
     use crate::providers::git::{GitCommandProvider, GitProvider};
 
     pub fn flox_instance() -> (Flox, TempDir) {
@@ -276,8 +275,6 @@ pub mod test_helpers {
             installable_locker: Default::default(),
             features: Default::default(),
         };
-
-        init_global_manifest(&global_manifest_path(&flox)).unwrap();
 
         (flox, tempdir_handle)
     }

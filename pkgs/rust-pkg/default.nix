@@ -100,11 +100,6 @@
 
       # Reexport of the platform flox is being built for
       NIX_TARGET_SYSTEM = targetPlatform.system;
-
-      # The global manifest we generate if one does not exist
-      GLOBAL_MANIFEST_TEMPLATE = builtins.path {
-        path = ../../assets/global_manifest_template.toml;
-      };
     }
     // lib.optionalAttrs hostPlatform.isDarwin {
       NIX_COREFOUNDATION_RPATH = "${darwin.CF}/Library/Frameworks";
