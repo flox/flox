@@ -130,7 +130,6 @@ impl Init {
                         PathPointer::new(env_name),
                         &dir,
                         flox.temp_dir.clone(),
-                        &flox.system,
                         &customization,
                         &flox,
                     )
@@ -142,7 +141,6 @@ impl Init {
                 PathPointer::new(env_name),
                 &dir,
                 flox.temp_dir.clone(),
-                &flox.system,
                 &customization,
                 &flox,
             )?
