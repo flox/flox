@@ -343,11 +343,7 @@ impl Pull {
                     , system = flox.system});
                 }
 
-                let migration_info = if flox.catalog_client.is_some() {
-                    env.needs_migration_to_v1(flox)?
-                } else {
-                    None
-                };
+                let migration_info = env.needs_migration_to_v1(flox)?;
 
                 // Will return OK if the user chose to abort the pull.
                 // The unwrap() is only reached if !force,

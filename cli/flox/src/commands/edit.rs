@@ -482,7 +482,12 @@ mod tests {
     #[test]
     fn test_recover_edit_loop_result_other_error() {
         let result = Err(EnvironmentError::Core(
-            CoreEnvironmentError::CatalogClientMissing,
+            // Using this example is _not_ prescriptive
+            // that this error _should not_ be handled!
+            //
+            // There are multiple v0 incompatiblity errors in CoreEnvironmentError
+            // this one is not handled, but it might need to?
+            CoreEnvironmentError::LockingVersion0NotSupported,
         ));
 
         Edit::make_interactively_recoverable(result).expect_err("should return unhandled Err");

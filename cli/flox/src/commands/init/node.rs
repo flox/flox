@@ -882,7 +882,7 @@ mod tests {
     async fn try_find_compatible_yarn_no_constraints_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for unconstrained nodejs version
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "nodejs_group",
@@ -917,7 +917,7 @@ mod tests {
     async fn try_find_compatible_yarn_node_available_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response when nodejs 18 is requested
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "nodejs_group",
@@ -954,7 +954,7 @@ mod tests {
     async fn try_find_compatible_yarn_node_unavailable_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // The default version is something other than "20",
             // so resolution fails and you get no groups back
             client.push_resolve_response(vec![]);
@@ -974,7 +974,7 @@ mod tests {
     async fn try_find_compatible_yarn_yarn_available_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for unconstrained nodejs version
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "nodejs_group",
@@ -1011,7 +1011,7 @@ mod tests {
     async fn try_find_compatible_yarn_yarn_unavailable_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for unconstrained nodejs version
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "nodejs_group",
@@ -1039,7 +1039,7 @@ mod tests {
     async fn try_find_compatible_yarn_both_available_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             // Response for nodejs version 18
             client.push_resolve_response(vec![resolved_pkg_group_with_dummy_package(
                 "nodejs_group",

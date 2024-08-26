@@ -48,7 +48,7 @@ pub struct Flox {
     /// Checking for [None] can be used to check if the use is logged in.
     pub floxhub_token: Option<FloxhubToken>,
 
-    pub catalog_client: Option<catalog::Client>,
+    pub catalog_client: catalog::Client,
     pub installable_locker: flox_cpp_utils::InstallableLockerImpl,
 
     /// Feature flags
@@ -272,7 +272,7 @@ pub mod test_helpers {
             )
             .unwrap(),
             floxhub_token: None,
-            catalog_client: Some(MockClient::default().into()),
+            catalog_client: MockClient::default().into(),
             installable_locker: Default::default(),
             features: Default::default(),
         };

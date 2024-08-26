@@ -2227,7 +2227,7 @@ mod test {
         let owner = EnvironmentOwner::from_str("owner").unwrap();
         let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
-        flox.catalog_client = Some(MockClient::new(None::<&str>).unwrap().into());
+        flox.catalog_client = MockClient::new(None::<&str>).unwrap().into();
 
         let original_manifest =
             toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap();
@@ -2352,7 +2352,7 @@ mod test {
         let (mut flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
 
         let client = MockClient::new(None::<&str>).unwrap();
-        flox.catalog_client = Some(client.into());
+        flox.catalog_client = client.into();
 
         let mut managed_env = test_helpers::mock_managed_environment(
             &flox,
@@ -2421,11 +2421,11 @@ mod test {
             .local_env_or_copy_current_generation(&flox)
             .unwrap();
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             client.clear_and_load_responses_from_file("resolve/hello.json");
         } else {
-            panic!("expected Mock client")
-        };
+            panic!("Expected a MockClient");
+        }
 
         let mut new_manifest = TypedManifestCatalog::default();
         new_manifest.install.insert(

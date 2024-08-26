@@ -242,12 +242,9 @@ impl<State> CoreEnvironment<State> {
                 }
             },
             TypedManifest::Catalog(manifest) => {
-                let Some(ref client) = flox.catalog_client else {
-                    return Err(CoreEnvironmentError::CatalogClientMissing);
-                };
                 tracing::debug!("using catalog client to lock");
                 LockedManifest::Catalog(self.lock_with_catalog_client(
-                    client,
+                    &flox.catalog_client,
                     &flox.installable_locker,
                     *manifest,
                 )?)
@@ -662,13 +659,9 @@ impl CoreEnvironment<ReadOnly> {
             TypedManifest::Catalog(catalog) => {
                 Self::ensure_valid_upgrade(groups_or_iids, &catalog)?;
                 tracing::debug!("using catalog client to upgrade");
-                let client = flox
-                    .catalog_client
-                    .as_ref()
-                    .ok_or(CoreEnvironmentError::CatalogClientMissing)?;
 
                 let (lockfile, upgraded) = self.upgrade_with_catalog_client(
-                    client,
+                    &flox.catalog_client,
                     &flox.installable_locker,
                     groups_or_iids,
                     &catalog,
@@ -930,17 +923,16 @@ impl CoreEnvironment<ReadOnly> {
         flox: &Flox,
     ) -> Result<PathBuf, CoreEnvironmentError> {
         // Return an error for deprecated modifications of v0 manifests
-        if flox.catalog_client.is_some() {
-            let manifest: TypedManifest = toml::from_str(manifest_contents.as_ref())
-                .map_err(CoreEnvironmentError::DeserializeManifest)?;
-            match manifest {
-                TypedManifest::Catalog(manifest) => {
-                    manifest.services.validate()?;
-                },
-                TypedManifest::Pkgdb(_) => {
-                    Err(CoreEnvironmentError::Version0NotSupported)?;
-                },
-            }
+
+        let manifest: TypedManifest = toml::from_str(manifest_contents.as_ref())
+            .map_err(CoreEnvironmentError::DeserializeManifest)?;
+        match manifest {
+            TypedManifest::Catalog(manifest) => {
+                manifest.services.validate()?;
+            },
+            TypedManifest::Pkgdb(_) => {
+                Err(CoreEnvironmentError::Version0NotSupported)?;
+            },
         }
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
@@ -1326,9 +1318,6 @@ pub enum CoreEnvironmentError {
     #[error("unsupported system to build container: {0}")]
     ContainerizeUnsupportedSystem(String),
 
-    #[error("Could not process catalog manifest without a catalog client")]
-    CatalogClientMissing,
-
     #[error("could not automatically migrate manifest to version 1")]
     MigrateManifest(#[source] toml_edit::de::Error),
 
@@ -1541,7 +1530,7 @@ mod tests {
         hello.pkg-path = "hello"
         "#;
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             client.clear_and_load_responses_from_file("resolve/hello.json");
         } else {
             panic!("expected Mock client")
@@ -1657,7 +1646,7 @@ mod tests {
         hello.pkg-path = "hello"
         "#;
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             client.clear_and_load_responses_from_file("resolve/hello.json");
         } else {
             panic!("expected Mock client")
@@ -1686,46 +1675,6 @@ mod tests {
         assert!(matches!(result, EditResult::ReActivateRequired {
             store_path: _
         }));
-    }
-
-    #[test]
-    fn locking_of_v1_manifest_requires_catalog_client() {
-        let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
-        flox.catalog_client = None;
-
-        let err = env_view
-            .lock(&flox)
-            .expect_err("should fail to lock v1 lockfile with pkgdb");
-
-        assert!(matches!(err, CoreEnvironmentError::CatalogClientMissing));
-
-        let mut mock_client = MockClient::new(None::<&str>).unwrap();
-        mock_client.push_resolve_response(vec![]);
-        flox.catalog_client = Option::Some(mock_client.into());
-
-        env_view
-            .lock(&flox)
-            .expect("lock should succeed with catalog client");
-    }
-
-    #[test]
-    fn upgrade_with_catalog_client_requires_catalog_client() {
-        // flox already has a catalog client
-        let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
-
-        flox.catalog_client = None;
-        let err = env_view
-            .upgrade(&flox, &[])
-            .expect_err("upgrade of v1 manifest should fail without client");
-
-        assert!(matches!(err, CoreEnvironmentError::CatalogClientMissing));
-
-        let mut mock_client = MockClient::new(None::<&str>).unwrap();
-        mock_client.push_resolve_response(vec![]);
-        flox.catalog_client = Option::Some(mock_client.into());
-        env_view
-            .upgrade(&flox, &[])
-            .expect("upgrade should succeed with catalog client");
     }
 
     /// Check that with an empty list of packages to upgrade, all packages are upgraded
@@ -1861,7 +1810,7 @@ mod tests {
 
         let mut env_view = CoreEnvironment::new(&env_path);
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             client.clear_and_load_responses_from_file("resolve/hello.json");
         } else {
             panic!("expected Mock client")
@@ -1918,7 +1867,7 @@ mod tests {
             MANUALLY_GENERATED.join("glibc_incompatible_v0"),
         );
 
-        if let Some(Client::Mock(ref mut client)) = flox.catalog_client {
+        if let Client::Mock(ref mut client) = flox.catalog_client {
             client.clear_and_load_responses_from_file("resolve/glibc_incompatible.json");
         } else {
             panic!("expected Mock client")

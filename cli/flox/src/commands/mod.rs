@@ -1682,9 +1682,6 @@ async fn maybe_migrate_environment_to_v1_inner(
 ) -> Result<(), MigrationError> {
     let description = environment_description(concrete_environment)?;
 
-    if flox.catalog_client.is_none() {
-        return Ok(());
-    }
     // The user answered the prompt to upgrade the environment
     let mut confirmed_upgrade = false;
     if let Some(migration_info) = concrete_environment

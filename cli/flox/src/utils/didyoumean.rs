@@ -56,15 +56,8 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
     }
 
     fn suggest_searched_packages(flox: &Flox, term: &str) -> Result<SearchResults> {
-        match flox.catalog_client {
-            Some(ref client) => {
-                tracing::debug!("using client for install suggestions");
-                Self::suggest_searched_packages_catalog(client, term, flox.system.clone())
-            },
-            None => {
-                unreachable!("remove pkgdb")
-            },
-        }
+        tracing::debug!("using client for install suggestions");
+        Self::suggest_searched_packages_catalog(&flox.catalog_client, term, flox.system.clone())
     }
 
     /// Collects installation suggestions for a given query using the catalog
@@ -197,7 +190,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
     /// and then query for related search results.
     /// Either of these may fail, in which case we will return with empty [SearchResults]
     /// and log the error.
-    pub fn new(term: &'a str, catalog_client: Option<Client>, system: String) -> Self {
+    pub fn new(term: &'a str, catalog_client: &Client, system: String) -> Self {
         let curated = Self::suggest_curated_package(term);
 
         let default_results = SearchResults {
@@ -206,11 +199,8 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
         };
 
         let search_results = if let Some(curated) = curated {
-            let res = if let Some(ref client) = catalog_client {
-                Self::suggest_searched_packages_catalog(client, curated, system)
-            } else {
-                unreachable!("remove pkgdb")
-            };
+            let res = Self::suggest_searched_packages_catalog(catalog_client, curated, system);
+
             match res {
                 Ok(results) => results,
                 Err(err) => {
