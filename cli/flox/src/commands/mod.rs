@@ -1,5 +1,6 @@
 mod activate;
 mod auth;
+mod build;
 mod containerize;
 mod delete;
 mod edit;
@@ -885,6 +886,9 @@ enum InternalCommands {
     /// FloxHub authentication commands
     #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
     Auth(#[bpaf(external(auth::auth))] auth::Auth),
+    /// Build packages for flox
+    #[bpaf(command, hide, footer("Run 'man flox-build' for more details."))]
+    Build(#[bpaf(external(build::build))] build::Build),
 }
 
 impl InternalCommands {
@@ -892,6 +896,7 @@ impl InternalCommands {
         match self {
             InternalCommands::ResetMetrics(args) => args.handle(config, flox).await?,
             InternalCommands::Auth(args) => args.handle(config, flox).await?,
+            InternalCommands::Build(args) => args.handle(config, flox).await?,
         }
         Ok(())
     }
