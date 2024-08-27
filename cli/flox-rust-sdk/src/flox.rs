@@ -63,9 +63,6 @@ pub struct Features {
     #[serde(default)]
     pub search_strategy: SearchStrategy,
     #[serde(default)]
-    pub use_catalog: UseCatalog,
-
-    #[serde(default)]
     pub build: bool,
 }
 

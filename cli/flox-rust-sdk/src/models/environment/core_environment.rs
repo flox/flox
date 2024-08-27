@@ -235,11 +235,7 @@ impl<State> CoreEnvironment<State> {
 
         let lockfile = match manifest {
             TypedManifest::Pkgdb(_) => {
-                if *flox.features.use_catalog {
-                    return Err(CoreEnvironmentError::LockingVersion0NotSupported);
-                } else {
-                    unimplemented!()
-                }
+                return Err(CoreEnvironmentError::LockingVersion0NotSupported);
             },
             TypedManifest::Catalog(manifest) => {
                 tracing::debug!("using catalog client to lock");
