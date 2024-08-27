@@ -152,9 +152,6 @@ test-all: test-pkgdb impure-tests integ-tests nix-integ-tests
     echo "just: DEPRECATED TARGET: Use 'flox' instead" >&2;
     cli/target/debug/flox {{args}}
 
-@pkgdb-flox +args="": build
-    FLOX_FEATURES_USE_CATALOG=false cli/target/debug/flox {{args}}
-
 # Run a `pkgdb` command
 @pkgdb +args="": build-pkgdb
     pkgdb/bin/pkgdb {{args}}
