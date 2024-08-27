@@ -889,7 +889,7 @@ EOF
   export _FLOX_SERVICES_ACTIVATE_TIMEOUT=0.1
   # process-compose will never be able to create this socket,
   # which looks the same as taking a long time to create the socket
-  export _FLOX_SERVICES_SOCKET="/no_permission.sock"
+  export _FLOX_SERVICES_SOCKET_OVERRIDE="/no_permission.sock"
   # As of version 1.6.1, there's a race condition in process-compose such that
   # it may leave behind a sleep process.
   # Close FD 3 so bats doesn't hang forever.
@@ -976,6 +976,68 @@ EOF
   assert_line "outer _FLOX_SERVICES_TO_START=unset"
   assert_line "inner FLOX_ACTIVATE_START_SERVICES=false"
   assert_line "inner _FLOX_SERVICES_TO_START=unset"
+}
+
+@test "activate: services can be layered" {
+
+  MANIFEST_CONTENTS_1="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "echo one"
+EOF
+  )"
+
+  "$FLOX_BIN" init -d one
+  echo "$MANIFEST_CONTENTS_1" | "$FLOX_BIN" edit -d one -f -
+
+
+  MANIFEST_CONTENTS_2="$(cat << "EOF"
+    version = 1
+
+    [services]
+    two.command = "echo two"
+EOF
+  )"
+
+  "$FLOX_BIN" init -d two
+  echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -d two -f -
+
+  cat <<"EOF" > script_inner.sh
+    set -euo pipefail
+
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+
+    for i in {1..5}; do
+      if "$FLOX_BIN" services status -d two | grep "two.*Completed"; then
+        break
+      fi
+      sleep .1
+    done
+    if [ "$i" -eq 5 ]; then
+      echo "Service in inner activation did not run" >&3
+      exit 1
+    fi
+EOF
+
+  "$FLOX_BIN" activate -d one --start-services -- bash <(cat <<"EOF"
+    set -euo pipefail
+
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+
+    "$FLOX_BIN" activate -d two --start-services -- bash script_inner.sh
+
+    for i in {1..5}; do
+      if "$FLOX_BIN" services status -d one | grep "one.*Completed"; then
+        break
+      fi
+      sleep .1
+    done
+    if [ "$i" -eq 5 ]; then
+      exit 1
+    fi
+EOF
+  )
 }
 
 # ---------------------------------------------------------------------------- #
