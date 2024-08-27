@@ -48,6 +48,12 @@ initNix()
   nix::evalSettings.enableImportFromDerivation.setDefault( false );
   nix::evalSettings.pureEval.setDefault( true );
   nix::evalSettings.useEvalCache.assign( true );
+
+  if (nix::getEnv("NIX_REMOTE_SYSTEMS")) {
+    nix::warn("NIX_REMOTE_SYSTEMS is set, using remote builders");
+    nix::settings.builders.assign(nix::getEnv("NIX_REMOTE_SYSTEMS").value());
+  }
+
   nix::experimentalFeatureSettings.experimentalFeatures.assign(
     std::set( { nix::Xp::Flakes } ) );
 
