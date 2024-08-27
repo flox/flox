@@ -143,19 +143,6 @@ pub fn format_error(err: &EnvironmentError) -> String {
             Please ensure that you have write permissions to write '.flox/env.json'.
         "},
 
-        // todo: enrich with global manifest path
-        EnvironmentError::InitGlobalManifest(err) => formatdoc! {"
-            Failed to initialize global manifest: {err}
-
-            Please ensure that you have write permissions
-            to write '~/.config/flox/global-manifest.toml'.
-        "},
-        EnvironmentError::ReadGlobalManifestTemplate(err) => formatdoc! {"
-            Failed to read global manifest template: {err}
-
-            Please ensure that you have read permissions
-            to read '~/.config/flox/global-manifest.toml'.
-        "},
         // todo: where in the control flow does this happen?
         //       do we want a separate error type for this (likely)
         EnvironmentError::StartDiscoveryDir(CanonicalizeError { path, err }) => formatdoc! {"
