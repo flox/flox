@@ -9,7 +9,6 @@ use flox_rust_sdk::models::environment::{CoreEnvironmentError, EnvironmentError}
 use flox_rust_sdk::models::lockfile::{
     LockedManifest,
     LockedManifestError,
-    LockedManifestPkgdb,
     LockedPackage,
     ResolutionFailure,
     ResolutionFailures,
@@ -172,15 +171,7 @@ impl Install {
                 }
             },
             LockedManifest::Pkgdb(_) => {
-                // run `pkgdb manifest check`
-                let warnings = LockedManifestPkgdb::check_lockfile(&lockfile_path)?;
-                warnings
-                    .iter()
-                    .filter(|w| {
-                        // Filter out warnings that are not related to the packages we just installed
-                        packages_to_install.iter().any(|p| w.package == p.id())
-                    })
-                    .for_each(|w| message::warning(&w.message));
+                unreachable!("We only support installing from the catalog now");
             },
         };
 

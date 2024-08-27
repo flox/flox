@@ -12,8 +12,7 @@ pub type FlakeRef = Value;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Display;
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use log::debug;
@@ -30,7 +29,6 @@ use super::manifest::{
 };
 use super::pkgdb::CallPkgDbError;
 use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
-use crate::models::pkgdb::{call_pkgdb, PKGDB_BIN};
 use crate::providers::catalog::{
     self,
     CatalogPage,
@@ -44,7 +42,6 @@ use crate::providers::flox_cpp_utils::{
     InstallableLocker,
     LockedInstallable,
 };
-use crate::utils::CommandExt;
 
 static DEFAULT_SYSTEMS_STR: Lazy<[String; 4]> = Lazy::new(|| {
     [
@@ -1234,27 +1231,6 @@ pub struct UpdateResult {
     pub new_lockfile: LockedManifestPkgdb,
     pub old_lockfile: Option<LockedManifestPkgdb>,
     pub store_path: Option<PathBuf>,
-}
-
-impl LockedManifestPkgdb {
-    /// Check the integrity of a lockfile using `pkgdb manifest check`
-    pub fn check_lockfile(
-        path: &CanonicalPath,
-    ) -> Result<Vec<LockfileCheckWarning>, LockedManifestError> {
-        let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
-        pkgdb_cmd
-            .args(["manifest", "check"])
-            .arg("--lockfile")
-            .arg(path.as_os_str());
-
-        debug!("checking lockfile with command: {}", pkgdb_cmd.display());
-
-        let value = call_pkgdb(pkgdb_cmd, true).map_err(LockedManifestError::CheckLockfile)?;
-        let warnings: Vec<LockfileCheckWarning> =
-            serde_json::from_value(value).map_err(LockedManifestError::ParseCheckWarnings)?;
-
-        Ok(warnings)
-    }
 }
 
 /// An environment (or global) pkgdb lockfile.
