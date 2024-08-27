@@ -890,10 +890,6 @@ EOF
   # process-compose will never be able to create this socket,
   # which looks the same as taking a long time to create the socket
   export _FLOX_SERVICES_SOCKET_OVERRIDE="/no_permission.sock"
-  # As of version 1.6.1, there's a race condition in process-compose such that
-  # it may leave behind a sleep process.
-  # Close FD 3 so bats doesn't hang forever.
-  # Kill sleep for now just to be safe.
 
   run "$FLOX_BIN" activate -s -- true
   assert_output --partial "❌ Failed to start services"
