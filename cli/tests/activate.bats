@@ -876,6 +876,24 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=activate,activate:envVar:zsh:HISTFILE
+@test "zsh: activate inherits HISTFILE" {
+  project_setup
+
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 \
+  HISTFILE="NOT_IN_MY_BACKYARD" \
+  run "$FLOX_BIN" activate -- bash -c '
+    echo $HISTFILE
+  '
+  assert_success
+  assert_output --partial "NOT_IN_MY_BACKYARD"
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=activate,activate:envVar-before-hook
 @test "{bash,fish,tcsh,zsh}: activate sets env var before hook" {
   project_setup
@@ -2064,7 +2082,7 @@ EOF
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rust-lib-src.json" \
     "$FLOX_BIN" install rustPlatform.rustLibSrc
-  
+
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     if ! [ -e "$FLOX_ENV/etc/profile.d/0501_rust.sh" ]; then
       echo "profile script did not exist" >&3

@@ -72,8 +72,8 @@ eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
 # HISTFILE and SHELL_SESSION_DIR variables, so define them up-front here
 # so that our env variable replay feature can fix the damage caused by
 # their /etc/zshrc* files.
-export HISTFILE=$HOME/.zsh_history
-export SHELL_SESSION_DIR=$HOME/.zsh_sessions
+export HISTFILE="${HISTFILE:-${ZDOTDIR:-$HOME}/.zsh_history}"
+export SHELL_SESSION_DIR="${SHELL_SESSION_DIR:-${ZDOTDIR:-$HOME}/.zsh_sessions}"
 
 # Set the prompt if we're in an interactive shell.
 if [[ -o interactive ]]; then
