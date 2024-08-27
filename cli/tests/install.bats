@@ -120,7 +120,6 @@ EOF
 
 @test "'flox install' doesn't provide duplicate suggestions for a multi-system environment" {
   skip "will be fixed by https://github.com/flox/flox/issues/1482"
-  rm -f "$GLOBAL_MANIFEST_LOCK"
 
   "$FLOX_BIN" init
   # add a second system

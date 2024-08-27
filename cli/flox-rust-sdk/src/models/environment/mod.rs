@@ -490,14 +490,6 @@ pub enum EnvironmentError {
     WriteEnvJson(#[source] std::io::Error),
     // endregion
 
-    // region: global manifest
-    #[error("couldn't create the global manifest")]
-    InitGlobalManifest(#[source] std::io::Error),
-
-    #[error("couldn't read global manifest template")]
-    ReadGlobalManifestTemplate(#[source] std::io::Error),
-    // endregion
-
     // region: find_dot_flox
     // todo: extract and reuse in other places where we need to canonicalize a path
     #[error(transparent)]
