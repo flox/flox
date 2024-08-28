@@ -34,7 +34,7 @@ Once the environment has been pushed, it can be used directly with the
 `--remote` option,
 or it can be used and edited locally before syncing with `flox push`.
 See [`flox-edit(1)`](./flox-edit.md), [`flox-install(1)`](./flox-install.md),
-and [`flox-remove(1)`](./flox-remove.md) for editing the environment.
+and [`flox-uninstall(1)`](./flox-uninstall.md) for editing the environment.
 
 In the same way as a git repo, local changes to an environment that has been
 pushed may diverge from the environment on FloxHub if `flox push` is run from a
