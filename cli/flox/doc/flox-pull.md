@@ -44,8 +44,7 @@ local system pulling the environment,
 in which case `-a` may be passed to forceably add the current system to the
 environment's manifest.
 This may create a broken environment that cannot be pushed back to FloxHub until
-it is repaired with [`flox-edit(1)`](./flox-edit.md) or
-[`flox-remove(1)`](./flox-remove.md).
+it is repaired with [`flox-edit(1)`](./flox-edit.md).
 See [`manifest.toml(5)`](./manifest.toml.md) for more on multi-system
 environments.
 
@@ -77,5 +76,4 @@ environments.
 
 [`flox-push(1)`](./flox-push.md)
 [`flox-edit(1)`](./flox-edit.md)
-[`flox-remove(1)`](./flox-remove.md)
 [`manifest.toml(5)`](./manifest.toml.md)
