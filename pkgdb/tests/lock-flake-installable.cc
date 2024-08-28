@@ -84,7 +84,13 @@ bool
 test_locksUrl( const nix::ref<nix::EvalState> & state,
                const std::string &              system )
 {
-  auto unlockedUrl = localTestFlake + "#hello";
+  // `localTestFlake` is contained within _this_ git repo.
+  // If there are any tracked changes, the flake is considered dirty.
+  // Thus in development this test would fail most of the time,
+  // unless the repo is in a clean state.
+  // To avoid this, exceptionally use an external flake for this test,
+  // that can be locked cleanly.
+  auto unlockedUrl = "git+https://github.com/flox/flox";
   auto lockedInstallable
     = flox::lockFlakeInstallable( state, system, unlockedUrl );
 
