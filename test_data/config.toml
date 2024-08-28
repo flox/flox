@@ -196,6 +196,12 @@ cmd = "flox install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackag
 pre_cmd = "flox init"
 cmd = "flox install vim"
 
+[resolve.vim-vim-full-conflict]
+pre_cmd = "flox init"
+cmd = "flox install vim vim-full"
+ignore_cmd_errors = true # pacakges conflict
+
+
 [search.hello]
 cmd = "flox search hello"
 

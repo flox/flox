@@ -213,3 +213,36 @@ EOF
   assert_output "⚠️  No changes made to environment."
 
 }
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=edit:priority
+@test "'flox edit' priority" {
+  "$FLOX_BIN" init
+
+WITHOUT_PRIORITY=$(cat <<EOF
+version = 1
+[install]
+vim.pkg-path = "vim"
+vim-full.pkg-path = "vim-full"
+EOF
+)
+
+WITH_PRIORITY=$(cat <<EOF
+version = 1
+[install]
+vim.pkg-path = "vim"
+vim-full.pkg-path = "vim-full"
+vim-full.priority = 4
+EOF
+)
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/vim-vim-full-conflict.json"
+  run "$FLOX_BIN" edit -f <(echo "$WITHOUT_PRIORITY")
+  assert_failure
+
+  run "$FLOX_BIN" edit -f <(echo "$WITH_PRIORITY")
+  assert_success
+
+  run "$FLOX_BIN" edit -f <(echo "$WITHOUT_PRIORITY")
+  assert_failure
+}
