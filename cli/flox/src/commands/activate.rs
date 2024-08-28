@@ -387,7 +387,7 @@ impl Activate {
         if !in_place && !is_ephemeral {
             Activate::launch_watchdog(
                 &flox,
-                environment.log_path()?.to_path_buf(),
+                &environment.log_path()?,
                 &path_hash(environment.dot_flox_path()),
                 socket_path,
                 config.flox.disable_metrics,
@@ -420,11 +420,12 @@ impl Activate {
     /// Launch the watchdog process
     fn launch_watchdog(
         flox: &Flox,
-        log_dir: PathBuf,
+        log_dir: impl AsRef<Path>,
         path_hash: &str,
         socket_path: impl AsRef<Path>,
         disable_metrics: bool,
     ) -> Result<()> {
+        let log_dir = log_dir.as_ref();
         let mut cmd = Command::new(&*WATCHDOG_BIN);
         if disable_metrics {
             cmd.arg("--disable-metrics");
