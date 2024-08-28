@@ -30,6 +30,7 @@ in
     cp -R ${../../assets/activation-scripts} $out
 
     substituteInPlace $out/activate \
+      --replace "@bash@" "${bash}/bin/bash" \
       --replace "@coreutils@" "${coreutils}" \
       --replace "@getopt@" "${getopt}" \
       --replace "@gnused@" "${gnused}" \
