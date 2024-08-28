@@ -63,6 +63,8 @@ pub static WATCHDOG_BIN: Lazy<PathBuf> = Lazy::new(|| {
     PathBuf::from(env::var("WATCHDOG_BIN").unwrap_or(env!("WATCHDOG_BIN").to_string()))
 });
 
+const TRACING_TAG_MODE: &str = "activate_mode";
+
 #[derive(Bpaf, Clone)]
 pub struct Activate {
     #[bpaf(external(environment_select), fallback(Default::default()))]
@@ -183,10 +185,9 @@ impl Activate {
 
         // Must come after getting an activation path to prevent premature
         // locking or migration.
-        subcommand_metric!(
-            "activate#version",
-            lockfile_version = environment.lockfile(&flox)?.version()
-        );
+        let lockfile_version = environment.lockfile(&flox)?.version();
+        subcommand_metric!("activate#version", lockfile_version = lockfile_version);
+        sentry_set_tag("lockfile_version", lockfile_version);
 
         // read the currently active environments from the environment
         let mut flox_active_environments = activated_environments();
@@ -399,6 +400,8 @@ impl Activate {
         //
         //    eval "$(flox activate)"
         if in_place {
+            sentry_set_tag(TRACING_TAG_MODE, "in_place");
+
             let shell = Self::detect_shell_for_in_place()?;
             Self::activate_in_place(&shell, &exports, &activation_path);
 
@@ -408,9 +411,12 @@ impl Activate {
         let shell = Self::detect_shell_for_subshell();
         // These functions will only return if exec fails
         if !self.run_args.is_empty() {
+            let mode = if is_ephemeral { "ephemeral" } else { "command" };
+            sentry_set_tag(TRACING_TAG_MODE, mode);
             sentry_shutdown(span_entered);
             Self::activate_command(self.run_args, shell, exports, activation_path, is_ephemeral)
         } else {
+            sentry_set_tag(TRACING_TAG_MODE, "interactive");
             sentry_shutdown(span_entered);
             Self::activate_interactive(shell, exports, activation_path, now_active)
         }
