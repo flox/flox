@@ -130,9 +130,15 @@ fn run(args: Cli) -> Result<(), Error> {
             kqueue::EventFilter::EVFILT_PROC,
             kqueue::FilterFlag::NOTE_EXIT,
         )?;
-        watcher.watch().context("failed to register watcher")?;
-        watcher
-    };
+        match watcher.watch() {
+            Ok(_) => Ok(watcher),
+            Err(err) => {
+                cleanup(&args.socket_path);
+                error!(%err, "failed to register watcher");
+                Err(err)
+            },
+        }
+    }?;
     debug!("registered termination interest");
 
     debug!(
