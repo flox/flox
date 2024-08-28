@@ -257,7 +257,7 @@ in
       find "$TESTS_DIR" "$NIX_BIN" "$PKGDB_BIN" "$WATCHDOG_BIN" "$FLOX_BIN"    \
         |${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
     else
-      exec -a "$0" ${batsWith}/bin/bats "''${_BATS_ARGS[@]}"    \
-                                        "''${_FLOX_TESTS[@]}";
+      ${batsWith}/bin/bats "''${_BATS_ARGS[@]}"    \
+                           "''${_FLOX_TESTS[@]}";
     fi
   ''
