@@ -541,7 +541,7 @@ impl LockedManifestCatalog {
         installable_locker: &impl InstallableLocker,
     ) -> Result<LockedManifestCatalog, LockedManifestError> {
         let catalog_groups = Self::collect_package_groups(manifest, seed_lockfile)?;
-        let (already_locked_packages, groups_to_lock) =
+        let (mut already_locked_packages, groups_to_lock) =
             Self::split_fully_locked_groups(catalog_groups, seed_lockfile);
 
         let flake_installables = Self::collect_flake_installables(manifest);
@@ -556,6 +556,9 @@ impl LockedManifestCatalog {
                 .filter_map(LockedPackage::as_catalog_package_ref),
             &manifest.options.allow,
         )?;
+
+        // Update the priority of already locked packages to match the manifest.
+        Self::update_priority(&mut already_locked_packages, manifest);
 
         if groups_to_lock.is_empty() && installables_to_lock.is_empty() {
             debug!("All packages are already locked, skipping resolution");
@@ -656,6 +659,42 @@ impl LockedManifestCatalog {
         }
 
         Ok(())
+    }
+
+    /// Update the priority of already locked packages to match the manifest.
+    ///
+    /// The `priority` field is originally set when constructing in [LockedPackageCatalog::from_parts],
+    /// after resolution.
+    /// Already locked packages are not re-resolved for priority changes
+    /// as priority is not a constraint for resolution.
+    /// The priority in the manifest may have changed since the package was locked,
+    /// so we update the priority of already locked packages to match the manifest.
+    fn update_priority<'a>(
+        already_locked_packages: impl IntoIterator<Item = &'a mut LockedPackage>,
+        manifest: &TypedManifestCatalog,
+    ) {
+        for locked_package in already_locked_packages {
+            let LockedPackage::Catalog(LockedPackageCatalog {
+                install_id,
+                priority,
+                ..
+            }) = locked_package
+            else {
+                // `already_locked_packages`` should only contain catalog packages to begin with
+                // and locked flake installables do not have a priority (yet?),
+                // so this shouldn't occur.
+                return;
+            };
+
+            let new_priority = manifest
+                .install
+                .get(install_id)
+                .and_then(|desciptor| desciptor.as_catalog_descriptor_ref())
+                .and_then(|descriptor| descriptor.priority)
+                .unwrap_or(DEFAULT_PRIORITY);
+
+            *priority = new_priority;
+        }
     }
 
     /// Transform a lockfile into a mapping that is easier to query:
@@ -3143,6 +3182,51 @@ pub(crate) mod tests {
         .unwrap();
 
         assert_eq!(locked_manifest.packages.len(), 2, "{:#?}", locked_manifest);
+    }
+
+    /// If catalog packages are already locked, no locking should occur.
+    /// Installables are still being resolved if not locked.
+    #[tokio::test]
+    async fn update_priority_if_fully_locked() {
+        let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
+
+        let mut manifest = manifest::test::empty_catalog_manifest();
+        manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
+        manifest
+            .install
+            .insert(foo_iid.clone(), foo_descriptor.clone());
+
+        let locked = LockedManifestCatalog {
+            version: Version::<1>,
+            manifest: manifest.clone(),
+            packages: vec![foo_locked.clone().into()],
+        };
+
+        let mut foo_descriptor_priority_after = foo_descriptor.unwrap_catalog_descriptor().unwrap();
+        foo_descriptor_priority_after.priority = Some(1);
+
+        let mut foo_locked_priority_after = foo_locked.clone();
+        foo_locked_priority_after.priority = 1;
+
+        let mut manifest_pririty_after = manifest.clone();
+        manifest_pririty_after.install.insert(
+            foo_iid.clone(),
+            foo_descriptor_priority_after.clone().into(),
+        );
+
+        let locker_mock = InstallableLockerMock::new();
+        let locked_manifest = LockedManifestCatalog::lock_manifest(
+            &manifest_pririty_after,
+            Some(&locked),
+            &PanickingClient,
+            &locker_mock,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(locked_manifest.packages.as_slice(), &[
+            foo_locked_priority_after.into()
+        ]);
     }
 
     /// [LockedManifestCatalog::lock_manifest] returns an error if an already
