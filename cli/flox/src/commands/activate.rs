@@ -48,6 +48,7 @@ use crate::commands::{ensure_environment_trust, ConcreteEnvironment, Environment
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::openers::Shell;
+use crate::utils::tracing::{sentry_guard_no_existing_span, sentry_set_tag, sentry_shutdown};
 use crate::utils::{default_nix_env_vars, message};
 use crate::{subcommand_metric, utils};
 
@@ -123,6 +124,11 @@ impl Activate {
         is_ephemeral: bool,
         services_to_start: &[String],
     ) -> Result<()> {
+        // There can only be one span before we shutdown and exec().
+        sentry_guard_no_existing_span();
+        let span = tracing::info_span!("activate");
+        let span_entered = span.entered();
+
         if let ConcreteEnvironment::Remote(ref env) = concrete_environment {
             if !self.trust {
                 ensure_environment_trust(&mut config, &flox, env).await?;
@@ -402,8 +408,10 @@ impl Activate {
         let shell = Self::detect_shell_for_subshell();
         // These functions will only return if exec fails
         if !self.run_args.is_empty() {
+            sentry_shutdown(span_entered);
             Self::activate_command(self.run_args, shell, exports, activation_path, is_ephemeral)
         } else {
+            sentry_shutdown(span_entered);
             Self::activate_interactive(shell, exports, activation_path, now_active)
         }
     }
