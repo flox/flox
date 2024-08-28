@@ -71,11 +71,13 @@ EOF
   assert_line -n "$line" --regexp '^    list, l[ ]+[\w .,]+'
   line=$((line + 1))
   assert_line -n "$line" --regexp '^    delete[ ]+[\w .,]+'
+  line=$((line + 1))
+  assert_line -n "$line" --regexp '^    services[ ]+[\w .,]+'
 }
 
 @test "f3: command grouping changes 2: 'Sharing Commands' listed in order" {
   run "$FLOX_BIN" --help
-  line=14
+  line=15
   assert_line -n "$line" --regexp '^Sharing Commands'
   line=$((line + 1))
   assert_line -n "$line" --regexp '^    push[ ]+[\w .,]+'

@@ -764,7 +764,7 @@ enum LocalDevelopmentCommands {
     )]
     Delete(#[bpaf(external(delete::delete))] delete::Delete),
     /// Interact with services
-    #[bpaf(command, hide)]
+    #[bpaf(command)]
     Services(#[bpaf(external(services::services_commands))] services::ServicesCommands),
 }
 
