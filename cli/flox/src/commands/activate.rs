@@ -435,10 +435,8 @@ impl Activate {
         cmd.arg(getpid().as_raw().to_string());
 
         // Set the log path
-        let pid = getpid();
-        let log_path = log_dir.join(format!("watchdog.{}.log", pid.as_raw()));
-        cmd.arg("--logs");
-        cmd.arg(log_path);
+        cmd.arg("--log-dir");
+        cmd.arg(log_dir);
         cmd.env("_FLOX_WATCHDOG_LOG_LEVEL", "debug"); // always write to log file
 
         // Set the socket path
