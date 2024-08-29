@@ -55,9 +55,9 @@ pub struct Cli {
     #[arg(short, long = "socket", value_name = "PATH")]
     pub socket_path: PathBuf,
 
-    /// Where to store watchdog logs
-    #[arg(short, long = "logs", value_name = "PATH")]
-    pub log_path: Option<PathBuf>,
+    /// The directory to store logs
+    #[arg(short, long = "log-dir", value_name = "PATH")]
+    pub log_dir: Option<PathBuf>,
 
     /// Disable metric reporting
     #[arg(long)]
@@ -71,11 +71,15 @@ pub struct Cli {
         registry = tracing::field::Empty,
         dot_flox_hash = tracing::field::Empty,
         socket = tracing::field::Empty,
-        log = tracing::field::Empty))]
+        log_dir = tracing::field::Empty))]
 fn main() -> Result<(), Error> {
     // Initialization
     let args = Cli::parse();
-    init_logger(&args.log_path).context("failed to initialize logger")?;
+    let log_file = &args
+        .log_dir
+        .as_ref()
+        .map(|dir| dir.join(format!("watchdog.{}.log", args.pid)));
+    init_logger(log_file).context("failed to initialize logger")?;
     if let Err(err) = ensure_process_group_leader() {
         error!(%err, "failed to ensure watchdog is detached from terminal");
     }
@@ -85,7 +89,7 @@ fn main() -> Result<(), Error> {
     span.record("registry", traceable_path(&args.registry_path));
     span.record("dot_flox_hash", &args.dot_flox_hash);
     span.record("socket", traceable_path(&args.socket_path));
-    span.record("log", maybe_traceable_path(&args.log_path));
+    span.record("log_dir", maybe_traceable_path(&args.log_dir));
     debug!("starting");
 
     // Set the signal handler

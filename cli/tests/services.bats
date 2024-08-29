@@ -1095,10 +1095,9 @@ EOF
   # Don't forget to export this so that it's set in the subshells
   export registry_file="$PWD/registry.json"
 
-  log_file="$PWD/flox-watchdog.log"
   dummy_registry path/to/env abcde123 > "$registry_file"
   _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
-    --logs "$log_file" \
+    --log-dir "$PWD" \
     --pid $$ \
     --registry "$registry_file" \
     --hash abcde123 \
@@ -1144,20 +1143,19 @@ EOF
 }
 
 @test "watchdog: exits on shutdown signal (SIGINT)" {
-  # Don't forget to export this so that it's set in the subshells
-  export log_file="$PWD/flox-watchdog.log"
-
+  target_pid="$$"
   registry_file="$PWD/registry.json"
   dummy_registry path/to/env abcde123 > "$registry_file"
   _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
-    --logs "$log_file" \
-    --pid $$ \
+    --log-dir "$PWD" \
+    --pid "$target_pid" \
     --registry "$registry_file" \
     --hash abcde123 \
     --socket does_not_exist &
 
   # Don't forget to export this so that it's set in the subshells
   export watchdog_pid="$!"
+  export log_file="$PWD/watchdog.${target_pid}.log"
 
   # Wait for start.
   timeout 1s bash -c "
@@ -1183,9 +1181,6 @@ EOF
 }
 
 @test "watchdog: exits when provided PID isn't running" {
-  # Don't forget to export this so that it's set in the subshells
-  export log_file="$PWD/flox-watchdog.log"
-
   # We need a test PID, but PIDs can be reused. There's also no delay on reusing
   # PIDs, so you can't create and kill a process to use its PID during that
   # make-believe no-reuse window. At best we can choose a random PID and skip
@@ -1198,7 +1193,7 @@ EOF
   registry_file="$PWD/registry.json"
   dummy_registry path/to/env abcde123 > "$registry_file"
   _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
-    --logs "$log_file" \
+    --log-dir "$PWD" \
     --pid "$test_pid" \
     --registry "$registry_file" \
     --hash abcde123 \
@@ -1206,6 +1201,7 @@ EOF
 
   # Don't forget to export this so that it's set in the subshells
   export watchdog_pid="$!"
+  export log_file="$PWD/watchdog.${test_pid}.log"
 
   # Wait for start.
   timeout 1s bash -c "
