@@ -24,7 +24,6 @@ use crate::utils::errors::{
 };
 use crate::utils::metrics::Hub;
 
-mod build;
 mod commands;
 mod config;
 mod utils;
