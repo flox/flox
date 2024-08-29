@@ -1153,9 +1153,8 @@ EOF
     --hash abcde123 \
     --socket does_not_exist &
 
-  # Don't forget to export this so that it's set in the subshells
-  export watchdog_pid="$!"
-  export log_file="$PWD/watchdog.${target_pid}.log"
+  watchdog_pid="$!"
+  log_file="$PWD/watchdog.${target_pid}.log"
 
   # Wait for start.
   timeout 1s bash -c "
@@ -1199,9 +1198,8 @@ EOF
     --hash abcde123 \
     --socket does_not_exist &
 
-  # Don't forget to export this so that it's set in the subshells
-  export watchdog_pid="$!"
-  export log_file="$PWD/watchdog.${test_pid}.log"
+  watchdog_pid="$!"
+  log_file="$PWD/watchdog.${test_pid}.log"
 
   # Wait for start.
   timeout 1s bash -c "
