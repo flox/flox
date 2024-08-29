@@ -91,6 +91,17 @@ setup() {
 }
 
 teardown() {
+  # Wait for watchdogs before project teardown, otherwise some tests will hang
+  # forever.
+  # I'm guessing this is because the watchdog and process-compose have logfiles
+  # in the project directory,
+  # so maybe one of them tries to log something and hangs.
+  # ps output is showing a process-compose down hanging forever,
+  # so that's a likely culprit.
+  # See https://github.com/flox/flox/actions/runs/10820753745/job/30021432134#step:9:26
+  # I'd check the logs to confirm what's happening...
+  # ...if only the reproducer wasn't to delete the logs.
+  wait_for_watchdogs
   project_teardown
   common_test_teardown
 }
@@ -136,7 +147,6 @@ setup_start_counter_services() {
   run "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
   assert_success
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
 EOF
 )
   assert_success
@@ -153,7 +163,6 @@ EOF
   assert_success
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     timeout 2s bash -c '
       while ! redis-cli -p "${REDIS_PORT}" ping; do
         sleep 0.1
@@ -218,7 +227,6 @@ EOF
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" install hello
 EOF
 )
@@ -233,7 +241,6 @@ EOF
   run "$FLOX_BIN" install hello
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" uninstall hello
 EOF
 )
@@ -248,7 +255,6 @@ EOF
     run "$FLOX_BIN" install hello
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
       "$FLOX_BIN" upgrade
 EOF
@@ -265,7 +271,6 @@ version = 1
 EOF
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" edit -f manifest.toml
 EOF
 )
@@ -289,7 +294,6 @@ EOF
   assert_success
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" pull
 EOF
 )
@@ -304,7 +308,6 @@ EOF
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services restart one two invalid
 EOF
 )
@@ -334,7 +337,6 @@ EOF
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     # Wait for completion so that we indicate "start" instead of "restart"
     "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
     "$FLOX_BIN" services restart one
@@ -353,7 +355,6 @@ EOF
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     # Wait for completion so that we indicate "start" instead of "restart"
     "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed two:Completed
     "$FLOX_BIN" services restart one two
@@ -373,7 +374,6 @@ EOF
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     # Wait for completion so that we indicate "start" instead of "restart"
     "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed two:Completed sleeping:Running
     "$FLOX_BIN" services restart
@@ -394,7 +394,6 @@ EOF
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop sleeping
     "$FLOX_BIN" services restart sleeping
 EOF
@@ -412,7 +411,6 @@ EOF
 
   # NB: No --start-services.
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services restart one
 EOF
 )
@@ -435,7 +433,6 @@ EOF
 
   # NB: No --start-services.
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services restart touch_file
     "$FLOX_BIN" services status
 EOF
@@ -451,7 +448,6 @@ EOF
 
   # NB: No --start-services.
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services restart
 EOF
 )
@@ -470,7 +466,6 @@ EOF
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     # Wait for completion so that we indicate "start" instead of "restart"
     "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
     "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
@@ -491,7 +486,6 @@ EOF
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
     "$FLOX_BIN" services restart
 EOF
@@ -506,7 +500,6 @@ EOF
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop
     "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
     "$FLOX_BIN" services restart
@@ -522,7 +515,6 @@ EOF
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop
     "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
     "$FLOX_BIN" services restart touch_file
@@ -538,7 +530,6 @@ EOF
   setup_start_counter_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop
     "$FLOX_BIN" edit -f "${TESTS_DIR}/services/touch_file.toml"
     "$FLOX_BIN" services restart one
@@ -557,7 +548,6 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop invalid
 EOF
 )
@@ -571,7 +561,6 @@ EOF
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
     exit_code=0
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one two invalid || exit_code=$?
     "$FLOX_BIN" services status
     exit $exit_code
@@ -610,7 +599,6 @@ EOF
   for command in "${commands[@]}"; do
     echo "Testing: flox services $command"
     command="$command" run "$FLOX_BIN" activate -- bash <(cat <<EOF
-      source "${TESTS_DIR}/services/register_cleanup.sh"
 
       [ ! -e "\$_FLOX_SERVICES_SOCKET" ] || exit 2
 
@@ -618,6 +606,9 @@ EOF
 EOF
 )
     assert_success
+
+    # give the watchdog a chance to clean up the services before the next iteration
+    wait_for_watchdogs
   done
 }
 
@@ -626,7 +617,6 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop
     "$FLOX_BIN" services status
 EOF
@@ -643,7 +633,6 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one
     "$FLOX_BIN" services status
 EOF
@@ -659,7 +648,6 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one two
     "$FLOX_BIN" services status
 EOF
@@ -676,7 +664,6 @@ EOF
   setup_sleeping_services
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services stop one
     "$FLOX_BIN" services status
     "$FLOX_BIN" services stop one
@@ -694,7 +681,6 @@ EOF
   setup_logging_services
   run "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services logs one
 EOF
   )
@@ -708,7 +694,6 @@ EOF
   # try running with multiple services specified
   run "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services logs one two
 EOF
   )
@@ -723,7 +708,6 @@ EOF
   # Try running without services specified
   run "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services logs
 EOF
   )
@@ -738,7 +722,6 @@ EOF
   # Try running with a nonexisting services specified
   run "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services logs doesnotexist
 EOF
   )
@@ -754,7 +737,6 @@ EOF
 
   run --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
 
     timeout 1 "$FLOX_BIN" services logs mostly-deterministic
 EOF
@@ -780,7 +762,6 @@ EOF
   # We expect flox to block and be killed by `timeout`
   run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
 
     # At the time of writing, the `mostly-deterministic` service sleeps for 3 seconds
     # Give flox a 4 second timeout to ensure the service has time to wake and log.
@@ -806,7 +787,6 @@ EOF
   # We expect flox to block and be killed by `timeout`, which will return a 124 exit code
   run -124 --separate-stderr "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
 
     # ensure some logs are printed for both services then stop the log reader
     # both processes write to the pipe once to signal they have written _something_
@@ -833,7 +813,6 @@ EOF
   # We expect flox to block and be killed by `timeout`
   "$FLOX_BIN" activate --start-services -- bash <(
     cat << 'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
 
     # ensure some logs are printed for both services then stop the log reader
     # both processes write to the pipe once to signal they have written _something_
@@ -867,7 +846,6 @@ EOF
 @test "status: lists the statuses for services" {
   setup_sleeping_services
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services status
 EOF
 )
@@ -909,14 +887,13 @@ EOF
   assert_output --partial "❌ Failed to start services"
 }
 
-@test "blocking: activation blocks on socket creation" {
+@test "blocking: activation blocks on process list" {
   setup_sleeping_services
-  # This is run immediately after activation starts, which is about as good
-  # as we can get for checking that activation has blocked until the socket
-  # exists
+  # This is run immediately after activation starts, which is about as good as
+  # we can get for checking that activation has blocked until process list
+  # succeeds
   run "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
-    "$PROCESS_COMPOSE_BIN" process list
+    "$PROCESS_COMPOSE_BIN" process list -u $_FLOX_SERVICES_SOCKET
 EOF
 )
   # Just assert that one of our processes shows up in the output, which indicates
@@ -927,7 +904,6 @@ EOF
 @test "activate: child processes write logs to .flox/log" {
   setup_sleeping_services
   "$FLOX_BIN" activate -s -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     # No actual work to do here other than let process-compose
     # start and write to logs
 EOF
@@ -963,7 +939,6 @@ EOF
   assert_success
 
   run "$FLOX_BIN" activate --start-services -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "${TESTS_DIR}/services/echo_activate_vars.sh" outer
     "$FLOX_BIN" activate -d "$INNER_PROJECT_DIR" -- bash "${TESTS_DIR}/services/echo_activate_vars.sh" inner
 EOF
@@ -984,7 +959,6 @@ EOF
 
   # NB: no --start-services
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     "$FLOX_BIN" services start
     "${TESTS_DIR}/services/echo_activate_vars.sh" outer
     "$FLOX_BIN" activate -d "$INNER_PROJECT_DIR" -- bash "${TESTS_DIR}/services/echo_activate_vars.sh" inner
@@ -1025,7 +999,6 @@ EOF
   cat <<"EOF" > script_inner.sh
     set -euo pipefail
 
-    source "${TESTS_DIR}/services/register_cleanup.sh"
 
     "${TESTS_DIR}"/services/wait_for_service_status.sh two:Completed
 EOF
@@ -1033,7 +1006,6 @@ EOF
   "$FLOX_BIN" activate -d one --start-services -- bash <(cat <<"EOF"
     set -euo pipefail
 
-    source "${TESTS_DIR}/services/register_cleanup.sh"
 
     "$FLOX_BIN" activate -d two --start-services -- bash script_inner.sh
 
@@ -1052,7 +1024,6 @@ EOF
 
   mkfifo started finished
   "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     echo > started
     timeout 2 cat finished
 EOF
@@ -1073,7 +1044,6 @@ EOF
 
   mkfifo started finished
   "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
     echo > started
     timeout 2 cat finished
 EOF
@@ -1098,7 +1068,6 @@ EOF
   setup_sleeping_services
   export -f watchdog_pids_called_with_arg
   SHELL="bash" run --separate-stderr "$FLOX_BIN" activate -- bash <(cat <<'EOF'
-    source "${TESTS_DIR}/services/register_cleanup.sh"
 
     # Ensure that the watchdog is still running
     times=0
@@ -1595,7 +1564,6 @@ EOF
     # but it's hard to reproduce,
     # so add set -x for more info in the future.
     set -euxo pipefail
-    source "${TESTS_DIR}/services/register_cleanup.sh"
 
     timeout 2 bash -c "set -x; while ! overmind status; do sleep .1; done"
 
@@ -1609,8 +1577,6 @@ EOF
 }
 
 @test "activate: picks up changes after environment modification when all services have stopped" {
-
-  export FLOX_FEATURES_SERVICES=true
 
   MANIFEST_CONTENTS_1="$(cat << "EOF"
     version = 1
@@ -1632,7 +1598,9 @@ EOF
   "$FLOX_BIN" activate -s -- echo \> fifo &
   activate_pid="$!"
 
-  # Make sure we avoid a race of service one failing to complete
+  # Since `one` is just an `echo` it will complete almost immediately once it has
+  # started, we just need to make we wait until after it has started.
+  echo "waiting for initial service to complete" >&3
   "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
 
   run "$FLOX_BIN" services logs one
