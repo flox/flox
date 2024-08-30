@@ -7,7 +7,6 @@
   buildDeps ? [], # optional
   buildScript ? null, # optional
   buildCache ? null, # optional
-  virtualSandbox ? "off", # optional
 }:
 # First a few assertions to ensure that the inputs are consistent.
 # buildCache is only meaningful with a build script
@@ -96,17 +95,17 @@ in
         ${
           if buildCache == null
           then ''
-            # When not preserving a cache we just run the build normally.
-            FLOX_VIRTUAL_SANDBOX=${virtualSandbox} FLOX_SRC_DIR=$(pwd) \
-            FLOX_TURBO=1 ${flox-env-package}/activate bash -e ${buildScript-contents}
+                 # When not preserving a cache we just run the build normally.
+                 FLOX_SRC_DIR=$(pwd) ${flox-env-package}/activate --turbo -- \
+            bash -e ${buildScript-contents}
           ''
           else ''
-            # If the build fails we still want to preserve the build cache, so we
-            # remove $out on failure and allow the Nix build to proceed to write
-            # the result symlink.
-            FLOX_VIRTUAL_SANDBOX=${virtualSandbox} FLOX_SRC_DIR=$(pwd) \
-            FLOX_TURBO=1 ${flox-env-package}/activate bash -e ${buildScript-contents} || \
-              ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
+                 # If the build fails we still want to preserve the build cache, so we
+                 # remove $out on failure and allow the Nix build to proceed to write
+                 # the result symlink.
+                 FLOX_SRC_DIR=$(pwd) ${flox-env-package}/activate --turbo -- \
+            bash -e ${buildScript-contents} || \
+                   ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
           ''
         }
       ''
@@ -129,10 +128,10 @@ in
           makeShellWrapper "${flox-env-package}/activate" "$prog" \
             --inherit-argv0 \
             --set FLOX_ENV "${flox-env-package}" \
-            --set FLOX_TURBO 1 \
             --set FLOX_MANIFEST_BUILD_OUT "$out" \
-            --set FLOX_VIRTUAL_SANDBOX "${virtualSandbox}" \
             --run 'export FLOX_SET_ARG0="$0"' \
+            --add-flags --turbo \
+            --add-flags -- \
             --add-flags "$hidden"
         fi
       done
