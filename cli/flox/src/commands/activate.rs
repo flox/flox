@@ -44,6 +44,7 @@ use super::{
     EnvironmentSelect,
     UninitializedEnvironment,
 };
+use crate::commands::services::ServicesCommandsError;
 use crate::commands::{ensure_environment_trust, ConcreteEnvironment, EnvironmentSelectError};
 use crate::config::{Config, EnvironmentPromptConfig};
 use crate::utils::dialog::{Dialog, Spinner};
@@ -342,6 +343,10 @@ impl Activate {
             if self.start_services {
                 // Error for remote envs and envs with v0 manifests, since they don't support services
                 ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+
+                if manifest.services.is_empty() {
+                    message::warning(ServicesCommandsError::NoDefinedServices);
+                }
             }
 
             let should_have_services =

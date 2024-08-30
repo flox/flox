@@ -932,6 +932,15 @@ EOF
   assert_success
 }
 
+@test "activate: --start-services warns if environment doesn't have services" {
+  run "$FLOX_BIN" init
+  assert_success
+
+  run "$FLOX_BIN" activate --start-services -- true
+  assert_success
+  assert_output "⚠️  Environment doesn't have any services defined."
+}
+
 @test "activate: outer activation starts services and inner activation doesn't" {
   setup_sleeping_services
 
