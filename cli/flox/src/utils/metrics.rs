@@ -34,6 +34,9 @@ pub const METRICS_EVENTS_API_KEY: &str = env!("METRICS_EVENTS_API_KEY");
 
 /// Creates a trace event for the given subcommand.
 ///
+/// Do NOT inline functions as fields values because any child tracing events
+/// will cause this event to be logged at TRACE level for reasons unknown.
+///
 /// We set the target to `flox_command` so that we can filter for these exact events.
 #[macro_export]
 macro_rules! subcommand_metric {
