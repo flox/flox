@@ -15,7 +15,7 @@ use flox_rust_sdk::models::env_registry::{
 };
 use flox_rust_sdk::providers::services::process_compose_down;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
-use logger::init_logger;
+use logger::{init_logger, spawn_heartbeat_log};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
 use once_cell::sync::Lazy;
@@ -152,6 +152,7 @@ fn main() -> Result<(), Error> {
         target_pid = args.pid,
         "watchdog is on duty"
     );
+    spawn_heartbeat_log();
 
     // Listen for a notification, getting an error if we should terminate
     #[cfg(target_os = "macos")]

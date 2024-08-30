@@ -1091,6 +1091,38 @@ EOF
   done
 }
 
+@test "watchdog: emits heartbeat log to prevent garbage collection while running" {
+  target_pid="$$"
+  registry_file="$PWD/registry.json"
+  dummy_registry path/to/env abcde123 > "$registry_file"
+
+  # Close fd3 in case we don't make it to the final `kill`. We don't care about
+  # orphaned children for the purpose of this test; watchdog will cleanup after
+  # itself when BATS exits.
+  # https://bats-core.readthedocs.io/en/stable/writing-tests.html#file-descriptor-3-read-this-if-bats-hangs
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
+    --log-dir "$PWD" \
+    --pid "$target_pid" \
+    --registry "$registry_file" \
+    --hash abcde123 \
+    --socket does_not_exist 3>&- &
+
+  watchdog_pid="$!"
+  log_file="$PWD/watchdog.${target_pid}.log"
+
+  # Wait for initial log entry. Other entries will be printed later but we don't
+  # want to wait that long.
+  timeout 1s bash -c "
+    while ! grep -qs 'still watching, woof woof' \"$log_file\"; do
+      sleep 0.1
+    done
+  "
+
+  # Signal to exit.
+  run kill "$watchdog_pid"
+  assert_success
+}
+
 @test "watchdog: exits on termination signal (SIGUSR1)" {
   # Don't forget to export this so that it's set in the subshells
   export registry_file="$PWD/registry.json"

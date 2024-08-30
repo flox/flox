@@ -1,10 +1,15 @@
 use std::fs::OpenOptions;
 use std::path::PathBuf;
+use std::thread::{sleep, spawn};
+use std::time::Duration;
 
 use anyhow::Context;
+use tracing::debug;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
+
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(3600);
 
 /// Initializes a logger that persists logs to an optional file in addition to `stderr`
 pub(crate) fn init_logger(file_path: &Option<PathBuf>) -> Result<(), anyhow::Error> {
@@ -39,4 +44,20 @@ pub(crate) fn init_logger(file_path: &Option<PathBuf>) -> Result<(), anyhow::Err
         .with(stderr_layer)
         .init();
     Ok(())
+}
+
+/// Starts a background thread which emits a log entry at an interval. This is
+/// used as an indication of whether a watchdog's log file can be garbage
+/// collected. The thread will run until the watchdog exits.
+pub(crate) fn spawn_heartbeat_log() {
+    /// Assert that HEARTBEAT_INTERVAL falls in the range of KEEP_WATCHDOG_DAYS at compile time.
+    const _: () = assert!(
+        HEARTBEAT_INTERVAL.as_secs() < duration_from_days(KEEP_WATCHDOG_DAYS).as_secs(),
+        "`HEARTBEAT_INTERVAL` must be less than `KEEP_WATCHDOG_DAYS` days"
+    );
+
+    spawn(|| loop {
+        debug!("still watching, woof woof");
+        sleep(HEARTBEAT_INTERVAL);
+    });
 }
