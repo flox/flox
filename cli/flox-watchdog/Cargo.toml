@@ -10,6 +10,7 @@ anyhow.workspace = true
 clap.workspace = true
 clap_derive.workspace = true
 flox-rust-sdk.workspace = true
+glob = "0.3.1"
 nix.workspace = true
 once_cell.workspace = true
 sentry.workspace = true
@@ -20,3 +21,7 @@ tracing-subscriber.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 kqueue.workspace = true
+
+[dev-dependencies]
+filetime = "0.2.25"
+tempfile.workspace = true
