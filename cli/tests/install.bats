@@ -439,7 +439,7 @@ EOF
 
 @test "flake: github ref added to manifest" {
   "$FLOX_BIN" init
-  input_flake="github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_OLD#hello"
+  input_flake="github:nixos/nixpkgs/$PKGDB_NIXPKGS_REV_NEW#hello"
   run "$FLOX_BIN" install "$input_flake"
   assert_success
   installed_flake=$(tomlq -r -c -t ".install.hello" "$MANIFEST_PATH")
@@ -448,7 +448,7 @@ EOF
 
 @test "flake: https ref added to manifest" {
   "$FLOX_BIN" init
-  input_flake="https://github.com/nixos/nixpkgs/archive/master.tar.gz#hello"
+  input_flake="https://github.com/nixos/nixpkgs/archive/$PKGDB_NIXPKGS_REV_NEW.tar.gz#hello"
   run "$FLOX_BIN" install "$input_flake"
   assert_success
   installed_flake=$(tomlq -r -c -t ".install.hello" "$MANIFEST_PATH")
