@@ -123,6 +123,7 @@ sharing environments, and administration.
 [`flox-search`(1)](./flox-search.md),
 [`flox-show(1)`](./flox-show.md),
 [`flox-edit`(1)](./flox-edit.md),
+[`manifest-toml`(5)](./manifest.toml.md)
 [`flox-list`(1)](./flox-list.md),
 [`flox-auth(1)`](./flox-auth.md),
 [`flox-push`(1)](./flox-push.md),
