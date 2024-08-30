@@ -32,7 +32,6 @@ __gnugrep := @gnugrep@
 __gnused := @gnused@
 __gnutar := @gnutar@
 __jq := @jq@
-__ld_floxlib := @ld_floxlib@
 __nix := @nix@
 
 # Access all required utilities by way of variables so that we don't depend
@@ -54,9 +53,9 @@ _tar := $(call __package_bin,$(__gnutar),tar)
 _uname := $(call __package_bin,$(__coreutils),uname)
 
 # Identify path to build-manifest.nix, in same directory as this Makefile.
-_build_manifest_nix := $(dir $(realpath $(lastword $(MAKEFILE_LIST))))build-manifest.nix
-ifeq (,$(wildcard $(_build_manifest_nix)))
-  $(error build-manifest.nix not found)
+_libexec_dir := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
+ifeq (,$(wildcard $(_libexec_dir)))
+  $(error cannot identify flox-package-builder libexec directory)
 endif
 
 # Invoke nix with the required experimental features enabled.
@@ -132,12 +131,11 @@ space := $(subst x,,x x)
 
 # The method of calling the sandbox differs based on O/S. Define
 # PRELOAD_ARGS to denote the correct way.
-__package_lib = $(if $(filter @%@,$(1)),$(2),$(1)/lib/$(2))
 ifeq (Darwin,$(OS))
-  PRELOAD_ARGS = DYLD_INSERT_LIBRARIES=$(call __package_lib,$(__ld_floxlib),libsandbox.dylib)
+  PRELOAD_ARGS = DYLD_INSERT_LIBRARIES=$(_libexec_dir)/libsandbox.dylib
 else
   ifeq (Linux,$(OS))
-    PRELOAD_ARGS = LD_PRELOAD=$(call __package_lib,$(__ld_floxlib),libsandbox.so)
+    PRELOAD_ARGS = LD_PRELOAD=$(_libexec_dir)/libsandbox.so
   else
     $(error unknown OS: $(OS))
   endif
@@ -150,9 +148,9 @@ define BUILD_local_template =
   .INTERMEDIATE: $(_pname)_local_build
   $(_pname)_local_build: $($(_pvarname)_buildScript)
 	@echo "Building $(_name) in local mode"
-	$(if $(_virtualSandbox),$(PRELOAD_ARGS) FLOX_SRC_DIR=$$$$(pwd) FLOX_VIRTUAL_SANDBOX=$(strip $(_virtualSandbox))) \
+	$(if $(_virtualSandbox),$(PRELOAD_ARGS) FLOX_SRC_DIR=$$$$(pwd) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	MAKEFLAGS= out=$(_out) $(FLOX_ENV)/activate --turbo -- $(_bash) -e $($(_pvarname)_buildScript)
-	set -o pipefail && $(_nix) build -L --file $(_build_manifest_nix) \
+	set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	    --argstr name "$(_name)" \
 	    --argstr flox-env "$(FLOX_ENV)" \
 	    --argstr install-prefix "$(_out)" \
@@ -206,7 +204,7 @@ define BUILD_nix_sandbox_template =
 	  $(_rm) -f "$(_result)-buildCache.prevOutPath"; \
 	  $(_readlink) "$(_result)-buildCache" > "$(_result)-buildCache.prevOutPath"; \
 	fi
-	set -o pipefail && $(_nix) build -L --file $(_build_manifest_nix) \
+	set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	    --argstr name "$(_name)" \
 	    --argstr srcTarball "$($(_pvarname)_src_tar)" \
 	    --argstr flox-env "$(FLOX_ENV)" \
