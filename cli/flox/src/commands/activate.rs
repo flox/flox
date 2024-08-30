@@ -176,11 +176,10 @@ impl Activate {
         };
 
         // Must come after getting an activation path to prevent premature
-        // locking or migration.
-        subcommand_metric!(
-            "activate#version",
-            lockfile_version = environment.lockfile(&flox)?.version()
-        );
+        // locking or migration. It must also not be evaluated inline with the
+        // macro or we'll leak TRACE logs for reasons unknown.
+        let lockfile_version = environment.lockfile(&flox)?.version();
+        subcommand_metric!("activate#version", lockfile_version = lockfile_version);
 
         // read the currently active environments from the environment
         let mut flox_active_environments = activated_environments();
