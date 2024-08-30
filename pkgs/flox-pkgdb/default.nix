@@ -183,12 +183,12 @@ in
           lcov
           remake
           # For IDEs
-          ccls
-          bear
+          # ccls
+          # bear
           # For lints/fmt
           clang-tools_16
-          include-what-you-use
-          llvm # for `llvm-symbolizer'
+          # include-what-you-use
+          # llvm # for `llvm-symbolizer'
           # For debugging
           (
             if stdenv.cc.isGNU or false

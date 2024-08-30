@@ -15,9 +15,6 @@
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.11";
 
-  # drop once bear is no longer broken in a newer release
-  inputs.nixpkgs-bear.url = "github:NixOS/nixpkgs/release-23.05";
-
   inputs.nixpkgs-process-compose.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
   inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
@@ -87,11 +84,6 @@
       cpp-semver = final.callPackage ./pkgs/cpp-semver {};
     };
 
-    # bear is broken in release 23.11 on darwin
-    overlays.bear = final: prev: {
-      inherit (inputs.nixpkgs-bear.legacyPackages.${prev.system}) bear;
-    };
-
     # Use a more recent version of process-compose
     overlays.process-compose = final: prev: {
       inherit (inputs.nixpkgs-process-compose.legacyPackages.${prev.system}) process-compose;
@@ -103,7 +95,6 @@
       overlays.nlohmann
       overlays.semver
       overlays.nix
-      overlays.bear
       overlays.process-compose
       sqlite3pp.overlays.default
       fenix.overlays.default
@@ -169,6 +160,7 @@
         tools = {
           # use fenix provided clippy
           clippy = rust-toolchain.clippy;
+          cargo = rust-toolchain.cargo;
           clang-tools = final.clang-tools_16;
         };
       };
