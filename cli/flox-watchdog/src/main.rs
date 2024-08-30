@@ -15,7 +15,7 @@ use flox_rust_sdk::models::env_registry::{
 };
 use flox_rust_sdk::providers::services::process_compose_down;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
-use logger::{init_logger, spawn_heartbeat_log};
+use logger::{init_logger, spawn_gc_logs, spawn_heartbeat_log};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
 use once_cell::sync::Lazy;
@@ -55,7 +55,7 @@ pub struct Cli {
     #[arg(short, long = "socket", value_name = "PATH")]
     pub socket_path: PathBuf,
 
-    /// The directory to store logs
+    /// The directory to store and garbage collect logs
     #[arg(short, long = "log-dir", value_name = "PATH")]
     pub log_dir: Option<PathBuf>,
 
@@ -153,6 +153,9 @@ fn main() -> Result<(), Error> {
         "watchdog is on duty"
     );
     spawn_heartbeat_log();
+    if let Some(log_dir) = args.log_dir {
+        spawn_gc_logs(log_dir);
+    }
 
     // Listen for a notification, getting an error if we should terminate
     #[cfg(target_os = "macos")]

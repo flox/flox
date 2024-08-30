@@ -174,6 +174,8 @@ pub trait Environment: Send {
 
     /// Return a path that environment should use to store logs.
     ///
+    /// New log file patterns need to be added to `flox-watchdog` for garbage collection.
+    ///
     /// The returned path will exist.
     fn log_path(&self) -> Result<CanonicalPath, EnvironmentError>;
 
