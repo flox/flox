@@ -104,7 +104,7 @@ jobs:
         uses: "actions/deploy-pages@v4"
 
   cli-dev:
-    name: "Flox CLI Tests"
+    name: "dev"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
 
@@ -325,7 +325,7 @@ jobs:
           SLACK_LINK_NAMES: true
 
   nix-build-bats-tests:
-    name: "Flox Bats Tests"
+    name: "remote"
     runs-on: "ubuntu-latest"
     timeout-minutes: 90
 
