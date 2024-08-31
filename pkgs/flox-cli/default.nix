@@ -42,7 +42,7 @@
         then "flox-watchdog"
         else "${flox-watchdog}/bin/flox-watchdog";
 
-      FLOX_ZDOTDIR = flox-activation-scripts + activate.d/zdotdir;
+      FLOX_ZDOTDIR = flox-activation-scripts + "/activate.d/zdotdir";
 
       # [sic] nix handles `BASH_` variables specially,
       # so we need to use a different name.

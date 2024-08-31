@@ -114,6 +114,11 @@ jobs:
         os:
           - "ubuntu-22.04-8core"
           - "macos-14-xlarge"
+        test-tags:
+          - "activate"
+          - "containerize"
+          - "catalog"
+          - "!activate,!containerize,!catalog"
 
     steps:
       - name: "Checkout"
@@ -145,6 +150,8 @@ jobs:
         run: nix develop -L --no-update-lock-file --command just build-cli
 
       - name: "CLI Unit Tests"
+        # Only run unit tests if when not running specialized integration tests
+        if: ${{ matrix.test-tags == '!activate,!containerize,!catalog' }}
         env:
           RUST_BACKTRACE: 1
         run: nix develop -L --no-update-lock-file --command just impure-tests
@@ -157,7 +164,7 @@ jobs:
         env:
           RUST_BACKTRACE: 1
           AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.MANAGED_AUTH0_FLOX_DEV_CLIENT_SECRET }}"
-        run: nix develop -L --no-update-lock-file --command just integ-tests
+        run: nix develop -L --no-update-lock-file --command just integ-tests --  --filter-tags '"${{ matrix.test-tags }}"'
 
       - name: "Capture process tree for failing tests"
         if: ${{ failure() }}
@@ -333,6 +340,11 @@ jobs:
           - "x86_64-darwin"
           - "aarch64-linux"
           - "aarch64-darwin"
+        test-tags:
+          - "activate"
+          - "containerize"
+          - "catalog"
+          - "!activate,!containerize,!catalog"
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
@@ -381,4 +393,4 @@ jobs:
             nix run \
                 --accept-flake-config \
                 --extra-experimental-features '"nix-command flakes"' \
-                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests'
+                'github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox-cli-tests' -- -- --filter-tags '"${{ matrix.test-tags }}"'
