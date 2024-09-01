@@ -9,6 +9,7 @@
 
 #include <fstream>
 
+#include <nix/eval-settings.hh>
 #include <nix/eval.hh>
 #include <nix/value-to-json.hh>
 

@@ -30,7 +30,7 @@ test_URLRoundtrip()
 {
   WrappedNixpkgsInputScheme inputScheme;
   auto                      url = "flox-nixpkgs:v0/flox/" + nixpkgsRev;
-  auto input = inputScheme.inputFromURL( nix::parseURL( url ) );
+  auto input = inputScheme.inputFromURL( nix::parseURL( url ), true );
   EXPECT( input.has_value() );
   EXPECT_EQ( inputScheme.toURL( *input ).to_string(), url );
   return true;
@@ -66,7 +66,7 @@ test_lockedFromUrl( nix::ref<nix::EvalState> & state )
 {
   WrappedNixpkgsInputScheme inputScheme;
   auto                      url = "flox-nixpkgs:v0/flox/" + nixpkgsRev;
-  auto                 input = inputScheme.inputFromURL( nix::parseURL( url ) );
+  auto input = inputScheme.inputFromURL( nix::parseURL( url ), true );
   nix::fetchers::Attrs attrs
     = inputScheme.fetch( state->store, *input ).second.toAttrs();
   auto owner      = nix::fetchers::getStrAttr( attrs, "owner" );

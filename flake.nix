@@ -13,9 +13,18 @@
     "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
   ];
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.11";
+  # XXX Temporary: lock process-compose to v1.9 until we can update flox to use
+  # the latest version. v1.9 did not appear on any stable snapshots so we instead
+  # select the most recent staging branch commit on which it appeared.
+  #
+  # Also note that we avoid using an overlay to pull in the Nix expression because
+  # this results in multiple glibc versions being built into the closure.
+  inputs.nixpkgs.url = "github:flox/nixpkgs/staging.20240817";
 
-  inputs.nixpkgs-process-compose.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  # Roll forward monthly as **our** stable branch advances. Note that we also
+  # build against the staging branch in CI to detect regressions before they
+  # reach stable.
+  # inputs.nixpkgs.url = "github:flox/nixpkgs/stable"; # TODO: uncomment this
 
   inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
   inputs.sqlite3pp.inputs.nixpkgs.follows = "nixpkgs";
@@ -84,18 +93,12 @@
       cpp-semver = final.callPackage ./pkgs/cpp-semver {};
     };
 
-    # Use a more recent version of process-compose
-    overlays.process-compose = final: prev: {
-      inherit (inputs.nixpkgs-process-compose.legacyPackages.${prev.system}) process-compose;
-    };
-
     # Aggregates all external dependency overlays before adding any of the
     # packages defined by this flake.
     overlays.deps = nixpkgs.lib.composeManyExtensions [
       overlays.nlohmann
       overlays.semver
       overlays.nix
-      overlays.process-compose
       sqlite3pp.overlays.default
       fenix.overlays.default
     ];

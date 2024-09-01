@@ -8,13 +8,18 @@
 # against `nix'.
 # This fixes that issue too.
 #
+# N.B. we select the "stable" revision in the full knowledge/expectation that
+# this will change out from underneath us over time. We do this along with a
+# commitment to continually build against the (flox) nixpkgs staging and
+# unstable branches in CI so that we will notified when upcoming upgrades of
+# nixVersions.stable upstream break our build.
 #
 # ---------------------------------------------------------------------------- #
 {
   nixVersions,
   stdenv,
 }:
-nixVersions.nix_2_17.overrideAttrs (prev: {
+nixVersions.stable.overrideAttrs (prev: {
   # Necessary for compiling with debug symbols
   inherit stdenv;
 
@@ -53,7 +58,7 @@ nixVersions.nix_2_17.overrideAttrs (prev: {
 
     Name: Nix
     Description: Nix Package Manager
-    Version: 2.17.1
+    Version: stable
     Requires: nix-store bdw-gc
     Libs: -L\''${libdir} -lnixfetchers
     Cflags: -isystem \''${includedir} -std=c++2a
