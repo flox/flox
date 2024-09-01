@@ -40,7 +40,7 @@ struct WrappedNixpkgsInputScheme : nix::fetchers::InputScheme
 
   /** @brief Convert a URL string into an input. */
   [[nodiscard]] std::optional<nix::fetchers::Input>
-  inputFromURL( const nix::ParsedURL & url ) const override;
+  inputFromURL( const nix::ParsedURL & url, bool requireTree ) const override;
 
   /** @brief Convert input to a URL representation. */
   [[nodiscard]] nix::ParsedURL

@@ -16,6 +16,7 @@
 #include <nix/config.hh>
 #include <nix/eval-cache.hh>
 #include <nix/eval-inline.hh> /**< for inline `allocValue', and `forceAttrs'. */
+#include <nix/eval-settings.hh>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
 #include <nix/flake/flakeref.hh>

@@ -344,10 +344,10 @@ lockFlakeInstallable( const nix::ref<nix::EvalState> & state,
                   }
                 return outputNamesSet;
               } },
-            e.raw() );
+            e.raw );
         },
       },
-      extendedOutputsSpec.raw() );
+      extendedOutputsSpec.raw );
   }
 
   std::string systemAttribute;

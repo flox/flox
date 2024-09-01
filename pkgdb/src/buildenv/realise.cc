@@ -15,6 +15,7 @@
 #include <nix/derived-path.hh>
 #include <nix/eval-cache.hh>
 #include <nix/eval-inline.hh>
+#include <nix/eval-settings.hh>
 #include <nix/eval.hh>
 #include <nix/flake/flake.hh>
 #include <nix/get-drvs.hh>
@@ -975,7 +976,7 @@ createContainerBuilder( nix::EvalState &       state,
   state.allowPath( environmentStorePath );
 
   // the derivation uses `builtins.storePath`
-  // to ensure that all store references of the enfironment
+  // to ensure that all store references of the environment
   // are included in the derivation/container.
   //
   // `builtins.storePath` however requires impure evaluation
