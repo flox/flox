@@ -341,10 +341,8 @@ jobs:
           - "aarch64-linux"
           - "aarch64-darwin"
         test-tags:
-          - "activate"
           - "containerize"
-          - "catalog"
-          - "!activate,!containerize,!catalog"
+          - "!containerize"
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
