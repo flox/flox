@@ -38,21 +38,12 @@
 
   # -------------------------------------------------------------------------- #
 
-  outputs = {
-    self,
-    nixpkgs,
-    sqlite3pp,
-    pre-commit-hooks,
-    crane,
-    fenix,
-    ...
-  } @ inputs: let
+  outputs = inputs: let
     # ------------------------------------------------------------------------ #
     # Temporarily use nixpkgs-process-compose
     nixpkgs.legacyPackages = {inherit (inputs.nixpkgs.legacyPackages) x86_64-linux x86_64-darwin aarch64-linux aarch64-darwin;};
     nixpkgs.lib = inputs.nixpkgs.lib;
   in rec {
-
     # Overlays
     # --------
     overlays.deps = nixpkgs.lib.composeManyExtensions [
@@ -71,64 +62,21 @@
 
         cpp-semver = final.callPackage ./pkgs/cpp-semver {};
       })
-      sqlite3pp.overlays.default
-      fenix.overlays.default
+      inputs.sqlite3pp.overlays.default
+      inputs.fenix.overlays.default
     ];
 
     # Packages defined in this repository.
     overlays.flox = final: prev: let
       callPackage = final.lib.callPackageWith (final
         // {
-          inherit inputs self;
+          inherit inputs; # passing in inputs... beware
+          inherit (inputs) self;
           pkgsFor = final;
         });
     in {
       # Generates a `.git/hooks/pre-commit' script.
-      pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
-        src = builtins.path {path = ./.;};
-        default_stages = ["manual" "push"];
-        hooks = {
-          alejandra.enable = true;
-          clang-format = {
-            enable = true;
-            types_or = final.lib.mkForce [
-              "c"
-              "c++"
-            ];
-          };
-          rustfmt = let
-            wrapper = final.symlinkJoin {
-              name = "rustfmt-wrapped";
-              paths = [final.rustfmt];
-              nativeBuildInputs = [final.makeWrapper];
-              postBuild = let
-                # Use nightly rustfmt
-                PATH = final.lib.makeBinPath [final.fenix.stable.cargo final.rustfmt];
-              in ''
-                wrapProgram $out/bin/cargo-fmt --prefix PATH : ${PATH};
-              '';
-            };
-          in {
-            enable = true;
-            entry = final.lib.mkForce "${wrapper}/bin/cargo-fmt fmt --all --manifest-path 'cli/Cargo.toml' -- --color always";
-          };
-          clippy.enable = true;
-          commitizen.enable = true;
-          shfmt.enable = false;
-          # shellcheck.enable = true; # disabled until we have time to fix all the warnings
-        };
-        settings = {
-          clippy.denyWarnings = true;
-          alejandra.verbosity = "quiet";
-          rust.cargoManifestPath = "cli/Cargo.toml";
-        };
-        tools = {
-          # use fenix provided clippy
-          clippy = final.rust-toolchain.clippy;
-          cargo = final.rust-toolchain.cargo;
-          clang-tools = final.clang-tools_16;
-        };
-      };
+      pre-commit-check = callPackage ./pkgs/pre-commit-check {inherit (inputs) pre-commit-hooks;};
 
       GENERATED_DATA = ./test_data/generated;
       MANUALLY_GENERATED = ./test_data/manually_generated;
@@ -143,27 +91,25 @@
       rustfmt = final.fenix.default.withComponents ["rustfmt"];
       rust-toolchain = final.fenix.stable;
 
-      rust-external-deps = callPackage ./pkgs/rust-external-deps { };
-      rust-internal-deps = callPackage ./pkgs/rust-internal-deps { };
+      rust-external-deps = callPackage ./pkgs/rust-external-deps {};
+      rust-internal-deps = callPackage ./pkgs/rust-internal-deps {};
 
       # (Linux-only) LD_AUDIT library for using dynamic libraries in Flox envs.
       ld-floxlib = callPackage ./pkgs/ld-floxlib {};
       flox-src = callPackage ./pkgs/flox-src {};
       flox-activation-scripts = callPackage ./pkgs/flox-activation-scripts {};
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
-      flox-watchdog = callPackage ./pkgs/flox-watchdog { }; # Flox Command Line Interface ( development build ).
-      flox-cli = callPackage ./pkgs/flox-cli { };
+      flox-watchdog = callPackage ./pkgs/flox-watchdog {}; # Flox Command Line Interface ( development build ).
+      flox-cli = callPackage ./pkgs/flox-cli {};
       flox-manpages = callPackage ./pkgs/flox-manpages {}; # Flox Command Line Interface Manpages
       flox = callPackage ./pkgs/flox {}; # Flox Command Line Interface ( production build ).
 
       # Wrapper scripts for running test suites.
-      flox-cli-tests = callPackage ./pkgs/flox-cli-tests { };
+      flox-cli-tests = callPackage ./pkgs/flox-cli-tests {};
     };
 
     # Composes dependency overlays and the overlay defined here.
-    overlays.default =
-      nixpkgs.lib.composeExtensions overlays.deps
-      overlays.flox;
+    overlays.default = nixpkgs.lib.composeExtensions overlays.deps overlays.flox;
 
     # ------------------------------------------------------------------------ #
 
@@ -175,49 +121,50 @@
 
     # ------------------------------------------------------------------------ #
 
-    checks = builtins.mapAttrs (system: pkgs:
-    {
-      inherit (pkgs) pre-commit-check;
-    }) pkgsContext;
+    checks = builtins.mapAttrs (system: pkgs: {inherit (pkgs) pre-commit-check;}) pkgsContext;
 
     # ------------------------------------------------------------------------ #
 
-    packages = builtins.mapAttrs (system: pkgs: {
-      inherit
-        (pkgs)
-        flox-activation-scripts
-        flox-pkgdb
-        flox-watchdog
-        flox-cli
-        flox-cli-tests
-        flox-manpages
-        flox
-        ld-floxlib
-        pre-commit-check
-        rust-external-deps
-        rust-internal-deps
-        ;
-      default = pkgs.flox;
-    }) pkgsContext;
+    packages =
+      builtins.mapAttrs (system: pkgs: {
+        inherit
+          (pkgs)
+          flox-activation-scripts
+          flox-pkgdb
+          flox-watchdog
+          flox-cli
+          flox-cli-tests
+          flox-manpages
+          flox
+          ld-floxlib
+          pre-commit-check
+          rust-external-deps
+          rust-internal-deps
+          ;
+        default = pkgs.flox;
+      })
+      pkgsContext;
 
     # ------------------------------------------------------------------------ #
-    devShells = builtins.mapAttrs (system: pkgsBase: let
-      pkgs = pkgsBase.extend (final: prev: {
-        flox-cli-tests = prev.flox-cli-tests.override {
-          PROJECT_TESTS_DIR = "/cli/tests";
-          PKGDB_BIN = null;
-          FLOX_BIN = null;
-          WATCHDOG_BIN = null;
-        };
-        flox-cli = prev.flox-cli.override {
-          flox-pkgdb = null;
-          flox-watchdog = null;
-        };
-        checksFor = checks.${final.system};
-      });
-    in {
-      default = pkgs.callPackage ./shells/default { };
-    }) pkgsContext;
+    devShells =
+      builtins.mapAttrs (system: pkgsBase: let
+        pkgs = pkgsBase.extend (final: prev: {
+          flox-cli-tests = prev.flox-cli-tests.override {
+            PROJECT_TESTS_DIR = "/cli/tests";
+            PKGDB_BIN = null;
+            FLOX_BIN = null;
+            WATCHDOG_BIN = null;
+          };
+          flox-cli = prev.flox-cli.override {
+            flox-pkgdb = null;
+            flox-watchdog = null;
+          };
+          checksFor = checks.${final.system};
+        });
+      in {
+        default = pkgs.callPackage ./shells/default {};
+      })
+      pkgsContext;
   }; # End `outputs'
 
   # -------------------------------------------------------------------------- #
