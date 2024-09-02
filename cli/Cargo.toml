@@ -61,7 +61,7 @@ sysinfo = "0.30.13"
 # TODO: review if we need this
 sys-info = "0.9"
 tempfile = "3.12.0"
-textwrap = { version = "0.16.0", features = ["terminal_size"] }
+textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "1"
 time = { version = "0.3", features = ["serde", "formatting"] }
 tokio = { version = "1", features = ["full"] }
