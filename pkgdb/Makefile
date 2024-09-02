@@ -359,8 +359,9 @@ ifdef ACTIVATION_SCRIPTS_PACKAGE_DIR
 	echo '$(ACTIVATION_SCRIPTS_PACKAGE_DIR)' > $@.new
 	( cmp $@ $@.new && rm $@.new ) || mv -f $@.new $@
 else
-  _rebuild_dirs = ../assets/activation-scripts ../pkgs/flox-activation-scripts
-  .ACTIVATION_SCRIPTS_PACKAGE_DIR: $(shell find $(_rebuild_dirs) -type f)
+  _rebuild_paths = ../flake.nix ../flake.lock \
+    ../assets/activation-scripts ../pkgs/flox-activation-scripts
+  .ACTIVATION_SCRIPTS_PACKAGE_DIR: $(shell find $(_rebuild_paths) -type f)
 	$(NIX) build --print-out-paths .#flox-activation-scripts > $@
 endif
 
