@@ -202,10 +202,11 @@ define BUILD_template =
   $(eval _version = 0.0.0)
   # Calculate name.
   $(eval _name = $(_pname)-$(_version))
-  # Short variable name for buildDependencies derived in the DEPENDS step.
+  # Variable for providing buildDependencies derived in the DEPENDS step
+  # to the Nix expression as a safely-quoted string.
   $(eval $(_pvarname)_buildDeps_arg = $(strip \
     $(if $($(_pvarname)_buildDeps),\
-      '["$(subst $(space),",$($(_pvarname)_buildDeps))"]')))
+      '["$(subst $(space)," ",$($(_pvarname)_buildDeps))"]')))
 
   # Set temp outpath of same strlen as eventual package storePath using the
   # 32-char hash previously derived from the package name, current working
