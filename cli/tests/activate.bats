@@ -984,6 +984,95 @@ EOF
   assert_output --partial "test_alias is an alias for echo testing"
 }
 
+# bats test_tags=activate,activate:rc:zsh
+@test "zsh: interactive activate respects history settings from dotfile" {
+  project_setup
+
+  # This should always work, even when Darwin sets a default in `/etc/zshrc`.
+  echo 'HISTFILE=${PROJECT_DIR}/.alt_history' >"$HOME/.zshrc.extra"
+  echo 'SHELL_SESSION_DIR=${PROJECT_DIR}/.alt_sessions' >>"$HOME/.zshrc.extra"
+
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 \
+    run expect "$TESTS_DIR/activate/histfile.exp" "$PROJECT_DIR"
+  assert_success
+  assert_line --partial "HISTFILE=$PROJECT_DIR/.alt_history"
+  assert_line --partial "SHELL_SESSION_DIR=$PROJECT_DIR/.alt_sessions"
+
+  # Additionally it should never be an immutable storepath.
+  refute_line --partial "HISTFILE=/nix/store/"
+  refute_line --partial "SHELL_SESSION_DIR=/nix/store/"
+}
+
+# bats test_tags=activate,activate:rc:zsh
+@test "zsh: interactive activate respects history settings from dotfile based on original ZDOTDIR" {
+  project_setup
+
+  # Mimic the default `/etc/zshrc` on Darwin prior to Nix being installed. We
+  # have to do this in `~/.zshrc` because we can't mock `/etc/zshrc`. However we
+  # apply the same `ZDOTDIR` logic to both, ensuring that it's not pointing at
+  # our immutable storepath.
+  echo 'HISTFILE=${ZDOTDIR:-$HOME}/.alt_history' >"$HOME/.zshrc.extra"
+  echo 'SHELL_SESSION_DIR=${ZDOTDIR:-$HOME}/.alt_sessions' >>"$HOME/.zshrc.extra"
+
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 \
+    run expect "$TESTS_DIR/activate/histfile.exp" "$PROJECT_DIR"
+  assert_success
+  assert_line --partial "HISTFILE=$HOME/.alt_history"
+  assert_line --partial "SHELL_SESSION_DIR=$HOME/.alt_sessions"
+
+  # Additionally it should never be an immutable storepath.
+  refute_line --partial "HISTFILE=/nix/store/"
+  refute_line --partial "SHELL_SESSION_DIR=/nix/store/"
+}
+
+# bats test_tags=activate,activate:rc:zsh
+@test "zsh: interactive activate respects history settings from environment variable where available" {
+  project_setup
+
+  # TODO: flox will set HOME if it doesn't match the home of the user with
+  # current euid. I'm not sure if we should change that, but for now just set
+  # USER to REAL_USER.
+  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 \
+    HISTFILE="$PROJECT_DIR/.alt_history" \
+    SHELL_SESSION_DIR="$PROJECT_DIR/.alt_sessions" \
+    run expect "$TESTS_DIR/activate/histfile.exp" "$PROJECT_DIR"
+  assert_success
+
+  # If the host configuration honours the environment variables then we do too.
+  #
+  # The majority of Linux distros don't ship with a default `/etc/zshrc` and will
+  # return our custom value. So we expect a custom value when using Flox.
+  #
+  # Darwin, with or without Nix, ships with a default `/etc/zshrc` that returns
+  # something other than our custom value. So we expect that default when using
+  # Flox.
+  CUSTOM_VALUE="/dev/null"
+  HISTFILE_DEFAULT="$(HISTFILE=$CUSTOM_VALUE zsh -ic 'echo $HISTFILE')"
+  SHELL_SESSION_DIR_DEFAULT="$(SHELL_SESSION_DIR=$CUSTOM_VALUE zsh -ic 'echo $SHELL_SESSION_DIR')"
+
+  if [[ "$HISTFILE_DEFAULT" == "$CUSTOM_VALUE" ]]; then
+    assert_line --partial "HISTFILE=${PROJECT_DIR}/.alt_history"
+  else
+    assert_line --partial "HISTFILE=${HISTFILE_DEFAULT}"
+  fi
+
+  if [[ "$SHELL_SESSION_DIR_DEFAULT=" == "$CUSTOM_VALUE" ]]; then
+    assert_line --partial "SHELL_SESSION_DIR=${PROJECT_DIR}/.alt_sessions"
+  else
+    assert_line --partial "SHELL_SESSION_DIR=${SHELL_SESSION_DEFAULT}"
+  fi
+
+  # Additionally it should never be an immutable storepath.
+  refute_line --partial "HISTFILE=/nix/store/"
+  refute_line --partial "SHELL_SESSION_DIR=/nix/store/"
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:envVar:bash
