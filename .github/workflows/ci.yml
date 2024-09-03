@@ -2,6 +2,29 @@ name: "CI"
 
 on:
   workflow_dispatch:
+    inputs:
+      enableUpterm:
+        description: "Enable the Upterm server for debugging workflows in-flight"
+        required: true
+        default: false
+        type: boolean
+      breakOnJob:
+        description: "Break on a specific job, to be used with the `enableUpterm` input"
+        required: false
+        type: choice
+        options:
+          - "changes"
+          - "pkgdb-dev"
+          - "cli-dev"
+          - "nix-build"
+          - "trigger-flox-installers-workflow"
+          - "report-failure"
+          - "nix-build-bats-tests"
+      allowedUptermUsers:
+        description: "Comma-separated list of GitHub users allowed to access the Upterm server"
+        required: false
+        type: string
+        default: "bryanhonof,tomberek,garbas"
   push:
     branches:
       - "main"
@@ -25,6 +48,14 @@ jobs:
     steps:
     # For pull requests it's not necessary to checkout the code
     - uses: "actions/checkout@v4"
+
+    - name: "Setup upterm session"
+      if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
+      uses: owenthereal/action-upterm@v1
+      with:
+        limit-access-to-actor: true
+        limit-access-to-users: ${{ inputs.allowedUptermUsers }}
+        wait-timeout-minutes: 15
 
     - uses: dorny/paths-filter@v3
       id: filter
@@ -66,6 +97,14 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
+
+      - name: "Setup upterm session"
+        if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
+        uses: owenthereal/action-upterm@v1
+        with:
+          limit-access-to-actor: true
+          limit-access-to-users: ${{ inputs.allowedUptermUsers }}
+          wait-timeout-minutes: 15
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -123,6 +162,14 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
+
+      - name: "Setup upterm session"
+        if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
+        uses: owenthereal/action-upterm@v1
+        with:
+          limit-access-to-actor: true
+          limit-access-to-users: ${{ inputs.allowedUptermUsers }}
+          wait-timeout-minutes: 15
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
@@ -198,6 +245,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: "Setup upterm session"
+        if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
+        uses: owenthereal/action-upterm@v1
+        with:
+          limit-access-to-actor: true
+          limit-access-to-users: ${{ inputs.allowedUptermUsers }}
+          wait-timeout-minutes: 15
+
       - name: "Setup"
         uses: "./.github/actions/common-setup"
         with:
@@ -264,6 +319,14 @@ jobs:
       - "nix-build"
 
     steps:
+      - name: "Setup upterm session"
+        if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
+        uses: owenthereal/action-upterm@v1
+        with:
+          limit-access-to-actor: true
+          limit-access-to-users: ${{ inputs.allowedUptermUsers }}
+          wait-timeout-minutes: 15
+
       - name: "Trigger flox-installers workflow"
         id: "trigger-workflow"
         uses: "convictional/trigger-workflow-and-wait@v1.6.5"
@@ -313,6 +376,14 @@ jobs:
       # TODO: enable these when deemed reliable - "nix-build-bats-tests"
 
     steps:
+      - name: "Setup upterm session"
+        if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
+        uses: owenthereal/action-upterm@v1
+        with:
+          limit-access-to-actor: true
+          limit-access-to-users: ${{ inputs.allowedUptermUsers }}
+          wait-timeout-minutes: 15
+
       - name: "Slack Notification"
         uses: "rtCamp/action-slack-notify@v2"
         env:
@@ -346,6 +417,14 @@ jobs:
     steps:
       - name: "Checkout"
         uses: "actions/checkout@v4"
+
+      - name: "Setup upterm session"
+        if: ${{ (true == inputs.enableUpterm) && (inputs.breakOnJob == github.job) }}
+        uses: owenthereal/action-upterm@v1
+        with:
+          limit-access-to-actor: true
+          limit-access-to-users: ${{ inputs.allowedUptermUsers }}
+          wait-timeout-minutes: 15
 
       - name: "Setup"
         uses: "./.github/actions/common-setup"
