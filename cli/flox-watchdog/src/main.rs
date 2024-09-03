@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -64,26 +65,36 @@ pub struct Cli {
     pub disable_metrics: bool,
 }
 
-#[instrument("watchdog",
-    skip_all,
-    fields(
-        pid = tracing::field::Empty,
-        registry = tracing::field::Empty,
-        dot_flox_hash = tracing::field::Empty,
-        socket = tracing::field::Empty,
-        log_dir = tracing::field::Empty))]
-fn main() -> Result<(), Error> {
-    // Initialization
+fn main() -> ExitCode {
     let args = Cli::parse();
+
+    // Initialization
     let log_file = &args
         .log_dir
         .as_ref()
         .map(|dir| dir.join(format!("watchdog.{}.log", args.pid)));
-    init_logger(log_file).context("failed to initialize logger")?;
-    if let Err(err) = ensure_process_group_leader() {
-        error!(%err, "failed to ensure watchdog is detached from terminal");
-    }
+
+    init_logger(log_file)
+        .context("failed to initialize logger")
+        .unwrap();
     let _sentry_guard = (!args.disable_metrics).then(init_sentry);
+
+    // Main
+    match run(args) {
+        Err(_) => ExitCode::FAILURE,
+        Ok(_) => ExitCode::SUCCESS,
+    }
+}
+
+#[instrument("watchdog",
+    err(Debug),
+    skip_all,
+    fields(pid = tracing::field::Empty,
+        registry = tracing::field::Empty,
+        dot_flox_hash = tracing::field::Empty,
+        socket = tracing::field::Empty,
+        log_dir = tracing::field::Empty))]
+fn run(args: Cli) -> Result<(), Error> {
     let span = tracing::Span::current();
     span.record("pid", args.pid);
     span.record("registry", traceable_path(&args.registry_path));
@@ -91,6 +102,8 @@ fn main() -> Result<(), Error> {
     span.record("socket", traceable_path(&args.socket_path));
     span.record("log_dir", maybe_traceable_path(&args.log_dir));
     debug!("starting");
+
+    ensure_process_group_leader().context("failed to ensure watchdog is detached from terminal")?;
 
     // Set the signal handler
     let should_clean_up = Arc::new(AtomicBool::new(false));
@@ -167,10 +180,7 @@ fn main() -> Result<(), Error> {
     // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
     // but there's not much we can do about that because we don't know who sent us one of those
     // signals or why.
-    if res.is_err() {
-        error!("received stop signal, exiting");
-        return res;
-    }
+    res.context("received stop signal, exiting without cleanup")?;
 
     // Now we proceed with cleanup assuming we've gotten a notification that the target process
     // has terminated.
