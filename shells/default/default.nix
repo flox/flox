@@ -17,6 +17,7 @@
   flox-watchdog,
   flox-pkgdb,
   flox-manpages,
+  stdenv,
   ci ? false,
   GENERATED_DATA ? ./../../test_data/generated,
   MANUALLY_GENERATED ? ./../../test_data/manually_generated,
@@ -45,11 +46,17 @@
       commitizen
       alejandra
       shfmt
-      mitmproxy
       yq
       cargo-nextest
       procps
       pstree
+    ]
+    ++ lib.optionals stdenv.isLinux [
+      # The python3Packages.mitmproxy-macos package is broken on mac:
+      #   nix-repl> legacyPackages.aarch64-darwin.python3Packages.mitmproxy-macos.meta.broken
+      #   true
+      # ... so only install it on Linux. It's only an optional dev dependency.
+      mitmproxy
     ];
 in
   mkShell (

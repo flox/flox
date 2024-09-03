@@ -13,9 +13,16 @@
     "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
   ];
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/release-23.11";
+  # XXX Temporary: lock process-compose to v1.9 until we can update flox to use
+  # the latest version. v1.9 did not appear on any stable snapshots so we instead
+  # select the most recent staging branch commit on which it appeared.
+  inputs.nixpkgs-process-compose.url = "github:flox/nixpkgs/staging.20240817";
+  inputs.nixpkgs-process-compose.flake = false;
 
-  inputs.nixpkgs-process-compose.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  # Roll forward monthly as **our** stable branch advances. Note that we also
+  # build against the staging branch in CI to detect regressions before they
+  # reach stable.
+  inputs.nixpkgs.url = "github:flox/nixpkgs/stable";
 
   inputs.sqlite3pp.url = "github:aakropotkin/sqlite3pp";
   inputs.sqlite3pp.inputs.nixpkgs.follows = "nixpkgs";
@@ -40,62 +47,30 @@
     fenix,
     ...
   } @ inputs: let
-    # Given a function `fn' which takes system names as an argument, produce an
-    # attribute set whose keys are system names, and values are the result of
-    # applying that system name to `fn'.
-    eachDefaultSystemMap = let
-      defaultSystems = [
-        "x86_64-linux"
-        "aarch64-linux"
-        "x86_64-darwin"
-        "aarch64-darwin"
-      ];
-    in
-      fn: let
-        proc = system: {
-          name = system;
-          value = fn system;
-        };
-      in
-        builtins.listToAttrs (map proc defaultSystems);
-
     # ------------------------------------------------------------------------ #
+    # Temporarily use nixpkgs-process-compose
+    nixpkgs.legacyPackages = {inherit (inputs.nixpkgs.legacyPackages) x86_64-linux x86_64-darwin aarch64-linux aarch64-darwin;};
+    nixpkgs.lib = inputs.nixpkgs.lib;
+  in rec {
 
     # Overlays
     # --------
-
-    # Add IWYU pragmas to `nlohmann_json'
-    # ( _include what you use_ extensions to headers for static analysis )
-    overlays.nlohmann = final: prev: {
-      nlohmann_json = final.callPackage ./pkgs/nlohmann_json {
-        inherit (prev) nlohmann_json;
-      };
-    };
-
-    # Use nix@2.17
-    overlays.nix = final: prev: {
-      # Uncomment to compile Nix with debug symbols on Linux
-      # nix = final.enableDebugging (final.callPackage ./pkgs/nix {});
-      nix = final.callPackage ./pkgs/nix {};
-    };
-
-    # Use cpp-semver
-    overlays.semver = final: prev: {
-      cpp-semver = final.callPackage ./pkgs/cpp-semver {};
-    };
-
-    # Use a more recent version of process-compose
-    overlays.process-compose = final: prev: {
-      inherit (inputs.nixpkgs-process-compose.legacyPackages.${prev.system}) process-compose;
-    };
-
-    # Aggregates all external dependency overlays before adding any of the
-    # packages defined by this flake.
     overlays.deps = nixpkgs.lib.composeManyExtensions [
-      overlays.nlohmann
-      overlays.semver
-      overlays.nix
-      overlays.process-compose
+      (final: prev: {
+        process-compose = final.callPackage (inputs.nixpkgs-process-compose + "/pkgs/applications/misc/process-compose") {};
+
+        # Add IWYU pragmas to `nlohmann_json'
+        # ( _include what you use_ extensions to headers for static analysis )
+        nlohmann_json = final.callPackage ./pkgs/nlohmann_json {
+          inherit (prev) nlohmann_json;
+        };
+
+        # Uncomment to compile Nix with debug symbols on Linux
+        # nix = final.enableDebugging (final.callPackage ./pkgs/nix {});
+        nix = final.callPackage ./pkgs/nix {};
+
+        cpp-semver = final.callPackage ./pkgs/cpp-semver {};
+      })
       sqlite3pp.overlays.default
       fenix.overlays.default
     ];
@@ -107,16 +82,6 @@
           inherit inputs self;
           pkgsFor = final;
         });
-
-      # We depend on several nightly features of rustfmt,
-      # so pick the current nightly version.
-      # We're using `default.withComponents`
-      # which _should_ only pull the nightly rustfmt component.
-      # Alternatively, we could use nixpkgs.rustfmt,
-      # and rebuild with a (stable) fenix toolchain and `asNightly = true`,
-      # which would avoid the need to pull another channel altogether.
-      rustfmt-nightly = final.fenix.default.withComponents ["rustfmt"];
-      rust-toolchain = final.fenix.stable;
     in {
       # Generates a `.git/hooks/pre-commit' script.
       pre-commit-check = pre-commit-hooks.lib.${final.system}.run {
@@ -134,11 +99,11 @@
           rustfmt = let
             wrapper = final.symlinkJoin {
               name = "rustfmt-wrapped";
-              paths = [rustfmt-nightly];
+              paths = [final.rustfmt];
               nativeBuildInputs = [final.makeWrapper];
               postBuild = let
                 # Use nightly rustfmt
-                PATH = final.lib.makeBinPath [final.fenix.stable.cargo rustfmt-nightly];
+                PATH = final.lib.makeBinPath [final.fenix.stable.cargo final.rustfmt];
               in ''
                 wrapProgram $out/bin/cargo-fmt --prefix PATH : ${PATH};
               '';
@@ -159,8 +124,8 @@
         };
         tools = {
           # use fenix provided clippy
-          clippy = rust-toolchain.clippy;
-          cargo = rust-toolchain.cargo;
+          clippy = final.rust-toolchain.clippy;
+          cargo = final.rust-toolchain.cargo;
           clang-tools = final.clang-tools_16;
         };
       };
@@ -168,41 +133,31 @@
       GENERATED_DATA = ./test_data/generated;
       MANUALLY_GENERATED = ./test_data/manually_generated;
 
-      # Package activation scripts.
-      flox-activation-scripts = callPackage ./pkgs/flox-activation-scripts {};
+      # We depend on several nightly features of rustfmt,
+      # so pick the current nightly version.
+      # We're using `default.withComponents`
+      # which _should_ only pull the nightly rustfmt component.
+      # Alternatively, we could use nixpkgs.rustfmt,
+      # and rebuild with a (stable) fenix toolchain and `asNightly = true`,
+      # which would avoid the need to pull another channel altogether.
+      rustfmt = final.fenix.default.withComponents ["rustfmt"];
+      rust-toolchain = final.fenix.stable;
 
-      flox-src = callPackage ./pkgs/flox-src {};
-
-      # Package Database Utilities: scrape, search, and resolve.
-      flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
-
-      # Flox Command Line Interface ( development build ).
-      flox-watchdog = callPackage ./pkgs/flox-watchdog {
-        rust-toolchain = rust-toolchain;
-        rustfmt = rustfmt-nightly;
-      };
-
-      flox-cli = callPackage ./pkgs/flox-cli {
-        rust-toolchain = rust-toolchain;
-        rustfmt = rustfmt-nightly;
-      };
-
-      # Flox Command Line Interface Manpages
-      flox-manpages = callPackage ./pkgs/flox-manpages {};
-
-      # Flox Command Line Interface ( production build ).
-      flox = callPackage ./pkgs/flox {};
-
-      # Wrapper scripts for running test suites.
-      flox-cli-tests =
-        callPackage ./pkgs/flox-cli-tests {
-        };
+      rust-external-deps = callPackage ./pkgs/rust-external-deps { };
+      rust-internal-deps = callPackage ./pkgs/rust-internal-deps { };
 
       # (Linux-only) LD_AUDIT library for using dynamic libraries in Flox envs.
       ld-floxlib = callPackage ./pkgs/ld-floxlib {};
+      flox-src = callPackage ./pkgs/flox-src {};
+      flox-activation-scripts = callPackage ./pkgs/flox-activation-scripts {};
+      flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
+      flox-watchdog = callPackage ./pkgs/flox-watchdog { }; # Flox Command Line Interface ( development build ).
+      flox-cli = callPackage ./pkgs/flox-cli { };
+      flox-manpages = callPackage ./pkgs/flox-manpages {}; # Flox Command Line Interface Manpages
+      flox = callPackage ./pkgs/flox {}; # Flox Command Line Interface ( production build ).
 
-      rust-external-deps = callPackage ./pkgs/rust-external-deps {rust-toolchain = rust-toolchain;};
-      rust-internal-deps = callPackage ./pkgs/rust-internal-deps {rust-toolchain = rust-toolchain;};
+      # Wrapper scripts for running test suites.
+      flox-cli-tests = callPackage ./pkgs/flox-cli-tests { };
     };
 
     # Composes dependency overlays and the overlay defined here.
@@ -216,24 +171,18 @@
     # This is exposed as an output later; but we don't use the name
     # `legacyPackages' to avoid checking the full closure with
     # `nix flake check' and `nix search'.
-    pkgsFor = eachDefaultSystemMap (system: let
-      base = builtins.getAttr system nixpkgs.legacyPackages;
-    in
-      base.extend overlays.default);
+    pkgsContext = builtins.mapAttrs (system: pkgs: pkgs.extend overlays.default) nixpkgs.legacyPackages;
 
     # ------------------------------------------------------------------------ #
 
-    checks = eachDefaultSystemMap (system: let
-      pkgs = builtins.getAttr system pkgsFor;
-    in {
+    checks = builtins.mapAttrs (system: pkgs:
+    {
       inherit (pkgs) pre-commit-check;
-    });
+    }) pkgsContext;
 
     # ------------------------------------------------------------------------ #
 
-    packages = eachDefaultSystemMap (system: let
-      pkgs = builtins.getAttr system pkgsFor;
-    in {
+    packages = builtins.mapAttrs (system: pkgs: {
       inherit
         (pkgs)
         flox-activation-scripts
@@ -249,13 +198,10 @@
         rust-internal-deps
         ;
       default = pkgs.flox;
-    });
-    # ------------------------------------------------------------------------ #
-  in {
-    inherit overlays packages pkgsFor checks;
+    }) pkgsContext;
 
-    devShells = eachDefaultSystemMap (system: let
-      pkgsBase = builtins.getAttr system pkgsFor;
+    # ------------------------------------------------------------------------ #
+    devShells = builtins.mapAttrs (system: pkgsBase: let
       pkgs = pkgsBase.extend (final: prev: {
         flox-cli-tests = prev.flox-cli-tests.override {
           PROJECT_TESTS_DIR = "/cli/tests";
@@ -267,13 +213,11 @@
           flox-pkgdb = null;
           flox-watchdog = null;
         };
+        checksFor = checks.${final.system};
       });
-      checksFor = builtins.getAttr system checks;
     in {
-      default = pkgs.callPackage ./shells/default {
-        inherit (checksFor) pre-commit-check;
-      };
-    });
+      default = pkgs.callPackage ./shells/default { };
+    }) pkgsContext;
   }; # End `outputs'
 
   # -------------------------------------------------------------------------- #
