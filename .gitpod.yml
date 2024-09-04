@@ -1,0 +1,6 @@
+# Borrowed from https://github.com/gitpod-io/template-nix/blob/23e258d392bee430e713638de148e566a90e2b00/.gitpod.yml
+image:
+  file: .gitpod.Dockerfile
+vscode:
+  extensions:
+    - bbenoist.Nix
