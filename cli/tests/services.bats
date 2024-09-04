@@ -1496,20 +1496,17 @@ EOF
 
   SCRIPT="$(cat << "EOF"
     set -euo pipefail
+    source "${TESTS_DIR}/services/register_cleanup.sh"
 
-    sleep 0.1 # small delay to let the services start
-    overmind status
+    timeout 2 bash -c "while ! overmind status; do sleep .1; done"
 
     "$FLOX_BIN" services status
     "$FLOX_BIN" services stop
-    sleep 0.1 # small delay to make sure services have stopped
 EOF
   )"
 
-  run "$FLOX_BIN" activate -s -- bash -c "$SCRIPT"
-  assert_success
-  run [ ! -e "$PWD/overmind.sock" ]
-  assert_success
+  "$FLOX_BIN" activate -s -- bash -c "$SCRIPT"
+  timeout 2 bash -c "while [ -e "$PWD/overmind.sock" ]; do sleep .1; done"
 }
 
 @test "activate: picks up changes after environment modification when all services have stopped" {
