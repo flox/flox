@@ -1,6 +1,7 @@
 {
   flox-pkgdb,
   gitMinimal,
+  gnumake,
   inputs,
   coreutils,
   lib,
@@ -10,6 +11,7 @@
   targetPlatform,
   rust-external-deps,
   flox-src,
+  flox-package-builder,
 }: let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
 
@@ -26,6 +28,11 @@
       if flox-pkgdb == null
       then "pkgdb"
       else "${flox-pkgdb}/bin/pkgdb";
+
+    # todo: provide this in devshells via an updatable path
+    FLOX_BUILD_MK = "${flox-package-builder}/libexec/flox-build.mk";
+
+    GNUMAKE_BIN = "${gnumake}/bin/make";
 
     SLEEP_BIN = "${coreutils}/bin/sleep";
 
