@@ -47,7 +47,7 @@ The produced container however can also run on macOS.
 
 `-o`, `--output`
 :   Write the container to `<path>`
-    (default: `./<environment-name>-container.tar.gz`)
+    (default: `./<environment-name>-container.tar`)
     If `<path>` is `-`, writes to `stdout`.
 
 ```{.include}
@@ -60,8 +60,8 @@ The produced container however can also run on macOS.
 Create a container image file and load it into Docker:
 
 ```
-$ flox containerize -o ./mycontainer.tar.gz
-$ docker load -i ./mycontainer.tar.gz
+$ flox containerize -o ./mycontainer.tar
+$ docker load -i ./mycontainer.tar
 ```
 
 Pipe the image into Docker directly:

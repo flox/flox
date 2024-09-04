@@ -105,24 +105,6 @@ function skip_if_linux() {
 }
 
 # bats test_tags=containerize:default-to-file
-@test "container is written to a file by default" {
-  skip_if_not_linux
-
-  env_setup_pkgdb
-
-  run "$FLOX_BIN" containerize
-  assert_success
-
-  assert [ -f "test-container.tar.gz" ] # <env-name>-container.tar.gz by default
-
-  run which podman
-
-  run podman load -i test-container.tar.gz
-  assert_success
-  assert_line --partial "Loaded image:"
-}
-
-# bats test_tags=containerize:default-to-file
 @test "catalog: container is written to a file by default" {
   skip_if_not_linux
 
@@ -131,17 +113,18 @@ function skip_if_linux() {
   run "$FLOX_BIN" containerize
   assert_success
 
-  assert [ -f "test-container.tar.gz" ] # <env-name>-container.tar.gz by default
+  assert [ -f "test-container.tar" ] # <env-name>-container.tar by default
 
   run which podman
 
-  run podman load -i test-container.tar.gz
+  run podman load -i test-container.tar
   assert_success
   assert_line --partial "Loaded image:"
 }
 
 # bats test_tags=containerize:piped-to-stdout
 @test "catalog: container is written to stdout when '-o -' is passed" {
+  skip "duplicate of next test"
   skip_if_not_linux
 
   env_setup_catalog
@@ -152,7 +135,7 @@ function skip_if_linux() {
 }
 
 # bats test_tags=containerize:run-container-i
-@test "catalog: container can be run with 'podman/docker run -i'" {
+@test "catalog: container can be run with 'podman/docker run' with/without -i'" {
   skip_if_not_linux
 
   env_setup_catalog
@@ -183,15 +166,8 @@ function skip_if_linux() {
   store_path_line="$(($n_stderr_lines - 2))"
   assert_regex "${stderr_lines[$store_path_line]}" "\/nix\/store\/.*\/bin\/hello"
   assert_equal "${stderr_lines[$hello_line]}" "Hello, world!"
-}
 
-# bats test_tags=containerize:run-container-no-i
-@test "catalog: container can be run with 'podman/docker run'" {
-  skip_if_not_linux
-
-  env_setup_catalog
-
-  CONTAINER_ID="$("$FLOX_BIN" containerize -o - | podman load | sed -nr 's/^Loaded image: (.*)$/\1/p')"
+  # Next, test without "-i'
   run --separate-stderr podman run "$CONTAINER_ID" -c 'echo $foo'
   assert_success
 

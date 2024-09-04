@@ -37,7 +37,7 @@ impl Containerize {
             Some(output) => output,
             None => std::env::current_dir()
                 .context("Could not get current directory")?
-                .join(format!("{}-container.tar.gz", env.name())),
+                .join(format!("{}-container.tar", env.name())),
         };
 
         let (output, output_name): (Box<dyn Write + Send>, String) =
