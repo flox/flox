@@ -27,8 +27,6 @@ mod stop;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ServicesCommandsError {
-    #[error("Services are not currently supported for remote environments.")]
-    RemoteEnvsNotSupported,
     #[error(
         "Cannot {action} services for an environment that is not activated.
 
@@ -94,14 +92,11 @@ pub struct ServicesEnvironment {
 impl ServicesEnvironment {
     /// Create a [ServicesEnvironment] from a [ConcreteEnvironment].
     ///
-    /// Returns an error if the environment is remote or doesn't support services.
+    /// Returns an error if the environment doesn't support services.
     pub fn from_concrete_environment(
         flox: &Flox,
         environment: ConcreteEnvironment,
     ) -> Result<Self> {
-        if let ConcreteEnvironment::Remote(_) = environment {
-            return Err(ServicesCommandsError::RemoteEnvsNotSupported.into());
-        }
         let socket = environment
             .dyn_environment_ref()
             .services_socket_path(flox)?;

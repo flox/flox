@@ -12,7 +12,7 @@ flox-services-status - display the status of services
 
 ```
 flox [<general-options>] services status
-     [-d=<path>]
+     [-d=<path> | -r=<owner/name>]
      [--json]
      [<name>] ...
 ```
@@ -36,6 +36,7 @@ does not exist.
     object on its own line.
 
 ```{.include}
+./include/environment-options.md
 ./include/general-options.md
 ```
 

@@ -122,7 +122,6 @@ setup_start_counter_services() {
 #
 #   - logs: providers/services.rs
 #   - status: providers/services.rs
-#   - remote environments: tests/environment-remotes.bats
 #
 # ---------------------------------------------------------------------------- #
 
@@ -1043,6 +1042,51 @@ EOF
     fi
 EOF
   )
+}
+
+# ---------------------------------------------------------------------------- #
+
+@test "remote: only have a single instance of services" {
+  setup_sleeping_services
+  floxhub_setup "flox"
+  "$FLOX_BIN" push --owner "$OWNER"
+  assert_success
+
+  mkfifo started finished
+  "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    echo > started
+    timeout 2 cat finished
+EOF
+  ) &
+  timeout 2 cat started
+
+  run "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash -c \
+    'echo > finished'
+  assert_success
+  assert_output --partial "⚠️  Skipped starting services, services are already running"
+}
+
+@test "remote: can interact with services from outside the activation" {
+  setup_sleeping_services
+  floxhub_setup "flox"
+  "$FLOX_BIN" push --owner "$OWNER"
+  assert_success
+
+  mkfifo started finished
+  "$FLOX_BIN" activate --start-services -r "${OWNER}/${PROJECT_NAME}" -- bash <(cat <<'EOF'
+    source "${TESTS_DIR}/services/register_cleanup.sh"
+    echo > started
+    timeout 2 cat finished
+EOF
+  ) &
+  timeout 2 cat started
+
+  run "$FLOX_BIN" services status -r "${OWNER}/${PROJECT_NAME}"
+  assert_success
+  assert_output --regexp "one +Running"
+  assert_output --regexp "two +Running"
+  echo > finished
 }
 
 # ---------------------------------------------------------------------------- #

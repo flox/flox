@@ -12,7 +12,7 @@ flox-services-restart - restart running services
 
 ```
 flox [<general-options>] services restart
-     [-d=<path>]
+     [-d=<path> | -r=<owner/name>]
      [<name>] ...
 ```
 
@@ -46,6 +46,7 @@ An error is displayed if the specified service does not exist.
 :   The name(s) of the services to restart.
 
 ```{.include}
+./include/environment-options.md
 ./include/general-options.md
 ```
 

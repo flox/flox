@@ -90,10 +90,13 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
    otherwise a warning will displayed and activation will continue.
 
    This flag is currently incompatible with "in-place" activations and remote
-   environnments, but these features will be added in the future.
+   environments, but these features will be added in the future.
 
    The services started with this flag will be cleaned up once the last
    activation of this environment terminates.
+
+   A remote environment can only have a single set of running services,
+   regardless of how many times the environment is activated concurrently.
 
 
 ```{.include}
