@@ -12,7 +12,7 @@ flox-services-restart - restart running services
 
 ```
 flox [<general-options>] services restart
-     [ -d=<path> ]
+     [-d=<path>]
      [<name>] ...
 ```
 

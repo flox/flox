@@ -12,7 +12,7 @@ flox-services-start - start services
 
 ```
 flox [<general-options>] services start
-     [ -d=<path> ]
+     [-d=<path>]
      [<name>] ...
 ```
 

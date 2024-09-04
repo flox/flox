@@ -12,9 +12,9 @@ flox-services-logs - show logs of services
 
 ```
 flox [<general-options>] services logs
-     [ -d=<path> ]
-     [ --follow ]
-     [ -n=<num> ]
+     [-d=<path>]
+     [--follow]
+     [-n=<num>]
      [<name>] ...
 ```
 

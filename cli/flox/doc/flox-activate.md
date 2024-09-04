@@ -15,7 +15,7 @@ flox [<general-options>] activate
      [-d=<path> | -r=<owner>/<name>]
      [-t]
      [--print-script]
-     [ -- <command> [<arguments>]]
+     [-- <command> [<arguments>]]
 ```
 
 # DESCRIPTION

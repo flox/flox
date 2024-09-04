@@ -12,8 +12,8 @@ flox-services-status - display the status of services
 
 ```
 flox [<general-options>] services status
-     [ -d=<path> ]
-     [ --json ]
+     [-d=<path>]
+     [--json]
      [<name>] ...
 ```
 
