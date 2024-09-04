@@ -12,7 +12,7 @@ flox-services-start - start services
 
 ```
 flox [<general-options>] services start
-     [-d=<path>]
+     [-d=<path> | -r=<owner/name>]
      [<name>] ...
 ```
 
@@ -32,6 +32,9 @@ has activated, so the services and your shell may have different environment
 variables or values. To ensure that your shell and the services have the same
 environment, reactivate your environment after making edits to the manifest.
 
+A remote environment can only have a single set of running services, regardless
+of how many times the environment is activated concurrently.
+
 # OPTIONS
 
 `-d`, `--dir`
@@ -41,6 +44,7 @@ environment, reactivate your environment after making edits to the manifest.
 :   The name(s) of the services to start.
 
 ```{.include}
+./include/environment-options.md
 ./include/general-options.md
 ```
 

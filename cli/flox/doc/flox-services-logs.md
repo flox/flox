@@ -12,7 +12,7 @@ flox-services-logs - show logs of services
 
 ```
 flox [<general-options>] services logs
-     [-d=<path>]
+     [-d=<path> | -r=<owner/name>]
      [--follow]
      [-n=<num>]
      [<name>] ...
@@ -52,6 +52,7 @@ An error will be returned if a specified service does not exist.
     will be displayed but the `--follow` flag is required.
 
 ```{.include}
+./include/environment-options.md
 ./include/general-options.md
 ```
 

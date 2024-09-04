@@ -12,7 +12,7 @@ flox-services-stop - stop running services
 
 ```
 flox [<general-options>] services stop
-     [-d=<path>]
+     [-d=<path> | -r=<owner/name>]
      [<name>] ...
 ```
 
@@ -40,6 +40,7 @@ non-zero exit code will be returned.
 :   The name(s) of the services to stop.
 
 ```{.include}
+./include/environment-options.md
 ./include/general-options.md
 ```
 
