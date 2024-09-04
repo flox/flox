@@ -98,6 +98,9 @@
       ld-floxlib = callPackage ./pkgs/ld-floxlib {};
       flox-src = callPackage ./pkgs/flox-src {};
       flox-activation-scripts = callPackage ./pkgs/flox-activation-scripts {};
+      flox-package-builder = callPackage ./pkgs/flox-package-builder {};
+
+      # Package Database Utilities: scrape, search, and resolve.
       flox-pkgdb = callPackage ./pkgs/flox-pkgdb {};
       flox-watchdog = callPackage ./pkgs/flox-watchdog {}; # Flox Command Line Interface ( development build ).
       flox-cli = callPackage ./pkgs/flox-cli {};
@@ -131,6 +134,7 @@
           (pkgs)
           flox-activation-scripts
           flox-pkgdb
+          flox-package-builder
           flox-watchdog
           flox-cli
           flox-cli-tests
