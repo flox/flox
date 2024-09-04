@@ -6,9 +6,12 @@ USER root
 
 # Install Nix
 RUN addgroup --system nixbld \
-  && adduser gitpod nixbld \
-  && for i in $(seq 1 32); do useradd -ms /bin/bash nixbld$i &&  adduser nixbld$i nixbld; done \
-  && mkdir -m 0755 /nix && chown gitpod /nix -R \
+	&& adduser gitpod nixbld \
+	&& for i in $(seq 1 32); do useradd -ms /bin/bash nixbld$i &&  adduser nixbld$i nixbld; done \
+	&& mkdir -m 0755 /nix && chown gitpod /nix -R \
+
+RUN sudo chown gitpod /nix/store \
+  	&& sudo chown gitpod /nix/var -R
 
 # Install Flox
 CMD /bin/bash -l
@@ -19,6 +22,3 @@ WORKDIR /home/gitpod
 RUN wget https://downloads.flox.dev/by-env/stable/deb/flox.x86_64-linux.deb \
 	&& sudo dpkg -i ./flox.x86_64-linux.deb
 
-RUN
-  sudo chown gitpod /nix/store \
-  && sudo chown gitpod /nix/var -R
