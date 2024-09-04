@@ -12,7 +12,7 @@ flox-services-stop - stop running services
 
 ```
 flox [<general-options>] services stop
-     [ -d=<path> ]
+     [-d=<path>]
      [<name>] ...
 ```
 
