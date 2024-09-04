@@ -15,7 +15,7 @@ flox-containerize - export an environment as a container image
 # SYNOPSIS
 
 ```
-flox [ `<general-options>` ] containerize
+flox [<general-options>] containerize
      [-d=<path> | -r=<owner/name>]
      [-o=<path>]
 ```
