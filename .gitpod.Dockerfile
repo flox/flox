@@ -8,7 +8,7 @@ USER root
 RUN addgroup --system nixbld \
 	&& adduser gitpod nixbld \
 	&& for i in $(seq 1 32); do useradd -ms /bin/bash nixbld$i &&  adduser nixbld$i nixbld; done \
-	&& mkdir -m 0755 /nix && chown gitpod /nix -R \
+	&& mkdir -m 0755 /nix && sudo chown gitpod /nix -R
 
 RUN sudo chown gitpod /nix/store \
   	&& sudo chown gitpod /nix/var -R
