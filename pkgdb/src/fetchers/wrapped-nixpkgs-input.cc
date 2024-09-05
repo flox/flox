@@ -293,8 +293,9 @@ WrappedNixpkgsInputScheme::inputFromAttrs(
  *        `flox-nixpkgs:v<RULES-VERSION>/owner/<REV-OR-REF>`.
  */
 std::optional<nix::fetchers::Input>
-WrappedNixpkgsInputScheme::inputFromURL( const nix::ParsedURL & url,
-                                         bool requireTree ) const
+WrappedNixpkgsInputScheme::inputFromURL(
+  const nix::ParsedURL & url,
+  bool /* requireTree ( unused ) */ ) const
 {
   if ( url.scheme != this->type() ) { return std::nullopt; }
 
