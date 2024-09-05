@@ -380,6 +380,7 @@ ServiceDescriptor ::= {
 , vars       = null | Map[STRING, STRING]
 , is-daemon  = null | BOOL
 , shutdown   = null | Shutdown
+, systems    = null | [<STRING>, ...]
 }
 
 Shutdown ::= {
@@ -417,6 +418,10 @@ Shutdown ::= {
     shutdown command to run instead of relying on the default behavior of
     sending a SIGTERM to the service. This field is required if the `is-daemon`
     field is `true`.
+
+`systems`
+:   An optional list of systems on which to run this service.
+    If omitted, the service is not restricted.
 
 ## `[options]`
 

@@ -259,7 +259,7 @@ impl RawManifest {
                   # This is a Flox environment manifest.
                   # Visit flox.dev/docs/concepts/manifest/
                   # or see flox-edit(1), manifest.toml(5) for more information.
-                  # 
+                  #
                   # Flox manifest version managed by Flox CLI
                   {}"#,
                 decor.prefix().and_then(|raw_str| raw_str.as_str()).unwrap_or("")})
@@ -858,6 +858,8 @@ pub struct ManifestServiceDescriptor {
     pub is_daemon: Option<bool>,
     /// How to shut down the service
     pub shutdown: Option<ManifestServiceShutdown>,
+    /// Systems to allow running the service on
+    pub systems: Option<Vec<System>>,
 }
 
 impl ManifestServices {
@@ -1503,7 +1505,7 @@ pub(super) mod test {
             # This is a Flox environment manifest.
             # Visit flox.dev/docs/concepts/manifest/
             # or see flox-edit(1), manifest.toml(5) for more information.
-            # 
+            #
             # Flox manifest version managed by Flox CLI
             version = 1
 
@@ -1585,7 +1587,7 @@ pub(super) mod test {
             # This is a Flox environment manifest.
             # Visit flox.dev/docs/concepts/manifest/
             # or see flox-edit(1), manifest.toml(5) for more information.
-            # 
+            #
             # Flox manifest version managed by Flox CLI
             version = 1
 
@@ -1671,7 +1673,7 @@ pub(super) mod test {
             # This is a Flox environment manifest.
             # Visit flox.dev/docs/concepts/manifest/
             # or see flox-edit(1), manifest.toml(5) for more information.
-            # 
+            #
             # Flox manifest version managed by Flox CLI
             version = 1
 
@@ -1753,7 +1755,7 @@ pub(super) mod test {
             # This is a Flox environment manifest.
             # Visit flox.dev/docs/concepts/manifest/
             # or see flox-edit(1), manifest.toml(5) for more information.
-            # 
+            #
             # Flox manifest version managed by Flox CLI
             version = 1
 
