@@ -331,11 +331,11 @@ impl ProcessStates {
     /// Note that this strips out our `flox_never_exit` process.
     pub fn read(socket: impl AsRef<Path>) -> Result<ProcessStates, ServiceError> {
         let mut cmd = base_process_compose_command(socket.as_ref());
-        let output = cmd
-            .arg("list")
-            .args(["--output", "json"])
-            .output()
-            .map_err(ServiceError::ProcessComposeCmd)?;
+        cmd.arg("list").args(["--output", "json"]);
+
+        debug!(cmd = %cmd.display(), "running process-compose process list");
+
+        let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
         if !output.status.success() {
             return Err(ServiceError::from_process_compose_log(
                 String::from_utf8_lossy(&output.stderr),
@@ -395,11 +395,11 @@ pub fn stop_services(
     tracing::debug!(names = names.join(","), "stopping services");
 
     let mut cmd = base_process_compose_command(socket);
-    let output = cmd
-        .arg("stop")
-        .args(names)
-        .output()
-        .map_err(ServiceError::ProcessComposeCmd)?;
+    cmd.arg("stop").args(&names);
+
+    debug!(cmd = %cmd.display(), services = ?names, "stopping services");
+
+    let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
 
     if output.status.success() {
         tracing::debug!("services stopped");
@@ -421,14 +421,14 @@ pub fn start_service(socket: impl AsRef<Path>, name: impl AsRef<str>) -> Result<
     tracing::debug!(%name, "starting service");
 
     let mut cmd = base_process_compose_command(socket);
-    let output = cmd
-        .arg("start")
-        .arg(name)
-        .output()
-        .map_err(ServiceError::ProcessComposeCmd)?;
+    cmd.arg("start").arg(name);
+
+    debug!(cmd = %cmd.display(), service = name, "startig service");
+
+    let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
 
     if output.status.success() {
-        tracing::debug!("service started");
+        debug!("service started");
         Ok(())
     } else {
         // Note that process compose treats an already running service as an
@@ -452,10 +452,11 @@ pub fn restart_service(
     tracing::debug!(name = name.as_ref().to_string(), "restarting service");
 
     let mut cmd = base_process_compose_command(socket);
-    let output = cmd
-        .args(["restart", name.as_ref()])
-        .output()
-        .map_err(ServiceError::ProcessComposeCmd)?;
+    cmd.args(["restart", name.as_ref()]);
+
+    debug!(command = %cmd.display(), service = name.as_ref(), "restarting service");
+
+    let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
 
     if output.status.success() {
         tracing::debug!("service restarted");
@@ -473,6 +474,9 @@ pub fn process_compose_down(socket_path: impl AsRef<Path>) -> Result<(), Service
     cmd.arg("--unix-socket");
     cmd.arg(socket_path.as_ref());
     cmd.env("NO_COLOR", "1");
+
+    debug!(command = %cmd.display(), "running process-compose down");
+
     let output = cmd.output().map_err(ServiceError::ProcessComposeCmd)?;
     if output.status.success() {
         Ok(())
@@ -702,6 +706,11 @@ impl ProcessComposeLogTail {
         cmd.arg("logs").arg(process.as_ref());
         cmd.arg("--tail").arg(tail.to_string());
 
+        debug!(
+            cmd = %cmd.display(),
+            "running process-compose logs --tail",
+        );
+
         cmd.stdout(Stdio::piped());
 
         let mut child = cmd.spawn().map_err(ServiceError::ProcessComposeCmd)?;
@@ -798,9 +807,10 @@ impl ProcessComposeLogReader {
             let mut cmd = base_process_compose_command(socket);
             cmd.arg("logs").arg(&process).arg("--follow");
             cmd.arg("--tail").arg(tail.to_string());
+
             cmd.stderr(Stdio::piped()).stdout(Stdio::piped());
 
-            debug!(cmd = cmd.display().to_string(), "attaching to logs");
+            debug!(cmd = %cmd.display(), service = process, "attaching to logs");
 
             let mut child = cmd.spawn().map_err(ServiceError::ProcessComposeCmd)?;
 
