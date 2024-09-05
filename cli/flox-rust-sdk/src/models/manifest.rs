@@ -67,7 +67,7 @@ impl RawManifest {
             table.decor_mut().set_suffix(indoc! {r#"
 
                 # hello.pkg-path = "hello"
-                # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }"#
+                # nodejs = { version = "^20.15.1", pkg-path = "nodejs" }"#
             });
 
             table
@@ -1511,7 +1511,7 @@ pub(super) mod test {
             # the `[install]` section.
             [install]
             # hello.pkg-path = "hello"
-            # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
+            # nodejs = { version = "^20.15.1", pkg-path = "nodejs" }
 
             # Set environment variables in the `[vars]` section. These variables may not
             # reference one another, and are added to the environment without first
@@ -1679,7 +1679,7 @@ pub(super) mod test {
             # the `[install]` section.
             [install]
             # hello.pkg-path = "hello"
-            # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
+            # nodejs = { version = "^20.15.1", pkg-path = "nodejs" }
 
             # Set environment variables in the `[vars]` section. These variables may not
             # reference one another, and are added to the environment without first
@@ -1761,7 +1761,7 @@ pub(super) mod test {
             # the `[install]` section.
             [install]
             # hello.pkg-path = "hello"
-            # nodejs = { version = "^18.4.2", pkg-path = "nodejs_18" }
+            # nodejs = { version = "^20.15.1", pkg-path = "nodejs" }
 
             # Set environment variables in the `[vars]` section. These variables may not
             # reference one another, and are added to the environment without first
