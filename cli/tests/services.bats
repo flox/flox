@@ -185,6 +185,31 @@ EOF
   done
 }
 
+@test "all imperative commands error when no services are defined for the current system" {
+  run "$FLOX_BIN" init
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+    one.systems = ["dummy-system"]
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+
+  commands=("logs" "restart" "start" "status" "stop")
+  for command in "${commands[@]}"; do
+    echo "Testing: flox services $command"
+    # NB: No --start-services.
+    run "$FLOX_BIN" activate -- "$FLOX_BIN" services "$command"
+    assert_failure
+    assert_line "❌ ERROR: Environment doesn't have any services defined for '$NIX_SYSTEM'."
+  done
+}
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=services:manifest-changes
@@ -1318,6 +1343,34 @@ EOF
   assert_output --partial "Services not started or quit unexpectedly."
 }
 
+@test "start: errors if service not available" {
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+    invalid.command = "sleep infinity"
+    invalid.systems = ["dummy-system"]
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    # don't set -euo pipefail because we expect these to fail
+    "$FLOX_BIN" services start invalid
+    "$FLOX_BIN" services status
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
+  assert_failure
+  assert_output --partial "Service 'invalid' not available on '$NIX_SYSTEM'."
+  assert_output --partial "Services not started or quit unexpectedly."
+}
+
 # Also tests service names with spaces in them, because starting them is handled
 # in Bash
 @test "start: only starts specified services" {
@@ -1351,6 +1404,36 @@ EOF
   assert_output --partial "no_space   Running"
   assert_output --partial "with space Running"
   assert_output --partial "skip       Disabled"
+}
+
+@test "start: only starts supported services" {
+
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [services]
+    one.command = "sleep infinity"
+    two.command = "sleep infinity"
+    two.systems = ["dummy-system"]
+EOF
+  )"
+
+  "$FLOX_BIN" init
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  SCRIPT="$(cat << "EOF"
+    # don't set -euo pipefail because we expect these to fail
+
+    "$FLOX_BIN" -vvv services start
+    "$FLOX_BIN" -vvvv services status
+EOF
+  )"
+
+  run "$FLOX_BIN" activate -- bash -c "$SCRIPT" 3>&-
+  assert_success
+  assert_output --partial "Service 'one' started."
+  assert_output --partial "one        Running"
 }
 
 @test "start: defaults to all services" {

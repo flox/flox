@@ -33,7 +33,7 @@ impl Status {
         subcommand_metric!("services::status");
 
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
-        guard_service_commands_available(&env)?;
+        guard_service_commands_available(&env, &flox.system)?;
 
         let processes = ProcessStates::read(env.socket())?;
 

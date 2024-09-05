@@ -39,7 +39,7 @@ impl Start {
 
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
         guard_is_within_activation(&env, "start")?;
-        guard_service_commands_available(&env)?;
+        guard_service_commands_available(&env, &flox.system)?;
 
         let start_new_process_compose = if !env.expect_services_running() {
             true

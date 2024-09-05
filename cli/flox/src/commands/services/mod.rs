@@ -2,12 +2,13 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
+use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{CoreEnvironmentError, Environment};
 use flox_rust_sdk::models::lockfile::LockedManifest;
 use flox_rust_sdk::models::manifest::{TypedManifest, TypedManifestCatalog};
 use flox_rust_sdk::providers::services::{new_services_to_start, ProcessState, ProcessStates};
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use super::{
     activated_environments,
@@ -35,6 +36,8 @@ To activate and start services, run 'flox activate --start-services'"
     NotInActivation { action: String },
     #[error("Environment doesn't have any services defined.")]
     NoDefinedServices,
+    #[error("Environment doesn't have any services defined for '{system}'.")]
+    NoDefinedServicesForSystem { system: System },
 }
 
 /// Services Commands.
@@ -150,13 +153,27 @@ impl ServicesEnvironment {
 /// A guard method that can be used to ensure that services commands are available.
 ///
 /// In this case, to use service commands, we require that the service manager socket exists
-/// or that there are services defined in the environment.
+/// or that there are services (compatible with the current system) defined in the environment.
 ///
 /// As described in [Self::socket] using the `socket` to determine whether services are running,
 /// may not be the most robust solution, but is currently used consistently.
-pub fn guard_service_commands_available(services_environment: &ServicesEnvironment) -> Result<()> {
+pub fn guard_service_commands_available(
+    services_environment: &ServicesEnvironment,
+    system: &System,
+) -> Result<()> {
     if !services_environment.socket.exists() && services_environment.manifest.services.is_empty() {
         return Err(ServicesCommandsError::NoDefinedServices.into());
+    } else if !services_environment.socket.exists()
+        && services_environment
+            .manifest
+            .services
+            .copy_for_system(system)
+            .is_empty()
+    {
+        return Err(ServicesCommandsError::NoDefinedServicesForSystem {
+            system: system.clone(),
+        }
+        .into());
     }
 
     Ok(())
@@ -218,7 +235,7 @@ fn processes_by_name_or_default_to_all<'a>(
             })
             .collect::<Result<Vec<_>>>()
     } else {
-        tracing::debug!("No service names provided, defaulting to all services");
+        debug!(processes = ?processes, "No service names provided, defaulting to all services");
         Ok(Vec::from_iter(processes.iter()))
     }
 }
@@ -239,6 +256,8 @@ pub async fn start_with_new_process_compose(
         // us ever getting here, but just in case.
         return Err(CoreEnvironmentError::ServicesWithV0.into());
     };
+    let system = flox.system.clone();
+
     for name in names {
         // Check any specified names against the locked manifest that we'll use
         // for starting `process-compose`. This does a similar job as
@@ -246,6 +265,14 @@ pub async fn start_with_new_process_compose(
         // running `process-compose` instance.
         if !lockfile.manifest.services.contains_key(name) {
             return Err(service_does_not_exist_error(name));
+        }
+        if !lockfile
+            .manifest
+            .services
+            .copy_for_system(&system)
+            .contains_key(name)
+        {
+            return Err(service_not_available_on_system_error(name, &system));
         }
     }
     Activate {
@@ -272,6 +299,7 @@ pub async fn start_with_new_process_compose(
         lockfile
             .manifest
             .services
+            .copy_for_system(&system)
             .keys()
             .cloned()
             .collect::<Vec<_>>()
@@ -285,6 +313,12 @@ pub async fn start_with_new_process_compose(
 /// current process-compose config.
 pub(crate) fn service_does_not_exist_error(name: &str) -> anyhow::Error {
     anyhow!(format!("Service '{name}' not found."))
+}
+
+/// Error to return when a service doesn't exist, either in the lockfile or the
+/// current process-compose config.
+fn service_not_available_on_system_error(name: &str, system: &System) -> anyhow::Error {
+    anyhow!(format!("Service '{name}' not available on '{system}'."))
 }
 
 #[cfg(test)]
