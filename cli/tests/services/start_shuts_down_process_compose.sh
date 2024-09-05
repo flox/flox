@@ -18,15 +18,7 @@ process_compose_pids_called_with_arg() {
 
 
 # Make sure we avoid a race of service one failing to complete
-for i in {1..5}; do
-  if "$FLOX_BIN" services status | grep "Completed"; then
-    break
-  fi
-  sleep .1
-done
-if [ "$i" -eq 5 ]; then
-  exit 1
-fi
+"${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
 
 process_compose_pids_before="$(process_compose_pids_called_with_arg "$(pwd)/.flox/run")"
 "$FLOX_BIN" services start

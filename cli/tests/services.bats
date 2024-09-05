@@ -819,21 +819,19 @@ EOF
     "$FLOX_BIN" services logs --follow > logs &
     logs_pid="$!"
 
-    for i in {1..10}; do
-      if grep "^mostly-deterministic: " logs && grep "^one                 : " logs; then
-        break
-      fi
-      sleep .1
-    done
-    if [ "$i" -eq 10 ]; then
+    if timeout 1s bash -c '
+      while ! grep "^mostly-deterministic: " logs || !grep "^one                 : " logs; do
+        sleep .1
+      done
+    '; then
+      # kill log reading, because with `--follow` the process wil block indefinitely
+      kill -SIGTERM "$logs_pid"
+    else
       echo "didn't find expected logs"
       # kill log reading, because with `--follow` the process wil block indefinitely
       kill -SIGTERM "$logs_pid"
       exit 1
     fi
-
-    # kill log reading, because with `--follow` the process wil block indefinitely
-    kill -SIGTERM "$logs_pid"
 EOF
   )
 }
@@ -862,15 +860,7 @@ EOF
   "$FLOX_BIN" activate -s -- echo \> fifo &
   activate_pid="$!"
   # Make sure the first `process-compose` gets up and running
-  for i in {1..5}; do
-    if "$FLOX_BIN" services status; then
-      break
-    fi
-    sleep .1
-  done
-  if [ "$i" -eq 5 ]; then
-    exit 1
-  fi
+  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
 
   run "$FLOX_BIN" activate -s -- true
   assert_success
@@ -1012,16 +1002,7 @@ EOF
 
     source "${TESTS_DIR}/services/register_cleanup.sh"
 
-    for i in {1..5}; do
-      if "$FLOX_BIN" services status -d two | grep "two.*Completed"; then
-        break
-      fi
-      sleep .1
-    done
-    if [ "$i" -eq 5 ]; then
-      echo "Service in inner activation did not run" >&3
-      exit 1
-    fi
+    "${TESTS_DIR}"/services/wait_for_service_status.sh two:Completed
 EOF
 
   "$FLOX_BIN" activate -d one --start-services -- bash <(cat <<"EOF"
@@ -1031,15 +1012,7 @@ EOF
 
     "$FLOX_BIN" activate -d two --start-services -- bash script_inner.sh
 
-    for i in {1..5}; do
-      if "$FLOX_BIN" services status -d one | grep "one.*Completed"; then
-        break
-      fi
-      sleep .1
-    done
-    if [ "$i" -eq 5 ]; then
-      exit 1
-    fi
+    "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
 EOF
   )
 }
@@ -1505,17 +1478,13 @@ EOF
   assert_success
   assert_output --partial "Service 'one' started."
 
+  export -f process_compose_pids_called_with_arg
   # Wait in case the watchdog doesn't shut down process-compose immediately
-  for i in {1..5}; do
-    if [ -z "$(process_compose_pids_called_with_arg "$(pwd)/.flox/run")" ]; then
-      break
-    fi
-    sleep .1
-  done
-  if [ "$i" -eq 5 ]; then
-    echo "process-compose is still running"
-    return 1
-  fi
+  timeout 1s bash -c '
+    while [ -n "$(process_compose_pids_called_with_arg "$(pwd)/.flox/run")" ]; do
+      sleep .1
+    done
+  '
 }
 
 @test "kills daemon process" {
@@ -1578,15 +1547,7 @@ EOF
   activate_pid="$!"
 
   # Make sure we avoid a race of service one failing to complete
-  for i in {1..5}; do
-    if "$FLOX_BIN" services status | grep "Completed"; then
-      break
-    fi
-    sleep .1
-  done
-  if [ "$i" -eq 5 ]; then
-    exit 1
-  fi
+  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
 
   run "$FLOX_BIN" services logs one
   assert_success
@@ -1609,26 +1570,10 @@ EOF
   "$FLOX_BIN" activate -s -- true
 
   # Make sure we avoid a race of service one failing to complete
-  for i in {1..5}; do
-    if "$FLOX_BIN" services status | grep "Completed"; then
-      break
-    fi
-    sleep .1
-  done
-  if [ "$i" -eq 5 ]; then
-    exit 1
-  fi
+  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
 
   # The added service should be running.
-  for i in {1..5}; do
-    if "$FLOX_BIN" services status | grep "two        Running"; then
-      break
-    fi
-    sleep .1
-  done
-  if [ "$i" -eq 5 ]; then
-    exit 1
-  fi
+  "${TESTS_DIR}"/services/wait_for_service_status.sh two:Running
 
   # The modified value of FOO should be printed.
   run "$FLOX_BIN" services logs one

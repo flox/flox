@@ -15,15 +15,7 @@ EOF
 echo "$MANIFEST_CONTENTS_2" | "$FLOX_BIN" edit -f -
 
 # Make sure we avoid a race of service one failing to complete
-for i in {1..5}; do
-  if "$FLOX_BIN" services status | grep "Completed"; then
-    break
-  fi
-  sleep .1
-done
-if [ "$i" -eq 5 ]; then
-  exit 1
-fi
+"${TESTS_DIR}"/services/wait_for_service_status.sh one:Completed
 
 "$FLOX_BIN" services start
 "$FLOX_BIN" services status
