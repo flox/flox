@@ -40,7 +40,7 @@ impl Restart {
 
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
         guard_is_within_activation(&env, "restart")?;
-        guard_service_commands_available(&env)?;
+        guard_service_commands_available(&env, &flox.system)?;
 
         let socket = env.socket();
         let existing_process_compose = socket.exists();

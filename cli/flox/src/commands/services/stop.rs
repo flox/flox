@@ -25,7 +25,7 @@ impl Stop {
         subcommand_metric!("services::stop");
 
         let env = ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
-        guard_service_commands_available(&env)?;
+        guard_service_commands_available(&env, &flox.system)?;
 
         let socket = env.socket();
 

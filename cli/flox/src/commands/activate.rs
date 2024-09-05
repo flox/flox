@@ -346,11 +346,16 @@ impl Activate {
 
                 if manifest.services.is_empty() {
                     message::warning(ServicesCommandsError::NoDefinedServices);
+                } else if manifest.services.copy_for_system(&flox.system).is_empty() {
+                    message::warning(ServicesCommandsError::NoDefinedServicesForSystem {
+                        system: flox.system.clone(),
+                    });
                 }
             }
 
-            let should_have_services =
-                self.start_services && !manifest.services.is_empty() && !in_place;
+            let should_have_services = self.start_services
+                && !manifest.services.copy_for_system(&flox.system).is_empty()
+                && !in_place;
             let start_new_process_compose = should_have_services
                 && if socket_path.exists() {
                     // Returns `Ok(true)` if `process-compose` was shutdown

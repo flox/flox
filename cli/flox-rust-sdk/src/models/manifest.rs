@@ -888,6 +888,25 @@ impl ManifestServices {
             Err(ServiceError::InvalidConfig(msg))
         }
     }
+
+    /// Create a new [ManifestServices] instance with services
+    /// for systems other than `system` filtered out.
+    ///
+    /// Clone the services rather than filter in place
+    /// to avoid accidental mutation of the original in memory manifest/lockfile.
+    pub fn copy_for_system(&self, system: &System) -> Self {
+        let mut services = BTreeMap::new();
+        for (name, desc) in self.0.iter() {
+            if desc
+                .systems
+                .as_ref()
+                .map_or(true, |systems| systems.contains(system))
+            {
+                services.insert(name.clone(), desc.clone());
+            }
+        }
+        ManifestServices(services)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -2170,5 +2189,33 @@ pub(super) mod test {
                 .into()
             )
         );
+    }
+
+    #[test]
+    fn filter_services_by_system() {
+        let manifest = indoc! {r#"
+            version = 1
+            [services]
+            postgres.command = "postgres"
+            mysql.command = "mysql"
+            mysql.systems = ["x86_64-linux", "aarch64-linux"]
+            redis.command = "redis"
+            redis.systems = ["aarch64-linux"]
+        "#};
+
+        let parsed = toml_edit::de::from_str::<TypedManifestCatalog>(manifest).unwrap();
+
+        assert_eq!(parsed.services.len(), 3, "{:?}", parsed.services);
+
+        let filtered = parsed.services.copy_for_system(&"x86_64-linux".to_string());
+        assert_eq!(filtered.len(), 2, "{:?}", filtered);
+        assert!(filtered.contains_key("postgres"));
+        assert!(filtered.contains_key("mysql"));
+
+        let filtered = parsed
+            .services
+            .copy_for_system(&"aarch64-darwin".to_string());
+        assert_eq!(filtered.len(), 1, "{:?}", filtered);
+        assert!(filtered.contains_key("postgres"));
     }
 }
