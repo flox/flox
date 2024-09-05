@@ -1,4 +1,3 @@
-
 #!/usr/bin/env bash
 #
 # Usage: wait_for_services_status.sh [name:status ...]
