@@ -176,10 +176,10 @@ mod tests {
     fn test_gc_logs_watchdog_removes_old_files() {
         let keep_last = 2;
         let dir = tempdir().unwrap();
-        let file_now = create_log_file(&dir.path(), "watchdog.now.log", None);
-        let file_one = create_log_file(&dir.path(), "watchdog.one.log", Some(keep_last - 1));
-        let file_two = create_log_file(&dir.path(), "watchdog.two.log", Some(keep_last));
-        let file_three = create_log_file(&dir.path(), "watchdog.three.log", Some(keep_last + 1));
+        let file_now = create_log_file(dir.path(), "watchdog.now.log", None);
+        let file_one = create_log_file(dir.path(), "watchdog.one.log", Some(keep_last - 1));
+        let file_two = create_log_file(dir.path(), "watchdog.two.log", Some(keep_last));
+        let file_three = create_log_file(dir.path(), "watchdog.three.log", Some(keep_last + 1));
 
         gc_logs_watchdog(dir.path(), keep_last).unwrap();
         assert!(file_now.exists());
@@ -206,7 +206,7 @@ mod tests {
         let files: Vec<PathBuf> = filenames
             .clone()
             .into_iter()
-            .map(|filename| create_log_file(&dir.path(), filename, Some(keep_last - 1)))
+            .map(|filename| create_log_file(dir.path(), filename, Some(keep_last - 1)))
             .collect();
         assert_eq!(files.len(), filenames.len());
 
@@ -221,7 +221,7 @@ mod tests {
         let keep_days = 2;
         let dir = tempdir().unwrap();
         let files: Vec<PathBuf> = (1..=keep_days * 2)
-            .map(|i| create_log_file(&dir.path(), &format!("services.{}.log", i), None))
+            .map(|i| create_log_file(dir.path(), &format!("services.{}.log", i), None))
             .collect();
 
         gc_logs_services(dir.path(), keep_days).unwrap();
@@ -249,7 +249,7 @@ mod tests {
         let files: Vec<PathBuf> = filenames
             .clone()
             .into_iter()
-            .map(|filename| create_log_file(&dir.path(), filename, None))
+            .map(|filename| create_log_file(dir.path(), filename, None))
             .collect();
         assert_eq!(files.len(), filenames.len());
 
@@ -283,10 +283,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let now = SystemTime::now();
 
-        let old_file = create_log_file(&dir.path(), "old.log", Some(threshold_days + 1));
+        let old_file = create_log_file(dir.path(), "old.log", Some(threshold_days + 1));
         assert!(file_older_than(&old_file, now, threshold_dur).unwrap());
 
-        let new_file = create_log_file(&dir.path(), "new.log", Some(threshold_days - 1));
+        let new_file = create_log_file(dir.path(), "new.log", Some(threshold_days - 1));
         assert!(!file_older_than(&new_file, now, threshold_dur).unwrap());
     }
 }
