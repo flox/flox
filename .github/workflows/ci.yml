@@ -215,7 +215,7 @@ jobs:
       - name: "Build"
         id: "build"
         run: |
-          for package in '.#packages.${{ matrix.system }}.flox-pkgdb' '.#packages.${{ matrix.system }}.flox-cli' '.#packages.${{ matrix.system }}.flox' ; do
+          for package in '.#packages.${{ matrix.system }}.flox-pkgdb' '.#packages.${{ matrix.system }}.flox-cli' '.#packages.${{ matrix.system }}.flox' '.#packages.${{ matrix.system }}.flox-cli-tests'; do
             echo "Building $package ..."
             git clean -xfd .
             if nix path-info                 \
@@ -360,27 +360,6 @@ jobs:
           TAILSCALE_AUTH_KEY:     "${{ secrets.MANAGED_TAILSCALE_AUTH_KEY }}"
           REMOTE_BUILDERS:        "${{    vars.MANAGED_REMOTE_BUILDERS }}"
           SYSTEM:                 "${{ matrix.system }}"
-
-      - name: "Build flox"
-        run: |
-          git clean -xfd
-          nix build -L \
-              --accept-flake-config \
-              --no-update-lock-file \
-              --print-out-paths \
-              '.#packages.${{ matrix.system }}.flox'
-          # We run bats tests later on against the `FLOX_CLI' env
-          echo "FLOX_CLI=$(readlink -f ./result; )/bin/flox" >> "$GITHUB_ENV"
-          rm ./result
-
-      - name: "Build Bats Tests (./#flox-cli-tests)"
-        run: |
-          git clean -xfd
-          nix build -L \
-              --no-update-lock-file \
-              --print-out-paths \
-              '.#packages.${{ matrix.system }}.flox-cli-tests'
-          nix copy --extra-experimental-features 'nix-command' --to "$CONFIGURE_NIX_SUBSTITUTER" ./result
 
       - name: "Run Bats Tests (./#flox-cli-tests)"
         timeout-minutes: 30
