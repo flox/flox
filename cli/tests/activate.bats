@@ -2320,7 +2320,7 @@ EOF
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/rust-lib-src.json" \
     "$FLOX_BIN" install rustPlatform.rustLibSrc
-  
+
   run "$FLOX_BIN" activate -- bash <(cat <<'EOF'
     if ! [ -e "$FLOX_ENV/etc/profile.d/0501_rust.sh" ]; then
       echo "profile script did not exist" >&3
@@ -2333,4 +2333,22 @@ EOF
 EOF
 )
   assert_success
+}
+
+@test "activate works with fish 3.2.2" {
+  if [ "$NIX_SYSTEM" == aarch64-linux ]; then
+    # running fish at all on aarch64-linux throws:
+    # terminate called after throwing an instance of 'std::bad_alloc'
+    #   what():  std::bad_alloc
+    skip "fish 3.2.2 is broken on aarch64-linux"
+  fi
+  project_setup
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/fish_3_2_2.json" \
+    "$FLOX_BIN" install fish@3.2.2
+
+  FLOX_SHELL="./.flox/run/$NIX_SYSTEM.$PROJECT_NAME/bin/fish" run "$FLOX_BIN" activate -- echo "\$FISH_VERSION"
+  assert_success
+  # fish doesn't have the equivalent of set -e, so refute "Error"
+  refute_output --partial Error
+  assert_output --partial "3.2.2"
 }

@@ -94,6 +94,10 @@ cmd = '''
 '''
 ignore_cmd_errors = true # build will fail on linux, thats fine
 
+[resolve.fish_3_2_2]
+pre_cmd = "flox init"
+cmd = "flox install fish@3.2.2"
+
 [resolve.hello]
 pre_cmd = "flox init"
 cmd = "flox install hello"
