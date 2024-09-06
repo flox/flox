@@ -384,6 +384,7 @@ impl CoreEnvironment<()> {
     /// argument.
     pub fn build_container(
         lockfile_path: CanonicalPath,
+        name: &str,
     ) -> Result<ContainerBuilder, CoreEnvironmentError> {
         if std::env::consts::OS != "linux" {
             return Err(CoreEnvironmentError::ContainerizeUnsupportedSystem(
@@ -395,6 +396,7 @@ impl CoreEnvironment<()> {
         pkgdb_cmd
             .arg("buildenv")
             .arg("--container")
+            .arg(name)
             .arg(lockfile_path);
 
         // Locking flakes may require using `ssh` for private flakes,

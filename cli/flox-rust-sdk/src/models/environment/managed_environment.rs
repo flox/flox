@@ -220,7 +220,7 @@ impl Environment for ManagedEnvironment {
         let lockfile_path = CanonicalPath::new(local_checkout.lockfile_path())
             .expect("a locked environment must have a lockfile");
 
-        let builder = CoreEnvironment::build_container(lockfile_path)?;
+        let builder = CoreEnvironment::build_container(lockfile_path, self.name().as_ref())?;
         Ok(builder)
     }
 

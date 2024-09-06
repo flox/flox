@@ -191,7 +191,7 @@ setup_file() {
 @test "Environment builds container" {
   run --separate-stderr \
     "$PKGDB_BIN" buildenv "$LOCKFILES/single-package/manifest.lock" \
-    --container
+    --container flox-env-container
   assert_success
   store_path=$(echo "$output" | jq -er '.store_path')
 
