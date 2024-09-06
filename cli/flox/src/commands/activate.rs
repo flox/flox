@@ -77,7 +77,7 @@ pub struct Activate {
     pub print_script: bool,
 
     /// Whether to start services when activating the environment
-    #[bpaf(long, short, hide)]
+    #[bpaf(long, short)]
     pub start_services: bool,
 
     /// Command to run interactively in the context of the environment
