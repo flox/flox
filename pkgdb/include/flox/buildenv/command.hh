@@ -40,6 +40,7 @@ private:
   std::optional<std::string> storePath;
   std::optional<std::string> serviceConfigPath;
   bool                       buildContainer = false;
+  std::optional<std::string> containerName;
 
 
 public:

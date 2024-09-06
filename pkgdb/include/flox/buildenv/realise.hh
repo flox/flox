@@ -370,8 +370,8 @@ createEnvironmentStorePath(
 nix::StorePath
 createContainerBuilder( nix::EvalState &       state,
                         const nix::StorePath & environmentStorePath,
-                        const System &         system );
-
+                        const System &         system,
+                        const std::string &    containerName );
 
 /* -------------------------------------------------------------------------- */
 

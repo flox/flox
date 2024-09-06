@@ -119,7 +119,7 @@ function skip_if_linux() {
 
   run podman load -i test-container.tar
   assert_success
-  assert_line --partial "Loaded image:"
+  assert_line --partial "Loaded image: localhost/test"
 }
 
 # bats test_tags=containerize:piped-to-stdout

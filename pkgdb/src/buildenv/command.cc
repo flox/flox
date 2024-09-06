@@ -44,8 +44,13 @@ BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
 
   this->parser.add_argument( "--container", "-c" )
     .help( "build a container builder script" )
-    .nargs( 0 )
-    .action( [&]( const auto & ) { this->buildContainer = true; } );
+    .metavar( "CONTAINER-NAME" )
+    .action(
+      [&]( const std::string & str )
+      {
+        this->buildContainer = true;
+        this->containerName  = str;
+      } );
 }
 
 
@@ -76,7 +81,10 @@ BuildEnvCommand::run()
       debugLog( "container requested, building container build script" );
 
       auto containerBuilderStorePath
-        = createContainerBuilder( *state, storePath, system );
+        = createContainerBuilder( *state,
+                                  storePath,
+                                  system,
+                                  *( this->containerName ) );
 
       debugLog( "built container builder: "
                 + store->printStorePath( containerBuilderStorePath ) );

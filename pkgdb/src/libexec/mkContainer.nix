@@ -8,6 +8,7 @@
   # the system to build for
   system,
   containerSystem,
+  containerName ? "flox-env-container",
 }: let
   environment = builtins.storePath environmentOutPath;
   pkgs = nixpkgsFlake.legacyPackages.${system};
@@ -16,7 +17,7 @@
   lowPriority = pkg: pkg.overrideAttrs (old: old // {meta = (old.meta or {}) // {priority = 10000;};});
 
   buildLayeredImageArgs = {
-    name = "flox-env-container";
+    name = containerName;
     # symlinkJoin fails when drv contains a symlinked bin directory, so wrap in an additional buildEnv
     contents = pkgs.buildEnv {
       name = "contents";
