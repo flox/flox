@@ -14,7 +14,7 @@ end
 # Assert that the expected _{add,del}_env variables are present.
 if test -z "$_add_env" -o -z "$_del_env"
   echo 'ERROR (fish): $_add_env and $_del_env not found in environment' >&2
-  return 1
+  exit 1
 end
 
 # The fish --init-command option allows us to source our startup
@@ -23,8 +23,8 @@ end
 # as we do in bash.
 
 # Restore environment variables set in the previous bash initialization.
-eval "$($_gnused/bin/sed -e 's/^/set -e /' -e 's/$/;/' $_del_env)"
-eval "$($_gnused/bin/sed -e 's/^/set -gx /' -e 's/=/ /' -e 's/$/;/' $_add_env)"
+$_gnused/bin/sed -e 's/^/set -e /' -e 's/$/;/' $_del_env | source
+$_gnused/bin/sed -e 's/^/set -gx /' -e 's/=/ /' -e 's/$/;/' $_add_env | source
 
 # Set the prompt if we're in an interactive shell.
 if isatty 1
