@@ -8,10 +8,10 @@ resolver = "2"
 anyhow = "1"
 async-stream = "0.3.5"
 blake3 = "1.5.3"
-bpaf = { version = "0.9.12", features = ["derive", "autocomplete"] }
+bpaf = { version = "0.9.13", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.38", features = ["serde"] }
-clap = { version = "4.5.4", features = ["derive"] }
+clap = { version = "4.5.17", features = ["derive"] }
 clap_derive = "4.5.4"
 config = "0.14.0"
 crossterm = "0.27"
@@ -54,7 +54,7 @@ serde_json = "1"
 serde_with = "3.9.0"
 serde_yaml = "0.9"
 shell-escape = "0.1.5"
-supports-color = "3.0.0"
+supports-color = "3.0.1"
 # provides process tools for shell detection
 sysinfo = "0.30.13"
 # provide system version information for metric
