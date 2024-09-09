@@ -166,6 +166,7 @@ common_file_teardown() {
   if [[ -z "${FLOX_TEST_KEEP_TMP:-}" ]]; then
     deleteEnvForce "$TEST_ENVIRONMENT"
     rm -rf "$BATS_FILE_TMPDIR"
+    rm -rf "$FLOX_CACHE_DIR"
   fi
   unset FLOX_TEST_HOME
 }

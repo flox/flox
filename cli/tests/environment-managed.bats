@@ -334,6 +334,8 @@ EOF
   # We should only see the path environnment
   run jq '.entries[0].envs | length' "$FLOX_DATA_DIR/env-registry.json"
   assert_output "1"
+
+  rm -rf "$FLOX_CACHE_DIR"
 }
 
 # bats test_tags=managed,delete,managed:fresh-deleted

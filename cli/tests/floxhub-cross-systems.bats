@@ -47,6 +47,7 @@ setup_file() {
 teardown_file() {
   "$FLOX_BIN" config --delete floxhub_url
   unset FLOX_FLOXHUB_TOKEN
+  common_file_teardown
 }
 
 # ---------------------------------------------------------------------------- #
