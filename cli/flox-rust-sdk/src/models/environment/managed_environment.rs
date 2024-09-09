@@ -1028,8 +1028,8 @@ impl ManagedEnvironment {
             .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
 
         copy_dir_recursive(
-            &current_generation.path(),
-            &self.path.join(ENV_DIR_NAME),
+            current_generation.path(),
+            self.path.join(ENV_DIR_NAME),
             true,
         )
         .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
@@ -1054,8 +1054,8 @@ impl ManagedEnvironment {
             fs::create_dir_all(self.path.join(ENV_DIR_NAME))
                 .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;
             copy_dir_recursive(
-                &current_generation.path(),
-                &self.path.join(ENV_DIR_NAME),
+                current_generation.path(),
+                self.path.join(ENV_DIR_NAME),
                 true,
             )
             .map_err(ManagedEnvironmentError::CreateLocalEnvironmentView)?;

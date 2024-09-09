@@ -584,16 +584,16 @@ pub enum UpgradeError {
 /// 2. fs_extra::dir::copy doesn't handle symlinks.
 ///    See: https://github.com/webdesus/fs_extra/issues/61
 fn copy_dir_recursive(
-    from: &impl AsRef<Path>,
-    to: &impl AsRef<Path>,
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
     keep_permissions: bool,
 ) -> Result<(), std::io::Error> {
     if !to.as_ref().exists() {
-        std::fs::create_dir(to).unwrap();
+        std::fs::create_dir(&to).unwrap();
     }
-    for entry in WalkDir::new(from).into_iter().skip(1) {
+    for entry in WalkDir::new(&from).into_iter().skip(1) {
         let entry = entry.unwrap();
-        let new_path = to.as_ref().join(entry.path().strip_prefix(from).unwrap());
+        let new_path = to.as_ref().join(entry.path().strip_prefix(&from).unwrap());
         match entry.file_type() {
             file_type if file_type.is_dir() => {
                 std::fs::create_dir(new_path).unwrap();

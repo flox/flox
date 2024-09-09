@@ -857,7 +857,7 @@ impl CoreEnvironment<ReadOnly> {
         &mut self,
         tempdir: impl AsRef<Path>,
     ) -> Result<CoreEnvironment<ReadWrite>, CoreEnvironmentError> {
-        copy_dir_recursive(&self.env_dir, &tempdir.as_ref(), true)
+        copy_dir_recursive(&self.env_dir, tempdir.as_ref(), true)
             .map_err(CoreEnvironmentError::MakeTemporaryEnv)?;
 
         Ok(CoreEnvironment {
