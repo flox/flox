@@ -162,7 +162,7 @@ define BUILD_local_template =
 	    --argstr flox-env "$(FLOX_ENV)" \
 	    --argstr install-prefix "$(_out)" \
 	    --out-link "result-$(_pname)" \
-	    --offline 2>&1 | $(_tee) $($(_pvarname)_logfile)
+	    2>&1 | $(_tee) $($(_pvarname)_logfile)
 
 endef
 
