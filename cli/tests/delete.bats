@@ -18,6 +18,7 @@ setup_file() {
 
 teardown_file() {
   unset _FLOX_USE_CATALOG_MOCK
+  common_file_teardown
 }
 
 # Helpers for project based tests.

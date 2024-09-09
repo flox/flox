@@ -381,6 +381,14 @@ flox_vars_setup() {
 # Set `FLOX_TEST_HOME' to a temporary directory and setup essential files.
 # Homedirs can be created "globally" for the entire test suite ( default ), or
 # for individual files or single tests by passing an optional argument.
+#
+# `home_setup` will set the `FLOX_CACHE_DIR` to a new tempdir through
+# `flox_vars_setup`.
+# Where called in `setup_suite`, or `file_setup`
+# (e.g. through `common_file_setup`), `teardown_suite`, or `teardown_file`
+# should delete the directory.
+# When calling `home_setup test` in a test, the test itself should delete the
+# `$FLOX_CACHE_DIR`.
 home_setup() {
   if [[ "${__FT_RAN_HOME_SETUP:-}" = "real" ]]; then
     export FLOX_TEST_HOME="$REAL_HOME"
@@ -469,8 +477,8 @@ common_suite_teardown() {
   # Delete suite tmpdir and envs unless the user requests to preserve them.
   if [[ -z ${FLOX_TEST_KEEP_TMP-} ]]; then
     rm -rf "$BATS_SUITE_TMPDIR"
+    rm -rf "$FLOX_CACHE_DIR"
   fi
-  rm -rf "$FLOX_CACHE_DIR"
   # Our agent was useful, but it's time for them to retire.
   # We force true in case we are tearing down when an agent never launched.
   eval "$(ssh-agent -k 2> /dev/null || echo ':')"

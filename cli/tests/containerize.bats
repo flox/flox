@@ -70,6 +70,7 @@ teardown() {
 
 teardown_file() {
   podman_cache_reset
+  common_file_teardown
 }
 
 # ---------------------------------------------------------------------------- #
