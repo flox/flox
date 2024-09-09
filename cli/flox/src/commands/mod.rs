@@ -1237,7 +1237,6 @@ impl UninitializedEnvironment {
                             flox,
                             path_pointer,
                             dot_flox_path,
-                            &flox.temp_dir,
                         )?)
                     },
                     EnvironmentPointer::Managed(managed_pointer) => {

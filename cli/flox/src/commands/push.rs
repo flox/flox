@@ -131,12 +131,8 @@ impl Push {
         owner: EnvironmentOwner,
         force: bool,
     ) -> Result<ManagedEnvironment> {
-        let path_environment = path_environment::PathEnvironment::open(
-            flox,
-            path_pointer,
-            dot_flox_path,
-            &flox.temp_dir,
-        )?;
+        let path_environment =
+            path_environment::PathEnvironment::open(flox, path_pointer, dot_flox_path)?;
 
         let pointer = ManagedPointer::new(owner.clone(), path_environment.name(), &flox.floxhub);
 
