@@ -66,9 +66,6 @@ pub struct PathEnvironment {
     /// Absolute path to the environment, typically `<...>/.flox`
     pub path: CanonicalPath,
 
-    /// The temporary directory that this environment will use during transactions
-    pub temp_dir: PathBuf,
-
     /// The associated [PathPointer] of this environment.
     ///
     /// Used to identify the environment.
@@ -97,7 +94,6 @@ impl PathEnvironment {
     pub fn new(
         dot_flox_path: CanonicalPath,
         pointer: PathPointer,
-        temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError> {
         if &*dot_flox_path == Path::new("/") {
             return Err(EnvironmentError::InvalidPath(dot_flox_path.into_inner()));
@@ -116,7 +112,6 @@ impl PathEnvironment {
             // path must be absolute as it is used to set FLOX_ENV
             path: dot_flox_path,
             pointer,
-            temp_dir: temp_dir.as_ref().to_path_buf(),
         })
     }
 
@@ -379,7 +374,6 @@ impl PathEnvironment {
         flox: &Flox,
         pointer: PathPointer,
         dot_flox_path: CanonicalPath,
-        temp_dir: impl AsRef<Path>,
     ) -> Result<Self, EnvironmentError> {
         ensure_registered(
             flox,
@@ -387,7 +381,7 @@ impl PathEnvironment {
             &EnvironmentPointer::Path(pointer.clone()),
         )?;
 
-        PathEnvironment::new(dot_flox_path, pointer, temp_dir)
+        PathEnvironment::new(dot_flox_path, pointer)
     }
 
     /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
@@ -396,7 +390,6 @@ impl PathEnvironment {
     pub fn init(
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
-        temp_dir: impl AsRef<Path>,
         customization: &InitCustomization,
         flox: &Flox,
     ) -> Result<Self, EnvironmentError> {
@@ -424,13 +417,8 @@ impl PathEnvironment {
             RawManifest::new_documented(all_systems.as_slice(), customization)
         };
 
-        let mut environment = Self::write_new_unchecked(
-            flox,
-            pointer,
-            dot_flox_parent_path,
-            temp_dir,
-            manifest.to_string(),
-        )?;
+        let mut environment =
+            Self::write_new_unchecked(flox, pointer, dot_flox_parent_path, manifest.to_string())?;
 
         // Build environment if customization installs at least one package
         if matches!(customization.packages.as_deref(), Some([_, ..])) {
@@ -460,7 +448,6 @@ impl PathEnvironment {
         flox: &Flox,
         pointer: PathPointer,
         dot_flox_parent_path: impl AsRef<Path>,
-        temp_dir: impl AsRef<Path>,
         manifest: impl AsRef<str>,
     ) -> Result<Self, EnvironmentError> {
         let dot_flox_path = dot_flox_parent_path.as_ref().join(DOT_FLOX);
@@ -500,7 +487,7 @@ impl PathEnvironment {
 
         let dot_flox_path = CanonicalPath::new(dot_flox_path).expect("the directory just created");
 
-        Self::open(flox, pointer, dot_flox_path, temp_dir)
+        Self::open(flox, pointer, dot_flox_path)
     }
 
     /// Determine if the environment needs to be rebuilt
@@ -548,7 +535,6 @@ pub mod test_helpers {
             flox,
             pointer,
             tempdir_in(&flox.temp_dir).unwrap().into_path(),
-            &flox.temp_dir,
             contents,
         )
         .unwrap()
@@ -567,7 +553,6 @@ pub mod test_helpers {
             flox,
             pointer.clone(),
             &dot_flox_parent_path,
-            &flox.temp_dir,
             &manifest_contents,
         )
         .unwrap();
@@ -576,7 +561,7 @@ pub mod test_helpers {
         let lockfile_path = env_dir.join(LOCKFILE_FILENAME);
         fs::write(lockfile_path, lockfile_contents).unwrap();
         new_path_environment(flox, &manifest_contents);
-        PathEnvironment::open(flox, pointer, dot_flox_path, &flox.temp_dir).unwrap()
+        PathEnvironment::open(flox, pointer, dot_flox_path).unwrap()
     }
 }
 
@@ -600,7 +585,6 @@ mod tests {
         let actual = PathEnvironment::init(
             pointer,
             environment_temp_dir.path(),
-            temp_dir.path(),
             &InitCustomization::default(),
             &flox,
         )
@@ -609,7 +593,6 @@ mod tests {
         let expected = PathEnvironment::new(
             CanonicalPath::new(environment_temp_dir.path().join(DOT_FLOX)).unwrap(),
             PathPointer::new("test".parse().unwrap()),
-            temp_dir.path(),
         )
         .unwrap();
 
@@ -633,7 +616,6 @@ mod tests {
         let mut env = PathEnvironment::init(
             pointer,
             environment_temp_dir.path(),
-            temp_dir.path(),
             &InitCustomization::default(),
             &flox,
         )
@@ -664,7 +646,6 @@ mod tests {
         let _env = PathEnvironment::init(
             ptr,
             environment_temp_dir.path(),
-            tmp_dir.path(),
             &InitCustomization::default(),
             &flox,
         )
@@ -687,7 +668,6 @@ mod tests {
         let env = PathEnvironment::init(
             ptr.clone(),
             environment_temp_dir.path(),
-            tmp_dir.path(),
             &InitCustomization::default(),
             &flox,
         )
@@ -696,7 +676,7 @@ mod tests {
         assert!(reg_path.exists());
         // Delete the registry so we can confirm that opening the environment creates it
         std::fs::remove_file(&reg_path).unwrap();
-        let _env = PathEnvironment::open(&flox, ptr, env.path, tmp_dir.path()).unwrap();
+        let _env = PathEnvironment::open(&flox, ptr, env.path).unwrap();
         let reg = read_environment_registry(&reg_path).unwrap().unwrap();
         assert!(matches!(
             reg.entries[0].envs[0].pointer,
@@ -713,7 +693,6 @@ mod tests {
         let env = PathEnvironment::init(
             ptr.clone(),
             environment_temp_dir.path(),
-            tmp_dir.path(),
             &InitCustomization::default(),
             &flox,
         )

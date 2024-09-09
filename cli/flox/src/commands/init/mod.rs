@@ -126,24 +126,12 @@ impl Init {
                 message: "Installing Flox suggested packages...",
                 help_message: None,
                 typed: Spinner::new(|| {
-                    PathEnvironment::init(
-                        PathPointer::new(env_name),
-                        &dir,
-                        flox.temp_dir.clone(),
-                        &customization,
-                        &flox,
-                    )
+                    PathEnvironment::init(PathPointer::new(env_name), &dir, &customization, &flox)
                 }),
             }
             .spin()?
         } else {
-            PathEnvironment::init(
-                PathPointer::new(env_name),
-                &dir,
-                flox.temp_dir.clone(),
-                &customization,
-                &flox,
-            )?
+            PathEnvironment::init(PathPointer::new(env_name), &dir, &customization, &flox)?
         };
 
         message::created(format!(
