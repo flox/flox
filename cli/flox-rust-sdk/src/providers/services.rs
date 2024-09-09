@@ -1004,6 +1004,7 @@ pub mod test_helpers {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::time::Duration;
 
     use indoc::formatdoc;
     use itertools::Itertools;
@@ -1384,7 +1385,20 @@ mod tests {
             ..Default::default()
         });
 
-        let states = ProcessStates::read(instance.socket()).expect("failed to read process states");
+        let mut states = None;
+        for _ in 0..10 {
+            std::thread::sleep(Duration::from_millis(10));
+            states = ProcessStates::read(instance.socket())
+                .inspect_err(|err| {
+                    println!("error reading states: {:?}", err);
+                })
+                .ok();
+
+            if states.is_some() {
+                break;
+            };
+        }
+        let states = states.expect("failed to read process states");
 
         let foo = states.process("foo").expect("foo not found");
         assert_eq!(foo.name, "foo");
