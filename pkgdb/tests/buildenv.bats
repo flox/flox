@@ -210,6 +210,19 @@ setup_file() {
   assert_line 'manifest.json'
 }
 
+# --------------------------------------------------------------------------- #
+
+# bats test_tags=requisites
+@test "Verify contents of requisites.txt" {
+  run "$PKGDB_BIN" buildenv "$LOCKFILES/single-package/manifest.lock"
+  assert_success
+  store_path=$(echo "$output" | jq -er '.store_path')
+  assert "$TEST" -f "${store_path}/requisites.txt"
+  nix-store -qR "${store_path}" | grep -v "${store_path}" | sort > "$BATS_TEST_TMPDIR/verify-requisites"
+  run diff "$BATS_TEST_TMPDIR/verify-requisites" "${store_path}/requisites.txt"
+  assert_success
+}
+
 # ---------------------------------------------------------------------------- #
 #
 #

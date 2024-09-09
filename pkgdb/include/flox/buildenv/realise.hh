@@ -46,6 +46,7 @@ static constexpr std::string_view ACTIVATION_SCRIPT_NAME = "activate";
 static constexpr std::string_view ACTIVATION_SUBDIR_NAME = "activate.d";
 static constexpr std::string_view PACKAGE_BUILDS_SUBDIR_NAME
   = "package-builds.d";
+static constexpr std::string_view REQUISITES_TXT_NAME = "requisites.txt";
 
 /* -------------------------------------------------------------------------- */
 
@@ -107,13 +108,23 @@ FLOX_DEFINE_EXCEPTION( PackageBuildFailure,
 /** @} */
 
 /**
- * @class flox::buildenv::PackageBuildFailure
+ * @class flox::buildenv::ActivationScriptBuildFailure
  * @brief An exception thrown when a package fails to build.
  * @{
  */
 FLOX_DEFINE_EXCEPTION( ActivationScriptBuildFailure,
                        EC_ACTIVATION_SCRIPT_BUILD_ERROR,
                        "failure building activation script" )
+/** @} */
+
+/**
+ * @class flox::buildenv::RequisitesTxtBuildFailure
+ * @brief An exception thrown when a package fails to build.
+ * @{
+ */
+FLOX_DEFINE_EXCEPTION( RequisitesTxtBuildFailure,
+                       EC_REQUISITES_TXT_BUILD_ERROR,
+                       "failure building requisites.txt" )
 /** @} */
 
 /* -------------------------------------------------------------------------- */
@@ -412,6 +423,15 @@ void
 addScriptToScriptsDir( const std::string &           scriptContents,
                        const std::filesystem::path & scriptsDir,
                        const std::string &           scriptName );
+
+/**
+ * @brief Adds requisites.txt to the environment root directory.
+ * @param tempDir The temporary scripts directory being assembled.
+ */
+void
+addRequisitesTxt( nix::EvalState &              state,
+                  nix::StorePathSet &           references,
+                  const std::filesystem::path & tempDir );
 
 
 /* -------------------------------------------------------------------------- */
