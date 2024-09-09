@@ -271,7 +271,7 @@ impl Generations<ReadWrite> {
 
         // copy `env/`, i.e. manifest and lockfile (if it exists) and possibly other assets
         // copy into `<generation>/env/` to make creating `PathEnvironment` easier
-        copy_dir_recursive(&environment.path(), &env_path, true).unwrap();
+        copy_dir_recursive(environment.path(), &env_path, true).unwrap();
 
         self.repo
             .add(&[&generation_path])
