@@ -248,7 +248,7 @@ function add_incompatible_package() {
     run "$FLOX_BIN" pull --remote owner/name --force
   assert_success
   assert_line --partial "resolution failed: package '$PACKAGE' not available for"
-  assert_line --partial "Migrated the environment to version 1 and included your system but could not"
+  assert_line --partial "Migrated the environment to version 1 and included your system"
 
   run "$FLOX_BIN" list
   assert_success
