@@ -92,8 +92,8 @@ impl PartialEq for PathEnvironment {
 
 impl PathEnvironment {
     pub fn new(
-        dot_flox_path: CanonicalPath,
         pointer: PathPointer,
+        dot_flox_path: CanonicalPath,
     ) -> Result<Self, EnvironmentError> {
         if &*dot_flox_path == Path::new("/") {
             return Err(EnvironmentError::InvalidPath(dot_flox_path.into_inner()));
@@ -381,7 +381,7 @@ impl PathEnvironment {
             &EnvironmentPointer::Path(pointer.clone()),
         )?;
 
-        PathEnvironment::new(dot_flox_path, pointer)
+        PathEnvironment::new(pointer, dot_flox_path)
     }
 
     /// Create a new env in a `.flox` directory within a specific path or open it if it exists.
@@ -591,8 +591,8 @@ mod tests {
         .unwrap();
 
         let expected = PathEnvironment::new(
-            CanonicalPath::new(environment_temp_dir.path().join(DOT_FLOX)).unwrap(),
             PathPointer::new("test".parse().unwrap()),
+            CanonicalPath::new(environment_temp_dir.path().join(DOT_FLOX)).unwrap(),
         )
         .unwrap();
 
