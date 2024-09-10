@@ -286,7 +286,7 @@ impl Pull {
         }
         .spin();
 
-        Self::handle_pull_result(
+        let resolution = Self::handle_pull_result(
             flox,
             result,
             &dot_flox_path,
@@ -297,7 +297,31 @@ impl Pull {
                 query_ignore_build_errors: Self::query_ignore_build_errors,
                 query_migrate_and_add_system: Self::query_migrate_and_add_system,
             }),
-        )
+        )?;
+
+        let message_lead = format!(
+            "Pulled {env_ref} from {floxhub_host}.",
+            floxhub_host = flox.floxhub.base_url()
+        );
+
+        match resolution {
+            PullResultResolutionContext::Success(completed) => {
+                message::created(formatdoc! {"
+                    {message_lead}
+
+                    {completed}
+                "});
+            },
+            PullResultResolutionContext::Warning(warning) => {
+                message::warning(formatdoc! {"
+                    {message_lead}
+
+                    {warning}
+                "});
+            },
+        }
+
+        Ok(())
     }
 
     /// Helper function for [Self::pull_new_environment] that can be unit tested.
@@ -311,52 +335,49 @@ impl Pull {
         force: bool,
         env: &mut ManagedEnvironment,
         query_functions: Option<QueryFunctions>,
-    ) -> Result<()> {
-        let pulled_line = format!(
-            "Pulled {owner}/{name} from {floxhub_host}",
-            owner = env.owner(),
-            name = env.name(),
-            floxhub_host = env.pointer().floxhub_url
-        );
-        let completed = formatdoc! {"
-                    {pulled_line}
+    ) -> Result<PullResultResolutionContext> {
+        let completed = indoc! {"
+           You can activate this environment with 'flox activate'\
+        "};
 
-                    You can activate this environment with 'flox activate'
-                    "};
-        match result {
-            Ok(_) => {
-                message::created(completed);
-            },
-            Err(EnvironmentError::Core(e)) if e.is_incompatible_system_error() => {
+        let Err(err) = result else {
+            return Ok(PullResultResolutionContext::Success(completed));
+        };
+
+        match err {
+            // Environment is not compatible with the current system
+            EnvironmentError::Core(e) if e.is_incompatible_system_error() => {
                 let hint = formatdoc! {"
                     Use 'flox pull --force' to add your system to the manifest.
                     For more on managing systems for your environment, visit the documentation:
                     https://flox.dev/docs/tutorials/multi-arch-environments
                 "};
+
                 if !force && query_functions.is_none() {
                     fs::remove_dir_all(dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
-                    bail!("{}", formatdoc! {"
-                            This environment is not yet compatible with your system ({system}).
+                    bail!(formatdoc! {"
+                        This environment is not yet compatible with your system ({system}).
 
-                            {hint}"
-                    , system = flox.system});
+                        {hint}",
+                        system = flox.system
+                    });
                 }
 
                 let migration_info = env.needs_migration_to_v1(flox)?;
 
-                // Will return OK if the user chose to abort the pull.
+                // Query functions will return `Ok(false)` if the user chose to abort the pull.
                 // The unwrap() is only reached if !force,
                 // and we return above if !force and query_functions.is_none()
-                let force = force || {
+                let stop = !force && {
                     if migration_info.is_some() {
-                        (query_functions.unwrap().query_migrate_and_add_system)(&flox.system)?
+                        !(query_functions.unwrap().query_migrate_and_add_system)(&flox.system)?
                     } else {
-                        (query_functions.unwrap().query_add_system)(&flox.system)?
+                        !(query_functions.unwrap().query_add_system)(&flox.system)?
                     }
                 };
 
-                if !force {
+                if stop {
                     // prompt available, user chose to abort
                     fs::remove_dir_all(dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
@@ -386,22 +407,20 @@ impl Pull {
                             // TODO: this could probably benefit from some newlines
                             message::warning(display_chain(&err));
 
-                            let message_with_warning = formatdoc! {"
-                                {pulled_line}
+                            let message_with_warning = indoc! {"
+                                Migrated the environment to version 1 and included your system
+                                but could not build.
 
-                                Migrated the environment to version 1 and included your system but could not
-                                build.
-                                Use 'flox edit' to address issues before activating.
+                                Use 'flox edit' to address issues before activating.\
                             "};
 
-                            message::created(message_with_warning);
+                            return Ok(PullResultResolutionContext::Warning(message_with_warning));
                         },
                         Ok(_) => {
                             message::plain("⬆️  Migrated environment to version 1.");
-                            message::created(&completed);
+                            return Ok(PullResultResolutionContext::Success(completed));
                         },
                     }
-                    return Ok(());
                 }
 
                 let manifest_with_current_system = Self::amend_current_system(env, flox)?;
@@ -418,21 +437,19 @@ impl Pull {
                     Err(broken_error) => {
                         message::warning(format!("{err:#}", err = anyhow!(broken_error)));
 
-                        let message_with_warning = formatdoc! {"
-                            {pulled_line}
-
+                        let message_with_warning = indoc! {"
                             Modified the manifest to include your system but could not build.
-                            Use 'flox edit' to address issues before activating.
+                            Use 'flox edit' to address issues before activating.\
                         "};
 
-                        message::created(message_with_warning);
+                        Ok(PullResultResolutionContext::Warning(message_with_warning))
                     },
-                    Ok(_) => {
-                        message::created(completed);
-                    },
-                };
+                    Ok(_) => Ok(PullResultResolutionContext::Success(completed)),
+                }
             },
-            Err(EnvironmentError::Core(ref core_err @ CoreEnvironmentError::BuildEnv(_)))
+
+            // Failed to _build_ the environment due to an incompatible package
+            EnvironmentError::Core(ref core_err @ CoreEnvironmentError::BuildEnv(_))
                 if core_err.is_incompatible_package_error() =>
             {
                 debug!(
@@ -453,25 +470,23 @@ impl Pull {
                 // The unwrap() is only reached if !force,
                 // and we return above if !force and query_functions.is_none()
                 if force || (query_functions.unwrap().query_ignore_build_errors)()? {
-                    let message_with_warning = formatdoc! {"
-                        {pulled_line}
-
+                    let message_with_warning = indoc! {"
                         Could not build environment.
-                        Use 'flox edit' to address issues before activating.
+                        Use 'flox edit' to address issues before activating.\
                     "};
-                    message::warning(message_with_warning);
+                    Ok(PullResultResolutionContext::Warning(message_with_warning))
                 } else {
                     fs::remove_dir_all(dot_flox_path)
                         .context("Could not clean up .flox/ directory")?;
                     bail!("Did not pull the environment.");
                 }
             },
-            Err(e) => {
+
+            e => {
                 fs::remove_dir_all(dot_flox_path).context("Could not clean up .flox/ directory")?;
                 bail!(e)
             },
-        };
-        Ok(())
+        }
     }
 
     /// prompt the user whether to automatically add their system to the manifest
@@ -535,7 +550,7 @@ impl Pull {
 
     /// add the current system to the manifest of the given environment
     fn amend_current_system(
-        env: &ManagedEnvironment,
+        env: &impl Environment,
         flox: &Flox,
     ) -> Result<DocumentMut, anyhow::Error> {
         manifest::add_system(&env.manifest_contents(flox)?, &flox.system)
@@ -602,6 +617,24 @@ impl Pull {
             _ => err.into(),
         }
     }
+}
+
+/// Additional (user facing) context for the result of [Pull::handle_pull_result].
+///
+/// This is used to construct the message to show to the user
+/// upon completion of the pull operation.
+///
+/// Resolving pull errors can succeed, fail,
+/// or fail where the error is eventually resolved by the user.
+/// The latter case is represents errors that happen
+/// when migrating or adding missing systems to the manifest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
+enum PullResultResolutionContext {
+    /// The pull operation was successful and the environment is ready to use
+    Success(&'static str),
+    /// The pull operation was successful
+    /// but the environment might require manual intervention before it can be used
+    Warning(&'static str),
 }
 
 #[cfg(test)]
