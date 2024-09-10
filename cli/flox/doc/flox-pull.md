@@ -4,7 +4,6 @@ section: 1
 header: "Flox User Manuals"
 ...
 
-
 # NAME
 
 flox-pull - pull environment from FloxHub
@@ -14,8 +13,9 @@ flox-pull - pull environment from FloxHub
 ```
 flox [<general-options>] pull
      [-d=<path>]
-     [-a]
      [-r=<owner>/<name> | <owner>/<name> | [-f]]
+     [-f]
+     [-c]
 ```
 
 # DESCRIPTION
@@ -34,14 +34,14 @@ When pulling an environment that has already been pulled, `-d` specifies which
 environment to sync.
 If `-d` is not specified and the current directory contains an environment, that
 environment is synced.
-`-f` may only be specified in this case, forceably updating the environment
+`-f` may be specified in this case, forcibly updating the environment
 locally even if there are local changes not reflected in the remote environment.
 `<owner>/<name>` may be specified in this case and will replace the environment
 with the specified environment.
 
 A remote environment may not support the architecture or operating system of the
 local system pulling the environment,
-in which case `-a` may be passed to forceably add the current system to the
+in which case `-f` may be passed to forcibly add the current system to the
 environment's manifest.
 This may create a broken environment that cannot be pushed back to FloxHub until
 it is repaired with [`flox-edit(1)`](./flox-edit.md).
@@ -56,9 +56,6 @@ environments.
 :   Directory to pull an environment into, or directory that contains an
     environment that has already been pulled (default: current directory).
 
-`-a`, `--add-system`
-:   Forceably add current system to the environment, even if incompatible.
-
 `-r <owner>/<name>`, `--remote <owner>/<name>`
 :   ID of the environment to pull.
 
@@ -66,7 +63,15 @@ environments.
 :   ID of the environment to pull.
 
 `-f`, `--force`
-:   Forceably overwrite the local copy of the environment.
+:   Forcefully overwrite the local copy of the environment,
+    and accept any kind of modification and possibly incompatible results
+    that have to be addressed manually.
+
+`-c`, `--copy`
+:   Create a local copy of an environment by removing the connection to the
+    upstream environment on FloxHub.
+    When pulling a new environment this creates a new environment
+    that can be used locally or pushed to FloxHub under a new user or name.
 
 ```{.include}
 ./include/general-options.md

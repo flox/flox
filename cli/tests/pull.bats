@@ -204,7 +204,6 @@ function add_incompatible_package() {
   assert_success
 }
 
-
 # bats test_tags=pull:floxhub
 # try pulling from floxhub authenticated with a test token
 @test "l?: pull environment from FloxHub" {
@@ -371,7 +370,6 @@ function add_incompatible_package() {
   # v0 manifest does not have a version field
   assert [ $(cat .flox/env/manifest.toml | tomlq -r '.version') == "null" ]
 }
-
 
 # ----------------------------- Catalog Tests -------------------------------- #
 # ---------------------------------------------------------------------------- #
@@ -550,6 +548,79 @@ function add_incompatible_package() {
 
   run "$FLOX_BIN" list
   assert_success
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=pull:copy:new
+@test "'pull --copy' creates path environment" {
+  make_dummy_env "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name --copy
+  assert_success
+  assert [ ! -e ".flox/env.lock" ]
+  assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
+  assert [ $(cat .flox/env.json | jq -r '.owner') == "null" ]
+  assert_output --partial "Created path environment from owner/name"
+}
+
+# bats test_tags=pull:copy:new:error-if-incompatible
+@test "'pull --copy' has same error semantics as normal 'pull'" {
+  make_dummy_env "owner" "name"
+  update_dummy_env "owner" "name"
+  make_incompatible "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name
+  assert_failure
+}
+
+# bats test_tags=pull:copy:convert
+@test "'pull --copy' converts managed env to path environment" {
+  make_dummy_env "owner" "name"
+
+  run "$FLOX_BIN" pull --remote owner/name
+  assert_success
+  assert [ -e ".flox/env.lock" ]
+  assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
+  assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
+
+  run "$FLOX_BIN" pull --copy
+  assert_success
+  assert [ ! -e ".flox/env.lock" ]
+  assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
+  assert [ $(cat .flox/env.json | jq -r '.owner') == "null" ]
+  assert_output --partial "Created path environment from owner/name"
+}
+
+# `flox pull --copy` is the recommended way to push an environmentto a new name
+# if the original was deleted from FloxHub.
+# bats test_tags=pull:copy:convert-if-deleted
+@test "'pull --copy' converts to path environment even if upstream deleted" {
+  make_dummy_env "owner" "name"
+
+  "$FLOX_BIN" pull --remote owner/name
+
+  # delete upstream
+  rm -rf "$FLOX_FLOXHUB_PATH"
+
+  run "$FLOX_BIN" pull --copy
+  assert_success
+}
+
+# `flox pull --copy` should not update an existing environment
+# bats test_tags=pull:copy:do-not-update-local
+@test "'pull --copy' does not pull" {
+  make_dummy_env "owner" "name"
+
+  "$FLOX_BIN" pull --remote owner/name
+
+  update_dummy_env "owner" "name"
+
+  "$FLOX_BIN" pull --copy
+
+  run "$FLOX_BIN" list
+  assert_success
+  assert_output --partial "No packages are installed"
 }
 
 # ---------------------------------------------------------------------------- #
