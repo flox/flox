@@ -20,7 +20,7 @@ use flox_rust_sdk::models::environment::{
     ENVIRONMENT_POINTER_FILENAME,
 };
 use flox_rust_sdk::models::manifest;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use log::debug;
 use toml_edit::DocumentMut;
 use tracing::instrument;
@@ -56,7 +56,9 @@ impl Default for PullSelect {
 // Pull environment from FloxHub
 #[derive(Bpaf, Clone)]
 pub struct Pull {
-    /// Directory in which to create a managed environment, or directory that already contains a managed environment (default: current directory)
+    /// Directory in which to create a managed environment,
+    /// or directory that already contains a managed environment
+    /// (default: current directory)
     #[bpaf(long, short, argument("path"))]
     dir: Option<PathBuf>,
 
@@ -66,6 +68,10 @@ pub struct Pull {
     /// When pulling an existing environment, overrides local changes.
     #[bpaf(long, short)]
     force: bool,
+
+    /// Create a copy of the upstream environment.
+    #[bpaf(short, long)]
+    copy: bool,
 
     #[bpaf(external(pull_select), fallback(Default::default()))]
     pull_select: PullSelect,
@@ -104,7 +110,14 @@ impl Pull {
 
                 debug!("Resolved user intent: pull {remote:?} into {dir:?}");
 
-                Self::pull_new_environment(&flox, dir, remote, self.force, &start_message)?;
+                Self::pull_new_environment(
+                    &flox,
+                    dir,
+                    remote,
+                    self.copy,
+                    self.force,
+                    &start_message,
+                )?;
             },
             PullSelect::Existing {} => {
                 let dir = self.dir.unwrap_or_else(|| std::env::current_dir().unwrap());
@@ -118,6 +131,17 @@ impl Pull {
                         EnvironmentPointer::Path(_) => bail!("Cannot pull into a path environment"),
                     }
                 };
+
+                if self.copy {
+                    debug!("`--copy` provided. converting to path environment, skipping pull");
+                    let env = ManagedEnvironment::open(&flox, pointer.clone(), dir.join(DOT_FLOX))?;
+                    env.into_path_environment(&flox)?;
+
+                    message::created(formatdoc! {"
+                        Created path environment from {owner}/{name}.
+                    ", owner = pointer.owner, name = pointer.name});
+                    return Ok(());
+                }
 
                 Self::pull_existing_environment(
                     &flox,
@@ -159,7 +183,7 @@ impl Pull {
 
         match state {
             PullResult::Updated => {
-                // only build if the environment was updated
+                // Only build if the environment was updated
                 //
                 // Build errors are _not_ handled here
                 // as it is assumed that environments were validated during push.
@@ -208,6 +232,7 @@ impl Pull {
         flox: &Flox,
         env_path: PathBuf,
         env_ref: EnvironmentRef,
+        copy: bool,
         force: bool,
         message: &str,
     ) -> Result<()> {
@@ -299,10 +324,23 @@ impl Pull {
             }),
         )?;
 
-        let message_lead = format!(
-            "Pulled {env_ref} from {floxhub_host}.",
-            floxhub_host = flox.floxhub.base_url()
-        );
+        if copy {
+            debug!("Converting environment to path environment");
+            if let Err(e) = env.into_path_environment(flox) {
+                fs::remove_dir_all(&dot_flox_path)
+                    .context("Could not clean up .flox/ directory")?;
+                bail!(e);
+            }
+        }
+
+        let message_lead = if copy {
+            format!("Created path environment from {env_ref}.")
+        } else {
+            format!(
+                "Pulled {env_ref} from {floxhub_host}.",
+                floxhub_host = flox.floxhub.base_url()
+            )
+        };
 
         match resolution {
             PullResultResolutionContext::Success(completed) => {
