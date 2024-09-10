@@ -21,6 +21,7 @@ use super::{
     InstallationAttempt,
     ManagedPointer,
     MigrationInfo,
+    PathPointer,
     UninstallationAttempt,
     CACHE_DIR_NAME,
     ENVIRONMENT_POINTER_FILENAME,
@@ -1557,6 +1558,64 @@ impl ManagedEnvironment {
 
         Ok(PullResult::Updated)
     }
+
+    /// Detach the environment from the remote repository.
+    ///
+    /// And return a [PathEnvironment] representing
+    /// the current local state of the environment.
+    ///
+    /// This method converts the [ManagedEnvironment] into a [PathEnvironment]
+    /// and deletes the corresponding branch in the [FloxMeta] repository.
+    ///
+    /// **The remote repository is not affected.**
+    pub fn into_path_environment(self, flox: &Flox) -> Result<PathEnvironment, EnvironmentError> {
+        let _ = self.local_env_or_copy_current_generation(flox)?;
+
+        // Since conversion happens in place, i.e. not in a transaction,
+        // we need to be careful not to break the environment as much as possible,
+        // if any of the intermediate steps fails.
+        //
+        // First, remove the out link as this can always be recreated
+        let out_link_path = &self.out_link;
+        if out_link_path.exists() {
+            std::fs::remove_file(out_link_path).map_err(|e| {
+                ManagedEnvironmentError::DeleteEnvironmentLink(out_link_path.to_path_buf(), e)
+            })?;
+        }
+
+        // remove the environment branch
+        // this can be recovered from the generation lock
+        let branch = branch_name(&self.pointer, &self.path);
+        self.floxmeta.git.delete_branch(&branch, true).unwrap();
+
+        fs::remove_file(self.path.join(GENERATION_LOCK_FILENAME))
+            .map_err(ManagedEnvironmentError::WriteLock)?;
+
+        // forget that this environment exists
+        deregister(
+            flox,
+            &self.path,
+            &EnvironmentPointer::Managed(self.pointer.clone()),
+        )?;
+
+        // create the metadata for a path environment
+        let path_pointer = PathPointer::new(self.name());
+        fs::write(
+            self.path.join(ENVIRONMENT_POINTER_FILENAME),
+            serde_json::to_string(&path_pointer)
+                .map_err(ManagedEnvironmentError::SerializePointer)?,
+        )
+        .map_err(ManagedEnvironmentError::WritePointer)?;
+
+        // open the environment to register it
+        let mut path_env = PathEnvironment::open(flox, path_pointer, self.path)?;
+
+        // trigger creation of an environment link
+        // todo: should we rather expose build/link methods for `PathEnv`?
+        let _ = path_env.activation_path(flox)?;
+
+        Ok(path_env)
+    }
 }
 
 pub mod test_helpers {
@@ -1647,6 +1706,7 @@ mod test {
 
     use fslock::LockFile;
     use indoc::indoc;
+    use test_helpers::mock_managed_environment_from_env_files;
     use url::Url;
 
     use super::*;
@@ -1668,7 +1728,7 @@ mod test {
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::LockedManifestCatalog;
     use crate::models::manifest::{ManifestPackageDescriptorCatalog, TypedManifestCatalog};
-    use crate::providers::catalog::{Client, MockClient};
+    use crate::providers::catalog::{Client, MockClient, GENERATED_DATA};
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::GitCommandProvider;
 
@@ -2648,5 +2708,73 @@ mod test {
         env.delete(&flox).unwrap();
         let reg = read_environment_registry(&reg_path).unwrap().unwrap();
         assert!(reg.entries.is_empty());
+    }
+
+    #[test]
+    fn convert_to_path_environment() {
+        let owner = "owner".parse().unwrap();
+        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
+
+        let environment = mock_managed_environment_from_env_files(
+            &flox,
+            GENERATED_DATA.join("envs").join("hello"),
+            owner,
+        );
+
+        // Assert that the environment looks like a managed environment
+        // - it has a ManagedPointer
+        // - it has a generation lock
+        // - it has a branch in the git repo
+        let pointer: ManagedPointer = serde_json::from_str(
+            &fs::read_to_string(environment.path.join(ENVIRONMENT_POINTER_FILENAME)).unwrap(),
+        )
+        .expect("env pointer should be a managed pointer");
+        assert!(
+            environment.path.join(GENERATION_LOCK_FILENAME).exists(),
+            "generation lock should exist"
+        );
+        assert!(environment
+            .floxmeta
+            .git
+            .has_branch(&branch_name(&pointer, &environment.path))
+            .unwrap());
+
+        // Unsafe to create a copy of the git provider
+        // due to risk of corrupting the state of the git repo.
+        // Since the original will be dropped however,
+        // its safe to do so in this instance.
+        let git = environment.floxmeta.git.clone();
+        let path_before = environment.path.clone();
+        let out_link_before = environment.out_link.clone();
+
+        // Convert the environment to a path environment
+        let path_env = environment.into_path_environment(&flox).unwrap();
+
+        // Assert that the environment looks like a path environment after conversion
+        // - its path is the same as before
+        // - it has a PathPointer
+        // - it does not have a generation lock
+        // - it does not have a branch in the git repo
+        assert_eq!(
+            path_env.path, path_before,
+            "the path of the environment should not change"
+        );
+        let _: PathPointer = serde_json::from_str(
+            &fs::read_to_string(path_env.path.join(ENVIRONMENT_POINTER_FILENAME)).unwrap(),
+        )
+        .expect("env pointer should be a path pointer");
+        assert!(
+            !path_env.path.join(GENERATION_LOCK_FILENAME).exists(),
+            "generation lock should be deleted"
+        );
+        assert!(
+            !git.has_branch(&branch_name(&pointer, &path_env.path))
+                .unwrap(),
+            "branch should be deleted"
+        );
+        assert!(
+            !out_link_before.exists(),
+            "managed env out link should be deleted"
+        )
     }
 }
