@@ -1,5 +1,5 @@
 {
-  pkgs ? import (builtins.getFlake "github:nixos/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd") {},
+  pkgs ? import (builtins.getFlake "github:flox/nixpkgs/dc14ed91132ee3a26255d01d8fd0c1f5bff27b2f") {},
   name,
   flox-env,
   install-prefix,
@@ -26,7 +26,7 @@ assert (srcTarball != null) -> (buildScript != null); let
     then null
     else (/. + buildCache);
 in
-  pkgs.runCommand name {
+  pkgs.runCommandNoCC name {
     inherit buildInputs srcTarball;
     nativeBuildInputs = with pkgs;
       [findutils gnutar gnused makeWrapper]
