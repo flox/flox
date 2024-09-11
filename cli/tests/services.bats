@@ -1508,7 +1508,10 @@ EOF
   echo "sleep: sleep 999999" > ./Procfile
 
   SCRIPT="$(cat << "EOF"
-    set -euo pipefail
+    # The timeout below has timed out,
+    # but it's hard to reproduce,
+    # so add set -x for more info in the future.
+    set -euxo pipefail
     source "${TESTS_DIR}/services/register_cleanup.sh"
 
     timeout 2 bash -c "while ! overmind status; do sleep .1; done"
