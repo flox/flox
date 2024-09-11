@@ -30,7 +30,12 @@ impl Stop {
         let socket = env.socket();
 
         let processes = ProcessStates::read(socket)?;
-        let named_processes = super::processes_by_name_or_default_to_all(&processes, &self.names)?;
+        let named_processes = super::processes_by_name_or_default_to_all(
+            &processes,
+            &env.manifest.services,
+            &flox.system,
+            &self.names,
+        )?;
 
         for process in named_processes {
             if !process.is_running {

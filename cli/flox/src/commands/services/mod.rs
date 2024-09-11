@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::{CoreEnvironmentError, Environment};
 use flox_rust_sdk::models::lockfile::LockedManifest;
-use flox_rust_sdk::models::manifest::{TypedManifest, TypedManifestCatalog};
+use flox_rust_sdk::models::manifest::{ManifestServices, TypedManifest, TypedManifestCatalog};
 use flox_rust_sdk::providers::services::{new_services_to_start, ProcessState, ProcessStates};
 use tracing::{debug, instrument};
 
@@ -29,15 +29,25 @@ mod stop;
 #[derive(Debug, thiserror::Error)]
 pub enum ServicesCommandsError {
     #[error(
-        "Cannot {action} services for an environment that is not activated.
-
-To activate and start services, run 'flox activate --start-services'"
+        "Cannot {action} services for an environment that is not activated.\n\
+        \n\
+        To activate and start services, run 'flox activate --start-services'"
     )]
     NotInActivation { action: String },
-    #[error("Environment doesn't have any services defined.")]
+    #[error("Environment does not have any services defined.")]
     NoDefinedServices,
-    #[error("Environment doesn't have any services defined for '{system}'.")]
+    #[error("Environment does not have any services defined for '{system}'.")]
     NoDefinedServicesForSystem { system: System },
+    #[error("Service '{name}' does not exist.")]
+    ServiceDoesNotExist { name: String },
+    #[error("Service '{name}' is not available on '{system}'.")]
+    ServiceNotAvailableOnSystem { name: String, system: System },
+    #[error(
+        "Service '{name}' was defined after services were started.\n\
+        \n\
+        To use the service, restart services with 'flox services restart'"
+    )]
+    DefinedServiceNotActive { name: String },
 }
 
 /// Services Commands.
@@ -217,27 +227,50 @@ pub fn warn_manifest_changes_for_services(flox: &Flox, env: &dyn Environment) {
 }
 
 /// Try to find processes by name, typically provided by the user via arguments,
-/// or default to all processes.
+/// or default to all `processes`.
+/// Typically `processes` will be the result of reading the processes
+/// of the currently active process-compose instance.
 ///
 /// If names are provided, all names must be names of actual services.
 /// If an invalid name is provided, an error is returned.
 fn processes_by_name_or_default_to_all<'a>(
     processes: &'a ProcessStates,
+    manifest_services: &ManifestServices,
+    system: impl Into<System>,
     names: &[String],
 ) -> Result<Vec<&'a ProcessState>> {
-    if !names.is_empty() {
-        names
-            .iter()
-            .map(|name| {
-                processes
-                    .process(name)
-                    .ok_or_else(|| service_does_not_exist_error(name))
-            })
-            .collect::<Result<Vec<_>>>()
-    } else {
+    if names.is_empty() {
         debug!(processes = ?processes, "No service names provided, defaulting to all services");
-        Ok(Vec::from_iter(processes.iter()))
+        return Ok(Vec::from_iter(processes.iter()));
     }
+
+    let system = &system.into();
+
+    let services_for_system = manifest_services.copy_for_system(system);
+
+    let mut states = Vec::with_capacity(names.len());
+    for name in names {
+        if let Some(state) = processes.process(name) {
+            states.push(state);
+            continue;
+        }
+
+        // Check if the service is available at all
+        let is_defined = manifest_services.contains_key(name);
+        let is_defined_for_system = services_for_system.contains_key(name);
+
+        if !is_defined {
+            Err(service_does_not_exist_error(name))?;
+        }
+
+        if !is_defined_for_system {
+            Err(service_not_available_on_system_error(name, system))?;
+        }
+
+        Err(defined_service_not_active_error(name))?;
+    }
+
+    Ok(states)
 }
 
 /// Note that this must be called within an existing activation, otherwise it
@@ -264,7 +297,7 @@ pub async fn start_with_new_process_compose(
         // `processes_by_name_or_default_to_all` where we don't yet have a
         // running `process-compose` instance.
         if !lockfile.manifest.services.contains_key(name) {
-            return Err(service_does_not_exist_error(name));
+            return Err(service_does_not_exist_error(name))?;
         }
         if !lockfile
             .manifest
@@ -272,7 +305,7 @@ pub async fn start_with_new_process_compose(
             .copy_for_system(&system)
             .contains_key(name)
         {
-            return Err(service_not_available_on_system_error(name, &system));
+            return Err(service_not_available_on_system_error(name, &system))?;
         }
     }
     Activate {
@@ -311,18 +344,32 @@ pub async fn start_with_new_process_compose(
 
 /// Error to return when a service doesn't exist, either in the lockfile or the
 /// current process-compose config.
-pub(crate) fn service_does_not_exist_error(name: &str) -> anyhow::Error {
-    anyhow!(format!("Service '{name}' not found."))
+pub(crate) fn service_does_not_exist_error(name: &str) -> ServicesCommandsError {
+    ServicesCommandsError::ServiceDoesNotExist {
+        name: name.to_string(),
+    }
 }
 
 /// Error to return when a service doesn't exist, either in the lockfile or the
 /// current process-compose config.
-fn service_not_available_on_system_error(name: &str, system: &System) -> anyhow::Error {
-    anyhow!(format!("Service '{name}' not available on '{system}'."))
+fn service_not_available_on_system_error(name: &str, system: &System) -> ServicesCommandsError {
+    ServicesCommandsError::ServiceNotAvailableOnSystem {
+        name: name.to_string(),
+        system: system.clone(),
+    }
+}
+
+/// Error to return when a service is defined in the manifest
+/// but not in the current process-compose config.
+fn defined_service_not_active_error(name: &str) -> ServicesCommandsError {
+    ServicesCommandsError::DefinedServiceNotActive {
+        name: name.to_string(),
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use flox_rust_sdk::models::manifest::ManifestServiceDescriptor;
     use flox_rust_sdk::providers::services::test_helpers::generate_process_state;
 
     use super::*;
@@ -335,8 +382,13 @@ mod tests {
         ]
         .into();
 
-        let all_processes = processes_by_name_or_default_to_all(&processes, &["foo".to_string()])
-            .expect("naming 'foo' should return one process");
+        let all_processes = processes_by_name_or_default_to_all(
+            &processes,
+            &ManifestServices::default(),
+            "ignore-system",
+            &["foo".to_string()],
+        )
+        .expect("naming 'foo' should return one process");
 
         assert_eq!(all_processes.len(), 1);
         assert_eq!(all_processes[0].name, "foo");
@@ -350,8 +402,13 @@ mod tests {
         ]
         .into();
 
-        let all_processes = processes_by_name_or_default_to_all(&processes, &[])
-            .expect("no process names should return all processes");
+        let all_processes = processes_by_name_or_default_to_all(
+            &processes,
+            &ManifestServices::default(),
+            "ignore-system",
+            &[],
+        )
+        .expect("no process names should return all processes");
 
         assert_eq!(all_processes.len(), 2);
     }
@@ -359,7 +416,81 @@ mod tests {
     #[test]
     fn processes_by_name_fails_for_invalid_names() {
         let processes = [generate_process_state("foo", "Running", 123, true)].into();
-        processes_by_name_or_default_to_all(&processes, &["bar".to_string()])
-            .expect_err("invalid process name should error");
+        processes_by_name_or_default_to_all(
+            &processes,
+            &ManifestServices::default(),
+            "ignore-system",
+            &["bar".to_string()],
+        )
+        .expect_err("invalid process name should error");
+    }
+
+    #[test]
+    fn processes_by_name_fails_if_service_not_available_on_current_system() {
+        let processes = [].into();
+        let mut manifest_services = ManifestServices::default();
+        manifest_services.insert("foo".to_string(), ManifestServiceDescriptor {
+            command: "".to_string(),
+            vars: None,
+            is_daemon: None,
+            shutdown: None,
+            systems: Some(vec!["another-system".to_string()]),
+        });
+
+        let err: ServicesCommandsError = processes_by_name_or_default_to_all(
+            &processes,
+            &manifest_services,
+            "ignore-system",
+            &["foo".to_string()],
+        )
+        .expect_err("invalid system should error")
+        .downcast()
+        .unwrap();
+
+        let expected = ServicesCommandsError::ServiceNotAvailableOnSystem {
+            name: "foo".to_string(),
+            system: "ignore-system".into(),
+        };
+
+        assert_eq!(
+            err.to_string(),
+            expected.to_string(),
+            "{:?} != {:?}",
+            err,
+            expected
+        );
+    }
+
+    #[test]
+    fn processes_by_name_fails_if_service_not_available_in_current_activation() {
+        let processes = [].into();
+        let mut manifest_services = ManifestServices::default();
+        manifest_services.insert("foo".to_string(), ManifestServiceDescriptor {
+            command: "".to_string(),
+            vars: None,
+            is_daemon: None,
+            shutdown: None,
+            systems: Some(vec!["system".to_string()]),
+        });
+
+        let err: ServicesCommandsError =
+            processes_by_name_or_default_to_all(&processes, &manifest_services, "system", &[
+                "foo".to_string()
+            ])
+            .expect_err("invalid system should error")
+            .downcast()
+            .unwrap();
+
+        let expected = ServicesCommandsError::DefinedServiceNotActive {
+            name: "foo".to_string(),
+        };
+
+        assert_eq!(
+            err.to_string(),
+            expected.to_string(),
+            "{:?} != {:?}",
+            err,
+            expected
+        );
     }
 }

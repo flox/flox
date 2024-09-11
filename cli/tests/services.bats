@@ -181,7 +181,7 @@ EOF
     # NB: No --start-services.
     run "$FLOX_BIN" activate -- "$FLOX_BIN" services "$command"
     assert_failure
-    assert_line "❌ ERROR: Environment doesn't have any services defined."
+    assert_line "❌ ERROR: Environment does not have any services defined."
   done
 }
 
@@ -206,7 +206,7 @@ EOF
     # NB: No --start-services.
     run "$FLOX_BIN" activate -- "$FLOX_BIN" services "$command"
     assert_failure
-    assert_line "❌ ERROR: Environment doesn't have any services defined for '$NIX_SYSTEM'."
+    assert_line "❌ ERROR: Environment does not have any services defined for '$NIX_SYSTEM'."
   done
 }
 
@@ -309,7 +309,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: Service 'invalid' not found"
+  assert_output --partial "❌ ERROR: Service 'invalid' does not exist."
 
   # This doesn't guarantee that the services haven't been restarted _after_
   # we've read the counter files. So an intermittent failure could indicate that
@@ -545,7 +545,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: Service 'one' not found"
+  assert_output --partial "❌ ERROR: Service 'one' does not exist."
   refute_output --partial "Service 'touch_file'"
   [ ! -e hello.txt ]
 }
@@ -562,7 +562,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: Service 'invalid' not found"
+  assert_output --partial "❌ ERROR: Service 'invalid' does not exist."
 }
 
 # bats test_tags=services:stop
@@ -578,7 +578,7 @@ EOF
 EOF
 )
   assert_failure
-  assert_output --partial "❌ ERROR: Service 'invalid' not found"
+  assert_output --partial "❌ ERROR: Service 'invalid' does not exist."
   assert_output --regexp "one +Running"
   assert_output --regexp "two +Running"
 }
@@ -743,7 +743,7 @@ EOF
 EOF
   )
   assert_failure
-  assert_line "❌ ERROR: Service 'doesnotexist' not found."
+  assert_line "❌ ERROR: Service 'doesnotexist' does not exist."
 }
 
 # Runs a service that will sleep after printing a few lines of logs.
@@ -956,13 +956,13 @@ EOF
   assert_success
 }
 
-@test "activate: --start-services warns if environment doesn't have services" {
+@test "activate: --start-services warns if environment does not have services" {
   run "$FLOX_BIN" init
   assert_success
 
   run "$FLOX_BIN" activate --start-services -- true
   assert_success
-  assert_output "⚠️  Environment doesn't have any services defined."
+  assert_output "⚠️  Environment does not have any services defined."
 }
 
 @test "activate: outer activation starts services and inner activation doesn't" {
@@ -1339,7 +1339,7 @@ EOF
 
   run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
   assert_failure
-  assert_output --partial "Service 'invalid' not found."
+  assert_output --partial "Service 'invalid' does not exist."
   assert_output --partial "Services not started or quit unexpectedly."
 }
 
@@ -1367,7 +1367,7 @@ EOF
 
   run "$FLOX_BIN" activate -- bash -c "$SCRIPT"
   assert_failure
-  assert_output --partial "Service 'invalid' not available on '$NIX_SYSTEM'."
+  assert_output --partial "Service 'invalid' is not available on '$NIX_SYSTEM'."
   assert_output --partial "Services not started or quit unexpectedly."
 }
 
@@ -1540,7 +1540,7 @@ EOF
   # Then try to start the second service.
   run "$FLOX_BIN" activate -s -- bash "${TESTS_DIR}/services/start_does_not_pick_up_modifications.sh"
   assert_failure
-  assert_output --partial "Service 'two' not found."
+  assert_output --partial "Service 'two' was defined after services were started."
 }
 
 

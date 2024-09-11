@@ -2,7 +2,9 @@ use std::path::Path;
 
 use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
+use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::manifest::ManifestServices;
 use flox_rust_sdk::providers::services::{
     process_compose_down,
     restart_service,
@@ -82,7 +84,13 @@ impl Restart {
             Ok(())
         } else {
             debug!("restarting services with existing process-compose instance");
-            Self::restart_with_existing_process_compose(socket, &self.names, existing_processes)
+            Self::restart_with_existing_process_compose(
+                socket,
+                &env.manifest.services,
+                &flox.system,
+                &self.names,
+                existing_processes,
+            )
         }
     }
 
@@ -103,10 +111,17 @@ impl Restart {
     // Defaults to restarting all services if no services are specified.
     fn restart_with_existing_process_compose(
         socket: impl AsRef<Path>,
+        manifest_services: &ManifestServices,
+        system: impl Into<System>,
         names: &[String],
         processes: ProcessStates,
     ) -> Result<()> {
-        let named_processes = super::processes_by_name_or_default_to_all(&processes, names)?;
+        let named_processes = super::processes_by_name_or_default_to_all(
+            &processes,
+            manifest_services,
+            system,
+            names,
+        )?;
 
         let mut failure_count = 0;
         for process in named_processes {
