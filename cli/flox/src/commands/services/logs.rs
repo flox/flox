@@ -43,8 +43,12 @@ impl Logs {
         let processes = ProcessStates::read(socket)?;
 
         if self.follow {
-            let named_processes =
-                super::processes_by_name_or_default_to_all(&processes, &self.names)?;
+            let named_processes = super::processes_by_name_or_default_to_all(
+                &processes,
+                &env.manifest.services,
+                &flox.system,
+                &self.names,
+            )?;
             let names = named_processes.iter().map(|state| &state.name);
             let log_stream = ProcessComposeLogStream::new(socket, names.clone(), self.tail)?;
 
@@ -62,7 +66,7 @@ impl Logs {
             // Avoids attaching to a log of a non-existent service, in which case `process-compose`
             // will block indefinitely.
             if processes.process(name).is_none() {
-                return Err(super::service_does_not_exist_error(name));
+                return Err(super::service_does_not_exist_error(name))?;
             }
 
             let tail = ProcessComposeLogTail::new(socket, name, self.tail)?;

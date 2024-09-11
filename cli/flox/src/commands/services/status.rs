@@ -37,7 +37,12 @@ impl Status {
 
         let processes = ProcessStates::read(env.socket())?;
 
-        let named_processes = super::processes_by_name_or_default_to_all(&processes, &self.names)?;
+        let named_processes = super::processes_by_name_or_default_to_all(
+            &processes,
+            &env.manifest.services,
+            &flox.system,
+            &self.names,
+        )?;
 
         let process_states_display = named_processes
             .into_iter()

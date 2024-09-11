@@ -3,7 +3,9 @@ use std::path::Path;
 
 use anyhow::{anyhow, Result};
 use bpaf::Bpaf;
+use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
+use flox_rust_sdk::models::manifest::ManifestServices;
 use flox_rust_sdk::providers::services::{
     shutdown_process_compose_if_all_processes_stopped,
     start_service,
@@ -64,7 +66,13 @@ impl Start {
             Ok(())
         } else {
             debug!("starting services with existing process-compose instance");
-            Self::start_with_existing_process_compose(env.socket(), &self.names, &mut stderr())
+            Self::start_with_existing_process_compose(
+                env.socket(),
+                &env.manifest.services,
+                &flox.system,
+                &self.names,
+                &mut stderr(),
+            )
         }
     }
 
@@ -72,11 +80,18 @@ impl Start {
     /// Defaults to starting all services if no services are specified.
     fn start_with_existing_process_compose(
         socket: impl AsRef<Path>,
+        manifest_services: &ManifestServices,
+        system: impl Into<System>,
         names: &[String],
         err_stream: &mut impl std::io::Write,
     ) -> Result<()> {
         let processes = ProcessStates::read(&socket)?;
-        let named_processes = super::processes_by_name_or_default_to_all(&processes, names)?;
+        let named_processes = super::processes_by_name_or_default_to_all(
+            &processes,
+            manifest_services,
+            system,
+            names,
+        )?;
 
         let mut failure_count = 0;
         for process in named_processes {
@@ -126,11 +141,16 @@ mod tests {
 
         let err = Start::start_with_existing_process_compose(
             instance.socket(),
+            &Default::default(),
+            "system",
             &["one".to_string()],
             &mut io::stderr(),
         )
         .unwrap_err();
-        assert!(err.to_string().contains("Service 'one' not found."));
+        assert!(
+            err.to_string().contains("Service 'one' does not exist."),
+            "{err}"
+        );
     }
 
     /// start_with_existing_process_compose can start a specified service
@@ -156,6 +176,8 @@ mod tests {
 
         Start::start_with_existing_process_compose(
             instance.socket(),
+            &Default::default(),
+            "system",
             &["two".to_string()],
             &mut io::stderr(),
         )
@@ -193,7 +215,14 @@ mod tests {
         assert!(!three_state.is_running);
 
         let mut out = Vec::new();
-        Start::start_with_existing_process_compose(instance.socket(), &[], &mut out).unwrap();
+        Start::start_with_existing_process_compose(
+            instance.socket(),
+            &Default::default(),
+            "system",
+            &[],
+            &mut out,
+        )
+        .unwrap();
         let states = ProcessStates::read(instance.socket()).unwrap();
         let one_state = states.process("one").unwrap();
         assert!(one_state.is_running);
