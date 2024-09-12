@@ -21,6 +21,12 @@ pub enum MessageType {
     AttrPathNotFound,
     #[serde(rename = "constraints_too_tight")]
     ConstraintsTooTight,
+    #[serde(rename = "attr_path_not_found.not_in_catalog")]
+    AttrPathNotFoundNotInCatalog,
+    #[serde(rename = "attr_path_not_found.systems_not_on_same_page")]
+    AttrPathNotFoundSystemsNotOnSamePage,
+    #[serde(rename = "attr_path_not_found.not_found_for_all_systems")]
+    AttrPathNotFoundNotFoundForAllSystems,
 
     #[serde(untagged)]
     Unknown(String),

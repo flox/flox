@@ -705,7 +705,15 @@ impl TryFrom<PackageGroup> for api_types::PackageGroup {
     }
 }
 
-/// The content of a generic message
+/// The content of a generic message.
+///
+/// These are generic messages from the service
+/// that do not carry any additional context.
+///
+/// Typically constructed from a [ResolutionMessageGeneral] where
+/// the [ResolutionMessageGeneral::type_] is [MessageType::General].
+///
+/// _Unknown_ message types are typically constructed as [MsgUnknown] instead.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MsgGeneral {
     /// The log level of the message
@@ -714,7 +722,7 @@ pub struct MsgGeneral {
     pub msg: String,
 }
 
-/// The content of a "attr path not found" message
+/// The content of a "attr path not found" message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MsgAttrPathNotFound {
     /// The log level of the message
@@ -729,7 +737,73 @@ pub struct MsgAttrPathNotFound {
     pub valid_systems: Vec<System>,
 }
 
-/// The content of a "constraints too tight" message
+/// A message that is returned by a catalog if the package,
+/// installed as [Self::install_id], cannot be resolved,
+/// because [Self::attr_path] is not present in the catalog.
+///
+/// Typically constructed from a [ResolutionMessageGeneral] where
+/// the [ResolutionMessageGeneral::type_] is [MessageType::AttrPathNotFoundNotInCatalog].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsgAttrPathNotFoundNotInCatalog {
+    /// The log level of the message
+    pub level: MessageLevel,
+    /// The actual message
+    pub msg: String,
+    /// The requested attribute path
+    pub attr_path: String,
+    /// The install id that requested this attribute path
+    pub install_id: String,
+}
+
+/// A message that is returned by a catalog if the package,
+/// installed as [Self::install_id], cannot be resolved,
+/// because no single page contain a package for all requested systems.
+/// The catalog suggests an alternaive grouping in [Self::system_groupings].
+///
+/// Typically constructed from a [ResolutionMessageGeneral] where
+/// the [ResolutionMessageGeneral::type_] is [MessageType::AttrPathNotFoundSystemsNotOnSamePage].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MsgAttrPathNotFoundSystemsNotOnSamePage {
+    /// The log level of the message
+    pub level: MessageLevel,
+    /// The actual message
+    pub msg: String,
+    /// The requested attribute path
+    pub attr_path: String,
+    /// The install id that requested this attribute path
+    pub install_id: String,
+    /// System groupings suggested by the catalog server
+    pub system_groupings: String,
+}
+
+/// A message that is returned by a catalog if the package,
+/// installed as [Self::install_id], cannot be resolved,
+/// because [Self::attr_path] is not found for all requested systems.
+/// Instead, the [Self::attr_path] is only valid on [Self::valid_systems].
+///
+/// Typically constructed from a [ResolutionMessageGeneral] where
+/// the [ResolutionMessageGeneral::type_] is [MessageType::AttrPathNotFoundNotFoundForAllSystems].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MsgAttrPathNotFoundNotFoundForAllSystems {
+    /// The log level of the message
+    pub level: MessageLevel,
+    /// The actual message
+    pub msg: String,
+    /// The requested attribute path
+    pub attr_path: String,
+    /// The install id that requested this attribute path
+    pub install_id: String,
+    /// The systems on which this attribute path is valid
+    pub valid_systems: Vec<System>,
+}
+
+/// A message that is returned by a catalog if the package group
+/// cannot be resolved because the constraints are too tight.
+/// For example, the version constraints of all packages
+/// can't be satisfied by a single page.
+///
+/// Typically constructed from a [ResolutionMessageGeneral] where
+/// the [ResolutionMessageGeneral::type_] is [MessageType::ConstraintsTooTight].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MsgConstraintsTooTight {
     /// The log level of the message
@@ -738,7 +812,9 @@ pub struct MsgConstraintsTooTight {
     pub msg: String,
 }
 
-/// The content of a generic message
+/// The content of a yet unkown message.
+///
+/// Generic messages are typically constructed [MsgGeneral].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MsgUnknown {
     /// The original message type string
@@ -752,6 +828,13 @@ pub struct MsgUnknown {
 }
 
 /// The kinds of resolution messages we can receive
+///
+/// This is a subset of the messages that can be returned by the catalog API.
+/// Currently, a [ResolutionMessage] is constructed from [ResolutionMessageGeneral],
+/// by matching on the `type_` field, and interpreting the
+/// [ResolutionMessageGeneral::context] field accordingly.
+///
+/// Messages _may_ be error messages, but they may also be informational.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResolutionMessage {
     /// A generic message about resolution
@@ -759,6 +842,9 @@ pub enum ResolutionMessage {
     /// The attribute path requested for an install id either doesn't exist at all,
     /// or isn't available on this system
     AttrPathNotFound(MsgAttrPathNotFound),
+    AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog),
+    AttrPathNotFoundSystemsNotOnSamePage(MsgAttrPathNotFoundSystemsNotOnSamePage),
+    AttrPathNotFoundNotFoundForAllSystems(MsgAttrPathNotFoundNotFoundForAllSystems),
     /// Couldn't resolve a package group because the constraints were too tight,
     /// which could mean that all the version constraints can't be satisfied by
     /// a single page.
@@ -768,13 +854,54 @@ pub enum ResolutionMessage {
 }
 
 impl ResolutionMessage {
-    pub fn msg(&self) -> String {
+    pub fn msg(&self) -> &str {
         match self {
-            ResolutionMessage::General(msg) => msg.msg.clone(),
-            ResolutionMessage::AttrPathNotFound(msg) => msg.msg.clone(),
-            ResolutionMessage::ConstraintsTooTight(msg) => msg.msg.clone(),
-            ResolutionMessage::Unknown(msg) => msg.msg.clone(),
+            ResolutionMessage::General(msg) => &msg.msg,
+            ResolutionMessage::AttrPathNotFoundNotInCatalog(msg) => &msg.msg,
+            ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(msg) => &msg.msg,
+            ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(msg) => &msg.msg,
+            ResolutionMessage::ConstraintsTooTight(msg) => &msg.msg,
+            ResolutionMessage::Unknown(msg) => &msg.msg,
         }
+    }
+
+    /// Extract context.attr_path
+    ///
+    /// The caller must determine whether context contains attr_path
+    fn attr_path_from_context(context: &HashMap<String, String>) -> String {
+        context
+            .get("attr_path")
+            .cloned()
+            .unwrap_or("default_attr_path".into())
+    }
+
+    /// Extract context.valid_systems
+    ///
+    /// The caller must determine whether context contains valid_systems
+    fn valid_systems_from_context(context: &HashMap<String, String>) -> Vec<System> {
+        // TODO: `valid_systems` currently come back as a ',' delimited string
+        //       rather than an array of strings.
+        //       We split on ',' hoping that there's no escaped ',' in there somewhere.
+        //       Since `"".split(',')` returns `[""]`, we filter out empty strings.
+        let Some(valid_systems_string) = context.get("valid_systems") else {
+            return Vec::new();
+        };
+
+        valid_systems_string
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    /// Extract context.install_id
+    ///
+    /// The caller must determine whether context contains install_id
+    fn install_id_from_context(context: &HashMap<String, String>) -> String {
+        context
+            .get("install_id")
+            .map(|s| s.to_string())
+            .unwrap_or("default_install_id".to_string())
     }
 }
 
@@ -790,41 +917,47 @@ impl From<ResolutionMessageGeneral> for ResolutionMessage {
                 msg: r_msg.message,
             }),
             MessageType::AttrPathNotFound => {
-                // Should always be present for this type of message, but that's not enforced
-                // by the type system
-                let attr_path = r_msg
-                    .context
-                    .get("attr_path")
-                    .cloned()
-                    .unwrap_or("default_attr_path".into());
-
-                // TODO: `valid_systems` currently come back as a ',' delimited string rather than
-                //       and array of strings, so you need to check whether the string is empty,
-                //       and if it's not empty you need to split on ',' hoping that there's not
-                //       and escaped ',' in there somewhere.
-                let valid_systems = r_msg
-                    .context
-                    .get("valid_systems")
-                    .and_then(|s| if s.is_empty() { None } else { Some(s) })
-                    .map(|combined| {
-                        combined
-                            .split(',')
-                            .map(|s| s.to_string())
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
-                let install_id: String = r_msg
-                    .context
-                    .get("install_id")
-                    .map(|s| s.to_string())
-                    .unwrap_or("default_install_id".to_string());
                 ResolutionMessage::AttrPathNotFound(MsgAttrPathNotFound {
                     level: r_msg.level,
                     msg: r_msg.message,
-                    attr_path: attr_path.to_string(),
-                    install_id,
-                    valid_systems,
+                    attr_path: Self::attr_path_from_context(&r_msg.context),
+                    install_id: Self::install_id_from_context(&r_msg.context),
+                    valid_systems: Self::valid_systems_from_context(&r_msg.context),
                 })
+            },
+            MessageType::AttrPathNotFoundNotInCatalog => {
+                ResolutionMessage::AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog {
+                    level: r_msg.level,
+                    msg: r_msg.message,
+                    attr_path: Self::attr_path_from_context(&r_msg.context),
+                    install_id: Self::install_id_from_context(&r_msg.context),
+                })
+            },
+            MessageType::AttrPathNotFoundSystemsNotOnSamePage => {
+                ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(
+                    MsgAttrPathNotFoundSystemsNotOnSamePage {
+                        level: r_msg.level,
+                        msg: r_msg.message,
+                        attr_path: Self::attr_path_from_context(&r_msg.context),
+                        install_id: Self::install_id_from_context(&r_msg.context),
+                        system_groupings: r_msg
+                            .context
+                            .get("system_groupings")
+                            .cloned()
+                            .unwrap_or("default_system_groupings".to_string()),
+                    },
+                )
+            },
+            MessageType::AttrPathNotFoundNotFoundForAllSystems => {
+                ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(
+                    MsgAttrPathNotFoundNotFoundForAllSystems {
+                        level: r_msg.level,
+                        msg: r_msg.message,
+                        attr_path: Self::attr_path_from_context(&r_msg.context),
+                        install_id: Self::install_id_from_context(&r_msg.context),
+                        valid_systems: Self::valid_systems_from_context(&r_msg.context),
+                    },
+                )
             },
             MessageType::ConstraintsTooTight => {
                 ResolutionMessage::ConstraintsTooTight(MsgConstraintsTooTight {
@@ -1324,5 +1457,33 @@ mod tests {
                 SearchTerm::VersionStripped("nodePackages.".to_string())
             );
         }
+    }
+
+    #[test]
+    fn extracts_valid_systems_from_context() {
+        let context = [(
+            "valid_systems".to_string(),
+            "aarch64-darwin,x86_64-linux".to_string(),
+        )]
+        .into();
+        let systems = ResolutionMessage::valid_systems_from_context(&context);
+        assert_eq!(systems, vec![
+            "aarch64-darwin".to_string(),
+            "x86_64-linux".to_string()
+        ]);
+    }
+
+    #[test]
+    fn extracts_valid_systems_from_context_with_suffix_comma() {
+        let context = [("valid_systems".to_string(), "aarch64-darwin,".to_string())].into();
+        let systems = ResolutionMessage::valid_systems_from_context(&context);
+        assert_eq!(systems, vec!["aarch64-darwin".to_string()]);
+    }
+
+    #[test]
+    fn extracts_valid_systems_from_context_if_empty() {
+        let context = [("valid_systems".to_string(), "".to_string())].into();
+        let systems = ResolutionMessage::valid_systems_from_context(&context);
+        assert_eq!(systems, Vec::<String>::new());
     }
 }
