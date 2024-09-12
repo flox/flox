@@ -173,16 +173,26 @@ common_file_teardown() {
 
 teardown_file() { common_file_teardown; }
 
-common_test_teardown() {
+wait_for_watchdogs() {
   # wait for any running flox-watchdog proceses to finish
   if [[ -n "${FLOX_DATA_DIR:-}" ]]; then
     # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
     # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
     # grep command itself doesn't get listed when we search for the data dir.
+    # The `sed` removes any leading whitespace,
+    # that is present in the output of `ps` on linux aparently?!.
     # The `cut` just extracts the PID.
     local pids
-    pids="$(ps -eo pid,args | grep flox-watchdog | grep ${FLOX_DATA_DIR?} | cut -d' ' -f1)"
+    pids="$(
+      ps -eo pid,args \
+      | grep flox-watchdog \
+      | grep ${FLOX_DATA_DIR?} \
+      | sed 's/^[[:blank:]]*//' \
+      | cut -d' ' -f1)"
+
     if [ -n "${pids?}" ]; then
+      echo "Waiting for pids: $pids" >&3
+
       tries=0
       while true; do
         tries=$((tries + 1))
@@ -190,14 +200,21 @@ common_test_teardown() {
           break
         else
           if [[ $tries -gt 1000 ]]; then
-            echo "ERROR: flox-watchdog processes did not finish after 10 seconds."
-            break
+            echo "ERROR: flox-watchdog processes did not finish after 10 seconds." >&3
+            # This will fail the test giving us a better idea of which watchdog
+            # didn't get cleaned up
+            exit 1
           fi
           sleep 0.01;
         fi
       done
     fi
   fi
+
+}
+
+common_test_teardown() {
+  wait_for_watchdogs
 
   # Delete test tmpdir unless the user requests to preserve them.
   # XXX: We do not attempt to delete envs here.
