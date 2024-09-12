@@ -2,7 +2,7 @@
   "openapi": "3.0.2",
   "info": {
     "title": "Flox Catalog Service",
-    "description": "\n# Flox Catalog Service API\n\nTBD\n\n*Markdown is available here*\n",
+    "description": "\n# Flox Catalog Service API\n\n![packages](https://api.preview.flox.dev/api/v1/catalog/status/badges/packages.svg)\n",
     "version": "vundefined",
     "x-logo": {
       "url": "https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png"
@@ -15,7 +15,7 @@
           "catalog"
         ],
         "summary": "Search for packages",
-        "description": "Search the catalog(s) under the given criteria for matching packages.\n\nRequired Query Parameters:\n- **seach_term**: The search term to search on.\n- **system**: The search will be constrained to packages on this system.\n\nOptional Query Parameters:\n- **catalogs**: Comma separated list of catalog names to search\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
+        "description": "Search the catalog(s) under the given criteria for matching packages.\n\nRequired Query Parameters:\n- **seach_term**: The search term to search on.\n- **system**: This is returned but does not affect results\n\nOptional Query Parameters:\n- **catalogs**: Comma separated list of catalog names to search\n- **page**: Optional page number for pagination (def = 0)\n- **pageSize**: Optional page size for pagination (def = 10)\n\nReturns:\n- **PackageSearchResult**: A list of PackageInfo and the total result count",
         "operationId": "search_api_v1_catalog_search_get",
         "parameters": [
           {
@@ -24,7 +24,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "[a-zA-Z0-9\\-\\._,]{2,200}",
+              "pattern": "[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}",
               "title": "Search Term"
             }
           },
@@ -207,6 +207,312 @@
         }
       }
     },
+    "/api/v1/catalog/settings/{key}": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Adjust various settings",
+        "description": "Adjusts various settings on the catalog service.\n\nQuery Parameters:\n- **key**: The the key to adjust.\n    - \"plan\" - Enables the logging of the DB query plan for queries for\n    **value** seconds.  It will be scheduled to turn off automatically after\n    that.",
+        "operationId": "settings_api_v1_catalog_settings__key__post",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key"
+            }
+          },
+          {
+            "name": "value",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Value"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Request validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/status/catalog": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "summary": "Get basic catalog database status",
+        "description": "Gather some basic status values from the database.\n\nReturns:\n- **CatalogStatus**: A dictionary of various status values.",
+        "operationId": "get_catalog_status_api_v1_catalog_status_catalog_get",
+        "responses": {
+          "200": {
+            "description": "Catalog Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogStatus"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Erorr",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/status/service": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "summary": "Get basic service status",
+        "description": "Returns basic service status\n\nReturns:\n- **ServiceStatus**: A dictionary of various status values.",
+        "operationId": "get_service_status_api_v1_catalog_status_service_get",
+        "responses": {
+          "200": {
+            "description": "Service Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceStatus-Input"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Erorr",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/status/sentry-debug": {
+      "get": {
+        "tags": [
+          "status"
+        ],
+        "summary": "Trigger Error",
+        "operationId": "trigger_error_api_v1_catalog_status_sentry_debug_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/catalogs/": {
+      "post": {
+        "tags": [
+          "user_catalogs"
+        ],
+        "summary": "Create a new user catalog",
+        "description": "Create a new user catalog\n\nRequired Query Parameters:\n- **name**: The name of the new catalog\n\n\nReturns:\n- **UserCatalog**: The new user catalog",
+        "operationId": "create_catalog_api_v1_catalog_catalogs__post",
+        "security": [
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The new user catalog was created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCatalog"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The catalog name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The catalog name is invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/catalogs/{catalog_name}": {
+      "get": {
+        "tags": [
+          "user_catalogs"
+        ],
+        "summary": "Get user catalog metadata",
+        "description": "Get user catalog metadata\n\nRequired Query Parameters:\n- **catalog_name**: The name of the catalog\n\n\nReturns:\n- **UserCatalog**: The user catalog",
+        "operationId": "get_catalog_api_v1_catalog_catalogs__catalog_name__get",
+        "security": [
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The user catalog metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCatalog"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog with the given name was not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The search terms given could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "user_catalogs"
+        ],
+        "summary": "Delete a user catalog",
+        "description": "Delete a user catalog\n\nRequired Query Parameters:\n- **catalog_name**: The name of catalog to delete\n\n\nReturns:\n- **None**",
+        "operationId": "delete_catalog_api_v1_catalog_catalogs__catalog_name__delete",
+        "security": [
+          {
+            "HTTPBasic": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "Deletion of user catalogs is not yet implemented",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The search terms given could not be processed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/status/catalog": {
       "get": {
         "tags": [
@@ -284,56 +590,6 @@
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/settings/settings/{key}": {
-      "post": {
-        "tags": [
-          "settings"
-        ],
-        "summary": "Adjust various settings",
-        "description": "Adjusts various settings on the catalog service.\n\nQuery Parameters:\n- **key**: The the key to adjust.\n    - \"plan\" - Enables the logging of the DB query plan for queries for\n    **value** seconds.  It will be scheduled to turn off automatically after\n    that.",
-        "operationId": "settings_api_v1_settings_settings__key__post",
-        "parameters": [
-          {
-            "name": "key",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Key"
-            }
-          },
-          {
-            "name": "value",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Value"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful.",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Request validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
               }
             }
           }
@@ -531,7 +787,7 @@
             "title": "Derivations Ct"
           },
           "schema_version": {
-            "type": "number",
+            "type": "string",
             "title": "Schema Version"
           },
           "tags": {
@@ -589,7 +845,10 @@
           "general",
           "resolution_trace",
           "attr_path_not_found",
-          "constraints_too_tight"
+          "constraints_too_tight",
+          "attr_path_not_found.not_in_catalog",
+          "attr_path_not_found.systems_not_on_same_page",
+          "attr_path_not_found.not_found_for_all_systems"
         ],
         "title": "MessageType"
       },
@@ -647,6 +906,12 @@
           },
           "allow_broken": {
             "title": "Allow Broken",
+            "default": false,
+            "nullable": true,
+            "type": "boolean"
+          },
+          "allow_insecure": {
+            "title": "Allow Insecure",
             "default": false,
             "nullable": true,
             "type": "boolean"
@@ -902,6 +1167,11 @@
             "nullable": true,
             "type": "boolean"
           },
+          "insecure": {
+            "title": "Insecure",
+            "nullable": true,
+            "type": "boolean"
+          },
           "unfree": {
             "title": "Unfree",
             "nullable": true,
@@ -938,6 +1208,7 @@
           "rev_count",
           "rev_date",
           "broken",
+          "insecure",
           "unfree",
           "stabilities",
           "scrape_date"
@@ -1155,6 +1426,11 @@
             "nullable": true,
             "type": "boolean"
           },
+          "insecure": {
+            "title": "Insecure",
+            "nullable": true,
+            "type": "boolean"
+          },
           "unfree": {
             "title": "Unfree",
             "nullable": true,
@@ -1195,6 +1471,7 @@
           "rev_count",
           "rev_date",
           "broken",
+          "insecure",
           "unfree",
           "stabilities",
           "scrape_date",
@@ -1381,6 +1658,36 @@
           "x86_64-linux"
         ],
         "title": "SystemEnum"
+      },
+      "UserCatalog": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "created_at"
+        ],
+        "title": "UserCatalog"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBasic": {
+        "type": "http",
+        "scheme": "basic"
       }
     }
   }

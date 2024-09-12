@@ -42,6 +42,79 @@ pub mod types {
             }
         }
     }
+    ///CatalogName
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "Catalog Name",
+    ///  "type": "string",
+    ///  "pattern": "[a-zA-Z0-9\\-_]{3,64}"
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+    pub struct CatalogName(String);
+    impl std::ops::Deref for CatalogName {
+        type Target = String;
+        fn deref(&self) -> &String {
+            &self.0
+        }
+    }
+    impl From<CatalogName> for String {
+        fn from(value: CatalogName) -> Self {
+            value.0
+        }
+    }
+    impl From<&CatalogName> for CatalogName {
+        fn from(value: &CatalogName) -> Self {
+            value.clone()
+        }
+    }
+    impl std::str::FromStr for CatalogName {
+        type Err = self::error::ConversionError;
+        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+            if regress::Regex::new("[a-zA-Z0-9\\-_]{3,64}")
+                .unwrap()
+                .find(value)
+                .is_none()
+            {
+                return Err("doesn't match pattern \"[a-zA-Z0-9\\-_]{3,64}\"".into());
+            }
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl std::convert::TryFrom<&str> for CatalogName {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<&String> for CatalogName {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<String> for CatalogName {
+        type Error = self::error::ConversionError;
+        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl<'de> serde::Deserialize<'de> for CatalogName {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            String::deserialize(deserializer)?
+                .parse()
+                .map_err(|e: self::error::ConversionError| {
+                    <D::Error as serde::de::Error>::custom(e.to_string())
+                })
+        }
+    }
     ///CatalogPageInput
     ///
     /// <details><summary>JSON schema</summary>
@@ -260,7 +333,7 @@ pub mod types {
     ///    },
     ///    "schema_version": {
     ///      "title": "Schema Version",
-    ///      "type": "number"
+    ///      "type": "string"
     ///    },
     ///    "search_index_ct": {
     ///      "title": "Search Index Ct",
@@ -295,7 +368,7 @@ pub mod types {
         pub latest_rev: chrono::DateTime<chrono::offset::Utc>,
         pub latest_scrape: chrono::DateTime<chrono::offset::Utc>,
         pub pages_ct: i64,
-        pub schema_version: f64,
+        pub schema_version: String,
         pub search_index_ct: i64,
         pub systems: Vec<String>,
         pub tags: std::collections::HashMap<String, Vec<String>>,
@@ -418,6 +491,79 @@ pub mod types {
             value.parse()
         }
     }
+    ///Name
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "Name",
+    ///  "type": "string",
+    ///  "pattern": "[a-zA-Z0-9\\-_]{3,64}"
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+    pub struct Name(String);
+    impl std::ops::Deref for Name {
+        type Target = String;
+        fn deref(&self) -> &String {
+            &self.0
+        }
+    }
+    impl From<Name> for String {
+        fn from(value: Name) -> Self {
+            value.0
+        }
+    }
+    impl From<&Name> for Name {
+        fn from(value: &Name) -> Self {
+            value.clone()
+        }
+    }
+    impl std::str::FromStr for Name {
+        type Err = self::error::ConversionError;
+        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+            if regress::Regex::new("[a-zA-Z0-9\\-_]{3,64}")
+                .unwrap()
+                .find(value)
+                .is_none()
+            {
+                return Err("doesn't match pattern \"[a-zA-Z0-9\\-_]{3,64}\"".into());
+            }
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl std::convert::TryFrom<&str> for Name {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<&String> for Name {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<String> for Name {
+        type Error = self::error::ConversionError;
+        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl<'de> serde::Deserialize<'de> for Name {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            String::deserialize(deserializer)?
+                .parse()
+                .map_err(|e: self::error::ConversionError| {
+                    <D::Error as serde::de::Error>::custom(e.to_string())
+                })
+        }
+    }
     ///Output
     ///
     /// <details><summary>JSON schema</summary>
@@ -478,6 +624,14 @@ pub mod types {
     ///  "properties": {
     ///    "allow_broken": {
     ///      "title": "Allow Broken",
+    ///      "default": false,
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "allow_insecure": {
+    ///      "title": "Allow Insecure",
     ///      "default": false,
     ///      "type": [
     ///        "boolean",
@@ -547,6 +701,8 @@ pub mod types {
     pub struct PackageDescriptor {
         #[serde(default = "defaults::package_descriptor_allow_broken")]
         pub allow_broken: Option<bool>,
+        #[serde(default = "defaults::package_descriptor_allow_insecure")]
+        pub allow_insecure: Option<bool>,
         #[serde(default = "defaults::package_descriptor_allow_pre_releases")]
         pub allow_pre_releases: Option<bool>,
         #[serde(default = "defaults::package_descriptor_allow_unfree")]
@@ -795,6 +951,7 @@ pub mod types {
     ///    "broken",
     ///    "derivation",
     ///    "description",
+    ///    "insecure",
     ///    "license",
     ///    "locked_url",
     ///    "name",
@@ -830,6 +987,13 @@ pub mod types {
     ///      "title": "Description",
     ///      "type": [
     ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "insecure": {
+    ///      "title": "Insecure",
+    ///      "type": [
+    ///        "boolean",
     ///        "null"
     ///      ]
     ///    },
@@ -921,6 +1085,7 @@ pub mod types {
         pub broken: Option<bool>,
         pub derivation: String,
         pub description: Option<String>,
+        pub insecure: Option<bool>,
         pub license: Option<String>,
         pub locked_url: String,
         pub name: String,
@@ -1185,6 +1350,7 @@ pub mod types {
     ///    "broken",
     ///    "derivation",
     ///    "description",
+    ///    "insecure",
     ///    "install_id",
     ///    "license",
     ///    "locked_url",
@@ -1221,6 +1387,13 @@ pub mod types {
     ///      "title": "Description",
     ///      "type": [
     ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "insecure": {
+    ///      "title": "Insecure",
+    ///      "type": [
+    ///        "boolean",
     ///        "null"
     ///      ]
     ///    },
@@ -1316,6 +1489,7 @@ pub mod types {
         pub broken: Option<bool>,
         pub derivation: String,
         pub description: Option<String>,
+        pub insecure: Option<bool>,
         pub install_id: String,
         pub license: Option<String>,
         pub locked_url: String,
@@ -1537,7 +1711,7 @@ pub mod types {
     ///{
     ///  "title": "Search Term",
     ///  "type": "string",
-    ///  "pattern": "[a-zA-Z0-9\\-\\._,]{2,200}"
+    ///  "pattern": "[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}"
     ///}
     /// ```
     /// </details>
@@ -1562,13 +1736,13 @@ pub mod types {
     impl std::str::FromStr for SearchTerm {
         type Err = self::error::ConversionError;
         fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
-            if regress::Regex::new("[a-zA-Z0-9\\-\\._,]{2,200}")
+            if regress::Regex::new("[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}")
                 .unwrap()
                 .find(value)
                 .is_none()
             {
                 return Err(
-                    "doesn't match pattern \"[a-zA-Z0-9\\-\\._,]{2,200}\"".into(),
+                    "doesn't match pattern \"[a-zA-Z0-9\\-\\.\\\\@%_,]{2,200}\"".into(),
                 );
             }
             Ok(Self(value.to_string()))
@@ -1774,9 +1948,54 @@ pub mod types {
             value.parse()
         }
     }
+    ///UserCatalog
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserCatalog",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "created_at",
+    ///    "id",
+    ///    "name"
+    ///  ],
+    ///  "properties": {
+    ///    "created_at": {
+    ///      "title": "Created At",
+    ///      "type": "string",
+    ///      "format": "date-time"
+    ///    },
+    ///    "id": {
+    ///      "title": "Id",
+    ///      "type": "integer"
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserCatalog {
+        pub created_at: chrono::DateTime<chrono::offset::Utc>,
+        pub id: i64,
+        pub name: String,
+    }
+    impl From<&UserCatalog> for UserCatalog {
+        fn from(value: &UserCatalog) -> Self {
+            value.clone()
+        }
+    }
     /// Generation of default values for serde.
     pub mod defaults {
         pub(super) fn package_descriptor_allow_broken() -> Option<bool> {
+            Some(false)
+        }
+        pub(super) fn package_descriptor_allow_insecure() -> Option<bool> {
             Some(false)
         }
         pub(super) fn package_descriptor_allow_pre_releases() -> Option<bool> {
@@ -1793,9 +2012,7 @@ pub mod types {
 
 # Flox Catalog Service API
 
-TBD
-
-*Markdown is available here*
+![packages](https://api.preview.flox.dev/api/v1/catalog/status/badges/packages.svg)
 
 
 Version: vundefined*/
@@ -1855,7 +2072,7 @@ Search the catalog(s) under the given criteria for matching packages.
 
 Required Query Parameters:
 - **seach_term**: The search term to search on.
-- **system**: The search will be constrained to packages on this system.
+- **system**: This is returned but does not affect results
 
 Optional Query Parameters:
 - **catalogs**: Comma separated list of catalog names to search
@@ -2033,6 +2250,273 @@ Sends a `POST` request to `/api/v1/catalog/resolve`
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
+    /**Adjust various settings
+
+Adjusts various settings on the catalog service.
+
+Query Parameters:
+- **key**: The the key to adjust.
+    - "plan" - Enables the logging of the DB query plan for queries for
+    **value** seconds.  It will be scheduled to turn off automatically after
+    that.
+
+Sends a `POST` request to `/api/v1/catalog/settings/{key}`
+
+*/
+    pub async fn settings_api_v1_catalog_settings_key_post<'a>(
+        &'a self,
+        key: &'a str,
+        value: &'a str,
+    ) -> Result<ResponseValue<serde_json::Value>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/settings/{}", self.baseurl, encode_path(& key
+            .to_string()),
+        );
+        let mut query = Vec::with_capacity(1usize);
+        query.push(("value", value.to_string()));
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&query)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get basic catalog database status
+
+Gather some basic status values from the database.
+
+Returns:
+- **CatalogStatus**: A dictionary of various status values.
+
+Sends a `GET` request to `/api/v1/catalog/status/catalog`
+
+*/
+    pub async fn get_catalog_status_api_v1_catalog_status_catalog_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<types::CatalogStatus>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/status/catalog", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            500u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get basic service status
+
+Returns basic service status
+
+Returns:
+- **ServiceStatus**: A dictionary of various status values.
+
+Sends a `GET` request to `/api/v1/catalog/status/service`
+
+*/
+    pub async fn get_service_status_api_v1_catalog_status_service_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<types::ServiceStatusInput>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/status/service", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            500u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Trigger Error
+
+Sends a `GET` request to `/api/v1/catalog/status/sentry-debug`
+
+*/
+    pub async fn trigger_error_api_v1_catalog_status_sentry_debug_get<'a>(
+        &'a self,
+    ) -> Result<ResponseValue<serde_json::Value>, Error<()>> {
+        let url = format!("{}/api/v1/catalog/status/sentry-debug", self.baseurl,);
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Create a new user catalog
+
+Create a new user catalog
+
+Required Query Parameters:
+- **name**: The name of the new catalog
+
+
+Returns:
+- **UserCatalog**: The new user catalog
+
+Sends a `POST` request to `/api/v1/catalog/catalogs/`
+
+*/
+    pub async fn create_catalog_api_v1_catalog_catalogs_post<'a>(
+        &'a self,
+        name: &'a types::Name,
+    ) -> Result<ResponseValue<types::UserCatalog>, Error<types::ErrorResponse>> {
+        let url = format!("{}/api/v1/catalog/catalogs/", self.baseurl,);
+        let mut query = Vec::with_capacity(1usize);
+        query.push(("name", name.to_string()));
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .query(&query)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            201u16 => ResponseValue::from_response(response).await,
+            409u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get user catalog metadata
+
+Get user catalog metadata
+
+Required Query Parameters:
+- **catalog_name**: The name of the catalog
+
+
+Returns:
+- **UserCatalog**: The user catalog
+
+Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}`
+
+*/
+    pub async fn get_catalog_api_v1_catalog_catalogs_catalog_name_get<'a>(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+    ) -> Result<ResponseValue<types::UserCatalog>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}", self.baseurl, encode_path(& catalog_name
+            .to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Delete a user catalog
+
+Delete a user catalog
+
+Required Query Parameters:
+- **catalog_name**: The name of catalog to delete
+
+
+Returns:
+- **None**
+
+Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
+
+*/
+    pub async fn delete_catalog_api_v1_catalog_catalogs_catalog_name_delete<'a>(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+    ) -> Result<ResponseValue<serde_json::Value>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}", self.baseurl, encode_path(& catalog_name
+            .to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .delete(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            501u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
     /**Get basic catalog database status
 
 Gather some basic status values from the database.
@@ -2121,50 +2605,6 @@ Sends a `GET` request to `/api/v1/status/sentry-debug`
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
-            _ => Err(Error::UnexpectedResponse(response)),
-        }
-    }
-    /**Adjust various settings
-
-Adjusts various settings on the catalog service.
-
-Query Parameters:
-- **key**: The the key to adjust.
-    - "plan" - Enables the logging of the DB query plan for queries for
-    **value** seconds.  It will be scheduled to turn off automatically after
-    that.
-
-Sends a `POST` request to `/api/v1/settings/settings/{key}`
-
-*/
-    pub async fn settings_api_v1_settings_settings_key_post<'a>(
-        &'a self,
-        key: &'a str,
-        value: &'a str,
-    ) -> Result<ResponseValue<serde_json::Value>, Error<types::ErrorResponse>> {
-        let url = format!(
-            "{}/api/v1/settings/settings/{}", self.baseurl, encode_path(& key
-            .to_string()),
-        );
-        let mut query = Vec::with_capacity(1usize);
-        query.push(("value", value.to_string()));
-        #[allow(unused_mut)]
-        let mut request = self
-            .client
-            .post(url)
-            .header(
-                reqwest::header::ACCEPT,
-                reqwest::header::HeaderValue::from_static("application/json"),
-            )
-            .query(&query)
-            .build()?;
-        let result = self.client.execute(request).await;
-        let response = result?;
-        match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            422u16 => {
-                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
-            }
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
