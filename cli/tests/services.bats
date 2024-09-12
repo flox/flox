@@ -1597,7 +1597,7 @@ EOF
     set -euxo pipefail
     source "${TESTS_DIR}/services/register_cleanup.sh"
 
-    timeout 2 bash -c "while ! overmind status; do sleep .1; done"
+    timeout 2 bash -c "set -x; while ! overmind status; do sleep .1; done"
 
     "$FLOX_BIN" services status
     "$FLOX_BIN" services stop
