@@ -32,7 +32,6 @@ use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
 use crate::providers::catalog::{
     self,
     CatalogPage,
-    MsgAttrPathNotFound,
     MsgAttrPathNotFoundNotFoundForAllSystems,
     PackageDescriptor,
     PackageGroup,

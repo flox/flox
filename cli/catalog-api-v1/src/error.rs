@@ -17,8 +17,6 @@ pub enum MessageType {
     General,
     #[serde(rename = "resolution_trace")]
     ResolutionTrace,
-    #[serde(rename = "attr_path_not_found")]
-    AttrPathNotFound,
     #[serde(rename = "constraints_too_tight")]
     ConstraintsTooTight,
     #[serde(rename = "attr_path_not_found.not_in_catalog")]
@@ -27,6 +25,9 @@ pub enum MessageType {
     AttrPathNotFoundSystemsNotOnSamePage,
     #[serde(rename = "attr_path_not_found.not_found_for_all_systems")]
     AttrPathNotFoundNotFoundForAllSystems,
+    // Although attr_path_not_found is in the API, the catalog server should
+    // never return it,
+    // so we'll let that fall through to Unknown.
 
     #[serde(untagged)]
     Unknown(String),
