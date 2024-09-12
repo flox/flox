@@ -722,21 +722,6 @@ pub struct MsgGeneral {
     pub msg: String,
 }
 
-/// The content of a "attr path not found" message.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MsgAttrPathNotFound {
-    /// The log level of the message
-    pub level: MessageLevel,
-    /// The actual message
-    pub msg: String,
-    /// The requested attribute path
-    pub attr_path: String,
-    /// The install id that requested this attribute path
-    pub install_id: String,
-    /// The systems on which this attribute path is valid
-    pub valid_systems: Vec<System>,
-}
-
 /// A message that is returned by a catalog if the package,
 /// installed as [Self::install_id], cannot be resolved,
 /// because [Self::attr_path] is not present in the catalog.
@@ -839,9 +824,6 @@ pub struct MsgUnknown {
 pub enum ResolutionMessage {
     /// A generic message about resolution
     General(MsgGeneral),
-    /// The attribute path requested for an install id either doesn't exist at all,
-    /// or isn't available on this system
-    AttrPathNotFound(MsgAttrPathNotFound),
     AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog),
     AttrPathNotFoundSystemsNotOnSamePage(MsgAttrPathNotFoundSystemsNotOnSamePage),
     AttrPathNotFoundNotFoundForAllSystems(MsgAttrPathNotFoundNotFoundForAllSystems),
@@ -916,15 +898,6 @@ impl From<ResolutionMessageGeneral> for ResolutionMessage {
                 level: MessageLevel::Trace,
                 msg: r_msg.message,
             }),
-            MessageType::AttrPathNotFound => {
-                ResolutionMessage::AttrPathNotFound(MsgAttrPathNotFound {
-                    level: r_msg.level,
-                    msg: r_msg.message,
-                    attr_path: Self::attr_path_from_context(&r_msg.context),
-                    install_id: Self::install_id_from_context(&r_msg.context),
-                    valid_systems: Self::valid_systems_from_context(&r_msg.context),
-                })
-            },
             MessageType::AttrPathNotFoundNotInCatalog => {
                 ResolutionMessage::AttrPathNotFoundNotInCatalog(MsgAttrPathNotFoundNotInCatalog {
                     level: r_msg.level,
