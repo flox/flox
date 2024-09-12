@@ -1699,6 +1699,7 @@ mod tests {
                     broken: Some(false),
                     derivation: "new derivation".to_string(),
                     description: Some("description".to_string()),
+                    insecure: Some(false),
                     install_id: foo_iid.clone(),
                     license: None,
                     locked_url: "locked-url".to_string(),

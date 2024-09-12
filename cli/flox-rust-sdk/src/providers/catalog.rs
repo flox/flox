@@ -988,6 +988,7 @@ pub mod test_helpers {
             broken: Some(false),
             derivation: String::new(),
             description: None,
+            insecure: Some(false),
             install_id: install_id.to_string(),
             license: None,
             locked_url: String::new(),
