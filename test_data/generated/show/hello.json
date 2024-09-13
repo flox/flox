@@ -1,20 +1,9 @@
 [
   {
-    "count": 11,
+    "count": 12,
     "results": [
       {
-        "description": "A program that produces a familiar, friendly greeting",
-        "input": "nixpkgs",
-        "license": "GPL-3.0-or-later",
-        "pname": "hello",
-        "relPath": [
-          "hello"
-        ],
-        "system": "aarch64-darwin",
-        "version": "2.12.1"
-      },
-      {
-        "description": "A program that produces a familiar, friendly greeting",
+        "description": "Program that produces a familiar, friendly greeting",
         "input": "nixpkgs",
         "license": "GPL-3.0-or-later",
         "pname": "hello",
@@ -43,6 +32,17 @@
         "relPath": [
           "hello"
         ],
+        "system": "aarch64-darwin",
+        "version": "2.12.1"
+      },
+      {
+        "description": "A program that produces a familiar, friendly greeting",
+        "input": "nixpkgs",
+        "license": "GPL-3.0-or-later",
+        "pname": "hello",
+        "relPath": [
+          "hello"
+        ],
         "system": "x86_64-linux",
         "version": "2.12.1"
       },
@@ -54,18 +54,7 @@
         "relPath": [
           "hello"
         ],
-        "system": "aarch64-darwin",
-        "version": "2.12"
-      },
-      {
-        "description": "A program that produces a familiar, friendly greeting",
-        "input": "nixpkgs",
-        "license": "GPL-3.0-or-later",
-        "pname": "hello",
-        "relPath": [
-          "hello"
-        ],
-        "system": "aarch64-linux",
+        "system": "x86_64-linux",
         "version": "2.12"
       },
       {
@@ -87,7 +76,18 @@
         "relPath": [
           "hello"
         ],
-        "system": "x86_64-linux",
+        "system": "aarch64-linux",
+        "version": "2.12"
+      },
+      {
+        "description": "A program that produces a familiar, friendly greeting",
+        "input": "nixpkgs",
+        "license": "GPL-3.0-or-later",
+        "pname": "hello",
+        "relPath": [
+          "hello"
+        ],
+        "system": "aarch64-darwin",
         "version": "2.12"
       },
       {
@@ -110,6 +110,17 @@
           "hello"
         ],
         "system": "x86_64-darwin",
+        "version": "2.10"
+      },
+      {
+        "description": "A program that produces a familiar, friendly greeting",
+        "input": "nixpkgs",
+        "license": "GPL-3.0-or-later",
+        "pname": "hello",
+        "relPath": [
+          "hello"
+        ],
+        "system": "aarch64-darwin",
         "version": "2.10"
       },
       {

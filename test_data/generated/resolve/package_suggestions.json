@@ -3,12 +3,11 @@
     {
       "msgs": [
         {
-          "AttrPathNotFound": {
+          "AttrPathNotFoundNotInCatalog": {
             "attr_path": "package",
             "install_id": "package",
             "level": "error",
-            "msg": "The attr_path 'package' is not found.",
-            "valid_systems": []
+            "msg": "The attr_path package is not found in the catalog."
           }
         }
       ],
@@ -17,38 +16,37 @@
     }
   ],
   {
-    "count": 1966,
+    "count": 3086,
     "results": [
       {
-        "description": "GNU Bourne-Again Shell, the de facto standard shell on Linux",
+        "description": "System to facilitate installing and updating packages",
         "input": "nixpkgs",
         "license": null,
-        "pname": "runtimeShellPackage",
+        "pname": "packagekit",
         "relPath": [
-          "runtimeShellPackage"
+          "packagekit"
         ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
-        "description": null,
+        "description": "Package manager for PureScript based on package sets",
         "input": "nixpkgs",
         "license": null,
-        "pname": "kpackage",
+        "pname": "psc-package",
         "relPath": [
-          "libsForQt5",
-          "kpackage"
+          "psc-package"
         ],
         "system": "aarch64-darwin",
         "version": null
       },
       {
-        "description": null,
+        "description": "Media packaging framework for VOD and Live DASH and HLS applications",
         "input": "nixpkgs",
         "license": null,
-        "pname": "xmonad-with-packages",
+        "pname": "shaka-packager",
         "relPath": [
-          "xmonad-with-packages"
+          "shaka-packager"
         ],
         "system": "aarch64-darwin",
         "version": null

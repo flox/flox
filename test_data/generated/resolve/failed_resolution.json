@@ -3,12 +3,11 @@
     {
       "msgs": [
         {
-          "AttrPathNotFound": {
+          "AttrPathNotFoundNotInCatalog": {
             "attr_path": "definitely-not-a-package",
             "install_id": "definitely-not-a-package",
             "level": "error",
-            "msg": "The attr_path 'definitely-not-a-package' is not found.",
-            "valid_systems": []
+            "msg": "The attr_path definitely-not-a-package is not found in the catalog."
           }
         }
       ],

@@ -10,20 +10,21 @@
           {
             "attr_path": "vim",
             "broken": false,
-            "derivation": "/nix/store/1wp4hcnydk3m67wlb5bxm1k51jwvlcba-vim-9.1.0595.drv",
+            "derivation": "/nix/store/5ipdkwr4x6lg2g0mn2pj48s6xmcwan6c-vim-9.1.0707.drv",
             "description": "Most popular clone of the VI editor",
+            "insecure": false,
             "install_id": "vim",
             "license": "Vim",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "name": "vim-9.1.0595",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "name": "vim-9.1.0707",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/s7arni8gjj5b77sw1qv8xpklqazcx9yd-vim-9.1.0595"
+                "store_path": "/nix/store/wdhpl0civ3ny5m6h4i426lp6x26xq7rx-vim-9.1.0707"
               },
               {
                 "name": "xxd",
-                "store_path": "/nix/store/6i7lgynna1bk44319xiap4a7ymi9v2fm-vim-9.1.0595-xxd"
+                "store_path": "/nix/store/igiq809m3jlhjm215vn26c33xcizhipm-vim-9.1.0707-xxd"
               }
             ],
             "outputs_to_install": [
@@ -31,34 +32,35 @@
               "xxd"
             ],
             "pname": "vim",
-            "rev": "d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "rev_count": 671089,
-            "rev_date": "2024-08-24T06:09:45Z",
-            "scrape_date": "2024-08-27T03:15:44Z",
+            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "rev_count": 679633,
+            "rev_date": "2024-09-10T15:58:18Z",
+            "scrape_date": "2024-09-12T03:12:46Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "9.1.0595"
+            "version": "9.1.0707"
           },
           {
             "attr_path": "vim",
             "broken": false,
-            "derivation": "/nix/store/sldrjnry871gs3nsrqk8zbajh95dwjzz-vim-9.1.0595.drv",
+            "derivation": "/nix/store/v3x39b12a4dwbdv66c8k7wmcq16rf9n8-vim-9.1.0707.drv",
             "description": "Most popular clone of the VI editor",
+            "insecure": false,
             "install_id": "vim",
             "license": "Vim",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "name": "vim-9.1.0595",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "name": "vim-9.1.0707",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/r1b7bp9bn00mx6zp6nziwhv6c9a9zpl7-vim-9.1.0595"
+                "store_path": "/nix/store/nhsna3kf8rmj24fi8hh08xn0wrxdapxb-vim-9.1.0707"
               },
               {
                 "name": "xxd",
-                "store_path": "/nix/store/5hbsr0fzs0qg7kadbccmkd67ib3chs7p-vim-9.1.0595-xxd"
+                "store_path": "/nix/store/84l4vc3mngac17gg6c3k45y1fsrdf595-vim-9.1.0707-xxd"
               }
             ],
             "outputs_to_install": [
@@ -66,34 +68,35 @@
               "xxd"
             ],
             "pname": "vim",
-            "rev": "d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "rev_count": 671089,
-            "rev_date": "2024-08-24T06:09:45Z",
-            "scrape_date": "2024-08-27T03:15:44Z",
+            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "rev_count": 679633,
+            "rev_date": "2024-09-10T15:58:18Z",
+            "scrape_date": "2024-09-12T03:12:46Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "9.1.0595"
+            "version": "9.1.0707"
           },
           {
             "attr_path": "vim",
             "broken": false,
-            "derivation": "/nix/store/pmyz90bljdd36vd8ppxqcwcp62y2djb7-vim-9.1.0595.drv",
+            "derivation": "/nix/store/6nav998v3val0162mi14fl8ls0lrpqax-vim-9.1.0707.drv",
             "description": "Most popular clone of the VI editor",
+            "insecure": false,
             "install_id": "vim",
             "license": "Vim",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "name": "vim-9.1.0595",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "name": "vim-9.1.0707",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/llqzlc672c9ch6a86zvh76gq5v5jnsv1-vim-9.1.0595"
+                "store_path": "/nix/store/kw42adc63whvnnricp9m0p1z4qqhirp4-vim-9.1.0707"
               },
               {
                 "name": "xxd",
-                "store_path": "/nix/store/39w4fgmvnqajmn3pw8r0j81zrhpam7n3-vim-9.1.0595-xxd"
+                "store_path": "/nix/store/v7qrl2wqr8a5574zyjsxn4xsw3zifjcb-vim-9.1.0707-xxd"
               }
             ],
             "outputs_to_install": [
@@ -101,34 +104,35 @@
               "xxd"
             ],
             "pname": "vim",
-            "rev": "d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "rev_count": 671089,
-            "rev_date": "2024-08-24T06:09:45Z",
-            "scrape_date": "2024-08-27T03:15:44Z",
+            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "rev_count": 679633,
+            "rev_date": "2024-09-10T15:58:18Z",
+            "scrape_date": "2024-09-12T03:12:46Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "9.1.0595"
+            "version": "9.1.0707"
           },
           {
             "attr_path": "vim",
             "broken": false,
-            "derivation": "/nix/store/sl7hdpms2jvbrg4v832fq0ha9zk6fn8a-vim-9.1.0595.drv",
+            "derivation": "/nix/store/i432hbkxnlk6ll4i74j15mlsrsp8v2al-vim-9.1.0707.drv",
             "description": "Most popular clone of the VI editor",
+            "insecure": false,
             "install_id": "vim",
             "license": "Vim",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "name": "vim-9.1.0595",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "name": "vim-9.1.0707",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/r2sjxb4zyl5jrb6s9jh78snv0si5h2gy-vim-9.1.0595"
+                "store_path": "/nix/store/fymb2prdsmc9268m3nr061zyxxqi8wkv-vim-9.1.0707"
               },
               {
                 "name": "xxd",
-                "store_path": "/nix/store/vzbif1ja5r0pscrndhcvfc38y07r33q6-vim-9.1.0595-xxd"
+                "store_path": "/nix/store/9z5agdwv20vxi35i9c024pr6bk8aziy9-vim-9.1.0707-xxd"
               }
             ],
             "outputs_to_install": [
@@ -136,34 +140,35 @@
               "xxd"
             ],
             "pname": "vim",
-            "rev": "d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "rev_count": 671089,
-            "rev_date": "2024-08-24T06:09:45Z",
-            "scrape_date": "2024-08-27T03:15:44Z",
+            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "rev_count": 679633,
+            "rev_date": "2024-09-10T15:58:18Z",
+            "scrape_date": "2024-09-12T03:12:46Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "9.1.0595"
+            "version": "9.1.0707"
           },
           {
             "attr_path": "vim-full",
             "broken": false,
-            "derivation": "/nix/store/npjc0n1n0k1hb5d8xm2xjnar0l32rx9p-vim-full-9.1.0595.drv",
+            "derivation": "/nix/store/y70q46m5kkmfnsv6sp2wy7wghf9xznn6-vim-full-9.1.0707.drv",
             "description": "Most popular clone of the VI editor",
+            "insecure": false,
             "install_id": "vim-full",
             "license": "Vim",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "name": "vim-full-9.1.0595",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "name": "vim-full-9.1.0707",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/h45lccfxa8ywrbk40m34iqvx89q2jsdv-vim-full-9.1.0595"
+                "store_path": "/nix/store/jy5lvj3jmkakrzzxa4jn7bg2b7iv0sxd-vim-full-9.1.0707"
               },
               {
                 "name": "xxd",
-                "store_path": "/nix/store/ywdck0g73nzqgvkh3rzxkk67z04rzlpf-vim-full-9.1.0595-xxd"
+                "store_path": "/nix/store/lspqq4n29zppnn3rralsadjmqq2cqqmr-vim-full-9.1.0707-xxd"
               }
             ],
             "outputs_to_install": [
@@ -171,34 +176,35 @@
               "xxd"
             ],
             "pname": "vim-full",
-            "rev": "d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "rev_count": 671089,
-            "rev_date": "2024-08-24T06:09:45Z",
-            "scrape_date": "2024-08-27T03:15:44Z",
+            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "rev_count": 679633,
+            "rev_date": "2024-09-10T15:58:18Z",
+            "scrape_date": "2024-09-12T03:12:46Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-darwin",
             "unfree": false,
-            "version": "9.1.0595"
+            "version": "9.1.0707"
           },
           {
             "attr_path": "vim-full",
             "broken": false,
-            "derivation": "/nix/store/byg86q6w8vzrcmlzkb7pir2f60jxg46k-vim-full-9.1.0595.drv",
+            "derivation": "/nix/store/6gmrncyn8phvh893ndgfg5hrm5ki260h-vim-full-9.1.0707.drv",
             "description": "Most popular clone of the VI editor",
+            "insecure": false,
             "install_id": "vim-full",
             "license": "Vim",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "name": "vim-full-9.1.0595",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "name": "vim-full-9.1.0707",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/wj30hm4sbpy378imd5z8rif493qb9ydj-vim-full-9.1.0595"
+                "store_path": "/nix/store/s93jib10l8sl5vgr099jizngs6x4h3nf-vim-full-9.1.0707"
               },
               {
                 "name": "xxd",
-                "store_path": "/nix/store/9f52x4vy1kqnzf5dlszlqbzgx1ylm5gp-vim-full-9.1.0595-xxd"
+                "store_path": "/nix/store/715ak2sab0xx3r72dkdy2kbbpd9kpy61-vim-full-9.1.0707-xxd"
               }
             ],
             "outputs_to_install": [
@@ -206,34 +212,35 @@
               "xxd"
             ],
             "pname": "vim-full",
-            "rev": "d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "rev_count": 671089,
-            "rev_date": "2024-08-24T06:09:45Z",
-            "scrape_date": "2024-08-27T03:15:44Z",
+            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "rev_count": 679633,
+            "rev_date": "2024-09-10T15:58:18Z",
+            "scrape_date": "2024-09-12T03:12:46Z",
             "stabilities": [
               "unstable"
             ],
             "system": "aarch64-linux",
             "unfree": false,
-            "version": "9.1.0595"
+            "version": "9.1.0707"
           },
           {
             "attr_path": "vim-full",
             "broken": false,
-            "derivation": "/nix/store/8ars1jygnph5hgmavqmsklf0hsfsznb5-vim-full-9.1.0595.drv",
+            "derivation": "/nix/store/qx1rkzyjri12nbw6wjz8cbyzkq38x7c4-vim-full-9.1.0707.drv",
             "description": "Most popular clone of the VI editor",
+            "insecure": false,
             "install_id": "vim-full",
             "license": "Vim",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "name": "vim-full-9.1.0595",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "name": "vim-full-9.1.0707",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/4pa8lra70yn9mh8a6d2k1f89j0qkds4r-vim-full-9.1.0595"
+                "store_path": "/nix/store/6288l406mj8x9m74b0wifslbfx0dghrb-vim-full-9.1.0707"
               },
               {
                 "name": "xxd",
-                "store_path": "/nix/store/k1rqsp7dw55cr42v84q14dwyq83y2v86-vim-full-9.1.0595-xxd"
+                "store_path": "/nix/store/q4ccqzmlw6wrz9bar3sayxmf1s98n07n-vim-full-9.1.0707-xxd"
               }
             ],
             "outputs_to_install": [
@@ -241,34 +248,35 @@
               "xxd"
             ],
             "pname": "vim-full",
-            "rev": "d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "rev_count": 671089,
-            "rev_date": "2024-08-24T06:09:45Z",
-            "scrape_date": "2024-08-27T03:15:44Z",
+            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "rev_count": 679633,
+            "rev_date": "2024-09-10T15:58:18Z",
+            "scrape_date": "2024-09-12T03:12:46Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-darwin",
             "unfree": false,
-            "version": "9.1.0595"
+            "version": "9.1.0707"
           },
           {
             "attr_path": "vim-full",
             "broken": false,
-            "derivation": "/nix/store/8js41vk1shib4y57z7h3rpgg33chqcdv-vim-full-9.1.0595.drv",
+            "derivation": "/nix/store/dv9cbiicvakdmmi8h4fqvr2pkwsb6vfc-vim-full-9.1.0707.drv",
             "description": "Most popular clone of the VI editor",
+            "insecure": false,
             "install_id": "vim-full",
             "license": "Vim",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "name": "vim-full-9.1.0595",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "name": "vim-full-9.1.0707",
             "outputs": [
               {
                 "name": "out",
-                "store_path": "/nix/store/axljbg1irw600vvv2xhkfkwgaprgcv7g-vim-full-9.1.0595"
+                "store_path": "/nix/store/2x5r4pn2hl193rqai754k4ck4fkz349d-vim-full-9.1.0707"
               },
               {
                 "name": "xxd",
-                "store_path": "/nix/store/j1ndja2cbb5qb43y3qdm9dn5741rcq0i-vim-full-9.1.0595-xxd"
+                "store_path": "/nix/store/yr2wjhlyl4zjd1w4zzi4d5z59kzij7mi-vim-full-9.1.0707-xxd"
               }
             ],
             "outputs_to_install": [
@@ -276,19 +284,19 @@
               "xxd"
             ],
             "pname": "vim-full",
-            "rev": "d0e1602ddde669d5beb01aec49d71a51937ed7be",
-            "rev_count": 671089,
-            "rev_date": "2024-08-24T06:09:45Z",
-            "scrape_date": "2024-08-27T03:15:44Z",
+            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "rev_count": 679633,
+            "rev_date": "2024-09-10T15:58:18Z",
+            "scrape_date": "2024-09-12T03:12:46Z",
             "stabilities": [
               "unstable"
             ],
             "system": "x86_64-linux",
             "unfree": false,
-            "version": "9.1.0595"
+            "version": "9.1.0707"
           }
         ],
-        "page": 671089,
+        "page": 679633,
         "url": ""
       }
     }

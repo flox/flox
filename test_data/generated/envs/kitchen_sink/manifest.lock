@@ -4,11 +4,7 @@
     "version": 1,
     "install": {
       "hello": {
-        "pkg-path": "hello",
-        "pkg-group": null,
-        "priority": null,
-        "version": null,
-        "systems": null
+        "pkg-path": "hello"
       }
     },
     "vars": {
@@ -25,34 +21,30 @@
       "tcsh": "    alias profile_alias \"echo tcsh\"\n    export PROFILE_SECTION_VAR=\"profile-tcsh\"\n"
     },
     "options": {
-      "systems": null,
       "allow": {
-        "unfree": null,
-        "broken": null,
         "licenses": []
       },
-      "semver": {
-        "allow-pre-releases": null
-      }
-    }
+      "semver": {}
+    },
+    "services": {},
+    "build": {}
   },
   "packages": [
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/7db0fz4nh3bj3xcxmbyp9hajv2lkji2q-hello-2.12.1.drv",
-      "description": "A program that produces a familiar, friendly greeting",
+      "derivation": "/nix/store/gmrg45y30qj3cp5higvbslj1szyg29br-hello-2.12.1.drv",
+      "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
       "name": "hello-2.12.1",
       "pname": "hello",
-      "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
-      "rev_count": 633517,
-      "rev_date": "2024-05-31T23:09:26Z",
-      "scrape_date": "2024-06-04T19:02:00Z",
+      "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
+      "rev_count": 679633,
+      "rev_date": "2024-09-10T15:58:18Z",
+      "scrape_date": "2024-09-12T03:12:46Z",
       "stabilities": [
-        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -61,7 +53,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/g9r8k42vkx4sh4689rig1mwcnnic6z7d-hello-2.12.1"
+        "out": "/nix/store/p3vrcf0z38979rclg1923vwi4vcrpgq1-hello-2.12.1"
       },
       "system": "aarch64-darwin",
       "group": "toplevel",
@@ -70,19 +62,18 @@
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/pb7w5qbpwyvy5979ps9qdpyjgfwhpvgn-hello-2.12.1.drv",
-      "description": "A program that produces a familiar, friendly greeting",
+      "derivation": "/nix/store/8gjks8haw2mq1gbsijmvrvpwxnmzrnmk-hello-2.12.1.drv",
+      "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
       "name": "hello-2.12.1",
       "pname": "hello",
-      "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
-      "rev_count": 633517,
-      "rev_date": "2024-05-31T23:09:26Z",
-      "scrape_date": "2024-06-04T19:02:00Z",
+      "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
+      "rev_count": 679633,
+      "rev_date": "2024-09-10T15:58:18Z",
+      "scrape_date": "2024-09-12T03:12:46Z",
       "stabilities": [
-        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -91,7 +82,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/h8j29rxrqk4s9nb2issyybrbfjcbfdmc-hello-2.12.1"
+        "out": "/nix/store/7lml1vf30kmg4lppnjjf0sqpgvvafp40-hello-2.12.1"
       },
       "system": "aarch64-linux",
       "group": "toplevel",
@@ -100,19 +91,18 @@
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/vpw7qifbwiy18fj5qrppz91jlsskf1if-hello-2.12.1.drv",
-      "description": "A program that produces a familiar, friendly greeting",
+      "derivation": "/nix/store/9xlh9xnj17hrbi523scqq019xl5z3h8z-hello-2.12.1.drv",
+      "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
       "name": "hello-2.12.1",
       "pname": "hello",
-      "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
-      "rev_count": 633517,
-      "rev_date": "2024-05-31T23:09:26Z",
-      "scrape_date": "2024-06-04T19:02:00Z",
+      "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
+      "rev_count": 679633,
+      "rev_date": "2024-09-10T15:58:18Z",
+      "scrape_date": "2024-09-12T03:12:46Z",
       "stabilities": [
-        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -121,7 +111,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/8vz43mcvm46zxm5mvfbhk42bm27cm7qg-hello-2.12.1"
+        "out": "/nix/store/b9nxjjjpnv5npiwqxw882x4z7wxmvwm5-hello-2.12.1"
       },
       "system": "x86_64-darwin",
       "group": "toplevel",
@@ -130,19 +120,18 @@
     {
       "attr_path": "hello",
       "broken": false,
-      "derivation": "/nix/store/rn30zy2bj4zka8axq0ipknfp1pbgnnd1-hello-2.12.1.drv",
-      "description": "A program that produces a familiar, friendly greeting",
+      "derivation": "/nix/store/crmj28zg09517n5sskml9fmy2c6r3rsr-hello-2.12.1.drv",
+      "description": "Program that produces a familiar, friendly greeting",
       "install_id": "hello",
       "license": "GPL-3.0-or-later",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=57610d2f8f0937f39dbd72251e9614b1561942d8",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
       "name": "hello-2.12.1",
       "pname": "hello",
-      "rev": "57610d2f8f0937f39dbd72251e9614b1561942d8",
-      "rev_count": 633517,
-      "rev_date": "2024-05-31T23:09:26Z",
-      "scrape_date": "2024-06-04T19:02:00Z",
+      "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
+      "rev_count": 679633,
+      "rev_date": "2024-09-10T15:58:18Z",
+      "scrape_date": "2024-09-12T03:12:46Z",
       "stabilities": [
-        "staging",
         "unstable"
       ],
       "unfree": false,
@@ -151,7 +140,7 @@
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/yh6x9ia5kxxw3w90vkb09vqgfvhb416k-hello-2.12.1"
+        "out": "/nix/store/yb84nwgvixzi9sx9nxssq581pc0cc8p3-hello-2.12.1"
       },
       "system": "x86_64-linux",
       "group": "toplevel",

@@ -3,7 +3,7 @@
     "count": 10,
     "results": [
       {
-        "description": "A high-level dynamically-typed programming language",
+        "description": "High-level dynamically-typed programming language",
         "input": "nixpkgs",
         "license": null,
         "pname": "python",
@@ -14,7 +14,7 @@
         "version": null
       },
       {
-        "description": "A high-level dynamically-typed programming language",
+        "description": "High-level dynamically-typed programming language",
         "input": "nixpkgs",
         "license": null,
         "pname": "python3",
@@ -25,7 +25,7 @@
         "version": null
       },
       {
-        "description": "A high-level dynamically-typed programming language",
+        "description": "High-level dynamically-typed programming language",
         "input": "nixpkgs",
         "license": null,
         "pname": "python2",
@@ -36,7 +36,7 @@
         "version": null
       },
       {
-        "description": "A Python interpreter written in Go",
+        "description": "Python interpreter written in Go",
         "input": "nixpkgs",
         "license": null,
         "pname": "gpython",
@@ -47,7 +47,7 @@
         "version": null
       },
       {
-        "description": "A high-level dynamically-typed programming language",
+        "description": "High-level dynamically-typed programming language",
         "input": "nixpkgs",
         "license": null,
         "pname": "python39",
@@ -83,6 +83,17 @@
         "description": "A high-level dynamically-typed programming language",
         "input": "nixpkgs",
         "license": null,
+        "pname": "python36",
+        "relPath": [
+          "python36"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "High-level dynamically-typed programming language",
+        "input": "nixpkgs",
+        "license": null,
         "pname": "python27",
         "relPath": [
           "python27"
@@ -97,17 +108,6 @@
         "pname": "python-qt",
         "relPath": [
           "python-qt"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "A high-level dynamically-typed programming language",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "python313",
-        "relPath": [
-          "python313"
         ],
         "system": "aarch64-darwin",
         "version": null

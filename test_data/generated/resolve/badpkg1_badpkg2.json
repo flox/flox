@@ -3,21 +3,19 @@
     {
       "msgs": [
         {
-          "AttrPathNotFound": {
+          "AttrPathNotFoundNotInCatalog": {
             "attr_path": "badpkg1",
             "install_id": "badpkg1",
             "level": "error",
-            "msg": "The attr_path 'badpkg1' is not found.",
-            "valid_systems": []
+            "msg": "The attr_path badpkg1 is not found in the catalog."
           }
         },
         {
-          "AttrPathNotFound": {
+          "AttrPathNotFoundNotInCatalog": {
             "attr_path": "badpkg2",
             "install_id": "badpkg2",
             "level": "error",
-            "msg": "The attr_path 'badpkg2' is not found.",
-            "valid_systems": []
+            "msg": "The attr_path badpkg2 is not found in the catalog."
           }
         }
       ],
