@@ -1,6 +1,6 @@
 [
   {
-    "count": 35,
+    "count": 60,
     "results": [
       {
         "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
@@ -14,7 +14,7 @@
         "version": null
       },
       {
-        "description": "A program that produces a familiar, friendly greeting",
+        "description": "Program that produces a familiar, friendly greeting",
         "input": "nixpkgs",
         "license": null,
         "pname": "hello",
@@ -36,6 +36,39 @@
         "version": null
       },
       {
+        "description": "GTK3-based greeter for the greetd daemon, written in python",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "nwg-hello",
+        "relPath": [
+          "nwg-hello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Basic sanity check that C++ and cmake infrastructure are working",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "hello-cpp",
+        "relPath": [
+          "hello-cpp"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "SocketCAN over Ethernet tunnel",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "cannelloni",
+        "relPath": [
+          "cannelloni"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
         "description": "Cloud music integration for your desktop",
         "input": "nixpkgs",
         "license": null,
@@ -47,12 +80,83 @@
         "version": null
       },
       {
-        "description": "An example package with unfree license (for testing)",
+        "description": "Example package with unfree license (for testing)",
         "input": "nixpkgs",
         "license": null,
         "pname": "hello-unfree",
         "relPath": [
           "hello-unfree"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Hello world Wayland client",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "hello-wayland",
+        "relPath": [
+          "hello-wayland"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Unified Modelling Language (UML) diagram program",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "umbrello",
+        "relPath": [
+          "libsForQt5",
+          "umbrello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "GUI for diagramming Unified Modelling Language (UML)",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "umbrello",
+        "relPath": [
+          "kdePackages",
+          "umbrello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "A Unified Modelling Language (UML) diagram program",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "umbrello",
+        "relPath": [
+          "libsForQt515",
+          "umbrello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "A Unified Modelling Language (UML) diagram program",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "umbrello",
+        "relPath": [
+          "libsForQt514",
+          "umbrello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "A Unified Modelling Language (UML) diagram program",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "umbrello",
+        "relPath": [
+          "libsForQt512",
+          "umbrello"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -142,6 +246,66 @@
         "version": null
       },
       {
+        "description": "Python module to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "bellows",
+        "relPath": [
+          "python39Packages",
+          "bellows"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python library for nello.io intercoms",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "pynello",
+        "relPath": [
+          "python38Packages",
+          "pynello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python module to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "bellows",
+        "relPath": [
+          "python38Packages",
+          "bellows"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "A Python 3 project to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "bellows",
+        "relPath": [
+          "python37Packages",
+          "bellows"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Unified Modelling Language (UML) diagram program",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "umbrello",
+        "relPath": [
+          "plasma5Packages",
+          "umbrello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
         "description": null,
         "input": "nixpkgs",
         "license": null,
@@ -166,6 +330,18 @@
         "version": null
       },
       {
+        "description": "Python module to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "bellows",
+        "relPath": [
+          "python312Packages",
+          "bellows"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
         "description": "Python library for nello.io intercoms",
         "input": "nixpkgs",
         "license": null,
@@ -178,6 +354,18 @@
         "version": null
       },
       {
+        "description": "Python module to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "bellows",
+        "relPath": [
+          "python311Packages",
+          "bellows"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
         "description": "Python library for nello.io intercoms",
         "input": "nixpkgs",
         "license": null,
@@ -185,6 +373,18 @@
         "relPath": [
           "python310Packages",
           "pynello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Python module to implement EZSP for EmberZNet devices",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "bellows",
+        "relPath": [
+          "python310Packages",
+          "bellows"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -310,6 +510,42 @@
         "version": null
       },
       {
+        "description": "A Unified Modelling Language (UML) diagram program",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "umbrello",
+        "relPath": [
+          "libsForQt5_openssl_1_1",
+          "umbrello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Apache module with a simple SAML 2.0 service provider",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "mod_auth_mellon",
+        "relPath": [
+          "apacheHttpdPackages",
+          "mod_auth_mellon"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Apache module with a simple SAML 2.0 service provider",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "mod_auth_mellon",
+        "relPath": [
+          "apacheHttpdPackages_2_4",
+          "mod_auth_mellon"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
         "description": null,
         "input": "nixpkgs",
         "license": null,
@@ -339,11 +575,35 @@
         "description": null,
         "input": "nixpkgs",
         "license": null,
+        "pname": "cl-mw_dot_examples_dot_hello-world",
+        "relPath": [
+          "sbclPackages",
+          "cl-mw_dot_examples_dot_hello-world"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": null,
+        "input": "nixpkgs",
+        "license": null,
         "pname": "qtools-helloworld",
         "relPath": [
           "lispPackages_new",
           "sbclPackages",
           "qtools-helloworld"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Open source home automation that puts local control and privacy first",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "homeassistant_yellow",
+        "relPath": [
+          "home-assistant-component-tests",
+          "homeassistant_yellow"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -362,6 +622,17 @@
         "version": null
       },
       {
+        "description": "Computer version of the game Reversi, more popularly called Othello",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "iagno",
+        "relPath": [
+          "iagno"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
         "description": "Trello interactive CLI on terminal",
         "input": "nixpkgs",
         "license": null,
@@ -373,12 +644,35 @@
         "version": null
       },
       {
+        "description": "Directly render SVG overlays into Gerber and Excellon files",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "gerbolyze",
+        "relPath": [
+          "gerbolyze"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
         "description": "Computer version of the game Reversi, more popularly called Othello",
         "input": "nixpkgs",
         "license": null,
         "pname": "iagno",
         "relPath": [
           "gnome",
+          "iagno"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Computer version of the game Reversi, more popularly called Othello",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "iagno",
+        "relPath": [
+          "gnome3",
           "iagno"
         ],
         "system": "aarch64-darwin",

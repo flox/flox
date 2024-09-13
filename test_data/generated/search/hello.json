@@ -1,9 +1,9 @@
 [
   {
-    "count": 15,
+    "count": 21,
     "results": [
       {
-        "description": "A program that produces a familiar, friendly greeting",
+        "description": "Program that produces a familiar, friendly greeting",
         "input": "nixpkgs",
         "license": null,
         "pname": "hello",
@@ -14,12 +14,45 @@
         "version": null
       },
       {
-        "description": "An example package with unfree license (for testing)",
+        "description": "GTK3-based greeter for the greetd daemon, written in python",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "nwg-hello",
+        "relPath": [
+          "nwg-hello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Basic sanity check that C++ and cmake infrastructure are working",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "hello-cpp",
+        "relPath": [
+          "hello-cpp"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Example package with unfree license (for testing)",
         "input": "nixpkgs",
         "license": null,
         "pname": "hello-unfree",
         "relPath": [
           "hello-unfree"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Hello world Wayland client",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "hello-wayland",
+        "relPath": [
+          "hello-wayland"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -80,42 +113,6 @@
         "relPath": [
           "javaPackages",
           "mavenHello_1_0"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Typeset Othello (Reversi) diagrams of any size, with annotations",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "othelloboard",
-        "relPath": [
-          "texlivePackages",
-          "othelloboard"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": null,
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "sly-hello-world",
-        "relPath": [
-          "emacsPackages",
-          "sly-hello-world"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": null,
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "qtools-helloworld",
-        "relPath": [
-          "sbclPackages",
-          "qtools-helloworld"
         ],
         "system": "aarch64-darwin",
         "version": null

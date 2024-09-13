@@ -1,9 +1,9 @@
 [
   {
-    "count": 541,
+    "count": 795,
     "results": [
       {
-        "description": "A parser generator for building parsers from grammars",
+        "description": "Parser generator for building parsers from grammars",
         "input": "nixpkgs",
         "license": null,
         "pname": "javacc",
@@ -25,6 +25,17 @@
         "version": null
       },
       {
+        "description": "A Java package that implements HDF4 and HDF5 data objects in an object-oriented form",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "hdf_java",
+        "relPath": [
+          "hdf_java"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
         "description": "GeoIP Java API",
         "input": "nixpkgs",
         "license": null,
@@ -36,7 +47,18 @@
         "version": null
       },
       {
-        "description": "A library for extracting tables from PDF files.",
+        "description": null,
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "dbus_java",
+        "relPath": [
+          "dbus_java"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Library for extracting tables from PDF files",
         "input": "nixpkgs",
         "license": null,
         "pname": "tabula-java",
@@ -47,7 +69,18 @@
         "version": null
       },
       {
-        "description": "An interface compiler that connects C/C++ code to higher-level languages",
+        "description": "Award winning, fully featured low overhead profiler for Java EE and Java SE platforms",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "yourkit-java",
+        "relPath": [
+          "yourkit-java"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Interface compiler that connects C/C++ code to higher-level languages",
         "input": "nixpkgs",
         "license": null,
         "pname": "swigWithJava",
@@ -78,45 +111,11 @@
         ],
         "system": "aarch64-darwin",
         "version": null
-      },
-      {
-        "description": null,
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "setJavaClassPath",
-        "relPath": [
-          "setJavaClassPath"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Gauge plugin that lets you write tests in Java",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "java",
-        "relPath": [
-          "gaugePlugins",
-          "java"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Programming language used for massively scalable soft real-time systems",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "erlang_odbc_javac",
-        "relPath": [
-          "erlang_odbc_javac"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
       }
     ]
   },
   {
-    "count": 72,
+    "count": 134,
     "results": [
       {
         "description": "Certified builds of OpenJDK",
@@ -130,7 +129,7 @@
         "version": null
       },
       {
-        "description": "Certified builds of OpenJDK",
+        "description": "Open-source Java Development Kit",
         "input": "nixpkgs",
         "license": null,
         "pname": "jdk8",
