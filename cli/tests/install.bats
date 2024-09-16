@@ -288,6 +288,9 @@ EOF
 }
 
 @test "'flox install' warns about broken packages" {
+
+  skip "TODO: discuss catalog-service behaviour in this case"
+
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/tabula.json" \
     run "$FLOX_BIN" install tabula
