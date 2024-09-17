@@ -45,14 +45,17 @@ _cp := $(call __package_bin,$(__coreutils),cp)
 _cut := $(call __package_bin,$(__coreutils),cut)
 _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
+_head := $(call __package_bin,$(__coreutils),head)
 _jq := $(call __package_bin,$(__jq),jq)
 _mktemp := $(call __package_bin,$(__coreutils),mktemp)
 _nix := $(call __package_bin,$(__nix),nix)
+_pwd := $(call __package_bin,$(__coreutils),pwd)
 _readlink := $(call __package_bin,$(__coreutils),readlink)
 _rm := $(call __package_bin,$(__coreutils),rm)
 _sed := $(call __package_bin,$(__gnused),sed)
 _sha256sum := $(call __package_bin,$(__coreutils),sha256sum)
 _tar := $(call __package_bin,$(__gnutar),tar)
+_tee := $(call __package_bin,$(__coreutils),tee)
 _uname := $(call __package_bin,$(__coreutils),uname)
 
 # Identify path to build-manifest.nix, in same directory as this Makefile.
@@ -105,9 +108,9 @@ define DEPENDS_template =
   # Compute 32-character stable string for use in stable path generation
   # based on hash of pname, current working directory and FLOX_ENV.
   $(eval $(_pvarname)_hash = $(shell ( \
-    ( echo $(_pname) $(realpath $(FLOX_ENV)) && pwd ) | $(_sha256sum) | head -c32)))
+    ( echo $(_pname) $(realpath $(FLOX_ENV)) && $(_pwd) ) | $(_sha256sum) | $(_head) -c32)))
   # Render a shorter 8-character version as well.
-  $(eval $(_pvarname)_shortHash = $(shell echo $($(_pvarname)_hash) | head -c8))
+  $(eval $(_pvarname)_shortHash = $(shell echo $($(_pvarname)_hash) | $(_head) -c8))
   # And while we're at it, set a temporary basename using the short hash.
   $(eval $(_pvarname)_tmpBasename = $(TMPDIR)/$($(_pvarname)_shortHash)-$(_pname))
 
@@ -151,14 +154,14 @@ define BUILD_local_template =
   .INTERMEDIATE: $(_pname)_local_build
   $(_pname)_local_build: $($(_pvarname)_buildScript)
 	@echo "Building $(_name) in local mode"
-	$(if $(_virtualSandbox),$(PRELOAD_ARGS) FLOX_SRC_DIR=$$$$(pwd) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
+	$(if $(_virtualSandbox),$(PRELOAD_ARGS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
 	MAKEFLAGS= out=$(_out) $(FLOX_ENV)/activate --turbo -- $(_bash) -e $($(_pvarname)_buildScript)
 	set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	    --argstr name "$(_name)" \
 	    --argstr flox-env "$(FLOX_ENV)" \
 	    --argstr install-prefix "$(_out)" \
 	    --out-link "result-$(_pname)" \
-	    --offline 2>&1 | tee $($(_pvarname)_logfile)
+	    --offline 2>&1 | $(_tee) $($(_pvarname)_logfile)
 
 endef
 
@@ -216,7 +219,7 @@ define BUILD_nix_sandbox_template =
 	    --argstr buildScript "$($(_pvarname)_buildScript)" \
 	    $(if $(_do_buildCache),--argstr buildCache "$($(_pvarname)_buildCache)") \
 	    --out-link "result-$(_pname)" \
-	    '^*' 2>&1 | tee $($(_pvarname)_logfile)
+	    '^*' 2>&1 | $(_tee) $($(_pvarname)_logfile)
 	@# Check to see if a new buildCache has been created, and if so then go
 	@# ahead and run 'nix store delete' on the previous cache, keeping in
 	@# mind that the symlink will remain unchanged in the event of an
