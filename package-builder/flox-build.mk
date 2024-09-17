@@ -42,13 +42,16 @@ __nix := @nix@
 __package_bin = $(if $(filter @%@,$(1)),$(2),$(1)/bin/$(2))
 _bash := $(call __package_bin,$(__bashInteractive),bash)
 _cp := $(call __package_bin,$(__coreutils),cp)
+_cut := $(call __package_bin,$(__coreutils),cut)
 _git := $(call __package_bin,$(__gitMinimal),git)
 _grep := $(call __package_bin,$(__gnugrep),grep)
 _jq := $(call __package_bin,$(__jq),jq)
+_mktemp := $(call __package_bin,$(__coreutils),mktemp)
 _nix := $(call __package_bin,$(__nix),nix)
 _readlink := $(call __package_bin,$(__coreutils),readlink)
 _rm := $(call __package_bin,$(__coreutils),rm)
 _sed := $(call __package_bin,$(__gnused),sed)
+_sha256sum := $(call __package_bin,$(__coreutils),sha256sum)
 _tar := $(call __package_bin,$(__gnutar),tar)
 _uname := $(call __package_bin,$(__coreutils),uname)
 
@@ -102,7 +105,7 @@ define DEPENDS_template =
   # Compute 32-character stable string for use in stable path generation
   # based on hash of pname, current working directory and FLOX_ENV.
   $(eval $(_pvarname)_hash = $(shell ( \
-    ( echo $(_pname) $(realpath $(FLOX_ENV)) && pwd ) | sha256sum | head -c32)))
+    ( echo $(_pname) $(realpath $(FLOX_ENV)) && pwd ) | $(_sha256sum) | head -c32)))
   # Render a shorter 8-character version as well.
   $(eval $(_pvarname)_shortHash = $(shell echo $($(_pvarname)_hash) | head -c8))
   # And while we're at it, set a temporary basename using the short hash.
@@ -188,7 +191,7 @@ define BUILD_nix_sandbox_template =
 	@if [ -f "$(_result)-buildCache" ]; then \
 	  $(_cp) $(_result)-buildCache $$@; \
 	else \
-	  tmpdir=$$$$(mktemp -d); \
+	  tmpdir=$$$$($(_mktemp) -d); \
 	  echo "Build cache initialized on $$$$(date)" > $$$$tmpdir/.buildCache.init; \
 	  $(_tar) -cf $$@ -C $$$$tmpdir .buildCache.init; \
 	  $(_rm) -rf $$$$tmpdir; \
@@ -268,14 +271,14 @@ define BUILD_template =
 	  if [ -L "$$$$i" ]; then \
 	    outpath="$$$$($(_readlink) $$$$i)"; \
 	    if [ -n "$$$$outpath" ]; then \
-	      pkgname="$$$$(echo $$$$i | cut -d- -f2-)"; \
+	      pkgname="$$$$(echo $$$$i | $(_cut) -d- -f2-)"; \
 	      $(_sed) -i "s%\$$$${$$$$pkgname}%$$$$outpath%g" $$@; \
 	    fi; \
 	  fi; \
 	done
 
   # Prepare temporary log file for capturing build output for inspection.
-  $(eval $(_pvarname)_logfile := $(shell mktemp --dry-run --suffix=-build-$(_pname).log))
+  $(eval $(_pvarname)_logfile := $(shell $(_mktemp) --dry-run --suffix=-build-$(_pname).log))
 
   # Insert mode-specific template.
   $(call BUILD_$(_build_mode)_template)
