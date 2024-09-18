@@ -51,6 +51,7 @@ _mktemp := $(call __package_bin,$(__coreutils),mktemp)
 _nix := $(call __package_bin,$(__nix),nix)
 _pwd := $(call __package_bin,$(__coreutils),pwd)
 _readlink := $(call __package_bin,$(__coreutils),readlink)
+_realpath := $(call __package_bin,$(__coreutils),realpath)
 _rm := $(call __package_bin,$(__coreutils),rm)
 _sed := $(call __package_bin,$(__gnused),sed)
 _sha256sum := $(call __package_bin,$(__coreutils),sha256sum)
@@ -126,7 +127,7 @@ define DEPENDS_template =
   $(foreach package,$(filter-out $(notdir $(build)),$(notdir $(BUILDS))),\
     $(if $(shell $(_grep) '\$${$(package)}' $(build)),\
       $(eval _dep = result-$(package))\
-      $(eval $(_pvarname)_buildDeps += $(realpath $(_dep)))\
+      $(eval $(_pvarname)_buildDeps += $(shell $(_realpath) $(_dep)))\
       $($(_pvarname)_buildScript): $(_dep)))
 endef
 
