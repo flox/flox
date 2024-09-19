@@ -438,6 +438,20 @@ EOF
   )"
 }
 
+@test "resolution message: systems not on same page" {
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/torchvision-bin.json" \
+    run "$FLOX_BIN" install python311Packages.torchvision-bin
+
+  assert_failure
+  assert_output "$(
+    cat << EOF
+❌ ERROR: resolution failed: The attr_path python311Packages.torchvision-bin is not found for all requested systems on the same page, consider package groups with the following system groupings: (aarch64-darwin,x86_64-linux), (x86_64-linux), (aarch64-darwin,x86_64-darwin,x86_64-linux), (aarch64-darwin,aarch64-linux,x86_64-linux).
+EOF
+  )"
+}
+
 # ---------------------------------------------------------------------------- #
 
 @test "flake: github ref added to manifest" {
