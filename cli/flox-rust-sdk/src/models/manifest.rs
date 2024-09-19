@@ -1138,6 +1138,14 @@ pub struct CatalogPackage {
     pub id: String,
     pub pkg_path: String,
     pub version: Option<String>,
+    /// Systems to resolve the package for.
+    /// If `None`, the package is resolved for all systems.
+    /// Currently this is not parsed from a shorthand descriptor,
+    /// but callers of [Environment::install] can set it
+    /// to avoid resolution errors.
+    ///
+    /// [Environment::install]: crate::models::environment::Environment::install
+    pub systems: Option<Vec<System>>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -1190,6 +1198,7 @@ impl FromStr for CatalogPackage {
             id: install_id,
             pkg_path: attr_path,
             version,
+            systems: None,
         })
     }
 }
@@ -1237,19 +1246,28 @@ fn install_id_from_attr_path(attr_path: &str, descriptor: &str) -> Result<String
     })
 }
 
-impl From<&CatalogPackage> for Vec<(&'static str, String)> {
-    fn from(val: &CatalogPackage) -> Self {
-        let mut vec = vec![("pkg-path", val.pkg_path.clone())];
-        if let Some(version) = &val.version {
-            vec.push(("version", version.clone()));
-        }
-        vec
-    }
-}
-
 impl From<&CatalogPackage> for InlineTable {
     fn from(val: &CatalogPackage) -> Self {
-        InlineTable::from_iter(Vec::from(val))
+        let mut table = InlineTable::new();
+        table.insert(
+            "pkg-path",
+            Value::String(Formatted::new(val.pkg_path.clone())),
+        );
+        if let Some(ref version) = val.version {
+            table.insert("version", Value::String(Formatted::new(version.clone())));
+        }
+        if let Some(ref systems) = val.systems {
+            table.insert(
+                "systems",
+                Value::Array(
+                    systems
+                        .iter()
+                        .map(|s| Value::String(Formatted::new(s.to_string())))
+                        .collect(),
+                ),
+            );
+        }
+        table
     }
 }
 
@@ -1598,6 +1616,7 @@ pub(super) mod test {
                 id: "python3".to_string(),
                 pkg_path: "python3".to_string(),
                 version: Some("3.11.6".to_string()),
+                systems: None,
             }]),
         };
 
@@ -1987,24 +2006,28 @@ pub(super) mod test {
             id: "hello".to_string(),
             pkg_path: "hello".to_string(),
             version: None,
+            systems: None,
         });
         let parsed: CatalogPackage = "foo.bar@=1.2.3".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
             id: "bar".to_string(),
             pkg_path: "foo.bar".to_string(),
             version: Some("=1.2.3".to_string()),
+            systems: None,
         });
         let parsed: CatalogPackage = "foo.bar@23.11".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
             id: "bar".to_string(),
             pkg_path: "foo.bar".to_string(),
             version: Some("23.11".to_string()),
+            systems: None,
         });
         let parsed: CatalogPackage = "rubyPackages.\"http_parser.rb\"".parse().unwrap();
         assert_eq!(parsed, CatalogPackage {
             id: "\"http_parser.rb\"".to_string(),
             pkg_path: "rubyPackages.\"http_parser.rb\"".to_string(),
             version: None,
+            systems: None,
         });
 
         CatalogPackage::from_str("foo.\"bar.baz.qux@1.2.3")
