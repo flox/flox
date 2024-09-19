@@ -461,8 +461,8 @@ impl From<ProvidedPackage> for CatalogPackage {
         CatalogPackage {
             id: value.name,
             pkg_path: value.rel_path.into(),
-
             version: value.version,
+            systems: None,
         }
     }
 }
@@ -695,11 +695,13 @@ mod tests {
                         id: "pip".to_string(),
                         pkg_path: "python311Packages.pip".to_string(),
                         version: None,
+                        systems: None,
                     },
                     CatalogPackage {
                         id: "package2".to_string(),
                         pkg_path: "path2".to_string(),
                         version: None,
+                        systems: None,
                     },
                 ]),
             },
@@ -715,11 +717,13 @@ mod tests {
                         id: "pip".to_string(),
                         pkg_path: "python311Packages.pip".to_string(),
                         version: None,
+                        systems: None,
                     },
                     CatalogPackage {
                         id: "package1".to_string(),
                         pkg_path: "path1".to_string(),
                         version: None,
+                        systems: None,
                     },
                 ]),
             },
@@ -804,16 +808,19 @@ mod tests {
                     id: "package1".to_string(),
                     pkg_path: "path1".to_string(),
                     version: None,
+                    systems: None,
                 },
                 CatalogPackage {
                     id: "package2".to_string(),
                     pkg_path: "path2".to_string(),
                     version: None,
+                    systems: None,
                 },
                 CatalogPackage {
                     id: "pip".to_string(),
                     pkg_path: "python311Packages.pip".to_string(),
                     version: None,
+                    systems: None,
                 },
             ]),
         });

@@ -150,6 +150,7 @@ impl InitHook for Go {
                 id: "go".to_string(),
                 pkg_path: "go".to_string(),
                 version: go_version,
+                systems: None,
             }]),
         }
     }

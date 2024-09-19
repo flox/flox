@@ -333,6 +333,7 @@ mod tests {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
             version: None,
+            systems: None,
         }];
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
@@ -361,6 +362,7 @@ mod tests {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
             version: None,
+            systems: None,
         }];
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
@@ -381,6 +383,7 @@ mod tests {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
             version: None,
+            systems: None,
         }];
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
@@ -409,6 +412,7 @@ mod tests {
             id: foo_iid.clone(),
             pkg_path: "foo".to_string(),
             version: None,
+            systems: None,
         }];
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
