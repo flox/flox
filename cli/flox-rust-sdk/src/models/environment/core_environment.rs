@@ -1472,8 +1472,13 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
     use std::str::FromStr;
 
-    use catalog::{Client, GENERATED_DATA, MANUALLY_GENERATED};
-    use catalog_api_v1::types::{ResolvedPackageDescriptor, SystemEnum};
+    use catalog::{
+        Client,
+        MsgAttrPathNotFoundNotFoundForAllSystems,
+        GENERATED_DATA,
+        MANUALLY_GENERATED,
+    };
+    use catalog_api_v1::types::{MessageLevel, ResolvedPackageDescriptor, SystemEnum};
     use chrono::{DateTime, Utc};
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
@@ -1894,13 +1899,17 @@ mod tests {
                 assert_eq!(
                     failures[0],
                     ResolutionFailure::PackageUnavailableOnSomeSystems {
-                        install_id: "glibc".to_string(),
-                        attr_path: "glibc".to_string(),
+                        catalog_message: MsgAttrPathNotFoundNotFoundForAllSystems {
+                            level: MessageLevel::Error,
+                            msg: "The attr_path glibc is not found for all the requested systems, suggest limiting systems to (aarch64-linux,x86_64-linux).".to_string(),
+                            install_id: "glibc".to_string(),
+                            valid_systems: vec![
+                                "aarch64-linux".to_string(),
+                                "x86_64-linux".to_string()
+                            ],
+                            attr_path: "glibc".to_string(),
+                        },
                         invalid_systems: vec!["aarch64-darwin".to_string()],
-                        valid_systems: vec![
-                            "aarch64-linux".to_string(),
-                            "x86_64-linux".to_string()
-                        ],
                     }
                 );
             } else {

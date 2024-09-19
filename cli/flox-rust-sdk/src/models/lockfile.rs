@@ -33,6 +33,10 @@ use crate::providers::catalog::{
     self,
     CatalogPage,
     MsgAttrPathNotFoundNotFoundForAllSystems,
+    MsgAttrPathNotFoundNotInCatalog,
+    MsgAttrPathNotFoundSystemsNotOnSamePage,
+    MsgConstraintsTooTight,
+    MsgUnknown,
     PackageDescriptor,
     PackageGroup,
     ResolvedPackageGroup,
@@ -348,30 +352,22 @@ impl FromIterator<ResolutionFailure> for ResolutionFailures {
 }
 
 /// Data relevant for formatting a resolution failure
+///
+/// This may wrap messages returned from the catalog with additional information
+/// extracted from the manifest.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ResolutionFailure {
-    PackageNotFound {
-        install_id: String,
-        attr_path: String,
-    },
+    PackageNotFound(MsgAttrPathNotFoundNotInCatalog),
     PackageUnavailableOnSomeSystems {
-        install_id: String,
-        attr_path: String,
-        invalid_systems: Vec<System>,
-        valid_systems: Vec<String>,
+        catalog_message: MsgAttrPathNotFoundNotFoundForAllSystems,
+        invalid_systems: Vec<String>,
     },
-    SystemsNotOnSamePage {
-        msg: String,
-        // TODO: Additional context, e.g. for error handling can be added here.
-        //       For now, we only forward the service defined message.
-    },
+    SystemsNotOnSamePage(MsgAttrPathNotFoundSystemsNotOnSamePage),
     ConstraintsTooTight {
-        fallback_msg: String,
+        catalog_message: MsgConstraintsTooTight,
         group: String,
     },
-    UnknownServiceMessage {
-        msg: String,
-    },
+    UnknownServiceMessage(MsgUnknown),
     FallbackMessage {
         msg: String,
     },
@@ -398,24 +394,32 @@ impl Display for ResolutionFailures {
 /// Formats a single resolution failure in a nice way
 fn format_single_resolution_failure(failure: &ResolutionFailure, is_one_of_many: bool) -> String {
     match failure {
-        ResolutionFailure::PackageNotFound { attr_path, .. } => {
+        ResolutionFailure::PackageNotFound(MsgAttrPathNotFoundNotInCatalog {
+            attr_path, ..
+        }) => {
             // Note: for `flox install`, this variant will be formatted with the
             // "didyoumean" mechanism.
             format!("could not find package '{attr_path}'.")
         },
         ResolutionFailure::PackageUnavailableOnSomeSystems {
-            attr_path,
+            catalog_message:
+                MsgAttrPathNotFoundNotFoundForAllSystems {
+                    attr_path,
+                    valid_systems,
+                    ..
+                },
             invalid_systems,
-            valid_systems,
             ..
         } => {
             let extra_indent = if is_one_of_many { 2 } else { 0 };
             let indented_invalid = invalid_systems
                 .iter()
+                .sorted()
                 .map(|s| indent_all_by(4, format!("- {s}")))
                 .join("\n");
             let indented_valid = valid_systems
                 .iter()
+                .sorted()
                 .map(|s| indent_all_by(4, format!("- {s}")))
                 .join("\n");
             let listed = [
@@ -442,8 +446,11 @@ fn format_single_resolution_failure(failure: &ResolutionFailure, is_one_of_many:
             or isolate dependencies in a new group with '<pkg>.pkg-group = \"newgroup\"'"};
             indent_by(extra_indent, msg)
         },
-        ResolutionFailure::SystemsNotOnSamePage { msg, .. }
-        | ResolutionFailure::UnknownServiceMessage { msg, .. }
+        ResolutionFailure::SystemsNotOnSamePage(MsgAttrPathNotFoundSystemsNotOnSamePage {
+            msg,
+            ..
+        })
+        | ResolutionFailure::UnknownServiceMessage(MsgUnknown { msg, .. })
         | ResolutionFailure::FallbackMessage { msg } => {
             if is_one_of_many {
                 indent_by(2, msg.to_string())
@@ -958,25 +965,23 @@ impl LockedManifestCatalog {
                     },
                     catalog::ResolutionMessage::AttrPathNotFoundNotInCatalog(inner) => {
                         tracing::debug!(kind = "attr_path_not_found.not_in_catalog",);
-                        ResolutionFailure::PackageNotFound {
-                            install_id: inner.install_id.clone(),
-                            attr_path: inner.attr_path.clone(),
-                        }
+                        ResolutionFailure::PackageNotFound(inner.clone())
                     },
                     catalog::ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(inner) => {
                         tracing::debug!(kind = "attr_path_not_found.not_found_for_all_systems",);
-                        Self::not_found_for_all_systems_failure(inner, manifest)?
+                        ResolutionFailure::PackageUnavailableOnSomeSystems {
+                            catalog_message: inner.clone(),
+                            invalid_systems: Self::determine_invalid_systems(inner, manifest)?,
+                        }
                     },
                     catalog::ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(inner) => {
                         tracing::debug!(kind = "attr_path_not_found.systems_not_on_same_page");
-                        ResolutionFailure::SystemsNotOnSamePage {
-                            msg: inner.msg.clone(),
-                        }
+                        ResolutionFailure::SystemsNotOnSamePage(inner.clone())
                     },
                     catalog::ResolutionMessage::ConstraintsTooTight(inner) => {
                         tracing::debug!(kind = "constraints_too_tight",);
                         ResolutionFailure::ConstraintsTooTight {
-                            fallback_msg: inner.msg.clone(),
+                            catalog_message: inner.clone(),
                             group: group.name.clone(),
                         }
                     },
@@ -987,9 +992,7 @@ impl LockedManifestCatalog {
                             context = serde_json::to_string(&inner.context).unwrap(),
                             "handling unknown resolution message"
                         );
-                        ResolutionFailure::UnknownServiceMessage {
-                            msg: inner.msg.clone(),
-                        }
+                        ResolutionFailure::UnknownServiceMessage(inner.clone())
                     },
                 };
                 failures.push(failure);
@@ -998,76 +1001,29 @@ impl LockedManifestCatalog {
         Ok(failures)
     }
 
-    /// Converts a "attr path not found" message into different resolution failures
-    fn not_found_for_all_systems_failure(
+    /// Determines which systems a package was requested on that it is not
+    /// available for
+    fn determine_invalid_systems(
         r_msg: &MsgAttrPathNotFoundNotFoundForAllSystems,
         manifest: &TypedManifestCatalog,
-    ) -> Result<ResolutionFailure, LockedManifestError> {
-        // This should be unreachable, since the catalog should have returned
-        // AttrPathNotFoundNotInCatalog
-        if r_msg.valid_systems.is_empty() {
-            tracing::debug!(
-                attr_path = r_msg.attr_path,
-                "no valid systems for requested attr_path"
-            );
-            return Ok(ResolutionFailure::PackageNotFound {
-                install_id: r_msg.install_id.clone(),
-                attr_path: r_msg.attr_path.clone(),
-            });
-        }
-
-        let (valid_systems, requested_systems) =
-            Self::determine_valid_and_requested_systems(r_msg, manifest)?;
-        let mut diff = requested_systems
-            .difference(&valid_systems)
-            .cloned()
-            .collect::<Vec<_>>();
-        diff.sort();
-        let mut available = r_msg.valid_systems.clone();
-        available.sort();
-        Ok(ResolutionFailure::PackageUnavailableOnSomeSystems {
-            install_id: r_msg.install_id.clone(),
-            attr_path: r_msg.attr_path.clone(),
-            invalid_systems: diff,
-            valid_systems: available,
-        })
-    }
-
-    /// Determines which systems a package is available for and which it was requested on
-    fn determine_valid_and_requested_systems(
-        r_msg: &MsgAttrPathNotFoundNotFoundForAllSystems,
-        manifest: &TypedManifestCatalog,
-    ) -> Result<(HashSet<System>, HashSet<System>), LockedManifestError> {
-        let default_systems = DEFAULT_SYSTEMS_STR
-            .clone()
-            .into_iter()
-            .collect::<HashSet<_>>();
-        let valid_systems = r_msg
-            .valid_systems
-            .clone()
-            .into_iter()
-            .collect::<HashSet<_>>();
+    ) -> Result<Vec<System>, LockedManifestError> {
+        let default_systems = HashSet::<_>::from_iter(DEFAULT_SYSTEMS_STR.iter());
+        let valid_systems = HashSet::<_>::from_iter(&r_msg.valid_systems);
         let manifest_systems = manifest
             .options
             .systems
-            .clone()
-            .map(|s| s.iter().cloned().collect::<HashSet<_>>())
+            .as_ref()
+            .map(HashSet::<_>::from_iter)
             .unwrap_or(default_systems);
         let pkg_descriptor = manifest
             .catalog_pkg_descriptor_with_id(&r_msg.install_id)
             .ok_or(LockedManifestError::InstallIdNotInManifest(
                 r_msg.install_id.clone(),
             ))?;
-        let pkg_systems = pkg_descriptor
-            .systems
-            .map(|s| s.iter().cloned().collect::<HashSet<_>>())
-            .clone();
-        let requested_systems = if let Some(requested) = pkg_systems {
-            requested
-        } else {
-            manifest_systems
-        };
-        Ok((valid_systems, requested_systems))
+        let pkg_systems = pkg_descriptor.systems.as_ref().map(HashSet::from_iter);
+        let requested_systems = pkg_systems.unwrap_or(manifest_systems);
+        let difference = &requested_systems - &valid_systems;
+        Ok(Vec::from_iter(difference.into_iter().cloned()))
     }
 
     /// Detects whether any groups failed to resolve
@@ -2625,7 +2581,9 @@ pub(crate) mod tests {
         )
         .await;
         if let Err(LockedManifestError::ResolutionFailed(res_failures)) = locked_manifest {
-            if let [ResolutionFailure::UnknownServiceMessage { msg }] = res_failures.0.as_slice() {
+            if let [ResolutionFailure::UnknownServiceMessage(MsgUnknown { msg, .. })] =
+                res_failures.0.as_slice()
+            {
                 assert_eq!(msg, response_msg.msg());
             } else {
                 panic!(
