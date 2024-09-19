@@ -940,105 +940,59 @@ impl LockedManifestCatalog {
                 "collecting failures from unresolved group"
             );
             for res_msg in group.msgs.iter() {
-                match res_msg {
+                tracing::debug!(
+                    level = res_msg.level().to_string(),
+                    msg = res_msg.msg(),
+                    "handling resolution message"
+                );
+                // If it's not an error, skip this message
+                if res_msg.level() != MessageLevel::Error {
+                    continue;
+                }
+                let failure = match res_msg {
                     catalog::ResolutionMessage::General(inner) => {
-                        tracing::debug!(
-                            kind = "general",
-                            level = inner.level.to_string(),
-                            msg = inner.msg,
-                            "handling resolution message"
-                        );
-                        // If it's not an error, skip this message
-                        if inner.level != MessageLevel::Error {
-                            continue;
-                        }
-                        let failure = ResolutionFailure::FallbackMessage {
+                        tracing::debug!(kind = "general");
+                        ResolutionFailure::FallbackMessage {
                             msg: inner.msg.clone(),
-                        };
-                        failures.push(failure);
+                        }
                     },
                     catalog::ResolutionMessage::AttrPathNotFoundNotInCatalog(inner) => {
-                        tracing::debug!(
-                            kind = "attr_path_not_found.not_in_catalog",
-                            level = inner.level.to_string(),
-                            msg = inner.msg,
-                            "handling resolution message"
-                        );
-                        // If it's not an error, skip this message
-                        if inner.level != MessageLevel::Error {
-                            continue;
-                        }
-                        let failure = ResolutionFailure::PackageNotFound {
+                        tracing::debug!(kind = "attr_path_not_found.not_in_catalog",);
+                        ResolutionFailure::PackageNotFound {
                             install_id: inner.install_id.clone(),
                             attr_path: inner.attr_path.clone(),
-                        };
-                        failures.push(failure);
+                        }
                     },
                     catalog::ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(inner) => {
-                        tracing::debug!(
-                            kind = "attr_path_not_found.not_found_for_all_systems",
-                            level = inner.level.to_string(),
-                            msg = inner.msg,
-                            "handling resolution message"
-                        );
-                        // If it's not an error, skip this message
-                        if inner.level != MessageLevel::Error {
-                            continue;
-                        }
-                        failures.push(Self::not_found_for_all_systems_failure(inner, manifest)?);
+                        tracing::debug!(kind = "attr_path_not_found.not_found_for_all_systems",);
+                        Self::not_found_for_all_systems_failure(inner, manifest)?
                     },
                     catalog::ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(inner) => {
-                        tracing::debug!(
-                            kind = "attr_path_not_found.systems_not_on_same_page",
-                            level = inner.level.to_string(),
-                            msg = inner.msg,
-                            "handling resolution message"
-                        );
-                        // If it's not an error, skip this message
-                        if inner.level != MessageLevel::Error {
-                            continue;
-                        }
-                        let failure = ResolutionFailure::SystemsNotOnSamePage {
+                        tracing::debug!(kind = "attr_path_not_found.systems_not_on_same_page");
+                        ResolutionFailure::SystemsNotOnSamePage {
                             msg: inner.msg.clone(),
-                        };
-                        failures.push(failure);
+                        }
                     },
                     catalog::ResolutionMessage::ConstraintsTooTight(inner) => {
-                        tracing::debug!(
-                            kind = "constraints_too_tight",
-                            level = inner.level.to_string(),
-                            msg = inner.msg,
-                            "handling resolution message"
-                        );
-                        // If it's not an error, skip this message
-                        if inner.level != MessageLevel::Error {
-                            continue;
-                        }
-                        let failure = ResolutionFailure::ConstraintsTooTight {
+                        tracing::debug!(kind = "constraints_too_tight",);
+                        ResolutionFailure::ConstraintsTooTight {
                             fallback_msg: inner.msg.clone(),
                             group: group.name.clone(),
-                        };
-                        failures.push(failure);
+                        }
                     },
                     catalog::ResolutionMessage::Unknown(inner) => {
                         tracing::debug!(
                             kind = "unknown",
-                            level = inner.level.to_string(),
-                            msg = inner.msg,
                             msg_type = inner.msg_type,
                             context = serde_json::to_string(&inner.context).unwrap(),
                             "handling unknown resolution message"
                         );
-                        // If it's not an error, skip this message
-                        if inner.level != MessageLevel::Error {
-                            continue;
-                        }
-                        let failure = ResolutionFailure::UnknownServiceMessage {
+                        ResolutionFailure::UnknownServiceMessage {
                             msg: inner.msg.clone(),
-                        };
-                        failures.push(failure);
+                        }
                     },
-                }
+                };
+                failures.push(failure);
             }
         }
         Ok(failures)

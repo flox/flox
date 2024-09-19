@@ -847,6 +847,17 @@ impl ResolutionMessage {
         }
     }
 
+    pub fn level(&self) -> MessageLevel {
+        match self {
+            ResolutionMessage::General(msg) => msg.level,
+            ResolutionMessage::AttrPathNotFoundNotInCatalog(msg) => msg.level,
+            ResolutionMessage::AttrPathNotFoundSystemsNotOnSamePage(msg) => msg.level,
+            ResolutionMessage::AttrPathNotFoundNotFoundForAllSystems(msg) => msg.level,
+            ResolutionMessage::ConstraintsTooTight(msg) => msg.level,
+            ResolutionMessage::Unknown(msg) => msg.level,
+        }
+    }
+
     /// Extract context.attr_path
     ///
     /// The caller must determine whether context contains attr_path
