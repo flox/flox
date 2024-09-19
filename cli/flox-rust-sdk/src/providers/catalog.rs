@@ -728,7 +728,7 @@ pub struct MsgGeneral {
 ///
 /// Typically constructed from a [ResolutionMessageGeneral] where
 /// the [ResolutionMessageGeneral::type_] is [MessageType::AttrPathNotFoundNotInCatalog].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MsgAttrPathNotFoundNotInCatalog {
     /// The log level of the message
     pub level: MessageLevel,
@@ -768,7 +768,7 @@ pub struct MsgAttrPathNotFoundSystemsNotOnSamePage {
 ///
 /// Typically constructed from a [ResolutionMessageGeneral] where
 /// the [ResolutionMessageGeneral::type_] is [MessageType::AttrPathNotFoundNotFoundForAllSystems].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MsgAttrPathNotFoundNotFoundForAllSystems {
     /// The log level of the message
     pub level: MessageLevel,
@@ -789,7 +789,7 @@ pub struct MsgAttrPathNotFoundNotFoundForAllSystems {
 ///
 /// Typically constructed from a [ResolutionMessageGeneral] where
 /// the [ResolutionMessageGeneral::type_] is [MessageType::ConstraintsTooTight].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MsgConstraintsTooTight {
     /// The log level of the message
     pub level: MessageLevel,
@@ -800,7 +800,7 @@ pub struct MsgConstraintsTooTight {
 /// The content of a yet unkown message.
 ///
 /// Generic messages are typically constructed [MsgGeneral].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MsgUnknown {
     /// The original message type string
     pub msg_type: String,

@@ -18,6 +18,7 @@ use flox_rust_sdk::models::manifest::{
     CatalogPackage,
     PackageToInstall,
 };
+use flox_rust_sdk::providers::catalog::MsgAttrPathNotFoundNotInCatalog;
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
@@ -232,7 +233,11 @@ impl Install {
                     .into_iter()
                     .partition(|f| matches!(f, ResolutionFailure::PackageNotFound { .. }));
                 for failure in need_didyoumean.into_iter() {
-                    let ResolutionFailure::PackageNotFound { attr_path, .. } = failure else {
+                    let ResolutionFailure::PackageNotFound(MsgAttrPathNotFoundNotInCatalog {
+                        attr_path,
+                        ..
+                    }) = failure
+                    else {
                         unreachable!("already checked that these failures are 'package not found'")
                     };
                     let suggestion = DidYouMean::<InstallSuggestion>::new(flox, &attr_path);
