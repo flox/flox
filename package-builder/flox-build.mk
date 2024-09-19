@@ -150,7 +150,7 @@ endif
 
 # The following template renders targets for the in-situ build mode.
 define BUILD_local_template =
-  $(eval _virtualSandbox = $(filter-out off,$(_sandbox)))
+  $(eval _virtualSandbox = $(filter-out null off,$(_sandbox)))
 
   .INTERMEDIATE: $(_pname)_local_build
   $(_pname)_local_build: $($(_pvarname)_buildScript)
@@ -314,9 +314,9 @@ $(foreach build,$(BUILDS), \
   $(eval _pname = $(notdir $(build))) \
   $(eval _sandbox = $(shell \
     $(_jq) -r '.manifest.build."$(_pname)".sandbox' $(MANIFEST_LOCK))) \
-  $(if $(filter null pure,$(_sandbox)), \
-    $(eval $(call BUILD_template,nix_sandbox)), \
-    $(eval $(call BUILD_template,local))))
+  $(if $(filter null off,$(_sandbox)), \
+    $(eval $(call BUILD_template,local)), \
+    $(eval $(call BUILD_template,nix_sandbox))))
 
 # Finally, we create the "all" target to build all known packages.
 .PHONY: all
