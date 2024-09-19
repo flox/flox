@@ -192,6 +192,11 @@ pre_cmd = '''
 '''
 cmd = "flox install tabula"
 
+[resolve.torchvision-bin]
+pre_cmd = "flox init"
+cmd = "flox install python311Packages.torchvision-bin"
+ignore_cmd_errors = true
+
 [resolve.webmention_ripgrep_rails]
 pre_cmd = "flox init"
 cmd = "flox install -i foo rubyPackages_3_2.webmention ripgrep -i bar rubyPackages_3_2.rails"
