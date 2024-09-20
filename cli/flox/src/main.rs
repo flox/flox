@@ -30,7 +30,6 @@ mod utils;
 
 async fn run(args: FloxArgs) -> Result<()> {
     init_logger(Some(args.verbosity));
-    set_user()?;
     set_parent_process_id();
     populate_default_nix_env_vars();
     let config = config::Config::parse()?;
@@ -78,6 +77,11 @@ fn main() -> ExitCode {
             .run_inner(Args::current_args())
             .unwrap_or_default()
     };
+
+    if let Err(err) = set_user() {
+        message::error(err.to_string());
+        return ExitCode::from(1);
+    }
 
     let disable_metrics = config::Config::parse()
         .unwrap_or_default()
