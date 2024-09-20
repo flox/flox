@@ -29,11 +29,16 @@ pre_cmd = "flox init"
 cmd = "flox install badpkg1 badpkg2"
 ignore_cmd_errors = true
 
+# Install a package that doesn't exist and a another that does only exist on Linux
+[resolve.badpkg_bpftrace]
+pre_cmd = "flox init"
+cmd = "flox install badpkg bpftrace"
+ignore_cmd_errors = true
+
 # Install a package that only exists on Linux
 [resolve.bpftrace]
 pre_cmd = "flox init"
 cmd = "flox install bpftrace"
-ignore_cmd_errors = true
 
 # Install multiple packages that only exist on Linux
 [resolve.bpftrace_systemd]

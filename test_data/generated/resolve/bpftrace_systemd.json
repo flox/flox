@@ -30,5 +30,179 @@
       "name": "toplevel",
       "page": null
     }
+  ],
+  [
+    {
+      "msgs": [],
+      "name": "toplevel",
+      "page": {
+        "complete": true,
+        "msgs": [],
+        "packages": [
+          {
+            "attr_path": "bpftrace",
+            "broken": false,
+            "derivation": "/nix/store/iskf0w9ijnpswyd6jh1yc0aba164alj4-bpftrace-0.21.2.drv",
+            "description": "High-level tracing language for Linux eBPF",
+            "insecure": false,
+            "install_id": "bpftrace",
+            "license": "Apache-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "name": "bpftrace-0.21.2",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/7x4y4vdjdqq5vw6m4v06k41wrwsvckqp-bpftrace-0.21.2-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/nsxhqzrcpy1r3a0f0z06bjy3mkck5vyc-bpftrace-0.21.2"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "bpftrace",
+            "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "rev_count": 681973,
+            "rev_date": "2024-09-16T05:08:36Z",
+            "scrape_date": "2024-09-18T03:14:07Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "0.21.2"
+          },
+          {
+            "attr_path": "bpftrace",
+            "broken": false,
+            "derivation": "/nix/store/32cmsz189h00nkgjg874v78qiniya6dn-bpftrace-0.21.2.drv",
+            "description": "High-level tracing language for Linux eBPF",
+            "insecure": false,
+            "install_id": "bpftrace",
+            "license": "Apache-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "name": "bpftrace-0.21.2",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/4zsnhbragvvyf9qksk84wqswd9xb8lcw-bpftrace-0.21.2-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/k56kgsknbvis83wgviacg3j3rp85p8fk-bpftrace-0.21.2"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "bpftrace",
+            "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "rev_count": 681973,
+            "rev_date": "2024-09-16T05:08:36Z",
+            "scrape_date": "2024-09-18T03:14:07Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "0.21.2"
+          },
+          {
+            "attr_path": "systemd",
+            "broken": false,
+            "derivation": "/nix/store/8c86p7b0kpn7czrf7spdh5q54z29a9d6-systemd-256.4.drv",
+            "description": "System and service manager for Linux",
+            "insecure": false,
+            "install_id": "systemd",
+            "license": "[ BSD-2-Clause, BSD-3-Clause, CC0-1.0, LGPL-2.1-or-later, LGPL-2.0-or-later, MIT, MIT-0, OFL-1.1, Public Domain ]",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "name": "systemd-256.4",
+            "outputs": [
+              {
+                "name": "dev",
+                "store_path": "/nix/store/8mh4f6gs5569br2j4z2hvr69822cbrsf-systemd-256.4-dev"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/kgfcllangf3njr0fybmq9kfbpcszcvqx-systemd-256.4-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/p0n0m1j2lzz1kmrxk1pxq9pb4x7mlk0i-systemd-256.4"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/z2m4s8ygnjsg55a6723lhmr04409j07w-systemd-256.4-debug"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "systemd",
+            "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "rev_count": 681973,
+            "rev_date": "2024-09-16T05:08:36Z",
+            "scrape_date": "2024-09-18T03:14:07Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "256.4"
+          },
+          {
+            "attr_path": "systemd",
+            "broken": false,
+            "derivation": "/nix/store/qb8izq5fyjv2g1qasqq8isijrsjff231-systemd-256.4.drv",
+            "description": "System and service manager for Linux",
+            "insecure": false,
+            "install_id": "systemd",
+            "license": "[ BSD-2-Clause, BSD-3-Clause, CC0-1.0, LGPL-2.1-or-later, LGPL-2.0-or-later, MIT, MIT-0, OFL-1.1, Public Domain ]",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "name": "systemd-256.4",
+            "outputs": [
+              {
+                "name": "dev",
+                "store_path": "/nix/store/bymhjvlyylz4m33dbv0wfw3cybxpp9rb-systemd-256.4-dev"
+              },
+              {
+                "name": "man",
+                "store_path": "/nix/store/x9dj2pb8jzaswkjmgsaddg43hcy4r4sn-systemd-256.4-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/1lbc6v5p1a3rn4rjaqnz0694xfbq8dxq-systemd-256.4"
+              },
+              {
+                "name": "debug",
+                "store_path": "/nix/store/0klm6f7ill0qb4aavq93m0rpf0y5z0hj-systemd-256.4-debug"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "systemd",
+            "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "rev_count": 681973,
+            "rev_date": "2024-09-16T05:08:36Z",
+            "scrape_date": "2024-09-18T03:14:07Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "256.4"
+          }
+        ],
+        "page": 681973,
+        "url": ""
+      }
+    }
   ]
 ]

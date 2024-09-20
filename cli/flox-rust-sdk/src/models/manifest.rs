@@ -1305,14 +1305,7 @@ pub fn insert_packages(
             let mut descriptor_table = InlineTable::new();
             match pkg {
                 PackageToInstall::Catalog(pkg) => {
-                    descriptor_table.insert(
-                        "pkg-path",
-                        Value::String(Formatted::new(pkg.pkg_path.clone())),
-                    );
-                    if let Some(ref version) = pkg.version {
-                        descriptor_table
-                            .insert("version", Value::String(Formatted::new(version.clone())));
-                    }
+                    descriptor_table = InlineTable::from(pkg);
                     debug!(
                         "package newly installed: id={}, pkg-path={}",
                         pkg.id, pkg.pkg_path
