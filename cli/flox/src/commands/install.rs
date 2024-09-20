@@ -1,11 +1,16 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::data::CanonicalPath;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{CoreEnvironmentError, EnvironmentError};
+use flox_rust_sdk::models::environment::{
+    CoreEnvironmentError,
+    Environment,
+    EnvironmentError,
+    InstallationAttempt,
+};
 use flox_rust_sdk::models::lockfile::{
     LockedManifest,
     LockedManifestError,
@@ -18,11 +23,14 @@ use flox_rust_sdk::models::manifest::{
     CatalogPackage,
     PackageToInstall,
 };
-use flox_rust_sdk::providers::catalog::MsgAttrPathNotFoundNotInCatalog;
+use flox_rust_sdk::providers::catalog::{
+    MsgAttrPathNotFoundNotFoundForAllSystems,
+    MsgAttrPathNotFoundNotInCatalog,
+};
 use indoc::formatdoc;
 use itertools::Itertools;
 use log::debug;
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{environment_select, EnvironmentSelect};
@@ -35,7 +43,7 @@ use crate::commands::{
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
-use crate::utils::errors::apply_doc_link_for_unsupported_packages;
+use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_error};
 use crate::utils::message;
 use crate::utils::tracing::sentry_set_tag;
 
@@ -150,8 +158,12 @@ impl Install {
             help_message: None,
             typed: Spinner::new(|| environment.install(&packages_to_install, &flox)),
         }
-        .spin()
-        .map_err(|err| Self::handle_error(err, &flox, &packages_to_install))?;
+        .spin();
+
+        let installation = match installation {
+            Ok(installation) => installation,
+            Err(err) => Self::handle_error(err, &flox, &mut *environment, &packages_to_install)?,
+        };
 
         let lockfile_path = environment.lockfile_path(&flox)?;
         let lockfile_path = CanonicalPath::new(lockfile_path)?;
@@ -205,11 +217,14 @@ impl Install {
             .join(",")
     }
 
+    /// Handle an error that occurred during installation.
+    /// Some errors are recoverable and will return with [Ok].
     fn handle_error(
         err: EnvironmentError,
         flox: &Flox,
+        environment: &mut dyn Environment,
         packages: &[PackageToInstall],
-    ) -> anyhow::Error {
+    ) -> Result<InstallationAttempt> {
         debug!("install error: {:?}", err);
 
         subcommand_metric!(
@@ -218,20 +233,97 @@ impl Install {
         );
 
         match err {
+            EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
+                LockedManifestError::ResolutionFailed(failures),
+            )) if failures.0.iter().all(|f| {
+                matches!(f, ResolutionFailure::PackageUnavailableOnSomeSystems { .. })
+            }) =>
+            {
+                let mut packages = packages
+                    .iter()
+                    .cloned()
+                    .map(|p| (p.id().to_string(), p))
+                    .collect::<HashMap<_, _>>();
+
+                for failure in &failures.0 {
+                    let ResolutionFailure::PackageUnavailableOnSomeSystems {
+                        catalog_message:
+                            MsgAttrPathNotFoundNotFoundForAllSystems {
+                                install_id,
+                                valid_systems,
+                                ..
+                            },
+                        invalid_systems: _,
+                    } = failure
+                    else {
+                        unreachable!("already checked that these failures are 'package unavailable on some systems'")
+                    };
+
+                    let Some(package_to_install) = packages.get_mut(install_id) else {
+                        warn!(install_id, "resolution failure for non-existent package");
+                        continue;
+                    };
+
+                    let PackageToInstall::Catalog(CatalogPackage { systems, .. }) =
+                        package_to_install
+                    else {
+                        warn!(
+                            install_id,
+                            ?package_to_install,
+                            "resolution failure for non-catalog package"
+                        );
+                        continue;
+                    };
+
+                    *systems = Some(valid_systems.clone());
+                }
+
+                let packages = packages.into_values().collect::<Vec<_>>();
+
+                let install_result = Dialog {
+                    message: "Installing packages for available systems...",
+                    help_message: Some("Some packages were not available on all requested systems"),
+                    typed: Spinner::new(|| environment.install(&packages, flox)),
+                }
+                .spin();
+
+                match install_result {
+                    Ok(install_attempt) => Ok(install_attempt),
+                    Err(err) => {
+                        debug!("install error: {:?}", err);
+                        let mut failures = failures;
+                        let msg = formatdoc! {"
+                            While attempting to install for available systems, the following error occurred:
+                            {err}
+                            ", err = format_error(&err).trim()
+                        };
+                        failures.0.push(ResolutionFailure::FallbackMessage { msg });
+                        Err(EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
+                            LockedManifestError::ResolutionFailed(failures),
+                        ))
+                        .into())
+                    },
+                }
+            },
+
             // Try to make suggestions when a package isn't found
             EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
                 LockedManifestError::ResolutionFailed(failures),
             )) => {
-                // We only have to do this bullshit because `DidYouMean` only lives
-                // in `flox`, otherwise we could just use it to format the failure in
-                // `flox-rust-sdk`.
-                // Essentially we're going to convert the `PackageNotFound` variants into
-                // `FallbackMessage` variants, which are just strings we're going to generate
-                // with `DidYouMean`
                 let (need_didyoumean, mut other_failures): (Vec<_>, Vec<_>) = failures
                     .0
                     .into_iter()
                     .partition(|f| matches!(f, ResolutionFailure::PackageNotFound { .. }));
+                // Essentially we're going to convert the `PackageNotFound` variants into
+                // `FallbackMessage` variants, which are just strings we're going to generate
+                // with `DidYouMean`.
+                // We use `DidYouMean` to generate the suggestions,
+                // separately from attempting an install,
+                // or other kind of resoluton.
+                // This is because `DidYouMean` may take an unknown amount of time,
+                // performing a search.
+                // For the same reason `DidYouMean` is also showing a spinner
+                // while the search is in progress.
                 for failure in need_didyoumean.into_iter() {
                     let ResolutionFailure::PackageNotFound(MsgAttrPathNotFoundNotInCatalog {
                         attr_path,
@@ -252,12 +344,12 @@ impl Install {
                     };
                     other_failures.push(ResolutionFailure::FallbackMessage { msg });
                 }
-                EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
+                Err(EnvironmentError::Core(CoreEnvironmentError::LockedManifest(
                     LockedManifestError::ResolutionFailed(ResolutionFailures(other_failures)),
                 ))
-                .into()
+                .into())
             },
-            err => apply_doc_link_for_unsupported_packages(err).into(),
+            err => Err(apply_doc_link_for_unsupported_packages(err).into()),
         }
     }
 

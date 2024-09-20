@@ -1,0 +1,34 @@
+[
+  [
+    {
+      "msgs": [
+        {
+          "AttrPathNotFoundNotInCatalog": {
+            "attr_path": "badpkg",
+            "install_id": "badpkg",
+            "level": "error",
+            "msg": "The attr_path badpkg is not found in the catalog."
+          }
+        },
+        {
+          "AttrPathNotFoundNotFoundForAllSystems": {
+            "attr_path": "bpftrace",
+            "install_id": "bpftrace",
+            "level": "error",
+            "msg": "The attr_path bpftrace is not found for all the requested systems, suggest limiting systems to (aarch64-linux,x86_64-linux).",
+            "valid_systems": [
+              "aarch64-linux",
+              "x86_64-linux"
+            ]
+          }
+        }
+      ],
+      "name": "toplevel",
+      "page": null
+    }
+  ],
+  {
+    "count": 0,
+    "results": []
+  }
+]

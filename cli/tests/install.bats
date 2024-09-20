@@ -367,33 +367,47 @@ EOF
   )"
 }
 
-@test "resolution message: single package not availabe on all systems" {
+# bats test_tags=install:single-not-on-all-systems
+@test "resolution fixup: package not available on all systems installs with looser constraints" {
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace.json" \
     run "$FLOX_BIN" install bpftrace
 
-  assert_failure
-  assert_output "$(
-    cat << EOF
-❌ ERROR: resolution failed: package 'bpftrace' not available for
-    - aarch64-darwin
-    - x86_64-darwin
-  but it is available for
-    - aarch64-linux
-    - x86_64-linux
+  assert_success
 
-For more on managing system-specific packages, visit the documentation:
-https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
-EOF
-  )"
+  run tomlq -e \
+    '.install.bpftrace.systems | debug(.) == ["aarch64-linux","x86_64-linux"]' \
+    "$MANIFEST_PATH"
+  assert_success
 }
 
-@test "resolution message: multiple packages not available on all systems" {
+# bats test_tags=install:multiple-not-on-all-systems
+@test "resolution fixub: multiple packages not available on all systems install with looser constraints" {
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/bpftrace_systemd.json" \
     run "$FLOX_BIN" install bpftrace systemd
+
+  assert_success
+
+  run tomlq -e \
+    '.install.bpftrace.systems | debug(.) == ["aarch64-linux","x86_64-linux"]' \
+    "$MANIFEST_PATH"
+  assert_success
+
+  run tomlq -e \
+    '.install.systemd.systems | debug(.) == ["aarch64-linux","x86_64-linux"]' \
+    "$MANIFEST_PATH"
+  assert_success
+}
+
+# bats test_tags=install:not-on-all-systems-and-other-error
+@test "resolution message: package not available on all systems with no fix when there is another error" {
+  "$FLOX_BIN" init
+
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/badpkg_bpftrace.json" \
+    run "$FLOX_BIN" install badpkg bpftrace
 
   assert_failure
   assert_output "$(
@@ -408,15 +422,8 @@ EOF
 
   For more on managing system-specific packages, visit the documentation:
   https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
-- package 'systemd' not available for
-      - aarch64-darwin
-      - x86_64-darwin
-    but it is available for
-      - aarch64-linux
-      - x86_64-linux
-
-  For more on managing system-specific packages, visit the documentation:
-  https://flox.dev/docs/tutorials/multi-arch-environments/#handling-unsupported-packages
+- Could not find package 'badpkg'.
+  Try 'flox search' with a broader search term.
 EOF
   )"
 }

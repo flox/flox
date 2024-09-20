@@ -18,5 +18,91 @@
       "name": "toplevel",
       "page": null
     }
+  ],
+  [
+    {
+      "msgs": [],
+      "name": "toplevel",
+      "page": {
+        "complete": true,
+        "msgs": [],
+        "packages": [
+          {
+            "attr_path": "bpftrace",
+            "broken": false,
+            "derivation": "/nix/store/iskf0w9ijnpswyd6jh1yc0aba164alj4-bpftrace-0.21.2.drv",
+            "description": "High-level tracing language for Linux eBPF",
+            "insecure": false,
+            "install_id": "bpftrace",
+            "license": "Apache-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "name": "bpftrace-0.21.2",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/7x4y4vdjdqq5vw6m4v06k41wrwsvckqp-bpftrace-0.21.2-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/nsxhqzrcpy1r3a0f0z06bjy3mkck5vyc-bpftrace-0.21.2"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "bpftrace",
+            "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "rev_count": 681973,
+            "rev_date": "2024-09-16T05:08:36Z",
+            "scrape_date": "2024-09-18T03:14:07Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "0.21.2"
+          },
+          {
+            "attr_path": "bpftrace",
+            "broken": false,
+            "derivation": "/nix/store/32cmsz189h00nkgjg874v78qiniya6dn-bpftrace-0.21.2.drv",
+            "description": "High-level tracing language for Linux eBPF",
+            "insecure": false,
+            "install_id": "bpftrace",
+            "license": "Apache-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "name": "bpftrace-0.21.2",
+            "outputs": [
+              {
+                "name": "man",
+                "store_path": "/nix/store/4zsnhbragvvyf9qksk84wqswd9xb8lcw-bpftrace-0.21.2-man"
+              },
+              {
+                "name": "out",
+                "store_path": "/nix/store/k56kgsknbvis83wgviacg3j3rp85p8fk-bpftrace-0.21.2"
+              }
+            ],
+            "outputs_to_install": [
+              "out",
+              "man"
+            ],
+            "pname": "bpftrace",
+            "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "rev_count": 681973,
+            "rev_date": "2024-09-16T05:08:36Z",
+            "scrape_date": "2024-09-18T03:14:07Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "0.21.2"
+          }
+        ],
+        "page": 681973,
+        "url": ""
+      }
+    }
   ]
 ]
