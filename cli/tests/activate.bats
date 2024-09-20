@@ -77,6 +77,8 @@ EOF
 setup_file() {
   common_file_setup
   user_dotfiles_setup
+
+  export BATS_NO_PARALLELIZE_WITHIN_FILE=true
 }
 
 # ---------------------------------------------------------------------------- #
