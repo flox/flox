@@ -214,7 +214,7 @@ jobs:
         run: |
           nix develop -L --no-update-lock-file --command just integ-tests --\
             --filter-tags '"${{ matrix.test-tags }}"' \
-            --jobs "$(nproc)" \
+            --jobs 4 \
             --no-parallelize-across-files
 
       - name: "Capture process tree for failing tests"
