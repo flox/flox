@@ -211,7 +211,11 @@ jobs:
         env:
           RUST_BACKTRACE: 1
           AUTH0_FLOX_DEV_CLIENT_SECRET: "${{ secrets.MANAGED_AUTH0_FLOX_DEV_CLIENT_SECRET }}"
-        run: nix develop -L --no-update-lock-file --command just integ-tests --  --filter-tags '"${{ matrix.test-tags }}"'
+        run: |
+          nix develop -L --no-update-lock-file --command just integ-tests --\
+            --filter-tags '"${{ matrix.test-tags }}"' \
+            --jobs "$(nproc)" \
+            --no-parallelize-across-files
 
       - name: "Capture process tree for failing tests"
         if: ${{ failure() }}
