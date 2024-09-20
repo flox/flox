@@ -326,7 +326,7 @@ mod tests {
     }
 
     #[test]
-    fn build_sandbox_pure_as_default() {
+    fn build_sandbox_pure() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
         let file_content = String::from("some content");
@@ -335,6 +335,7 @@ mod tests {
             version = 1
 
             [build.{package_name}]
+            sandbox = "pure"
             command = """
                 mkdir $out
                 cp {file_name} $out/{file_name}
@@ -354,7 +355,7 @@ mod tests {
     }
 
     #[test]
-    fn build_sandbox_off() {
+    fn build_sandbox_off_as_default() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
         let file_content = String::from("some content");
@@ -363,7 +364,6 @@ mod tests {
             version = 1
 
             [build.{package_name}]
-            sandbox = "off"
             command = """
                 mkdir $out
                 cp {file_name} $out/{file_name}
@@ -508,6 +508,7 @@ mod tests {
             hello.pkg-path = "hello"
 
             [build.{package_name}]
+            sandbox = "pure"
             command = """
                 mkdir $out
                 type hello | grep -o "{file_content}" > $out/{file_name}
