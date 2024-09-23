@@ -93,6 +93,7 @@ setup() {
 teardown() {
   # Wait for watchdogs before project teardown, otherwise some tests will hang
   # forever.
+  #
   # I'm guessing this is because the watchdog and process-compose have logfiles
   # in the project directory,
   # so maybe one of them tries to log something and hangs.
@@ -101,6 +102,14 @@ teardown() {
   # See https://github.com/flox/flox/actions/runs/10820753745/job/30021432134#step:9:26
   # I'd check the logs to confirm what's happening...
   # ...if only the reproducer wasn't to delete the logs.
+  #
+  # When running in parallel `wait_for_watchdogs`
+  # may wait for watchdog processes of unrelated tests.
+  # It tries to avoid non-test processes by looking for the data dir argument,
+  # passed to the watchdog process.
+  # Within the `services` tests, we call `setup_isolated_flox` during `setup()`,
+  # which sets the data dir to a unique value for every test,
+  # thus avoiding waiting for unrelated watchdog processes.
   wait_for_watchdogs
   project_teardown
   common_test_teardown
