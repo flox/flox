@@ -8,10 +8,10 @@ resolver = "2"
 anyhow = "1"
 async-stream = "0.3.5"
 blake3 = "1.5.3"
-bpaf = { version = "0.9.13", features = ["derive", "autocomplete"] }
+bpaf = { version = "0.9.14", features = ["derive", "autocomplete"] }
 catalog-api-v1 = { path = "catalog-api-v1" }
 chrono = { version = "0.4.38", features = ["serde"] }
-clap = { version = "4.5.17", features = ["derive"] }
+clap = { version = "4.5.18", features = ["derive"] }
 clap_derive = "4.5.4"
 config = "0.14.0"
 crossterm = "0.27"
