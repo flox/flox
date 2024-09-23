@@ -17,6 +17,7 @@ pre-commit-hooks.lib.${system}.run {
   ];
   hooks = {
     alejandra.enable = true;
+    alejandra.settings.verbosity = "quiet";
     clang-format = {
       enable = true;
       types_or = lib.mkForce [
@@ -44,13 +45,12 @@ pre-commit-hooks.lib.${system}.run {
       entry = lib.mkForce "${wrapper}/bin/cargo-fmt fmt --all --manifest-path 'cli/Cargo.toml' -- --color always";
     };
     clippy.enable = true;
+    clippy.settings.denyWarnings = true;
     commitizen.enable = true;
     shfmt.enable = false;
     # shellcheck.enable = true; # disabled until we have time to fix all the warnings
   };
   settings = {
-    clippy.denyWarnings = true;
-    alejandra.verbosity = "quiet";
     rust.cargoManifestPath = "cli/Cargo.toml";
   };
   tools = {
