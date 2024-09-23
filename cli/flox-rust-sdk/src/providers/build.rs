@@ -188,15 +188,23 @@ mod tests {
         parent.join(format!("result-{package}-buildCache"))
     }
 
+    #[derive(Default, Debug, Clone, PartialEq)]
+    struct CollectedOutput {
+        stdout: String,
+        stderr: String,
+    }
+
     /// Runs a build and asserts that the `ExitStatus` matches `expect_status`.
+    /// STDOUT and STDERR are returned if you wish to make additional
+    /// assertions on the output of the build.
     fn assert_build_status(
         flox: &Flox,
         env: &mut PathEnvironment,
         package_name: &str,
         expect_success: bool,
-    ) {
+    ) -> CollectedOutput {
         let builder = FloxBuildMk;
-        let output = builder
+        let output_stream = builder
             .build(
                 &env.parent_path().unwrap(),
                 &env.activation_path(flox).unwrap(),
@@ -204,17 +212,27 @@ mod tests {
             )
             .unwrap();
 
-        for message in output {
+        let mut output = CollectedOutput::default();
+        for message in output_stream {
             match message {
                 Output::Exit(status) => match expect_success {
                     true => assert!(status.success()),
                     false => assert!(!status.success()),
                 },
-                // Copy output to debug failing tests.
-                Output::Stdout(line) => println!("stdout: {line}"),
-                Output::Stderr(line) => println!("stderr: {line}"),
+                Output::Stdout(line) => {
+                    println!("stdout: {line}"); // To debug failing tests
+                    output.stdout.push_str(&line);
+                    output.stdout.push('\n');
+                },
+                Output::Stderr(line) => {
+                    println!("stderr: {line}"); // To debug failing tests
+                    output.stderr.push_str(&line);
+                    output.stderr.push('\n');
+                },
             }
         }
+
+        output
     }
 
     /// Asserts that `file_name` exists with `content` within the build result
