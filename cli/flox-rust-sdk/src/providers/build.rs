@@ -317,6 +317,36 @@ mod tests {
     }
 
     #[test]
+    fn build_no_dollar_out_sandbox_pure() {
+        let package_name = String::from("foo");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = "[ ! -e $out ]"
+            sandbox = "pure"
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        let output = assert_build_status(&flox, &mut env, &package_name, false);
+        // Weird string formatting because indoc strips leading whitespace
+        assert!(output.stdout.contains(
+            r#"
+       > ERROR: Build command did not copy outputs to '$out'.
+       > - copy a single file with 'cp bin $out'
+       > - copy multiple files with 'mkdir -p $out && cp bin/* $out/'
+       > - copy files from an Autotools project with 'make install PREFIX=$out'"#
+        ));
+        assert!(
+            !output.stdout.contains("failed to produce output path"),
+            "nix's own error for empty output path is bypassed"
+        );
+    }
+
+    #[test]
     #[ignore = "TODO: `files` isn't currently passed to or parsed by `flox-build.mk`."]
     fn build_includes_files() {
         let package_name = String::from("foo");

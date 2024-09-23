@@ -42,10 +42,12 @@ in
   } (
     (
       if (buildScript == null)
-      then ''
-        # If no build script is provided copy the contents of install prefix
-        # to the output directory, rewriting path references as we go.
-        if [ -e ${install-prefix-contents} ]; then
+      then
+        if ! builtins.pathExists install-prefix
+        then "${dollar_out_error_and_exit}"
+        else ''
+          # If no build script is provided copy the contents of install prefix
+          # to the output directory, rewriting path references as we go.
           if [ -d ${install-prefix-contents} ]; then
             mkdir $out
             tar -C ${install-prefix-contents} -c --mode=u+w -f - . | \
@@ -55,14 +57,10 @@ in
             cp ${install-prefix-contents} $out
             sed --binary "s%${install-prefix}%$out%g" $out
           fi
-        else
-          echo "ERROR: build did not produce expected \$out (${install-prefix})" 1>&2
-          exit 1
-        fi
-        ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
-          signDarwinBinariesInAllOutputs
-        ''}
-      ''
+          ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
+            signDarwinBinariesInAllOutputs
+          ''}
+        ''
       else ''
         echo "---"
         echo "Input checksums:"
@@ -118,6 +116,10 @@ in
       ''
     )
     + ''
+      # Check that the build populated $out.
+      if [ ! -e "$out" ]; then
+        ${dollar_out_error_and_exit}
+      fi
       # Start by patching shebangs in bin and sbin directories.
       for dir in $out/bin $out/sbin; do
         if [ -d "$dir" ]; then
