@@ -31,7 +31,6 @@
   inputs.pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.crane.url = "github:ipetkov/crane";
-  inputs.crane.inputs.nixpkgs.follows = "nixpkgs";
 
   inputs.fenix.url = "github:nix-community/fenix";
   inputs.fenix.inputs.nixpkgs.follows = "nixpkgs";
