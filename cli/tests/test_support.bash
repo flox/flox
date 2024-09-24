@@ -216,7 +216,9 @@ wait_for_watchdogs() {
 common_test_teardown() {
   # Delete test tmpdir unless the user requests to preserve them.
   # XXX: We do not attempt to delete envs here.
-  if [[ -z "${FLOX_TEST_KEEP_TMP:-}" ]]; then rm -rf "$BATS_TEST_TMPDIR"; fi
+  if [[ -z "${FLOX_TEST_KEEP_TMP:-}" ]]; then
+    rm -rf "$BATS_TEST_TMPDIR" || (ls -laR "$BATS_TEST_TMPDIR"; exit 1);
+  fi
 }
 
 teardown() { common_test_teardown; }
