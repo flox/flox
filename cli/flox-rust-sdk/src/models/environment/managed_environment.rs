@@ -1344,6 +1344,9 @@ impl ManagedEnvironment {
 
         let options = floxmeta_git_options(git_url, &pointer.owner, token);
 
+        // Initialize a new branch for this environment in a new, temporary,
+        // bare repo. This acts like part of the bare repo that backs a user's
+        // real floxmeta repo.
         let generations = Generations::init(
             options,
             checkedout_floxmeta_path,
@@ -1353,12 +1356,17 @@ impl ManagedEnvironment {
         )
         .map_err(ManagedEnvironmentError::InitializeFloxmeta)?;
 
+        // Creates a temporary floxmeta repo that we'll add generations to
+        // and push to FloxHub from. This also acts as the `origin` remote
+        // for the bare repo we created above.
         let temp_floxmeta_git = generations.git().clone();
 
         let mut generations = generations
             .writable(flox.temp_dir.clone())
             .map_err(ManagedEnvironmentError::CreateFloxmetaDir)?;
 
+        // Add this environment as a new generation, which involves pushing to
+        // the fake remote.
         generations
             .add_generation(&mut core_environment, "Add first generation".to_string())
             .map_err(ManagedEnvironmentError::CommitGeneration)?;
@@ -1370,6 +1378,7 @@ impl ManagedEnvironment {
             )
             .unwrap();
 
+        // Push the branch for this environment to FloxHub
         match temp_floxmeta_git.push_ref("upstream", "HEAD", force) {
             Err(GitRemoteCommandError::AccessDenied) => Err(ManagedEnvironmentError::AccessDenied)?,
             Err(GitRemoteCommandError::Diverged) => Err(ManagedEnvironmentError::Diverged)?,
@@ -1377,6 +1386,8 @@ impl ManagedEnvironment {
             _ => {},
         }
 
+        // Change the `env.json` file to indicate that the environment is no longer
+        // a path environment, and instead is managed centrally on FloxHub.
         fs::write(
             dot_flox_path.join(ENVIRONMENT_POINTER_FILENAME),
             serde_json::to_string(&pointer).map_err(ManagedEnvironmentError::SerializePointer)?,
