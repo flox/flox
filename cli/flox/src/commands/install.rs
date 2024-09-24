@@ -276,13 +276,17 @@ impl Install {
                     };
 
                     *systems = Some(valid_systems.clone());
+                    message::warning(format!(
+                        "Installing '{install_id}' for the following systems: {:?}",
+                        valid_systems
+                    ));
                 }
 
                 let packages = packages.into_values().collect::<Vec<_>>();
 
                 let install_result = Dialog {
                     message: "Installing packages for available systems...",
-                    help_message: Some("Some packages were not available on all requested systems"),
+                    help_message: None,
                     typed: Spinner::new(|| environment.install(&packages, flox)),
                 }
                 .spin();
