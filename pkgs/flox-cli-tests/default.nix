@@ -236,8 +236,17 @@ in
       '--print-output-on-failure'
       '--verbose-run'
       '--timing'
-      "''${@:-}"
     );
+
+    flox_test_jobs="''${FLOX_TEST_JOBS:-4}"
+    if [[ "$flox_test_jobs" -gt 2 ]]; then
+      _BATS_ARGS+=( '--jobs' "$flox_test_jobs" )
+      _BATS_ARGS+=( '--no-parallelize-across-files' )
+    fi
+
+    # Add the rest of the arguments provided to the script
+    _BATS_ARGS+=("''${@:-}")
+
     {
       echo "''${0##*/}: Running test suite with:";
       echo "  FLOX_BIN:                 $FLOX_BIN";
