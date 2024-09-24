@@ -798,9 +798,8 @@ enum SharingCommands {
     /// Containerize an environment
     #[bpaf(
         command,
-        hide,
         footer("Run 'man flox-containerize' for more details."),
-        header("This command is experimental and its behaviour is subject to change")
+        header("This command is experimental, linux-only, and its behaviour is subject to change")
     )]
     Containerize(#[bpaf(external(containerize::containerize))] containerize::Containerize),
 }
