@@ -132,6 +132,10 @@ setup() {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 teardown() {
+  # Cleaning up the `BATS_TEST_TMPDIR` occasionally fails,
+  # because of an 'env-registry.json' that gets concurrently written
+  # by the watchdog as the activation terminates.
+  wait_for_watchdogs
   project_teardown
   common_test_teardown
 }
