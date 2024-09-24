@@ -27,6 +27,7 @@ nixVersions.stable.overrideAttrs (prev: {
   patches =
     prev.patches
     ++ [
+      (builtins.path {path = ./patches/nix-7370.patch;})
       (builtins.path {path = ./patches/nix-9147.patch;})
       (builtins.path {path = ./patches/multiple-github-tokens.2.13.2.patch;})
     ];
@@ -65,9 +66,3 @@ nixVersions.stable.overrideAttrs (prev: {
     EOF
   '';
 })
-# ---------------------------------------------------------------------------- #
-#
-#
-#
-# ============================================================================ #
-

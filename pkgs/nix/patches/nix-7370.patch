@@ -1,0 +1,34 @@
+From c5fdbdae321903740e0e735aa89fab5647992687 Mon Sep 17 00:00:00 2001
+From: Eelco Dolstra <edolstra@gmail.com>
+Date: Mon, 19 Jun 2023 16:54:05 +0200
+Subject: [PATCH] LocalStore::addTempRoot(): Handle ENOENT
+
+If the garbage collector has acquired the global GC lock, but hasn't
+created the GC socket yet, then a client attempting to connect would
+get ENOENT. Note that this only happens when the GC runs for the first
+time on a machine. Subsequently clients will get ECONNREFUSED which
+was already handled.
+
+Fixes #7370.
+---
+ src/libstore/gc.cc       | 13 +++++++++----
+ tests/gc-non-blocking.sh |  7 ++++++-
+ 2 files changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/src/libstore/gc.cc b/src/libstore/gc.cc
+index 0038ec80257..b5b9e2049d4 100644
+--- a/src/libstore/gc.cc
++++ b/src/libstore/gc.cc
+@@ -138,9 +138,9 @@ void LocalStore::addTempRoot(const StorePath & path)
+             try {
+                 nix::connect(fdRootsSocket->get(), socketPath);
+             } catch (SysError & e) {
+-                /* The garbage collector may have exited, so we need to
+-                   restart. */
+-                if (e.errNo == ECONNREFUSED) {
++                /* The garbage collector may have exited or not
++                   created the socket yet, so we need to restart. */
++                if (e.errNo == ECONNREFUSED || e.errNo == ENOENT) {
+                     debug("GC socket connection refused");
+                     fdRootsSocket->close();
+                     goto restart;
