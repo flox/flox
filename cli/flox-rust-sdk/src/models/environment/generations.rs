@@ -259,10 +259,12 @@ impl Generations<ReadWrite> {
             generation_metadata.last_active = Some(Utc::now());
         }
 
+        // Insert the new generation
         let _existing = metadata
             .generations
             .insert(generation.into(), generation_metadata);
 
+        // Write the metadata file with the new generation added
         write_metadata_file(metadata, self.repo.path())?;
 
         let generation_path = self.repo.path().join(generation.to_string());
@@ -308,7 +310,12 @@ impl Generations<ReadWrite> {
         environment: &mut CoreEnvironment,
         description: String,
     ) -> Result<(), GenerationsError> {
-        // keys should all be numbers (but)
+        // Returns the highest numbered generation so we know which number to assign
+        // the new one. We don't support rollbacks or checking out specific generations
+        // yet, but this protects against potentially overwriting another generation if
+        // you're currently on e.g. 2, but the latest is 5.
+        //
+        // Keys should all be numbers, but if they aren't we provide a default value.
         let max = self
             .metadata()?
             .generations
