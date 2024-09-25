@@ -177,8 +177,12 @@ impl Environment for RemoteEnvironment {
         self.inner.lockfile(flox)
     }
 
-    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError> {
-        self.inner.build_container(flox)
+    fn build_container(
+        &mut self,
+        flox: &Flox,
+        tag: &str,
+    ) -> Result<ContainerBuilder, EnvironmentError> {
+        self.inner.build_container(flox, tag)
     }
 
     /// Install packages to the environment atomically
