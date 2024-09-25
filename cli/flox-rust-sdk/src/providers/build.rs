@@ -900,4 +900,100 @@ mod tests {
         assert!(!cache_foo.exists());
         assert!(!result_bar.exists());
     }
+
+    #[test]
+    fn dollar_out_persisted_no_sandbox() {
+        let package_name = String::from("foo");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "off"
+            command = """
+                echo "Hello, World!" >> $out
+                exit 42
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        let output = assert_build_status(&flox, &mut env, &package_name, false);
+
+        let out_path_message_regex = regex::Regex::new("out=(.+?)\\s").unwrap();
+
+        let out_path = match out_path_message_regex.captures(&output.stdout) {
+            Some(captures) => Path::new(captures.get(1).unwrap().as_str()),
+            None => panic!("$out path not found in stdout"),
+        };
+
+        assert!(out_path.exists(), "out_path not found: {out_path:?}");
+
+        let out_content = fs::read_to_string(out_path).unwrap();
+        assert_eq!(out_content, "Hello, World!\n");
+    }
+
+    fn build_script_persisted(mode: &str, succeed: bool) {
+        let package_name = String::from("foo");
+
+        let command = if succeed {
+            r#"echo "Hello, World!" >> $out"#
+        } else {
+            "exit 42"
+        };
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "{mode}"
+            command = '{command}'
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        let output = assert_build_status(&flox, &mut env, &package_name, succeed);
+
+        let build_script_path_message_regex =
+            regex::Regex::new(r#"bash -e (.+-build.bash)|--argstr buildScript "(.+build.bash)""#)
+                .unwrap();
+
+        let build_script_path = match build_script_path_message_regex.captures(&output.stdout) {
+            Some(captures) => Path::new(
+                captures
+                    .get(1)
+                    .or_else(|| captures.get(2))
+                    .unwrap()
+                    .as_str(),
+            ),
+            None => panic!("$build_script_path not found in stdout"),
+        };
+
+        assert!(
+            build_script_path.exists(),
+            "build_script_path not found: {build_script_path:?}"
+        );
+    }
+
+    #[test]
+    fn build_script_persisted_pure_on_success() {
+        build_script_persisted("pure", true);
+    }
+
+    #[test]
+    fn build_script_persisted_pure_on_failure() {
+        build_script_persisted("pure", false);
+    }
+
+    #[test]
+    fn build_script_persisted_no_sandbox_on_success() {
+        build_script_persisted("off", true);
+    }
+
+    #[test]
+    fn build_script_persisted_no_sandbox_on_failure() {
+        build_script_persisted("off", false);
+    }
 }

@@ -119,7 +119,7 @@ define DEPENDS_template =
   # Compute 32-character stable string for use in stable path generation
   # based on hash of pname, current working directory and FLOX_ENV.
   $(eval $(_pvarname)_hash = $(shell ( \
-    ( echo $(_pname) $(realpath $(FLOX_ENV)) && $(_pwd) ) | $(_sha256sum) | $(_head) -c32)))
+    ( echo $(_pname) && $(_pwd) ) | $(_sha256sum) | $(_head) -c32)))
   # Render a shorter 8-character version as well.
   $(eval $(_pvarname)_shortHash = $(shell echo $($(_pvarname)_hash) | $(_head) -c8))
   # And while we're at it, set a temporary basename using the short hash.
@@ -311,7 +311,7 @@ define BUILD_template =
   # will have successfully built the corresponding result-$(_pname) symlinks.
   # Iterate through this list, replacing all instances of "${package}" with the
   # corresponding storePath as identified by the result-* symlink.
-  .INTERMEDIATE: $($(_pvarname)_buildScript)
+  .PRECIOUS: $($(_pvarname)_buildScript)
   $($(_pvarname)_buildScript): $(build)
 	@echo "Rendering $(_pname) build script to $$@"
 	@$(_cp) $$< $$@
