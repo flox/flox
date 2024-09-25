@@ -33,12 +33,26 @@ pub trait ManifestBuilder {
         flox_env: &Path,
         package: &[String],
     ) -> Result<BuildOutput, ManifestBuilderError>;
+
+    fn clean(
+        &self,
+        base_dir: &Path,
+        flox_env: &Path,
+        package: &[String],
+    ) -> Result<(), ManifestBuilderError>;
 }
 
 #[derive(Debug, Error)]
 pub enum ManifestBuilderError {
     #[error("failed to call package builder: {0}")]
     CallBuilderError(#[source] std::io::Error),
+
+    #[error("failed to clean up build artifacts")]
+    RunClean {
+        stdout: String,
+        stderr: String,
+        status: ExitStatus,
+    },
 }
 
 pub enum Output {
@@ -71,6 +85,18 @@ impl Iterator for BuildOutput {
 /// A manifest builder that uses the [FLOX_BUILD_MK] makefile to build packages.
 pub struct FloxBuildMk;
 
+impl FloxBuildMk {
+    fn base_command(&self, base_dir: &Path, flox_env: &Path) -> Command {
+        // todo: extra makeflags, eventually
+        let mut command = Command::new(&*GNUMAKE_BIN);
+        command.arg("-f").arg(&*FLOX_BUILD_MK);
+        command.arg("-C").arg(base_dir);
+        command.arg(format!("FLOX_ENV={}", flox_env.display()));
+
+        command
+    }
+}
+
 impl ManifestBuilder for FloxBuildMk {
     /// Build `packages` defined in the environment rendered at
     /// `flox_env` using the [FLOX_BUILD_MK] makefile.
@@ -95,21 +121,25 @@ impl ManifestBuilder for FloxBuildMk {
         flox_env: &Path,
         packages: &[String],
     ) -> Result<BuildOutput, ManifestBuilderError> {
-        let mut command = Command::new(&*GNUMAKE_BIN);
-        command.arg("-f").arg(&*FLOX_BUILD_MK);
-        command.arg("-C").arg(base_dir);
-        command.arg(format!("FLOX_ENV={}", flox_env.display()));
+        let mut command = self.base_command(base_dir, flox_env);
 
-        // todo: extra makeflags, eventually
-
-        // add packages
-        let build_targets = packages.iter().map(|p| format!("build/{p}"));
-        command.args(build_targets);
+        // Add build target arguments by prefixing the package names with "build/".
+        // If no packages are specified, build all packages.
+        // While the default target is "build", we explicitly specify it here
+        // to avoid unintentional changes in behvaior.
+        if packages.is_empty() {
+            let build_all_target = "build";
+            command.arg(build_all_target);
+        } else {
+            let build_targets = packages.iter().map(|p| format!("build/{p}"));
+            command.args(build_targets);
+        };
 
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
 
-        debug!("running manifest build builder: {}", command.display());
+        debug!(command = %command.display(), "running manifest build target");
+
         let mut child = command
             .spawn()
             .map_err(ManifestBuilderError::CallBuilderError)?;
@@ -137,6 +167,61 @@ impl ManifestBuilder for FloxBuildMk {
         });
 
         Ok(BuildOutput { receiver })
+    }
+
+    /// Clean build artifacts for `packages` defined in the environment
+    /// rendered at `flox_env` using the [FLOX_BUILD_MK] makefile.
+    ///
+    /// `packages` SHOULD be a list of package names defined in the
+    /// environment or an empty list to clean all packages.
+    ///
+    /// `packages` are converted to clean targets by prefixing them with "clean/".
+    /// If no packages are specified, all packages are cleaned by evaluating the "clean" target.
+    ///
+    /// Cleaning will remove the  following build artifacts for the specified packages:
+    ///
+    /// * the `result-<package>` and `result-<package>-buildCache` store links in `base_dir`
+    /// * the store paths linked to by the `result-<package>` links
+    /// * the temporary build directories for the specified packages
+    fn clean(
+        &self,
+        base_dir: &Path,
+        flox_env: &Path,
+        packages: &[String],
+    ) -> Result<(), ManifestBuilderError> {
+        let mut command = self.base_command(base_dir, flox_env);
+
+        // Add clean target arguments by prefixing the package names with "clean/".
+        // If no packages are specified, clean all packages.
+        if packages.is_empty() {
+            let clean_all_target = "clean";
+            command.arg(clean_all_target);
+        } else {
+            let clean_targets = packages.iter().map(|p| format!("clean/{p}"));
+            command.args(clean_targets);
+        };
+
+        debug!(command=%command.display(), "running manifest clean target");
+
+        let output = command
+            .output()
+            .map_err(ManifestBuilderError::CallBuilderError)?;
+        let status = output.status;
+
+        if !status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+
+            debug!(%status, %stderr, %stdout, "failed to clean build artifacts");
+
+            return Err(ManifestBuilderError::RunClean {
+                stdout,
+                stderr,
+                status,
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -234,6 +319,22 @@ mod tests {
         }
 
         output
+    }
+
+    fn assert_clean_success(flox: &Flox, env: &mut PathEnvironment, package_names: &[&str]) {
+        let builder = FloxBuildMk;
+        let err = builder
+            .clean(
+                &env.parent_path().unwrap(),
+                &env.activation_path(flox).unwrap(),
+                &package_names
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(),
+            )
+            .err();
+
+        assert!(err.is_none(), "expected clean to succeed: {err:?}")
     }
 
     /// Asserts that `file_name` exists with `content` within the build result
@@ -689,5 +790,114 @@ mod tests {
 
         assert_build_status(&flox, &mut env, &package_name, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    #[test]
+    fn cleans_up_data_sandbox() {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let file_content = String::from("some content");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "pure"
+            command = """
+                mkdir $out
+                echo "{file_content}" > $out/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+        let result = result_dir(&env_path, &package_name);
+        let cache = cache_dir(&env_path, &package_name);
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+
+        assert!(result.exists());
+        assert!(cache.exists());
+
+        assert_clean_success(&flox, &mut env, &[&package_name]);
+        assert!(!result.exists());
+        assert!(!cache.exists());
+    }
+
+    #[test]
+    fn cleans_up_data_no_sandbox() {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let file_content = String::from("some content");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "off"
+            command = """
+                mkdir $out
+                echo "{file_content}" > $out/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let result = result_dir(&env_path, &package_name);
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+
+        assert!(result.exists());
+
+        assert_clean_success(&flox, &mut env, &[&package_name]);
+        assert!(!result.exists());
+    }
+
+    #[test]
+    fn cleans_up_all() {
+        let package_foo = String::from("foo");
+        let package_bar = String::from("bar");
+
+        let file_name = String::from("file");
+        let file_content = String::from("some content");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_foo}]
+            sandbox = "pure"
+            command = """
+                mkdir $out
+                echo "{file_content}" > $out/{file_name}
+            """
+            [build.{package_bar}]
+            sandbox = "off"
+            command = """
+                mkdir $out
+                echo "{file_content}" > $out/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+        let result_foo = result_dir(&env_path, &package_foo);
+        let cache_foo = cache_dir(&env_path, &package_foo);
+        let result_bar = result_dir(&env_path, &package_bar);
+
+        assert_build_status(&flox, &mut env, &package_foo, true);
+        assert_build_status(&flox, &mut env, &package_bar, true);
+
+        assert!(result_foo.exists());
+        assert!(cache_foo.exists());
+        assert!(result_bar.exists());
+
+        assert_clean_success(&flox, &mut env, &[]);
+        assert!(!result_foo.exists());
+        assert!(!cache_foo.exists());
+        assert!(!result_bar.exists());
     }
 }

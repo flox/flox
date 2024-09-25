@@ -886,7 +886,7 @@ enum InternalCommands {
     /// FloxHub authentication commands
     #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
     Auth(#[bpaf(external(auth::auth))] auth::Auth),
-    /// Build packages for flox
+    /// Build packages for Flox
     #[bpaf(command, hide, footer("Run 'man flox-build' for more details."))]
     Build(#[bpaf(external(build::build))] build::Build),
 }
