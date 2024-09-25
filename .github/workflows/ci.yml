@@ -296,6 +296,7 @@ jobs:
           NIX="nix --accept-flake-config --experimental-features 'nix-command flakes'"
           CLOSURE_SIZE=$(
             ssh github@$REMOTE_SERVER \
+              -oLogLevel=ERROR \
               -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
                 "$NIX build github:flox/flox/${{ github.sha }}#packages.${{ matrix.system }}.flox &&" \
                 "$NIX path-info -r --json ./result" \
@@ -447,6 +448,7 @@ jobs:
         run: |
           git clean -xfd
           ssh github@$REMOTE_SERVER \
+            -oLogLevel=ERROR \
             -oUserKnownHostsFile=$REMOTE_SERVER_USER_KNOWN_HOSTS_FILE \
             nix run \
                 --accept-flake-config \
