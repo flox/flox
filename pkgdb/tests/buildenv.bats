@@ -210,6 +210,37 @@ setup_file() {
   assert_line 'manifest.json'
 }
 
+# ---------------------------------------------------------------------------- #
+
+# With '--container-tag' produces a script that can be used to build a container
+# with a specific tag.
+# bats test_tags=buildenv:container-tag
+@test "Environment builds container with tag" {
+  container_name='flox-env-container-tag-test'
+  container_tag='somereallyhardtoguesstag'
+
+  run --separate-stderr \
+    "$PKGDB_BIN" buildenv "$LOCKFILES/single-package/manifest.lock" \
+    --container "$container_name" \
+    --container-tag "$container_tag"
+  assert_success
+  store_path=$(echo "$output" | jq -er '.store_path')
+
+  # Run the container builder script.
+  export store_path
+  run bash -c '"$store_path" > "$BATS_TEST_TMPDIR/container.tar"'
+  assert_success
+
+  # Fetch the manifest.json from the tarball.
+  tar xf "$BATS_TEST_TMPDIR/container.tar" --wildcards 'manifest.json'
+  assert_success
+
+  # Check that the tag is present in the manifest.
+  want="$container_name:$container_tag"
+  got="$(cat manifest.json | jq -r '.[].RepoTags[0]')"
+  assert [ "$want" == "$got" ]
+}
+
 # --------------------------------------------------------------------------- #
 
 # bats test_tags=requisites
