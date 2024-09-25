@@ -46,11 +46,16 @@ BuildEnvCommand::BuildEnvCommand() : parser( "buildenv" )
     .help( "build a container builder script" )
     .metavar( "CONTAINER-NAME" )
     .action(
-      [&]( const std::string & str )
+      [&]( const std::string & arg )
       {
         this->buildContainer = true;
-        this->containerName  = str;
+        this->containerName  = arg;
       } );
+
+  this->parser.add_argument( "--container-tag" )
+    .help( "set the container's tag" )
+    .metavar( "CONTAINER-TAG" )
+    .action( [&]( const std::string & arg ) { this->containerTag = arg; } );
 }
 
 
@@ -80,11 +85,12 @@ BuildEnvCommand::run()
     {
       debugLog( "container requested, building container build script" );
 
-      auto containerBuilderStorePath
-        = createContainerBuilder( *state,
-                                  storePath,
-                                  system,
-                                  *( this->containerName ) );
+      auto containerBuilderStorePath = createContainerBuilder(
+        *state,
+        storePath,
+        system,
+        this->containerName.value_or( "flox-env-container" ),
+        this->containerTag.value_or( "latest" ) );
 
       debugLog( "built container builder: "
                 + store->printStorePath( containerBuilderStorePath ) );
