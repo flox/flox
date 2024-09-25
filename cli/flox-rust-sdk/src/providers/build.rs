@@ -103,7 +103,8 @@ impl ManifestBuilder for FloxBuildMk {
         // todo: extra makeflags, eventually
 
         // add packages
-        command.args(packages);
+        let build_targets = packages.iter().map(|p| format!("build/{p}"));
+        command.args(build_targets);
 
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());

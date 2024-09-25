@@ -75,13 +75,23 @@ SHELL := $(_bash)
 OS := $(shell $(_uname) -s)
 
 # Set the default goal to be all builds if one is not specified.
-.DEFAULT_GOAL := all
+.DEFAULT_GOAL := usage
 
 # Set a default TMPDIR variable if one is not already defined.
 TMPDIR ?= /tmp
 
 # Use the wildcard operator to identify builds in the provided $FLOX_ENV.
 BUILDS := $(wildcard $(FLOX_ENV)/package-builds.d/*)
+
+# Define a usage target to provide a helpful message when no target is specified.
+.PHONY: usage
+usage:
+	@echo "Usage: make -f $(lastword $(MAKEFILE_LIST)) [TARGET]"
+	@echo "Targets:"
+	@echo "  build: build all packages"
+	@echo "  build/[pname]: build the specified package"
+	@echo "  clean: clean all build artifacts"
+	@echo "  clean/[pname]: clean build artifacts for the specified package"
 
 # The `nix build` command will attempt a rebuild in every instance,
 # and we will presumably want `flox build` to do the same. However,
@@ -114,6 +124,13 @@ define DEPENDS_template =
   $(eval $(_pvarname)_shortHash = $(shell echo $($(_pvarname)_hash) | $(_head) -c8))
   # And while we're at it, set a temporary basename using the short hash.
   $(eval $(_pvarname)_tmpBasename = $(TMPDIR)/$($(_pvarname)_shortHash)-$(_pname))
+
+  # Create a target for cleaning up the temporary directory.
+  .PHONY: clean/$(_pname)
+  clean/$(_pname):
+	-$(_rm) -rf $($(_pvarname)_tmpBasename)
+
+  clean_targets += clean/$(_pname)
 
   # We need to render a version of the build script with package prerequisites
   # replaced with their corresponding outpaths, and we create that at a stable
@@ -148,6 +165,31 @@ else
   endif
 endif
 
+# Define a template target for cleaning up result symlinks and their
+# associated storePaths, if they exist.
+define CLEAN_result_link_template =
+  # Note that this template is evaluated at Makefile compilation time,
+  # but is only called for the clean target, for which that's
+  # a fine time to test for the existence of symlinks and storepaths,
+  # so we can use GNU make functions to interrogate the filesystem
+  # and create nicely formatted targets customized for each result link.
+
+  # The builtin realpath function returns the empty string when the
+  # result is a dangling symlink.
+  $(eval _storePath = $(realpath $(1)))
+
+  .PHONY: clean_result_link/$(1)
+  clean_result_link/$(1):
+	-$(_rm) -f $(1)
+
+  .PHONY: clean_result_storepath/$(1)
+  clean_result_storepath/$(1): clean_result_link/$(1)
+	-$(_nix) store delete $(_storePath) >/dev/null 2>&1
+
+  clean/$(_pname): clean_result_link/$(1) \
+    $(if $(_storePath),clean_result_storepath/$(1))
+endef
+
 # The following template renders targets for the in-situ build mode.
 define BUILD_local_template =
   $(eval _virtualSandbox = $(filter-out null off,$(_sandbox)))
@@ -168,10 +210,9 @@ endef
 
 # The following template renders targets for the sandbox build mode.
 define BUILD_nix_sandbox_template =
-  # Again, it is expected that the sandbox and caching modes will be specified
-  # on a per-build basis within the manifest, but in the meantime while we wait
-  # for the manifest parser to be implemented we will grep for the explicit
-  # "buildCache" setting within the build script itself. (See below)
+  # We anticipate that we may eventually want to specify the caching mode
+  # on a per-build basis within the manifest, but in the meantime we configure
+  # the use of a build cache for all pure builds.
   $(eval _do_buildCache = true)
 
   # The sourceTarball value needs to be stable when nothing changes across builds,
@@ -200,6 +241,9 @@ define BUILD_nix_sandbox_template =
 	  $(_tar) -cf $$@ -C $$$$tmpdir .buildCache.init; \
 	  $(_rm) -rf $$$$tmpdir; \
 	fi
+
+  # Create a target for cleaning up the buildCache result symlink.
+  $(eval $(call CLEAN_result_link_template,$(_result)-buildCache))
 
   .PHONY: $(_pname)_nix_sandbox_build
   $(_pname)_nix_sandbox_build: $($(_pvarname)_buildScript) $($(_pvarname)_src_tar) \
@@ -296,13 +340,16 @@ define BUILD_template =
 	  exit 1; \
 	fi
 
+  # Create a target for cleaning up the result symlink.
+  $(eval $(call CLEAN_result_link_template,$(_result)))
+
   # Create a helper target for referring to the package by its name rather
   # than the [real] result symlink we're looking to create.
-  .PHONY: $(_pname)
-  $(_pname): $(_result)
+  .PHONY: build/$(_pname)
+  build/$(_pname): $(_result)
 
-  # Accumulate a list of known build targets for the "all" target.
-  all += $(_result)
+  # Accumulate a list of known build targets for the "build" target.
+  build_targets += $(_result)
 endef
 
 # It is expected that the sandbox and caching modes will be specified on a
@@ -318,9 +365,13 @@ $(foreach build,$(BUILDS), \
     $(eval $(call BUILD_template,local)), \
     $(eval $(call BUILD_template,nix_sandbox))))
 
-# Finally, we create the "all" target to build all known packages.
-.PHONY: all
-all: $(all)
+# Finally, we create the "build" target to build all known packages.
+.PHONY: build
+build: $(build_targets)
+
+# Add a target for cleaning up the build artifacts.
+.PHONY: clean
+clean: $(clean_targets)
 
 .PHONY: FORCE
 FORCE:
