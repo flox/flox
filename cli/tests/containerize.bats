@@ -120,7 +120,25 @@ function skip_if_linux() {
 
   run podman load -i test-container.tar
   assert_success
-  assert_line --partial "Loaded image: localhost/test"
+  assert_line --partial "Loaded image: localhost/test:latest"
+}
+
+# bats test_tags=containerize:container-tag
+@test "catalog: container is tagged with specified tag" {
+  skip_if_not_linux
+
+  env_setup_catalog
+
+  run "$FLOX_BIN" containerize --tag 'sometag'
+  assert_success
+
+  assert [ -f "test-container.tar" ] # <env-name>-container.tar by default
+
+  run which podman
+
+  run podman load -i test-container.tar
+  assert_success
+  assert_line --partial "Loaded image: localhost/test:sometag"
 }
 
 # bats test_tags=containerize:piped-to-stdout

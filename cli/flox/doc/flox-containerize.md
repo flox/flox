@@ -18,6 +18,7 @@ flox-containerize - export an environment as a container image
 flox [<general-options>] containerize
      [-d=<path> | -r=<owner/name>]
      [-o=<path>]
+     [--tag=<tag>]
 ```
 
 # DESCRIPTION
@@ -90,6 +91,17 @@ $ flox install hello
 $ flox containerize -o - | docker load
 $ docker run <container id> hello
 Hello, world
+```
+
+Create a container with a specific tag:
+
+```
+$ flox init
+$ flox install hello
+$ flox containerize --tag 'v1' -o - | docker load
+$ docker run --rm -it <container name>:v1
+[floxenv] $ hello
+Hello, world!
 ```
 
 # SEE ALSO

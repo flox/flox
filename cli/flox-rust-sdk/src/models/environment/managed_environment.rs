@@ -214,14 +214,18 @@ impl Environment for ManagedEnvironment {
     }
 
     /// This will lock if there is an out of sync local checkout
-    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError> {
+    fn build_container(
+        &mut self,
+        flox: &Flox,
+        tag: &str,
+    ) -> Result<ContainerBuilder, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
         self.ensure_locked(flox, &mut local_checkout)?;
 
         let lockfile_path = CanonicalPath::new(local_checkout.lockfile_path())
             .expect("a locked environment must have a lockfile");
 
-        let builder = CoreEnvironment::build_container(lockfile_path, self.name().as_ref())?;
+        let builder = CoreEnvironment::build_container(lockfile_path, self.name().as_ref(), tag)?;
         Ok(builder)
     }
 

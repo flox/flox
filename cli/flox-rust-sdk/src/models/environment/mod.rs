@@ -118,8 +118,12 @@ pub struct MigrationInfo {
 }
 
 pub trait Environment: Send {
-    /// Create a container image from the environment
-    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError>;
+    /// Create a container image from the environment, tagged with the given tag
+    fn build_container(
+        &mut self,
+        flox: &Flox,
+        tag: &str,
+    ) -> Result<ContainerBuilder, EnvironmentError>;
 
     /// Install packages to the environment atomically
     fn install(

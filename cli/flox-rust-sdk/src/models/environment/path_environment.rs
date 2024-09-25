@@ -178,13 +178,17 @@ impl Environment for PathEnvironment {
     }
 
     /// This will lock the environment if it is not already locked.
-    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError> {
+    fn build_container(
+        &mut self,
+        flox: &Flox,
+        tag: &str,
+    ) -> Result<ContainerBuilder, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         env_view.ensure_locked(flox)?;
         let lockfile_path = CanonicalPath::new(env_view.lockfile_path())
             .expect("a locked environment must have a lockfile");
 
-        let builder = CoreEnvironment::build_container(lockfile_path, self.name().as_ref())?;
+        let builder = CoreEnvironment::build_container(lockfile_path, self.name().as_ref(), tag)?;
         Ok(builder)
     }
 
@@ -713,7 +717,7 @@ mod tests {
 
         let mut environment =
             new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
-        environment.build_container(&flox).unwrap();
+        environment.build_container(&flox, "latest").unwrap();
     }
 
     /// Attempting to build a container for a v0 environment without a lockfile should fail
@@ -725,7 +729,7 @@ mod tests {
             std::fs::read_to_string(MANUALLY_GENERATED.join("hello_v0").join(MANIFEST_FILENAME))
                 .unwrap();
         let mut environment = new_path_environment(&flox, &manifest_contents);
-        let err = environment.build_container(&flox).unwrap_err();
+        let err = environment.build_container(&flox, "latest").unwrap_err();
         assert!(matches!(
             err,
             EnvironmentError::Core(CoreEnvironmentError::LockingVersion0NotSupported)
