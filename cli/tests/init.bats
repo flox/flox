@@ -37,6 +37,7 @@ setup() {
 }
 
 teardown() {
+  wait_for_watchdogs
   project_teardown
   common_test_teardown
 }
