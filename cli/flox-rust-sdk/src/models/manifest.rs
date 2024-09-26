@@ -1552,7 +1552,8 @@ pub(super) mod test {
 
 
             ## Environment Variables ----------------------------------------------------
-            ##  ...also available for use in [hook] and [profile] scripts...
+            ##  ... available for use in the activated environment
+            ##      as well as [hook] and [profile] scripts below.
             ## --------------------------------------------------------------------------
             [vars]
             # INTRO_MESSAGE = "It's gettin' Flox in here"
