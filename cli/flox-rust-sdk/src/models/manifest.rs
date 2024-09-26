@@ -1563,10 +1563,10 @@ pub(super) mod test {
             ##  ... run by _bash_ shell when you run 'flox activate'.
             ## --------------------------------------------------------------------------
             [hook]
-            #on-activate = '''
-            # -> Set variables, create files and directories
-            # -> Perform initialization steps, e.g. create a python venv
-            #'''
+            # on-activate = '''
+            #   # -> Set variables, create files and directories
+            #   # -> Perform initialization steps, e.g. create a python venv
+            # '''
 
 
             ## Profile script -----------------------------------------------------------
