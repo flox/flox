@@ -24,6 +24,7 @@ use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
 
 mod logger;
+mod process;
 mod sentry;
 
 type Error = anyhow::Error;
@@ -117,10 +118,8 @@ fn run(args: Cli) -> Result<(), Error> {
     signal_hook::flag::register(SIGQUIT, Arc::clone(&should_terminate))
         .context("failed to set SIGQUIT signal handler")?;
 
-    // Ensure that we'll get sent SIGUSR1 on Linux when the parent terminates
     #[cfg(target_os = "linux")]
-    nix::sys::prctl::set_pdeathsig(Some(nix::sys::signal::Signal::SIGUSR1))
-        .context("set_pdeathsig failed")?;
+    let watcher = process::ProcfsWatcher::new(args.pid);
 
     #[cfg(target_os = "macos")]
     let watcher = {
@@ -139,7 +138,6 @@ fn run(args: Cli) -> Result<(), Error> {
             },
         }
     }?;
-    debug!("registered termination interest");
 
     debug!(
         path = traceable_path(&args.socket_path),
@@ -151,8 +149,6 @@ fn run(args: Cli) -> Result<(), Error> {
     let activation = ActivationPid::from(args.pid);
     // Check if our original parent has already exited.
     // If it has, we can go ahead and cleanup.
-    // Note that this check should come after we call prctl or kqueue so that
-    // there isn't a race between checking ppid and calling prctl or kqueue.
     if !activation.is_current_process_parent() {
         debug!("parent has already exited");
         let reg = read_environment_registry(&args.registry_path)?.unwrap_or_default();
@@ -176,12 +172,13 @@ fn run(args: Cli) -> Result<(), Error> {
         spawn_gc_logs(log_dir);
     }
 
-    // Listen for a notification, getting an error if we should terminate
+    debug!("waiting for termination");
+
     #[cfg(target_os = "macos")]
     let res = wait_for_termination(watcher, should_clean_up, should_terminate);
 
     #[cfg(target_os = "linux")]
-    let res = wait_for_termination(should_clean_up, should_terminate);
+    let res = wait_for_termination(watcher, should_clean_up, should_terminate);
 
     // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
     // but there's not much we can do about that because we don't know who sent us one of those
@@ -270,6 +267,7 @@ fn wait_for_termination(
 
 #[cfg(target_os = "linux")]
 fn wait_for_termination(
+    watcher: process::ProcfsWatcher,
     proceed_flag: Arc<AtomicBool>,
     stop_flag: Arc<AtomicBool>,
 ) -> Result<(), Error> {
@@ -280,6 +278,10 @@ fn wait_for_termination(
         }
         if stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
             break Err(anyhow!("received stop signal"));
+        }
+        if !watcher.is_running() {
+            debug!("received termination event, will proceed");
+            break Ok(());
         }
         std::thread::sleep(CHECK_INTERVAL);
     }
