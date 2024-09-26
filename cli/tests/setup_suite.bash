@@ -44,7 +44,7 @@ xdg_reals_setup() {
   export REAL_XDG_DATA_HOME="${XDG_DATA_HOME:?}"
   export REAL_XDG_STATE_HOME="${XDG_STATE_HOME:?}"
   # Prevent later routines from referencing real dirs.
-  unset USER HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME
+  unset USER HOME XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME XDG_DATA_DIRS
   export __FT_RAN_XDG_REALS_SETUP=:
 }
 
