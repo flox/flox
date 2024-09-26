@@ -48,7 +48,7 @@ use crate::providers::flox_cpp_utils::{
     LockedInstallable,
 };
 
-static DEFAULT_SYSTEMS_STR: Lazy<[String; 4]> = Lazy::new(|| {
+pub(crate) static DEFAULT_SYSTEMS_STR: Lazy<[String; 4]> = Lazy::new(|| {
     [
         "aarch64-darwin".to_string(),
         "aarch64-linux".to_string(),
