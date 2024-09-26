@@ -1570,7 +1570,7 @@ pub(super) mod test {
 
 
             ## Profile script -----------------------------------------------------------
-            ## ... sourced by _your shell_ when you run `flox activate`
+            ## ... sourced by _your shell_ when you run 'flox activate'.
             ## --------------------------------------------------------------------------
             [profile]
             #common = '''
