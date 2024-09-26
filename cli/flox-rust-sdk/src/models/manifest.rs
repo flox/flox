@@ -1593,7 +1593,7 @@ pub(super) mod test {
             #serve.command = "python3 -m http.server"
 
 
-            ## Other Environment Options -----------------------------------------------
+            ## Other Environment Options ------------------------------------------------
             [options]
             systems = [ # Systems that environment is compatible with
               "aarch64-darwin",
