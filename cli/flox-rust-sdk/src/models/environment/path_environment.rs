@@ -48,7 +48,7 @@ use crate::models::container_builder::ContainerBuilder;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::lockfile::Lockfile;
+use crate::models::lockfile::{Lockfile, DEFAULT_SYSTEMS_STR};
 use crate::models::manifest::{CatalogPackage, Manifest, PackageToInstall, RawManifest};
 use crate::providers::buildenv::BuildEnvOutputs;
 use crate::utils::mtime_of;
@@ -411,15 +411,12 @@ impl PathEnvironment {
         }
 
         // Create manifest
-        let all_systems = [
-            &System::from("aarch64-darwin"),
-            &System::from("aarch64-linux"),
-            &System::from("x86_64-darwin"),
-            &System::from("x86_64-linux"),
-        ];
         let manifest = {
             tracing::debug!("creating raw catalog manifest");
-            RawManifest::new_documented(all_systems.as_slice(), customization)
+            RawManifest::new_documented(
+                &DEFAULT_SYSTEMS_STR.iter().collect::<Vec<_>>(),
+                customization,
+            )
         };
 
         let mut environment =
