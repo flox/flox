@@ -1573,16 +1573,16 @@ pub(super) mod test {
             ## ... sourced by _your shell_ when you run 'flox activate'.
             ## --------------------------------------------------------------------------
             [profile]
-            #common = '''
-            # gum style \
+            # common = '''
+            #   gum style \
             #   --foreground 212 --border-foreground 212 --border double \
             #   --align center --width 50 --margin "1 2" --padding "2 4" \
             #     $INTRO_MESSAGE
-            #'''
+            # '''
             ## Shell specific profiles go here:
-            #bash = ...
-            #zsh  = ...
-            #fish = ...
+            # bash = ...
+            # zsh  = ...
+            # fish = ...
 
 
             ## Services -----------------------------------------------------------------
