@@ -352,6 +352,18 @@ pub enum TypedManifest {
 
 /// Not meant for writing manifest files, only for reading them.
 /// Modifications should be made using the the raw functions in this module.
+
+// We use skip_serializing_if throughout to reduce the size of the lockfile and
+// improve backwards compatibility when we introduce fields.
+// We don't use Option and skip_serializing_none because an empty table gets
+// treated as Some,
+// but we don't care about distinguishing between a table not being present and
+// a table being present but empty.
+// In both cases, we can just skip serializing.
+// It would be better if we could deny_unknown_fields when we're deserializing
+// the user provided manifest but allow unknown fields when deserializing the
+// lockfile,
+// but that doesn't seem worth the effort at the moment.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
@@ -360,9 +372,11 @@ pub struct TypedManifestCatalog {
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
+    #[serde(skip_serializing_if = "ManifestInstall::skip_serializing")]
     pub install: ManifestInstall,
     /// Variables that are exported to the shell environment upon activation.
     #[serde(default)]
+    #[serde(skip_serializing_if = "ManifestVariables::skip_serializing")]
     pub vars: ManifestVariables,
     /// Hooks that are run at various times during the lifecycle of the manifest
     /// in a known shell environment.
@@ -376,9 +390,11 @@ pub struct TypedManifestCatalog {
     pub options: ManifestOptions,
     /// Service definitions
     #[serde(default)]
+    #[serde(skip_serializing_if = "ManifestServices::skip_serializing")]
     pub services: ManifestServices,
     /// Package build definitions
     #[serde(default)]
+    #[serde(skip_serializing_if = "ManifestBuild::skip_serializing")]
     pub build: ManifestBuild,
 }
 
@@ -571,6 +587,12 @@ pub struct ManifestInstall(
     BTreeMap<String, ManifestPackageDescriptor>,
 );
 
+impl ManifestInstall {
+    fn skip_serializing(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 // todo: this can make the error messages less clear and might call for a custom (de)serialize impl
@@ -739,6 +761,12 @@ pub struct ManifestVariables(
     pub(crate) BTreeMap<String, String>,
 );
 
+impl ManifestVariables {
+    fn skip_serializing(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -838,9 +866,14 @@ pub struct ManifestServices(
             strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
         )
     )]
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) BTreeMap<String, ManifestServiceDescriptor>,
 );
+
+impl ManifestServices {
+    fn skip_serializing(&self) -> bool {
+        self.0.is_empty()
+    }
+}
 
 /// The definition of a service in a manifest
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -935,9 +968,14 @@ pub struct ManifestBuild(
         test,
         proptest(strategy = "proptest_btree_map_alphanum_keys::<ManifestBuildDescriptor>(10, 3)")
     )]
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) BTreeMap<String, ManifestBuildDescriptor>,
 );
+
+impl ManifestBuild {
+    fn skip_serializing(&self) -> bool {
+        self.0.is_empty()
+    }
+}
 
 /// The definition of a package built from within the environment
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
