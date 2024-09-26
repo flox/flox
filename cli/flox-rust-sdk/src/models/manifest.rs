@@ -1601,7 +1601,7 @@ pub(super) mod test {
               "x86_64-darwin",
               "x86_64-linux",
             ]
-            #cuda-detection = false  # Uncomment to disable CUDA detection.
+            # cuda-detection = false  # Uncomment to disable CUDA detection.
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
