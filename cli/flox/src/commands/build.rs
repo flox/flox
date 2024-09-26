@@ -3,6 +3,7 @@ use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::lockfile::LockedManifest;
 use flox_rust_sdk::providers::build::{FloxBuildMk, ManifestBuilder, Output};
+use indoc::indoc;
 use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
@@ -81,6 +82,14 @@ fn make_packages_to_build(lockfile: &LockedManifest, packages: Vec<String>) -> R
     };
 
     let environment_packages = &lockfile.manifest.build;
+
+    if environment_packages.is_empty() {
+        bail!(indoc! {"
+        No builds found.
+
+        Add a build by modifying the '[build]' section of the manifest with 'flox edit'
+        "});
+    }
 
     let packages_to_build = if packages.is_empty() {
         environment_packages.keys().cloned().collect()
