@@ -1590,7 +1590,7 @@ pub(super) mod test {
             ##  $ flox services status  <- Status of running services
             ## --------------------------------------------------------------------------
             [services]
-            #serve.command = "python3 -m http.server"
+            # serve.command = "python3 -m http.server"
 
 
             ## Other Environment Options ------------------------------------------------
