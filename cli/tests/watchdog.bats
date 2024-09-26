@@ -289,8 +289,7 @@ EOF
   "
 }
 
-@test "start: watchdog shuts down process-compose started by start" {
-
+@test "watchdog: shuts down process-compose started by imperative start" {
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
 
