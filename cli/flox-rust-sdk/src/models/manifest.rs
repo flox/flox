@@ -1559,7 +1559,7 @@ pub(super) mod test {
 
 
             ## Activation Hook ----------------------------------------------------------
-            ##  ...run by _bash_ shell when you run `flox activate`
+            ##  ... run by _bash_ shell when you run 'flox activate'.
             ## --------------------------------------------------------------------------
             [hook]
             #on-activate = '''
