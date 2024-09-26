@@ -1,7 +1,7 @@
 export _gnused="@gnused@"
 
 # Confirm _flox_activate_tracelevel is defined before proceeding.
-if [ -z "$_flox_activate_tracelevel" ]; then
+if [ -z "${_flox_activate_tracelevel:=}" ]; then
   echo 'WARNING (zsh): _flox_activate_tracelevel not defined .. defaulting to 0' >&2
   export _flox_activate_tracelevel=0
 fi

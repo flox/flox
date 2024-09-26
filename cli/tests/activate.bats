@@ -2358,3 +2358,25 @@ EOF
   refute_output --partial Error
   assert_output --partial "3.2.2"
 }
+
+@test "no unset variables in bash" {
+  project_setup
+  run bash <(cat <<'EOF'
+  set -u
+  eval "$($FLOX_BIN activate)"
+EOF
+)
+  refute_output --partial "_flox"
+  refute_output --partial "_FLOX"
+}
+
+@test "no unset variables in zsh" {
+  project_setup
+  run zsh <(cat <<'EOF'
+  set -u
+  eval "$($FLOX_BIN activate)"
+EOF
+)
+  refute_output --partial "_flox"
+  refute_output --partial "_FLOX"
+}

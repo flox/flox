@@ -16,7 +16,7 @@ fi
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here, but not if we're already in the process of sourcing
 # bashrc in a parent process.
-if [ -f ~/.bashrc ] && [ -z "$_flox_already_sourcing_bashrc" ]
+if [ -f ~/.bashrc ] && [ -z "${_flox_already_sourcing_bashrc:=}" ]
 then
   # Save and restore the current tracelevel in the event that sourcing
   # bashrc launches an inner nested activation which unsets it.
@@ -29,7 +29,7 @@ fi
 
 # The above .bashrc may have performed a nested activation, so confirm
 # _flox_activate_tracelevel is defined before proceeding.
-if [ -z "$_flox_activate_tracelevel" ]; then
+if [ -z "${_flox_activate_tracelevel:=}" ]; then
   echo 'WARNING (bash): _flox_activate_tracelevel not defined .. defaulting to 0' >&2
   export _flox_activate_tracelevel=0
 fi
