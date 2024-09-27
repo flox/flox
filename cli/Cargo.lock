@@ -1108,6 +1108,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "flox-activations"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "clap_derive",
+]
+
+[[package]]
 name = "flox-rust-sdk"
 version = "0.0.0"
 dependencies = [
