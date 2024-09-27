@@ -2142,6 +2142,7 @@ EOF
 Sourcing .zshenv
 Setting PATH from .zshenv
 sourcing hook.on-activate for first time
+sourcing profile.common for first time
 sourcing profile.zsh for first time
 EOF
   refute_output --partial "zprofile"
@@ -2163,6 +2164,7 @@ Setting PATH from .zshenv
 Sourcing .zshrc
 Setting PATH from .zshrc
 sourcing hook.on-activate for first time
+sourcing profile.common for first time
 sourcing profile.zsh for first time
 EOF
   refute_output --partial "zprofile"
@@ -2187,6 +2189,7 @@ Setting PATH from .zshrc
 Sourcing .zlogin
 Setting PATH from .zlogin
 sourcing hook.on-activate for first time
+sourcing profile.common for first time
 sourcing profile.zsh for first time
 Sourcing .zlogout
 Setting PATH from .zlogout
