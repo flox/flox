@@ -1,0 +1,9 @@
+[package]
+name = "flox-activations"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+clap = { version = "4.5.18", default-features = false, features = ["std","usage", "help", "error-context", "derive"] }
+clap_derive.workspace = true

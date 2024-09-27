@@ -1,6 +1,6 @@
 [workspace]
-members = ["flox", "flox-rust-sdk", "catalog-api-v1", "mk_data", "flox-watchdog"]
-default-members = ["flox", "flox-watchdog"]
+members = ["flox", "flox-rust-sdk", "catalog-api-v1", "mk_data", "flox-watchdog", "flox-activations"]
+default-members = ["flox", "flox-watchdog", "flox-activations"]
 
 resolver = "2"
 
@@ -91,3 +91,10 @@ openapiv3 = "2.0"
 prettyplease = "0.2"
 progenitor = "0.6"
 syn = "2.0"
+
+[profile.small]
+inherits = "release"
+opt-level = "z"
+strip = true
+lto = true
+codegen-units = 1
