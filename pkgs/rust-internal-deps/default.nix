@@ -29,7 +29,7 @@
       then "pkgdb"
       else "${flox-pkgdb}/bin/pkgdb";
 
-    # todo: provide this in devshells via an updatable path
+    # develop with `flox-package-builder.devShellHook`
     FLOX_BUILD_MK = "${flox-package-builder}/libexec/flox-build.mk";
 
     GNUMAKE_BIN = "${gnumake}/bin/make";
