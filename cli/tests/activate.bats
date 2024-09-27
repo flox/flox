@@ -2225,28 +2225,57 @@ EOF
 }
 
 # bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshrc
-@test "zsh: in-place activation from .zshrc" {
+@test "zsh: activation after in-place activation from .zshrc" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
 
-  echo 'eval "$("$FLOX_BIN" activate)"' >> "$HOME/.zshrc"
-
-  run zsh --interactive --login -c 'true'
+  # Undo `BADPATH` changes from `user_dotfiles_setup` so that we get binaries
+  # from the `flox-cli-tests` devShell.
+  run rm "$HOME"/.z*
   assert_success
-  assert_output - <<EOF
-Sourcing .zshenv
-Setting PATH from .zshenv
-Sourcing .zprofile
-Setting PATH from .zprofile
-Sourcing .zshrc
-Setting PATH from .zshrc
+
+  echo 'eval "$("$FLOX_BIN" activate)"' > "$HOME/.zshrc"
+
+  "$FLOX_BIN" init -d nested
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+    [profile]
+    common = """
+      echo "nested profile.common"
+    """
+    zsh = """
+      echo "nested profile.zsh"
+    """
+    [hook]
+    on-activate = """
+      echo "nested hook.on-activate"
+    """
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -d nested -f -
+
+  # Unset the flags from `only-once` profile scripts because we expect them to
+  # be run once by the outer `zsh` command, then again by the inner `nested`
+  # profile scripts, and then no further.
+  # Also need to strip carriage-returns from the `expect` output in order for
+  # BATS to do multi-line assertions on the output.
+  FLOX_SHELL=zsh USER="$REAL_USER" NO_COLOR=1 run zsh --interactive --login -c \
+    "unset _already_ran_profile_common _already_ran_profile_zsh && expect $TESTS_DIR/activate/activate.exp nested | tr -d '\r'"
+  assert_success
+  # Outer in-place activation.
+  assert_output --partial - <<EOF
 sourcing hook.on-activate for first time
 sourcing profile.common for first time
 sourcing profile.zsh for first time
-Sourcing .zlogin
-Setting PATH from .zlogin
-Sourcing .zlogout
-Setting PATH from .zlogout
+EOF
+  # Inner interactive activation.
+  assert_output --partial - <<EOF
+nested hook.on-activate
+sourcing profile.common for first time
+sourcing profile.zsh for first time
+nested profile.common
+nested profile.zsh
 EOF
 }
 

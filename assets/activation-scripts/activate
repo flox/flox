@@ -515,6 +515,7 @@ case "$_flox_shell" in
     echo "setenv _del_env \"$_del_env\";"
     echo "source '$FLOX_ENV/activate.d/tcsh';"
     ;;
+  # Any additions should probably be restored in zdotdir/* scripts
   *zsh)
     echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
     echo "export FLOX_ENV=\"$FLOX_ENV\";"
