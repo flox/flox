@@ -16,7 +16,7 @@ on-activate = """
 
 common = """
   if [ -n "$_already_ran_profile_common" ]; then
-    echo "ERROR: profile section sourced twice" >&2
+    echo "ERROR: profile.common section sourced twice" >&2
     exit 1
   else
     echo "sourcing profile.common for first time" >&2
