@@ -20,7 +20,6 @@ load test_support.bash
 # disrupt flox's attempts to configure the environment. Please append to this
 # growing list of nightmare scenarios as you encounter them in the wild.
 user_dotfiles_setup() {
-  if [[ -n ${__FT_RAN_USER_DOTFILES_SETUP-} ]]; then return 0; fi
   # N.B. $HOME is set to the test user's home directory by flox_vars_setup
   # so none of these should exist, and we abort if we find otherwise.
   if
@@ -70,13 +69,10 @@ if ( -e "$HOME/.$i.extra" ) then
 endif
 EOF
   done
-
-  export __FT_RAN_USER_DOTFILES_SETUP=:
 }
 
 setup_file() {
   common_file_setup
-  user_dotfiles_setup
 
   export BATS_NO_PARALLELIZE_WITHIN_FILE=true
 }
@@ -128,6 +124,7 @@ project_teardown() {
 
 setup() {
   common_test_setup
+  user_dotfiles_setup
   setup_isolated_flox # concurrent pkgdb database creation
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
