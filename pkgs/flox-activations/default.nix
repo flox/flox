@@ -6,7 +6,7 @@
   rustfmt ? rust-toolchain.rustfmt,
   flox-src,
   rust-external-deps,
-  rust-internal-deps
+  rust-internal-deps,
 }: let
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = (inputs.crane.mkLib pkgsFor).overrideToolchain rust-toolchain.toolchain;
@@ -92,4 +92,3 @@ in
       };
     }
     // envs)
- 
