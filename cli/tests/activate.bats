@@ -2132,43 +2132,65 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshenv
-@test "zdotdir: test zshenv activation" {
+@test "zsh: in-place activation with non-interactive non-login shell" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+
   run zsh -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
-  assert_line "Sourcing .zshenv"
-  refute_line "Sourcing .zshrc"
-  refute_line "Sourcing .zlogin"
-  assert_line "sourcing hook.on-activate for first time"
-  assert_line "sourcing profile.zsh for first time"
+  assert_output - <<EOF
+Sourcing .zshenv
+Setting PATH from .zshenv
+sourcing hook.on-activate for first time
+sourcing profile.zsh for first time
+EOF
+  refute_output --partial "zprofile"
+  refute_output --partial "zshrc"
+  refute_output --partial "zlogin"
+  refute_output --partial "zlogout"
 }
 
 # bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshrc
-@test "zdotdir: test zshrc activation" {
+@test "zsh: in-place activation with interactive non-login shell" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
-  cat $HOME/.zshrc
-  run zsh -i -c 'eval "$("$FLOX_BIN" activate)"'
+
+  run zsh --interactive -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
-  assert_line "Sourcing .zshenv"
-  assert_line "Sourcing .zshrc"
-  refute_line "Sourcing .zlogin"
-  assert_line "sourcing hook.on-activate for first time"
-  assert_line "sourcing profile.zsh for first time"
+  assert_output - <<EOF
+Sourcing .zshenv
+Setting PATH from .zshenv
+Sourcing .zshrc
+Setting PATH from .zshrc
+sourcing hook.on-activate for first time
+sourcing profile.zsh for first time
+EOF
+  refute_output --partial "zprofile"
+  refute_output --partial "zlogin"
+  refute_output --partial "zlogout"
 }
 
 # bats test_tags=activate,activate:zdotdir,activate:zdotdir:zlogin
-@test "zdotdir: test zlogin activation" {
+@test "zsh: in-place activation with interactive login shell" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
-  run zsh -i -l -c 'eval "$("$FLOX_BIN" activate)"'
+
+  run zsh --interactive --login -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
-  assert_line "Sourcing .zshenv"
-  assert_line "Sourcing .zshrc"
-  assert_line "Sourcing .zlogin"
-  assert_line "sourcing hook.on-activate for first time"
-  assert_line "sourcing profile.zsh for first time"
+  assert_output - <<EOF
+Sourcing .zshenv
+Setting PATH from .zshenv
+Sourcing .zprofile
+Setting PATH from .zprofile
+Sourcing .zshrc
+Setting PATH from .zshrc
+Sourcing .zlogin
+Setting PATH from .zlogin
+sourcing hook.on-activate for first time
+sourcing profile.zsh for first time
+Sourcing .zlogout
+Setting PATH from .zlogout
+EOF
 }
 
 # ---------------------------------------------------------------------------- #
