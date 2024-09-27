@@ -14,6 +14,7 @@
   iconv,
   nawk,
   fd,
+  flox-activations,
 }: let
   ld-floxlib_so =
     if stdenv.isLinux
