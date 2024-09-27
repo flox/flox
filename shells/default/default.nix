@@ -17,6 +17,7 @@
   flox-watchdog,
   flox-pkgdb,
   flox-manpages,
+  flox-package-builder,
   stdenv,
   ci ? false,
   GENERATED_DATA ? ./../../test_data/generated,
@@ -78,6 +79,7 @@ in
         + flox-watchdog.devShellHook
         + flox-cli.devShellHook
         + pre-commit-check.shellHook
+        + flox-package-builder.devShellHook
         + ''
           export MANPATH=${flox-manpages}/share/man:$MANPATH
         '';
