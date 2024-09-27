@@ -20,8 +20,9 @@ load test_support.bash
 # disrupt flox's attempts to configure the environment. Please append to this
 # growing list of nightmare scenarios as you encounter them in the wild.
 user_dotfiles_setup() {
-  # N.B. $HOME is set to the test user's home directory by flox_vars_setup
-  # so none of these should exist, and we abort if we find otherwise.
+  # N.B. $HOME is set to a test-isolated directory by `common_file_setup`,
+  # `home_setup`, and `flox_vars_setup` so none of the files below should exist
+  # and we abort if we find otherwise.
   set -o noclobber
 
   BADPATH="/usr/local/bin:/usr/bin:/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin"
@@ -107,17 +108,13 @@ project_teardown() {
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
   unset PROJECT_NAME
-  rm -f \
-    "$HOME/.bashrc.extra" \
-    "$HOME/.tcshrc.extra" \
-    "$HOME/.config/fish/config.fish.extra" \
-    "$HOME/.zshrc.extra"
 }
 
 # ---------------------------------------------------------------------------- #
 
 setup() {
   common_test_setup
+  home_setup test # Isolate $HOME for each test.
   user_dotfiles_setup
   setup_isolated_flox # concurrent pkgdb database creation
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
