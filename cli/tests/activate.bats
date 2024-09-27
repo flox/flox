@@ -68,8 +68,6 @@ EOF
 
 setup_file() {
   common_file_setup
-
-  export BATS_NO_PARALLELIZE_WITHIN_FILE=true
 }
 
 # ---------------------------------------------------------------------------- #
