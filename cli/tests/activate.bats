@@ -22,16 +22,8 @@ load test_support.bash
 user_dotfiles_setup() {
   # N.B. $HOME is set to the test user's home directory by flox_vars_setup
   # so none of these should exist, and we abort if we find otherwise.
-  if
-    [ -f "$HOME/.bashrc" -o -f "$HOME/.zshrc" -o -f "$HOME/.zshenv" -o
-    -f "$HOME/.zlogin" -o -f "$HOME/.zlogout" -o -f "$HOME/.zprofile" -o
-    -f "$HOME/.profile" -o -f "$HOME/.login" -o -f "$HOME/.logout" -o
-    -f "$HOME/.config/fish/config.fish" -o
-    -f "$HOME/.cshrc" -o -f "$HOME/.tcshrc" ]
-  then
-    echo "user_dotfiles_setup: found preexisting dotfile(s) in $HOME" >&2
-    return 1
-  fi
+  set -o noclobber
+
   BADPATH="/usr/local/bin:/usr/bin:/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin"
 
   # Posix-compliant shells
@@ -69,6 +61,8 @@ if ( -e "$HOME/.$i.extra" ) then
 endif
 EOF
   done
+
+  set +o noclobber
 }
 
 setup_file() {
