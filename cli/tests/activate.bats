@@ -2198,6 +2198,112 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
+# bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshenv
+@test "zsh: in-place activation from .zshenv" {
+  project_setup
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+
+  echo 'eval "$("$FLOX_BIN" activate)"' >> "$HOME/.zshenv"
+
+  run zsh --interactive --login -c 'true'
+  assert_success
+  assert_output - <<EOF
+Sourcing .zshenv
+Setting PATH from .zshenv
+sourcing hook.on-activate for first time
+sourcing profile.common for first time
+sourcing profile.zsh for first time
+Sourcing .zprofile
+Setting PATH from .zprofile
+Sourcing .zshrc
+Setting PATH from .zshrc
+Sourcing .zlogin
+Setting PATH from .zlogin
+Sourcing .zlogout
+Setting PATH from .zlogout
+EOF
+}
+
+# bats test_tags=activate,activate:zdotdir,activate:zdotdir:zshrc
+@test "zsh: in-place activation from .zshrc" {
+  project_setup
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+
+  echo 'eval "$("$FLOX_BIN" activate)"' >> "$HOME/.zshrc"
+
+  run zsh --interactive --login -c 'true'
+  assert_success
+  assert_output - <<EOF
+Sourcing .zshenv
+Setting PATH from .zshenv
+Sourcing .zprofile
+Setting PATH from .zprofile
+Sourcing .zshrc
+Setting PATH from .zshrc
+sourcing hook.on-activate for first time
+sourcing profile.common for first time
+sourcing profile.zsh for first time
+Sourcing .zlogin
+Setting PATH from .zlogin
+Sourcing .zlogout
+Setting PATH from .zlogout
+EOF
+}
+
+# bats test_tags=activate,activate:zdotdir,activate:zdotdir:zlogin
+@test "zsh: in-place activation from .zlogin" {
+  project_setup
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+
+  echo 'eval "$("$FLOX_BIN" activate)"' >> "$HOME/.zlogin"
+
+  run zsh --interactive --login -c 'true'
+  assert_success
+  assert_output - <<EOF
+Sourcing .zshenv
+Setting PATH from .zshenv
+Sourcing .zprofile
+Setting PATH from .zprofile
+Sourcing .zshrc
+Setting PATH from .zshrc
+Sourcing .zlogin
+Setting PATH from .zlogin
+sourcing hook.on-activate for first time
+sourcing profile.common for first time
+sourcing profile.zsh for first time
+Sourcing .zlogout
+Setting PATH from .zlogout
+EOF
+}
+
+# bats test_tags=activate,activate:zdotdir,activate:zdotdir:zprofile
+@test "zsh: in-place activation from .zprofile" {
+  project_setup
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+
+  echo 'eval "$("$FLOX_BIN" activate)"' >> "$HOME/.zprofile"
+
+  run zsh -i -l -c 'true'
+  assert_success
+  assert_output - <<EOF
+Sourcing .zshenv
+Setting PATH from .zshenv
+Sourcing .zprofile
+Setting PATH from .zprofile
+sourcing hook.on-activate for first time
+sourcing profile.common for first time
+sourcing profile.zsh for first time
+Sourcing .zshrc
+Setting PATH from .zshrc
+Sourcing .zlogin
+Setting PATH from .zlogin
+Sourcing .zlogout
+Setting PATH from .zlogout
+EOF
+}
+
+# ---------------------------------------------------------------------------- #
+
 # bats test_tags=activate,activate:do_not_leak_FLOX_SHELL
 @test "activation does not leak FLOX_SHELL variable" {
   project_setup
