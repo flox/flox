@@ -33,7 +33,7 @@ jsonwebtoken = "9.2"
 log = "0.4.22"
 nix = { version = "0.28", features = ["signal", "process", "user"] }
 oauth2 = "4.4"
-once_cell = "1.20.0"
+once_cell = "1.20.1"
 path-dedot = "3.1.1"
 pollster = "0.3.0"
 progenitor-client = "0.6"
@@ -60,7 +60,7 @@ sysinfo = "0.30.13"
 # provide system version information for metric
 # TODO: review if we need this
 sys-info = "0.9"
-tempfile = "3.12.0"
+tempfile = "3.13.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "1"
 time = { version = "0.3", features = ["serde", "formatting"] }
