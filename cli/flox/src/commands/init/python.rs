@@ -817,7 +817,6 @@ mod tests {
     use flox_rust_sdk::providers::catalog::test_helpers::resolved_pkg_group_with_dummy_package;
     use flox_rust_sdk::providers::catalog::Client;
     use pretty_assertions::assert_eq;
-    use serial_test::serial;
 
     use super::*;
     use crate::commands::init::ProvidedPackage;
@@ -898,7 +897,6 @@ mod tests {
 
     /// ProvidedVersion::Compatible should be returned for an empty pyproject.toml
     #[tokio::test]
-    #[serial]
     async fn pyproject_empty_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
@@ -925,7 +923,6 @@ mod tests {
 
     /// ProvidedVersion::Compatible should be returned for requires-python = ">=3.8"
     #[tokio::test]
-    #[serial]
     async fn pyproject_available_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
@@ -959,7 +956,6 @@ mod tests {
 
     /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
     #[tokio::test]
-    #[serial]
     async fn pyproject_unavailable_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
@@ -995,7 +991,6 @@ mod tests {
 
     /// ProvidedVersion::Incompatible should be returned for requires-python = "1"
     #[tokio::test]
-    #[serial]
     async fn pyproject_parse_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
@@ -1088,7 +1083,6 @@ mod tests {
 
     /// ProvidedVersion::Compatible should be returned for python = "^3.7"
     #[tokio::test]
-    #[serial]
     async fn poetry_pyproject_available_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
@@ -1131,7 +1125,6 @@ mod tests {
 
     /// ProvidedVersion::Incompatible should be returned for python = "1"
     #[tokio::test]
-    #[serial]
     async fn poetry_pyproject_unavailable_version_with_catalog() {
         let (mut flox, _temp_dir_handle) = flox_instance();
 
