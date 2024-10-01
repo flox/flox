@@ -1495,6 +1495,7 @@ mod tests {
     use super::*;
     use crate::data::Version;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::ResolutionFailures;
     use crate::models::manifest::{
@@ -1502,7 +1503,6 @@ mod tests {
         RawManifest,
         DEFAULT_GROUP_NAME,
     };
-    use crate::models::{lockfile, manifest};
     use crate::providers::flox_cpp_utils::InstallableLockerMock;
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
@@ -1685,7 +1685,7 @@ mod tests {
     fn upgrade_with_empty_list_upgrades_all() {
         let (mut env_view, _flox, _temp_dir_handle) = empty_core_environment();
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
         let lockfile = lockfile::LockedManifestCatalog {

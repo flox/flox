@@ -1560,8 +1560,7 @@ pub(crate) mod tests {
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
-    use crate::models::manifest::test::empty_catalog_manifest;
-    use crate::models::manifest::{self, RawManifest, TypedManifest};
+    use crate::models::manifest::{RawManifest, TypedManifest};
     use crate::models::search::{SearchLimit, SearchResults};
     use crate::providers::flox_cpp_utils::{FlakeInstallableError, InstallableLockerMock};
 
@@ -2165,7 +2164,7 @@ pub(crate) mod tests {
     fn make_params_seeded_unchanged() {
         let (foo_before_iid, foo_before_descriptor, foo_before_locked) =
             fake_catalog_package_lock("foo", None);
-        let mut manifest_before = manifest::test::empty_catalog_manifest();
+        let mut manifest_before = TypedManifestCatalog::default();
         manifest_before
             .install
             .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
@@ -2197,7 +2196,7 @@ pub(crate) mod tests {
     fn make_params_seeded_unlock_if_invalidated() {
         let (foo_before_iid, foo_before_descriptor, foo_before_locked) =
             fake_catalog_package_lock("foo", None);
-        let mut manifest_before = manifest::test::empty_catalog_manifest();
+        let mut manifest_before = TypedManifestCatalog::default();
         manifest_before
             .install
             .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
@@ -2220,7 +2219,7 @@ pub(crate) mod tests {
 
         assert!(foo_after_descriptor.invalidates_existing_resolution(&foo_before_descriptor));
 
-        let mut manifest_after = manifest::test::empty_catalog_manifest();
+        let mut manifest_after = TypedManifestCatalog::default();
         manifest_after
             .install
             .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
@@ -2243,7 +2242,7 @@ pub(crate) mod tests {
     fn make_params_seeded_changed_no_invalidation() {
         let (foo_before_iid, foo_before_descriptor, foo_before_locked) =
             fake_catalog_package_lock("foo", None);
-        let mut manifest_before = manifest::test::empty_catalog_manifest();
+        let mut manifest_before = TypedManifestCatalog::default();
         manifest_before
             .install
             .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
@@ -2265,7 +2264,7 @@ pub(crate) mod tests {
 
         assert!(!foo_after_descriptor.invalidates_existing_resolution(&foo_before_descriptor));
 
-        let mut manifest_after = manifest::test::empty_catalog_manifest();
+        let mut manifest_after = TypedManifestCatalog::default();
         manifest_after
             .install
             .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
@@ -2331,7 +2330,7 @@ pub(crate) mod tests {
     /// for each default system.
     #[test]
     fn make_installables_to_lock_for_default_systems() {
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         let (foo_install_id, foo_descriptor, _) = fake_flake_installable_lock("foo");
 
         manifest
@@ -2357,7 +2356,7 @@ pub(crate) mod tests {
     fn make_installables_to_lock_for_manifest_systems() {
         let system = "aarch64-darwin";
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest.options.systems = Some(vec![system.to_string()]);
 
         let (foo_install_id, foo_descriptor, _) = fake_flake_installable_lock("foo");
@@ -2382,7 +2381,7 @@ pub(crate) mod tests {
     /// should only return [FlakeInstallableToLock] for the flake installables.
     #[test]
     fn make_installables_to_lock_filter_catalog() {
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         let (foo_install_id, foo_descriptor, _) = fake_flake_installable_lock("foo");
         let (bar_install_id, bar_descriptor, _) = fake_catalog_package_lock("bar", None);
 
@@ -2476,7 +2475,7 @@ pub(crate) mod tests {
     /// Both catalog packages and flake installables should be removed.
     #[test]
     fn unlock_by_iid() {
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         let (bar_iid, bar_descriptor, bar_locked) = fake_catalog_package_lock("bar", None);
         let (baz_iid, baz_descriptor, baz_locked) = fake_flake_installable_lock("baz");
@@ -2511,7 +2510,7 @@ pub(crate) mod tests {
     /// Unlocking by group should remove all packages in that group
     #[test]
     fn unlock_by_group() {
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", Some("group"));
         let (bar_iid, bar_descriptor, bar_locked) = fake_catalog_package_lock("bar", Some("group"));
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
@@ -2531,7 +2530,7 @@ pub(crate) mod tests {
     /// and the package
     #[test]
     fn unlock_by_iid_and_group() {
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         let (foo_iid, foo_descriptor, foo_locked) =
             fake_catalog_package_lock("foo", Some("foo_install_id"));
         let (bar_iid, bar_descriptor, bar_locked) =
@@ -2691,7 +2690,7 @@ pub(crate) mod tests {
             fake_catalog_package_lock("baz", Some("group2"));
         let (yeet_iid, yeet_descriptor, _) = fake_catalog_package_lock("yeet", Some("group2"));
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest.install.insert(foo_iid, foo_descriptor.clone());
         manifest.install.insert(bar_iid, bar_descriptor.clone());
         manifest
@@ -2786,7 +2785,7 @@ pub(crate) mod tests {
             ..foo_locked.clone()
         };
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest
             .install
             .insert(foo_iid.clone(), foo_descriptor_two_systems.clone());
@@ -2843,7 +2842,7 @@ pub(crate) mod tests {
             panic!("Expected a catalog descriptor");
         };
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest
             .install
             .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
@@ -2890,7 +2889,7 @@ pub(crate) mod tests {
         let (foo_iid, foo_descriptor, _) = fake_flake_installable_lock("foo");
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest.options.systems = Some(vec![system.to_string()]);
 
         manifest
@@ -2929,7 +2928,7 @@ pub(crate) mod tests {
         let system = "aarch64-darwin";
         let (_, _, bar_locked) = fake_flake_installable_lock("bar");
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest.options.systems = Some(vec![system.to_string()]);
 
         let locked = LockedManifestCatalog {
@@ -2961,7 +2960,7 @@ pub(crate) mod tests {
         let mut foo_locked_system_2 = foo_locked;
         foo_locked_system_2.locked_installable.system = SystemEnum::Aarch64Linux.to_string();
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest.options.systems = Some(vec![system.to_string()]);
 
         manifest
@@ -2996,7 +2995,7 @@ pub(crate) mod tests {
         let system_2 = "aarch64-linux";
         let (foo_iid, foo_descriptor, foo_locked) = fake_flake_installable_lock("foo");
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest
             .install
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
@@ -3036,7 +3035,7 @@ pub(crate) mod tests {
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
         manifest
             .install
@@ -3070,7 +3069,7 @@ pub(crate) mod tests {
         let (foo_iid, foo_descriptor, _) = fake_catalog_package_lock("foo", None);
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
         manifest
             .install
@@ -3140,7 +3139,7 @@ pub(crate) mod tests {
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         let (bar_iid, bar_descriptor, bar_locked) = fake_flake_installable_lock("bar");
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
         manifest
             .install
@@ -3176,7 +3175,7 @@ pub(crate) mod tests {
     async fn update_priority_if_fully_locked() {
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest.options.systems = Some(vec![SystemEnum::Aarch64Darwin.to_string()]);
         manifest
             .install
@@ -3224,7 +3223,7 @@ pub(crate) mod tests {
         let (foo_iid, foo_descriptor_one_system, mut foo_locked) =
             fake_catalog_package_lock("foo", None);
         foo_locked.unfree = Some(true);
-        let mut manifest = empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest
             .install
             .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
@@ -3259,7 +3258,7 @@ pub(crate) mod tests {
         // Create a manifest with a package foo and `options.allow.unfree = false`
         let (foo_iid, foo_descriptor_one_system, _) =
             fake_catalog_package_lock("foo", Some("toplevel"));
-        let mut manifest = empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest
             .install
             .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
@@ -3449,7 +3448,7 @@ pub(crate) mod tests {
         };
         baz_locked.system = SystemEnum::Aarch64Linux.to_string();
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest
             .install
             .insert(foo_iid.clone(), foo_descriptor.clone());
@@ -3525,7 +3524,7 @@ pub(crate) mod tests {
 
         baz_locked.locked_installable.system = SystemEnum::Aarch64Linux.to_string();
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = TypedManifestCatalog::default();
         manifest
             .install
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
