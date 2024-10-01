@@ -331,7 +331,7 @@ pub fn write_environment_registry(
     reg_path: &impl AsRef<Path>,
     _lock: LockFile,
 ) -> Result<(), EnvRegistryError> {
-    serialize_atomically(reg, reg_path, _lock).map_err(EnvRegistryError::WriteEnvironmentRegistry)
+    serialize_atomically(reg, &reg_path, _lock).map_err(EnvRegistryError::WriteEnvironmentRegistry)
 }
 
 /// Acquires the filesystem-based lock on the user's environment registry file
@@ -424,6 +424,14 @@ pub fn deregister_activation(
 
     write_environment_registry(&reg, &reg_path, lock)?;
     Ok(current_activations)
+}
+
+/// Returns whether this watchdog has been started without a need for it
+/// e.g. another watchdog is already monitoring this activation.
+pub fn should_bail_at_startup(reg: &EnvRegistry, path_hash: &str) -> bool {
+    reg.entry_for_hash(path_hash)
+        .map(|entry| !entry.activations.is_empty())
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -611,6 +619,19 @@ mod test {
             let activation = activations.iter().next().unwrap();
             entry.deregister_activation(*activation);
             prop_assert!(!entry.activations.contains(activation));
+        }
+
+        #[test]
+        fn says_when_to_bail(reg: EnvRegistry) {
+            if reg.entries.is_empty() {
+                prop_assert!(!should_bail_at_startup(&reg, "foo"));
+                return Ok(());
+            }
+            let entry_to_inspect = reg.entries[0].clone();
+            let hash = entry_to_inspect.path_hash.clone();
+            let contains_pids = !entry_to_inspect.activations.is_empty();
+            let would_bail = should_bail_at_startup(&reg, &hash);
+            prop_assert_eq!(would_bail, contains_pids);
         }
     }
 
