@@ -16,6 +16,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use log::debug;
+use shared::Version;
 use thiserror::Error;
 
 use super::manifest::{
@@ -28,7 +29,7 @@ use super::manifest::{
     DEFAULT_PRIORITY,
 };
 use super::pkgdb::CallPkgDbError;
-use crate::data::{CanonicalPath, CanonicalizeError, System, Version};
+use crate::data::{CanonicalPath, CanonicalizeError, System};
 use crate::providers::catalog::{
     self,
     CatalogPage,

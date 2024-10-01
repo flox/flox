@@ -24,11 +24,11 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
+use shared::Version;
 use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;
 use super::{copy_dir_recursive, ENV_DIR_NAME};
-use crate::data::Version;
 use crate::flox::EnvironmentName;
 use crate::models::environment::MANIFEST_FILENAME;
 use crate::providers::git::{

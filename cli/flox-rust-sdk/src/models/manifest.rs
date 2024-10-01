@@ -10,11 +10,12 @@ use proptest::prelude::*;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
+use shared::Version;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
 use url::Url;
 
 use super::environment::path_environment::InitCustomization;
-use crate::data::{System, Version};
+use crate::data::System;
 use crate::providers::services::ServiceError;
 #[cfg(test)]
 use crate::utils::proptest_btree_map_alphanum_keys;

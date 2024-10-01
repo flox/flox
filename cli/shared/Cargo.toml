@@ -1,0 +1,13 @@
+[package]
+name = "shared"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+# should be a dev-dependency but test doesn't apply across crates
+proptest.workspace = true
+# should be a dev-dependency but test doesn't apply across crates
+proptest-derive.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

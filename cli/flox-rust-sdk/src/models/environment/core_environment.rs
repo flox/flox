@@ -1485,6 +1485,7 @@ mod tests {
     use chrono::{DateTime, Utc};
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
+    use shared::Version;
     use tempfile::{tempdir_in, TempDir};
     use test_helpers::{new_core_environment_from_env_files, new_core_environment_with_lockfile};
     use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
@@ -1492,7 +1493,6 @@ mod tests {
     use self::catalog::{CatalogPage, MockClient, ResolvedPackageGroup};
     use self::test_helpers::new_core_environment;
     use super::*;
-    use crate::data::Version;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;

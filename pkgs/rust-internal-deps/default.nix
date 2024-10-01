@@ -56,12 +56,14 @@ in
         # The effect is that cargo will build all required dependencies
         # but not the actual crates in the workspace -- hence "depsOnly".
         # In this case we do want to build some of the crates in the workspace,
-        # i.e. flox-rust-sdk and catalog-api-v1 as dependencies of flox and flox-watchdog.
+        # i.e. flox-rust-sdk, catalog-api-v1, and shared as dependencies of flox
+        # and flox-watchdog.
         # To achieve this, we copy the source of these crates back into the workspace.
         cargoExtraArgs = "--locked -p flox -p flox-watchdog";
         postPatch = ''
           cp -rf --no-preserve=mode ${flox-src}/flox-rust-sdk/* ./flox-rust-sdk
           cp -rf --no-preserve=mode ${flox-src}/catalog-api-v1/* ./catalog-api-v1
+          cp -rf --no-preserve=mode ${flox-src}/shared/* ./shared
         '';
 
         # runtime dependencies
