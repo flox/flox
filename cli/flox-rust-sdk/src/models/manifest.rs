@@ -1506,16 +1506,7 @@ pub(super) mod test {
     "#};
 
     pub fn empty_catalog_manifest() -> TypedManifestCatalog {
-        TypedManifestCatalog {
-            version: Version,
-            install: ManifestInstall::default(),
-            vars: ManifestVariables::default(),
-            hook: ManifestHook::default(),
-            profile: ManifestProfile::default(),
-            options: ManifestOptions::default(),
-            services: ManifestServices::default(),
-            build: ManifestBuild::default(),
-        }
+        TypedManifestCatalog::default()
     }
 
     #[test]
