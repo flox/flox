@@ -162,21 +162,8 @@ fn run(args: Cli) -> Result<(), Error> {
         "checked socket"
     );
 
-    // Register activation PID so that we can track last one out
+    // Register this activation PID
     let activation = ActivationPid::from(args.pid);
-    // Check if our original parent has already exited.
-    // If it has, we can go ahead and cleanup.
-    if !activation.is_current_process_parent() {
-        debug!("parent has already exited");
-        let reg = read_environment_registry(&args.registry_path)?.unwrap_or_default();
-        let entry = reg
-            .entry_for_hash(&args.dot_flox_hash)
-            .ok_or(EnvRegistryError::UnknownKey(args.dot_flox_hash))?;
-        if entry.activations.is_empty() {
-            cleanup(args.socket_path);
-        }
-        return Ok(());
-    }
     register_activation(&args.registry_path, &args.dot_flox_hash, activation)?;
 
     info!(
