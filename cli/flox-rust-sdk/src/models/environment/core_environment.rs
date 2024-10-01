@@ -1485,7 +1485,6 @@ mod tests {
     use chrono::{DateTime, Utc};
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
-    use serial_test::serial;
     use tempfile::{tempdir_in, TempDir};
     use test_helpers::{new_core_environment_from_env_files, new_core_environment_with_lockfile};
     use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
@@ -1515,7 +1514,6 @@ mod tests {
 
     /// Check that `edit` updates the manifest and creates a lockfile
     #[test]
-    #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn edit_env_creates_manifest_and_lockfile() {
         let (mut flox, tempdir) = flox_instance();
@@ -1546,7 +1544,6 @@ mod tests {
 
     /// A no-op with edit returns EditResult::Unchanged
     #[test]
-    #[serial]
     fn edit_no_op_returns_unchanged() {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env_view = new_core_environment(&flox, "version = 1");
@@ -1559,7 +1556,6 @@ mod tests {
     /// Trying to build a manifest with a system other than the current one
     /// results in an error that is_incompatible_system_error()
     #[test]
-    #[serial]
     fn build_incompatible_system() {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env_view = new_core_environment(&flox, "");
@@ -1580,7 +1576,6 @@ mod tests {
     /// Trying to build a manifest with a package that is incompatible with the current system
     /// results in an error that is_incompatible_package_error()
     #[test]
-    #[serial]
     fn build_incompatible_package() {
         #[cfg(target_os = "macos")]
         let env_files_dirname = "glibc_incompatible_v0_both_darwin";
@@ -1601,7 +1596,6 @@ mod tests {
     /// Trying to build a manifest with an insecure package results in an error
     /// that is_incompatible_package_error()
     #[test]
-    #[serial]
     fn build_insecure_package() {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env_view = new_core_environment_from_env_files(
@@ -1637,7 +1631,6 @@ mod tests {
 
     /// Installing hello with edit returns EditResult::Success
     #[test]
-    #[serial]
     fn edit_adding_package_returns_success() {
         let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
 
@@ -1661,7 +1654,6 @@ mod tests {
 
     /// Adding a hook with edit returns EditResult::ReActivateRequired
     #[test]
-    #[serial]
     fn edit_adding_hook_returns_re_activate_required() {
         let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
 
@@ -1794,7 +1786,6 @@ mod tests {
 
     /// linking an environment should set a gc-root
     #[test]
-    #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn build_flox_environment_and_links() {
         let (mut flox, tempdir) = flox_instance();
