@@ -1505,10 +1505,6 @@ pub(super) mod test {
         version = 1
     "#};
 
-    pub fn empty_catalog_manifest() -> TypedManifestCatalog {
-        TypedManifestCatalog::default()
-    }
-
     #[test]
     fn catalog_manifest_rejects_unknown_fields() {
         let manifest = formatdoc! {"
