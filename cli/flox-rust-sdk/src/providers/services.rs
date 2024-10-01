@@ -1394,9 +1394,15 @@ mod tests {
                 })
                 .ok();
 
-            if states.is_some() {
-                break;
-            };
+            if let Some(ref states) = states {
+                // Even if `process-compose list` succeeded, the processes might
+                // be "Running"
+                if states.process("bar").unwrap().status == "Completed"
+                    && states.process("baz").unwrap().status == "Completed"
+                {
+                    break;
+                }
+            }
         }
         let states = states.expect("failed to read process states");
 
