@@ -8,9 +8,11 @@ use anyhow::{anyhow, Context};
 use clap::Parser;
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::env_registry::{
+    acquire_env_registry_lock,
     deregister_activation,
     read_environment_registry,
     register_activation,
+    should_bail_at_startup,
     ActivationPid,
     EnvRegistryError,
 };
@@ -117,6 +119,21 @@ fn run(args: Cli) -> Result<(), Error> {
         .context("failed to set SIGTERM signal handler")?;
     signal_hook::flag::register(SIGQUIT, Arc::clone(&should_terminate))
         .context("failed to set SIGQUIT signal handler")?;
+
+    // Before doing anything major, check whether there's already a watchdog
+    // monitoring this activation. If there is then this watchdog should just
+    // exit.
+    let lock = acquire_env_registry_lock(&args.registry_path)
+        .context("failed while acquiring registry lock")?;
+    if let Some(reg) = read_environment_registry(&args.registry_path)
+        .context("failed to open environment registry")?
+    {
+        if should_bail_at_startup(&reg, &args.dot_flox_hash) {
+            info!("another watchdog exists, exiting");
+            return Ok(());
+        }
+    }
+    drop(lock);
 
     #[cfg(target_os = "linux")]
     let watcher = process::ProcfsWatcher::new(args.pid);
