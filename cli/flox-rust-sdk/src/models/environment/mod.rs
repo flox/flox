@@ -7,6 +7,7 @@ use std::{fs, io};
 use core_environment::UpgradeResult;
 use log::debug;
 use serde::{Deserialize, Serialize};
+use shared::Version;
 use thiserror::Error;
 use url::Url;
 use walkdir::WalkDir;
@@ -18,7 +19,7 @@ use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::{LockedManifest, LockedManifestError};
 use super::manifest::{ManifestError, PackageToInstall, RawManifest, TomlEditError, TypedManifest};
-use crate::data::{CanonicalPath, CanonicalizeError, Version};
+use crate::data::{CanonicalPath, CanonicalizeError};
 use crate::flox::{Flox, Floxhub};
 use crate::providers::git::{
     GitCommandDiscoverError,

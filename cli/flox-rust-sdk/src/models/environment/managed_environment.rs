@@ -3,6 +3,7 @@ use std::{fs, io};
 
 use log::debug;
 use serde::{Deserialize, Serialize};
+use shared::Version;
 use thiserror::Error;
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};
@@ -29,7 +30,7 @@ use super::{
     LOG_DIR_NAME,
     N_HASH_CHARS,
 };
-use crate::data::{CanonicalPath, Version};
+use crate::data::CanonicalPath;
 use crate::flox::{EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::env_registry::{

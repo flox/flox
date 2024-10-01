@@ -1,10 +1,8 @@
 mod canonical_path;
-mod version;
 
 use std::fmt::Display;
 
 pub use canonical_path::{CanonicalPath, CanonicalizeError};
-pub use version::Version;
 pub type System = String;
 
 /// Different representations of the same attribute path

@@ -10,10 +10,11 @@ use nix::libc::pid_t;
 use nix::sys::signal::kill;
 use nix::unistd::Pid as NixPid;
 use serde::{Deserialize, Serialize};
+use shared::Version;
 use tracing::debug;
 
 use super::environment::{path_hash, EnvironmentPointer};
-use crate::data::{CanonicalPath, Version};
+use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::utils::traceable_path;
 

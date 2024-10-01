@@ -1149,6 +1149,7 @@ dependencies = [
  "serde_with",
  "serde_yaml",
  "serial_test",
+ "shared",
  "shell-escape",
  "temp-env",
  "tempfile",
@@ -3425,6 +3426,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
+]
+
+[[package]]
+name = "shared"
+version = "0.0.0"
+dependencies = [
+ "proptest",
+ "proptest-derive",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
