@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::{fs, io};
@@ -7,7 +6,7 @@ use std::{fs, io};
 use core_environment::UpgradeResult;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use shared::Version;
+pub use shared::{path_hash, Version};
 use thiserror::Error;
 use url::Url;
 use walkdir::WalkDir;
@@ -78,7 +77,7 @@ pub const FLOX_SERVICES_SOCKET_VAR: &str = "_FLOX_SERVICES_SOCKET";
 /// This variable is used in tests to override what path to use for the socket.
 pub const FLOX_SERVICES_SOCKET_OVERRIDE_VAR: &str = "_FLOX_SERVICES_SOCKET_OVERRIDE";
 
-pub const N_HASH_CHARS: usize = 8;
+pub use shared::N_HASH_CHARS;
 
 /// The result of an installation attempt that contains the new manifest contents
 /// along with whether each package was already installed
@@ -685,13 +684,6 @@ pub fn find_dot_flox(initial_dir: &Path) -> Result<Option<DotFlox>, EnvironmentE
 /// Directory containing nix gc roots for (previous) builds of environments of a given owner
 pub(super) fn gcroots_dir(flox: &Flox, owner: &EnvironmentOwner) -> PathBuf {
     flox.cache_dir.join(GCROOTS_DIR_NAME).join(owner.as_str())
-}
-
-/// Returns the truncated hash of a [Path]
-pub fn path_hash(p: impl AsRef<Path>) -> String {
-    let mut chars = blake3::hash(p.as_ref().as_os_str().as_bytes()).to_hex();
-    chars.truncate(N_HASH_CHARS);
-    chars.to_string()
 }
 
 /// Return a path to the services socket given a unique identifier

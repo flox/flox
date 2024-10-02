@@ -1122,7 +1122,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-stream",
- "blake3",
  "catalog-api-v1",
  "chrono",
  "derive_more",
@@ -3431,6 +3430,7 @@ dependencies = [
 name = "shared"
 version = "0.0.0"
 dependencies = [
+ "blake3",
  "derive_more",
  "proptest",
  "proptest-derive",
