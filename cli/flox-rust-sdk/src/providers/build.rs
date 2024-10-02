@@ -260,7 +260,7 @@ fn read_output_to_channel(
 mod tests {
     use std::fs::{self};
 
-    use indoc::formatdoc;
+    use indoc::{formatdoc, indoc};
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
@@ -830,6 +830,183 @@ mod tests {
             .unwrap();
         assert_build_status(&flox, &mut env, &package_name, true);
         assert_build_file(&env_path, &package_name, &file_name, content_after);
+    }
+
+    #[test]
+    fn build_wraps_binaries_with_preserved_arg0() {
+        let package_name = String::from("foo");
+        let file_name = String::from("print_arg0");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            go.pkg-path = "go"
+
+            [build.{package_name}]
+            command = """
+                go build main.go
+                mkdir -p $out/bin
+                cp main $out/bin/{file_name}
+            """
+        "#};
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let arg0_code = indoc! {r#"
+            package main
+
+            import (
+                "fmt"
+                "os"
+            )
+
+            func main() {
+                fmt.Println(os.Args[0])
+            }
+        "#};
+        fs::write(env_path.join("main.go"), arg0_code).unwrap();
+
+        if let Client::Mock(ref mut client) = flox.catalog_client {
+            client.clear_and_load_responses_from_file("init/go.json");
+        } else {
+            panic!("expected Mock client")
+        };
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            result_path.to_string_lossy(),
+            "binaries should have the correct arg0"
+        );
+    }
+
+    #[test]
+    fn build_wraps_scripts_without_preserved_arg0() {
+        let package_name = String::from("foo");
+        let file_name = String::from("print_arg0");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = """
+                mkdir -p $out/bin
+                cp {file_name} $out/bin/{file_name}
+                chmod +x $out/bin/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        // Beware inlining this script and having $0 interpolated too early.
+        let arg0_code = indoc! {r#"
+            #!/usr/bin/env bash
+            echo "$0"
+        "#};
+        fs::write(env_path.join(&file_name), arg0_code).unwrap();
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+        let result_wrapped = result_dir(&env_path, &package_name)
+            .read_link() // store path
+            .unwrap()
+            .join("bin")
+            .join(format!(".{}-wrapped", &file_name));
+
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(output.status.success());
+
+        // This isn't possible for interpreted scripts as described in:
+        // https://github.com/NixOS/nixpkgs/issues/150841
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            result_wrapped.to_string_lossy(),
+            "intepreted scripts are known to have the wrong arg0"
+        );
+    }
+
+    #[test]
+    fn build_wraps_scripts_without_preserved_exe() {
+        let package_name = String::from("foo");
+        let file_name = String::from("print_exe");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            go.pkg-path = "go"
+
+            [build.{package_name}]
+            command = """
+                go build main.go
+                mkdir -p $out/bin
+                cp main $out/bin/{file_name}
+            """
+        "#};
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let exe_code = indoc! {r#"
+            package main
+
+            import (
+                "fmt"
+                "os"
+            )
+
+            func main() {
+                exe, err := os.Executable()
+                if err != nil {
+                    fmt.Println(err)
+                    os.Exit(1)
+                }
+
+                fmt.Println(exe)
+            }
+        "#};
+        fs::write(env_path.join("main.go"), exe_code).unwrap();
+
+        if let Client::Mock(ref mut client) = flox.catalog_client {
+            client.clear_and_load_responses_from_file("init/go.json");
+        } else {
+            panic!("expected Mock client")
+        };
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+        let result_wrapped = result_dir(&env_path, &package_name)
+            .read_link() // store path
+            .unwrap()
+            .join("bin")
+            .join(format!(".{}-wrapped", &file_name));
+
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(output.status.success());
+
+        // This isn't currently implemented. For ideas see:
+        // https://brioche.dev/docs/how-it-works/packed-executables/
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            result_wrapped.to_string_lossy(),
+            "binaries are known to have the wrong exe"
+        );
     }
 
     #[test]
