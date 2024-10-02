@@ -12,6 +12,7 @@ use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
+use tracing::trace;
 use url::Url;
 
 use super::environment::path_environment::InitCustomization;
@@ -1208,27 +1209,63 @@ impl FromStr for CatalogPackage {
     ///
     ///     attribute_path ::= <install_id> | <attribute_path_rest>.<install_id>
     ///     attribute_path_rest ::= <identifier> | <attribute_path_rest>.<identifier>
-    ///     install_id ::= <identifier>
+    ///     install_id ::= <identifier> | @<identifier>
     ///
     ///     version ::= <string> # interpreted as semver or plain version by the resolver
     /// ```
-    /// Todo: this does currently _not_ handle any more pathological cases like
-    ///  - `@` in the version string (the last `@` is the delimiter)
     fn from_str(descriptor: &str) -> Result<Self, ManifestError> {
-        let (attr_path, version) = match descriptor.split_once('@') {
-            Some((attr_path, version)) if !version.is_empty() => {
-                (attr_path.to_string(), Some(version.to_string()))
-            },
-            Some(_) => {
+        fn split_version(haystack: &str) -> (usize, Option<&str>) {
+            let mut version_at = None;
+            let mut start = 0;
+
+            loop {
+                trace!(descriptor = haystack, start, substring = &haystack[start..]);
+                match haystack[start..].find('@') {
+                    // Found "@" at the beginning of the descriptor,
+                    // interpreted the "@" as part of the first attribute.
+                    Some(next_version_at) if start + next_version_at == 0 => {
+                        start += 1;
+                        continue;
+                    },
+                    // Found ".@", interpreted the "@" as part of the attribute,
+                    // as it would otherwise be unclear what is being versioned.
+                    // An example of this is `nodePackages.@angular/cli`
+                    Some(next_version_at)
+                        if &haystack[start + next_version_at - 1..start + next_version_at]
+                            == "." =>
+                    {
+                        start = start + next_version_at + 1;
+                        continue;
+                    },
+                    // Found a version delimiting "@"
+                    Some(next_version_at) => {
+                        version_at = Some(start + next_version_at);
+                        break;
+                    },
+                    // No version delimiting "@" found
+                    None => break,
+                }
+            }
+
+            let version = version_at.map(|at| &haystack[at + 1..]);
+            (version_at.unwrap_or(haystack.len()), version)
+        }
+
+        let (attr_path_len, version) = split_version(descriptor);
+        let attr_path = descriptor[..attr_path_len].to_string();
+        let version = if let Some(version) = version {
+            if version.is_empty() {
                 return Err(ManifestError::MalformedStringDescriptor {
                     msg: indoc! {"
-                        Expected version requrement after '@'.
+                        Expected version requirement after '@'.
                         Try adding quotes around the argument."}
                     .to_string(),
                     desc: descriptor.to_string(),
-                })
-            },
-            None => (descriptor.to_string(), None),
+                });
+            }
+            Some(version.to_string())
+        } else {
+            None
         };
 
         let install_id = install_id_from_attr_path(&attr_path, descriptor)?;
@@ -2049,9 +2086,38 @@ pub(super) mod test {
             systems: None,
         });
 
+        // Attributes starting with `@` are allowed, the @ is not delimting the version if following a '.'
+        let parsed: CatalogPackage = "nodePackages.@angular@1.2.3".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "@angular".to_string(),
+            pkg_path: "nodePackages.@angular".to_string(),
+            version: Some("1.2.3".to_string()),
+            systems: None,
+        });
+
+        // Attributes starting with `@` are allowed, the @ is not delimting the version
+        // if its the first character
+        let parsed: CatalogPackage = "@1.2.3".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "3".to_string(),
+            pkg_path: "@1.2.3".to_string(),
+            version: None,
+            systems: None,
+        });
+
+        // Attributes starting with `@` are allowed, the @ is not delimting the version
+        // if its the first character.
+        // Following `@` may delimit a version
+        let parsed: CatalogPackage = "@pkg@version".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "@pkg".to_string(),
+            pkg_path: "@pkg".to_string(),
+            version: Some("version".to_string()),
+            systems: None,
+        });
+
         CatalogPackage::from_str("foo.\"bar.baz.qux@1.2.3")
             .expect_err("missing closing quote should cause failure");
-        CatalogPackage::from_str("@1.2.3").expect_err("missing attrpath should cause failure");
         CatalogPackage::from_str("foo@").expect_err("missing version should cause failure");
     }
 
