@@ -159,6 +159,7 @@ impl<'a> DidYouMean<'a, SearchSuggestion> {
             "rust" => "cargo",
             "diff" => "diffutils",
             "make" => "gnumake",
+            "k8s" => "kubernetes",
             _ => return None,
         };
         Some(suggestion)
