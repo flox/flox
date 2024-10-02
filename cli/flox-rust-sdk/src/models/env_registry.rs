@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::fmt;
-use std::fs::File;
-use std::io::{BufReader, BufWriter};
+use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -25,8 +24,8 @@ pub const ENV_REGISTRY_FILENAME: &str = "env-registry.json";
 pub enum EnvRegistryError {
     #[error("couldn't acquire environment registry file lock")]
     AcquireLock(#[source] fslock::Error),
-    #[error("couldn't open environment registry file")]
-    OpenRegistry(#[source] std::io::Error),
+    #[error("couldn't read environment registry file")]
+    ReadRegistry(#[source] std::io::Error),
     #[error("couldn't parse environment registry")]
     ParseRegistry(#[source] serde_json::Error),
     #[error("failed to open temporary file for registry")]
@@ -321,10 +320,9 @@ pub fn read_environment_registry(
         );
         return Ok(None);
     }
-    let f = File::open(path).map_err(EnvRegistryError::OpenRegistry)?;
-    let reader = BufReader::new(f);
+    let contents = std::fs::read_to_string(path).map_err(EnvRegistryError::ReadRegistry)?;
     let parsed: EnvRegistry =
-        serde_json::from_reader(reader).map_err(EnvRegistryError::ParseRegistry)?;
+        serde_json::from_str(&contents).map_err(EnvRegistryError::ParseRegistry)?;
     Ok(Some(parsed))
 }
 
