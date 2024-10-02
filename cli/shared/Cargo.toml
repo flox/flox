@@ -4,6 +4,7 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
+blake3.workspace = true
 derive_more.workspace = true
 # should be a dev-dependency but test doesn't apply across crates
 proptest.workspace = true
