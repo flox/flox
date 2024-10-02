@@ -33,7 +33,7 @@ pub struct StartOrAttachArgs {
     pub flox_env: PathBuf,
     #[arg(help = "The store path of the rendered environment for this activation.")]
     #[arg(short, long, value_name = "PATH")]
-    pub store_path: PathBuf,
+    pub store_path: String,
 }
 
 #[derive(Debug, Args)]
