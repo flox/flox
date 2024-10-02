@@ -1,6 +1,7 @@
 use clap::Parser;
 use cli::Cli;
 
+mod activations;
 mod cli;
 
 type Error = anyhow::Error;
