@@ -3433,10 +3433,12 @@ version = "0.0.0"
 dependencies = [
  "blake3",
  "derive_more",
+ "fslock",
  "proptest",
  "proptest-derive",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
 ]
 

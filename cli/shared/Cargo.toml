@@ -6,10 +6,12 @@ edition = "2021"
 [dependencies]
 blake3.workspace = true
 derive_more.workspace = true
+fslock.workspace = true
 # should be a dev-dependency but test doesn't apply across crates
 proptest.workspace = true
 # should be a dev-dependency but test doesn't apply across crates
 proptest-derive.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
