@@ -48,6 +48,7 @@ _grep := $(call __package_bin,$(__gnugrep),grep)
 _head := $(call __package_bin,$(__coreutils),head)
 _jq := $(call __package_bin,$(__jq),jq)
 _mktemp := $(call __package_bin,$(__coreutils),mktemp)
+_mv := $(call __package_bin,$(__coreutils),mv)
 _nix := $(call __package_bin,$(__nix),nix)
 _pwd := $(call __package_bin,$(__coreutils),pwd)
 _readlink := $(call __package_bin,$(__coreutils),readlink)
@@ -312,18 +313,19 @@ define BUILD_template =
   # Iterate through this list, replacing all instances of "${package}" with the
   # corresponding storePath as identified by the result-* symlink.
   .PRECIOUS: $($(_pvarname)_buildScript)
-  $($(_pvarname)_buildScript): $(build)
+  $($(_pvarname)_buildScript): $(build) FORCE
 	@echo "Rendering $(_pname) build script to $$@"
-	@$(_cp) $$< $$@
+	@$(_cp) --no-preserve=mode $$< $$@.new
 	@for i in $$^; do \
-	  if [ -L "$$$$i" ]; then \
+	  if [ "$$$$i" != "FORCE" -a -L "$$$$i" ]; then \
 	    outpath="$$$$($(_readlink) $$$$i)"; \
 	    if [ -n "$$$$outpath" ]; then \
 	      pkgname="$$$$(echo $$$$i | $(_cut) -d- -f2-)"; \
-	      $(_sed) -i "s%\$$$${$$$$pkgname}%$$$$outpath%g" $$@; \
+	      $(_sed) -i "s%\$$$${$$$$pkgname}%$$$$outpath%g" $$@.new; \
 	    fi; \
 	  fi; \
 	done
+	@$(_mv) -f $$@.new $$@
 
   # Prepare temporary log file for capturing build output for inspection.
   $(eval $(_pvarname)_logfile := $(shell $(_mktemp) --dry-run --suffix=-build-$(_pname).log))

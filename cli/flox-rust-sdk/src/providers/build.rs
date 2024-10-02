@@ -797,6 +797,42 @@ mod tests {
     }
 
     #[test]
+    fn rebuild_with_modified_command() {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let content_before = "before";
+        let content_after = "after";
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = """
+                mkdir -p $out
+                echo -n "{content_before}" > $out/{file_name}
+            """
+        "#});
+        let env_path = env.parent_path().unwrap();
+        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_file(&env_path, &package_name, &file_name, content_before);
+
+        let _ = env
+            .edit(&flox, formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = """
+                mkdir -p $out
+                echo -n "{content_after}" > $out/{file_name}
+            """
+        "#})
+            .unwrap();
+        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_file(&env_path, &package_name, &file_name, content_after);
+    }
+
+    #[test]
     fn cleans_up_data_sandbox() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
