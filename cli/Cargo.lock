@@ -1114,6 +1114,14 @@ dependencies = [
  "anyhow",
  "clap",
  "clap_derive",
+ "fslock",
+ "serde",
+ "serde_json",
+ "shared",
+ "time",
+ "tracing",
+ "uuid",
+ "xdg",
 ]
 
 [[package]]
