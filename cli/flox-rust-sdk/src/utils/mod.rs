@@ -10,6 +10,7 @@ use std::{fs, io};
 use ::log::debug;
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
+pub use shared::traceable_path;
 use thiserror::Error;
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -159,12 +160,6 @@ impl Display for DisplayCommand<'_> {
 
         Ok(())
     }
-}
-
-/// Returns a `tracing`-compatible form of a [Path]
-pub fn traceable_path(p: impl AsRef<Path>) -> impl tracing::Value {
-    let path = p.as_ref();
-    path.display().to_string()
 }
 
 /// Returns a `tracing`-compatible form of an `Option<PathBuf>`
