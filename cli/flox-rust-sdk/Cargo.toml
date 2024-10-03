@@ -42,6 +42,7 @@ url-escape.workspace = true
 uuid.workspace = true
 walkdir.workspace = true
 xdg.workspace = true
+serial_test = { workspace = true, features = ["file_locks"] }
 
 [dev-dependencies]
 anyhow.workspace = true
