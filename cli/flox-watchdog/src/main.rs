@@ -2,19 +2,16 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::Duration;
 
-use anyhow::{anyhow, Context};
+use anyhow::{bail, Context};
 use clap::Parser;
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::env_registry::{
     acquire_env_registry_lock,
-    deregister_activation,
     read_environment_registry,
     register_activation,
     should_bail_at_startup,
     ActivationPid,
-    EnvRegistryError,
 };
 use flox_rust_sdk::providers::services::process_compose_down;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
@@ -22,8 +19,11 @@ use logger::{init_logger, spawn_gc_logs, spawn_heartbeat_log};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
 use once_cell::sync::Lazy;
+use process::WaitResult;
 use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
+
+use crate::process::Watcher;
 
 mod logger;
 mod process;
@@ -37,7 +37,6 @@ const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.
 The watchdog (fka. klaus) is spawned during activation to aid in service cleanup
 when the final activation of an environment has terminated. This cleanup can
 be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
-const CHECK_INTERVAL: Duration = Duration::from_millis(10);
 
 #[derive(Debug, Parser)]
 #[command(version = Lazy::get(&FLOX_VERSION).map(|v| v.as_str()).unwrap_or("0.0.0"))]
@@ -136,25 +135,18 @@ fn run(args: Cli) -> Result<(), Error> {
     drop(lock);
 
     #[cfg(target_os = "linux")]
-    let watcher = process::ProcfsWatcher::new(args.pid);
-
+    let mut watcher2 = process::LinuxWatcher::new(args.pid);
     #[cfg(target_os = "macos")]
-    let watcher = {
-        let mut watcher = kqueue::Watcher::new()?;
-        watcher.add_pid(
-            args.pid,
-            kqueue::EventFilter::EVFILT_PROC,
-            kqueue::FilterFlag::NOTE_EXIT,
-        )?;
-        match watcher.watch() {
-            Ok(_) => Ok(watcher),
-            Err(err) => {
-                cleanup(&args.socket_path);
-                error!(%err, "failed to register watcher");
-                Err(err)
-            },
-        }
-    }?;
+    let mut watcher2 = process::MacOsWatcher::new(
+        args.pid.into(),
+        &args.registry_path,
+        &args.dot_flox_hash,
+        should_terminate,
+        should_clean_up,
+    );
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    bail!("unsupported operating system");
 
     debug!(
         path = traceable_path(&args.socket_path),
@@ -178,32 +170,19 @@ fn run(args: Cli) -> Result<(), Error> {
 
     debug!("waiting for termination");
 
-    #[cfg(target_os = "macos")]
-    let res = wait_for_termination(watcher, should_clean_up, should_terminate);
-
-    #[cfg(target_os = "linux")]
-    let res = wait_for_termination(watcher, should_clean_up, should_terminate);
-
-    // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
-    // but there's not much we can do about that because we don't know who sent us one of those
-    // signals or why.
-    res.context("received stop signal, exiting without cleanup")?;
-
-    // Now we proceed with cleanup assuming we've gotten a notification that the target process
-    // has terminated.
-
-    let remaining_activations =
-        deregister_activation(&args.registry_path, &args.dot_flox_hash, activation)
-            .context("failed to deregister activation")?;
-    debug!(n = remaining_activations, "remaining activations");
-    if remaining_activations == 0 {
-        cleanup(args.socket_path);
-    } else {
-        debug!(
-            reason = "remaining activations",
-            "did not shut down process-compose"
-        );
+    if let WaitResult::Terminate = watcher2
+        .wait_for_termination()
+        .context("failed while waiting for termination")?
+    {
+        // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
+        // but there's not much we can do about that because we don't know who sent us one of those
+        // signals or why.
+        bail!("received stop signal, exiting without cleanup");
     }
+
+    // Once `wait_for_termination` returns we can assume that all of the target
+    // PIDs have terminated. We now proceed with teardown.
+    cleanup(args.socket_path);
 
     // Exit
     info!("exiting");
@@ -245,48 +224,4 @@ fn ensure_process_group_leader() -> Result<(), Error> {
         setsid().context("failed to create new session")?;
     }
     Ok(())
-}
-
-#[cfg(target_os = "macos")]
-fn wait_for_termination(
-    watcher: kqueue::Watcher,
-    proceed_flag: Arc<AtomicBool>,
-    stop_flag: Arc<AtomicBool>,
-) -> Result<(), Error> {
-    loop {
-        if proceed_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            debug!("observed proceed flag");
-            break Ok(());
-        }
-        if stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            break Err(anyhow!("received stop signal"));
-        }
-        if let Some(_event) = watcher.poll(None) {
-            debug!("received termination event, will proceed");
-            break Ok(());
-        }
-        std::thread::sleep(CHECK_INTERVAL);
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn wait_for_termination(
-    watcher: process::ProcfsWatcher,
-    proceed_flag: Arc<AtomicBool>,
-    stop_flag: Arc<AtomicBool>,
-) -> Result<(), Error> {
-    loop {
-        if proceed_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            debug!("observed flag, will proceed");
-            break Ok(());
-        }
-        if stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            break Err(anyhow!("received stop signal"));
-        }
-        if !watcher.is_running() {
-            debug!("received termination event, will proceed");
-            break Ok(());
-        }
-        std::thread::sleep(CHECK_INTERVAL);
-    }
 }

@@ -34,6 +34,8 @@ pub enum EnvRegistryError {
     EnvNotRegistered,
     #[error("failed to write environment registry file")]
     WriteEnvironmentRegistry(#[source] SerializeError),
+    #[error("no registry found")]
+    NoEnvRegistry,
 }
 
 /// A local registry of environments on the system.
@@ -252,7 +254,7 @@ impl ActivationPid {
     }
 
     /// Check whether an activation is still running.
-    fn is_running(&self) -> bool {
+    pub fn is_running(&self) -> bool {
         // TODO: Compare name or check for watchdog child to see if it's a real activation?
         let pid = NixPid::from(*self);
         match kill(pid, None) {
@@ -268,6 +270,12 @@ impl ActivationPid {
 impl From<i32> for ActivationPid {
     fn from(value: i32) -> Self {
         Self(value)
+    }
+}
+
+impl From<ActivationPid> for pid_t {
+    fn from(value: ActivationPid) -> Self {
+        value.0
     }
 }
 
@@ -328,7 +336,7 @@ pub fn read_environment_registry(
 /// environment registry, as that is essentially bypassing the lock.
 pub fn write_environment_registry(
     reg: &EnvRegistry,
-    reg_path: &impl AsRef<Path>,
+    reg_path: impl AsRef<Path>,
     _lock: LockFile,
 ) -> Result<(), EnvRegistryError> {
     serialize_atomically(reg, &reg_path, _lock).map_err(EnvRegistryError::WriteEnvironmentRegistry)
@@ -432,6 +440,21 @@ pub fn should_bail_at_startup(reg: &EnvRegistry, path_hash: &str) -> bool {
     reg.entry_for_hash(path_hash)
         .map(|entry| !entry.activations.is_empty())
         .unwrap_or(false)
+}
+
+/// Returns the list of activation PIDs for a given activation.
+pub fn activation_pids(
+    reg_path: impl AsRef<Path>,
+    path_hash: impl AsRef<str>,
+) -> Result<HashSet<ActivationPid>, EnvRegistryError> {
+    let _lock = acquire_env_registry_lock(&reg_path)?;
+    let mut reg = read_environment_registry(&reg_path)?.ok_or(EnvRegistryError::NoEnvRegistry)?;
+    let entry = reg
+        .entry_for_hash_mut(path_hash.as_ref())
+        .ok_or(EnvRegistryError::EnvNotRegistered)?;
+    entry.remove_stale_activations();
+    let remaining_pids = entry.activations.clone();
+    Ok(remaining_pids)
 }
 
 #[cfg(test)]
