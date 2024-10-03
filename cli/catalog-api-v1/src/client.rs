@@ -599,6 +599,43 @@ pub mod types {
             value.clone()
         }
     }
+    ///Outputs
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "Outputs",
+    ///  "type": "array",
+    ///  "items": {
+    ///    "$ref": "#/components/schemas/Output"
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct Outputs(pub Vec<Output>);
+    impl std::ops::Deref for Outputs {
+        type Target = Vec<Output>;
+        fn deref(&self) -> &Vec<Output> {
+            &self.0
+        }
+    }
+    impl From<Outputs> for Vec<Output> {
+        fn from(value: Outputs) -> Self {
+            value.0
+        }
+    }
+    impl From<&Outputs> for Outputs {
+        fn from(value: &Outputs) -> Self {
+            value.clone()
+        }
+    }
+    impl From<Vec<Output>> for Outputs {
+        fn from(value: Vec<Output>) -> Self {
+            Self(value)
+        }
+    }
     ///PackageDescriptor
     ///
     /// <details><summary>JSON schema</summary>
@@ -936,6 +973,79 @@ pub mod types {
     impl From<&PackageInfoSearch> for PackageInfoSearch {
         fn from(value: &PackageInfoSearch) -> Self {
             value.clone()
+        }
+    }
+    ///PackageName
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "Package Name",
+    ///  "type": "string",
+    ///  "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}"
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+    pub struct PackageName(String);
+    impl std::ops::Deref for PackageName {
+        type Target = String;
+        fn deref(&self) -> &String {
+            &self.0
+        }
+    }
+    impl From<PackageName> for String {
+        fn from(value: PackageName) -> Self {
+            value.0
+        }
+    }
+    impl From<&PackageName> for PackageName {
+        fn from(value: &PackageName) -> Self {
+            value.clone()
+        }
+    }
+    impl std::str::FromStr for PackageName {
+        type Err = self::error::ConversionError;
+        fn from_str(value: &str) -> Result<Self, self::error::ConversionError> {
+            if regress::Regex::new("[a-zA-Z0-9\\.\\-_]{3,128}")
+                .unwrap()
+                .find(value)
+                .is_none()
+            {
+                return Err("doesn't match pattern \"[a-zA-Z0-9\\.\\-_]{3,128}\"".into());
+            }
+            Ok(Self(value.to_string()))
+        }
+    }
+    impl std::convert::TryFrom<&str> for PackageName {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &str) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<&String> for PackageName {
+        type Error = self::error::ConversionError;
+        fn try_from(value: &String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl std::convert::TryFrom<String> for PackageName {
+        type Error = self::error::ConversionError;
+        fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
+            value.parse()
+        }
+    }
+    impl<'de> serde::Deserialize<'de> for PackageName {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            String::deserialize(deserializer)?
+                .parse()
+                .map_err(|e: self::error::ConversionError| {
+                    <D::Error as serde::de::Error>::custom(e.to_string())
+                })
         }
     }
     ///PackageResolutionInfo
@@ -1864,6 +1974,41 @@ pub mod types {
             value.clone()
         }
     }
+    ///StoreInfo
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "StoreInfo",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "auth_token",
+    ///    "url"
+    ///  ],
+    ///  "properties": {
+    ///    "auth_token": {
+    ///      "title": "Auth Token",
+    ///      "type": "string"
+    ///    },
+    ///    "url": {
+    ///      "title": "Url",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct StoreInfo {
+        pub auth_token: String,
+        pub url: String,
+    }
+    impl From<&StoreInfo> for StoreInfo {
+        fn from(value: &StoreInfo) -> Self {
+            value.clone()
+        }
+    }
     ///SystemEnum
     ///
     /// <details><summary>JSON schema</summary>
@@ -1876,7 +2021,8 @@ pub mod types {
     ///    "aarch64-darwin",
     ///    "aarch64-linux",
     ///    "x86_64-darwin",
-    ///    "x86_64-linux"
+    ///    "x86_64-linux",
+    ///    "invalid"
     ///  ]
     ///}
     /// ```
@@ -1902,6 +2048,8 @@ pub mod types {
         X8664Darwin,
         #[serde(rename = "x86_64-linux")]
         X8664Linux,
+        #[serde(rename = "invalid")]
+        Invalid,
     }
     impl From<&SystemEnum> for SystemEnum {
         fn from(value: &SystemEnum) -> Self {
@@ -1915,6 +2063,7 @@ pub mod types {
                 Self::Aarch64Linux => "aarch64-linux".to_string(),
                 Self::X8664Darwin => "x86_64-darwin".to_string(),
                 Self::X8664Linux => "x86_64-linux".to_string(),
+                Self::Invalid => "invalid".to_string(),
             }
         }
     }
@@ -1926,6 +2075,7 @@ pub mod types {
                 "aarch64-linux" => Ok(Self::Aarch64Linux),
                 "x86_64-darwin" => Ok(Self::X8664Darwin),
                 "x86_64-linux" => Ok(Self::X8664Linux),
+                "invalid" => Ok(Self::Invalid),
                 _ => Err("invalid value".into()),
             }
         }
@@ -1946,6 +2096,220 @@ pub mod types {
         type Error = self::error::ConversionError;
         fn try_from(value: String) -> Result<Self, self::error::ConversionError> {
             value.parse()
+        }
+    }
+    ///UserBuildCreationResponse
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserBuildCreationResponse",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "store"
+    ///  ],
+    ///  "properties": {
+    ///    "store": {
+    ///      "$ref": "#/components/schemas/StoreInfo"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserBuildCreationResponse {
+        pub store: StoreInfo,
+    }
+    impl From<&UserBuildCreationResponse> for UserBuildCreationResponse {
+        fn from(value: &UserBuildCreationResponse) -> Self {
+            value.clone()
+        }
+    }
+    ///UserBuildInput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserBuild",
+    ///  "examples": [
+    ///    {
+    ///      "derivation": {
+    ///        "description": "A very nice derivation",
+    ///        "drv_path": "foo.bar.curl",
+    ///        "license": "GnuFoo",
+    ///        "name": "mydrv",
+    ///        "outputs": {
+    ///          "bin": "/nix/store/foo"
+    ///        },
+    ///        "outputs_to_install": [
+    ///          "bin"
+    ///        ],
+    ///        "pname": "mydrv",
+    ///        "system": "x86_64-linux",
+    ///        "version": "1.0"
+    ///      },
+    ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+    ///      "locked_url": "http://example.com?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "derivation",
+    ///    "locked_base_catalog_url",
+    ///    "locked_url"
+    ///  ],
+    ///  "properties": {
+    ///    "derivation": {
+    ///      "$ref": "#/components/schemas/UserDerivation-Input"
+    ///    },
+    ///    "locked_base_catalog_url": {
+    ///      "title": "Locked Base Catalog Url",
+    ///      "type": "string"
+    ///    },
+    ///    "locked_url": {
+    ///      "title": "Locked Url",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserBuildInput {
+        pub derivation: UserDerivationInput,
+        pub locked_base_catalog_url: String,
+        pub locked_url: String,
+    }
+    impl From<&UserBuildInput> for UserBuildInput {
+        fn from(value: &UserBuildInput) -> Self {
+            value.clone()
+        }
+    }
+    ///UserBuildListInput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserBuildList",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/UserBuild-Input"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserBuildListInput {
+        pub items: Vec<UserBuildInput>,
+    }
+    impl From<&UserBuildListInput> for UserBuildListInput {
+        fn from(value: &UserBuildListInput) -> Self {
+            value.clone()
+        }
+    }
+    ///UserBuildListOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserBuildList",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/UserBuild-Output"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserBuildListOutput {
+        pub items: Vec<UserBuildOutput>,
+    }
+    impl From<&UserBuildListOutput> for UserBuildListOutput {
+        fn from(value: &UserBuildListOutput) -> Self {
+            value.clone()
+        }
+    }
+    ///UserBuildOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserBuild",
+    ///  "examples": [
+    ///    {
+    ///      "derivation": {
+    ///        "description": "A very nice derivation",
+    ///        "drv_path": "foo.bar.curl",
+    ///        "license": "GnuFoo",
+    ///        "name": "mydrv",
+    ///        "outputs": {
+    ///          "bin": "/nix/store/foo"
+    ///        },
+    ///        "outputs_to_install": [
+    ///          "bin"
+    ///        ],
+    ///        "pname": "mydrv",
+    ///        "system": "x86_64-linux",
+    ///        "version": "1.0"
+    ///      },
+    ///      "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+    ///      "locked_url": "http://example.com?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "derivation",
+    ///    "locked_base_catalog_url",
+    ///    "locked_url"
+    ///  ],
+    ///  "properties": {
+    ///    "derivation": {
+    ///      "$ref": "#/components/schemas/UserDerivation-Output"
+    ///    },
+    ///    "locked_base_catalog_url": {
+    ///      "title": "Locked Base Catalog Url",
+    ///      "type": "string"
+    ///    },
+    ///    "locked_url": {
+    ///      "title": "Locked Url",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserBuildOutput {
+        pub derivation: UserDerivationOutput,
+        pub locked_base_catalog_url: String,
+        pub locked_url: String,
+    }
+    impl From<&UserBuildOutput> for UserBuildOutput {
+        fn from(value: &UserBuildOutput) -> Self {
+            value.clone()
         }
     }
     ///UserCatalog
@@ -1987,6 +2351,358 @@ pub mod types {
     }
     impl From<&UserCatalog> for UserCatalog {
         fn from(value: &UserCatalog) -> Self {
+            value.clone()
+        }
+    }
+    ///UserDerivationInput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserDerivation",
+    ///  "examples": [
+    ///    {
+    ///      "description": "A very nice derivation",
+    ///      "drv_path": "foo.bar.curl",
+    ///      "license": "GnuFoo",
+    ///      "name": "mydrv",
+    ///      "outputs": {
+    ///        "bin": "/nix/store/foo"
+    ///      },
+    ///      "outputs_to_install": [
+    ///        "bin"
+    ///      ],
+    ///      "pname": "mydrv",
+    ///      "system": "x86_64-linux",
+    ///      "version": "1.0"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "description",
+    ///    "drv_path",
+    ///    "name",
+    ///    "outputs",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "broken": {
+    ///      "title": "Broken",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "type": "string"
+    ///    },
+    ///    "drv_path": {
+    ///      "title": "Drv Path",
+    ///      "type": "string"
+    ///    },
+    ///    "license": {
+    ///      "title": "License",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "outputs": {
+    ///      "$ref": "#/components/schemas/Outputs"
+    ///    },
+    ///    "outputs_to_install": {
+    ///      "title": "Outputs To Install",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "pname": {
+    ///      "title": "Pname",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    },
+    ///    "unfree": {
+    ///      "title": "Unfree",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserDerivationInput {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub broken: Option<bool>,
+        pub description: String,
+        pub drv_path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub license: Option<String>,
+        pub name: String,
+        pub outputs: Outputs,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub outputs_to_install: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub pname: Option<String>,
+        pub system: SystemEnum,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub unfree: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub version: Option<String>,
+    }
+    impl From<&UserDerivationInput> for UserDerivationInput {
+        fn from(value: &UserDerivationInput) -> Self {
+            value.clone()
+        }
+    }
+    ///UserDerivationOutput
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserDerivation",
+    ///  "examples": [
+    ///    {
+    ///      "description": "A very nice derivation",
+    ///      "drv_path": "foo.bar.curl",
+    ///      "license": "GnuFoo",
+    ///      "name": "mydrv",
+    ///      "outputs": {
+    ///        "bin": "/nix/store/foo"
+    ///      },
+    ///      "outputs_to_install": [
+    ///        "bin"
+    ///      ],
+    ///      "pname": "mydrv",
+    ///      "system": "x86_64-linux",
+    ///      "version": "1.0"
+    ///    }
+    ///  ],
+    ///  "type": "object",
+    ///  "required": [
+    ///    "description",
+    ///    "drv_path",
+    ///    "name",
+    ///    "outputs",
+    ///    "system"
+    ///  ],
+    ///  "properties": {
+    ///    "broken": {
+    ///      "title": "Broken",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "description": {
+    ///      "title": "Description",
+    ///      "type": "string"
+    ///    },
+    ///    "drv_path": {
+    ///      "title": "Drv Path",
+    ///      "type": "string"
+    ///    },
+    ///    "license": {
+    ///      "title": "License",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "outputs": {
+    ///      "$ref": "#/components/schemas/Outputs"
+    ///    },
+    ///    "outputs_to_install": {
+    ///      "title": "Outputs To Install",
+    ///      "type": [
+    ///        "array",
+    ///        "null"
+    ///      ],
+    ///      "items": {
+    ///        "type": "string"
+    ///      }
+    ///    },
+    ///    "pname": {
+    ///      "title": "Pname",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "system": {
+    ///      "$ref": "#/components/schemas/SystemEnum"
+    ///    },
+    ///    "unfree": {
+    ///      "title": "Unfree",
+    ///      "type": [
+    ///        "boolean",
+    ///        "null"
+    ///      ]
+    ///    },
+    ///    "version": {
+    ///      "title": "Version",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserDerivationOutput {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub broken: Option<bool>,
+        pub description: String,
+        pub drv_path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub license: Option<String>,
+        pub name: String,
+        pub outputs: Outputs,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub outputs_to_install: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub pname: Option<String>,
+        pub system: SystemEnum,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub unfree: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub version: Option<String>,
+    }
+    impl From<&UserDerivationOutput> for UserDerivationOutput {
+        fn from(value: &UserDerivationOutput) -> Self {
+            value.clone()
+        }
+    }
+    ///UserPackage
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserPackage",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "catalog",
+    ///    "name",
+    ///    "original_url"
+    ///  ],
+    ///  "properties": {
+    ///    "catalog": {
+    ///      "title": "Catalog",
+    ///      "type": "string"
+    ///    },
+    ///    "name": {
+    ///      "title": "Name",
+    ///      "type": "string"
+    ///    },
+    ///    "original_url": {
+    ///      "title": "Original Url",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserPackage {
+        pub catalog: String,
+        pub name: String,
+        pub original_url: String,
+    }
+    impl From<&UserPackage> for UserPackage {
+        fn from(value: &UserPackage) -> Self {
+            value.clone()
+        }
+    }
+    ///UserPackageCreate
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserPackageCreate",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "original_url"
+    ///  ],
+    ///  "properties": {
+    ///    "original_url": {
+    ///      "title": "Original Url",
+    ///      "type": "string"
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserPackageCreate {
+        pub original_url: String,
+    }
+    impl From<&UserPackageCreate> for UserPackageCreate {
+        fn from(value: &UserPackageCreate) -> Self {
+            value.clone()
+        }
+    }
+    ///UserPackageList
+    ///
+    /// <details><summary>JSON schema</summary>
+    ///
+    /// ```json
+    ///{
+    ///  "title": "UserPackageList",
+    ///  "type": "object",
+    ///  "required": [
+    ///    "items"
+    ///  ],
+    ///  "properties": {
+    ///    "items": {
+    ///      "title": "Items",
+    ///      "type": "array",
+    ///      "items": {
+    ///        "$ref": "#/components/schemas/UserPackage"
+    ///      }
+    ///    }
+    ///  }
+    ///}
+    /// ```
+    /// </details>
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    pub struct UserPackageList {
+        pub items: Vec<UserPackage>,
+    }
+    impl From<&UserPackageList> for UserPackageList {
+        fn from(value: &UserPackageList) -> Self {
             value.clone()
         }
     }
@@ -2517,20 +3233,29 @@ Sends a `DELETE` request to `/api/v1/catalog/catalogs/{catalog_name}`
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
-    /**Get basic catalog database status
+    /**List packages available in a catalog
 
-Gather some basic status values from the database.
+Lists available packages in a catalog
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
 
 Returns:
-- **CatalogStatus**: A dictionary of various status values.
+- **UserPackageList**
 
-Sends a `GET` request to `/api/v1/status/catalog`
+Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
 
 */
-    pub async fn get_catalog_status_api_v1_status_catalog_get<'a>(
+    pub async fn get_catalog_packages_api_v1_catalog_catalogs_catalog_name_packages_get<
+        'a,
+    >(
         &'a self,
-    ) -> Result<ResponseValue<types::CatalogStatus>, Error<types::ErrorResponse>> {
-        let url = format!("{}/api/v1/status/catalog", self.baseurl,);
+        catalog_name: &'a types::CatalogName,
+    ) -> Result<ResponseValue<types::UserPackageList>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages", self.baseurl, encode_path(&
+            catalog_name.to_string()),
+        );
         #[allow(unused_mut)]
         let mut request = self
             .client
@@ -2544,54 +3269,97 @@ Sends a `GET` request to `/api/v1/status/catalog`
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
-            500u16 => {
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
-    /**Get basic service status
+    /**Create a new package in a user catalog
 
-Returns basic service status
+Creates a catalog package
+
+Path Parameters:
+- **catalog_name**: The name of catalog to place the package into
+
+Required Query Parameters:
+- **name**: The name of package (attr_path) to create
 
 Returns:
-- **ServiceStatus**: A dictionary of various status values.
+- **UserPackage**
 
-Sends a `GET` request to `/api/v1/status/service`
+Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages`
 
 */
-    pub async fn get_service_status_api_v1_status_service_get<'a>(
+    pub async fn post_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_post<
+        'a,
+    >(
         &'a self,
-    ) -> Result<ResponseValue<types::ServiceStatusInput>, Error<types::ErrorResponse>> {
-        let url = format!("{}/api/v1/status/service", self.baseurl,);
+        catalog_name: &'a types::CatalogName,
+        name: &'a types::Name,
+        body: &'a types::UserPackageCreate,
+    ) -> Result<ResponseValue<types::UserPackage>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages", self.baseurl, encode_path(&
+            catalog_name.to_string()),
+        );
+        let mut query = Vec::with_capacity(1usize);
+        query.push(("name", name.to_string()));
         #[allow(unused_mut)]
         let mut request = self
             .client
-            .get(url)
+            .post(url)
             .header(
                 reqwest::header::ACCEPT,
                 reqwest::header::HeaderValue::from_static("application/json"),
             )
+            .json(&body)
+            .query(&query)
             .build()?;
         let result = self.client.execute(request).await;
         let response = result?;
         match response.status().as_u16() {
-            200u16 => ResponseValue::from_response(response).await,
-            500u16 => {
+            201u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            409u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
                 Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
             }
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
-    /**Trigger Error
+    /**Get package info
 
-Sends a `GET` request to `/api/v1/status/sentry-debug`
+Get package info
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+- **package_name**: The name of the pacakge
+
+Returns:
+- **UserPackage**
+
+Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}`
 
 */
-    pub async fn trigger_error_api_v1_status_sentry_debug_get<'a>(
+    pub async fn get_catalog_package_api_v1_catalog_catalogs_catalog_name_packages_package_name_get<
+        'a,
+    >(
         &'a self,
-    ) -> Result<ResponseValue<serde_json::Value>, Error<()>> {
-        let url = format!("{}/api/v1/status/sentry-debug", self.baseurl,);
+        catalog_name: &'a types::CatalogName,
+        package_name: &'a types::PackageName,
+    ) -> Result<ResponseValue<types::UserPackage>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages/{}", self.baseurl, encode_path(&
+            catalog_name.to_string()), encode_path(& package_name.to_string()),
+        );
         #[allow(unused_mut)]
         let mut request = self
             .client
@@ -2605,6 +3373,118 @@ Sends a `GET` request to `/api/v1/status/sentry-debug`
         let response = result?;
         match response.status().as_u16() {
             200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Get a list of builds for a given package
+
+Get the list of builds for a given package
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+- **package_name**: The name of the pacakge
+
+Returns:
+- **UserBuildList**
+
+Sends a `GET` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/builds`
+
+*/
+    pub async fn get_package_builds_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_get<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        package_name: &'a types::PackageName,
+    ) -> Result<ResponseValue<types::UserBuildListInput>, Error<types::ErrorResponse>> {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/builds", self.baseurl,
+            encode_path(& catalog_name.to_string()), encode_path(& package_name
+            .to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .get(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            200u16 => ResponseValue::from_response(response).await,
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            _ => Err(Error::UnexpectedResponse(response)),
+        }
+    }
+    /**Submit a build of a particular package
+
+Create a build of a package
+
+Path Parameters:
+- **catalog_name**: The name of the catalog
+- **package_name**: The name of the package
+Body Content:
+- **UserBuild**: The build info to submit
+
+Returns:
+- **UserBuildCreationResponse**
+
+Sends a `POST` request to `/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/builds`
+
+*/
+    pub async fn create_package_build_api_v1_catalog_catalogs_catalog_name_packages_package_name_builds_post<
+        'a,
+    >(
+        &'a self,
+        catalog_name: &'a types::CatalogName,
+        package_name: &'a types::PackageName,
+        body: &'a types::UserBuildInput,
+    ) -> Result<
+        ResponseValue<types::UserBuildCreationResponse>,
+        Error<types::ErrorResponse>,
+    > {
+        let url = format!(
+            "{}/api/v1/catalog/catalogs/{}/packages/{}/builds", self.baseurl,
+            encode_path(& catalog_name.to_string()), encode_path(& package_name
+            .to_string()),
+        );
+        #[allow(unused_mut)]
+        let mut request = self
+            .client
+            .post(url)
+            .header(
+                reqwest::header::ACCEPT,
+                reqwest::header::HeaderValue::from_static("application/json"),
+            )
+            .json(&body)
+            .build()?;
+        let result = self.client.execute(request).await;
+        let response = result?;
+        match response.status().as_u16() {
+            201u16 => ResponseValue::from_response(response).await,
+            400u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            404u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
+            422u16 => {
+                Err(Error::ErrorResponse(ResponseValue::from_response(response).await?))
+            }
             _ => Err(Error::UnexpectedResponse(response)),
         }
     }
