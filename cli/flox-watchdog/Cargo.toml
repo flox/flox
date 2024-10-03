@@ -25,3 +25,4 @@ kqueue.workspace = true
 [dev-dependencies]
 filetime = "0.2.25"
 tempfile.workspace = true
+serde_json.workspace = true
