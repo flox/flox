@@ -1118,6 +1118,8 @@ dependencies = [
  "serde",
  "serde_json",
  "shared",
+ "temp-env",
+ "tempfile",
  "time",
  "tracing",
  "uuid",
