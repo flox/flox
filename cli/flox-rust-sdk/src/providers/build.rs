@@ -253,6 +253,10 @@ fn read_output_to_channel(
 ///
 /// Currently, this is _the_ testsuite for the `flox-build.mk` builder.
 #[cfg(test)]
+// TODO: https://github.com/flox/flox/issues/2185
+// Serialise all build tests to workaround potential Nix bug.
+// Use file-based locking to be compatible with `nextest`.
+#[serial_test::file_serial(build)]
 mod tests {
     use std::fs::{self};
 
