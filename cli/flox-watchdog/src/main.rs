@@ -135,9 +135,15 @@ fn run(args: Cli) -> Result<(), Error> {
     drop(lock);
 
     #[cfg(target_os = "linux")]
-    let mut watcher2 = process::LinuxWatcher::new(args.pid);
+    let mut watcher = process::LinuxWatcher::new(
+        args.pid.into(),
+        &args.registry_path,
+        &args.dot_flox_hash,
+        should_terminate,
+        should_clean_up,
+    );
     #[cfg(target_os = "macos")]
-    let mut watcher2 = process::MacOsWatcher::new(
+    let mut watcher = process::MacOsWatcher::new(
         args.pid.into(),
         &args.registry_path,
         &args.dot_flox_hash,
@@ -170,7 +176,7 @@ fn run(args: Cli) -> Result<(), Error> {
 
     debug!("waiting for termination");
 
-    if let WaitResult::Terminate = watcher2
+    if let WaitResult::Terminate = watcher
         .wait_for_termination()
         .context("failed while waiting for termination")?
     {

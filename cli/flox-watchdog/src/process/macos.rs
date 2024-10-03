@@ -201,15 +201,16 @@ mod test {
             cleanup_flag.clone(),
         );
         let wait_result = std::thread::scope(move |s| {
-            let procs_handle = s.spawn(move || {
+            let flag_handle = s.spawn(move || {
                 std::thread::sleep(Duration::from_millis(100));
                 terminate_flag.store(true, std::sync::atomic::Ordering::SeqCst);
             });
             let watcher_handle = s.spawn(move || watcher.wait_for_termination().unwrap());
             let wait_result = watcher_handle.join().unwrap();
-            let _ = procs_handle.join(); // should already have terminated
+            let _ = flag_handle.join(); // should already have terminated
             wait_result
         });
+        stop_process(proc);
         assert_eq!(wait_result, WaitResult::Terminate);
     }
 
@@ -229,15 +230,16 @@ mod test {
             cleanup_flag.clone(),
         );
         let wait_result = std::thread::scope(move |s| {
-            let procs_handle = s.spawn(move || {
+            let flag_handle = s.spawn(move || {
                 std::thread::sleep(Duration::from_millis(100));
                 cleanup_flag.store(true, std::sync::atomic::Ordering::SeqCst);
             });
             let watcher_handle = s.spawn(move || watcher.wait_for_termination().unwrap());
             let wait_result = watcher_handle.join().unwrap();
-            let _ = procs_handle.join(); // should already have terminated
+            let _ = flag_handle.join(); // should already have terminated
             wait_result
         });
+        stop_process(proc);
         assert_eq!(wait_result, WaitResult::CleanUp);
     }
 }
