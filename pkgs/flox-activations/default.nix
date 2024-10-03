@@ -19,18 +19,17 @@ in
       version = envs.FLOX_VERSION;
       src = flox-src;
 
-      # Set up incremental compilation
+      # Note about incremental compilation:
       #
-      # Cargo artifacts are built for the union of features used transitively
-      # by `flox` and `flox-watchdog`.
-      # Compiling either separately would result in a different set of features
-      # and thus cache misses.
-      cargoArtifacts = rust-external-deps;
+      # Unlike the `flox` and `flox-watchdog` packages,
+      # we cannot reuse the `flox-*-deps` packages for incremental compilation
+      # because this crate is built with the "small" profile,
+      # which among othet things applies different compiler optimizations.
+      #
+      # Crane will still cache the dependencies of this package,
+      # through its own automation, but will experience cache misses
+      # if we add shared (internal) packages.
       cargoExtraArgs = "--locked -p flox-activations";
-      postPatch = ''
-        rm -rf ./flox/*
-        cp -rf --no-preserve=mode ${craneLib.mkDummySrc {src = flox-src;}}/flox/* ./flox
-      '';
 
       CARGO_LOG = "cargo::core::compiler::fingerprint=info";
       CARGO_PROFILE = "small";
