@@ -146,3 +146,52 @@ fn read_activations_json(path: impl AsRef<Path>) -> Result<Option<Activations>, 
     let parsed: Activations = serde_json::from_str(&contents)?;
     Ok(Some(parsed))
 }
+
+#[cfg(test)]
+mod test {
+    #[cfg(target_os = "linux")]
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::*;
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn flox_runtime_dir_respects_xdg_runtime_dir() {
+        // In reality XDG_RUNTIME_DIR would be something like `/run/user/1001`,
+        // but that won't necessarily exist where this unit test is run.
+        // We need a directory with group and others rights 00 otherwise
+        // xdg::BaseDirectories errors.
+        // And because we may eventually use it for sockets, it needs to be
+        // relatively short.
+        let tempdir = tempfile::Builder::new()
+            .permissions(std::fs::Permissions::from_mode(0o700))
+            .tempdir_in("/tmp")
+            .unwrap();
+        let runtime_dir = tempdir.path();
+        let flox_runtime_dir = temp_env::with_var("XDG_RUNTIME_DIR", Some(&runtime_dir), || {
+            flox_runtime_dir(PathBuf::new())
+        })
+        .unwrap();
+        assert_eq!(flox_runtime_dir, runtime_dir.join("flox"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn flox_runtime_dir_falls_back_to_flox_cache() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let cache_dir = tempdir.path();
+        let flox_runtime_dir = temp_env::with_var("XDG_RUNTIME_DIR", None::<String>, || {
+            flox_runtime_dir(cache_dir)
+        })
+        .unwrap();
+        assert_eq!(flox_runtime_dir, cache_dir.join("run"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn flox_runtime_dir_uses_cache_dir() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let cache_dir = tempdir.path();
+        let flox_runtime_dir = flox_runtime_dir(cache_dir).unwrap();
+        assert_eq!(flox_runtime_dir, cache_dir.join("run"));
+    }
+}
