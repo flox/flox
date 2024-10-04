@@ -12,14 +12,82 @@ use uuid::Uuid;
 type Error = anyhow::Error;
 
 /// Deserialized contents of activations.json
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct Activations {
+///
+/// This is the state of the activations of the environments.
+/// There is EXACTLY ONE [Activations] file per FLOX_ENV,
+/// which may be rendered at different times with different store paths.
+/// [Activations::activations] is a list of [Activation]s
+/// with AT MOST ONE activation for a given store path.
+/// This latter invariant is enforced by [Activations::get_or_create_activation_for_store_path]
+/// being the only way to add an activation.
+/// Activations are identifiable by their [Activation::id], for simpler lookups
+/// and global uniqueness in case the that two environments have the same store path.
+///
+/// Notably, the [Activations] does not feature methods to remove activations.
+/// Removing actiavtions falls onto the watchdog, which is responsible for cleaning up activations.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Activations {
     version: Version<1>,
     activations: Vec<Activation>,
 }
 
+impl Activations {
+    /// Get a mutable reference to the activation with the given ID.
+    ///
+    /// Used internally to manipulate the state of an activation.
+    pub fn activation_for_id_mut(&mut self, activation_id: Uuid) -> Option<&mut Activation> {
+        self.activations
+            .iter_mut()
+            .find(|activation| activation.id == activation_id)
+    }
+
+    /// Get an immutable reference to the activation with the given ID.
+    ///
+    /// Used internally to manipulate the state of an activation.
+    #[allow(unused)]
+    pub fn activation_for_id_ref(&mut self, activation_id: Uuid) -> Option<&Activation> {
+        self.activations
+            .iter()
+            .find(|activation| activation.id == activation_id)
+    }
+
+    /// Get a mutable reference to the activation with the given store path.
+    pub fn activation_for_store_path(&mut self, store_path: &str) -> Option<&Activation> {
+        self.activations
+            .iter()
+            .find(|activation| activation.store_path == store_path)
+    }
+
+    /// Create a new activation for the given store path and attach a PID to it.
+    ///
+    /// If an activation for the store path already exists, return an error.
+    pub fn create_activation(
+        &mut self,
+        store_path: &str,
+        pid: u32,
+    ) -> Result<&mut Activation, Error> {
+        if self.activation_for_store_path(store_path).is_some() {
+            anyhow::bail!("activation for store path '{store_path}' already exists");
+        }
+
+        let id = Uuid::new_v4();
+        let activation = Activation {
+            id,
+            store_path: store_path.to_string(),
+            ready: false,
+            attached_pids: vec![AttachedPid {
+                pid,
+                expiration: None,
+            }],
+        };
+
+        self.activations.push(activation);
+        Ok(self.activations.last_mut().unwrap())
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct Activation {
+pub struct Activation {
     /// Unique identifier for this activation
     ///
     /// There should only be a single activation for an environment + store_path
@@ -193,5 +261,46 @@ mod test {
         let cache_dir = tempdir.path();
         let flox_runtime_dir = flox_runtime_dir(cache_dir).unwrap();
         assert_eq!(flox_runtime_dir, cache_dir.join("run"));
+    }
+
+    #[test]
+    fn create_activation() {
+        let mut activations = Activations::default();
+        let store_path = "/store/path";
+        let activation = activations.create_activation(store_path, 123);
+
+        assert!(activation.is_ok(), "{}", activation.unwrap_err());
+        assert_eq!(activations.activations.len(), 1);
+
+        let activation = activations.create_activation(store_path, 123);
+        assert!(
+            activation.is_err(),
+            "adding the same activation twice should fail"
+        );
+        assert_eq!(activations.activations.len(), 1);
+    }
+
+    #[test]
+    fn get_activation_by_id() {
+        let mut activations = Activations::default();
+        let store_path = "/store/path";
+        let activation = activations.create_activation(store_path, 123).unwrap();
+        let id = activation.id();
+
+        let activation = activations.activation_for_id_ref(id).unwrap();
+        assert_eq!(activation.id(), id);
+        assert_eq!(activation.store_path, store_path);
+    }
+
+    #[test]
+    fn get_activation_by_id_mut() {
+        let mut activations = Activations::default();
+        let store_path = "/store/path";
+        let activation = activations.create_activation(store_path, 123).unwrap();
+        let id = activation.id();
+
+        let activation = activations.activation_for_id_mut(id).unwrap();
+        assert_eq!(activation.id(), id);
+        assert_eq!(activation.store_path, store_path);
     }
 }
