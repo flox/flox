@@ -50,7 +50,7 @@ impl LinuxWatcher {
 
     /// Reads the state of a process. Any failure is used as an indication that
     /// the process is no longer running.
-    fn try_read_pid_status(pid: ActivationPid) -> Option<String> {
+    pub(crate) fn try_read_pid_status(pid: ActivationPid) -> Option<String> {
         let path = format!("/proc/{}/stat", pid);
         let pid_raw: i32 = pid.into();
         let stat = match read_to_string(path) {
@@ -76,7 +76,7 @@ impl LinuxWatcher {
     }
 
     /// Returns whether the process is considered running.
-    fn pid_is_running(pid: ActivationPid) -> bool {
+    pub(crate) fn pid_is_running(pid: ActivationPid) -> bool {
         Self::try_read_pid_status(pid).is_some_and(|state| {
             !matches!(
                 state.as_str(),

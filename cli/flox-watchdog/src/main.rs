@@ -10,8 +10,8 @@ use flox_rust_sdk::models::env_registry::{
     acquire_env_registry_lock,
     read_environment_registry,
     register_activation,
-    should_bail_at_startup,
     ActivationPid,
+    EnvRegistry,
 };
 use flox_rust_sdk::providers::services::process_compose_down;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
@@ -232,4 +232,41 @@ fn ensure_process_group_leader() -> Result<(), Error> {
         setsid().context("failed to create new session")?;
     }
     Ok(())
+}
+
+/// Returns whether this watchdog has been started without a need for it
+/// e.g. another watchdog is already monitoring this activation.
+pub fn should_bail_at_startup(reg: &EnvRegistry, path_hash: &str) -> bool {
+    reg.entry_for_hash(path_hash)
+        .map(|entry| {
+            let mut activations = entry.activations.clone();
+
+            // If we don't prune the terminated processes from the list of
+            // activations, then we could get into a state where the watchdog
+            // dies, leaving PIDs in the registry that prevent another watchdog
+            // from ever starting.
+
+            // On Linux we can do this reliably because `/proc` can distinguish
+            // between running, terminated, and zombie processes.
+            #[cfg(target_os = "linux")]
+            activations.retain(process::LinuxWatcher::pid_is_running);
+
+            // On macOS we _can't_ do this reliably, but we can make a best
+            // effort attempt. We can't use kqueue because it errors when you
+            // try to wait on a process that has already terminated. That leaves
+            // us with `kill -0`, which can't distinguish between a running
+            // process and a zombie. This means that a watchdog could mistakenly
+            // see a zombie watchdog and decide that it should terminate on
+            // startup instead of continuing execution. That would prevent a
+            // watchdog from starting until the zombie was cleaned up.
+            #[cfg(target_os = "macos")]
+            activations.retain(|pid| pid.is_running());
+
+            // Sorry, FreeBSD users
+            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+            panic!("unsupported operating system");
+
+            !activations.is_empty()
+        })
+        .unwrap_or(false)
 }
