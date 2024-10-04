@@ -118,7 +118,7 @@
     "count": 134,
     "results": [
       {
-        "description": "Certified builds of OpenJDK",
+        "description": "Open-source Java Development Kit",
         "input": "nixpkgs",
         "license": null,
         "pname": "jdk",

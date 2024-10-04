@@ -10,12 +10,12 @@
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/gmrg45y30qj3cp5higvbslj1szyg29br-hello-2.12.1.drv",
+            "derivation": "/nix/store/2xclkmh62nvh11fz839lnnfp0fvdmars-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "hello-2.12.1",
             "outputs": [
               {
@@ -27,10 +27,10 @@
               "out"
             ],
             "pname": "hello",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -41,12 +41,12 @@
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/8gjks8haw2mq1gbsijmvrvpwxnmzrnmk-hello-2.12.1.drv",
+            "derivation": "/nix/store/07iwdbb4j4r2daaja5fancdh1wq4r0lj-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "hello-2.12.1",
             "outputs": [
               {
@@ -58,10 +58,10 @@
               "out"
             ],
             "pname": "hello",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -72,12 +72,12 @@
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/9xlh9xnj17hrbi523scqq019xl5z3h8z-hello-2.12.1.drv",
+            "derivation": "/nix/store/gm4sf3dwjyw1zslv4b1l020m1p3122a0-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "hello-2.12.1",
             "outputs": [
               {
@@ -89,10 +89,10 @@
               "out"
             ],
             "pname": "hello",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -103,12 +103,12 @@
           {
             "attr_path": "hello",
             "broken": false,
-            "derivation": "/nix/store/crmj28zg09517n5sskml9fmy2c6r3rsr-hello-2.12.1.drv",
+            "derivation": "/nix/store/af3rc6phyv80h7aq4y3d08awnq2ja8fp-hello-2.12.1.drv",
             "description": "Program that produces a familiar, friendly greeting",
             "insecure": false,
             "install_id": "hello",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "hello-2.12.1",
             "outputs": [
               {
@@ -120,10 +120,10 @@
               "out"
             ],
             "pname": "hello",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -132,7 +132,7 @@
             "version": "2.12.1"
           }
         ],
-        "page": 679633,
+        "page": 687768,
         "url": ""
       }
     }

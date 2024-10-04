@@ -49,7 +49,6 @@
         "pkg-path": "python3"
       }
     },
-    "vars": {},
     "hook": {},
     "profile": {},
     "options": {
@@ -63,9 +62,7 @@
         "licenses": []
       },
       "semver": {}
-    },
-    "services": {},
-    "build": {}
+    }
   },
   "packages": [
     {

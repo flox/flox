@@ -1,6 +1,6 @@
 [
   {
-    "count": 21,
+    "count": 22,
     "results": [
       {
         "description": "Program that produces a familiar, friendly greeting",
@@ -9,6 +9,17 @@
         "pname": "hello",
         "relPath": [
           "hello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Simple program printing hello world in Go",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "hello-go",
+        "relPath": [
+          "hello-go"
         ],
         "system": "aarch64-darwin",
         "version": null
@@ -101,18 +112,6 @@
         "relPath": [
           "javaPackages",
           "mavenHello_1_1"
-        ],
-        "system": "aarch64-darwin",
-        "version": null
-      },
-      {
-        "description": "Maven Hello World",
-        "input": "nixpkgs",
-        "license": null,
-        "pname": "mavenHello_1_0",
-        "relPath": [
-          "javaPackages",
-          "mavenHello_1_0"
         ],
         "system": "aarch64-darwin",
         "version": null

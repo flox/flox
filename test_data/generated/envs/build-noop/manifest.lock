@@ -2,8 +2,6 @@
   "lockfile-version": 1,
   "manifest": {
     "version": 1,
-    "install": {},
-    "vars": {},
     "hook": {},
     "profile": {},
     "options": {
@@ -12,7 +10,6 @@
       },
       "semver": {}
     },
-    "services": {},
     "build": {
       "hello": {
         "command": "echo hello",
