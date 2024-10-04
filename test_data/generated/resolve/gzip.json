@@ -10,12 +10,12 @@
           {
             "attr_path": "gzip",
             "broken": false,
-            "derivation": "/nix/store/chh8bzac3ifdpbij5ipm1mlz4grcbils-gzip-1.13.drv",
+            "derivation": "/nix/store/xhbqf29rxmpkffx0fvyrnmg0ppk7faia-gzip-1.13.drv",
             "description": "GNU zip compression program",
             "insecure": false,
             "install_id": "gzip",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "gzip-1.13",
             "outputs": [
               {
@@ -36,10 +36,10 @@
               "man"
             ],
             "pname": "gzip",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -55,7 +55,7 @@
             "insecure": false,
             "install_id": "gzip",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "gzip-1.13",
             "outputs": [
               {
@@ -76,10 +76,10 @@
               "man"
             ],
             "pname": "gzip",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -90,12 +90,12 @@
           {
             "attr_path": "gzip",
             "broken": false,
-            "derivation": "/nix/store/h17n5paxpcwbwrmyrvwy7pyaad7j3h4l-gzip-1.13.drv",
+            "derivation": "/nix/store/5fk0kyxwx2f8q63nqjn3ashgvs77vp7a-gzip-1.13.drv",
             "description": "GNU zip compression program",
             "insecure": false,
             "install_id": "gzip",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "gzip-1.13",
             "outputs": [
               {
@@ -116,10 +116,10 @@
               "man"
             ],
             "pname": "gzip",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -135,7 +135,7 @@
             "insecure": false,
             "install_id": "gzip",
             "license": "GPL-3.0-or-later",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "gzip-1.13",
             "outputs": [
               {
@@ -156,10 +156,10 @@
               "man"
             ],
             "pname": "gzip",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -168,7 +168,7 @@
             "version": "1.13"
           }
         ],
-        "page": 679633,
+        "page": 687768,
         "url": ""
       }
     }

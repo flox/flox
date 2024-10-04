@@ -10,12 +10,12 @@
           {
             "attr_path": "darwin.ps",
             "broken": false,
-            "derivation": "/nix/store/bshay5i2yr7zdzfymxm6sn6mihc2mjsa-adv_cmds-119.drv",
+            "derivation": "/nix/store/kjajqsdmcylczdhm3xnzc3wxzdqachga-adv_cmds-119.drv",
             "description": null,
             "insecure": false,
             "install_id": "ps",
             "license": "APSL-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "adv_cmds-119",
             "outputs": [
               {
@@ -35,10 +35,10 @@
               "out"
             ],
             "pname": "ps",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -47,7 +47,7 @@
             "version": "adv_cmds-119"
           }
         ],
-        "page": 679633,
+        "page": 687768,
         "url": ""
       }
     }
