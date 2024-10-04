@@ -176,22 +176,24 @@ fn run(args: Cli) -> Result<(), Error> {
 
     debug!("waiting for termination");
 
-    if let WaitResult::Terminate = watcher
-        .wait_for_termination()
-        .context("failed while waiting for termination")?
-    {
-        // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
-        // but there's not much we can do about that because we don't know who sent us one of those
-        // signals or why.
-        bail!("received stop signal, exiting without cleanup");
+    match watcher.wait_for_termination() {
+        Ok(WaitResult::CleanUp) => {
+            // Exit
+            info!("exiting");
+            cleanup(&args.socket_path);
+        },
+        Ok(WaitResult::Terminate) => {
+            // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
+            // but there's not much we can do about that because we don't know who sent us one of those
+            // signals or why.
+            bail!("received stop signal, exiting without cleanup");
+        },
+        Err(err) => {
+            cleanup(&args.socket_path);
+            bail!("failed while waiting for termination: {err}");
+        },
     }
 
-    // Once `wait_for_termination` returns we can assume that all of the target
-    // PIDs have terminated. We now proceed with teardown.
-    cleanup(args.socket_path);
-
-    // Exit
-    info!("exiting");
     Ok(())
 }
 
