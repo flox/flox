@@ -90,8 +90,8 @@ impl FloxBuildMk {
         // todo: extra makeflags, eventually
         let mut command = Command::new(&*GNUMAKE_BIN);
         command.env_remove("MAKEFLAGS");
-        command.arg("-f").arg(&*FLOX_BUILD_MK);
-        command.arg("-C").arg(base_dir);
+        command.arg("--file").arg(&*FLOX_BUILD_MK);
+        command.arg("--directory").arg(base_dir); // Change dir before reading makefile.
         command.arg(format!("FLOX_ENV={}", flox_env.display()));
 
         command
