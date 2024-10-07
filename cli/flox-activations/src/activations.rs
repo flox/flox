@@ -254,14 +254,24 @@ fn flox_runtime_dir(cache_dir: impl AsRef<Path>) -> Result<PathBuf, Error> {
 }
 
 /// {flox_runtime_dir}/{path_hash(flox_env)}/activations.json
-#[allow(unused)]
-fn activations_json_path(
+pub fn activations_json_path(
     cache_dir: impl AsRef<Path>,
     flox_env: impl AsRef<Path>,
 ) -> Result<PathBuf, Error> {
     Ok(flox_runtime_dir(cache_dir)?
         .join(path_hash(flox_env))
         .join("activations.json"))
+}
+
+/// {flox_runtime_dir}/{path_hash(flox_env)}/{activation_id}
+pub fn activation_state_dir_path(
+    cache_dir: impl AsRef<Path>,
+    flox_env: impl AsRef<Path>,
+    activation_id: Uuid,
+) -> Result<PathBuf, Error> {
+    Ok(flox_runtime_dir(cache_dir)?
+        .join(path_hash(flox_env))
+        .join(activation_id.to_string()))
 }
 
 /// Returns the parsed environment registry file or `None` if it doesn't yet exist.
