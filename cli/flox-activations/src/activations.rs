@@ -5,7 +5,7 @@ use flox_core::canonical_path::CanonicalPath;
 use flox_core::{path_hash, traceable_path, Version};
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 use tracing::debug;
 use uuid::Uuid;
 
@@ -109,6 +109,49 @@ pub struct Activation {
     /// The activation should not be cleaned up until all PIDs have exited or
     /// expired.
     attached_pids: Vec<AttachedPid>,
+}
+
+impl Activation {
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    /// Whether the activation is ready to be attached to.
+    ///
+    /// "Readyness" is a one way state change, set via [Self::set_ready].
+    pub fn ready(&self) -> bool {
+        self.ready
+    }
+
+    /// Set the activation as ready to be attached to.
+    pub fn set_ready(&mut self) {
+        self.ready = true;
+    }
+
+    /// Attach a PID to an activation.
+    ///
+    /// Register another PID that runs the same activation of an environment.
+    /// Registered PIDs are used by the watchdog,
+    /// to determine when an activation can be cleaned up.
+    pub fn attach_pid(&mut self, pid: u32, timeout: Option<Duration>) {
+        let expiration = timeout.map(|timeout| OffsetDateTime::now_utc() + timeout);
+        let attached_pid = AttachedPid { pid, expiration };
+
+        self.attached_pids.push(attached_pid);
+    }
+
+    /// Remove a PID from an activation.
+    ///
+    /// Unregister a PID that has previously been attached to an activation.
+    ///
+    /// Primarily, used as part of the `attach` subcommand to update,
+    /// which PID is attached to an activation.
+    /// I.e. in in-place activations, the process that started the activation will be flox,
+    /// while the process that attaches to the activation will be the `eval`ing shell.
+    pub fn remove_pid(&mut self, pid: u32) {
+        self.attached_pids
+            .retain(|attached_pid| attached_pid.pid != pid);
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -302,5 +345,35 @@ mod test {
         let activation = activations.activation_for_id_mut(id).unwrap();
         assert_eq!(activation.id(), id);
         assert_eq!(activation.store_path, store_path);
+    }
+
+    #[test]
+    fn activation_attach_pid() {
+        let mut activation = Activation {
+            id: Uuid::new_v4(),
+            store_path: "/store/path".to_string(),
+            ready: false,
+            attached_pids: vec![],
+        };
+
+        activation.attach_pid(123, None);
+        assert_eq!(activation.attached_pids.len(), 1);
+        assert_eq!(activation.attached_pids[0].pid, 123);
+    }
+
+    #[test]
+    fn activation_remove_pid() {
+        let mut activation = Activation {
+            id: Uuid::new_v4(),
+            store_path: "/store/path".to_string(),
+            ready: false,
+            attached_pids: vec![AttachedPid {
+                pid: 123,
+                expiration: None,
+            }],
+        };
+
+        activation.remove_pid(123);
+        assert_eq!(activation.attached_pids.len(), 0);
     }
 }
