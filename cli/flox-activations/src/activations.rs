@@ -6,6 +6,7 @@ use nix::errno::Errno;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use time::{Duration, OffsetDateTime};
 use tracing::debug;
 use uuid::Uuid;
@@ -265,20 +266,42 @@ fn activations_json_path(
 
 /// Returns the parsed environment registry file or `None` if it doesn't yet exist.
 ///
-/// The file can be written with [flox_core::serialize_atomically]
-#[allow(unused)]
-fn read_activations_json(path: impl AsRef<Path>) -> Result<Option<Activations>, Error> {
+/// The file can be written with [write_activations_json].
+/// This function acquires a lock on the file,
+/// which should be reused for writing, to avoid TOCTOU issues.
+pub fn read_activations_json(
+    path: impl AsRef<Path>,
+) -> Result<(Option<Activations>, LockFile), Error> {
     let path = path.as_ref();
+    let lock_file = acquire_activations_json_lock(path)?;
+
     if !path.exists() {
         debug!(
             path = traceable_path(&path),
             "environment registry not found"
         );
-        return Ok(None);
+        return Ok((None, lock_file));
     }
+
     let contents = std::fs::read_to_string(path)?;
     let parsed: Activations = serde_json::from_str(&contents)?;
-    Ok(Some(parsed))
+    Ok((Some(parsed), lock_file))
+}
+
+/// Writes the environment registry file.
+/// The file is written atomically.
+/// The lock is released after the write.
+///
+/// This uses [flox_core::serialize_atomically] to write the file, and inherits its requirements.
+/// * `path` must have a parent directory.
+/// * The lock must correspond to the file being written.
+pub fn write_activations_json(
+    activations: &Activations,
+    path: impl AsRef<Path>,
+    lock: LockFile,
+) -> Result<(), Error> {
+    flox_core::serialize_atomically(&json!(activations), &path, lock)?;
+    Ok(())
 }
 
 #[cfg(test)]
