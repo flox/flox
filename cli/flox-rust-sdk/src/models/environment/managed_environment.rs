@@ -1,9 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
+use flox_core::Version;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use shared::Version;
 use thiserror::Error;
 
 use super::core_environment::{CoreEnvironment, UpgradeResult};

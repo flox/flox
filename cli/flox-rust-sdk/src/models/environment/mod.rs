@@ -4,9 +4,9 @@ use std::str::FromStr;
 use std::{fs, io};
 
 use core_environment::UpgradeResult;
+pub use flox_core::{path_hash, Version};
 use log::debug;
 use serde::{Deserialize, Serialize};
-pub use shared::{path_hash, Version};
 use thiserror::Error;
 use url::Url;
 use walkdir::WalkDir;
@@ -77,7 +77,7 @@ pub const FLOX_SERVICES_SOCKET_VAR: &str = "_FLOX_SERVICES_SOCKET";
 /// This variable is used in tests to override what path to use for the socket.
 pub const FLOX_SERVICES_SOCKET_OVERRIDE_VAR: &str = "_FLOX_SERVICES_SOCKET_OVERRIDE";
 
-pub use shared::N_HASH_CHARS;
+pub use flox_core::N_HASH_CHARS;
 
 /// The result of an installation attempt that contains the new manifest contents
 /// along with whether each package was already installed

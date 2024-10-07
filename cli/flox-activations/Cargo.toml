@@ -7,10 +7,10 @@ edition = "2021"
 anyhow.workspace = true
 clap = { version = "4.5.18", default-features = false, features = ["std","usage", "help", "error-context", "derive"] }
 clap_derive.workspace = true
+flox-core.workspace = true
 fslock.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-shared.workspace = true
 time.workspace = true
 tracing.workspace = true
 uuid.workspace = true

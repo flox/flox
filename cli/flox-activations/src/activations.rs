@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
+#[cfg(target_os = "linux")]
+use flox_core::canonical_path::CanonicalPath;
+use flox_core::{path_hash, traceable_path, Version};
 use fslock::LockFile;
 use serde::{Deserialize, Serialize};
-#[cfg(target_os = "linux")]
-use shared::canonical_path::CanonicalPath;
-use shared::{path_hash, traceable_path, Version};
 use time::OffsetDateTime;
 use tracing::debug;
 use uuid::Uuid;
@@ -131,7 +131,7 @@ fn activations_json_path(
 
 /// Returns the parsed environment registry file or `None` if it doesn't yet exist.
 ///
-/// The file can be written with [shared::serialize_atomically]
+/// The file can be written with [flox_core::serialize_atomically]
 #[allow(unused)]
 fn read_activations_json(path: impl AsRef<Path>) -> Result<Option<Activations>, Error> {
     let path = path.as_ref();

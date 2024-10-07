@@ -3,13 +3,13 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use flox_core::{serialize_atomically, SerializeError, Version};
 use fslock::LockFile;
 use nix::errno::Errno;
 use nix::libc::pid_t;
 use nix::sys::signal::kill;
 use nix::unistd::Pid as NixPid;
 use serde::{Deserialize, Serialize};
-use shared::{serialize_atomically, SerializeError, Version};
 use tracing::debug;
 
 use super::environment::{path_hash, EnvironmentPointer};
