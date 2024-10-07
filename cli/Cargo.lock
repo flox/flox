@@ -1116,6 +1116,7 @@ dependencies = [
  "clap_derive",
  "flox-core",
  "fslock",
+ "nix",
  "serde",
  "serde_json",
  "temp-env",
