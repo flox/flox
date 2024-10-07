@@ -1,7 +1,5 @@
 use std::path::{Path, PathBuf};
 
-#[cfg(target_os = "linux")]
-use flox_core::canonical_path::CanonicalPath;
 use flox_core::{path_hash, traceable_path, Version};
 use fslock::LockFile;
 use nix::errno::Errno;
@@ -235,20 +233,18 @@ fn activations_json_lock_path(activations_json_path: impl AsRef<Path>) -> PathBu
 fn flox_runtime_dir(cache_dir: impl AsRef<Path>) -> Result<PathBuf, Error> {
     #[cfg(target_os = "macos")]
     let runtime_dir: Option<PathBuf> = None;
+
     #[cfg(target_os = "linux")]
     let runtime_dir = {
-        let base_directories = xdg::BaseDirectories::new()?;
-        let runtime_dir = base_directories.get_runtime_directory().ok();
-        // Canonicalize so we error early if the path doesn't exist
-        runtime_dir
-            .map(|runtime_dir| CanonicalPath::new(runtime_dir).map(CanonicalPath::into_inner))
-            .transpose()?
+        let base_directories = xdg::BaseDirectories::with_prefix("flox")?;
+        base_directories.create_runtime_directory("").ok()
     };
 
     let flox_runtime_dir = match runtime_dir {
-        Some(dir) => dir.join("flox"),
+        Some(dir) => dir,
         None => cache_dir.as_ref().join("run"),
     };
+
     // We don't want to error if the directory already exists,
     // so use create_dir_all.
     std::fs::create_dir_all(&flox_runtime_dir)?;
