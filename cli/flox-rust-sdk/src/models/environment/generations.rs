@@ -22,9 +22,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
+use flox_core::Version;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
-use shared::Version;
 use thiserror::Error;
 
 use super::core_environment::CoreEnvironment;

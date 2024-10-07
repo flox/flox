@@ -8,9 +8,9 @@ use std::time::SystemTime;
 use std::{fs, io};
 
 use ::log::debug;
+pub use flox_core::traceable_path;
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
-pub use shared::traceable_path;
 use thiserror::Error;
 use tokio::fs::OpenOptions;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

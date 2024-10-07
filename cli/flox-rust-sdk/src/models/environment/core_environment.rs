@@ -1483,9 +1483,9 @@ mod tests {
     };
     use catalog_api_v1::types::{MessageLevel, ResolvedPackageDescriptor, SystemEnum};
     use chrono::{DateTime, Utc};
+    use flox_core::Version;
     use indoc::{formatdoc, indoc};
     use pretty_assertions::assert_eq;
-    use shared::Version;
     use tempfile::{tempdir_in, TempDir};
     use test_helpers::{new_core_environment_from_env_files, new_core_environment_with_lockfile};
     use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;

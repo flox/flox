@@ -15,8 +15,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use flox_core::Version;
 use log::debug;
-use shared::Version;
 use thiserror::Error;
 
 use super::manifest::{

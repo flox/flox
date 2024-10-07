@@ -1114,16 +1114,32 @@ dependencies = [
  "anyhow",
  "clap",
  "clap_derive",
+ "flox-core",
  "fslock",
  "serde",
  "serde_json",
- "shared",
  "temp-env",
  "tempfile",
  "time",
  "tracing",
  "uuid",
  "xdg",
+]
+
+[[package]]
+name = "flox-core"
+version = "0.0.0"
+dependencies = [
+ "blake3",
+ "derive_more",
+ "fslock",
+ "proptest",
+ "proptest-derive",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -1136,6 +1152,7 @@ dependencies = [
  "chrono",
  "derive_more",
  "enum_dispatch",
+ "flox-core",
  "fslock",
  "futures",
  "httpmock",
@@ -1158,7 +1175,6 @@ dependencies = [
  "serde_with",
  "serde_yaml",
  "serial_test",
- "shared",
  "shell-escape",
  "temp-env",
  "tempfile",
@@ -3438,22 +3454,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
-]
-
-[[package]]
-name = "shared"
-version = "0.0.0"
-dependencies = [
- "blake3",
- "derive_more",
- "fslock",
- "proptest",
- "proptest-derive",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tracing",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
 [package]
-name = "shared"
+name = "flox-core"
 version = "0.0.0"
 edition = "2021"
 
