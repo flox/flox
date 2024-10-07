@@ -7,6 +7,7 @@ export _setsid="@setsid@"
 export _getopt="@getopt@"
 export _process_compose="@process-compose@"
 export _jq="@jq@"
+export _activate_d="@out@/activate.d"
 export _zdotdir="@out@/activate.d/zdotdir"
 export _tcsh_home="@out@/activate.d/tcsh_home"
 
@@ -241,178 +242,13 @@ if [ "$FLOX_ACTIVATE_START_SERVICES" == "true" ]; then
 fi
 
 # From this point on the activation process depends on the mode:
-
-# 1. "command" mode(s): invoke the user's shell with args that:
-#   a. defeat the shell's normal startup scripts
-#   b. source the relevant activation script
-#   c. invoke the command in one of "stdin" or "-c" modes
 if [ $# -gt 0 ]; then
-  if [ -n "$FLOX_TURBO" ]; then
-    # "turbo command" mode: simply invoke the provided command and args
-    # from *this shell* without paying the cost of invoking the userShell.
-    if [ -n "$FLOX_SET_ARG0" ]; then
-      # Wrapped binary from `flox build`.
-      exec -a "$FLOX_SET_ARG0" "$@"
-    else
-      # We cannot exec here because we support bash shell internal commands.
-      "$@"
-      exit $?
-    fi
-  fi
-  # "-c" command mode: pass both [2] arguments unaltered to shell invocation
-  case "$_flox_shell" in
-    *bash)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" --noprofile --norc -c "$*"
-      else
-        if [ -t 1 ]; then
-          exec "$_flox_shell" --noprofile --rcfile "$FLOX_ENV/activate.d/bash" -c "$*"
-        else
-          # The bash --rcfile option only works for interactive shells
-          # so we need to cobble together our own means of sourcing our
-          # startup script for non-interactive shells.
-          exec "$_flox_shell" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash && $*"
-        fi
-      fi
-      ;;
-    *fish)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" -c "$*"
-      else
-        exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $FLOX_ENV/activate.d/fish" -c "$*"
-      fi
-      ;;
-    *tcsh)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" -c "$*"
-      else
-        export FLOX_ORIG_HOME="$HOME"
-        export HOME="$_tcsh_home"
-        export FLOX_TCSH_INIT_SCRIPT="$FLOX_ENV/activate.d/tcsh"
-        exec "$_flox_shell" -m -c "$*"
-      fi
-      ;;
-    *zsh)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS -c "$*"
-      else
-        export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
-        export ZDOTDIR="$_zdotdir"
-        export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
-        # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
-        # automatically sourcing /etc/zshrc et al.
-        exec "$_flox_shell" -o NO_GLOBAL_RCS -c "$*"
-      fi
-      ;;
-    *)
-      echo "Unsupported shell: $_flox_shell" >&2
-      exit 1
-      ;;
-  esac
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/attach-command.bash"
+elif [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/attach-interactive.bash"
+else
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/attach-inplace.bash"
 fi
-
-# 2. "interactive" mode: invoke the user's shell with args that:
-#   a. defeat the shell's normal startup scripts
-#   b. source the relevant activation script
-if [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
-  case "$_flox_shell" in
-    *bash)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" --noprofile --norc
-      else
-        if [ -t 1 ]; then
-          exec "$_flox_shell" --noprofile --rcfile "$FLOX_ENV/activate.d/bash"
-        else
-          # The bash --rcfile option only works for interactive shells
-          # so we need to cobble together our own means of sourcing our
-          # startup script for non-interactive shells.
-          # XXX Is this case even a thing? What's the point of activating with
-          #     no command to be invoked and no controlling terminal from which
-          #     to issue commands?!? A broken docker experience maybe?!?
-          exec "$_flox_shell" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash"
-        fi
-      fi
-      ;;
-    *fish)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell"
-      else
-        exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $FLOX_ENV/activate.d/fish"
-      fi
-      ;;
-    *tcsh)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" -f
-      else
-        export FLOX_ORIG_HOME="$HOME"
-        export HOME="$_tcsh_home"
-        export FLOX_TCSH_INIT_SCRIPT="$FLOX_ENV/activate.d/tcsh"
-        # The -m option is required for tcsh to source a .tcshrc file that
-        # the effective user does not own.
-        exec "$_flox_shell" -m
-      fi
-      ;;
-    *zsh)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS
-      else
-        export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
-        export ZDOTDIR="$_zdotdir"
-        export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
-        # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
-        # automatically sourcing /etc/zshrc et al.
-        exec "$_flox_shell" -o NO_GLOBAL_RCS
-      fi
-      ;;
-    *)
-      echo "Unsupported shell: $_flox_shell" >&2
-      exit 1
-      ;;
-  esac
-fi
-
-# 3. "in-place" mode: emit activation commands in correct shell dialect
-
-# Finish by echoing the contents of the shell-specific activation script.
-# N.B. the output of these scripts may be eval'd with backticks which have
-# the effect of removing newlines from the output, so we must ensure that
-# the output is a valid shell script fragment when represented on a single
-# line.
-case "$_flox_shell" in
-  *bash)
-    echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
-    echo "export FLOX_ENV=\"$FLOX_ENV\";"
-    echo "export _add_env=\"$_add_env\";"
-    echo "export _del_env=\"$_del_env\";"
-    echo "source '$FLOX_ENV/activate.d/bash';"
-    ;;
-  *fish)
-    echo "set -gx _flox_activate_tracelevel \"$_flox_activate_tracelevel\";"
-    echo "set -gx FLOX_ENV \"$FLOX_ENV\";"
-    echo "set -gx _add_env \"$_add_env\";"
-    echo "set -gx _del_env \"$_del_env\";"
-    echo "source '$FLOX_ENV/activate.d/fish';"
-    ;;
-  *tcsh)
-    echo "setenv _flox_activate_tracelevel \"$_flox_activate_tracelevel\";"
-    echo "setenv FLOX_ENV \"$FLOX_ENV\";"
-    echo "setenv _add_env \"$_add_env\";"
-    echo "setenv _del_env \"$_del_env\";"
-    echo "source '$FLOX_ENV/activate.d/tcsh';"
-    ;;
-  # Any additions should probably be restored in zdotdir/* scripts
-  *zsh)
-    echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
-    echo "export FLOX_ENV=\"$FLOX_ENV\";"
-    echo "export FLOX_ORIG_ZDOTDIR=\"$ZDOTDIR\";"
-    echo "export ZDOTDIR=\"$_zdotdir\";"
-    echo "export FLOX_ZSH_INIT_SCRIPT=\"$FLOX_ENV/activate.d/zsh\";"
-    echo "export _add_env=\"$_add_env\";"
-    echo "export _del_env=\"$_del_env\";"
-    echo "source '$FLOX_ENV/activate.d/zsh';"
-    ;;
-  *)
-    echo "Unsupported shell: $_flox_shell" >&2
-    exit 1
-    ;;
-esac
