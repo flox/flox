@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 use flox_core::canonical_path::CanonicalPath;
 use flox_core::{path_hash, traceable_path, Version};
 use fslock::LockFile;
+use nix::errno::Errno;
+use nix::sys::signal::kill;
+use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use time::{Duration, OffsetDateTime};
 use tracing::debug;
@@ -128,6 +131,17 @@ impl Activation {
         self.ready = true;
     }
 
+    /// Whether the process that started the activation is still running.
+    ///
+    /// Used to determine if the attaching processes need to continue to wait,
+    /// for the activation to become ready.
+    pub fn startup_process_running(&self) -> bool {
+        self.attached_pids
+            .first()
+            .map(|attached_pid| attached_pid.is_running())
+            .unwrap_or_default()
+    }
+
     /// Attach a PID to an activation.
     ///
     /// Register another PID that runs the same activation of an environment.
@@ -168,6 +182,19 @@ struct AttachedPid {
     /// In that case, `flox activate` sets an expiration so that the shell has
     /// some time before the activation is cleaned up.
     expiration: Option<OffsetDateTime>,
+}
+
+impl AttachedPid {
+    fn is_running(&self) -> bool {
+        let pid = Pid::from_raw(self.pid as i32);
+        match kill(pid, None) {
+            // These semantics come from kill(2).
+            Ok(_) => true,              // Process received the signal and is running.
+            Err(Errno::EPERM) => true,  // No permission to send a signal but we know it's running.
+            Err(Errno::ESRCH) => false, // No process running to receive the signal.
+            Err(_) => false,            // Unknown error, assume no running process.
+        }
+    }
 }
 
 /// Acquires the filesystem-based lock on activations.json
