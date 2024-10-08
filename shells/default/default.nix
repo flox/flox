@@ -1,5 +1,5 @@
 {
-  alejandra,
+  nixfmt-rfc-style,
   commitizen,
   hivemind,
   just,
@@ -45,7 +45,7 @@
       just
       hivemind
       commitizen
-      alejandra
+      nixfmt-rfc-style
       shfmt
       yq
       cargo-nextest
