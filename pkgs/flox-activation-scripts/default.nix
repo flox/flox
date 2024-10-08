@@ -15,6 +15,7 @@
   nawk,
   fd,
   flox-activations,
+  shfmt,
 }:
 let
   ld-floxlib_so = if stdenv.isLinux then "${ld-floxlib}/lib/ld-floxlib.so" else "__LINUX_ONLY__";
@@ -66,4 +67,10 @@ runCommand "flox-activation-scripts"
       $out/activate.d/bash \
       $out/activate.d/set-prompt.bash \
       $out/etc/profile.d/*
+
+    chmod 0755 $out
+    cp ${../../.editorconfig} $out/.editorconfig
+    # This will only catch extensions and shebangs that `shfmt --find` knows about.
+    ${shfmt}/bin/shfmt --diff $out
+    rm $out/.editorconfig
   ''
