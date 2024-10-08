@@ -8,7 +8,8 @@
   pkgsFor,
   rust-toolchain,
   flox-src,
-}: let
+}:
+let
   # crane (<https://crane.dev/>) library for building rust packages
   craneLib = (inputs.crane.mkLib pkgsFor).overrideToolchain rust-toolchain.toolchain;
 
@@ -37,9 +38,7 @@
         darwin.apple_sdk.frameworks.SystemConfiguration
       ];
 
-    nativeBuildInputs = [
-      pkg-config
-    ];
+    nativeBuildInputs = [ pkg-config ];
   };
 in
-  cargoDepsArtifacts
+cargoDepsArtifacts

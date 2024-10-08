@@ -1,4 +1,4 @@
-{writeScriptBin}:
+{ writeScriptBin }:
 writeScriptBin "hello" ''
   echo "Hello"
 ''

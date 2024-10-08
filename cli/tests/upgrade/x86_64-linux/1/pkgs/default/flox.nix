@@ -17,5 +17,5 @@
 
   # Environment variables
   # environmentVariables.LANG = "en_US.UTF-8";
-  packages.nixpkgs-flox-upgrade-test.curl = {};
+  packages.nixpkgs-flox-upgrade-test.curl = { };
 }

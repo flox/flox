@@ -15,21 +15,16 @@
 # nixVersions.stable upstream break our build.
 #
 # ---------------------------------------------------------------------------- #
-{
-  nixVersions,
-  stdenv,
-}:
+{ nixVersions, stdenv }:
 nixVersions.stable.overrideAttrs (prev: {
   # Necessary for compiling with debug symbols
   inherit stdenv;
 
   # Apply patch files.
-  patches =
-    prev.patches
-    ++ [
-      (builtins.path {path = ./patches/nix-9147.patch;})
-      (builtins.path {path = ./patches/multiple-github-tokens.2.13.2.patch;})
-    ];
+  patches = prev.patches ++ [
+    (builtins.path { path = ./patches/nix-9147.patch; })
+    (builtins.path { path = ./patches/multiple-github-tokens.2.13.2.patch; })
+  ];
 
   postFixup = ''
     # Generate a `sed' pattern to fix up public header `#includes'.
@@ -70,4 +65,3 @@ nixVersions.stable.overrideAttrs (prev: {
 #
 #
 # ============================================================================ #
-
