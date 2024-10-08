@@ -10,6 +10,7 @@
   containerSystem,
   containerName ? "flox-env-container",
   containerTag ? null,
+  containerCreated ? "now",
 }: let
   environment = builtins.storePath environmentOutPath;
   pkgs = nixpkgsFlake.legacyPackages.${system};
@@ -20,6 +21,7 @@
   buildLayeredImageArgs = {
     name = containerName;
     tag = containerTag;
+    created = containerCreated;
     # symlinkJoin fails when drv contains a symlinked bin directory, so wrap in an additional buildEnv
     contents = pkgs.buildEnv {
       name = "contents";
