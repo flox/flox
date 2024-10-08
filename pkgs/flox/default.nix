@@ -20,9 +20,9 @@ let
     if (FLOX_VERSION != null) then
       FLOX_VERSION
     else if !(self ? revCount || self ? shortRev) then
-      "${fileVersion}-dirty"
+      "${fileVersion}+git.dirty"
     else if !(self ? revCount) then
-      "${fileVersion}-g${self.shortRev}"
+      "${fileVersion}+git.${self.shortRev}"
     else
       fileVersion;
 in
