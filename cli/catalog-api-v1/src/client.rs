@@ -2338,6 +2338,13 @@ pub mod types {
     ///    "name": {
     ///      "title": "Name",
     ///      "type": "string"
+    ///    },
+    ///    "owner_handle": {
+    ///      "title": "Owner Handle",
+    ///      "type": [
+    ///        "string",
+    ///        "null"
+    ///      ]
     ///    }
     ///  }
     ///}
@@ -2348,6 +2355,8 @@ pub mod types {
         pub created_at: chrono::DateTime<chrono::offset::Utc>,
         pub id: i64,
         pub name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub owner_handle: Option<String>,
     }
     impl From<&UserCatalog> for UserCatalog {
         fn from(value: &UserCatalog) -> Self {

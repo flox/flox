@@ -2113,6 +2113,11 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "owner_handle": {
+            "title": "Owner Handle",
+            "nullable": true,
+            "type": "string"
           }
         },
         "type": "object",
