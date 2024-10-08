@@ -1,4 +1,5 @@
 {
+  treefmt,
   nixfmt-rfc-style,
   commitizen,
   hivemind,
@@ -45,6 +46,7 @@
       just
       hivemind
       commitizen
+      treefmt
       nixfmt-rfc-style
       shfmt
       yq
