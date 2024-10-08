@@ -16,8 +16,9 @@ pre-commit-hooks.lib.${system}.run {
     "push"
   ];
   hooks = {
-    alejandra.enable = true;
-    alejandra.settings.verbosity = "quiet";
+    nixfmt-rfc-style = {
+      enable = true;
+    };
     clang-format = {
       enable = true;
       types_or = lib.mkForce [
