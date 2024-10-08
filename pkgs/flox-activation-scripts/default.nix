@@ -15,19 +15,20 @@
   nawk,
   fd,
   flox-activations,
-}: let
-  ld-floxlib_so =
-    if stdenv.isLinux
-    then "${ld-floxlib}/lib/ld-floxlib.so"
-    else "__LINUX_ONLY__";
-  ldconfig =
-    if stdenv.isLinux
-    then "${iconv}/bin/ldconfig"
-    else "__LINUX_ONLY__";
+}:
+let
+  ld-floxlib_so = if stdenv.isLinux then "${ld-floxlib}/lib/ld-floxlib.so" else "__LINUX_ONLY__";
+  ldconfig = if stdenv.isLinux then "${iconv}/bin/ldconfig" else "__LINUX_ONLY__";
 in
-  runCommand "flox-activation-scripts" {
-    buildInputs = [bash coreutils gnused];
-  } ''
+runCommand "flox-activation-scripts"
+  {
+    buildInputs = [
+      bash
+      coreutils
+      gnused
+    ];
+  }
+  ''
     cp -R ${../../assets/activation-scripts} $out
 
     substituteInPlace $out/activate \

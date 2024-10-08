@@ -5,7 +5,8 @@
   pandoc,
   fd,
   installShellFiles,
-}: let
+}:
+let
   compileManPageBin = writeShellScript "compile" ''
     source="$1"
     shift
@@ -32,13 +33,18 @@
     > "$dest"
   '';
 in
-  runCommand "flox-manpages" {
+runCommand "flox-manpages"
+  {
     src = builtins.path {
       name = "flox-manpage-src";
       path = "${./../../cli/flox/doc}";
     };
-    buildInputs = [fd installShellFiles];
-  } ''
+    buildInputs = [
+      fd
+      installShellFiles
+    ];
+  }
+  ''
     buildDir=$(pwd)/__build
 
     mkdir "$out"

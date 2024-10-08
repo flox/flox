@@ -25,7 +25,7 @@ stdenvNoCC.mkDerivation rec {
   meta = with lib; {
     description = "semver in c++";
     homepage = "https://github.com/easz/cpp-semver";
-    maintainers = with maintainers; [tomberek];
+    maintainers = with maintainers; [ tomberek ];
     license = licenses.mit;
   };
 }

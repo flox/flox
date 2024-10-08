@@ -1,3 +1,1 @@
-{
-  environmentVariables.test = "file";
-}
+{ environmentVariables.test = "file"; }
