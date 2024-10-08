@@ -19,7 +19,7 @@ use logger::{init_logger, spawn_gc_logs, spawn_heartbeat_log};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
 use once_cell::sync::Lazy;
-use process::WaitResult;
+use process::{PidWatcher, WaitResult};
 use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
 
@@ -133,26 +133,13 @@ fn run(args: Cli) -> Result<(), Error> {
         }
     }
     drop(lock);
-
-    #[cfg(target_os = "linux")]
-    let mut watcher = process::LinuxWatcher::new(
+    let mut watcher = process::PidWatcher::new(
         args.pid.into(),
         &args.registry_path,
         &args.dot_flox_hash,
         should_terminate,
         should_clean_up,
     );
-    #[cfg(target_os = "macos")]
-    let mut watcher = process::MacOsWatcher::new(
-        args.pid.into(),
-        &args.registry_path,
-        &args.dot_flox_hash,
-        should_terminate,
-        should_clean_up,
-    );
-
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    bail!("unsupported operating system");
 
     debug!(
         path = traceable_path(&args.socket_path),
@@ -246,25 +233,7 @@ pub fn should_bail_at_startup(reg: &EnvRegistry, path_hash: &str) -> bool {
             // dies, leaving PIDs in the registry that prevent another watchdog
             // from ever starting.
 
-            // On Linux we can do this reliably because `/proc` can distinguish
-            // between running, terminated, and zombie processes.
-            #[cfg(target_os = "linux")]
-            activations.retain(process::LinuxWatcher::pid_is_running);
-
-            // On macOS we _can't_ do this reliably, but we can make a best
-            // effort attempt. We can't use kqueue because it errors when you
-            // try to wait on a process that has already terminated. That leaves
-            // us with `kill -0`, which can't distinguish between a running
-            // process and a zombie. This means that a watchdog could mistakenly
-            // see a zombie watchdog and decide that it should terminate on
-            // startup instead of continuing execution. That would prevent a
-            // watchdog from starting until the zombie was cleaned up.
-            #[cfg(target_os = "macos")]
-            activations.retain(|pid| pid.is_running());
-
-            // Sorry, FreeBSD users
-            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-            panic!("unsupported operating system");
+            activations.retain(|&pid| PidWatcher::pid_is_running(pid));
 
             !activations.is_empty()
         })
