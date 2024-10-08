@@ -61,7 +61,7 @@ runCommand "flox-activation-scripts"
       substituteInPlace $i --replace "@fd@" "${fd}"
     done
 
-    ${shellcheck}/bin/shellcheck \
+    ${shellcheck}/bin/shellcheck --external-sources --check-sourced \
       $out/activate \
       $out/activate.d/bash \
       $out/activate.d/set-prompt.bash \

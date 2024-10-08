@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck shell=bash disable=SC1090,SC1091
+# shellcheck shell=bash
 export _bash="@bash@"
 export _coreutils="@coreutils@"
 export _gnused="@gnused@"
@@ -106,7 +106,6 @@ start_services_blocking () {
 }
 
 # Parse command-line arguments.
-# shellcheck disable=SC1091
 OPTIONS=c:
 LONGOPTS=command:,noprofile,turbo
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] [--turbo] [--noprofile]"
@@ -274,12 +273,14 @@ if [ $flox_env_found -eq 0 ] || [ "$_FLOX_ACTIVATE_FORCE_REACTIVATE" == true ]; 
       shopt -s nullglob;
       echo *.sh;
     );
+    # shellcheck disable=SC1090 # from rendered environment
     for p in "${_prof_scripts[@]}"; do . "$FLOX_ENV/etc/profile.d/$p"; done
     unset _prof_scripts;
   fi
 
   # Set static environment variables from the manifest.
   if [ -f "$FLOX_ENV/activate.d/envrc" ]; then
+    # shellcheck disable=SC1091 # from rendered environment
     source "$FLOX_ENV/activate.d/envrc"
   fi
 
@@ -289,6 +290,7 @@ if [ $flox_env_found -eq 0 ] || [ "$_FLOX_ACTIVATE_FORCE_REACTIVATE" == true ]; 
     # user-provided hook scripts because these can get interpreted
     # as configuration statements by the "in-place" activation
     # mode. So, we'll redirect stdout to stderr.
+    # shellcheck disable=SC1091 # from rendered environment
     source "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
   fi
 

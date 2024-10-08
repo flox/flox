@@ -1,4 +1,4 @@
-# shellcheck shell=bash disable=SC1090,SC1091,SC2154
+# shellcheck shell=bash
 export _gnused="@gnused@"
 
 # Enable shell-specific profile script startup with verbosity 2.
@@ -22,6 +22,7 @@ then
   # bashrc launches an inner nested activation which unsets it.
   _save_flox_activate_tracelevel="$_flox_activate_tracelevel"
   export _flox_already_sourcing_bashrc=1
+  # shellcheck disable=SC1090 # from user environment
   source ~/.bashrc
   unset _flox_already_sourcing_bashrc
   export _flox_activate_tracelevel="$_save_flox_activate_tracelevel"
@@ -40,12 +41,14 @@ eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_add_env")"
 
 # Set the prompt if we're in an interactive shell.
 if [ -t 1 ]; then
+  # shellcheck disable=SC1091 # from rendered environment
   source "$FLOX_ENV/activate.d/set-prompt.bash"
 fi
 
 # Source user-specified profile scripts if they exist.
 for i in profile-common profile-bash hook-script; do
   if [ -e "$FLOX_ENV/activate.d/$i" ]; then
+    # shellcheck disable=SC1090 # from rendered environment
     source "$FLOX_ENV/activate.d/$i"
   fi
 done
