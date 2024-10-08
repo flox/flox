@@ -159,8 +159,8 @@ Flox must be buildable using `flox` or `nix`.
   A pre-commit hook is set up to check rust file formatting.
 - format nix code
   ```console
-  $ alejandra .
-  $ alejandra . --check # just check
+  $ treefmt -f nix .
+  $ treefmt -f nix . --fail-on-change # just check
   ```
   A pre-commit hook is set up to check nix file formatting.
 - lint rust

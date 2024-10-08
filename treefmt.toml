@@ -1,0 +1,11 @@
+# One CLI to format the code tree - https://git.numtide.com/numtide/treefmt
+
+[formatter.nix]
+# Formatter to run
+command = "nixfmt"
+# Command-line arguments for the command
+options = []
+# Glob pattern of files to include
+includes = [ "*.nix" ]
+# Glob patterns of files to exclude
+excludes = []
