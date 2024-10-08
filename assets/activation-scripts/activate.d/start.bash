@@ -38,15 +38,17 @@ export FLOX_ENV_DIRS_activate FLOX_ENV_LIB_DIRS_activate FLOX_PROMPT_ENVIRONMENT
 # Process the flox environment customizations, which includes (amongst
 # other things) prepending this environment's bin directory to the PATH.
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
-  declare -a _prof_scripts;
-  read -r -d '' -a _prof_scripts < <(
-    cd "$FLOX_ENV/etc/profile.d" || exit;
-    shopt -s nullglob;
-    echo *.sh;
-  );
-  # shellcheck disable=SC1090 # from rendered environment
-  for p in "${_prof_scripts[@]}"; do . "$FLOX_ENV/etc/profile.d/$p"; done
-  unset _prof_scripts;
+  declare -a _profile_scripts
+  read -r -d '' -a _profile_scripts < <(
+    cd "$FLOX_ENV/etc/profile.d" || exit
+    shopt -s nullglob
+    echo *.sh
+  )
+  for profile_script in "${_profile_scripts[@]}"; do
+    # shellcheck disable=SC1090 # from rendered environment
+    source "$FLOX_ENV/etc/profile.d/$profile_script"
+  done
+  unset _profile_scripts
 fi
 
 # Set static environment variables from the manifest.
