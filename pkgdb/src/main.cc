@@ -27,6 +27,7 @@
 #include "flox/linkenv/command.hh"
 #include "flox/lock-flake-installable.hh"
 #include "flox/pkgdb/metrics.hh"
+#include "flox/realisepkgs/command.hh"
 
 
 /* -------------------------------------------------------------------------- */
@@ -95,6 +96,9 @@ run( int argc, char * argv[] )
   flox::command::VerboseParser prog( "pkgdb", FLOX_PKGDB_VERSION );
   prog.add_description( "CRUD operations for package metadata" );
 
+  flox::realisepkgs::RealisePkgsCommand cmdRealisePkgs;
+  prog.add_subparser( cmdRealisePkgs.getParser() );
+
   flox::buildenv::BuildEnvCommand cmdBuildEnv;
   prog.add_subparser( cmdBuildEnv.getParser() );
 
@@ -126,6 +130,10 @@ run( int argc, char * argv[] )
 
   /* Run subcommand */
   if ( prog.is_subcommand_used( "buildenv" ) ) { return cmdBuildEnv.run(); }
+  if ( prog.is_subcommand_used( "realisepkgs" ) )
+    {
+      return cmdRealisePkgs.run();
+    }
   if ( prog.is_subcommand_used( cmdLock.getParser() ) )
     {
       return cmdLock.run();
