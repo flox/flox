@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use flox_core::{path_hash, traceable_path, Version};
 use fslock::LockFile;
 use nix::errno::Errno;
@@ -202,7 +203,13 @@ fn acquire_activations_json_lock(
     activations_json_path: impl AsRef<Path>,
 ) -> Result<LockFile, Error> {
     let lock_path = activations_json_lock_path(activations_json_path);
-    Ok(LockFile::open(lock_path.as_os_str())?)
+    let lock_path_parent = lock_path.parent().expect("lock path has parent");
+    if !(lock_path.exists()) {
+        std::fs::create_dir_all(lock_path.parent().unwrap())?;
+    }
+    let mut lock = LockFile::open(&lock_path).context("failed to open lockfile")?;
+    lock.lock().context("failed to lock lockfile")?;
+    Ok(lock)
 }
 
 /// Returns the path to the lock file for activations.json.
@@ -283,7 +290,7 @@ pub fn read_activations_json(
     path: impl AsRef<Path>,
 ) -> Result<(Option<Activations>, LockFile), Error> {
     let path = path.as_ref();
-    let lock_file = acquire_activations_json_lock(path)?;
+    let lock_file = acquire_activations_json_lock(path).context("failed to acquire lockfile")?;
 
     if !path.exists() {
         debug!(
