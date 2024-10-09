@@ -26,7 +26,7 @@ trim_trailing_whitespace = true
 # Shell files
 # -----------
 
-[*.{sh,bash,bats,zsh}]
+[{*.{sh,bash,bats,zsh},activate}]
 indent_style       = space  # Use spaces not tabs
 indent_size        = 2      # 2 space width
 binary_next_line   = true   # Pipes go at beginning of newline, not end.
