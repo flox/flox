@@ -16,13 +16,14 @@
 }:
 let
   fileVersion = lib.fileContents "${inputs.self}/VERSION";
+  # flox version is in the git descrive format (not semver)
   version =
     if (FLOX_VERSION != null) then
       FLOX_VERSION
     else if !(self ? revCount || self ? shortRev) then
-      "${fileVersion}+git.dirty"
+      "${fileVersion}-dirty"
     else if !(self ? revCount) then
-      "${fileVersion}+git.${self.shortRev}"
+      "${fileVersion}-g${self.shortRev}"
     else
       fileVersion;
 in
