@@ -345,7 +345,9 @@ pub fn write_environment_registry(
 /// Acquires the filesystem-based lock on the user's environment registry file
 pub fn acquire_env_registry_lock(reg_path: impl AsRef<Path>) -> Result<LockFile, EnvRegistryError> {
     let lock_path = env_registry_lock_path(reg_path);
-    LockFile::open(lock_path.as_os_str()).map_err(EnvRegistryError::AcquireLock)
+    let mut lock = LockFile::open(lock_path.as_os_str()).map_err(EnvRegistryError::AcquireLock)?;
+    lock.lock().map_err(EnvRegistryError::AcquireLock)?;
+    Ok(lock)
 }
 
 /// Ensures that the environment is registered. This is a no-op if it is already registered.
