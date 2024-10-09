@@ -190,6 +190,8 @@ fn check_for_activation_ready_and_attach_pid(
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
+
     use super::*;
     use crate::cli::test::{read_activations, write_activations};
 
