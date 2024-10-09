@@ -77,6 +77,8 @@ impl StartOrAttachArgs {
 /// exit with an error.
 /// If the activation startup process fails, exit with an error.
 /// In either case, the activation can likely just be restarted.
+// TODO: use store_path rather than activation_id.
+// If we are activation 3, activation 1 fails, but activation 2 succeeds, we may want to attach to activation 2
 fn wait_for_activation_ready_and_attach_pid(
     activations_json_path: &Path,
     activation_id: uuid::Uuid,
@@ -104,6 +106,10 @@ fn wait_for_activation_ready_and_attach_pid(
         }
 
         if !activation.startup_process_running() {
+            // TODO: clean out old activation of store_path
+            // Or we may need to do that in activation_for_store_path()
+            //
+            // TODO: just call StartOrAttach::handle again
             anyhow::bail!(indoc! {"
                 Prior activation of the environment failed to start, or completed.
 
