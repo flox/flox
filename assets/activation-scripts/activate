@@ -50,12 +50,12 @@ FLOX_TURBO="${FLOX_TURBO:-}"
 FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
 while true; do
   case "$1" in
-    -c|--command)
+    -c | --command)
       shift
       if [ -z "$1" ]; then
-	echo "Option -c requires an argument." >&2
-	echo "$USAGE" >&2
-	exit 1
+        echo "Option -c requires an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
       fi
       FLOX_CMD="$1"
       shift
@@ -102,7 +102,7 @@ fi
 #       the value coming from the CLI for now because it won't be set for
 #       container invocations, and it would have the incorrect value for
 #       nested flox activations.
-_FLOX_ENV="$( $_coreutils/bin/dirname -- "${BASH_SOURCE[0]}" )"
+_FLOX_ENV="$($_coreutils/bin/dirname -- "${BASH_SOURCE[0]}")"
 if [ -n "$FLOX_ENV" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
   echo "WARN: detected change in FLOX_ENV: $FLOX_ENV -> $_FLOX_ENV" >&2
 fi
@@ -117,14 +117,10 @@ unset FLOX_SHELL
 
 # Bail if the shell is unsupported.
 case "$_flox_shell" in
-  *bash)
-    ;;
-  *fish)
-    ;;
-  *tcsh)
-    ;;
-  *zsh)
-    ;;
+  *bash) ;;
+  *fish) ;;
+  *tcsh) ;;
+  *zsh) ;;
   *)
     echo "Unsupported shell: $_flox_shell" >&2
     exit 1

@@ -11,7 +11,7 @@ export _nawk="@nawk@"
 #
 # ---------------------------------------------------------------------------- #
 
-activate_cuda(){
+activate_cuda() {
   # Strip a trailing or lone slash so that we can construct it later.
   local fhs_root_prefix="${1%/}"
   # Path to ldconfig that can be substituted for testing.
@@ -30,18 +30,18 @@ activate_cuda(){
   fi
 
   # Skip when no Nvidia device
-  if ! ( "$_findutils/bin/find" "${fhs_root_prefix}/dev" -maxdepth 1 -iname 'nvidia*' -o -iname dxg | read -r ;); then
+  if ! ("$_findutils/bin/find" "${fhs_root_prefix}/dev" -maxdepth 1 -iname 'nvidia*' -o -iname dxg | read -r); then
     return 0
   fi
 
   # Use system library cache.
-  SYSTEM_LIBS=$("$ldconfig_bin" --print-cache -C /etc/ld.so.cache 2>/dev/null \
+  SYSTEM_LIBS=$("$ldconfig_bin" --print-cache -C /etc/ld.so.cache 2> /dev/null \
     | "$_nawk/bin/nawk" "\$1 ~ /${lib_pattern}/ { print \$4 }")
 
   # Fallback for NixOS.
   if [ -z "$SYSTEM_LIBS" ]; then
     # LD_AUDIT workaround for Linux: https://github.com/flox/flox/issues/1341
-    SYSTEM_LIBS=$(LD_AUDIT="" "$_fd/bin/fd" "$lib_pattern" "${fhs_root_prefix}/run/opengl-driver" 2>/dev/null)
+    SYSTEM_LIBS=$(LD_AUDIT="" "$_fd/bin/fd" "$lib_pattern" "${fhs_root_prefix}/run/opengl-driver" 2> /dev/null)
   fi
 
   # No matching libs from either results.

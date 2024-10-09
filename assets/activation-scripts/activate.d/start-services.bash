@@ -1,6 +1,6 @@
 NOT_READY="SOCKET_NOT_READY"
 
-poll_services_status () {
+poll_services_status() {
   local socket_file="$1"
   local output
   output=$($_process_compose process list -u "$socket_file" -o json 2>&1)
@@ -10,14 +10,14 @@ poll_services_status () {
   # We don't want to exit on pipe failures here
   set +o pipefail
   local parsed_json
-  parsed_json=$(echo "$output" | "$_jq" -r -c '.[0].status' 2>/dev/null)
+  parsed_json=$(echo "$output" | "$_jq" -r -c '.[0].status' 2> /dev/null)
   # Restore the previous shell settings
   eval "$saved_options"
   # `parsed_json` will be a null string if anything went wrong
   echo "${parsed_json:-${NOT_READY}}"
 }
 
-wait_for_services_socket () {
+wait_for_services_socket() {
   local socket_file="$1"
   local status
   status=$(poll_services_status "$socket_file")
@@ -27,9 +27,11 @@ wait_for_services_socket () {
   done
 }
 
-start_services_blocking () {
-  local config_file="$1"; shift
-  local socket_file="$1"; shift
+start_services_blocking() {
+  local config_file="$1"
+  shift
+  local socket_file="$1"
+  shift
   local log_dir="$1"
   local timestamp_ms
   timestamp_ms=$("$_coreutils/bin/date" "+%Y%m%d%H%M%S%6N")
@@ -45,9 +47,9 @@ start_services_blocking () {
   # services
   if [ -n "$_FLOX_SERVICES_TO_START" ]; then
     readarray -t services_to_start < <(echo "$_FLOX_SERVICES_TO_START" | "$_jq" -r '.[]')
-    COMPOSE_SHELL="$_bash" "$_setsid" "$_setsid" "$_process_compose" up "${services_to_start[@]}" -f "$config_file" -u "$socket_file" -L "$log_file" --tui=false >/dev/null 2>&1 &
+    COMPOSE_SHELL="$_bash" "$_setsid" "$_setsid" "$_process_compose" up "${services_to_start[@]}" -f "$config_file" -u "$socket_file" -L "$log_file" --tui=false > /dev/null 2>&1 &
   else
-    COMPOSE_SHELL="$_bash" "$_setsid" "$_setsid" "$_process_compose" up -f "$config_file" -u "$socket_file" -L "$log_file" --tui=false >/dev/null 2>&1 &
+    COMPOSE_SHELL="$_bash" "$_setsid" "$_setsid" "$_process_compose" up -f "$config_file" -u "$socket_file" -L "$log_file" --tui=false > /dev/null 2>&1 &
   fi
   # Make these functions available in subshells so that `timeout` can call them
   export -f wait_for_services_socket poll_services_status
