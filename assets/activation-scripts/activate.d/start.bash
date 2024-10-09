@@ -89,13 +89,13 @@ if [ $flox_env_found -eq 0 ]; then
 
   # Capture environment variables to _set_ as "key=value" pairs.
   # comm -13: only env declarations unique to `$_end_env` (new declarations)
-  $_coreutils/bin/comm -13 "$_start_env" "$_end_env" | \
-    $_gnused/bin/sed -e 's/^declare -x //' > "$_add_env"
+  $_coreutils/bin/comm -13 "$_start_env" "$_end_env" \
+    | $_gnused/bin/sed -e 's/^declare -x //' > "$_add_env"
 
   # Capture environment variables to _unset_ as a list of keys.
   # TODO: remove from $_del_env keys set in $_add_env
-  $_coreutils/bin/comm -23 "$_start_env" "$_end_env" | \
-    $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
+  $_coreutils/bin/comm -23 "$_start_env" "$_end_env" \
+    | $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
 
   # Don't need these anymore.
   $_coreutils/bin/rm -f "$_start_env" "$_end_env"

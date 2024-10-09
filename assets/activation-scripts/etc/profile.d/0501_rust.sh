@@ -1,4 +1,3 @@
-
 # shellcheck shell=bash
 export _coreutils="@coreutils@"
 # ============================================================================ #
@@ -9,7 +8,7 @@ export _coreutils="@coreutils@"
 
 # Only run if 'rustLibSrc' is in the environment
 if [[ -d "$FLOX_ENV/rustc-std-workspace-std" ]]; then
-  export RUST_SRC_PATH="$FLOX_ENV";
+  export RUST_SRC_PATH="$FLOX_ENV"
 fi
 
 # ---------------------------------------------------------------------------- #
