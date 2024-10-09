@@ -1,10 +1,8 @@
-# 3. "in-place" mode: emit activation commands in correct shell dialect
-
-# Finish by echoing the contents of the shell-specific activation script.
-# N.B. the output of these scripts may be eval'd with backticks which have
-# the effect of removing newlines from the output, so we must ensure that
-# the output is a valid shell script fragment when represented on a single
-# line.
+# "in-place" mode: emit activation commands in correct shell dialect by echoing
+# the contents of the shell-specific activation script.  N.B. the output of
+# these scripts may be eval'd with backticks which have the effect of removing
+# newlines from the output, so we must ensure that the output is a valid shell
+# script fragment when represented on a single line.
 case "$_flox_shell" in
   *bash)
     echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"

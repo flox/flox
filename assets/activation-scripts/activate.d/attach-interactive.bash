@@ -1,4 +1,4 @@
-# 2. "interactive" mode: invoke the user's shell with args that:
+# "interactive" mode: invoke the user's shell with args that:
 #   a. defeat the shell's normal startup scripts
 #   b. source the relevant activation script
 case "$_flox_shell" in

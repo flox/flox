@@ -1,4 +1,4 @@
-# 1. "command" mode(s): invoke the user's shell with args that:
+# "command" mode(s): invoke the user's shell with args that:
 #   a. defeat the shell's normal startup scripts
 #   b. source the relevant activation script
 #   c. invoke the command in one of "stdin" or "-c" modes
