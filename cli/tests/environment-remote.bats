@@ -165,15 +165,6 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=remote,activate,remote:activate
-@test "m9: activate works in remote environment" {
-  make_remote_pkgdb_env_with_hello
-
-  run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- command -v hello
-  assert_success
-  assert_output --partial "$FLOX_CACHE_DIR/remote/owner/test/.flox/run/bin/hello"
-}
-
-# bats test_tags=remote,activate,remote:activate
 @test "catalog: m9: activate works in remote environment" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env

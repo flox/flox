@@ -1,0 +1,7 @@
+version = 1
+
+[install]
+pip.pkg-path = "python312Packages.pip"
+
+[options]
+systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]

@@ -1,0 +1,159 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "pip": {
+        "pkg-path": "python312Packages.pip"
+      }
+    },
+    "hook": {},
+    "profile": {},
+    "options": {
+      "systems": [
+        "aarch64-darwin",
+        "x86_64-darwin",
+        "aarch64-linux",
+        "x86_64-linux"
+      ],
+      "allow": {
+        "licenses": []
+      },
+      "semver": {}
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "python312Packages.pip",
+      "broken": false,
+      "derivation": "/nix/store/3v2dbqnlcbiv775cmy70qhsd6vswxpxl-python3.12-pip-24.0.drv",
+      "description": "PyPA recommended tool for installing Python packages",
+      "install_id": "pip",
+      "license": "[ MIT ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+      "name": "python3.12-pip-24.0",
+      "pname": "pip",
+      "rev": "5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+      "rev_count": 690827,
+      "rev_date": "2024-10-09T16:51:18Z",
+      "scrape_date": "2024-10-11T03:53:01Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "python3.12-pip-24.0",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "dist": "/nix/store/3yb7n0g2g3ilgg8lqxjra7xwfk8gvx8b-python3.12-pip-24.0-dist",
+        "man": "/nix/store/pigrf6jikna1akz7wh540y7dawcbhba2-python3.12-pip-24.0-man",
+        "out": "/nix/store/gqwsjs8lb2qncb7nq2pcnbrfm7xn86ry-python3.12-pip-24.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python312Packages.pip",
+      "broken": false,
+      "derivation": "/nix/store/7rpvlg66lppmmn90fa8c588kagfiw2ln-python3.12-pip-24.0.drv",
+      "description": "PyPA recommended tool for installing Python packages",
+      "install_id": "pip",
+      "license": "[ MIT ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+      "name": "python3.12-pip-24.0",
+      "pname": "pip",
+      "rev": "5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+      "rev_count": 690827,
+      "rev_date": "2024-10-09T16:51:18Z",
+      "scrape_date": "2024-10-11T03:53:01Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "python3.12-pip-24.0",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "dist": "/nix/store/050bshc1sdfq9lmvmgqrj1iihklw8bpv-python3.12-pip-24.0-dist",
+        "man": "/nix/store/wd5gpcw3nh94fljzh4ycdhh4mqdp1dhs-python3.12-pip-24.0-man",
+        "out": "/nix/store/g24k5pcsml27wrdbg0cnv4z43sg1x2j0-python3.12-pip-24.0"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python312Packages.pip",
+      "broken": false,
+      "derivation": "/nix/store/7cfp4xa189j5idaswfhkjgaj2ws8rvrn-python3.12-pip-24.0.drv",
+      "description": "PyPA recommended tool for installing Python packages",
+      "install_id": "pip",
+      "license": "[ MIT ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+      "name": "python3.12-pip-24.0",
+      "pname": "pip",
+      "rev": "5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+      "rev_count": 690827,
+      "rev_date": "2024-10-09T16:51:18Z",
+      "scrape_date": "2024-10-11T03:53:01Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "python3.12-pip-24.0",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "dist": "/nix/store/pra4rbs2v1j2q765sb9i57i3vh3i3m47-python3.12-pip-24.0-dist",
+        "man": "/nix/store/d1w6bk9kzabml495qnyq3401l1nv5z2k-python3.12-pip-24.0-man",
+        "out": "/nix/store/ripynigkvg7cyb5c4vwnff0x9wg3g11s-python3.12-pip-24.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python312Packages.pip",
+      "broken": false,
+      "derivation": "/nix/store/qbmkaf15dr962yjn0l84nl442zz9vk1h-python3.12-pip-24.0.drv",
+      "description": "PyPA recommended tool for installing Python packages",
+      "install_id": "pip",
+      "license": "[ MIT ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+      "name": "python3.12-pip-24.0",
+      "pname": "pip",
+      "rev": "5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+      "rev_count": 690827,
+      "rev_date": "2024-10-09T16:51:18Z",
+      "scrape_date": "2024-10-11T03:53:01Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "python3.12-pip-24.0",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "dist": "/nix/store/dsvflc0qwkji07q5s1wcdkmjnlvn6pcn-python3.12-pip-24.0-dist",
+        "man": "/nix/store/qd68nvc1jj0bqv47v2zbv8p2ghhqw6hi-python3.12-pip-24.0-man",
+        "out": "/nix/store/gam79wgc54sn8yyw2xkrqkf93v5lwaz1-python3.12-pip-24.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

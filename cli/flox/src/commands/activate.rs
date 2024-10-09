@@ -27,7 +27,6 @@ use flox_rust_sdk::models::environment::{
     FLOX_PROMPT_ENVIRONMENTS_VAR,
     FLOX_SERVICES_SOCKET_VAR,
 };
-use flox_rust_sdk::models::manifest::TypedManifest;
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use indexmap::IndexSet;
@@ -329,63 +328,62 @@ impl Activate {
         }
 
         let socket_path = environment.services_socket_path(&flox)?;
-        if let TypedManifest::Catalog(manifest) = environment.manifest(&flox)? {
-            exports.insert(
-                "_FLOX_ENV_CUDA_DETECTION",
-                match manifest.options.cuda_detection {
-                    Some(false) => "0", // manifest opts-out
-                    _ => "1",           // default to enabling CUDA
-                }
-                .to_string(),
-            );
-
-            if in_place && self.start_services {
-                debug!("not starting services for in-place activation");
-                message::warning("Skipped starting services. Services are not yet supported for in place activations.");
+        let manifest = environment.manifest(&flox)?;
+        exports.insert(
+            "_FLOX_ENV_CUDA_DETECTION",
+            match manifest.options.cuda_detection {
+                Some(false) => "0", // manifest opts-out
+                _ => "1",           // default to enabling CUDA
             }
+            .to_string(),
+        );
 
-            // We should error for remote environments even if they don't have
-            // services so that the user doesn't assume we're actually starting
-            // services.
-            if self.start_services {
-                // Error for remote envs and envs with v0 manifests, since they don't support services
-                ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+        if in_place && self.start_services {
+            debug!("not starting services for in-place activation");
+            message::warning("Skipped starting services. Services are not yet supported for in place activations.");
+        }
 
-                if manifest.services.is_empty() {
-                    message::warning(ServicesCommandsError::NoDefinedServices);
-                } else if manifest.services.copy_for_system(&flox.system).is_empty() {
-                    message::warning(ServicesCommandsError::NoDefinedServicesForSystem {
-                        system: flox.system.clone(),
-                    });
-                }
+        // We should error for remote environments even if they don't have
+        // services so that the user doesn't assume we're actually starting
+        // services.
+        if self.start_services {
+            // Error for remote envs, since they don't support services
+            ServicesEnvironment::from_environment_selection(&flox, &self.environment)?;
+
+            if manifest.services.is_empty() {
+                message::warning(ServicesCommandsError::NoDefinedServices);
+            } else if manifest.services.copy_for_system(&flox.system).is_empty() {
+                message::warning(ServicesCommandsError::NoDefinedServicesForSystem {
+                    system: flox.system.clone(),
+                });
             }
+        }
 
-            let should_have_services = self.start_services
-                && !manifest.services.copy_for_system(&flox.system).is_empty()
-                && !in_place;
-            let start_new_process_compose = should_have_services
-                && if socket_path.exists() {
-                    // Returns `Ok(true)` if `process-compose` was shutdown
-                    shutdown_process_compose_if_all_processes_stopped(&socket_path)?
-                } else {
-                    true
-                };
-            tracing::debug!(
-                should_have_services,
-                start_new_process_compose,
-                "setting service variables"
-            );
-            exports.insert(
-                FLOX_ACTIVATE_START_SERVICES_VAR,
-                start_new_process_compose.to_string(),
-            );
-            exports.insert(
-                FLOX_SERVICES_SOCKET_VAR,
-                socket_path.to_string_lossy().to_string(),
-            );
-            if should_have_services && !start_new_process_compose {
-                message::warning("Skipped starting services, services are already running");
-            }
+        let should_have_services = self.start_services
+            && !manifest.services.copy_for_system(&flox.system).is_empty()
+            && !in_place;
+        let start_new_process_compose = should_have_services
+            && if socket_path.exists() {
+                // Returns `Ok(true)` if `process-compose` was shutdown
+                shutdown_process_compose_if_all_processes_stopped(&socket_path)?
+            } else {
+                true
+            };
+        tracing::debug!(
+            should_have_services,
+            start_new_process_compose,
+            "setting service variables"
+        );
+        exports.insert(
+            FLOX_ACTIVATE_START_SERVICES_VAR,
+            start_new_process_compose.to_string(),
+        );
+        exports.insert(
+            FLOX_SERVICES_SOCKET_VAR,
+            socket_path.to_string_lossy().to_string(),
+        );
+        if should_have_services && !start_new_process_compose {
+            message::warning("Skipped starting services, services are already running");
         }
 
         exports.extend(default_nix_env_vars());

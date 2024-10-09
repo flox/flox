@@ -61,7 +61,7 @@ function make_empty_remote_env() {
 # create path env from pre-generated locked manifest v0
 function make_remote_env_with_hello() {
   mkdir -p "$PROJECT_DIR/.flox/env"
-  cp "$MANUALLY_GENERATED"/hello_v0/* "$PROJECT_DIR/.flox/env"
+  cp "$GENERATED_DATA"/envs/hello/* "$PROJECT_DIR/.flox/env"
   echo '{
     "name": "'$PROJECT_NAME'",
     "version": 1
@@ -286,16 +286,6 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
-
-# Make sure we haven't activate
-# bats test_tags=managed,activate,managed:activate
-@test "m9: activate works in managed environment" {
-  make_remote_env_with_hello
-
-  run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- command -v hello
-  assert_success
-  assert_output --regexp "${FLOX_CACHE_DIR}/run/owner/${PROJECT_NAME}\..+/bin/hello"
-}
 
 # bats test_tags=managed,activate,managed:activate
 @test "catalog: m9: activate works in managed environment" {

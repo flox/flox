@@ -18,7 +18,7 @@ use flox_rust_sdk::providers::services::{LoggedError, ServiceError};
 use indoc::{formatdoc, indoc};
 use log::{debug, trace};
 
-use crate::commands::{EnvironmentSelectError, MigrationError};
+use crate::commands::EnvironmentSelectError;
 
 /// Convert to an error variant that directs the user to the docs if the provided error is
 /// due to a package not being supported on the current system.
@@ -414,13 +414,7 @@ pub fn format_core_error(err: &CoreEnvironmentError) -> String {
             "},
         },
         // User facing
-        CoreEnvironmentError::Version0NotSupported => display_chain(err),
-        // User facing
-        CoreEnvironmentError::LockingVersion0NotSupported => display_chain(err),
         CoreEnvironmentError::Services(err) => display_chain(err),
-        CoreEnvironmentError::ServicesWithV0 => {
-            format_core_error(&CoreEnvironmentError::ServicesWithV0)
-        },
     }
 }
 
@@ -705,34 +699,6 @@ pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
             .chain()
             .skip(1)
             .fold(err.to_string(), |acc, cause| format!("{}: {}", acc, cause)),
-    }
-}
-
-pub fn format_migration_error(err: &MigrationError) -> String {
-    trace!("formatting migration_error: {err:?}");
-
-    match err {
-        MigrationError::Environment(EnvironmentError::ManagedEnvironment(
-            ManagedEnvironmentError::CheckoutOutOfSync,
-        ))
-        | MigrationError::ConfirmedUpgradeFailed(EnvironmentError::ManagedEnvironment(
-            ManagedEnvironmentError::CheckoutOutOfSync,
-        )) => formatdoc! {"
-            Cannot automatically migrate environment:
-            The environment has changes that are not yet synced to a generation.
-
-            Migrate the environment manually by setting 'version = 1'
-            in the manifest file or reset the local manifest to the current generation using
-
-                $ flox edit --reset
-        "},
-        MigrationError::Environment(err) | MigrationError::ConfirmedUpgradeFailed(err) => {
-            formatdoc! {"
-                Failed to migrate environment:
-                {err}
-            ", err = format_error(err).trim_end()}
-        },
-        _ => display_chain(err),
     }
 }
 

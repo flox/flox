@@ -71,53 +71,6 @@ pub struct Registry {
     _json: Value,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize /* , Deserialize implemented manually */)]
-#[serde(untagged)]
-pub enum LockedManifest {
-    Catalog(LockedManifestCatalog),
-    Pkgdb(LockedManifestPkgdb),
-}
-
-impl<'de> Deserialize<'de> for LockedManifest {
-    fn deserialize<D>(deserializer: D) -> Result<LockedManifest, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = Value::deserialize(deserializer)?;
-        let version = value.get("lockfile-version").and_then(Value::as_u64);
-
-        match version {
-            Some(0) => Ok(LockedManifest::Pkgdb(LockedManifestPkgdb(value))),
-            Some(1) => serde_json::from_value(value)
-                .map(LockedManifest::Catalog)
-                .map_err(serde::de::Error::custom),
-            _ => Err(serde::de::Error::custom(
-                "unsupported or missing 'lockfile-version'",
-            )),
-        }
-    }
-}
-
-impl LockedManifest {
-    pub fn read_from_file(path: &CanonicalPath) -> Result<Self, LockedManifestError> {
-        let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
-        serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
-    }
-
-    pub fn version(&self) -> u8 {
-        match self {
-            LockedManifest::Pkgdb(_) => 0,
-            LockedManifest::Catalog(_) => 1,
-        }
-    }
-}
-
-impl Display for LockedManifest {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", serde_json::json!(self))
-    }
-}
-
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LockedManifestCatalog {
@@ -127,6 +80,23 @@ pub struct LockedManifestCatalog {
     pub manifest: TypedManifestCatalog,
     /// locked packages
     pub packages: Vec<LockedPackage>,
+}
+
+impl LockedManifestCatalog {
+    pub fn read_from_file(path: &CanonicalPath) -> Result<Self, LockedManifestError> {
+        let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
+        serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
+    }
+
+    pub fn version(&self) -> u8 {
+        1
+    }
+}
+
+impl Display for LockedManifestCatalog {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::json!(self))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, derive_more::From)]
@@ -1561,7 +1531,7 @@ pub(crate) mod tests {
 
     use self::catalog::PackageResolutionInfo;
     use super::*;
-    use crate::models::manifest::{RawManifest, TypedManifest};
+    use crate::models::manifest::{RawManifest, TypedManifestCatalog};
     use crate::models::search::{SearchLimit, SearchResults};
     use crate::providers::flox_cpp_utils::{FlakeInstallableError, InstallableLockerMock};
 
@@ -1706,13 +1676,8 @@ pub(crate) mod tests {
         .unwrap()
     });
 
-    static TEST_TYPED_MANIFEST: Lazy<TypedManifestCatalog> = Lazy::new(|| {
-        let typed = TEST_RAW_MANIFEST.to_typed().unwrap();
-        match typed {
-            TypedManifest::Catalog(manifest) => *manifest,
-            _ => panic!("Expected a catalog manifest"),
-        }
-    });
+    static TEST_TYPED_MANIFEST: Lazy<TypedManifestCatalog> =
+        Lazy::new(|| TEST_RAW_MANIFEST.to_typed().unwrap());
 
     static TEST_RESOLUTION_RESPONSE_UNKNOWN_MSG: Lazy<Vec<ResolvedPackageGroup>> =
         Lazy::new(|| {
@@ -1816,8 +1781,8 @@ pub(crate) mod tests {
         }]
     });
 
-    static TEST_LOCKED_MANIFEST: Lazy<LockedManifest> = Lazy::new(|| {
-        LockedManifest::Catalog(LockedManifestCatalog {
+    static TEST_LOCKED_MANIFEST: Lazy<LockedManifestCatalog> =
+        Lazy::new(|| LockedManifestCatalog {
             version: Version::<1>,
             manifest: TEST_TYPED_MANIFEST.clone(),
             packages: vec![LockedPackageCatalog {
@@ -1851,8 +1816,7 @@ pub(crate) mod tests {
                 priority: 5,
             }
             .into()],
-        })
-    });
+        });
 
     #[test]
     fn make_params_smoke() {
@@ -2116,13 +2080,10 @@ pub(crate) mod tests {
             .into(),
         );
 
-        let LockedManifest::Catalog(seed) = &*TEST_LOCKED_MANIFEST else {
-            panic!("Expected a catalog lockfile");
-        };
-
-        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, Some(seed))
-            .unwrap()
-            .collect::<Vec<_>>();
+        let actual_params =
+            LockedManifestCatalog::collect_package_groups(&manifest, Some(&*TEST_LOCKED_MANIFEST))
+                .unwrap()
+                .collect::<Vec<_>>();
 
         let expected_params = vec![PackageGroup {
             name: "group".to_string(),
@@ -2551,9 +2512,7 @@ pub(crate) mod tests {
 
     #[test]
     fn unlock_by_iid_noop_if_already_unlocked() {
-        let LockedManifest::Catalog(mut seed) = TEST_LOCKED_MANIFEST.clone() else {
-            panic!("Expected a catalog lockfile");
-        };
+        let mut seed = TEST_LOCKED_MANIFEST.clone();
 
         // If the package is not in the seed, the lockfile should be unchanged
         let expected = seed.packages.clone();
@@ -2641,10 +2600,7 @@ pub(crate) mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(
-            &LockedManifest::Catalog(locked_manifest),
-            &*TEST_LOCKED_MANIFEST
-        );
+        assert_eq!(&locked_manifest, &*TEST_LOCKED_MANIFEST);
     }
 
     /// If a manifest doesn't have `options.systems`, it defaults to locking for
@@ -3561,10 +3517,7 @@ pub(crate) mod tests {
         [options]
         systems = ["aarch64-linux", "x86_64-linux"]
         "#};
-        let TypedManifest::Catalog(manifest) = toml_edit::de::from_str(&manifest_contents).unwrap()
-        else {
-            panic!("expected a catalog manifest");
-        };
+        let manifest = toml_edit::de::from_str(&manifest_contents).unwrap();
         let installables =
             LockedManifestCatalog::collect_flake_installables(&manifest).collect::<Vec<_>>();
         assert_eq!(installables.len(), 1);
