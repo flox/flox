@@ -19,6 +19,7 @@ flox [<general-options>] containerize
      [-d=<path> | -r=<owner/name>]
      [-o=<path>]
      [--tag=<tag>]
+     [--load-into-registry=backend]
 ```
 
 # DESCRIPTION
@@ -50,6 +51,14 @@ The produced container however can also run on macOS.
 :   Write the container to `<path>`
     (default: `./<environment-name>-container.tar`)
     If `<path>` is `-`, writes to `stdout`.
+
+`-t`, `--tag`
+:   Tag the container with `<tag>`
+    (default: `latest`)
+
+`-l`, `--load-into-registry`
+:   Loads the container into `<backend>` without having to pipe
+    Has to be one of `docker` or `podman`.
 
 ```{.include}
 ./include/environment-options.md
@@ -100,6 +109,17 @@ $ flox init
 $ flox install hello
 $ flox containerize --tag 'v1' -o - | docker load
 $ docker run --rm -it <container name>:v1
+[floxenv] $ hello
+Hello, world!
+```
+
+Create a container, and load it into Docker's local registry directly:
+
+```
+$ flox init
+$ flox install hello
+$ flox containerize --load-into-registry=docker
+$ docker run --rm -it <container name>:latest
 [floxenv] $ hello
 Hello, world!
 ```

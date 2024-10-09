@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result};
 use bpaf::Bpaf;
@@ -12,6 +13,14 @@ use super::{environment_select, EnvironmentSelect};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::message;
+
+fn is_accepted_registry(reg: &Option<String>) -> bool {
+    return match reg.as_deref() {
+        Some("docker") | Some("podman") => true,
+        Some(_) => false,
+        None => true, // Since it's optional, it's fine to not have it
+    };
+}
 
 // Containerize an environment
 #[derive(Bpaf, Clone, Debug)]
@@ -26,6 +35,15 @@ pub struct Containerize {
     /// Tag to apply to the container, defaults to 'latest'
     #[bpaf(short, long, argument("tag"))]
     tag: Option<String>,
+
+    /// Which container registry to load the container into
+    #[bpaf(
+        short,
+        long("load-into-registry"),
+        argument("registry"),
+        guard(is_accepted_registry, "one of docker or podman is required")
+    )]
+    load_into_registry: Option<String>,
 }
 impl Containerize {
     #[instrument(name = "containerize", skip_all)]
@@ -50,7 +68,16 @@ impl Containerize {
         };
 
         let (output, output_name): (Box<dyn Write + Send>, String) =
-            if output_path == Path::new("-") {
+            if self.load_into_registry.is_some() {
+                let registry = self.load_into_registry.unwrap();
+                let command = Command::new(&registry)
+                    .arg("load")
+                    .stdin(Stdio::piped())
+                    .spawn()
+                    .context("Could not start registry load command")?;
+
+                (Box::new(command.stdin.unwrap()), registry.to_string())
+            } else if output_path == Path::new("-") {
                 debug!("output=stdout");
 
                 (Box::new(std::io::stdout()), "stdout".to_string())
