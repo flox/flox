@@ -77,3 +77,88 @@ impl AttachArgs {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::path::PathBuf;
+
+    use tempfile::TempDir;
+
+    use super::{AttachArgs, AttachExclusiveArgs};
+    use crate::activations::AttachedPid;
+    use crate::cli::test::{read_activations, write_activations};
+
+    #[test]
+    fn attach_to_id_with_new_pid() {
+        let cache_dir = TempDir::new().unwrap();
+        let flox_env = PathBuf::from("/path/to/floxenv");
+        let new_pid = 5678;
+
+        let id = write_activations(&cache_dir, &flox_env, |activations| {
+            activations
+                .create_activation("/store/path", 1234)
+                .unwrap()
+                .id()
+        });
+
+        let args = AttachArgs {
+            flox_env: flox_env.clone(),
+            id,
+            pid: new_pid,
+            exclusive: AttachExclusiveArgs {
+                timeout_ms: Some(1000),
+                remove_pid: None,
+            },
+        };
+
+        args.handle(cache_dir.path().to_path_buf()).unwrap();
+
+        let activation = read_activations(&cache_dir, &flox_env, |activations| {
+            activations.activation_for_id_ref(id).unwrap().clone()
+        })
+        .unwrap();
+
+        activation
+            .attached_pids()
+            .iter()
+            .find(|pid| pid.pid == new_pid)
+            .expect("pid was attached");
+    }
+
+    #[test]
+    fn attach_to_id_with_replace() {
+        let cache_dir = TempDir::new().unwrap();
+        let flox_env = PathBuf::from("/path/to/floxenv");
+        let old_pid = 1234;
+        let new_pid = 5678;
+
+        let id = write_activations(&cache_dir, &flox_env, |activations| {
+            activations
+                .create_activation("/store/path", old_pid)
+                .unwrap()
+                .id()
+        });
+
+        let args = AttachArgs {
+            flox_env: flox_env.clone(),
+            id,
+            pid: new_pid,
+            exclusive: AttachExclusiveArgs {
+                timeout_ms: None,
+                remove_pid: Some(old_pid),
+            },
+        };
+
+        args.handle(cache_dir.path().to_path_buf()).unwrap();
+
+        let activation = read_activations(&cache_dir, &flox_env, |activations| {
+            activations.activation_for_id_ref(id).unwrap().clone()
+        })
+        .unwrap();
+
+        assert_eq!(activation.attached_pids(), &[AttachedPid {
+            pid: new_pid,
+            expiration: None
+        }]);
+    }
+}

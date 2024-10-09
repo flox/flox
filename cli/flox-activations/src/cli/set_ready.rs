@@ -44,3 +44,46 @@ impl SetReadyArgs {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::cli::test::{read_activations, write_activations};
+
+    #[test]
+    fn set_ready() {
+        let cache_dir = TempDir::new().unwrap();
+        let flox_env = PathBuf::from("/path/to/floxenv");
+        let pid = 5678;
+
+        let id = write_activations(&cache_dir, &flox_env, |activations| {
+            activations
+                .create_activation("/store/path", pid)
+                .unwrap()
+                .id()
+        });
+
+        let ready = read_activations(&cache_dir, &flox_env, |activations| {
+            activations.activation_for_id_ref(id).unwrap().ready()
+        })
+        .unwrap();
+
+        assert!(!ready);
+
+        let args = SetReadyArgs {
+            flox_env: flox_env.clone(),
+            id,
+        };
+
+        args.handle(cache_dir.path().to_path_buf()).unwrap();
+
+        let ready = read_activations(&cache_dir, &flox_env, |activations| {
+            activations.activation_for_id_ref(id).unwrap().ready()
+        })
+        .unwrap();
+
+        assert!(ready);
+    }
+}
