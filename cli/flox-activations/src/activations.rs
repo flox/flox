@@ -48,7 +48,7 @@ impl Activations {
     ///
     /// Used internally to manipulate the state of an activation.
     #[allow(unused)]
-    pub fn activation_for_id_ref(&mut self, activation_id: Uuid) -> Option<&Activation> {
+    pub fn activation_for_id_ref(&self, activation_id: Uuid) -> Option<&Activation> {
         self.activations
             .iter()
             .find(|activation| activation.id == activation_id)
@@ -168,9 +168,16 @@ impl Activation {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct AttachedPid {
-    pid: u32,
+#[cfg(test)]
+impl Activation {
+    pub(crate) fn attached_pids(&self) -> &[AttachedPid] {
+        &self.attached_pids
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+pub(crate) struct AttachedPid {
+    pub(crate) pid: u32,
     /// If Some, the time after which the activation can be cleaned up
     ///
     /// Even if the PID has exited, the activation should not be cleaned up
@@ -181,7 +188,7 @@ struct AttachedPid {
     /// time to evaluate the script.
     /// In that case, `flox activate` sets an expiration so that the shell has
     /// some time before the activation is cleaned up.
-    expiration: Option<OffsetDateTime>,
+    pub(crate) expiration: Option<OffsetDateTime>,
 }
 
 impl AttachedPid {

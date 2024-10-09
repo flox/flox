@@ -41,7 +41,39 @@ pub enum Command {
 
 #[cfg(test)]
 mod test {
+    use std::path::Path;
+
     use super::*;
+    use crate::activations::{self, Activations};
+
+    pub(crate) fn write_activations<T>(
+        cache_dir: impl AsRef<Path>,
+        flox_env: impl AsRef<Path>,
+        f: impl FnOnce(&mut Activations) -> T,
+    ) -> T {
+        let activations_json_path =
+            activations::activations_json_path(cache_dir, flox_env).unwrap();
+        let (activations, lock) =
+            activations::read_activations_json(&activations_json_path).unwrap();
+        let mut activations = activations.unwrap_or_default();
+
+        let res = f(&mut activations);
+
+        activations::write_activations_json(&activations, &activations_json_path, lock).unwrap();
+        res
+    }
+
+    pub(crate) fn read_activations<T>(
+        cache_dir: impl AsRef<Path>,
+        flox_env: impl AsRef<Path>,
+        f: impl FnOnce(&Activations) -> T,
+    ) -> Option<T> {
+        let activations_json_path =
+            activations::activations_json_path(cache_dir, flox_env).unwrap();
+        let (activations, _lock) =
+            activations::read_activations_json(&activations_json_path).unwrap();
+        activations.map(|activations| f(&activations))
+    }
 
     #[test]
     fn cli_works() {
