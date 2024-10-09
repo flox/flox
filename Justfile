@@ -164,6 +164,19 @@ test-all: test-pkgdb impure-tests integ-tests nix-integ-tests
     pushd cli; cargo clean;
     make -C pkgdb clean;
 
+# ---------------------------------------------------------------------------- #
+
+@format-cli:
+    pushd cli; cargo fmt; popd
+
+@format-pkgdb:
+    pushd pkgdb; make fmt; popd
+
+@format-nix:
+    treefmt
+
+# Format all the code
+format: format-cli format-pkgdb format-nix
 
 # ---------------------------------------------------------------------------- #
 #
