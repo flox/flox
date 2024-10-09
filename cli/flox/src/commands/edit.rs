@@ -27,19 +27,13 @@ use super::services::warn_manifest_changes_for_services;
 use super::{
     activated_environments,
     environment_select,
-    maybe_migrate_environment_to_v1,
     EnvironmentSelect,
-    MigrationError,
     UninitializedEnvironment,
 };
 use crate::commands::{ensure_floxhub_token, ConcreteEnvironment, EnvironmentSelectError};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Confirm, Dialog, Spinner};
-use crate::utils::errors::{
-    apply_doc_link_for_unsupported_packages,
-    format_core_error,
-    format_migration_error,
-};
+use crate::utils::errors::{apply_doc_link_for_unsupported_packages, format_core_error};
 use crate::utils::message;
 
 // Edit declarative environment configuration
@@ -106,7 +100,6 @@ impl Edit {
                 Self::edit_manifest(&flox, &mut detected_environment, contents).await?
             },
             EditAction::Rename { name } => {
-                // TODO: we could migrate environment to v1 if we wanted to
                 let span = tracing::info_span!("rename");
                 let _guard = span.enter();
                 if let ConcreteEnvironment::Path(mut environment) = detected_environment {
@@ -175,34 +168,6 @@ impl Edit {
             if environment.has_local_changes(flox)? && contents.is_none() {
                 bail!(ManagedEnvironmentError::CheckoutOutOfSync)
             }
-        };
-
-        match maybe_migrate_environment_to_v1(flox, environment).await {
-            Ok(_) => (),
-            e @ Err(MigrationError::MigrationCancelled) => e?,
-
-            // If the user said they wanted an upgrade and it failed, print why but don't fail
-            // [CoreEnvironmentError::LockForMigration] and [CoreEnvironmentError::MigrateManifest]
-            // are handled separately to avoid suggesting the use of `flox edit` within `flox edit`.
-            Err(MigrationError::ConfirmedUpgradeFailed(EnvironmentError::Core(
-                CoreEnvironmentError::LockForMigration(err),
-            ))) => {
-                message::warning(format_core_error(&err));
-            },
-            Err(MigrationError::ConfirmedUpgradeFailed(EnvironmentError::Core(
-                CoreEnvironmentError::MigrateManifest(err),
-            ))) => {
-                message::warning(err.to_string());
-            },
-            Err(e @ MigrationError::ConfirmedUpgradeFailed(_)) => {
-                message::warning(format_migration_error(&e));
-            },
-            // Swallow other migration errors because edit is the only way to fix them.
-            // Don't print anything if there's an error, because the editor will
-            // open too fast for the user to see it.
-            Err(_) => (),
-            // Note: ManagedEnvironmentError::CheckoutOutOfSync case is unreachable here,
-            // because it's handled above for clarity.
         };
 
         let active_environment = UninitializedEnvironment::from_concrete_environment(environment)?;
@@ -315,7 +280,6 @@ impl Edit {
         match result {
             Err(EnvironmentError::Core(e @ CoreEnvironmentError::LockedManifest(_)))
             | Err(EnvironmentError::Core(e @ CoreEnvironmentError::DeserializeManifest(_)))
-            | Err(EnvironmentError::Core(e @ CoreEnvironmentError::Version0NotSupported))
             | Err(EnvironmentError::Core(
                 e @ CoreEnvironmentError::BuildEnv(CallPkgDbError::PkgDbError(PkgDbError {
                     exit_code: error_codes::BUILDENV_CONFLICT,
@@ -421,10 +385,8 @@ impl Edit {
 mod tests {
     use std::fs;
 
-    use flox_rust_sdk::flox::test_helpers::{flox_instance, flox_instance_with_optional_floxhub};
+    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
     use flox_rust_sdk::models::environment::managed_environment::test_helpers::mock_managed_environment;
-    use flox_rust_sdk::models::environment::path_environment::test_helpers::new_path_environment;
-    use flox_rust_sdk::models::environment::test_helpers::MANIFEST_V0_FIELDS;
     use flox_rust_sdk::models::lockfile::LockedManifestError;
     use indoc::indoc;
     use serde::de::Error;
@@ -464,33 +426,6 @@ mod tests {
         Edit::make_interactively_recoverable(result)
             .expect("should be recoverable")
             .expect_err("should return recoverable err");
-    }
-
-    /// Error due to manifest version 0 is recoverable
-    #[test]
-    fn test_recover_edit_loop_result_version_0() {
-        let result = Err(EnvironmentError::Core(
-            CoreEnvironmentError::Version0NotSupported,
-        ));
-
-        Edit::make_interactively_recoverable(result)
-            .expect("should be recoverable")
-            .expect_err("should return recoverable err");
-    }
-
-    /// other errors are not recoverable and should be returned as-is
-    #[test]
-    fn test_recover_edit_loop_result_other_error() {
-        let result = Err(EnvironmentError::Core(
-            // Using this example is _not_ prescriptive
-            // that this error _should not_ be handled!
-            //
-            // There are multiple v0 incompatiblity errors in CoreEnvironmentError
-            // this one is not handled, but it might need to?
-            CoreEnvironmentError::LockingVersion0NotSupported,
-        ));
-
-        Edit::make_interactively_recoverable(result).expect_err("should return unhandled Err");
     }
 
     /// Error due to empty vars and no editor in PATH
@@ -790,148 +725,6 @@ mod tests {
         assert!(tmp1.path().is_dir());
         assert!(tmp2.path().is_dir());
         assert!(tmp3.path().is_dir());
-    }
-
-    /// Given a v0 manifest that can be migrated and v0 contents, the migration
-    /// should succeed,
-    /// but the edit should fail.
-    #[tokio::test]
-    async fn migration_successful_migration_unsuccessful_edit() {
-        let (flox, _temp_dir_handle) = flox_instance();
-        let mut concrete_environment = ConcreteEnvironment::Path(new_path_environment(&flox, ""));
-        let new_contents = indoc! {r#"
-            [options]
-            allow.broken = false
-            "#};
-
-        let err = Edit::edit_manifest(
-            &flox,
-            &mut concrete_environment,
-            Some(new_contents.to_string()),
-        )
-        .await
-        .unwrap_err()
-        .downcast::<EnvironmentError>()
-        .unwrap();
-
-        assert!(matches!(
-            err,
-            EnvironmentError::Core(CoreEnvironmentError::Version0NotSupported)
-        ));
-
-        let actual_contents = concrete_environment
-            .into_dyn_environment()
-            .manifest_contents(&flox)
-            .unwrap();
-        assert_eq!(actual_contents, "version = 1\n");
-    }
-
-    /// Given a v0 manifest that cannot be migrated and v0 contents, the migration
-    /// should fail,
-    /// and the edit should fail.
-    #[tokio::test]
-    async fn migration_unsuccessful_migration_unsuccessful_edit() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        let mut concrete_environment =
-            ConcreteEnvironment::Path(new_path_environment(&flox, MANIFEST_V0_FIELDS));
-
-        let new_contents = indoc! {r#"
-            [options]
-            allow.broken = false
-            "#};
-
-        let err = Edit::edit_manifest(
-            &flox,
-            &mut concrete_environment,
-            Some(new_contents.to_string()),
-        )
-        .await
-        .unwrap_err()
-        .downcast::<EnvironmentError>()
-        .unwrap();
-
-        assert!(matches!(
-            err,
-            EnvironmentError::Core(CoreEnvironmentError::Version0NotSupported)
-        ));
-
-        let actual_contents = concrete_environment
-            .into_dyn_environment()
-            .manifest_contents(&flox)
-            .unwrap();
-        assert!(!actual_contents.contains("version = 1"));
-    }
-
-    /// Given a v0 manifest that cannot be migrated and v1 contents, the migration
-    /// should fail,
-    /// but the edit should succeed.
-    #[tokio::test]
-    async fn migration_unsuccessful_migration_successful_edit() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        let mut concrete_environment =
-            ConcreteEnvironment::Path(new_path_environment(&flox, MANIFEST_V0_FIELDS));
-
-        let new_contents = indoc! {r#"
-            version = 1
-
-            [options]
-            allow.broken = false
-            "#};
-
-        Edit::edit_manifest(
-            &flox,
-            &mut concrete_environment,
-            Some(new_contents.to_string()),
-        )
-        .await
-        .unwrap();
-
-        // TODO: would be nice to make an assertion about
-        // `Failed to migrate environment to version 1` being printed.
-
-        let actual_contents = concrete_environment
-            .dyn_environment_ref_mut()
-            .manifest_contents(&flox)
-            .unwrap();
-        assert!(actual_contents.contains("version = 1"));
-    }
-
-    /// Given a v0 manifest that can be migrated and v1 contents, the migration
-    /// should succeed,
-    /// and the edit should succeed.
-    #[tokio::test]
-    async fn migration_successful_migration_successful_edit() {
-        let (flox, _temp_dir_handle) = flox_instance();
-        let old_contents = indoc! {r#"
-            [options]
-            allow.broken = false
-            "#};
-
-        let mut concrete_environment =
-            ConcreteEnvironment::Path(new_path_environment(&flox, old_contents));
-
-        let new_contents = indoc! {r#"
-            version = 1
-
-            [options]
-            allow.broken = false
-            "#};
-
-        Edit::edit_manifest(
-            &flox,
-            &mut concrete_environment,
-            Some(new_contents.to_string()),
-        )
-        .await
-        .unwrap();
-
-        let actual_contents = concrete_environment
-            .into_dyn_environment()
-            .manifest_contents(&flox)
-            .unwrap();
-        assert!(actual_contents.contains("version = 1"));
     }
 
     /// If no no manifest file or contents are provided,

@@ -232,37 +232,3 @@ EOF
   assert_success
   assert_output "⬆️  Upgraded 'hello' in environment 'test'."
 }
-
-# bats test_tags=upgrade:migrate:manifest
-@test "upgrade performs manifest migration" {
-  NAME="name"
-
-  setup_pkgdb_env "$NAME"
-  # Updating an locked environment produces a different message.
-  # Here we want to test the migration message for migrating manifests only.
-  rm -f "$PROJECT_DIR/.flox/env/manifest.lock"
-
-  run "$FLOX_BIN" upgrade
-  assert_output --partial "Detected an old environment version. Attempting to migrate to version 1."
-  assert_output --partial "ℹ️  No packages need to be upgraded in environment '$NAME'"
-  assert_output --partial "⬆️  Migrated environment '$NAME' to version 1."
-}
-
-# bats test_tags=upgrade:migrate:lockfile
-@test "upgrade performs lockfile migration" {
-  NAME="name"
-  setup_pkgdb_env "$NAME"
-
-  run "$FLOX_BIN" upgrade
-  assert_output --partial "Detected an old environment version. Attempting to migrate to version 1 and upgrade packages."
-  assert_output --partial "⬆️  Migrated environment to version 1 and upgraded all packages for environment '$NAME'."
-}
-
-@test "catalog: package names and systems are deduped" {
-  "$FLOX_BIN" init
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/old_hello.json" \
-    "$FLOX_BIN" install hello
-  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
-    run "$FLOX_BIN" upgrade hello
-  assert_output "⬆️  Upgraded 'hello' in environment 'test'."
-}

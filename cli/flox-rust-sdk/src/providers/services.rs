@@ -272,6 +272,7 @@ pub fn service_config_write_location(temp_dir: impl AsRef<Path>) -> Result<PathB
     Ok(path)
 }
 
+/// Generate the YAML config file for services if the lockfile contains services.
 pub fn maybe_make_service_config_file(
     flox: &Flox,
     lockfile: &LockedManifestCatalog,
