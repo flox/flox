@@ -240,8 +240,9 @@ impl MockClient {
     /// Clear mock responses and then load responses from a file into the list
     /// of mock responses
     pub fn clear_and_load_responses_from_file(&mut self, relative_path: &str) {
-        let responses = read_mock_responses((*GENERATED_DATA).join(relative_path))
-            .expect("couldn't read mock responses");
+        let data_path = (*GENERATED_DATA).join(relative_path);
+        eprintln!("data path: {}", data_path.display());
+        let responses = read_mock_responses(data_path).expect("couldn't read mock responses");
         let mut locked_mock_responses = self
             .mock_responses
             .lock()

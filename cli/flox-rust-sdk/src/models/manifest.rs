@@ -291,18 +291,14 @@ impl RawManifest {
     ///
     /// Discussion: using a string field as the version tag `version: "1"` vs `version: 1`
     /// could work today, but is still limited by the lack of an optional tag.
-    pub fn to_typed(&self) -> Result<TypedManifest, toml_edit::de::Error> {
+    pub fn to_typed(&self) -> Result<TypedManifestCatalog, toml_edit::de::Error> {
         match self.get_version() {
-            Some(1) => Ok(TypedManifest::Catalog(toml_edit::de::from_document(
-                self.0.clone(),
-            )?)),
-            None => Ok(TypedManifest::Pkgdb(toml_edit::de::from_document(
-                self.0.clone(),
-            )?)),
+            Some(1) => Ok(toml_edit::de::from_document(self.0.clone())?),
             Some(v) => {
                 let msg = format!("unsupported manifest version: {v}");
                 Err(toml_edit::de::Error::custom(msg))
             },
+            None => Err(toml_edit::de::Error::custom("unsupported manifest version")),
         }
     }
 }
@@ -335,21 +331,6 @@ impl DerefMut for RawManifest {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
-}
-
-/// Represents the Manifest data schema for reading/processing of the manifest.
-/// Writing a [`TypedManifest`] will drop comments and formatting.
-/// Hence, this should only be used in cases where these can safely be severed.
-/// Edits to the user facing manifest.toml file should be made using [`RawManifest`] instead.
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[serde(untagged)]
-pub enum TypedManifest {
-    /// v1 manifest, processed by flox and resolved using the catalog service
-    Catalog(Box<TypedManifestCatalog>),
-    /// deprecated ~v0~ manifest, processed entirely by `pkgdb`
-    #[cfg_attr(test, proptest(skip))]
-    Pkgdb(TypedManifestPkgdb),
 }
 
 /// Not meant for writing manifest files, only for reading them.
@@ -1004,25 +985,6 @@ pub enum ManifestBuildSandbox {
     Pure,
 }
 
-/// Deserialize the manifest as a [serde_json::Value],
-/// then convert it to a [RawManifest] that can then be converted to a [TypedManifest].
-/// This provides more precise errors based on the version of the manifest.
-///
-/// See the comment on [`RawManifest::to_typed`] for more information.
-impl<'de> Deserialize<'de> for TypedManifest {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let document = toml_edit::ser::to_document(&value)
-            .map_err(|err| serde::de::Error::custom(err.to_string()))?;
-        RawManifest(document)
-            .to_typed()
-            .map_err(serde::de::Error::custom)
-    }
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum ManifestError {
     #[error("couldn't parse descriptor '{}': {}", desc, msg)]
@@ -1523,15 +1485,21 @@ pub(super) mod test {
     use super::*;
 
     const DUMMY_MANIFEST: &str = indoc! {r#"
+        version = 1
+        
         [install]
-        hello = {}
+        hello.pkg-path = "hello"
 
         [install.ripgrep]
+        pkg-path = "ripgrep"
         [install.bat]
+        pkg-path = "bat"
     "#};
 
     // This is an array of tables called `install` rather than a table called `install`.
     const BAD_MANIFEST: &str = indoc! {r#"
+        version = 1
+        
         [[install]]
         python = {}
 
@@ -1551,7 +1519,7 @@ pub(super) mod test {
             unknown = 'field'
         "};
 
-        let err = toml_edit::de::from_str::<TypedManifest>(&manifest)
+        let err = toml_edit::de::from_str::<TypedManifestCatalog>(&manifest)
             .expect_err("manifest.toml should be invalid");
 
         assert!(
@@ -1570,7 +1538,7 @@ pub(super) mod test {
             allow.unknown = true
         "};
 
-        let err = toml_edit::de::from_str::<TypedManifest>(&manifest)
+        let err = toml_edit::de::from_str::<TypedManifestCatalog>(&manifest)
             .expect_err("manifest.toml should be invalid");
 
         assert!(
@@ -1910,23 +1878,8 @@ pub(super) mod test {
     }
 
     #[test]
-    fn detect_pkgdb_manifest() {
-        const PKGDB_MANIFEST: &str = indoc! {r#"
-            # No version field, so it's a pkgdb manifest
-        "#};
-
-        assert!(matches!(
-            toml_edit::de::from_str(PKGDB_MANIFEST),
-            Ok(TypedManifest::Pkgdb(_))
-        ))
-    }
-
-    #[test]
     fn detect_catalog_manifest() {
-        assert!(matches!(
-            toml_edit::de::from_str(CATALOG_MANIFEST),
-            Ok(TypedManifest::Catalog(_))
-        ))
+        assert!(toml_edit::de::from_str::<TypedManifestCatalog>(CATALOG_MANIFEST).is_ok());
     }
 
     #[test]
@@ -1968,7 +1921,7 @@ pub(super) mod test {
         let test_packages = vec![PackageToInstall::Catalog(
             CatalogPackage::from_str("foo").unwrap(),
         )];
-        let insertion = insert_packages("", &test_packages).unwrap();
+        let insertion = insert_packages(CATALOG_MANIFEST, &test_packages).unwrap();
         assert!(
             contains_package(&insertion.new_toml.clone().unwrap(), test_packages[0].id()).unwrap()
         );
@@ -1990,7 +1943,7 @@ pub(super) mod test {
         let attempted_insertion = insert_packages(BAD_MANIFEST, &test_packages);
         assert!(matches!(
             attempted_insertion,
-            Err(TomlEditError::MalformedInstallTable(_))
+            Err(TomlEditError::ParseManifest(_))
         ))
     }
 
@@ -2000,14 +1953,14 @@ pub(super) mod test {
         let attempted_removal = remove_packages(BAD_MANIFEST, &test_packages);
         assert!(matches!(
             attempted_removal,
-            Err(TomlEditError::MalformedInstallTable(_))
+            Err(TomlEditError::ParseManifest(_))
         ))
     }
 
     #[test]
     fn error_when_install_table_missing() {
         let test_packages = vec!["hello".to_owned()];
-        let removal = remove_packages("", &test_packages);
+        let removal = remove_packages("version = 1", &test_packages);
         assert!(matches!(removal, Err(TomlEditError::PackageNotFound(_))));
     }
 

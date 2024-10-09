@@ -42,9 +42,9 @@ teardown() {
 
 # ---------------------------------------------------------------------------- #
 
-init_pkgdb_env() {
+init_env() {
   mkdir -p "$PROJECT_DIR/.flox/env"
-  cp --no-preserve=mode "$MANUALLY_GENERATED"/empty_v0/* "$PROJECT_DIR/.flox/env"
+  cp --no-preserve=mode "$MANUALLY_GENERATED"/empty/* "$PROJECT_DIR/.flox/env"
 
   echo '{
     "name": "env",
@@ -60,36 +60,27 @@ init_pkgdb_env() {
 }
 
 @test "'flox list' lists packages of environment in the current dir; No package" {
-  init_pkgdb_env
+  init_env
   run "$FLOX_BIN" list
   assert_success
-}
-
-@test "'flox list' lists packages of environment in the current dir; One package from nixpkgs" {
-  init_pkgdb_env
-  cp "$MANUALLY_GENERATED"/hello_v0/* "$PROJECT_DIR/.flox/env"
-
-  run "$FLOX_BIN" list
-  assert_success
-  assert_output --regexp 'hello: hello \([0-9]+\.[0-9]+(\.[0-9]+)?\)'
 }
 
 @test "'flox list' lists packages of environment in the current dir; shows different paths" {
-  init_pkgdb_env
-  cp "$MANUALLY_GENERATED"/python_v0/* "$PROJECT_DIR/.flox/env"
+  init_env
+  cp "$GENERATED_DATA"/envs/pip/* "$PROJECT_DIR/.flox/env"
 
   run "$FLOX_BIN" list
   assert_success
   assert_output --regexp - <<EOF
-pip: python311Packages.pip \([0-9]+\.[0-9]+(\.[0-9]+)?\)
+pip: python312Packages.pip.*
 EOF
 }
 
 @test "'flox list' lists packages of environment in the current dir; shows different id" {
-  init_pkgdb_env
+  init_env
 
   # install hello with `greeting` as the iid.
-  cp "$MANUALLY_GENERATED"/hello_as_greeting_v0/* "$PROJECT_DIR/.flox/env"
+  cp "$GENERATED_DATA"/envs/hello_as_greeting/* "$PROJECT_DIR/.flox/env"
 
   run "$FLOX_BIN" list
   assert_success
@@ -98,34 +89,16 @@ greeting: hello \([0-9]+\.[0-9]+(\.[0-9]+)?\)
 EOF
 }
 
-# bats test_tags=list,list:config
-@test "'flox list --config' shows manifest content" {
-  init_pkgdb_env
-  # mock files are copied from store with ro permissions
-  tomlq -i -t '.hook."on-activate" = "something suspicious"' "$PROJECT_DIR/.flox/env/manifest.toml"
-
-  MANIFEST_CONTENT="$(
-    cat <<EOF
-[hook]
-on-activate = "something suspicious"
-EOF
-  )"
-
-  run "$FLOX_BIN" list --config
-  assert_success
-  assert_output --partial "$MANIFEST_CONTENT"
-}
-
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=list,list:not-applicable
 @test "'flox list' hides packages not installed for the current system" {
-  init_pkgdb_env
+  init_env
 
   # Mock env with `hello` installed for all systems
   # and `htop` for no system to emulate a package not installed
   # for the current system on all systems.
-  cp "$MANUALLY_GENERATED"/hello_and_htop_for_no_system_v0/* "$PROJECT_DIR/.flox/env"
+  cp "$GENERATED_DATA"/envs/hello_and_htop_for_no_system/* "$PROJECT_DIR/.flox/env"
 
   run "$FLOX_BIN" list -n
   assert_success
@@ -137,15 +110,15 @@ EOF
 # https://github.com/flox/flox/issues/1039
 # bats test_tags=list,list:tolerates-missing-version
 @test "'flox list' tolerates missing version" {
-  init_pkgdb_env
+  init_env
 
   # `influxdb2 does not have a version attribute set in nixpkgs (2024-02-19)
   # todo: replace with a more predicatable/smaller example
-  cp "$MANUALLY_GENERATED"/influxdb2_v0/* "$PROJECT_DIR/.flox/env"
+  cp "$GENERATED_DATA"/envs/influxdb2/* "$PROJECT_DIR/.flox/env"
 
   run "$FLOX_BIN" list
   assert_success
-  assert_output "influxdb2: influxdb2 (N/A)"
+  assert_output "influxdb2: influxdb2 (influxdb2)"
 }
 
 # ------------------------------ Catalog Tests ------------------------------- #

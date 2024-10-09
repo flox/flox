@@ -1,0 +1,9 @@
+version = 1
+
+[install]
+hello.pkg-path = "hello"
+htop.pkg-path = "htop"
+htop.systems = []
+
+[options]
+systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]

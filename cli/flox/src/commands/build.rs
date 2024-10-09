@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::lockfile::LockedManifest;
+use flox_rust_sdk::models::lockfile::LockedManifestCatalog;
 use flox_rust_sdk::providers::build::{FloxBuildMk, ManifestBuilder, Output};
 use indoc::indoc;
 use tracing::instrument;
@@ -133,11 +133,10 @@ impl Build {
     }
 }
 
-fn available_packages(lockfile: &LockedManifest, packages: Vec<String>) -> Result<Vec<String>> {
-    let LockedManifest::Catalog(lockfile) = lockfile else {
-        bail!("Build requires a v1 lockfile");
-    };
-
+fn available_packages(
+    lockfile: &LockedManifestCatalog,
+    packages: Vec<String>,
+) -> Result<Vec<String>> {
     let environment_packages = &lockfile.manifest.build;
 
     if environment_packages.is_empty() {
