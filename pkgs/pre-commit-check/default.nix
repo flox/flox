@@ -11,7 +11,7 @@
   bash,
 }:
 pre-commit-hooks.lib.${system}.run {
-  src = builtins.path {path = ./.;};
+  src = builtins.path { path = ./.; };
   default_stages = [
     "manual"
     "push"
@@ -27,25 +27,29 @@ pre-commit-hooks.lib.${system}.run {
         "c++"
       ];
     };
-    rustfmt = let
-      wrapper = symlinkJoin {
-        name = "rustfmt-wrapped";
-        paths = [rustfmt];
-        nativeBuildInputs = [makeWrapper];
-        postBuild = let
-          # Use nightly rustfmt
-          PATH = lib.makeBinPath [
-            fenix.stable.cargo
-            rustfmt
-          ];
-        in ''
-          wrapProgram $out/bin/cargo-fmt --prefix PATH : ${PATH};
-        '';
+    rustfmt =
+      let
+        wrapper = symlinkJoin {
+          name = "rustfmt-wrapped";
+          paths = [ rustfmt ];
+          nativeBuildInputs = [ makeWrapper ];
+          postBuild =
+            let
+              # Use nightly rustfmt
+              PATH = lib.makeBinPath [
+                fenix.stable.cargo
+                rustfmt
+              ];
+            in
+            ''
+              wrapProgram $out/bin/cargo-fmt --prefix PATH : ${PATH};
+            '';
+        };
+      in
+      {
+        enable = true;
+        entry = lib.mkForce "${wrapper}/bin/cargo-fmt fmt --all --manifest-path 'cli/Cargo.toml' -- --color always";
       };
-    in {
-      enable = true;
-      entry = lib.mkForce "${wrapper}/bin/cargo-fmt fmt --all --manifest-path 'cli/Cargo.toml' -- --color always";
-    };
     clippy.enable = true;
     clippy.settings.denyWarnings = true;
     commitizen = {
