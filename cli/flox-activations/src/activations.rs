@@ -55,9 +55,16 @@ impl Activations {
     }
 
     /// Get a mutable reference to the activation with the given store path.
-    pub fn activation_for_store_path(&mut self, store_path: &str) -> Option<&Activation> {
+    pub fn activation_for_store_path(&self, store_path: &str) -> Option<&Activation> {
         self.activations
             .iter()
+            .find(|activation| activation.store_path == store_path)
+    }
+
+    /// Get a mutable reference to the activation with the given store path.
+    pub fn activation_for_store_path_mut(&mut self, store_path: &str) -> Option<&mut Activation> {
+        self.activations
+            .iter_mut()
             .find(|activation| activation.store_path == store_path)
     }
 

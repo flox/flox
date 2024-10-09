@@ -6,7 +6,6 @@ use clap::Args;
 use fslock::LockFile;
 use indoc::indoc;
 use time::{Duration, OffsetDateTime};
-use uuid::Uuid;
 
 use crate::activations::{self, Activations};
 use crate::Error;
@@ -32,7 +31,7 @@ impl StartOrAttachArgs {
     fn handle_inner(
         self,
         cache_dir: PathBuf,
-        attach_fn: impl FnOnce(&Path, LockFile, Uuid, u32) -> Result<(), Error>,
+        attach_fn: impl FnOnce(&Path, LockFile, &str, u32) -> Result<(), Error>,
         start_fn: impl FnOnce(
             Activations,
             PathBuf,
@@ -45,12 +44,12 @@ impl StartOrAttachArgs {
         let activations_json_path = activations::activations_json_path(&cache_dir, &self.flox_env)?;
 
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
-        let mut activations = activations.unwrap_or_default();
+        let activations = activations.unwrap_or_default();
 
         let (activation_id, attaching) =
             match activations.activation_for_store_path(&self.store_path) {
                 Some(activation) => {
-                    attach_fn(&activations_json_path, lock, activation.id(), self.pid)?;
+                    attach_fn(&activations_json_path, lock, &self.store_path, self.pid)?;
                     (activation.id(), true)
                 },
                 None => {
@@ -81,7 +80,7 @@ impl StartOrAttachArgs {
 fn attach(
     activations_json_path: &Path,
     lock: fslock::LockFile,
-    activation_id: Uuid,
+    store_path: &str,
     pid: u32,
 ) -> Result<(), Error> {
     // Drop the lock to allow the activation to be updated by other processes
@@ -90,7 +89,7 @@ fn attach(
     let attach_expiration = OffsetDateTime::now_utc() + Duration::seconds(10);
     wait_for_activation_ready_and_attach_pid(
         activations_json_path,
-        activation_id,
+        store_path,
         attach_expiration,
         pid,
     )?;
@@ -116,18 +115,16 @@ fn start(
 /// exit with an error.
 /// If the activation startup process fails, exit with an error.
 /// In either case, the activation can likely just be restarted.
-// TODO: use store_path rather than activation_id.
-// If we are activation 3, activation 1 fails, but activation 2 succeeds, we may want to attach to activation 2
 fn wait_for_activation_ready_and_attach_pid(
     activations_json_path: &Path,
-    activation_id: uuid::Uuid,
+    store_path: &str,
     attach_expiration: OffsetDateTime,
     attaching_pid: u32,
 ) -> Result<(), anyhow::Error> {
     loop {
         let ready = check_for_activation_ready_and_attach_pid(
             activations_json_path,
-            activation_id,
+            store_path,
             attaching_pid,
             attach_expiration,
             OffsetDateTime::now_utc(),
@@ -144,7 +141,7 @@ fn wait_for_activation_ready_and_attach_pid(
 
 fn check_for_activation_ready_and_attach_pid(
     activations_json_path: &Path,
-    activation_id: uuid::Uuid,
+    store_path: &str,
     attaching_pid: u32,
     attach_expiration: OffsetDateTime,
     now: OffsetDateTime,
@@ -155,7 +152,7 @@ fn check_for_activation_ready_and_attach_pid(
     };
 
     let activation = activations
-        .activation_for_id_mut(activation_id)
+        .activation_for_store_path_mut(store_path)
         .context(indoc! {"
             Prior activation of the environment completed.
 
@@ -280,6 +277,7 @@ mod tests {
     fn check_for_activation_not_ready() {
         let cache_dir = tempfile::tempdir().unwrap();
         let flox_env = PathBuf::from("/path/to/floxenv");
+        let store_path = "/store/path";
 
         // The PID of the current process, guaranteed to be running
         let pid = std::process::id();
@@ -288,11 +286,8 @@ mod tests {
         let now = OffsetDateTime::now_utc();
         let attach_expiration = now + Duration::seconds(10);
 
-        let id = write_activations(&cache_dir, &flox_env, |activations| {
-            activations
-                .create_activation("/store/path", pid)
-                .unwrap()
-                .id()
+        let _ = write_activations(&cache_dir, &flox_env, |activations| {
+            activations.create_activation(store_path, pid).unwrap().id()
         });
 
         let activations_json_path =
@@ -300,7 +295,7 @@ mod tests {
 
         let ready = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
-            id,
+            store_path,
             attaching_pid,
             attach_expiration,
             now,
@@ -315,6 +310,7 @@ mod tests {
     fn check_for_activation_ready() {
         let cache_dir = tempfile::tempdir().unwrap();
         let flox_env = PathBuf::from("/path/to/floxenv");
+        let store_path = "/store/path";
 
         // The PID of the current process, guaranteed to be running
         let pid = std::process::id();
@@ -323,8 +319,8 @@ mod tests {
         let now = OffsetDateTime::now_utc();
         let attach_expiration = now + Duration::seconds(10);
 
-        let id = write_activations(&cache_dir, &flox_env, |activations| {
-            let activation = activations.create_activation("/store/path", pid).unwrap();
+        let _ = write_activations(&cache_dir, &flox_env, |activations| {
+            let activation = activations.create_activation(store_path, pid).unwrap();
             activation.set_ready();
             activation.id()
         });
@@ -334,7 +330,7 @@ mod tests {
 
         let ready = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
-            id,
+            store_path,
             attaching_pid,
             attach_expiration,
             now,
@@ -344,7 +340,7 @@ mod tests {
         assert!(ready, "Activation should be ready");
 
         read_activations(cache_dir, flox_env, |activations| {
-            let activation = activations.activation_for_id_ref(id).unwrap();
+            let activation = activations.activation_for_store_path(store_path).unwrap();
             let attached_pid = activation
                 .attached_pids()
                 .iter()
@@ -362,6 +358,7 @@ mod tests {
     fn check_for_activation_fails_if_starting_process_is_dead() {
         let cache_dir = tempfile::tempdir().unwrap();
         let flox_env = PathBuf::from("/path/to/floxenv");
+        let store_path = "/store/path";
 
         let pid = make_unused_pid();
         let attaching_pid = 5678;
@@ -369,8 +366,8 @@ mod tests {
         let now = OffsetDateTime::now_utc();
         let attach_expiration = now + Duration::seconds(10);
 
-        let id = write_activations(&cache_dir, &flox_env, |activations| {
-            let activation = activations.create_activation("/store/path", pid).unwrap();
+        let _ = write_activations(&cache_dir, &flox_env, |activations| {
+            let activation = activations.create_activation(store_path, pid).unwrap();
             activation.id()
         });
 
@@ -379,7 +376,7 @@ mod tests {
 
         let result = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
-            id,
+            store_path,
             attaching_pid,
             attach_expiration,
             now,
@@ -395,6 +392,7 @@ mod tests {
     fn check_for_activation_fails_if_starting_process_timeout_expires() {
         let cache_dir = tempfile::tempdir().unwrap();
         let flox_env = PathBuf::from("/path/to/floxenv");
+        let store_path = "/store/path";
 
         // The PID of the current process, guaranteed to be running
         let pid = std::process::id();
@@ -404,8 +402,8 @@ mod tests {
         // Set the expiration to be in the past
         let attach_expiration = now - Duration::seconds(10);
 
-        let id = write_activations(&cache_dir, &flox_env, |activations| {
-            let activation = activations.create_activation("/store/path", pid).unwrap();
+        let _ = write_activations(&cache_dir, &flox_env, |activations| {
+            let activation = activations.create_activation(store_path, pid).unwrap();
             activation.id()
         });
 
@@ -414,7 +412,7 @@ mod tests {
 
         let result = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
-            id,
+            store_path,
             attaching_pid,
             attach_expiration,
             now,
