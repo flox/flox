@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 
 mod attach;
@@ -17,6 +19,14 @@ const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.";
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
+
+    #[arg(
+        short,
+        long,
+        value_name = "PATH",
+        help = "The path to the cache directory."
+    )]
+    pub cache_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
