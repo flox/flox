@@ -516,38 +516,34 @@ impl UpdateNotification {
             Err(e) => Err(UpdateNotificationError::Io(e))?,
         };
 
-        let new_version_str = get_latest_version_future.await?;
-        let current_version_str = FLOX_VERSION.as_str();
+        let Ok(current_version) = FLOX_VERSION.parse::<FloxVersion>() else {
+            return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
+                "version '{}' is invalid.",
+                *FLOX_VERSION
+            )));
+        };
 
-        if let Ok(new_version) = new_version_str.parse::<FloxVersion>() {
-            if let Ok(current_version) = current_version_str.parse::<FloxVersion>() {
-                match current_version.partial_cmp(&new_version) {
-                    None => {
-                        return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
-                            "We can not compare '{current_version}'."
-                        )))
-                    },
-                    Some(std::cmp::Ordering::Less) => {
-                        return Ok(UpdateCheckResult::UpdateAvailable(UpdateNotification {
-                            new_version: new_version.to_string(),
-                            notification_file,
-                        }))
-                    },
-                    _ => {
-                        return Ok(UpdateCheckResult::RefreshNotificationFile(
-                            notification_file,
-                        ))
-                    },
-                }
-            } else {
-                Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
-                    "version '{current_version_str}' is invalid."
-                )))
-            }
-        } else {
-            Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
+        let new_version_str = get_latest_version_future.await?;
+        let Ok(new_version) = new_version_str.parse::<FloxVersion>() else {
+            return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
                 "version '{new_version_str}' is invalid."
-            )))
+            )));
+        };
+
+        match current_version.partial_cmp(&new_version) {
+            None => Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
+                "Cannot compare the current version: {current_version}"
+            ))),
+            Some(std::cmp::Ordering::Less) => {
+                Ok(UpdateCheckResult::UpdateAvailable(UpdateNotification {
+                    new_version: new_version.to_string(),
+                    notification_file,
+                }))
+            },
+            // current_version is Equal or Greater than new_version
+            _ => Ok(UpdateCheckResult::RefreshNotificationFile(
+                notification_file,
+            )),
         }
     }
 
