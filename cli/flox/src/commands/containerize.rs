@@ -41,7 +41,7 @@ pub struct Containerize {
         short,
         long("load-into-registry"),
         argument("registry"),
-        guard(is_accepted_registry, "one of docker or podman is required")
+        guard(is_accepted_registry, "'--load-into-registry' must be docker or podman")
     )]
     load_into_registry: Option<String>,
 }
