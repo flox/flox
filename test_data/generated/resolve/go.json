@@ -1,0 +1,140 @@
+[
+  [
+    {
+      "msgs": [],
+      "name": "toplevel",
+      "page": {
+        "complete": true,
+        "msgs": [],
+        "packages": [
+          {
+            "attr_path": "go",
+            "broken": false,
+            "derivation": "/nix/store/x1p2gf1jcqn29l4agdqrb0w09rib7w3m-go-1.22.7.drv",
+            "description": "Go Programming language",
+            "insecure": false,
+            "install_id": "go",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=c31898adf5a8ed202ce5bea9f347b1c6871f32d1",
+            "name": "go-1.22.7",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/rfcwglhhspqx5v5h0sl4b3py14i6vpxa-go-1.22.7"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "go",
+            "rev": "c31898adf5a8ed202ce5bea9f347b1c6871f32d1",
+            "rev_count": 689866,
+            "rev_date": "2024-10-06T19:07:05Z",
+            "scrape_date": "2024-10-09T03:51:54Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "1.22.7"
+          },
+          {
+            "attr_path": "go",
+            "broken": false,
+            "derivation": "/nix/store/qk95aryv3n1mhmk0lxf55sg9yr0l6138-go-1.22.7.drv",
+            "description": "Go Programming language",
+            "insecure": false,
+            "install_id": "go",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=c31898adf5a8ed202ce5bea9f347b1c6871f32d1",
+            "name": "go-1.22.7",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/64z59pb0ss407rbv1fcvq0ynngrwfa6k-go-1.22.7"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "go",
+            "rev": "c31898adf5a8ed202ce5bea9f347b1c6871f32d1",
+            "rev_count": 689866,
+            "rev_date": "2024-10-06T19:07:05Z",
+            "scrape_date": "2024-10-09T03:51:54Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "1.22.7"
+          },
+          {
+            "attr_path": "go",
+            "broken": false,
+            "derivation": "/nix/store/4bjrs6k4a0xjyy5zanbc8igv0cffsi0a-go-1.22.7.drv",
+            "description": "Go Programming language",
+            "insecure": false,
+            "install_id": "go",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=c31898adf5a8ed202ce5bea9f347b1c6871f32d1",
+            "name": "go-1.22.7",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/r8199g59rmp6ac0lnx86fpk57fbxc3bk-go-1.22.7"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "go",
+            "rev": "c31898adf5a8ed202ce5bea9f347b1c6871f32d1",
+            "rev_count": 689866,
+            "rev_date": "2024-10-06T19:07:05Z",
+            "scrape_date": "2024-10-09T03:51:54Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "1.22.7"
+          },
+          {
+            "attr_path": "go",
+            "broken": false,
+            "derivation": "/nix/store/gp0ma9f4n4nxmgbgl1g65kvlf05cl22y-go-1.22.7.drv",
+            "description": "Go Programming language",
+            "insecure": false,
+            "install_id": "go",
+            "license": "BSD-3-Clause",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=c31898adf5a8ed202ce5bea9f347b1c6871f32d1",
+            "name": "go-1.22.7",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/chzgk756zb2cqlzbjr86m0lfxi63cdfy-go-1.22.7"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "go",
+            "rev": "c31898adf5a8ed202ce5bea9f347b1c6871f32d1",
+            "rev_count": 689866,
+            "rev_date": "2024-10-06T19:07:05Z",
+            "scrape_date": "2024-10-09T03:51:54Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "1.22.7"
+          }
+        ],
+        "page": 689866,
+        "url": ""
+      }
+    }
+  ]
+]

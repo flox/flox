@@ -111,6 +111,10 @@ cmd = "flox install hello"
 pre_cmd = "flox init"
 cmd = "flox install hello-unfree"
 
+[resolve.go]
+pre_cmd = "flox init"
+cmd = "flox install go"
+
 [resolve.krb5_after_prereqs_installed]
 files = ["envs/krb5_prereqs/manifest.toml"]
 pre_cmd = '''
