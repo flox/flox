@@ -68,8 +68,7 @@ impl Containerize {
         };
 
         let (output, output_name): (Box<dyn Write + Send>, String) =
-            if self.load_into_registry.is_some() {
-                let registry = self.load_into_registry.unwrap();
+            if let Some(registry) = self.load_into_registry {
                 let command = Command::new(&registry)
                     .arg("load")
                     .stdin(Stdio::piped())
