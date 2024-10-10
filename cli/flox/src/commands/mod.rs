@@ -532,7 +532,7 @@ impl UpdateNotification {
 
         match current_version.partial_cmp(&new_version) {
             None => Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
-                "We can not compare '{current_version}'."
+                "Cannot compare the current version: {current_version}"
             ))),
             Some(std::cmp::Ordering::Less) => {
                 Ok(UpdateCheckResult::UpdateAvailable(UpdateNotification {
