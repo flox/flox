@@ -871,7 +871,7 @@ mod tests {
         fs::write(env_path.join("main.go"), arg0_code).unwrap();
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
-            client.clear_and_load_responses_from_file("init/go.json");
+            client.clear_and_load_responses_from_file("resolve/go.json");
         } else {
             panic!("expected Mock client")
         };
@@ -983,7 +983,7 @@ mod tests {
         fs::write(env_path.join("main.go"), exe_code).unwrap();
 
         if let Client::Mock(ref mut client) = flox.catalog_client {
-            client.clear_and_load_responses_from_file("init/go.json");
+            client.clear_and_load_responses_from_file("resolve/go.json");
         } else {
             panic!("expected Mock client")
         };
