@@ -218,7 +218,7 @@ mod tests {
 
         args.handle_inner(
             cache_dir.path().to_path_buf(),
-            |_, _, _, _| Ok(()),
+            attach,
             |_, _, _, _, _| panic!("start should not be called"),
             &mut output,
         )
@@ -259,7 +259,7 @@ mod tests {
         args.handle_inner(
             cache_dir.path().to_path_buf(),
             |_, _, _, _| panic!("attach should not be called"),
-            |_, _, _, _, _| Ok(id),
+            start,
             &mut output,
         )
         .expect("handle_inner should succeed");
