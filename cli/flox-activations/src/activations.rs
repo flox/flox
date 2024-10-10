@@ -235,62 +235,25 @@ fn activations_json_lock_path(activations_json_path: impl AsRef<Path>) -> PathBu
     activations_json_path.as_ref().with_extension("lock")
 }
 
-/// Directory for flox to store runtime data in.
-///
-/// Typically
-/// $XDG_RUNTIME_DIR/flox
-/// or
-/// ~/.cache/flox/run
-///
-/// For sockets and activation data, we want the guarantees provided by XDG_RUNTIME_DIR.
-/// Per https://specifications.freedesktop.org/basedir-spec/latest/
-/// XDG_RUNTIME_DIR
-/// - MUST be owned by the user, and they MUST be the only one having read and write access to it. Its Unix access mode MUST be 0700
-/// - MUST be on a local file system and not shared with any other system
-/// - MUST be created when the user first logs in
-///
-/// On macOS we use cache directory.
-// TODO: some of this logic should be deduplicated with services_socket_path
-#[allow(unused)]
-fn flox_runtime_dir(cache_dir: impl AsRef<Path>) -> Result<PathBuf, Error> {
-    #[cfg(target_os = "macos")]
-    let runtime_dir: Option<PathBuf> = None;
-
-    #[cfg(target_os = "linux")]
-    let runtime_dir = {
-        let base_directories = xdg::BaseDirectories::with_prefix("flox")?;
-        base_directories.create_runtime_directory("").ok()
-    };
-
-    let flox_runtime_dir = match runtime_dir {
-        Some(dir) => dir,
-        None => cache_dir.as_ref().join("run"),
-    };
-
-    // We don't want to error if the directory already exists,
-    // so use create_dir_all.
-    std::fs::create_dir_all(&flox_runtime_dir)?;
-
-    Ok(flox_runtime_dir)
-}
-
 /// {flox_runtime_dir}/{path_hash(flox_env)}/activations.json
 pub fn activations_json_path(
-    cache_dir: impl AsRef<Path>,
+    runtime_dir: impl AsRef<Path>,
     flox_env: impl AsRef<Path>,
 ) -> Result<PathBuf, Error> {
-    Ok(flox_runtime_dir(cache_dir)?
+    Ok(runtime_dir
+        .as_ref()
         .join(path_hash(flox_env))
         .join("activations.json"))
 }
 
 /// {flox_runtime_dir}/{path_hash(flox_env)}/{activation_id}
 pub fn activation_state_dir_path(
-    cache_dir: impl AsRef<Path>,
+    runtime_dir: impl AsRef<Path>,
     flox_env: impl AsRef<Path>,
     activation_id: Uuid,
 ) -> Result<PathBuf, Error> {
-    Ok(flox_runtime_dir(cache_dir)?
+    Ok(runtime_dir
+        .as_ref()
         .join(path_hash(flox_env))
         .join(activation_id.to_string()))
 }
@@ -337,51 +300,7 @@ pub fn write_activations_json(
 
 #[cfg(test)]
 mod test {
-    #[cfg(target_os = "linux")]
-    use std::os::unix::fs::PermissionsExt;
-
     use super::*;
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn flox_runtime_dir_respects_xdg_runtime_dir() {
-        // In reality XDG_RUNTIME_DIR would be something like `/run/user/1001`,
-        // but that won't necessarily exist where this unit test is run.
-        // We need a directory with group and others rights 00 otherwise
-        // xdg::BaseDirectories errors.
-        // And because we may eventually use it for sockets, it needs to be
-        // relatively short.
-        let tempdir = tempfile::Builder::new()
-            .permissions(std::fs::Permissions::from_mode(0o700))
-            .tempdir_in("/tmp")
-            .unwrap();
-        let runtime_dir = tempdir.path();
-        let flox_runtime_dir = temp_env::with_var("XDG_RUNTIME_DIR", Some(&runtime_dir), || {
-            flox_runtime_dir(PathBuf::new())
-        })
-        .unwrap();
-        assert_eq!(flox_runtime_dir, runtime_dir.join("flox"));
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn flox_runtime_dir_falls_back_to_flox_cache() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let cache_dir = tempdir.path();
-        let flox_runtime_dir = temp_env::with_var("XDG_RUNTIME_DIR", None::<String>, || {
-            flox_runtime_dir(cache_dir)
-        })
-        .unwrap();
-        assert_eq!(flox_runtime_dir, cache_dir.join("run"));
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn flox_runtime_dir_uses_cache_dir() {
-        let tempdir = tempfile::tempdir().unwrap();
-        let cache_dir = tempdir.path();
-        let flox_runtime_dir = flox_runtime_dir(cache_dir).unwrap();
-        assert_eq!(flox_runtime_dir, cache_dir.join("run"));
-    }
 
     #[test]
     fn create_activation() {

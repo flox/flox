@@ -24,9 +24,10 @@ pub struct Cli {
         short,
         long,
         value_name = "PATH",
-        help = "The path to the cache directory."
+        help = "The path to the runtime directory keeping activation data.\n\
+                Defaults to XDG_RUNTIME_DIR/flox or XDG_CACHE_HOME/flox if not provided."
     )]
-    pub cache_dir: Option<PathBuf>,
+    pub runtime_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -47,12 +48,12 @@ mod test {
     use crate::activations::{self, Activations};
 
     pub(crate) fn write_activations<T>(
-        cache_dir: impl AsRef<Path>,
+        runtime_dir: impl AsRef<Path>,
         flox_env: impl AsRef<Path>,
         f: impl FnOnce(&mut Activations) -> T,
     ) -> T {
         let activations_json_path =
-            activations::activations_json_path(cache_dir, flox_env).unwrap();
+            activations::activations_json_path(runtime_dir, flox_env).unwrap();
         let (activations, lock) =
             activations::read_activations_json(&activations_json_path).unwrap();
         let mut activations = activations.unwrap_or_default();
@@ -64,12 +65,12 @@ mod test {
     }
 
     pub(crate) fn read_activations<T>(
-        cache_dir: impl AsRef<Path>,
+        runtime_dir: impl AsRef<Path>,
         flox_env: impl AsRef<Path>,
         f: impl FnOnce(&Activations) -> T,
     ) -> Option<T> {
         let activations_json_path =
-            activations::activations_json_path(cache_dir, flox_env).unwrap();
+            activations::activations_json_path(runtime_dir, flox_env).unwrap();
         let (activations, _lock) =
             activations::read_activations_json(&activations_json_path).unwrap();
         activations.map(|activations| f(&activations))
