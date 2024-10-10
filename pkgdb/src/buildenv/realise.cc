@@ -177,8 +177,18 @@ maybeGetCursor( nix::ref<nix::EvalState> &              state,
 {
   debugLog(
     nix::fmt( "getting attr cursor '%s.%s", cursor->getAttrPathStr(), attr ) );
-  auto symbol      = state->symbols.create( attr );
-  auto maybeCursor = cursor->maybeGetAttr( symbol, true );
+  auto        symbol = state->symbols.create( attr );
+  MaybeCursor maybeCursor;
+  try
+    {
+      maybeCursor = cursor->maybeGetAttr( symbol );
+    }
+  catch ( nix::eval_cache::CachedEvalError & e )
+    {
+      /* Force re-evaluating a cached error so we show the original error to the
+       * user */
+      e.force();
+    }
   if ( maybeCursor == nullptr ) { return std::nullopt; }
   auto newCursor
     = static_cast<nix::ref<nix::eval_cache::AttrCursor>>( maybeCursor );
