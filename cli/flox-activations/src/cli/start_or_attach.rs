@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -25,12 +26,34 @@ pub struct StartOrAttachArgs {
 
 impl StartOrAttachArgs {
     pub(crate) fn handle(self, cache_dir: PathBuf) -> Result<(), anyhow::Error> {
-        self.handle_inner(cache_dir, attach, start, std::io::stdout())
+        let mut retries = 3;
+
+        loop {
+            let result = self.handle_inner(&cache_dir, attach, start, std::io::stdout());
+
+            let Err(err) = result else {
+                break;
+            };
+
+            if let Some(restartable_failure) = err.downcast_ref::<RestartableFailure>() {
+                eprintln!("{}", restartable_failure);
+                retries -= 1;
+                if retries == 0 {
+                    return Err(err);
+                }
+                eprintln!("Retrying ...");
+                continue;
+            }
+
+            return Err(err);
+        }
+
+        Ok(())
     }
 
     fn handle_inner(
-        self,
-        cache_dir: PathBuf,
+        &self,
+        cache_dir: &Path,
         attach_fn: impl FnOnce(&Path, LockFile, &str, u32) -> Result<(), Error>,
         start_fn: impl FnOnce(
             Activations,
@@ -41,7 +64,7 @@ impl StartOrAttachArgs {
         ) -> Result<uuid::Uuid, Error>,
         mut output: impl Write,
     ) -> Result<(), Error> {
-        let activations_json_path = activations::activations_json_path(&cache_dir, &self.flox_env)?;
+        let activations_json_path = activations::activations_json_path(cache_dir, &self.flox_env)?;
 
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
         let activations = activations.unwrap_or_default();
@@ -68,7 +91,7 @@ impl StartOrAttachArgs {
         writeln!(
             &mut output,
             "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(cache_dir, self.flox_env, activation_id)?
+            activations::activation_state_dir_path(cache_dir, &self.flox_env, activation_id)?
                 .display()
         )?;
         writeln!(&mut output, "_FLOX_ACTIVATION_ID={activation_id}")?;
@@ -153,11 +176,8 @@ fn check_for_activation_ready_and_attach_pid(
 
     let activation = activations
         .activation_for_store_path_mut(store_path)
-        .context(indoc! {"
-            Prior activation of the environment completed.
-
-            Try again to start a new activation of the environment.
-        "})?;
+        .context("Prior activation of the environment completed before it could be attached to.")
+        .map_err(RestartableFailure)?;
 
     if activation.ready() {
         activation.attach_pid(attaching_pid, None);
@@ -168,13 +188,10 @@ fn check_for_activation_ready_and_attach_pid(
     if !activation.startup_process_running() {
         // TODO: clean out old activation of store_path
         // Or we may need to do that in activation_for_store_path()
-        //
-        // TODO: just call StartOrAttach::handle again
-        anyhow::bail!(indoc! {"
+        return Err(RestartableFailure(anyhow::anyhow!(indoc! {"
             Prior activation of the environment failed to start, or completed.
-
-            Try again to start a new activation of the environment.
-        "});
+        "}))
+        .into());
     }
 
     if now > attach_expiration {
@@ -186,6 +203,19 @@ fn check_for_activation_ready_and_attach_pid(
         "});
     }
     Ok(false)
+}
+
+#[derive(Debug)]
+struct RestartableFailure(anyhow::Error);
+impl std::error::Error for RestartableFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
+}
+impl Display for RestartableFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
 #[cfg(test)]
@@ -217,7 +247,7 @@ mod tests {
         let mut output = Vec::new();
 
         args.handle_inner(
-            cache_dir.path().to_path_buf(),
+            cache_dir.path(),
             attach,
             |_, _, _, _, _| panic!("start should not be called"),
             &mut output,
@@ -257,7 +287,7 @@ mod tests {
 
         let id = Uuid::new_v4();
         args.handle_inner(
-            cache_dir.path().to_path_buf(),
+            cache_dir.path(),
             |_, _, _, _| panic!("attach should not be called"),
             start,
             &mut output,
