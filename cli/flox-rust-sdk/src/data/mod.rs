@@ -1,12 +1,9 @@
-mod canonical_path;
 mod flox_version;
-mod version;
 
 use std::fmt::Display;
 
-pub use canonical_path::{CanonicalPath, CanonicalizeError};
+pub use flox_core::canonical_path::{CanonicalPath, CanonicalizeError};
 pub use flox_version::FloxVersion;
-pub use version::Version;
 pub type System = String;
 
 /// Different representations of the same attribute path
