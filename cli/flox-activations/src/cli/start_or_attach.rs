@@ -25,11 +25,11 @@ pub struct StartOrAttachArgs {
 }
 
 impl StartOrAttachArgs {
-    pub(crate) fn handle(self, cache_dir: PathBuf) -> Result<(), anyhow::Error> {
+    pub(crate) fn handle(self, runtime_dir: PathBuf) -> Result<(), anyhow::Error> {
         let mut retries = 3;
 
         loop {
-            let result = self.handle_inner(&cache_dir, attach, start, std::io::stdout());
+            let result = self.handle_inner(&runtime_dir, attach, start, std::io::stdout());
 
             let Err(err) = result else {
                 break;
@@ -53,7 +53,7 @@ impl StartOrAttachArgs {
 
     fn handle_inner(
         &self,
-        cache_dir: &Path,
+        runtime_dir: &Path,
         attach_fn: impl FnOnce(&Path, LockFile, &str, u32) -> Result<(), Error>,
         start_fn: impl FnOnce(
             Activations,
@@ -64,7 +64,8 @@ impl StartOrAttachArgs {
         ) -> Result<uuid::Uuid, Error>,
         mut output: impl Write,
     ) -> Result<(), Error> {
-        let activations_json_path = activations::activations_json_path(cache_dir, &self.flox_env)?;
+        let activations_json_path =
+            activations::activations_json_path(runtime_dir, &self.flox_env)?;
 
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
         let activations = activations.unwrap_or_default();
@@ -91,7 +92,7 @@ impl StartOrAttachArgs {
         writeln!(
             &mut output,
             "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(cache_dir, &self.flox_env, activation_id)?
+            activations::activation_state_dir_path(runtime_dir, &self.flox_env, activation_id)?
                 .display()
         )?;
         writeln!(&mut output, "_FLOX_ACTIVATION_ID={activation_id}")?;
@@ -227,14 +228,14 @@ mod tests {
 
     #[test]
     fn attach_if_activation_exists() {
-        let cache_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = tempfile::tempdir().unwrap();
         let flox_env = PathBuf::from("/path/to/floxenv");
         let store_path = "/store/path";
 
         // The PID of the current process, guaranteed to be running
         let pid = std::process::id();
 
-        let id = write_activations(&cache_dir, &flox_env, |activations| {
+        let id = write_activations(&runtime_dir, &flox_env, |activations| {
             activations.create_activation(store_path, pid).unwrap().id()
         });
 
@@ -247,7 +248,7 @@ mod tests {
         let mut output = Vec::new();
 
         args.handle_inner(
-            cache_dir.path(),
+            runtime_dir.path(),
             |_, _, _, _| Ok(()),
             |_, _, _, _, _| panic!("start should not be called"),
             &mut output,
@@ -259,7 +260,7 @@ mod tests {
         assert!(output.contains("_FLOX_ATTACH=true"));
         assert!(output.contains(&format!(
             "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(&cache_dir, flox_env, id)
+            activations::activation_state_dir_path(&runtime_dir, flox_env, id)
                 .unwrap()
                 .display()
         )));
@@ -268,14 +269,14 @@ mod tests {
 
     #[test]
     fn start_if_activation_does_not_exist() {
-        let cache_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = tempfile::tempdir().unwrap();
         let flox_env = PathBuf::from("/path/to/floxenv");
         let store_path = "/store/path";
 
         // The PID of the current process, guaranteed to be running
         let pid = std::process::id();
 
-        write_activations(&cache_dir, &flox_env, |_| {});
+        write_activations(&runtime_dir, &flox_env, |_| {});
 
         let args = StartOrAttachArgs {
             pid,
@@ -287,7 +288,7 @@ mod tests {
 
         let id = Uuid::new_v4();
         args.handle_inner(
-            cache_dir.path(),
+            runtime_dir.path(),
             |_, _, _, _| panic!("attach should not be called"),
             |_, _, _, _, _| Ok(id),
             &mut output,
@@ -298,7 +299,7 @@ mod tests {
         assert!(output.contains("_FLOX_ATTACH=false"));
         assert!(output.contains(&format!(
             "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(&cache_dir, flox_env, id)
+            activations::activation_state_dir_path(&runtime_dir, flox_env, id)
                 .unwrap()
                 .display()
         )));
@@ -307,7 +308,7 @@ mod tests {
 
     #[test]
     fn check_for_activation_not_ready() {
-        let cache_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = tempfile::tempdir().unwrap();
         let flox_env = PathBuf::from("/path/to/floxenv");
         let store_path = "/store/path";
 
@@ -318,12 +319,12 @@ mod tests {
         let now = OffsetDateTime::now_utc();
         let attach_expiration = now + Duration::seconds(10);
 
-        let _ = write_activations(&cache_dir, &flox_env, |activations| {
+        let _ = write_activations(&runtime_dir, &flox_env, |activations| {
             activations.create_activation(store_path, pid).unwrap().id()
         });
 
         let activations_json_path =
-            activations::activations_json_path(&cache_dir, &flox_env).unwrap();
+            activations::activations_json_path(&runtime_dir, &flox_env).unwrap();
 
         let ready = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
@@ -340,7 +341,7 @@ mod tests {
     /// and the return value should be true.
     #[test]
     fn check_for_activation_ready() {
-        let cache_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = tempfile::tempdir().unwrap();
         let flox_env = PathBuf::from("/path/to/floxenv");
         let store_path = "/store/path";
 
@@ -351,14 +352,14 @@ mod tests {
         let now = OffsetDateTime::now_utc();
         let attach_expiration = now + Duration::seconds(10);
 
-        let _ = write_activations(&cache_dir, &flox_env, |activations| {
+        let _ = write_activations(&runtime_dir, &flox_env, |activations| {
             let activation = activations.create_activation(store_path, pid).unwrap();
             activation.set_ready();
             activation.id()
         });
 
         let activations_json_path =
-            activations::activations_json_path(&cache_dir, &flox_env).unwrap();
+            activations::activations_json_path(&runtime_dir, &flox_env).unwrap();
 
         let ready = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
@@ -371,7 +372,7 @@ mod tests {
 
         assert!(ready, "Activation should be ready");
 
-        read_activations(cache_dir, flox_env, |activations| {
+        read_activations(runtime_dir, flox_env, |activations| {
             let activation = activations.activation_for_store_path(store_path).unwrap();
             let attached_pid = activation
                 .attached_pids()
@@ -388,7 +389,7 @@ mod tests {
 
     #[test]
     fn check_for_activation_fails_if_starting_process_is_dead() {
-        let cache_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = tempfile::tempdir().unwrap();
         let flox_env = PathBuf::from("/path/to/floxenv");
         let store_path = "/store/path";
 
@@ -398,13 +399,13 @@ mod tests {
         let now = OffsetDateTime::now_utc();
         let attach_expiration = now + Duration::seconds(10);
 
-        let _ = write_activations(&cache_dir, &flox_env, |activations| {
+        let _ = write_activations(&runtime_dir, &flox_env, |activations| {
             let activation = activations.create_activation(store_path, pid).unwrap();
             activation.id()
         });
 
         let activations_json_path =
-            activations::activations_json_path(&cache_dir, &flox_env).unwrap();
+            activations::activations_json_path(&runtime_dir, &flox_env).unwrap();
 
         let result = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
@@ -422,7 +423,7 @@ mod tests {
 
     #[test]
     fn check_for_activation_fails_if_starting_process_timeout_expires() {
-        let cache_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = tempfile::tempdir().unwrap();
         let flox_env = PathBuf::from("/path/to/floxenv");
         let store_path = "/store/path";
 
@@ -434,13 +435,13 @@ mod tests {
         // Set the expiration to be in the past
         let attach_expiration = now - Duration::seconds(10);
 
-        let _ = write_activations(&cache_dir, &flox_env, |activations| {
+        let _ = write_activations(&runtime_dir, &flox_env, |activations| {
             let activation = activations.create_activation(store_path, pid).unwrap();
             activation.id()
         });
 
         let activations_json_path =
-            activations::activations_json_path(&cache_dir, &flox_env).unwrap();
+            activations::activations_json_path(&runtime_dir, &flox_env).unwrap();
 
         let result = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
