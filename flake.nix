@@ -11,12 +11,6 @@
     "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
   ];
 
-  # XXX Temporary: lock process-compose to v1.9 until we can update flox to use
-  # the latest version. v1.9 did not appear on any stable snapshots so we instead
-  # select the most recent staging branch commit on which it appeared.
-  inputs.nixpkgs-process-compose.url = "github:flox/nixpkgs/staging.20240817";
-  inputs.nixpkgs-process-compose.flake = false;
-
   # Roll forward monthly as **our** stable branch advances. Note that we also
   # build against the staging branch in CI to detect regressions before they
   # reach stable.
@@ -39,7 +33,6 @@
     inputs:
     let
       # ------------------------------------------------------------------------ #
-      # Temporarily use nixpkgs-process-compose
       nixpkgs.legacyPackages = {
         inherit (inputs.nixpkgs.legacyPackages)
           x86_64-linux
@@ -55,10 +48,6 @@
       # --------
       overlays.deps = nixpkgs.lib.composeManyExtensions [
         (final: prev: {
-          process-compose = final.callPackage (
-            inputs.nixpkgs-process-compose + "/pkgs/applications/misc/process-compose"
-          ) { };
-
           # Add IWYU pragmas to `nlohmann_json'
           # ( _include what you use_ extensions to headers for static analysis )
           nlohmann_json = final.callPackage ./pkgs/nlohmann_json { inherit (prev) nlohmann_json; };
