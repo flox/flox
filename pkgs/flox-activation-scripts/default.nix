@@ -20,6 +20,11 @@
 let
   ld-floxlib_so = if stdenv.isLinux then "${ld-floxlib}/lib/ld-floxlib.so" else "__LINUX_ONLY__";
   ldconfig = if stdenv.isLinux then "${iconv}/bin/ldconfig" else "__LINUX_ONLY__";
+  # Some versions of Nix don't support `.` in name
+  editorconfig = builtins.path {
+    name = "editorconfig";
+    path = ../../.editorconfig;
+  };
 in
 runCommand "flox-activation-scripts"
   {
@@ -69,7 +74,7 @@ runCommand "flox-activation-scripts"
       $out/etc/profile.d/*
 
     chmod 0755 $out
-    cp ${../../.editorconfig} $out/.editorconfig
+    cp ${editorconfig} $out/.editorconfig
     # This will only catch extensions and shebangs that `shfmt --find` knows about.
     ${shfmt}/bin/shfmt --diff $out
     rm $out/.editorconfig
