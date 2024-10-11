@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use clap::Args;
-use uuid::Uuid;
 
 use crate::activations;
 
@@ -13,9 +12,9 @@ pub struct SetReadyArgs {
     #[arg(help = "The path to the .flox directory for the environment.")]
     #[arg(short, long, value_name = "PATH")]
     flox_env: PathBuf,
-    #[arg(help = "The UUID for this particular activation of this environment.")]
-    #[arg(short, long, value_name = "UUID")]
-    id: Uuid,
+    #[arg(help = "The ID for this particular activation of this environment.")]
+    #[arg(short, long, value_name = "ID")]
+    id: String,
 }
 
 impl SetReadyArgs {
@@ -29,7 +28,7 @@ impl SetReadyArgs {
         };
 
         let activation = activations
-            .activation_for_id_mut(self.id)
+            .activation_for_id_mut(&self.id)
             .with_context(|| {
                 format!(
                     "No activation with ID {} found for environment {}",
@@ -67,7 +66,7 @@ mod tests {
         });
 
         let ready = read_activations(&runtime_dir, &flox_env, |activations| {
-            activations.activation_for_id_ref(id).unwrap().ready()
+            activations.activation_for_id_ref(&id).unwrap().ready()
         })
         .unwrap();
 
@@ -75,7 +74,7 @@ mod tests {
 
         let args = SetReadyArgs {
             flox_env: flox_env.clone(),
-            id,
+            id: id.clone(),
         };
 
         args.handle(runtime_dir.path().to_path_buf()).unwrap();

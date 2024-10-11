@@ -1112,6 +1112,7 @@ name = "flox-activations"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "blake3",
  "clap",
  "clap_derive",
  "flox-core",
