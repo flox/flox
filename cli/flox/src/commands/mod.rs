@@ -1342,6 +1342,8 @@ impl UninitializedEnvironment {
     }
 
     /// The environment description when displayed in a prompt
+    // TODO: we use this for activate errors in Bash since it doesn't have
+    // quotes whereas we use message_description for activate errors in Rust.
     pub fn bare_description(&self) -> Result<String> {
         if self.is_remote() {
             Ok(format!(
@@ -1363,6 +1365,8 @@ impl UninitializedEnvironment {
     }
 
     /// The environment description when displayed in messages
+    // TODO: we use this for activate errors in Rust whereas we use
+    // bare_description for activate errors in Bash since it doesn't add quotes.
     pub fn message_description(&self) -> Result<String> {
         if self.is_remote() {
             Ok(format!(
