@@ -40,6 +40,7 @@ runCommand "flox-activation-scripts"
     substituteInPlace $out/activate \
       --replace "@bash@" "${bash}/bin/bash" \
       --replace "@coreutils@" "${coreutils}" \
+      --replace "@flox_activations@" "${flox-activations}" \
       --replace "@getopt@" "${getopt}" \
       --replace "@gnused@" "${gnused}" \
       --replace "@jq@" "${jq}/bin/jq" \
