@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::{Duration, OffsetDateTime};
 use tracing::debug;
-use uuid::Uuid;
 
 type Error = anyhow::Error;
 
@@ -38,20 +37,23 @@ impl Activations {
     /// Get a mutable reference to the activation with the given ID.
     ///
     /// Used internally to manipulate the state of an activation.
-    pub fn activation_for_id_mut(&mut self, activation_id: Uuid) -> Option<&mut Activation> {
+    pub fn activation_for_id_mut(
+        &mut self,
+        activation_id: impl AsRef<str>,
+    ) -> Option<&mut Activation> {
         self.activations
             .iter_mut()
-            .find(|activation| activation.id == activation_id)
+            .find(|activation| activation.id == activation_id.as_ref())
     }
 
     /// Get an immutable reference to the activation with the given ID.
     ///
     /// Used internally to manipulate the state of an activation.
     #[allow(unused)]
-    pub fn activation_for_id_ref(&self, activation_id: Uuid) -> Option<&Activation> {
+    pub fn activation_for_id_ref(&self, activation_id: impl AsRef<str>) -> Option<&Activation> {
         self.activations
             .iter()
-            .find(|activation| activation.id == activation_id)
+            .find(|activation| activation.id == activation_id.as_ref())
     }
 
     /// Get a mutable reference to the activation with the given store path.
@@ -80,7 +82,10 @@ impl Activations {
             anyhow::bail!("activation for store path '{store_path}' already exists");
         }
 
-        let id = Uuid::new_v4();
+        let mut chars = blake3::hash(store_path.as_bytes()).to_hex();
+        // We need something short to put in socket paths
+        chars.truncate(8);
+        let id = chars.to_string();
         let activation = Activation {
             id,
             store_path: store_path.to_string(),
@@ -92,6 +97,7 @@ impl Activations {
         };
 
         self.activations.push(activation);
+
         Ok(self.activations.last_mut().unwrap())
     }
 }
@@ -106,7 +112,7 @@ pub struct Activation {
     /// may change.
     /// We generate a UUID so that we have something convenient to pass around
     /// and use as a directory name.
-    id: Uuid,
+    id: String,
     /// The store path of the built environment
     store_path: String,
     /// Whether the activation of the environment is ready to be attached to.
@@ -122,8 +128,8 @@ pub struct Activation {
 }
 
 impl Activation {
-    pub fn id(&self) -> Uuid {
-        self.id
+    pub fn id(&self) -> String {
+        self.id.clone()
     }
 
     /// Whether the activation is ready to be attached to.
@@ -250,12 +256,12 @@ pub fn activations_json_path(
 pub fn activation_state_dir_path(
     runtime_dir: impl AsRef<Path>,
     flox_env: impl AsRef<Path>,
-    activation_id: Uuid,
+    activation_id: impl AsRef<str>,
 ) -> Result<PathBuf, Error> {
     Ok(runtime_dir
         .as_ref()
         .join(path_hash(flox_env))
-        .join(activation_id.to_string()))
+        .join(activation_id.as_ref()))
 }
 
 /// Returns the parsed environment registry file or `None` if it doesn't yet exist.
@@ -326,7 +332,7 @@ mod test {
         let activation = activations.create_activation(store_path, 123).unwrap();
         let id = activation.id();
 
-        let activation = activations.activation_for_id_ref(id).unwrap();
+        let activation = activations.activation_for_id_ref(&id).unwrap();
         assert_eq!(activation.id(), id);
         assert_eq!(activation.store_path, store_path);
     }
@@ -338,7 +344,7 @@ mod test {
         let activation = activations.create_activation(store_path, 123).unwrap();
         let id = activation.id();
 
-        let activation = activations.activation_for_id_mut(id).unwrap();
+        let activation = activations.activation_for_id_mut(&id).unwrap();
         assert_eq!(activation.id(), id);
         assert_eq!(activation.store_path, store_path);
     }
@@ -346,7 +352,7 @@ mod test {
     #[test]
     fn activation_attach_pid() {
         let mut activation = Activation {
-            id: Uuid::new_v4(),
+            id: "1".to_string(),
             store_path: "/store/path".to_string(),
             ready: false,
             attached_pids: vec![],
@@ -360,7 +366,7 @@ mod test {
     #[test]
     fn activation_remove_pid() {
         let mut activation = Activation {
-            id: Uuid::new_v4(),
+            id: "1".to_string(),
             store_path: "/store/path".to_string(),
             ready: false,
             attached_pids: vec![AttachedPid {

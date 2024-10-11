@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow.workspace = true
+blake3.workspace = true
 clap = { version = "4.5.19", default-features = false, features = ["std","usage", "help", "error-context", "derive"] }
 clap_derive.workspace = true
 flox-core.workspace = true

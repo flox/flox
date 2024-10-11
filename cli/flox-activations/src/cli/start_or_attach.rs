@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -58,10 +59,12 @@ impl StartOrAttachArgs {
         start_fn: impl FnOnce(
             Activations,
             PathBuf,
+            &Path,
+            &PathBuf,
             fslock::LockFile,
             &str,
             u32,
-        ) -> Result<uuid::Uuid, Error>,
+        ) -> Result<String, Error>,
         mut output: impl Write,
     ) -> Result<(), Error> {
         let activations_json_path =
@@ -80,6 +83,8 @@ impl StartOrAttachArgs {
                     let id = start_fn(
                         activations,
                         activations_json_path,
+                        runtime_dir,
+                        &self.flox_env,
                         lock,
                         &self.store_path,
                         self.pid,
@@ -92,7 +97,7 @@ impl StartOrAttachArgs {
         writeln!(
             &mut output,
             "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(runtime_dir, &self.flox_env, activation_id)?
+            activations::activation_state_dir_path(runtime_dir, &self.flox_env, &activation_id)?
                 .display()
         )?;
         writeln!(&mut output, "_FLOX_ACTIVATION_ID={activation_id}")?;
@@ -123,11 +128,20 @@ fn attach(
 fn start(
     mut activations: Activations,
     activations_json_path: PathBuf,
+    runtime_dir: &Path,
+    flox_env: &PathBuf,
     lock: fslock::LockFile,
     store_path: &str,
     pid: u32,
-) -> Result<uuid::Uuid, anyhow::Error> {
+) -> Result<String, anyhow::Error> {
     let activation_id = activations.create_activation(store_path, pid)?.id();
+    // The activation script will assume this directory exists
+    fs::create_dir_all(activations::activation_state_dir_path(
+        runtime_dir,
+        flox_env,
+        &activation_id,
+    )?)?;
+
     activations::write_activations_json(&activations, &activations_json_path, lock)?;
     Ok(activation_id)
 }
@@ -221,8 +235,6 @@ impl Display for RestartableFailure {
 
 #[cfg(test)]
 mod tests {
-    use uuid::Uuid;
-
     use super::*;
     use crate::cli::test::{read_activations, write_activations};
 
@@ -250,7 +262,7 @@ mod tests {
         args.handle_inner(
             runtime_dir.path(),
             |_, _, _, _| Ok(()),
-            |_, _, _, _, _| panic!("start should not be called"),
+            |_, _, _, _, _, _, _| panic!("start should not be called"),
             &mut output,
         )
         .expect("handle_inner should succeed");
@@ -260,7 +272,7 @@ mod tests {
         assert!(output.contains("_FLOX_ATTACH=true"));
         assert!(output.contains(&format!(
             "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(&runtime_dir, flox_env, id)
+            activations::activation_state_dir_path(&runtime_dir, flox_env, &id)
                 .unwrap()
                 .display()
         )));
@@ -286,11 +298,11 @@ mod tests {
 
         let mut output = Vec::new();
 
-        let id = Uuid::new_v4();
+        let id = "1".to_string();
         args.handle_inner(
             runtime_dir.path(),
             |_, _, _, _| panic!("attach should not be called"),
-            |_, _, _, _, _| Ok(id),
+            |_, _, _, _, _, _, _| Ok(id.clone()),
             &mut output,
         )
         .expect("handle_inner should succeed");
@@ -299,7 +311,7 @@ mod tests {
         assert!(output.contains("_FLOX_ATTACH=false"));
         assert!(output.contains(&format!(
             "_FLOX_ACTIVATION_STATE_DIR={}",
-            activations::activation_state_dir_path(&runtime_dir, flox_env, id)
+            activations::activation_state_dir_path(&runtime_dir, flox_env, &id)
                 .unwrap()
                 .display()
         )));
