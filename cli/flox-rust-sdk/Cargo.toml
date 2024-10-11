@@ -46,6 +46,7 @@ serial_test = { workspace = true, features = ["file_locks"] }
 
 [dev-dependencies]
 anyhow.workspace = true
+goblin = "0.8.2"
 httpmock.workspace = true
 pretty_assertions.workspace = true
 proptest.workspace = true

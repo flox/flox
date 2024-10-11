@@ -1011,6 +1011,127 @@ mod tests {
     }
 
     #[test]
+    fn build_impure_patches_binaries() {
+        let package_name = String::from("foo");
+        let file_name = String::from("links-against-libc");
+
+        // Force CGO without providing `gcc` from the Flox environment.
+        //
+        // In reality `gcc` and `libc` will come from the `devShell` rather than
+        // a host OS which complicates these tests and means that we can never
+        // trust `rpath` or `runpath`.
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            go.pkg-path = "go"
+
+            [vars]
+            CGO_ENABLED = "1"
+
+            [build.{package_name}]
+            command = """
+                go build main.go
+                mkdir -p $out/bin
+                cp main $out/bin/{file_name}
+            """
+        "#};
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let libc_code = indoc! {r#"
+            package main
+
+            /*
+            #include <stdio.h>
+
+            void hello() {
+                printf("Hello from libc!\n");
+                fflush(stdout);
+            }
+            */
+            import "C"
+
+            func main() {
+                C.hello()
+            }
+        "#};
+        fs::write(env_path.join("main.go"), libc_code).unwrap();
+
+        if let Client::Mock(ref mut client) = flox.catalog_client {
+            client.clear_and_load_responses_from_file("resolve/go.json");
+        } else {
+            panic!("expected Mock client")
+        };
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+        let result_wrapped = result_dir(&env_path, &package_name)
+            .read_link() // store path
+            .unwrap()
+            .join("bin")
+            .join(format!(".{}-wrapped", &file_name));
+
+        // Read the binary without executing a linker like `ldd` does.
+        let bin = &fs::read(result_wrapped).unwrap();
+        let bin_object = goblin::Object::parse(bin).unwrap();
+        match bin_object {
+            // Linux
+            goblin::Object::Elf(elf) => {
+                // Should always come from the Flox environment.
+                // TODO: Gives false-positives when run from devShell.
+                let interpreter = elf.interpreter.unwrap();
+                assert!(
+                    interpreter.starts_with("/nix/store/"),
+                    "should patch interpreter to nix store, got {:?}",
+                    interpreter
+                );
+                // Will be resolved at runtime from either the Flox environment
+                // or the host OS, in that order. If neither provide it then the
+                // binary will fail to run but that's the best we can do for an
+                // impure build.
+                assert!(
+                    elf.libraries.iter().any(|lib| lib.starts_with("libc.so")),
+                    "should be dynamically linked against libc, got {:?}",
+                    elf.libraries
+                );
+            },
+            // Darwin
+            goblin::Object::Mach(mach) => {
+                let mach_o = match mach {
+                    goblin::mach::Mach::Binary(mach_o) => mach_o,
+                    _ => panic!("unexpected MachO type"),
+                };
+                // It might be possible to patch these at the expense of portability:
+                // - https://daiderd.com/2020/06/25/nix-and-libsystem.html
+                let system_libs = vec![
+                    "/usr/lib/libSystem.B.dylib",
+                    "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+                ];
+                for lib_expected in system_libs {
+                    assert!(
+                        mach_o.libs.iter().any(|lib| *lib == lib_expected),
+                        "should link against system {lib_expected}, got {:?}",
+                        mach_o.libs
+                    );
+                }
+            },
+            _ => panic!("unexpected binary format"),
+        };
+
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(output.status.success(), "should still be executable");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            "Hello from libc!"
+        );
+    }
+
+    #[test]
     fn cleans_up_data_sandbox() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
