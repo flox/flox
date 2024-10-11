@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::Args;
 use time::Duration;
-use uuid::Uuid;
 
 use crate::{activations, Error};
 
@@ -15,9 +14,9 @@ pub struct AttachArgs {
     #[arg(help = "The path to the .flox directory for the environment.")]
     #[arg(short, long, value_name = "PATH")]
     pub flox_env: PathBuf,
-    #[arg(help = "The UUID for this particular activation of this environment.")]
-    #[arg(short, long, value_name = "UUID")]
-    pub id: Uuid,
+    #[arg(help = "The ID for this particular activation of this environment.")]
+    #[arg(short, long, value_name = "ID")]
+    pub id: String,
     #[command(flatten)]
     pub exclusive: AttachExclusiveArgs,
 }
@@ -44,7 +43,7 @@ impl AttachArgs {
         };
 
         let activation = activations
-            .activation_for_id_mut(self.id)
+            .activation_for_id_mut(&self.id)
             .with_context(|| {
                 format!(
                     "No activation with ID {} found for environment {}",
@@ -104,7 +103,7 @@ mod test {
 
         let args = AttachArgs {
             flox_env: flox_env.clone(),
-            id,
+            id: id.clone(),
             pid: new_pid,
             exclusive: AttachExclusiveArgs {
                 timeout_ms: Some(1000),
@@ -142,7 +141,7 @@ mod test {
 
         let args = AttachArgs {
             flox_env: flox_env.clone(),
-            id,
+            id: id.clone(),
             pid: new_pid,
             exclusive: AttachExclusiveArgs {
                 timeout_ms: None,
