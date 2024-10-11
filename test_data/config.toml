@@ -334,6 +334,19 @@ pre_cmd = '''
 '''
 cmd = "flox init --auto-setup"
 
+[envs.go_gcc]
+skip_if_output_exists = "envs/go_gcc"
+files = ["envs/go_gcc/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/go_gcc"
+    mkdir -p "$env_dir"
+    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+'''
+
 [envs.kitchen_sink]
 skip_if_output_exists = "envs/kitchen_sink"
 files = ["envs/kitchen_sink/manifest.toml"]
