@@ -136,6 +136,7 @@ impl Activate {
         let environment = concrete_environment.dyn_environment_ref_mut();
 
         let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
+        let interactive = !in_place && self.run_args.is_empty();
         // Don't spin in bashrcs and similar contexts
         let activation_path_result = if in_place {
             environment.activation_path(&flox)
@@ -212,6 +213,12 @@ impl Activate {
                 "Environment is already active: environment={}. Not adding to active environments",
                 now_active.bare_description()?
             );
+            if interactive {
+                return Err(anyhow!(
+                    "Environment {} is already active",
+                    now_active.message_description()?
+                ));
+            }
         } else {
             // Add to _FLOX_ACTIVE_ENVIRONMENTS so we can detect what environments are active.
             flox_active_environments.set_last_active(now_active.clone());
@@ -410,10 +417,10 @@ impl Activate {
 
         let shell = Self::detect_shell_for_subshell();
         // These functions will only return if exec fails
-        if !self.run_args.is_empty() {
-            Self::activate_command(self.run_args, shell, exports, activation_path, is_ephemeral)
-        } else {
+        if interactive {
             Self::activate_interactive(shell, exports, activation_path, now_active)
+        } else {
+            Self::activate_command(self.run_args, shell, exports, activation_path, is_ephemeral)
         }
     }
 
