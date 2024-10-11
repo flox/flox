@@ -1,27 +1,17 @@
 # If interactive and a command has not been passed, this is an interactive
 # activate,
 # and we print a message to the user
-# TODO: should this be printed after scripts?
-# Should it be in Rust using message::updated?
+# If inside a container, FLOX_ENV_DESCRIPTION won't be set, and we don't need to
+# print a message
 if [ -t 1 ] && [ $# -eq 0 ]; then
   echo "✅ You are now using the environment '$FLOX_ENV_DESCRIPTION'." >&2
   echo "To stop using this environment, type 'exit'" >&2
   echo >&2
 fi
 
-if [ $flox_env_found -eq 0 ]; then
-  # First activation of this environment. Snapshot environment to start.
-  _start_env="$($_coreutils/bin/mktemp --suffix=.start-env)"
-  export | $_coreutils/bin/sort > "$_start_env"
-else # we know "$_FLOX_ACTIVATE_FORCE_REACTIVATE" == true
-  # TODO: restore _start_env
-  :
-fi
-
-# Capture PID of this "first" activation. This provides the unique
-# identifier with which to refer to environment variables associated
-# with this environment activation.
-FLOX_ENV_PID="$$"
+# First activation of this environment. Snapshot environment to start.
+_start_env="$_FLOX_ACTIVATION_STATE_DIR/bare.env"
+export | $_coreutils/bin/sort > "$_start_env"
 
 # Set environment variables which represent the cumulative layering
 # of flox environments. For the most part this involves prepending
@@ -54,6 +44,11 @@ if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   unset _profile_scripts
 fi
 
+# Capture post-etc-profiles.env.
+# This is currently unused but could be useful for runtime only environment in
+# the future.
+export | $_coreutils/bin/sort > "$_FLOX_ACTIVATION_STATE_DIR/post-etc-profiles.env"
+
 # Set static environment variables from the manifest.
 if [ -f "$FLOX_ENV/activate.d/envrc" ]; then
   # shellcheck disable=SC1091 # from rendered environment
@@ -72,36 +67,28 @@ if [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
   set -euo pipefail
 fi
 
-# We only need to capture the ending environment when
-# "$_FLOX_ACTIVATE_FORCE_REACTIVATE" isn't set
-if [ $flox_env_found -eq 0 ]; then
-  # Capture ending environment.
-  _end_env="$($_coreutils/bin/mktemp --suffix=.$FLOX_ENV_PID.end-env)"
-  export | $_coreutils/bin/sort > "$_end_env"
+# Capture ending environment.
+_end_env="$_FLOX_ACTIVATION_STATE_DIR/post-hook.env"
+export | $_coreutils/bin/sort > "$_end_env"
 
-  # The userShell initialization scripts that follow have the potential to undo
-  # the environment modifications performed above, so we must first calculate
-  # all changes made to the environment so far so that we can restore them after
-  # the userShell initialization scripts have run. We use the `comm(1)` command
-  # to compare the starting and ending environment captures (think of it as a
-  # better diff for comparing sorted files), and `sed(1)` to format the output
-  # in the best format for use in each language-specific activation script.
-  _add_env="$($_coreutils/bin/mktemp --suffix=.$FLOX_ENV_PID.add-env)"
-  _del_env="$($_coreutils/bin/mktemp --suffix=.$FLOX_ENV_PID.del-env)"
+# The userShell initialization scripts that follow have the potential to undo
+# the environment modifications performed above, so we must first calculate
+# all changes made to the environment so far so that we can restore them after
+# the userShell initialization scripts have run. We use the `comm(1)` command
+# to compare the starting and ending environment captures (think of it as a
+# better diff for comparing sorted files), and `sed(1)` to format the output
+# in the best format for use in each language-specific activation script.
+_add_env="$_FLOX_ACTIVATION_STATE_DIR/add.env"
+_del_env="$_FLOX_ACTIVATION_STATE_DIR/del.env"
 
-  # Export tempfile paths for use within shell-specific activation scripts.
-  export _add_env _del_env
+# Capture environment variables to _set_ as "key=value" pairs.
+# comm -13: only env declarations unique to `$_end_env` (new declarations)
+$_coreutils/bin/comm -13 "$_start_env" "$_end_env" \
+  | $_gnused/bin/sed -e 's/^declare -x //' > "$_add_env"
 
-  # Capture environment variables to _set_ as "key=value" pairs.
-  # comm -13: only env declarations unique to `$_end_env` (new declarations)
-  $_coreutils/bin/comm -13 "$_start_env" "$_end_env" \
-    | $_gnused/bin/sed -e 's/^declare -x //' > "$_add_env"
+# Capture environment variables to _unset_ as a list of keys.
+# TODO: remove from $_del_env keys set in $_add_env
+$_coreutils/bin/comm -23 "$_start_env" "$_end_env" \
+  | $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
 
-  # Capture environment variables to _unset_ as a list of keys.
-  # TODO: remove from $_del_env keys set in $_add_env
-  $_coreutils/bin/comm -23 "$_start_env" "$_end_env" \
-    | $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
-
-  # Don't need these anymore.
-  $_coreutils/bin/rm -f "$_start_env" "$_end_env"
-fi
+"$_flox_activations" set-ready --flox-env "$FLOX_ENV" --id "$_FLOX_ACTIVATION_ID"

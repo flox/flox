@@ -6,12 +6,11 @@
 # Save environment variables that could be set if sourcing zshrc launches an
 # inner nested activation.
 _save_flox_activate_tracelevel="$_flox_activate_tracelevel"
+_save_FLOX_ACTIVATION_STATE_DIR="$_FLOX_ACTIVATION_STATE_DIR"
 _save_FLOX_ENV="$FLOX_ENV"
 _save_FLOX_ORIG_ZDOTDIR="$FLOX_ORIG_ZDOTDIR"
 _save_ZDOTDIR="$ZDOTDIR"
 _save_FLOX_ZSH_INIT_SCRIPT="$FLOX_ZSH_INIT_SCRIPT"
-_save_add_env="$_add_env"
-_save_del_env="$_del_env"
 
 restore_saved_vars() {
     export _flox_activate_tracelevel="$_save_flox_activate_tracelevel"
@@ -19,8 +18,7 @@ restore_saved_vars() {
     export FLOX_ORIG_ZDOTDIR="$_save_FLOX_ORIG_ZDOTDIR"
     export ZDOTDIR="$_save_ZDOTDIR"
     export FLOX_ZSH_INIT_SCRIPT="$_save_FLOX_ZSH_INIT_SCRIPT"
-    export _add_env="$_save_add_env"
-    export _del_env="$_save_del_env"
+    export _FLOX_ACTIVATION_STATE_DIR="$_save_FLOX_ACTIVATION_STATE_DIR"
 }
 
 if [ -f /etc/zshrc ]
