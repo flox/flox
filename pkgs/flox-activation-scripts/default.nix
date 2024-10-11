@@ -42,10 +42,10 @@ runCommand "flox-activation-scripts"
       --replace "@coreutils@" "${coreutils}" \
       --replace "@getopt@" "${getopt}" \
       --replace "@gnused@" "${gnused}" \
-      --replace "@setsid@" "${util-linux}/bin/setsid" \
+      --replace "@jq@" "${jq}/bin/jq" \
       --replace "@out@" "$out" \
       --replace "@process-compose@" "${process-compose}/bin/process-compose" \
-      --replace "@jq@" "${jq}/bin/jq" \
+      --replace "@setsid@" "${util-linux}/bin/setsid" \
       --replace "/usr/bin/env bash" "${bash}/bin/bash"
 
     substituteInPlace $out/activate.d/bash \

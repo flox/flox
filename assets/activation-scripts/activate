@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
+export _activate_d="@out@/activate.d"
 export _bash="@bash@"
 export _coreutils="@coreutils@"
-export _gnused="@gnused@"
-export _setsid="@setsid@"
 export _getopt="@getopt@"
-export _process_compose="@process-compose@"
+export _gnused="@gnused@"
 export _jq="@jq@"
-export _activate_d="@out@/activate.d"
-export _zdotdir="@out@/activate.d/zdotdir"
+export _process_compose="@process-compose@"
+export _setsid="@setsid@"
 export _tcsh_home="@out@/activate.d/tcsh_home"
+export _zdotdir="@out@/activate.d/zdotdir"
 
 # Top-level Flox environment activation script.
 
