@@ -42,7 +42,9 @@ case "$_flox_shell" in
     if [ -n "$FLOX_NOPROFILE" ]; then
       exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS
     else
-      export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
+      if [ -n "${ZDOTDIR:-}" ]; then
+        export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
+      fi
       export ZDOTDIR="$_zdotdir"
       export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
       # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
