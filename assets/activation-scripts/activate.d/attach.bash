@@ -1,15 +1,14 @@
-# "Reactivation" of this environment.
-
-# Assert that the expected _{add,del}_env variables are present.
-if [ -z "$_add_env" ] || [ -z "$_del_env" ]; then
-  echo "ERROR (activate): \$_add_env and \$_del_env not found in environment" >&2
-  if [ -h "$FLOX_ENV" ]; then
-    echo "moving $FLOX_ENV link to $FLOX_ENV.$$ - please try again" >&2
-    $_coreutils/bin/mv "$FLOX_ENV" "$FLOX_ENV.$$"
-  fi
-  exit 1
+# If interactive and a command has not been passed, this is an interactive
+# activate,
+# and we print a message to the user
+# If inside a container, FLOX_ENV_DESCRIPTION won't be set, and we don't need to
+# print a message (although attach isn't reachable anyways)
+if [ -t 1 ] && [ $# -eq 0 ] && [ -n "${FLOX_ENV_DESCRIPTION:-}" ]; then
+  echo "✅ Attached to existing activation of environment '$FLOX_ENV_DESCRIPTION'" >&2
+  echo "To stop using this environment, type 'exit'" >&2
+  echo >&2
 fi
 
 # Replay the environment for the benefit of this shell.
-eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' "$_del_env")"
-eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_add_env")"
+eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env")"
+eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env")"

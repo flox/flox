@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::env;
 use std::io::stdout;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::{env, fs};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::Bpaf;
@@ -176,6 +176,13 @@ impl Activate {
             other => other?,
         };
 
+        let store_path = fs::read_link(&activation_path).with_context(|| {
+            format!(
+                "a symlink at {} was just created and should still exist",
+                activation_path.display()
+            )
+        })?;
+
         // Must come after getting an activation path to prevent premature
         // locking or migration. It must also not be evaluated inline with the
         // macro or we'll leak TRACE logs for reasons unknown.
@@ -312,6 +319,10 @@ impl Activate {
                 now_active
                     .bare_description()
                     .expect("`bare_description` is infallible"),
+            ),
+            (
+                "_FLOX_ACTIVATE_STORE_PATH",
+                store_path.to_string_lossy().to_string(),
             ),
         ]);
 

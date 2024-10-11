@@ -89,8 +89,8 @@ See [`manifest.toml(5)`](./manifest.toml.md) for more details on shell hooks.
    If no services are running, the services from the manifest will be started,
    otherwise a warning will displayed and activation will continue.
 
-   This flag is currently incompatible with "in-place" activations and remote
-   environments, but these features will be added in the future.
+   This flag is currently incompatible with "in-place" activations,
+   but this feature will be added in the future.
 
    The services started with this flag will be cleaned up once the last
    activation of this environment terminates.

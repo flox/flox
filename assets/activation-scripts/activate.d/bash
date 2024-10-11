@@ -6,13 +6,6 @@ if [ "$_flox_activate_tracelevel" -ge 2 ]; then
   set -x
 fi
 
-# Assert that the expected _{add,del}_env variables are present.
-if [ -z "$_add_env" ] || [ -z "$_del_env" ]
-then
-  echo "ERROR (bash): \$_add_env and \$_del_env not found in environment" >&2;
-  exit 1;
-fi
-
 # We use --rcfile to activate using bash which skips sourcing ~/.bashrc,
 # so source that here, but not if we're already in the process of sourcing
 # bashrc in a parent process.
@@ -36,8 +29,8 @@ if [ -z "${_flox_activate_tracelevel:=}" ]; then
 fi
 
 # Restore environment variables set in the previous bash initialization.
-eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' "$_del_env")"
-eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_add_env")"
+eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env")"
+eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env")"
 
 # Set the prompt if we're in an interactive shell.
 if [ -t 1 ]; then
