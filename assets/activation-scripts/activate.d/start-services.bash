@@ -45,7 +45,7 @@ start_services_blocking() {
 
   # flox services start [service...] needs to be able to start some but not all
   # services
-  if [ -n "$_FLOX_SERVICES_TO_START" ]; then
+  if [ -n "${_FLOX_SERVICES_TO_START:-}" ]; then
     readarray -t services_to_start < <(echo "$_FLOX_SERVICES_TO_START" | "$_jq" -r '.[]')
     COMPOSE_SHELL="$_bash" "$_setsid" "$_setsid" "$_process_compose" up "${services_to_start[@]}" -f "$config_file" -u "$socket_file" -L "$log_file" --tui=false > /dev/null 2>&1 &
   else

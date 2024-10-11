@@ -5,7 +5,7 @@
 if [ -n "$FLOX_TURBO" ]; then
   # "turbo command" mode: simply invoke the provided command and args
   # from *this shell* without paying the cost of invoking the userShell.
-  if [ -n "$FLOX_SET_ARG0" ]; then
+  if [ -n "${FLOX_SET_ARG0:-}" ]; then
     # Wrapped binary from `flox build`.
     exec -a "$FLOX_SET_ARG0" "$@"
   else
@@ -52,7 +52,9 @@ case "$_flox_shell" in
     if [ -n "$FLOX_NOPROFILE" ]; then
       exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS -c "$*"
     else
-      export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
+      if [ -n "${ZDOTDIR:-}" ]; then
+        export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
+      fi
       export ZDOTDIR="$_zdotdir"
       export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
       # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from

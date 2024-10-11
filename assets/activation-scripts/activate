@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
+
+set -euo pipefail
+
 export _activate_d="@out@/activate.d"
 export _bash="@bash@"
 export _coreutils="@coreutils@"
@@ -104,7 +107,7 @@ fi
 #       container invocations, and it would have the incorrect value for
 #       nested flox activations.
 _FLOX_ENV="$($_coreutils/bin/dirname -- "${BASH_SOURCE[0]}")"
-if [ -n "$FLOX_ENV" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
+if [ -n "${FLOX_ENV:-}" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
   echo "WARN: detected change in FLOX_ENV: $FLOX_ENV -> $_FLOX_ENV" >&2
 fi
 export FLOX_ENV="$_FLOX_ENV"
@@ -156,7 +159,7 @@ else
 fi
 
 # Start services before the shell or command is invoked
-if [ "$FLOX_ACTIVATE_START_SERVICES" == "true" ]; then
+if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/start-services.bash"
 fi
@@ -165,7 +168,7 @@ fi
 if [ $# -gt 0 ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/attach-command.bash"
-elif [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
+elif [ -t 1 ] || [ -n "${_FLOX_FORCE_INTERACTIVE:-}" ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/attach-interactive.bash"
 else
