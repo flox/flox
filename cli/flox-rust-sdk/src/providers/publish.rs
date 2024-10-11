@@ -1,5 +1,89 @@
-use crate::flox::Flox;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use url::Url;
+use crate::models::environment::managed_environment::ManagedEnvironment;
+use crate::models::environment::path_environment::PathEnvironment;
+use crate::models::environment::Environment;
+use crate::models::lockfile::{self, LockedManifestCatalog};
+
+use super::git::GitCommandProvider;
+
+/// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
+/// Authentication, upload, builds etc, are implementation details of the specific provider.
+/// Modeling the behavior as a trait allows us to swap out the provider, e.g. a mock for testing.
+pub trait Publish {
+    /// // Note: `Environment` is a bit broad here, specifically,
+    ///          since we dont support building of nonlocal environments.
+    ///          My suggestion is usually to define an enum of exactly the supported environments,
+    ///          despite the existring proliferation of `*Environment` types.
+    ///
+    ///              /// This coudl also be a more generally useful "LocalEnvironment" type
+    ///              enum PublishEnvironment {
+    ///                  Path(PathEnvironment),
+    ///                  Managed(ManagedEnvironment),
+    ///              }
+    fn publish_ä(
+        &self,
+        environment: impl Environment,
+        package: String,
+        catalog: String,
+    ) -> Result<(), String>;
+
+    /// Alternative version of publish that takes more granular arguments, instead of depending on [Environment].
+    /// The downside of this is that the argumetns are still directly derived from a single environemnt
+    /// and must be consistent.
+    /// As individual arguments, these invairants are not enforced.
+    fn publish_ü(
+        &self,
+        git: GitCommandProvider,
+        environment_root_relative: PathBuf, // RelativePath,
+        // can be used to infer catalog page
+        lockfile: LockedManifestCatalog,
+        package: String,
+        catalog: String,
+    ) -> Result<(), String>;
+
+    /// Alternative version of publish that takes more granular arguments, instead of depending directly on [Environment].
+    /// Ensures the integrity of the environment metadata by requiring [CheckedEnvironmentMetadata].
+    fn publish_ö(
+        &self,
+        environment: CheckedEnvironmentMetadata,
+        package: String,
+        catalog: String,
+    ) -> Result<(), String>;
+
+    /// Alternative version of publish that directly addresses an upstrean git repo, for publishing.
+    /// Determining the upstream url from an [Environment] is a responsibility of the caller.
+    fn publish_ë(
+        &self,
+        upstream_git_repo: Url,
+        environment_root_relative: PathBuf,
+        package: String,
+        catalog: String,
+    );
+}
+
+/// ensures that the required metadata for publishing is consistent
+pub struct CheckedEnvironmentMetadata {
+    pub git_metadata: GitCommandProvider,
+    pub environment_root_relative: PathBuf, // RelativePath
+    pub lockfile: LockedManifestCatalog,
+    // This field isn't "pub", so no one outside this module can construct this struct. That helps
+    // ensure that we can only make this struct as a result of doing the "right thing."
+    _private: ()
+}
+
+impl From<&PathEnvironment> for CheckedEnvironmentMetadata {
+    fn from(value: &PathEnvironment) -> Self {
+        todo!()
+    }
+}
+impl From<&ManagedEnvironment> for CheckedEnvironmentMetadata {
+    fn from(value: &ManagedEnvironment) -> Self {
+        todo!()
+    }
+}
+
 
 pub struct PublishProvider {
     repo_dir: Path,
