@@ -2,14 +2,13 @@ use std::path::{Path, PathBuf};
 
 use url::Url;
 
+use super::build::ManifestBuilder;
+use super::git::GitCommandProvider;
 use crate::flox::FloxhubToken;
 use crate::models::environment::managed_environment::ManagedEnvironment;
 use crate::models::environment::path_environment::PathEnvironment;
 use crate::models::environment::Environment;
 use crate::models::lockfile::{self, LockedManifestCatalog};
-
-use super::build::ManifestBuilder;
-use super::git::GitCommandProvider;
 
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
 /// Authentication, upload, builds etc, are implementation details of the specific provider.
@@ -73,7 +72,7 @@ pub struct CheckedEnvironmentMetadata {
     pub lockfile: LockedManifestCatalog,
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
-    _private: ()
+    _private: (),
 }
 
 impl From<&PathEnvironment> for CheckedEnvironmentMetadata {
@@ -86,7 +85,6 @@ impl From<&ManagedEnvironment> for CheckedEnvironmentMetadata {
         todo!()
     }
 }
-
 
 /// The `PublishProvider` is a concrete implementation of the `Publish` trait.
 /// It is responsible for the actual implementation of the `Publish` trait,
@@ -104,17 +102,17 @@ pub struct PublishProvider<Builder> {
 }
 
 /// (default) implementation of the `Publish` trait, i.e. the publis interface to publish.
-///
 // regarding best patterns  _behind_ the `Publish` inteface i'm less opinionated,
 // I think typestates on the `PublishProvider` or a more functional typestate inspired
 // approach like @zmitchell suggested could be a good fit.
-impl<Builder> Publish for PublishProvider<&Builder> where Builder: ManifestBuilder {
-
-}
+impl<Builder> Publish for PublishProvider<&Builder> where Builder: ManifestBuilder {}
 
 impl PublishProvider {
     pub fn new(repo_dir: Path, package: &str) -> Self {
-        Self { repo_dir: repo_dir, package_name: package.to_string() }
+        Self {
+            repo_dir,
+            package_name: package.to_string(),
+        }
     }
 
     /// initiates the publish process
@@ -127,7 +125,7 @@ impl PublishProvider {
         // - Type States (like the old publish?)
         // - Make each phase independant, taking arguments for all that's needed
         //    and track the ongoing state only here in publish()?
-        // - Combination of Type States and making each phase independant may be the 
+        // - Combination of Type States and making each phase independant may be the
         //    easiest to test?
         prepublish_check();
 
@@ -145,23 +143,21 @@ impl PublishProvider {
     ///         lockfile of the build repo
     /// ... version, description, name, attr_path from manifest
     /// ... catalog from ???? (cli argument? manifest?)
-    pub fn prepublish_check(repo_dir: &Path, package_name: &str)
-    {
+    pub fn prepublish_check(repo_dir: &Path, package_name: &str) {
         // _sandbox = temp dir
         // Use GitCommandProvider to get remote and current rev of build_repo
         // Use GitCommandProvider to clone that remote/rev to _sandbox
-            // this will ensure it's in the remote
+        // this will ensure it's in the remote
         // Load the manifest from the .flox of that repo to get the version/description/catalog
         // Confirm access to remote resources, login, etc, so as to not waste
         // time if it's going to fail later or require user interaction to
         // continue the operation.
     }
-    
+
     /// Access a `flox build` builder, probably another provider?
     /// ... to clone into a sandbox and run
     /// ... `flox activate; flox build;`
-    pub fn prepublish_build<B: ManifestBuilder>(builder: &B, _sandbox: &Path)
-    {
+    pub fn prepublish_build<B: ManifestBuilder>(builder: &B, _sandbox: &Path) {
         // We need to do enough to get the build info for the next step
         // ... equivalent to run `flox activate; flox build;`?
 
@@ -171,16 +167,15 @@ impl PublishProvider {
         // Use ManifestBuilder to perform the build (evaluation?) so we can get
         // the info we need.  Do we need to build? or is there something else?
         let build_output = builder.build(_sandbox, flox_env, &self.package_name);
-        
-        // the build_output looks to be the stdout of the build process.. how do 
+
+        // the build_output looks to be the stdout of the build process.. how do
         // we access the drv_path and that stuff?
     }
 
     /// Obtains info from the build process (the sandboxed one above)
     /// ... base_catalog_{locked_url, rev, rev_count, rev_date}
     /// ... system, drv_path (??), outputs (??)
-    pub fn gather_build_info(_sandbox: &Path)
-    {
+    pub fn gather_build_info(_sandbox: &Path) {
         // Access lockfile of _sandbox to get base_catalog_{locked_url, rev, rev_count, rev_date}
         // populate the following:
         //      how do we get the drv_path, outputs(and paths), system from this?
@@ -190,10 +185,7 @@ impl PublishProvider {
     /// ... check access to the catalog
     /// ... check presence of and create the package if needed
     /// ... publish the build info
-    pub fn publish_to_catalog()
-    {
+    pub fn publish_to_catalog() {
         // We should have all the info now.
-
     }
-
 }
