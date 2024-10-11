@@ -266,10 +266,13 @@ mod tests {
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::flox::Flox;
-    use crate::models::environment::path_environment::test_helpers::new_path_environment;
+    use crate::models::environment::path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_from_env_files,
+    };
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::Environment;
-    use crate::providers::catalog::Client;
+    use crate::providers::catalog::{Client, GENERATED_DATA};
 
     fn result_dir(parent: &Path, package: &str) -> PathBuf {
         parent.join(format!("result-{package}"))
@@ -1064,6 +1067,88 @@ mod tests {
             String::from_utf8_lossy(&output.stdout).trim_end(),
             result_wrapped.to_string_lossy(),
             "binaries are known to have the wrong exe"
+        );
+    }
+
+    #[test]
+    fn build_impure_against_libc() {
+        let package_name = String::from("foo");
+        let bin_name = String::from("links-against-libc");
+        let source_name = String::from("main.go");
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/go_gcc"));
+        let env_path = env.parent_path().unwrap();
+
+        let base_manifest = env.manifest_contents(&flox).unwrap();
+        let build_manifest = formatdoc! {r#"
+            {base_manifest}
+
+            [vars]
+            CGO_ENABLED = "1"
+
+            [build.{package_name}]
+            command = """
+                cat main.go
+                go build {source_name}
+                mkdir -p $out/bin
+                cp main $out/bin/{bin_name}
+            """
+        "#};
+        env.edit(&flox, build_manifest).unwrap();
+
+        let expected_message = "Hello from C!";
+        // Literal `{` and `}` are escaped as `{{` and `}}`.
+        let source_code = formatdoc! {r#"
+            package main
+
+            /*
+            #include <stdio.h>
+
+            void hello() {{
+                printf("{expected_message}\n");
+                fflush(stdout);
+            }}
+            */
+            import "C"
+
+            func main() {{
+                C.hello()
+            }}
+        "#};
+        fs::write(env_path.join(source_name), source_code).unwrap();
+
+        if let Client::Mock(ref mut client) = flox.catalog_client {
+            client.clear_and_load_responses_from_file("envs/go_gcc.json");
+        } else {
+            panic!("expected Mock client")
+        };
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&bin_name);
+        let output = Command::new(&result_path).output().unwrap();
+
+        // The binary should execute successfully but we can't make any
+        // guarantees about the portability or reproducibility of impure builds
+        // which may link against system libraries.
+        //
+        // This also serves as a regression test against `autoPathelfHook`
+        // conflicting with `gcc` or `libc` from the Flox environment which will
+        // cause either binaries that hang or fail with:
+        //
+        // `*** stack smashing detected ***: terminated`
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            expected_message
         );
     }
 
