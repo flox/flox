@@ -39,11 +39,14 @@ export FLOX_ENV_DIRS_activate FLOX_ENV_LIB_DIRS_activate FLOX_PROMPT_ENVIRONMENT
 # other things) prepending this environment's bin directory to the PATH.
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
   declare -a _profile_scripts
+  # TODO: figure out why this is needed
+  set +e
   read -r -d '' -a _profile_scripts < <(
     cd "$FLOX_ENV/etc/profile.d" || exit
     shopt -s nullglob
     echo *.sh
   )
+  set -e
   for profile_script in "${_profile_scripts[@]}"; do
     # shellcheck disable=SC1090 # from rendered environment
     source "$FLOX_ENV/etc/profile.d/$profile_script"
@@ -63,8 +66,10 @@ if [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
   # user-provided hook scripts because these can get interpreted
   # as configuration statements by the "in-place" activation
   # mode. So, we'll redirect stdout to stderr.
+  set +euo pipefail
   # shellcheck disable=SC1091 # from rendered environment
   source "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
+  set -euo pipefail
 fi
 
 # We only need to capture the ending environment when

@@ -29,7 +29,9 @@ case "$_flox_shell" in
   *zsh)
     echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
     echo "export FLOX_ENV=\"$FLOX_ENV\";"
-    echo "export FLOX_ORIG_ZDOTDIR=\"$ZDOTDIR\";"
+    if [ -n "${ZDOTDIR:-}" ]; then
+      echo "export FLOX_ORIG_ZDOTDIR=\"$ZDOTDIR\";"
+    fi
     echo "export ZDOTDIR=\"$_zdotdir\";"
     echo "export FLOX_ZSH_INIT_SCRIPT=\"$FLOX_ENV/activate.d/zsh\";"
     echo "export _add_env=\"$_add_env\";"

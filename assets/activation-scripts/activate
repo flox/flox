@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
+
+set -euo pipefail
+
 export _activate_d="@out@/activate.d"
 export _bash="@bash@"
 export _coreutils="@coreutils@"
@@ -165,7 +168,7 @@ fi
 if [ $# -gt 0 ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/attach-command.bash"
-elif [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
+elif [ -t 1 ] || [ -n "${_FLOX_FORCE_INTERACTIVE:-}" ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/attach-interactive.bash"
 else
