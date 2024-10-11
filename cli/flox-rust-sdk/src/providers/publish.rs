@@ -1,11 +1,14 @@
 use std::path::{Path, PathBuf};
 
 use url::Url;
+
+use crate::flox::FloxhubToken;
 use crate::models::environment::managed_environment::ManagedEnvironment;
 use crate::models::environment::path_environment::PathEnvironment;
 use crate::models::environment::Environment;
 use crate::models::lockfile::{self, LockedManifestCatalog};
 
+use super::build::ManifestBuilder;
 use super::git::GitCommandProvider;
 
 /// The `Publish` trait describes the high level behavior of publishing a package to a catalog.
@@ -85,9 +88,28 @@ impl From<&ManagedEnvironment> for CheckedEnvironmentMetadata {
 }
 
 
-pub struct PublishProvider {
-    repo_dir: Path,
-    package_name: String,
+/// The `PublishProvider` is a concrete implementation of the `Publish` trait.
+/// It is responsible for the actual implementation of the `Publish` trait,
+/// i.e. the actual publishing of a package to a catalog.
+///
+/// The `PublishProvider` is a generic struct, parameterized by a `Builder` type,
+/// to build packages before publishing.
+pub struct PublishProvider<Builder> {
+    /// Directory under which we will clone and build the
+    base_temp_dir: PathBuf,
+    /// Token of the user to authenticate with the catalog
+    auth_token: FloxhubToken,
+    /// Building of manifest packages
+    builder: Builder,
+}
+
+/// (default) implementation of the `Publish` trait, i.e. the publis interface to publish.
+///
+// regarding best patterns  _behind_ the `Publish` inteface i'm less opinionated,
+// I think typestates on the `PublishProvider` or a more functional typestate inspired
+// approach like @zmitchell suggested could be a good fit.
+impl<Builder> Publish for PublishProvider<&Builder> where Builder: ManifestBuilder {
+
 }
 
 impl PublishProvider {
