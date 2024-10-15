@@ -46,6 +46,9 @@ impl PublishProvider {
         // Use GitCommandProvider to clone that remote/rev to _sandbox
             // this will ensure it's in the remote
         // Load the manifest from the .flox of that repo to get the version/description/catalog
+        // Confirm access to remote resources, login, etc, so as to not waste
+        // time if it's going to fail later or require user interaction to
+        // continue the operation.
     }
     
     /// Access a `flox build` builder, probably another provider?
