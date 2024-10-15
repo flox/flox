@@ -33,7 +33,7 @@ impl PublishProvider {
     }
 
     /// Ensures current commit is in remote
-    /// Gathers of the info needed for publish
+    /// Gathers the info needed for publish
     /// ... locked_url, rev, rev_count, rev_date of the build repo from git
     /// ... locked_url, rev, rev_count, rev_date of the base catalog from the
     ///         lockfile of the build repo
