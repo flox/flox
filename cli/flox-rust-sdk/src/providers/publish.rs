@@ -7,7 +7,7 @@ pub struct PublishProvider {
 }
 
 impl PublishProvider {
-    pub fn new(repo_dir: Path, package: &str) -> Self {
+    pub fn new(repo_dir: impl AsRef<Path>, package: impl AsRef<str>) -> Self {
         Self { repo_dir: repo_dir, package_name: package.to_string() }
     }
 
