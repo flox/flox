@@ -2,7 +2,7 @@ use crate::flox::Flox;
 use std::path::Path;
 
 pub struct PublishProvider {
-    repo_dir: Path,
+    repo_dir: PathBuf,
     package_name: String,
 }
 
