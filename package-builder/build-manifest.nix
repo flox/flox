@@ -40,6 +40,7 @@ pkgs.runCommandNoCC name
         gnused
         makeWrapper
       ]
+      ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ autoPatchelfHook ]
       ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ darwin.autoSignDarwinBinariesHook ];
     outputs = [ "out" ] ++ pkgs.lib.optionals (buildCache != null) [ "buildCache" ];
   }
@@ -63,6 +64,9 @@ pkgs.runCommandNoCC name
             fi
             ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
               signDarwinBinariesInAllOutputs
+            ''}
+            ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+              autoPatchelfPostFixup
             ''}
           ''
       else
