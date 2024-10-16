@@ -712,6 +712,63 @@ mod tests {
     }
 
     #[test]
+    fn build_result_uses_package_from_environment() {
+        let package_name = String::from("foo");
+        let file_name = String::from("exec-hello-from-env.sh");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+            [install]
+            hello.pkg-path = "hello"
+
+            [build.{package_name}]
+            sandbox = "pure"
+            command = """
+                mkdir -p $out/bin
+                cat > $out/bin/{file_name} <<EOF
+                    #!/usr/bin/env bash
+                    exec hello
+            EOF
+                chmod +x $out/bin/{file_name}
+            """
+        "#};
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        if let Client::Mock(ref mut client) = flox.catalog_client {
+            client.clear_and_load_responses_from_file("resolve/hello.json");
+        } else {
+            panic!("expected Mock client")
+        };
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+
+        fs::write(env_path.join("hello"), indoc! {r#"
+            #!/usr/bin/env bash
+            echo "This should not be used because the environment's PATH takes precedence"
+            exit 1
+        "#})
+        .unwrap();
+
+        let output = Command::new(&result_path)
+            .env("PATH", env_path)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            "Hello, world!",
+            "should successfully execute hello from environment"
+        );
+    }
+
+    #[test]
     fn build_uses_var_from_manifest() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
