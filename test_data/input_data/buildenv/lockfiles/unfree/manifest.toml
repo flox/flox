@@ -1,0 +1,7 @@
+# Expected to fail because `hello-unfree` has an unfree license
+# and `options.allow.unfree` is not set to `true`
+[install]
+hello.pkg-path = "hello-unfree"
+
+[options]
+systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]

@@ -1,0 +1,8 @@
+version = 1
+
+[install]
+vim.pkg-path = "vim"
+vim-full.pkg-path = "vim-full"
+
+[options]
+systems = ["aarch64-darwin", "x86_64-darwin", "aarch64-linux", "x86_64-linux"]
