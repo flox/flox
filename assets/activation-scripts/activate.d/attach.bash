@@ -1,13 +1,5 @@
 # "Reactivation" of this environment.
 
-# If we're attempting to launch an interactive shell then just print a
-# message to say that the environment has already been activated.
-if [ -t 1 ] && [ $# -eq 0 ]; then
-  # TODO: should this be in Rust using message::error?
-  echo "❌ ERROR: Environment '$FLOX_ENV_DESCRIPTION' is already active." >&2
-  exit 1
-fi
-
 # Assert that the expected _{add,del}_env variables are present.
 if [ -z "$_add_env" ] || [ -z "$_del_env" ]; then
   echo "ERROR (activate): \$_add_env and \$_del_env not found in environment" >&2

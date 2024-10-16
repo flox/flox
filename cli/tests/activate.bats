@@ -2526,3 +2526,15 @@ EOF
   refute_output --partial "_flox"
   refute_output --partial "_FLOX"
 }
+
+@test "nested interactive activate fails" {
+  project_setup
+  run bash <(cat <<'EOF'
+    eval "$("$FLOX_BIN" activate)"
+
+    FLOX_SHELL="bash" expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
+EOF
+)
+  assert_failure
+  assert_output --partial "is already active"
+}
