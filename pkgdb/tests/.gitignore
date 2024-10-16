@@ -5,5 +5,6 @@ is_sqlite3
 lock-flake-installable
 lockfile
 realise
+realisepkgs-lockfile
 registry
 util
