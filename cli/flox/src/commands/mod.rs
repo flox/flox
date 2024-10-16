@@ -26,7 +26,7 @@ use std::{env, fmt, fs, io, mem};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
-use flox_rust_sdk::data::CanonicalPath;
+use flox_rust_sdk::data::{CanonicalPath, FloxVersion};
 use flox_rust_sdk::flox::{
     EnvironmentName,
     EnvironmentOwner,
@@ -516,25 +516,35 @@ impl UpdateNotification {
             Err(e) => Err(UpdateNotificationError::Io(e))?,
         };
 
-        let new_version = get_latest_version_future.await?;
-
-        // Sanity check we got a version back
-        if let Err(e) = semver::Version::parse(&new_version) {
+        let Ok(current_version) = FLOX_VERSION.parse::<FloxVersion>() else {
             return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
-                "version is invalid: {e}"
+                "version '{}' is invalid.",
+                *FLOX_VERSION
             )));
-        }
-
-        if *FLOX_VERSION == new_version {
-            return Ok(UpdateCheckResult::RefreshNotificationFile(
-                notification_file,
-            ));
         };
 
-        Ok(UpdateCheckResult::UpdateAvailable(UpdateNotification {
-            new_version,
-            notification_file,
-        }))
+        let new_version_str = get_latest_version_future.await?;
+        let Ok(new_version) = new_version_str.parse::<FloxVersion>() else {
+            return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
+                "version '{new_version_str}' is invalid."
+            )));
+        };
+
+        match current_version.partial_cmp(&new_version) {
+            None => Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
+                "Cannot compare the current version {current_version} to {new_version}"
+            ))),
+            Some(std::cmp::Ordering::Less) => {
+                Ok(UpdateCheckResult::UpdateAvailable(UpdateNotification {
+                    new_version: new_version.to_string(),
+                    notification_file,
+                }))
+            },
+            // current_version is Equal or Greater than new_version
+            _ => Ok(UpdateCheckResult::RefreshNotificationFile(
+                notification_file,
+            )),
+        }
     }
 
     /// Print if there's a new version available,
@@ -1962,9 +1972,11 @@ mod tests {
         )
         .unwrap();
 
+        let latest_version: String = "1000.0.0".to_string();
+
         let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
-            async { Ok("0.0.0".to_string()) },
+            async { Ok(latest_version.clone()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await;
@@ -1973,7 +1985,7 @@ mod tests {
             result.unwrap(),
             UpdateCheckResult::UpdateAvailable(UpdateNotification {
                 notification_file,
-                new_version: "0.0.0".to_string()
+                new_version: latest_version.clone(),
             })
         );
     }
@@ -1987,7 +1999,7 @@ mod tests {
 
         let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
-            async { Ok("0.0.0".to_string()) },
+            async { Ok("1000.0.0".to_string()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await;
@@ -1996,7 +2008,7 @@ mod tests {
             result.unwrap(),
             UpdateCheckResult::UpdateAvailable(UpdateNotification {
                 notification_file,
-                new_version: "0.0.0".to_string()
+                new_version: "1000.0.0".to_string()
             })
         );
     }
@@ -2017,7 +2029,7 @@ mod tests {
 
         match result {
             Err(UpdateNotificationError::WeMayHaveMessedUp(e)) => {
-                assert!(e.to_string().contains("version is invalid"))
+                assert!(e.to_string().contains("version 'bad' is invalid"))
             },
             _ => panic!(),
         }
