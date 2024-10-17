@@ -52,7 +52,7 @@ teardown() {
 # catalog tests
 
 # bats test_tags=catalog
-@test "catalog: install requests with pip" {
+@test "install requests with pip" {
   "$FLOX_BIN" init
 
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/python3_pip.json" \
@@ -66,7 +66,7 @@ teardown() {
 }
 
 # bats test_tags=python:activate:poetry,catalog
-@test "catalog: flox activate works with poetry" {
+@test "flox activate works with poetry" {
   cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/python/poetry/* "$PROJECT_DIR/"
   # Files copied from the store are read-only
@@ -86,7 +86,7 @@ teardown() {
 }
 
 # bats test_tags=python:activate:pyproject:pip,catalog
-@test "catalog: flox activate works with pyproject and pip" {
+@test "flox activate works with pyproject and pip" {
   cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/python/pyproject-pip/* "$PROJECT_DIR/"
   # Files copied from the store are read-only
@@ -105,7 +105,7 @@ teardown() {
 }
 
 # bats test_tags=python:activate:requirements,catalog
-@test "catalog: flox activate works with requirements.txt and pip" {
+@test "flox activate works with requirements.txt and pip" {
   cp -r "$INPUT_DATA"/init/python/common/* "$PROJECT_DIR/"
   cp -r "$INPUT_DATA"/init/python/requirements/* "$PROJECT_DIR/"
   # Files copied from the store are read-only
@@ -124,7 +124,7 @@ teardown() {
 }
 
 # bats test_tags=init:python:auto-setup,init:python:auto-setup:bash,catalog
-@test "catalog: verify auto-setup Python venv activation: bash" {
+@test "verify auto-setup Python venv activation: bash" {
   OWNER="owner"
   NAME="name"
   echo "requests" > requirements.txt
@@ -137,7 +137,7 @@ teardown() {
 }
 
 # bats test_tags=init:python:auto-setup,init:python:auto-setup:zsh,catalog
-@test "catalog: verify auto-setup Python venv activation: zsh" {
+@test "verify auto-setup Python venv activation: zsh" {
   OWNER="owner"
   NAME="name"
   echo "requests" > requirements.txt
@@ -150,7 +150,7 @@ teardown() {
 }
 
 # bats test_tags=init:python:auto-setup,init:python:auto-setup:fish,catalog
-@test "catalog: verify auto-setup Python venv activation: fish" {
+@test "verify auto-setup Python venv activation: fish" {
   OWNER="owner"
   NAME="name"
   echo "requests" > requirements.txt
@@ -163,7 +163,7 @@ teardown() {
 }
 
 # bats test_tags=init:python:auto-setup,init:python:auto-setup:tcsh,catalog
-@test "catalog: verify auto-setup Python venv activation: tcsh" {
+@test "verify auto-setup Python venv activation: tcsh" {
   OWNER="owner"
   NAME="name"
   echo "requests" > requirements.txt

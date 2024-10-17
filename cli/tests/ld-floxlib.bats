@@ -100,7 +100,7 @@ teardown() {
 
 # ---------------------------------------------------------------------------- #
 
-@test "catalog: test ld-floxlib.so on Linux only" {
+@test "test ld-floxlib.so on Linux only" {
   project_setup_catalog
 
   # Revision PKGDB_NIXPKGS_REV_OLDER is expected to provide glibc 2.34.

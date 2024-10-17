@@ -233,7 +233,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:l2,pull:l2:a,pull:l4
-@test "catalog: l2.a/l4: flox pull accepts a floxhub namespace/environment, creates .flox if it does not exist" {
+@test "l2.a/l4: flox pull accepts a floxhub namespace/environment, creates .flox if it does not exist" {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
@@ -249,7 +249,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:l2,pull:l2:b
-@test "catalog: l2.b: flox pull with --remote fails if an env is already present" {
+@test "l2.b: flox pull with --remote fails if an env is already present" {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
@@ -262,7 +262,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:l2,pull:l2:c
-@test "catalog: l2.c: flox pull with --remote and --dir pulls into the specified directory" {
+@test "l2.c: flox pull with --remote and --dir pulls into the specified directory" {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
@@ -277,7 +277,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:l3,pull:l3:a
-@test "catalog: l3.a: pulling without namespace/environment" {
+@test "l3.a: pulling without namespace/environment" {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
@@ -299,7 +299,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:l3,pull:l3:b
-@test "catalog: l3.b: pulling without namespace/environment respects --dir" {
+@test "l3.b: pulling without namespace/environment respects --dir" {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
@@ -320,7 +320,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:l6,pull:l6:a
-@test "catalog: l6.a: pulling the same remote environment in multiple directories creates unique copies of the environment" {
+@test "l6.a: pulling the same remote environment in multiple directories creates unique copies of the environment" {
   make_dummy_env "owner" "name"
 
   mkdir first second
@@ -352,7 +352,7 @@ function add_incompatible_package() {
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=pull:twice:no-force
-@test "catalog: pull environment inside the same environment without the '--force' flag" {
+@test "pull environment inside the same environment without the '--force' flag" {
   make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
 
@@ -366,7 +366,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:twice:force
-@test "catalog: pull environment inside the same environment with '--force' flag" {
+@test "pull environment inside the same environment with '--force' flag" {
   make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
 
@@ -386,7 +386,7 @@ function add_incompatible_package() {
 # due to the current system missing <system> in `option.systems`
 # AND a package that is indeed not able to be built for the current system
 # should show a warning, but otherwise succeed to pull
-@test "catalog: pull unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
+@test "pull unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
   make_dummy_env "owner" "name"
   remove_extra_systems "owner" "name"
   update_dummy_env "owner" "name"
@@ -485,7 +485,7 @@ function add_incompatible_package() {
 
 # bats test_tags=activate:remote:incompatible
 # activating an incompatible environment should fail gracefully
-@test "catalog: activate incompatible environment fails gracefully" {
+@test "activate incompatible environment fails gracefully" {
 
   make_dummy_env "owner" "name"
   remove_extra_systems "owner" "name"

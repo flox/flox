@@ -288,7 +288,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=managed,activate,managed:activate
-@test "catalog: m9: activate works in managed environment" {
+@test "m9: activate works in managed environment" {
   make_empty_remote_env
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     "$FLOX_BIN" install hello
