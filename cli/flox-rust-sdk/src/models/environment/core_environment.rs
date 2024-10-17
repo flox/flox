@@ -20,12 +20,7 @@ use super::{
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
-use crate::models::lockfile::{
-    LockedManifestCatalog,
-    LockedManifestError,
-    LockedPackage,
-    ResolutionFailure,
-};
+use crate::models::lockfile::{LockedManifestError, LockedPackage, Lockfile, ResolutionFailure};
 use crate::models::manifest::{
     insert_packages,
     remove_packages,
@@ -104,11 +99,11 @@ impl<State> CoreEnvironment<State> {
 
     /// Return a [LockedManifest] if the lockfile exists,
     /// otherwise return None
-    pub fn existing_lockfile(&self) -> Result<Option<LockedManifestCatalog>, CoreEnvironmentError> {
+    pub fn existing_lockfile(&self) -> Result<Option<Lockfile>, CoreEnvironmentError> {
         let lockfile_path = self.lockfile_path();
         if let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) {
             Ok(Some(
-                LockedManifestCatalog::read_from_file(&lockfile_path)
+                Lockfile::read_from_file(&lockfile_path)
                     .map_err(CoreEnvironmentError::LockedManifest)?,
             ))
         } else {
@@ -123,9 +118,7 @@ impl<State> CoreEnvironment<State> {
 
     /// Return a [LockedManifest] if the environment is already locked and has
     /// the same manifest contents as the manifest, otherwise return None.
-    fn lockfile_if_up_to_date(
-        &self,
-    ) -> Result<Option<LockedManifestCatalog>, CoreEnvironmentError> {
+    fn lockfile_if_up_to_date(&self) -> Result<Option<Lockfile>, CoreEnvironmentError> {
         let lockfile_path = self.lockfile_path();
 
         let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) else {
@@ -134,7 +127,7 @@ impl<State> CoreEnvironment<State> {
 
         let manifest: TypedManifestCatalog = toml::from_str(&self.manifest_contents()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
-        let lockfile = LockedManifestCatalog::read_from_file(&lockfile_path)
+        let lockfile = Lockfile::read_from_file(&lockfile_path)
             .map_err(CoreEnvironmentError::LockedManifest)?;
 
         // Check if the manifest embedded in the lockfile and the manifest
@@ -156,10 +149,7 @@ impl<State> CoreEnvironment<State> {
     /// The real point of this method is letting us skip locking for an already
     /// locked pkgdb manifest,
     /// since pkgdb manifests can no longer be locked.
-    pub fn ensure_locked(
-        &mut self,
-        flox: &Flox,
-    ) -> Result<LockedManifestCatalog, CoreEnvironmentError> {
+    pub fn ensure_locked(&mut self, flox: &Flox) -> Result<Lockfile, CoreEnvironmentError> {
         match self.lockfile_if_up_to_date()? {
             Some(lock) => Ok(lock),
             None => self.lock(flox),
@@ -181,7 +171,7 @@ impl<State> CoreEnvironment<State> {
     /// The caller is responsible for skipping calls to lock when an environment
     /// is already locked.
     /// For that reason, this always writes the lockfile to disk.
-    pub fn lock(&mut self, flox: &Flox) -> Result<LockedManifestCatalog, CoreEnvironmentError> {
+    pub fn lock(&mut self, flox: &Flox) -> Result<Lockfile, CoreEnvironmentError> {
         let manifest = self.manifest()?;
 
         let lockfile = self.lock_with_catalog_client(
@@ -215,18 +205,18 @@ impl<State> CoreEnvironment<State> {
         client: &catalog::Client,
         installable_locker: &impl InstallableLocker,
         manifest: TypedManifestCatalog,
-    ) -> Result<LockedManifestCatalog, CoreEnvironmentError> {
+    ) -> Result<Lockfile, CoreEnvironmentError> {
         let existing_lockfile = 'lockfile: {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
                 break 'lockfile None;
             };
             Some(
-                LockedManifestCatalog::read_from_file(&lockfile_path)
+                Lockfile::read_from_file(&lockfile_path)
                     .map_err(CoreEnvironmentError::LockedManifest)?,
             )
         };
 
-        LockedManifestCatalog::lock_manifest(
+        Lockfile::lock_manifest(
             &manifest,
             existing_lockfile.as_ref(),
             client,
@@ -262,7 +252,7 @@ impl<State> CoreEnvironment<State> {
     pub fn build(&mut self, flox: &Flox) -> Result<PathBuf, CoreEnvironmentError> {
         let lockfile_path = CanonicalPath::new(self.lockfile_path())
             .map_err(CoreEnvironmentError::BadLockfilePath)?;
-        let lockfile = LockedManifestCatalog::read_from_file(&lockfile_path)
+        let lockfile = Lockfile::read_from_file(&lockfile_path)
             .map_err(CoreEnvironmentError::LockedManifest)?;
 
         let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
@@ -671,15 +661,14 @@ impl CoreEnvironment<ReadOnly> {
         flake_locking: &impl InstallableLocker,
         groups_or_iids: &[&str],
         manifest: &TypedManifestCatalog,
-    ) -> Result<(LockedManifestCatalog, Vec<(LockedPackage, LockedPackage)>), CoreEnvironmentError>
-    {
+    ) -> Result<(Lockfile, Vec<(LockedPackage, LockedPackage)>), CoreEnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let existing_lockfile = 'lockfile: {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
                 break 'lockfile None;
             };
             Some(
-                LockedManifestCatalog::read_from_file(&lockfile_path)
+                Lockfile::read_from_file(&lockfile_path)
                     .map_err(CoreEnvironmentError::LockedManifest)?,
             )
         };
@@ -712,14 +701,10 @@ impl CoreEnvironment<ReadOnly> {
             })
         };
 
-        let upgraded_lockfile = LockedManifestCatalog::lock_manifest(
-            manifest,
-            seed_lockfile.as_ref(),
-            client,
-            flake_locking,
-        )
-        .block_on()
-        .map_err(CoreEnvironmentError::LockedManifest)?;
+        let upgraded_lockfile =
+            Lockfile::lock_manifest(manifest, seed_lockfile.as_ref(), client, flake_locking)
+                .block_on()
+                .map_err(CoreEnvironmentError::LockedManifest)?;
 
         let pkgs_after_upgrade = {
             let mut pkgs_by_id = BTreeMap::new();
@@ -1337,7 +1322,7 @@ mod tests {
         let mut manifest = TypedManifestCatalog::default();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
-        let lockfile = lockfile::LockedManifestCatalog {
+        let lockfile = lockfile::Lockfile {
             version: Version,
             packages: vec![foo_locked.into()],
             manifest: manifest.clone(),

@@ -22,7 +22,7 @@ use tempfile::NamedTempFile;
 use tracing::debug;
 
 use crate::flox::Flox;
-use crate::models::lockfile::LockedManifestCatalog;
+use crate::models::lockfile::Lockfile;
 use crate::models::manifest::{ManifestServiceShutdown, ManifestServices};
 use crate::utils::{traceable_path, CommandExt};
 
@@ -275,7 +275,7 @@ pub fn service_config_write_location(temp_dir: impl AsRef<Path>) -> Result<PathB
 /// Generate the YAML config file for services if the lockfile contains services.
 pub fn maybe_make_service_config_file(
     flox: &Flox,
-    lockfile: &LockedManifestCatalog,
+    lockfile: &Lockfile,
 ) -> Result<Option<PathBuf>, ServiceError> {
     let service_config_path = if !lockfile.manifest.services.is_empty() {
         let config_path = service_config_write_location(&flox.temp_dir)?;

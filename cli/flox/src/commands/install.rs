@@ -12,7 +12,7 @@ use flox_rust_sdk::models::environment::{
     InstallationAttempt,
 };
 use flox_rust_sdk::models::lockfile::{
-    LockedManifestCatalog,
+    Lockfile,
     LockedManifestError,
     LockedPackage,
     ResolutionFailure,
@@ -164,7 +164,7 @@ impl Install {
         let lockfile_content = std::fs::read_to_string(&lockfile_path)?;
 
         // Check for warnings in the lockfile
-        let lockfile: LockedManifestCatalog = serde_json::from_str(&lockfile_content)?;
+        let lockfile: Lockfile = serde_json::from_str(&lockfile_content)?;
         // TODO: move this behind the `installation.new_manifest.is_some()`
         // check below so we don't warn when we don't even install anything
         for warning in Self::generate_warnings(
