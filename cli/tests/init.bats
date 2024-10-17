@@ -206,7 +206,7 @@ EOF
 }
 
 # bats test_tags=init:catalog
-@test "catalog: init creates manifest with all 4 systems" {
+@test "init creates manifest with all 4 systems" {
   "$FLOX_BIN" init
   systems=$(tomlq -r -c '.options.systems' .flox/env/manifest.toml)
   assert_equal "$systems" '["aarch64-darwin","aarch64-linux","x86_64-darwin","x86_64-linux"]'
