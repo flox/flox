@@ -1,0 +1,140 @@
+[
+  [
+    {
+      "msgs": [],
+      "name": "toplevel",
+      "page": {
+        "complete": true,
+        "msgs": [],
+        "packages": [
+          {
+            "attr_path": "hello",
+            "broken": false,
+            "derivation": "/nix/store/2xclkmh62nvh11fz839lnnfp0fvdmars-hello-2.12.1.drv",
+            "description": "Program that produces a familiar, friendly greeting",
+            "insecure": false,
+            "install_id": "hello",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+            "name": "hello-2.12.1",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/p3vrcf0z38979rclg1923vwi4vcrpgq1-hello-2.12.1"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "hello",
+            "rev": "5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+            "rev_count": 690827,
+            "rev_date": "2024-10-09T16:51:18Z",
+            "scrape_date": "2024-10-11T03:53:01Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "2.12.1"
+          },
+          {
+            "attr_path": "hello",
+            "broken": false,
+            "derivation": "/nix/store/gm4sf3dwjyw1zslv4b1l020m1p3122a0-hello-2.12.1.drv",
+            "description": "Program that produces a familiar, friendly greeting",
+            "insecure": false,
+            "install_id": "hello",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+            "name": "hello-2.12.1",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/b9nxjjjpnv5npiwqxw882x4z7wxmvwm5-hello-2.12.1"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "hello",
+            "rev": "5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+            "rev_count": 690827,
+            "rev_date": "2024-10-09T16:51:18Z",
+            "scrape_date": "2024-10-11T03:53:01Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "2.12.1"
+          },
+          {
+            "attr_path": "hello",
+            "broken": false,
+            "derivation": "/nix/store/07iwdbb4j4r2daaja5fancdh1wq4r0lj-hello-2.12.1.drv",
+            "description": "Program that produces a familiar, friendly greeting",
+            "insecure": false,
+            "install_id": "hello",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+            "name": "hello-2.12.1",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/7lml1vf30kmg4lppnjjf0sqpgvvafp40-hello-2.12.1"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "hello",
+            "rev": "5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+            "rev_count": 690827,
+            "rev_date": "2024-10-09T16:51:18Z",
+            "scrape_date": "2024-10-11T03:53:01Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "2.12.1"
+          },
+          {
+            "attr_path": "hello",
+            "broken": false,
+            "derivation": "/nix/store/af3rc6phyv80h7aq4y3d08awnq2ja8fp-hello-2.12.1.drv",
+            "description": "Program that produces a familiar, friendly greeting",
+            "insecure": false,
+            "install_id": "hello",
+            "license": "GPL-3.0-or-later",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+            "name": "hello-2.12.1",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/yb84nwgvixzi9sx9nxssq581pc0cc8p3-hello-2.12.1"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "hello",
+            "rev": "5633bcff0c6162b9e4b5f1264264611e950c8ec7",
+            "rev_count": 690827,
+            "rev_date": "2024-10-09T16:51:18Z",
+            "scrape_date": "2024-10-11T03:53:01Z",
+            "stabilities": [
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "2.12.1"
+          }
+        ],
+        "page": 690827,
+        "url": ""
+      }
+    }
+  ]
+]

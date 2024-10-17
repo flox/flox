@@ -219,14 +219,6 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "bash: interactive activate puts package in path" {
-  project_setup_pkgdb
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
-  assert_output --regexp "bin/hello"
-  refute_output "not found"
-}
-
-# bats test_tags=activate,activate:path,activate:path:bash
-@test "catalog: bash: interactive activate puts package in path" {
   project_setup
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -239,15 +231,10 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:fish
 @test "fish: interactive activate puts package in path" {
-  project_setup_pkgdb
-  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
-  assert_output --regexp "bin/hello"
-  refute_output "not found"
-}
-
-# bats test_tags=activate,activate:path,activate:path:fish
-@test "catalog: fish: interactive activate puts package in path" {
-  project_setup_pkgdb
+  project_setup
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
+  run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
+  assert_success
   FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
   assert_output --regexp "bin/hello"
   refute_output "not found"
@@ -255,14 +242,6 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:tcsh
 @test "tcsh: interactive activate puts package in path" {
-  project_setup_pkgdb
-  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
-  assert_output --regexp "bin/hello"
-  refute_output "not found"
-}
-
-# bats test_tags=activate,activate:path,activate:path:tcsh
-@test "catalog: tcsh: interactive activate puts package in path" {
   project_setup
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -275,17 +254,6 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:zsh
 @test "zsh: interactive activate puts package in path" {
-  project_setup_pkgdb
-  # TODO: flox will set HOME if it doesn't match the home of the user with
-  # current euid. I'm not sure if we should change that, but for now just set
-  # USER to REAL_USER.
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/interactive-hello.exp" "$PROJECT_DIR"
-  assert_output --regexp "bin/hello"
-  refute_output "not found"
-}
-
-# bats test_tags=activate,activate:path,activate:path:zsh
-@test "catalog: zsh: interactive activate puts package in path" {
   project_setup
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -1151,19 +1119,6 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:bash
 @test "'flox activate' modifies path (bash)" {
-  project_setup_pkgdb
-
-  # hello is not on the path
-  run -1 type hello
-
-  # project_setup_pkgdb sets up an environment with hello installed
-  FLOX_SHELL="bash" run "$FLOX_BIN" activate -- hello
-  assert_success
-  assert_output --partial "Hello, world!"
-}
-
-# bats test_tags=activate,activate:path,activate:path:bash
-@test "catalog: 'flox activate' modifies path (bash)" {
   project_setup
   original_path="$PATH"
   FLOX_SHELL="bash" run "$FLOX_BIN" activate -- echo '$PATH'
@@ -1184,19 +1139,6 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:fish
 @test "'flox activate' modifies path (fish)" {
-  project_setup_pkgdb
-
-  # hello is not on the path
-  run -1 type hello
-
-  # project_setup_pkgdb sets up an environment with hello installed
-  FLOX_SHELL="fish" run "$FLOX_BIN" activate -- hello
-  assert_success
-  assert_output --partial "Hello, world!"
-}
-
-# bats test_tags=activate,activate:path,activate:path:fish
-@test "catalog: 'flox activate' modifies path (fish)" {
   project_setup
   original_path="$PATH"
   FLOX_SHELL="fish" run "$FLOX_BIN" activate -- echo '$PATH'
@@ -1217,19 +1159,6 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:tcsh
 @test "'flox activate' modifies path (tcsh)" {
-  project_setup_pkgdb
-
-  # hello is not on the path
-  run -1 type hello
-
-  # project_setup_pkgdb sets up an environment with hello installed
-  FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- hello
-  assert_success
-  assert_output --partial "Hello, world!"
-}
-
-# bats test_tags=activate,activate:path,activate:path:tcsh
-@test "catalog: 'flox activate' modifies path (tcsh)" {
   project_setup
   original_path="$PATH"
   FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- echo '$PATH'
@@ -1250,19 +1179,6 @@ EOF
 
 # bats test_tags=activate,activate:path,activate:path:zsh
 @test "'flox activate' modifies path (zsh)" {
-  project_setup_pkgdb
-
-  # hello is not on the path
-  run -1 type hello
-
-  # project_setup_pkgdb sets up an environment with hello installed
-  FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- hello
-  assert_success
-  assert_output --partial "Hello, world!"
-}
-
-# bats test_tags=activate,activate:path,activate:path:zsh
-@test "catalog: 'flox activate' modifies path (zsh)" {
   project_setup
   original_path="$PATH"
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- echo '$PATH'
@@ -1331,24 +1247,6 @@ EOF
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:bash
 @test "'flox activate' modifies the current shell (bash)" {
-  project_setup_pkgdb
-
-  cp -r "$MANUALLY_GENERATED"/hello_for_activate_v0/* .flox/env/
-
-  run bash -c 'eval "$($FLOX_BIN activate)"; type hello; echo $foo'
-  assert_success
-  assert_line "sourcing hook.on-activate"
-  assert_line "sourcing profile.common"
-  assert_line "sourcing profile.bash"
-  refute_line "sourcing profile.fish"
-  refute_line "sourcing profile.tcsh"
-  refute_line "sourcing profile.zsh"
-  assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
-  assert_line "baz"
-}
-
-# bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:bash
-@test "catalog: 'flox activate' modifies the current shell (bash)" {
   project_setup
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -1371,24 +1269,6 @@ EOF
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:fish
 @test "'flox activate' modifies the current shell (fish)" {
-  project_setup_pkgdb
-
-  cp -r "$MANUALLY_GENERATED"/hello_for_activate_v0/* .flox/env/
-
-  run fish -c 'eval "$($FLOX_BIN activate)"; type hello; echo $foo'
-  assert_success
-  assert_line "sourcing hook.on-activate"
-  assert_line "sourcing profile.common"
-  refute_line "sourcing profile.bash"
-  assert_line "sourcing profile.fish"
-  refute_line "sourcing profile.tcsh"
-  refute_line "sourcing profile.zsh"
-  assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
-  assert_line "baz"
-}
-
-# bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:fish
-@test "catalog: 'flox activate' modifies the current shell (fish)" {
   project_setup
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -1413,24 +1293,6 @@ EOF
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:tcsh
 @test "'flox activate' modifies the current shell (tcsh)" {
-  project_setup_pkgdb
-
-  cp -r "$MANUALLY_GENERATED"/hello_for_activate_v0/* .flox/env/
-
-  run tcsh -c 'eval "`$FLOX_BIN activate`"; echo hello is `which hello`; echo $foo'
-  assert_success
-  assert_line "sourcing hook.on-activate"
-  assert_line "sourcing profile.common"
-  refute_line "sourcing profile.bash"
-  refute_line "sourcing profile.fish"
-  assert_line "sourcing profile.tcsh"
-  refute_line "sourcing profile.zsh"
-  assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
-  assert_line "baz"
-}
-
-# bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:tcsh
-@test "catalog: 'flox activate' modifies the current shell (tcsh)" {
   project_setup
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -1455,22 +1317,6 @@ EOF
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:zsh
 @test "'flox activate' modifies the current shell (zsh)" {
-  project_setup_pkgdb
-
-  cp -r "$MANUALLY_GENERATED"/hello_for_activate_v0/* .flox/env/
-
-  run zsh -c 'eval "$("$FLOX_BIN" activate)"; type hello; echo $foo'
-  assert_success
-  assert_line "sourcing hook.on-activate"
-  assert_line "sourcing profile.common"
-  refute_line "sourcing profile.bash"
-  assert_line "sourcing profile.zsh"
-  assert_line --partial "hello is $(realpath $PROJECT_DIR)/.flox/run/"
-  assert_line "baz"
-}
-
-# bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:zsh
-@test "catalog: 'flox activate' modifies the current shell (zsh)" {
   project_setup
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -1546,26 +1392,6 @@ EOF
 
 # bats test_tags=activate,activate:python-detects-installed-python
 @test "'flox activate' sets python vars if python is installed" {
-  project_setup_pkgdb
-
-  # Mock flox install of python311Packages.pip
-  cp "$MANUALLY_GENERATED"/python_v0/* "$PROJECT_DIR/.flox/env/"
-
-  # unset python vars if any
-  unset PYTHONPATH
-  unset PIP_CONFIG_FILE
-
-  run -- "$FLOX_BIN" activate -- echo PYTHONPATH is '$PYTHONPATH'
-  assert_success
-  assert_line "PYTHONPATH is $(realpath $PROJECT_DIR)/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/lib/python3.11/site-packages"
-
-  run -- "$FLOX_BIN" activate -- echo PIP_CONFIG_FILE is '$PIP_CONFIG_FILE'
-  assert_success
-  assert_line "PIP_CONFIG_FILE is $(realpath $PROJECT_DIR)/.flox/pip.ini"
-}
-
-# bats test_tags=activate,activate:python-detects-installed-python
-@test "catalog: 'flox activate' sets python vars if python is installed" {
   project_setup
   # unset python vars if any
   unset PYTHONPATH
@@ -1605,7 +1431,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate:flox-uses-default-env
-@test "catalog: 'flox *' uses local environment over 'default' environment" {
+@test "'flox *' uses local environment over 'default' environment" {
   project_setup # TODO: we need PROJECT_DIR, but not flox init
   "$FLOX_BIN" delete -f
   mkdir default

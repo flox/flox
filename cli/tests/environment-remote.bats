@@ -100,7 +100,7 @@ make_remote_pkgdb_env_with_hello() {
 }
 
 # bats test_tags=hermetic,remote,remote:outlink
-@test "catalog: r0: building a remote environment creates outlink" {
+@test "r0: building a remote environment creates outlink" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
 
@@ -140,7 +140,7 @@ make_remote_pkgdb_env_with_hello() {
 }
 
 # bats test_tags=edit,remote,remote:edit
-@test "catalog: m3: edit a package from a managed environment" {
+@test "m3: edit a package from a managed environment" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
 
@@ -166,15 +166,6 @@ EOF
 
 # bats test_tags=remote,activate,remote:activate
 @test "m9: activate works in remote environment" {
-  make_remote_pkgdb_env_with_hello
-
-  run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- command -v hello
-  assert_success
-  assert_output --partial "$FLOX_CACHE_DIR/remote/owner/test/.flox/run/bin/hello"
-}
-
-# bats test_tags=remote,activate,remote:activate
-@test "catalog: m9: activate works in remote environment" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
   "$FLOX_BIN" install hello --remote "$OWNER/test"
