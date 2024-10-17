@@ -47,7 +47,7 @@ use crate::models::container_builder::ContainerBuilder;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::lockfile::LockedManifestCatalog;
+use crate::models::lockfile::Lockfile;
 use crate::models::manifest::{
     CatalogPackage,
     PackageToInstall,
@@ -176,7 +176,7 @@ impl PathEnvironment {
 
 impl Environment for PathEnvironment {
     /// This will lock the environment if it is not already locked.
-    fn lockfile(&mut self, flox: &Flox) -> Result<LockedManifestCatalog, EnvironmentError> {
+    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         Ok(env_view.ensure_locked(flox)?)
     }

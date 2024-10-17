@@ -43,7 +43,7 @@ use crate::models::env_registry::{
 use crate::models::environment::copy_dir_recursive;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
-use crate::models::lockfile::LockedManifestCatalog;
+use crate::models::lockfile::Lockfile;
 use crate::models::manifest::{PackageToInstall, TypedManifestCatalog};
 use crate::providers::git::{
     GitCommandBranchHashError,
@@ -208,7 +208,7 @@ impl GenerationLock {
 
 impl Environment for ManagedEnvironment {
     /// This will lock if there is an out of sync local checkout
-    fn lockfile(&mut self, flox: &Flox) -> Result<LockedManifestCatalog, EnvironmentError> {
+    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
         self.ensure_locked(flox, &mut local_checkout)
     }
@@ -502,7 +502,7 @@ impl ManagedEnvironment {
         &mut self,
         flox: &Flox,
         local_checkout: &mut CoreEnvironment,
-    ) -> Result<LockedManifestCatalog, EnvironmentError> {
+    ) -> Result<Lockfile, EnvironmentError> {
         // Otherwise, there would be a generation without a lockfile, which is a bad state,
         // and we error.
         if !Self::validate_checkout(local_checkout, &self.get_current_generation(flox)?)? {
@@ -1656,7 +1656,7 @@ mod test {
     use crate::models::environment::{DOT_FLOX, MANIFEST_FILENAME};
     use crate::models::floxmeta::floxmeta_dir;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
-    use crate::models::lockfile::LockedManifestCatalog;
+    use crate::models::lockfile::Lockfile;
     use crate::models::manifest::{ManifestPackageDescriptorCatalog, TypedManifestCatalog};
     use crate::providers::catalog::{Client, MockClient, GENERATED_DATA};
     use crate::providers::git::tests::commit_file;
@@ -2442,14 +2442,14 @@ mod test {
 
         let lockfile_content =
             fs::read_to_string(managed_env.lockfile_path(&flox).unwrap()).unwrap();
-        let lockfile: LockedManifestCatalog = serde_json::from_str(&lockfile_content).unwrap();
+        let lockfile: Lockfile = serde_json::from_str(&lockfile_content).unwrap();
 
         assert_eq!(lockfile.manifest, new_manifest);
         assert_eq!(lockfile.packages.len(), 4); // 1 x 4 systems
 
         let lockfile_in_generation_content =
             fs::read_to_string(managed_env.lockfile_path(&flox).unwrap()).unwrap();
-        let lockfile_in_generation: LockedManifestCatalog =
+        let lockfile_in_generation: Lockfile =
             serde_json::from_str(&lockfile_in_generation_content).unwrap();
 
         assert_eq!(lockfile_in_generation, lockfile);

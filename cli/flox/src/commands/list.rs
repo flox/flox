@@ -7,7 +7,7 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::lockfile::{
     InstalledPackage,
-    LockedManifestCatalog,
+    Lockfile,
     LockedPackageFlake,
     PackageInfo,
     PackageToList,
@@ -255,7 +255,7 @@ impl List {
     ///
     /// Check the implementation docs of [Environment::lockfile] for more
     /// information.
-    fn get_lockfile(flox: &Flox, env: &mut dyn Environment) -> Result<LockedManifestCatalog> {
+    fn get_lockfile(flox: &Flox, env: &mut dyn Environment) -> Result<Lockfile> {
         let lockfile = Dialog {
                 message: "No lockfile found for environment, building...",
                 help_message: None,
