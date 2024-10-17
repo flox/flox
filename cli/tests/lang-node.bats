@@ -51,7 +51,7 @@ teardown() {
 # catalog tests
 
 # bats test_tags=catalog
-@test "catalog: flox activate works with npm" {
+@test "flox activate works with npm" {
   cp -r "$INPUT_DATA/init/node/common/." .
   cp -r "$INPUT_DATA/init/node/npm/." .
   # Files copied from the store are read-only
@@ -65,7 +65,7 @@ teardown() {
 }
 
 # bats test_tags=catalog
-@test "catalog: flox activate works with yarn" {
+@test "flox activate works with yarn" {
   cp -r "$INPUT_DATA/init/node/common/." .
   cp -r "$INPUT_DATA/init/node/yarn/." .
   # Files copied from the store are read-only
@@ -80,7 +80,7 @@ teardown() {
 }
 
 # bats test_tags=catalog
-@test "catalog: install krb5 with node" {
+@test "install krb5 with node" {
   "$FLOX_BIN" init
 
   cat "$GENERATED_DATA/envs/krb5_prereqs/manifest.toml" | _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/envs/krb5_prereqs/krb5_prereqs.json" "$FLOX_BIN" edit -f -

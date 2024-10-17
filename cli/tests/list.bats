@@ -125,7 +125,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=list,list:catalog
-@test "catalog: 'flox list' lists packages of environment in the current dir; One package from nixpkgs" {
+@test "'flox list' lists packages of environment in the current dir; One package from nixpkgs" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     "$FLOX_BIN" install hello
@@ -136,7 +136,7 @@ EOF
 }
 
 # bats test_tags=list,list:catalog,list:config
-@test "catalog: 'flox list --config' shows manifest content" {
+@test "'flox list --config' shows manifest content" {
   "$FLOX_BIN" init
   MANIFEST_CONTENTS="$(
     cat <<-EOF

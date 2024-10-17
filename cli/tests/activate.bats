@@ -218,7 +218,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:path,activate:path:bash
-@test "catalog: bash: interactive activate puts package in path" {
+@test "bash: interactive activate puts package in path" {
   project_setup
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -230,7 +230,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:fish
-@test "catalog: fish: interactive activate puts package in path" {
+@test "fish: interactive activate puts package in path" {
   project_setup
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -241,7 +241,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:tcsh
-@test "catalog: tcsh: interactive activate puts package in path" {
+@test "tcsh: interactive activate puts package in path" {
   project_setup
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -253,7 +253,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:zsh
-@test "catalog: zsh: interactive activate puts package in path" {
+@test "zsh: interactive activate puts package in path" {
   project_setup
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   run "$FLOX_BIN" install -d "$PROJECT_DIR" hello
@@ -1118,7 +1118,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:path,activate:path:bash
-@test "catalog: 'flox activate' modifies path (bash)" {
+@test "'flox activate' modifies path (bash)" {
   project_setup
   original_path="$PATH"
   FLOX_SHELL="bash" run "$FLOX_BIN" activate -- echo '$PATH'
@@ -1138,7 +1138,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:fish
-@test "catalog: 'flox activate' modifies path (fish)" {
+@test "'flox activate' modifies path (fish)" {
   project_setup
   original_path="$PATH"
   FLOX_SHELL="fish" run "$FLOX_BIN" activate -- echo '$PATH'
@@ -1158,7 +1158,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:tcsh
-@test "catalog: 'flox activate' modifies path (tcsh)" {
+@test "'flox activate' modifies path (tcsh)" {
   project_setup
   original_path="$PATH"
   FLOX_SHELL="tcsh" run "$FLOX_BIN" activate -- echo '$PATH'
@@ -1178,7 +1178,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:path,activate:path:zsh
-@test "catalog: 'flox activate' modifies path (zsh)" {
+@test "'flox activate' modifies path (zsh)" {
   project_setup
   original_path="$PATH"
   FLOX_SHELL="zsh" run "$FLOX_BIN" activate -- echo '$PATH'
@@ -1246,7 +1246,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:bash
-@test "catalog: 'flox activate' modifies the current shell (bash)" {
+@test "'flox activate' modifies the current shell (bash)" {
   project_setup
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -1268,7 +1268,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:fish
-@test "catalog: 'flox activate' modifies the current shell (fish)" {
+@test "'flox activate' modifies the current shell (fish)" {
   project_setup
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -1292,7 +1292,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:tcsh
-@test "catalog: 'flox activate' modifies the current shell (tcsh)" {
+@test "'flox activate' modifies the current shell (tcsh)" {
   project_setup
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -1316,7 +1316,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:inplace-modifies,activate:inplace-modifies:zsh
-@test "catalog: 'flox activate' modifies the current shell (zsh)" {
+@test "'flox activate' modifies the current shell (zsh)" {
   project_setup
   # set profile scripts
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -1391,7 +1391,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:python-detects-installed-python
-@test "catalog: 'flox activate' sets python vars if python is installed" {
+@test "'flox activate' sets python vars if python is installed" {
   project_setup
   # unset python vars if any
   unset PYTHONPATH
@@ -1431,7 +1431,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate:flox-uses-default-env
-@test "catalog: 'flox *' uses local environment over 'default' environment" {
+@test "'flox *' uses local environment over 'default' environment" {
   project_setup # TODO: we need PROJECT_DIR, but not flox init
   "$FLOX_BIN" delete -f
   mkdir default

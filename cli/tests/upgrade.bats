@@ -180,7 +180,7 @@ setup_pkgdb_env() {
   assert_output "ℹ️  No packages need to be upgraded in environment 'test'."
 }
 
-@test "catalog: page changes should not be considered an upgrade" {
+@test "page changes should not be considered an upgrade" {
   "$FLOX_BIN" init
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/curl_hello.json" \
     "$FLOX_BIN" install curl hello
