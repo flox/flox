@@ -291,7 +291,7 @@ impl RawManifest {
     ///
     /// Discussion: using a string field as the version tag `version: "1"` vs `version: 1`
     /// could work today, but is still limited by the lack of an optional tag.
-    pub fn to_typed(&self) -> Result<TypedManifestCatalog, toml_edit::de::Error> {
+    pub fn to_typed(&self) -> Result<Manifest, toml_edit::de::Error> {
         match self.get_version() {
             Some(1) => Ok(toml_edit::de::from_document(self.0.clone())?),
             Some(v) => {
@@ -350,7 +350,7 @@ impl DerefMut for RawManifest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
-pub struct TypedManifestCatalog {
+pub struct Manifest {
     pub version: Version<1>,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
@@ -381,7 +381,7 @@ pub struct TypedManifestCatalog {
     pub build: ManifestBuild,
 }
 
-impl TypedManifestCatalog {
+impl Manifest {
     /// Get the package descriptor with the specified install_id.
     pub fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<ManifestPackageDescriptor> {
         self.install.0.get(id.as_ref()).cloned()
@@ -1519,7 +1519,7 @@ pub(super) mod test {
             unknown = 'field'
         "};
 
-        let err = toml_edit::de::from_str::<TypedManifestCatalog>(&manifest)
+        let err = toml_edit::de::from_str::<Manifest>(&manifest)
             .expect_err("manifest.toml should be invalid");
 
         assert!(
@@ -1538,7 +1538,7 @@ pub(super) mod test {
             allow.unknown = true
         "};
 
-        let err = toml_edit::de::from_str::<TypedManifestCatalog>(&manifest)
+        let err = toml_edit::de::from_str::<Manifest>(&manifest)
             .expect_err("manifest.toml should be invalid");
 
         assert!(
@@ -1879,7 +1879,7 @@ pub(super) mod test {
 
     #[test]
     fn detect_catalog_manifest() {
-        assert!(toml_edit::de::from_str::<TypedManifestCatalog>(CATALOG_MANIFEST).is_ok());
+        assert!(toml_edit::de::from_str::<Manifest>(CATALOG_MANIFEST).is_ok());
     }
 
     #[test]
@@ -2076,9 +2076,9 @@ pub(super) mod test {
 
     proptest! {
         #[test]
-        fn manifest_round_trip(manifest in any::<TypedManifestCatalog>()) {
+        fn manifest_round_trip(manifest in any::<Manifest>()) {
             let toml = toml_edit::ser::to_string(&manifest).unwrap();
-            let parsed = toml_edit::de::from_str::<TypedManifestCatalog>(&toml).unwrap();
+            let parsed = toml_edit::de::from_str::<Manifest>(&toml).unwrap();
             prop_assert_eq!(manifest, parsed);
         }
     }
@@ -2236,7 +2236,7 @@ pub(super) mod test {
 
         "#};
 
-        let parsed = toml_edit::de::from_str::<TypedManifestCatalog>(build_manifest).unwrap();
+        let parsed = toml_edit::de::from_str::<Manifest>(build_manifest).unwrap();
 
         assert_eq!(
             parsed.build,
@@ -2264,7 +2264,7 @@ pub(super) mod test {
             redis.systems = ["aarch64-linux"]
         "#};
 
-        let parsed = toml_edit::de::from_str::<TypedManifestCatalog>(manifest).unwrap();
+        let parsed = toml_edit::de::from_str::<Manifest>(manifest).unwrap();
 
         assert_eq!(parsed.services.len(), 3, "{:?}", parsed.services);
 
