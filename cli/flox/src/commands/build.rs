@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use bpaf::Bpaf;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::lockfile::LockedManifestCatalog;
+use flox_rust_sdk::models::lockfile::Lockfile;
 use flox_rust_sdk::providers::build::{FloxBuildMk, ManifestBuilder, Output};
 use indoc::indoc;
 use tracing::instrument;
@@ -134,7 +134,7 @@ impl Build {
 }
 
 fn available_packages(
-    lockfile: &LockedManifestCatalog,
+    lockfile: &Lockfile,
     packages: Vec<String>,
 ) -> Result<Vec<String>> {
     let environment_packages = &lockfile.manifest.build;

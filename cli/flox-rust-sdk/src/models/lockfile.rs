@@ -73,7 +73,7 @@ pub struct Registry {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct LockedManifestCatalog {
+pub struct Lockfile {
     #[serde(rename = "lockfile-version")]
     pub version: Version<1>,
     /// original manifest that was locked
@@ -82,7 +82,7 @@ pub struct LockedManifestCatalog {
     pub packages: Vec<LockedPackage>,
 }
 
-impl LockedManifestCatalog {
+impl Lockfile {
     pub fn read_from_file(path: &CanonicalPath) -> Result<Self, LockedManifestError> {
         let contents = fs::read(path).map_err(LockedManifestError::ReadLockfile)?;
         serde_json::from_slice(&contents).map_err(LockedManifestError::ParseLockfile)
@@ -93,7 +93,7 @@ impl LockedManifestCatalog {
     }
 }
 
-impl Display for LockedManifestCatalog {
+impl Display for Lockfile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", serde_json::json!(self))
     }
@@ -442,7 +442,7 @@ fn format_multiple_resolution_failures(failures: &[ResolutionFailure]) -> String
     format!("multiple resolution failures:\n{msgs}")
 }
 
-impl LockedManifestCatalog {
+impl Lockfile {
     /// Convert a locked manifest to a list of installed packages for a given system.
     ///
     /// Catalog packages share a format with pkgdb.
@@ -505,10 +505,10 @@ impl LockedManifestCatalog {
     /// and allows for potential parallelization in the future.
     pub async fn lock_manifest(
         manifest: &TypedManifestCatalog,
-        seed_lockfile: Option<&LockedManifestCatalog>,
+        seed_lockfile: Option<&Lockfile>,
         client: &impl catalog::ClientTrait,
         installable_locker: &impl InstallableLocker,
-    ) -> Result<LockedManifestCatalog, LockedManifestError> {
+    ) -> Result<Lockfile, LockedManifestError> {
         let catalog_groups = Self::collect_package_groups(manifest, seed_lockfile)?;
         let (mut already_locked_packages, groups_to_lock) =
             Self::split_fully_locked_groups(catalog_groups, seed_lockfile);
@@ -531,7 +531,7 @@ impl LockedManifestCatalog {
 
         if groups_to_lock.is_empty() && installables_to_lock.is_empty() {
             debug!("All packages are already locked, skipping resolution");
-            return Ok(LockedManifestCatalog {
+            return Ok(Lockfile {
                 version: Version::<1>,
                 manifest: manifest.clone(),
                 packages: [already_locked_packages, already_locked_installables].concat(),
@@ -571,7 +571,7 @@ impl LockedManifestCatalog {
             &manifest.options.allow,
         )?;
 
-        let lockfile = LockedManifestCatalog {
+        let lockfile = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: [
@@ -669,7 +669,7 @@ impl LockedManifestCatalog {
     /// Transform a lockfile into a mapping that is easier to query:
     /// Lockfile -> { (install_id, system): (package_descriptor, locked_package) }
     fn make_seed_mapping(
-        seed: &LockedManifestCatalog,
+        seed: &Lockfile,
     ) -> HashMap<(&str, &str), (&ManifestPackageDescriptor, &LockedPackage)> {
         seed.packages
             .iter()
@@ -705,7 +705,7 @@ impl LockedManifestCatalog {
     /// or would be pushed higher up.
     fn collect_package_groups(
         manifest: &TypedManifestCatalog,
-        seed_lockfile: Option<&LockedManifestCatalog>,
+        seed_lockfile: Option<&Lockfile>,
     ) -> Result<impl Iterator<Item = PackageGroup>, LockedManifestError> {
         let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
 
@@ -816,7 +816,7 @@ impl LockedManifestCatalog {
     /// This is used to avoid re-resolving packages that are already locked.
     fn split_fully_locked_groups(
         groups: impl IntoIterator<Item = PackageGroup>,
-        seed_lockfile: Option<&LockedManifestCatalog>,
+        seed_lockfile: Option<&Lockfile>,
     ) -> (Vec<LockedPackage>, Vec<PackageGroup>) {
         let seed_locked_packages = seed_lockfile.map_or_else(HashMap::new, Self::make_seed_mapping);
 
@@ -1062,7 +1062,7 @@ impl LockedManifestCatalog {
     /// with [Self::collect_flake_installables].
     fn split_locked_flake_installables(
         installables: impl IntoIterator<Item = FlakeInstallableToLock>,
-        seed_lockfile: Option<&LockedManifestCatalog>,
+        seed_lockfile: Option<&Lockfile>,
     ) -> (Vec<LockedPackage>, Vec<FlakeInstallableToLock>) {
         // todo: consider computing once and passing a reference to the consumer functions.
         //       we now compute this 3 times during a single lock operation
@@ -1781,8 +1781,8 @@ pub(crate) mod tests {
         }]
     });
 
-    static TEST_LOCKED_MANIFEST: Lazy<LockedManifestCatalog> =
-        Lazy::new(|| LockedManifestCatalog {
+    static TEST_LOCKED_MANIFEST: Lazy<Lockfile> =
+        Lazy::new(|| Lockfile {
             version: Version::<1>,
             manifest: TEST_TYPED_MANIFEST.clone(),
             packages: vec![LockedPackageCatalog {
@@ -1822,7 +1822,7 @@ pub(crate) mod tests {
     fn make_params_smoke() {
         let manifest = &*TEST_TYPED_MANIFEST;
 
-        let params = LockedManifestCatalog::collect_package_groups(manifest, None)
+        let params = Lockfile::collect_package_groups(manifest, None)
             .unwrap()
             .collect::<Vec<_>>();
         assert_eq!(&params, &*TEST_RESOLUTION_PARAMS);
@@ -1898,7 +1898,7 @@ pub(crate) mod tests {
             ],
         }];
 
-        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, None)
+        let actual_params = Lockfile::collect_package_groups(&manifest, None)
             .unwrap()
             .collect::<Vec<_>>();
 
@@ -1965,7 +1965,7 @@ pub(crate) mod tests {
             ],
         }];
 
-        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, None)
+        let actual_params = Lockfile::collect_package_groups(&manifest, None)
             .unwrap()
             .collect::<Vec<_>>();
 
@@ -1991,7 +1991,7 @@ pub(crate) mod tests {
         // todo: ideally the manifest would not even parse if it has an unavailable system
         let manifest = toml::from_str(manifest_str).unwrap();
 
-        let actual_result = LockedManifestCatalog::collect_package_groups(&manifest, None);
+        let actual_result = Lockfile::collect_package_groups(&manifest, None);
 
         assert!(
             matches!(actual_result, Err(LockedManifestError::SystemUnavailableInManifest {
@@ -2055,7 +2055,7 @@ pub(crate) mod tests {
             },
         ];
 
-        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, None)
+        let actual_params = Lockfile::collect_package_groups(&manifest, None)
             .unwrap()
             .collect::<Vec<_>>();
 
@@ -2081,7 +2081,7 @@ pub(crate) mod tests {
         );
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest, Some(&*TEST_LOCKED_MANIFEST))
+            Lockfile::collect_package_groups(&manifest, Some(&*TEST_LOCKED_MANIFEST))
                 .unwrap()
                 .collect::<Vec<_>>();
 
@@ -2131,7 +2131,7 @@ pub(crate) mod tests {
             .install
             .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
 
-        let seed = LockedManifestCatalog {
+        let seed = Lockfile {
             version: Version::<1>,
             manifest: manifest_before.clone(),
             packages: vec![foo_before_locked.clone().into()],
@@ -2140,7 +2140,7 @@ pub(crate) mod tests {
         // ---------------------------------------------------------------------
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest_before, Some(&seed))
+            Lockfile::collect_package_groups(&manifest_before, Some(&seed))
                 .unwrap()
                 .collect::<Vec<_>>();
 
@@ -2163,7 +2163,7 @@ pub(crate) mod tests {
             .install
             .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
 
-        let seed = LockedManifestCatalog {
+        let seed = Lockfile {
             version: Version::<1>,
             manifest: manifest_before.clone(),
             packages: vec![foo_before_locked.into()],
@@ -2187,7 +2187,7 @@ pub(crate) mod tests {
             .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest_after, Some(&seed))
+            Lockfile::collect_package_groups(&manifest_after, Some(&seed))
                 .unwrap()
                 .collect::<Vec<_>>();
 
@@ -2209,7 +2209,7 @@ pub(crate) mod tests {
             .install
             .insert(foo_before_iid.clone(), foo_before_descriptor.clone());
 
-        let seed = LockedManifestCatalog {
+        let seed = Lockfile {
             version: Version::<1>,
             manifest: manifest_before.clone(),
             packages: vec![foo_before_locked.clone().into()],
@@ -2232,7 +2232,7 @@ pub(crate) mod tests {
             .insert(foo_after_iid.clone(), foo_after_descriptor.clone());
 
         let actual_params =
-            LockedManifestCatalog::collect_package_groups(&manifest_after, Some(&seed))
+            Lockfile::collect_package_groups(&manifest_after, Some(&seed))
                 .unwrap()
                 .collect::<Vec<_>>();
 
@@ -2281,7 +2281,7 @@ pub(crate) mod tests {
                 .collect(),
         }];
 
-        let actual_params = LockedManifestCatalog::collect_package_groups(&manifest, None)
+        let actual_params = Lockfile::collect_package_groups(&manifest, None)
             .unwrap()
             .collect::<Vec<_>>();
 
@@ -2307,7 +2307,7 @@ pub(crate) mod tests {
                 system: system.to_string(),
             });
 
-        let actual: Vec<_> = LockedManifestCatalog::collect_flake_installables(&manifest).collect();
+        let actual: Vec<_> = Lockfile::collect_flake_installables(&manifest).collect();
 
         assert_eq!(actual, expected);
     }
@@ -2333,7 +2333,7 @@ pub(crate) mod tests {
             system: system.to_string(),
         }];
 
-        let actual: Vec<_> = LockedManifestCatalog::collect_flake_installables(&manifest).collect();
+        let actual: Vec<_> = Lockfile::collect_flake_installables(&manifest).collect();
 
         assert_eq!(actual, expected);
     }
@@ -2362,7 +2362,7 @@ pub(crate) mod tests {
                 system: system.to_string(),
             });
 
-        let actual: Vec<_> = LockedManifestCatalog::collect_flake_installables(&manifest).collect();
+        let actual: Vec<_> = Lockfile::collect_flake_installables(&manifest).collect();
 
         assert_eq!(actual, expected);
     }
@@ -2412,7 +2412,7 @@ pub(crate) mod tests {
         let manifest = &*TEST_TYPED_MANIFEST;
 
         let locked_packages =
-            LockedManifestCatalog::locked_packages_from_resolution(manifest, groups.clone())
+            Lockfile::locked_packages_from_resolution(manifest, groups.clone())
                 .unwrap()
                 .collect::<Vec<_>>();
 
@@ -2450,7 +2450,7 @@ pub(crate) mod tests {
         manifest
             .install
             .insert(qux_iid.clone(), qux_descriptor.into());
-        let mut lockfile = LockedManifestCatalog {
+        let mut lockfile = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![
@@ -2477,7 +2477,7 @@ pub(crate) mod tests {
         let (bar_iid, bar_descriptor, bar_locked) = fake_catalog_package_lock("bar", Some("group"));
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
         manifest.install.insert(bar_iid.clone(), bar_descriptor);
-        let mut lockfile = LockedManifestCatalog {
+        let mut lockfile = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.into(), bar_locked.into()],
@@ -2499,7 +2499,7 @@ pub(crate) mod tests {
             fake_catalog_package_lock("bar", Some("foo_install_id"));
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
         manifest.install.insert(bar_iid.clone(), bar_descriptor);
-        let mut lockfile = LockedManifestCatalog {
+        let mut lockfile = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.into(), bar_locked.into()],
@@ -2532,7 +2532,7 @@ pub(crate) mod tests {
             response.first().unwrap().msgs.first().unwrap().clone();
         client.push_resolve_response(response);
 
-        let locked_manifest = LockedManifestCatalog::lock_manifest(
+        let locked_manifest = Lockfile::lock_manifest(
             manifest,
             None,
             &client,
@@ -2570,7 +2570,7 @@ pub(crate) mod tests {
                 response.first().unwrap().msgs.first().unwrap().clone();
             client.push_resolve_response(response);
 
-            let locked_manifest = LockedManifestCatalog::lock_manifest(
+            let locked_manifest = Lockfile::lock_manifest(
                 manifest,
                 None,
                 &client,
@@ -2592,7 +2592,7 @@ pub(crate) mod tests {
         let mut client = catalog::MockClient::new(None::<String>).unwrap();
         client.push_resolve_response(TEST_RESOLUTION_RESPONSE.clone());
 
-        let locked_manifest = LockedManifestCatalog::lock_manifest(
+        let locked_manifest = Lockfile::lock_manifest(
             manifest,
             None,
             &client,
@@ -2614,7 +2614,7 @@ pub(crate) mod tests {
             hello_install_id.pkg-path = "hello"
         "#};
         let manifest: TypedManifestCatalog = toml::from_str(manifest_str).unwrap();
-        let package_groups: Vec<_> = LockedManifestCatalog::collect_package_groups(&manifest, None)
+        let package_groups: Vec<_> = Lockfile::collect_package_groups(&manifest, None)
             .unwrap()
             .collect();
 
@@ -2654,7 +2654,7 @@ pub(crate) mod tests {
             .install
             .insert(baz_iid.clone(), baz_descriptor.clone());
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: [&foo_locked, &bar_locked, &baz_locked]
@@ -2667,10 +2667,10 @@ pub(crate) mod tests {
             .insert(yeet_iid.clone(), yeet_descriptor.clone());
 
         let groups =
-            LockedManifestCatalog::collect_package_groups(&manifest, Some(&locked)).unwrap();
+            Lockfile::collect_package_groups(&manifest, Some(&locked)).unwrap();
 
         let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
-            LockedManifestCatalog::split_fully_locked_groups(groups, Some(&locked));
+            Lockfile::split_fully_locked_groups(groups, Some(&locked));
 
         // All packages of group1 are locked
         assert_eq!(&fully_locked, &[bar_locked, foo_locked].map(Into::into));
@@ -2747,7 +2747,7 @@ pub(crate) mod tests {
             .install
             .insert(foo_iid.clone(), foo_descriptor_two_systems.clone());
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![
@@ -2760,7 +2760,7 @@ pub(crate) mod tests {
             .install
             .insert(foo_iid, foo_descriptor_one_system.clone());
 
-        let groups = LockedManifestCatalog::collect_package_groups(&manifest, Some(&locked))
+        let groups = Lockfile::collect_package_groups(&manifest, Some(&locked))
             .unwrap()
             .collect::<Vec<_>>();
 
@@ -2773,7 +2773,7 @@ pub(crate) mod tests {
         );
 
         let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
-            LockedManifestCatalog::split_fully_locked_groups(groups, Some(&locked));
+            Lockfile::split_fully_locked_groups(groups, Some(&locked));
 
         assert_eq!(fully_locked, vec![foo_locked.into()]);
         assert_eq!(to_resolve, vec![]);
@@ -2804,7 +2804,7 @@ pub(crate) mod tests {
             .install
             .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.into()],
@@ -2814,7 +2814,7 @@ pub(crate) mod tests {
             .install
             .insert(foo_iid, foo_descriptor_two_systems.clone());
 
-        let groups = LockedManifestCatalog::collect_package_groups(&manifest, Some(&locked))
+        let groups = Lockfile::collect_package_groups(&manifest, Some(&locked))
             .unwrap()
             .collect::<Vec<_>>();
 
@@ -2832,7 +2832,7 @@ pub(crate) mod tests {
         ]);
 
         let (fully_locked, to_resolve): (Vec<_>, Vec<_>) =
-            LockedManifestCatalog::split_fully_locked_groups(groups, Some(&locked));
+            Lockfile::split_fully_locked_groups(groups, Some(&locked));
 
         assert_eq!(fully_locked, vec![]);
         assert_eq!(to_resolve.len(), 1);
@@ -2856,16 +2856,16 @@ pub(crate) mod tests {
             .install
             .insert(bar_iid.clone(), bar_descriptor.clone().into());
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![bar_locked.clone().into()],
         };
 
-        let flake_installables = LockedManifestCatalog::collect_flake_installables(&manifest);
+        let flake_installables = Lockfile::collect_flake_installables(&manifest);
 
         let (locked, to_resolve): (Vec<_>, Vec<_>) =
-            LockedManifestCatalog::split_locked_flake_installables(
+            Lockfile::split_locked_flake_installables(
                 flake_installables,
                 Some(&locked),
             );
@@ -2888,16 +2888,16 @@ pub(crate) mod tests {
         let mut manifest = TypedManifestCatalog::default();
         manifest.options.systems = Some(vec![system.to_string()]);
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![bar_locked.clone().into()],
         };
 
-        let flake_installables = LockedManifestCatalog::collect_flake_installables(&manifest);
+        let flake_installables = Lockfile::collect_flake_installables(&manifest);
 
         let (locked, to_resolve): (Vec<_>, Vec<_>) =
-            LockedManifestCatalog::split_locked_flake_installables(
+            Lockfile::split_locked_flake_installables(
                 flake_installables,
                 Some(&locked),
             );
@@ -2924,7 +2924,7 @@ pub(crate) mod tests {
             .install
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![
@@ -2933,10 +2933,10 @@ pub(crate) mod tests {
             ],
         };
 
-        let flake_installables = LockedManifestCatalog::collect_flake_installables(&manifest);
+        let flake_installables = Lockfile::collect_flake_installables(&manifest);
 
         let (locked, to_resolve): (Vec<_>, Vec<_>) =
-            LockedManifestCatalog::split_locked_flake_installables(
+            Lockfile::split_locked_flake_installables(
                 flake_installables,
                 Some(&locked),
             );
@@ -2958,7 +2958,7 @@ pub(crate) mod tests {
             .insert(foo_iid.clone(), foo_descriptor.clone().into());
 
         // lockfile for only system_1
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.clone().into()],
@@ -2967,10 +2967,10 @@ pub(crate) mod tests {
         // system_2 is added to the manifest
         manifest.options.systems = Some(vec![system_1.to_string(), system_2.to_string()]);
 
-        let flake_installables = LockedManifestCatalog::collect_flake_installables(&manifest);
+        let flake_installables = Lockfile::collect_flake_installables(&manifest);
 
         let (locked, to_resolve): (Vec<_>, Vec<_>) =
-            LockedManifestCatalog::split_locked_flake_installables(
+            Lockfile::split_locked_flake_installables(
                 flake_installables,
                 Some(&locked),
             );
@@ -3001,13 +3001,13 @@ pub(crate) mod tests {
             .install
             .insert(bar_iid.clone(), bar_descriptor.clone().into());
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.into(), bar_locked.into()],
         };
 
-        let locked_manifest = LockedManifestCatalog::lock_manifest(
+        let locked_manifest = Lockfile::lock_manifest(
             &manifest,
             Some(&locked),
             &PanickingClient,
@@ -3035,7 +3035,7 @@ pub(crate) mod tests {
             .install
             .insert(bar_iid.clone(), bar_descriptor.clone().into());
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![bar_locked.into()],
@@ -3077,7 +3077,7 @@ pub(crate) mod tests {
             }),
         }]);
 
-        let locked_manifest = LockedManifestCatalog::lock_manifest(
+        let locked_manifest = Lockfile::lock_manifest(
             &manifest,
             Some(&locked),
             &client_mock,
@@ -3105,7 +3105,7 @@ pub(crate) mod tests {
             .install
             .insert(bar_iid.clone(), bar_descriptor.clone().into());
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.into()],
@@ -3114,7 +3114,7 @@ pub(crate) mod tests {
         let locker_mock = InstallableLockerMock::new();
         locker_mock.push_lock_result(Ok(bar_locked.locked_installable));
 
-        let locked_manifest = LockedManifestCatalog::lock_manifest(
+        let locked_manifest = Lockfile::lock_manifest(
             &manifest,
             Some(&locked),
             &PanickingClient,
@@ -3138,7 +3138,7 @@ pub(crate) mod tests {
             .install
             .insert(foo_iid.clone(), foo_descriptor.clone());
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.clone().into()],
@@ -3157,7 +3157,7 @@ pub(crate) mod tests {
         );
 
         let locker_mock = InstallableLockerMock::new();
-        let locked_manifest = LockedManifestCatalog::lock_manifest(
+        let locked_manifest = Lockfile::lock_manifest(
             &manifest_pririty_after,
             Some(&locked),
             &PanickingClient,
@@ -3185,7 +3185,7 @@ pub(crate) mod tests {
             .install
             .insert(foo_iid.clone(), foo_descriptor_one_system.clone());
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest: manifest.clone(),
             packages: vec![foo_locked.into()],
@@ -3196,7 +3196,7 @@ pub(crate) mod tests {
 
         let client = catalog::MockClient::new(None::<String>).unwrap();
         assert!(matches!(
-            LockedManifestCatalog::lock_manifest(
+            Lockfile::lock_manifest(
                 &manifest,
                 Some(&locked),
                 &client,
@@ -3241,7 +3241,7 @@ pub(crate) mod tests {
             .unfree = Some(true);
         client.push_resolve_response(vec![resolved_group]);
         assert!(matches!(
-            LockedManifestCatalog::lock_manifest(
+            Lockfile::lock_manifest(
                 &manifest,
                 None,
                 &client,
@@ -3261,7 +3261,7 @@ pub(crate) mod tests {
         foo_locked.license = Some("disallowed".to_string());
 
         assert!(matches!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
                 licenses: vec!["allowed".to_string()]
@@ -3278,7 +3278,7 @@ pub(crate) mod tests {
         foo_locked.license = Some("allowed".to_string());
 
         assert!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
                 licenses: vec!["allowed".to_string()]
@@ -3295,7 +3295,7 @@ pub(crate) mod tests {
         foo_locked.broken = Some(true);
 
         assert!(matches!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
                 licenses: vec![]
@@ -3312,7 +3312,7 @@ pub(crate) mod tests {
         foo_locked.broken = Some(true);
 
         assert!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: Some(true),
                 licenses: vec![]
@@ -3329,7 +3329,7 @@ pub(crate) mod tests {
         foo_locked.broken = Some(true);
 
         assert!(matches!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: Some(false),
                 licenses: vec![]
@@ -3346,7 +3346,7 @@ pub(crate) mod tests {
         foo_locked.unfree = Some(true);
 
         assert!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: None,
                 broken: None,
                 licenses: vec![]
@@ -3363,7 +3363,7 @@ pub(crate) mod tests {
         foo_locked.unfree = Some(true);
 
         assert!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: Some(true),
                 broken: None,
                 licenses: vec![]
@@ -3380,7 +3380,7 @@ pub(crate) mod tests {
         foo_locked.unfree = Some(true);
 
         assert!(matches!(
-            LockedManifestCatalog::check_packages_are_allowed(&vec![foo_locked], &Allows {
+            Lockfile::check_packages_are_allowed(&vec![foo_locked], &Allows {
                 unfree: Some(false),
                 broken: None,
                 licenses: vec![]
@@ -3416,7 +3416,7 @@ pub(crate) mod tests {
             .install
             .insert(baz_iid.clone(), baz_descriptor.clone());
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest,
             packages: vec![
@@ -3489,7 +3489,7 @@ pub(crate) mod tests {
             .install
             .insert(baz_iid.clone(), baz_descriptor.into());
 
-        let locked = LockedManifestCatalog {
+        let locked = Lockfile {
             version: Version::<1>,
             manifest,
             packages: vec![foo_locked.clone().into(), baz_locked.clone().into()],
@@ -3519,7 +3519,7 @@ pub(crate) mod tests {
         "#};
         let manifest = toml_edit::de::from_str(&manifest_contents).unwrap();
         let installables =
-            LockedManifestCatalog::collect_flake_installables(&manifest).collect::<Vec<_>>();
+            Lockfile::collect_flake_installables(&manifest).collect::<Vec<_>>();
         assert_eq!(installables.len(), 1);
         assert_eq!(installables[0].system.as_str(), "x86_64-linux");
     }
