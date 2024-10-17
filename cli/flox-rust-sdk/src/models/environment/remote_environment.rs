@@ -26,7 +26,7 @@ use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
 use crate::models::lockfile::Lockfile;
-use crate::models::manifest::{PackageToInstall, TypedManifestCatalog};
+use crate::models::manifest::{Manifest, PackageToInstall};
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
 
@@ -249,7 +249,7 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Return the deserialized manifest
-    fn manifest(&self, flox: &Flox) -> Result<TypedManifestCatalog, EnvironmentError> {
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
         self.inner.manifest(flox)
     }
 

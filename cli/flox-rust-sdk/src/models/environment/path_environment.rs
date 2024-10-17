@@ -48,12 +48,7 @@ use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::lockfile::Lockfile;
-use crate::models::manifest::{
-    CatalogPackage,
-    PackageToInstall,
-    RawManifest,
-    TypedManifestCatalog,
-};
+use crate::models::manifest::{CatalogPackage, Manifest, PackageToInstall, RawManifest};
 use crate::utils::mtime_of;
 
 /// Struct representing a local environment
@@ -271,7 +266,7 @@ impl Environment for PathEnvironment {
     }
 
     /// Return the deserialized manifest
-    fn manifest(&self, _flox: &Flox) -> Result<TypedManifestCatalog, EnvironmentError> {
+    fn manifest(&self, _flox: &Flox) -> Result<Manifest, EnvironmentError> {
         let env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         env_view.manifest().map_err(EnvironmentError::Core)
     }

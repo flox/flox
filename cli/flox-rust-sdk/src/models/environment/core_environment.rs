@@ -24,11 +24,11 @@ use crate::models::lockfile::{LockedManifestError, LockedPackage, Lockfile, Reso
 use crate::models::manifest::{
     insert_packages,
     remove_packages,
+    Manifest,
     ManifestError,
     ManifestPackageDescriptor,
     PackageToInstall,
     TomlEditError,
-    TypedManifestCatalog,
 };
 use crate::models::pkgdb::{
     call_pkgdb,
@@ -111,7 +111,7 @@ impl<State> CoreEnvironment<State> {
         }
     }
 
-    pub fn manifest(&self) -> Result<TypedManifestCatalog, CoreEnvironmentError> {
+    pub fn manifest(&self) -> Result<Manifest, CoreEnvironmentError> {
         toml::from_str(&self.manifest_contents()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)
     }
@@ -125,7 +125,7 @@ impl<State> CoreEnvironment<State> {
             return Ok(None);
         };
 
-        let manifest: TypedManifestCatalog = toml::from_str(&self.manifest_contents()?)
+        let manifest: Manifest = toml::from_str(&self.manifest_contents()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
         let lockfile = Lockfile::read_from_file(&lockfile_path)
             .map_err(CoreEnvironmentError::LockedManifest)?;
@@ -204,7 +204,7 @@ impl<State> CoreEnvironment<State> {
         &self,
         client: &catalog::Client,
         installable_locker: &impl InstallableLocker,
-        manifest: TypedManifestCatalog,
+        manifest: Manifest,
     ) -> Result<Lockfile, CoreEnvironmentError> {
         let existing_lockfile = 'lockfile: {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
@@ -422,7 +422,7 @@ impl CoreEnvironment<ReadOnly> {
     }
 
     fn get_install_ids_to_uninstall(
-        manifest: &TypedManifestCatalog,
+        manifest: &Manifest,
         packages: Vec<String>,
     ) -> Result<Vec<String>, CoreEnvironmentError> {
         let mut install_ids = Vec::new();
@@ -603,7 +603,7 @@ impl CoreEnvironment<ReadOnly> {
 
     fn ensure_valid_upgrade(
         groups_or_iids: &[&str],
-        manifest: &TypedManifestCatalog,
+        manifest: &Manifest,
     ) -> Result<(), CoreEnvironmentError> {
         for id in groups_or_iids {
             tracing::debug!(id, "checking that id is a package or group");
@@ -660,7 +660,7 @@ impl CoreEnvironment<ReadOnly> {
         client: &impl ClientTrait,
         flake_locking: &impl InstallableLocker,
         groups_or_iids: &[&str],
-        manifest: &TypedManifestCatalog,
+        manifest: &Manifest,
     ) -> Result<(Lockfile, Vec<(LockedPackage, LockedPackage)>), CoreEnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let existing_lockfile = 'lockfile: {
@@ -819,7 +819,7 @@ impl CoreEnvironment<ReadOnly> {
         manifest_contents: impl AsRef<str>,
         flox: &Flox,
     ) -> Result<PathBuf, CoreEnvironmentError> {
-        let manifest: TypedManifestCatalog = toml::from_str(manifest_contents.as_ref())
+        let manifest: Manifest = toml::from_str(manifest_contents.as_ref())
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
         manifest.services.validate()?;
 
@@ -934,9 +934,9 @@ impl EditResult {
             // TODO: use a single toml crate (toml_edit already implements serde traits)
             // TODO: use different error variants, users _can_ fix errors in the _new_ manifest
             //       but they _can't_ fix errors in the _old_ manifest
-            let old_manifest: TypedManifestCatalog = toml::from_str(old_manifest_contents)
+            let old_manifest: Manifest = toml::from_str(old_manifest_contents)
                 .map_err(CoreEnvironmentError::DeserializeManifest)?;
-            let new_manifest: TypedManifestCatalog = toml::from_str(new_manifest_contents)
+            let new_manifest: Manifest = toml::from_str(new_manifest_contents)
                 .map_err(CoreEnvironmentError::DeserializeManifest)?;
 
             if old_manifest.hook != new_manifest.hook
@@ -1319,7 +1319,7 @@ mod tests {
     fn upgrade_with_empty_list_upgrades_all() {
         let (mut env_view, _flox, _temp_dir_handle) = empty_core_environment();
 
-        let mut manifest = TypedManifestCatalog::default();
+        let mut manifest = Manifest::default();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
         let lockfile = lockfile::Lockfile {
@@ -1500,8 +1500,8 @@ mod tests {
     /// # Returns
     ///
     /// * `TypedManifest` - A mock `TypedManifest` containing the provided entries.
-    fn generate_mock_manifest(entries: Vec<(&str, &str)>) -> TypedManifestCatalog {
-        let mut typed_manifest_mock = TypedManifestCatalog::default();
+    fn generate_mock_manifest(entries: Vec<(&str, &str)>) -> Manifest {
+        let mut typed_manifest_mock = Manifest::default();
 
         for (test_iid, dotted_package) in entries {
             typed_manifest_mock.install.insert(

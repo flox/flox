@@ -133,10 +133,7 @@ impl Build {
     }
 }
 
-fn available_packages(
-    lockfile: &Lockfile,
-    packages: Vec<String>,
-) -> Result<Vec<String>> {
+fn available_packages(lockfile: &Lockfile, packages: Vec<String>) -> Result<Vec<String>> {
     let environment_packages = &lockfile.manifest.build;
 
     if environment_packages.is_empty() {

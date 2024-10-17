@@ -7,8 +7,8 @@ use flox_rust_sdk::flox::Flox;
 use flox_rust_sdk::models::environment::Environment;
 use flox_rust_sdk::models::lockfile::{
     InstalledPackage,
-    Lockfile,
     LockedPackageFlake,
+    Lockfile,
     PackageInfo,
     PackageToList,
 };

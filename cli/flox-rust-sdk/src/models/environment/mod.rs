@@ -16,7 +16,7 @@ use super::container_builder::ContainerBuilder;
 use super::env_registry::EnvRegistryError;
 use super::environment_ref::{EnvironmentName, EnvironmentOwner};
 use super::lockfile::{LockedManifestError, Lockfile};
-use super::manifest::{ManifestError, PackageToInstall, TypedManifestCatalog};
+use super::manifest::{Manifest, ManifestError, PackageToInstall};
 use crate::data::{CanonicalPath, CanonicalizeError};
 use crate::flox::{Flox, Floxhub};
 use crate::providers::git::{
@@ -143,7 +143,7 @@ pub trait Environment: Send {
     fn manifest_contents(&self, flox: &Flox) -> Result<String, EnvironmentError>;
 
     /// Return the deserialized manifest
-    fn manifest(&self, flox: &Flox) -> Result<TypedManifestCatalog, EnvironmentError>;
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError>;
 
     /// Return a path containing the built environment and its activation script.
     ///
