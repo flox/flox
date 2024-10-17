@@ -44,7 +44,7 @@ use crate::models::environment::copy_dir_recursive;
 use crate::models::environment_ref::{EnvironmentName, EnvironmentOwner};
 use crate::models::floxmeta::{floxmeta_git_options, FloxMeta, FloxMetaError};
 use crate::models::lockfile::Lockfile;
-use crate::models::manifest::{PackageToInstall, TypedManifestCatalog};
+use crate::models::manifest::{Manifest, PackageToInstall};
 use crate::providers::git::{
     GitCommandBranchHashError,
     GitCommandError,
@@ -374,7 +374,7 @@ impl Environment for ManagedEnvironment {
     }
 
     /// Return the deserialized manifest
-    fn manifest(&self, flox: &Flox) -> Result<TypedManifestCatalog, EnvironmentError> {
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
         Ok(toml::from_str(&self.manifest_contents(flox)?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?)
     }
@@ -1657,7 +1657,7 @@ mod test {
     use crate::models::floxmeta::floxmeta_dir;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::Lockfile;
-    use crate::models::manifest::{ManifestPackageDescriptorCatalog, TypedManifestCatalog};
+    use crate::models::manifest::{Manifest, ManifestPackageDescriptorCatalog};
     use crate::providers::catalog::{Client, MockClient, GENERATED_DATA};
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::GitCommandProvider;
@@ -2219,8 +2219,7 @@ mod test {
 
         flox.catalog_client = MockClient::new(None::<&str>).unwrap().into();
 
-        let original_manifest =
-            toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap();
+        let original_manifest = toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap();
 
         let managed_env = test_helpers::mock_managed_environment(&flox, &original_manifest, owner);
 
@@ -2266,7 +2265,7 @@ mod test {
 
         let managed_env = test_helpers::mock_managed_environment(
             &flox,
-            &toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+            &toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap(),
             owner,
         );
 
@@ -2309,7 +2308,7 @@ mod test {
 
         let managed_env = test_helpers::mock_managed_environment(
             &flox,
-            &toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+            &toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap(),
             owner,
         );
 
@@ -2346,7 +2345,7 @@ mod test {
 
         let mut managed_env = test_helpers::mock_managed_environment(
             &flox,
-            &toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+            &toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap(),
             owner,
         );
 
@@ -2403,7 +2402,7 @@ mod test {
 
         let mut managed_env = test_helpers::mock_managed_environment(
             &flox,
-            &toml_edit::ser::to_string_pretty(&TypedManifestCatalog::default()).unwrap(),
+            &toml_edit::ser::to_string_pretty(&Manifest::default()).unwrap(),
             owner,
         );
 
@@ -2417,7 +2416,7 @@ mod test {
             panic!("Expected a MockClient");
         }
 
-        let mut new_manifest = TypedManifestCatalog::default();
+        let mut new_manifest = Manifest::default();
         new_manifest.install.insert(
             "hello".to_string(),
             ManifestPackageDescriptorCatalog {
@@ -2460,8 +2459,8 @@ mod test {
     fn test_validate_local_same_manifest() {
         let (flox, _temp_dir_handle) = flox_instance();
 
-        let manifest_a = TypedManifestCatalog::default();
-        let manifest_b = TypedManifestCatalog::default();
+        let manifest_a = Manifest::default();
+        let manifest_b = Manifest::default();
 
         let env_a = new_core_environment(
             &flox,
@@ -2480,8 +2479,8 @@ mod test {
     fn test_validate_local_different_manifest() {
         let (flox, _temp_dir_handle) = flox_instance();
 
-        let mut manifest_a = TypedManifestCatalog::default();
-        let manifest_b = TypedManifestCatalog::default();
+        let mut manifest_a = Manifest::default();
+        let manifest_b = Manifest::default();
 
         let env_a = new_core_environment(
             &flox,
@@ -2510,8 +2509,8 @@ mod test {
     fn test_validate_local_different_binary_content() {
         let (flox, _temp_dir_handle) = flox_instance();
 
-        let manifest_a = TypedManifestCatalog::default();
-        let manifest_b = TypedManifestCatalog::default();
+        let manifest_a = Manifest::default();
+        let manifest_b = Manifest::default();
 
         // Serialize the same manifest to two different environments
         // once with pretty formatting and once without.

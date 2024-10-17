@@ -12,9 +12,9 @@ use flox_rust_sdk::models::environment::{
     InstallationAttempt,
 };
 use flox_rust_sdk::models::lockfile::{
-    Lockfile,
     LockedManifestError,
     LockedPackage,
+    Lockfile,
     ResolutionFailure,
     ResolutionFailures,
 };
