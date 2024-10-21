@@ -2302,6 +2302,59 @@ EOF
   assert_success
 }
 
+@test "profile: JUPYTER_PATH not modified when Jupyter is not installed" {
+  project_setup
+
+  # Shouldn't be set by default.
+  run "$FLOX_BIN" activate -- \
+    bash -c 'echo "JUPYTER_PATH is: $JUPYTER_PATH"'
+  assert_success
+  assert_output "JUPYTER_PATH is: "
+
+  # Should respect existing variable from outside activation.
+  JUPYTER_PATH="/fakepath" run "$FLOX_BIN" activate -- \
+    bash -c 'echo "JUPYTER_PATH is: $JUPYTER_PATH"'
+  assert_success
+  assert_output "JUPYTER_PATH is: /fakepath"
+}
+
+@test "profile: JUPYTER_PATH is modified when Jupyter is installed" {
+  # Mock contains both extensions but only one is used in each install.
+  export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/jupyter_with_extensions.json"
+
+  PACKAGES_OUTER="jupyter python312Packages.jupyterlab-widgets"
+  PACKAGES_INNER="jupyter python312Packages.jupyterlab-git"
+
+  EXPECTED_NOTEBOOK="@jupyter-notebook/lab-extension"
+  EXPECTED_WIDGETS="@jupyter-widgets/jupyterlab-manager"
+  EXPECTED_GIT="@jupyterlab/git"
+
+  # Test outer project by itself.
+  "$FLOX_BIN" init --dir=outer
+  run "$FLOX_BIN" install --dir=outer $PACKAGES_OUTER
+  assert_success
+
+  run "$FLOX_BIN" activate --dir=outer -- \
+    jupyter labextension list
+  assert_success
+  assert_line --partial "$EXPECTED_NOTEBOOK" # from outer
+  assert_line --partial "$EXPECTED_WIDGETS"  # from outer
+  refute_line --partial "$EXPECTED_GIT"      # not from inner
+
+  # Test outer and inner project combined.
+  "$FLOX_BIN" init --dir=inner
+  run "$FLOX_BIN" install --dir=inner $PACKAGES_INNER
+  assert_success
+
+  run "$FLOX_BIN" activate --dir=outer -- \
+    "$FLOX_BIN" activate --dir=inner -- \
+    jupyter labextension list
+  assert_success
+  assert_line --partial "$EXPECTED_NOTEBOOK" # from either
+  assert_line --partial "$EXPECTED_WIDGETS"  # from outer
+  assert_line --partial "$EXPECTED_GIT"      # from inner
+}
+
 @test "activate works with fish 3.2.2" {
   if [ "$NIX_SYSTEM" == aarch64-linux ]; then
     # running fish at all on aarch64-linux throws:
