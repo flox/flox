@@ -273,7 +273,7 @@ EOF
 # that the current behavior is consistent and predictable.
 
 # bats test_tags=activate,activate:hook,activate:hook:bash
-@test "bash: activate runs profile scripts" {
+@test "bash: interactive activate runs profile scripts" {
   project_setup
   # calls init
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -287,6 +287,13 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:bash
+@test "bash: command activate runs profile scripts" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
@@ -296,6 +303,13 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:bash
+@test "bash: command activate skips profile scripts with FLOX_NOPROFILE" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_NOPROFILE=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
@@ -305,10 +319,15 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:bash
+@test "bash: command activate skips profile scripts with FLOX_TURBO" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_TURBO=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_success
-  FLOX_TURBO=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -316,10 +335,25 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+  FLOX_TURBO=1 FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
+  assert_success
+}
+
+# bats test_tags=activate
+@test "bash: activation script can be run directly" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly in various forms.
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
   assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  assert_output --partial "sourcing profile.common"
+  assert_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
   assert_success
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
@@ -334,12 +368,13 @@ EOF
   assert_success
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
   assert_success
-  assert_output --partial "sourcing hook.on-activate"
-  assert_output --partial "sourcing profile.common"
-  assert_output --partial "sourcing profile.bash"
-  refute_output --partial "sourcing profile.fish"
-  refute_output --partial "sourcing profile.tcsh"
-  refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate
+@test "bash: activation script can be run with --noprofile" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --noprofile.
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
@@ -350,6 +385,13 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate
+@test "bash: activation script can be run with --turbo" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --turbo.
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
@@ -363,7 +405,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:hook,activate:hook:fish
-@test "fish: activate runs profile scripts" {
+@test "fish: interactive activate runs profile scripts" {
   project_setup
   # calls init
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -377,6 +419,13 @@ EOF
   assert_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:fish
+@test "fish: command activate runs profile scripts" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
@@ -386,6 +435,13 @@ EOF
   assert_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:fish
+@test "fish: command activate skips profile scripts with FLOX_NOPROFILE" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_NOPROFILE=1 FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
@@ -395,10 +451,16 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+
+# bats test_tags=activate,activate:hook,activate:hook:fish
+@test "fish: command activate skips profile scripts with FLOX_TURBO" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_TURBO=1 FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_success
-  FLOX_TURBO=1 FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -406,10 +468,25 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+  FLOX_TURBO=1 FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
+  assert_success
+}
+
+# bats test_tags=activate
+@test "fish: activation script can be run directly" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly in various forms.
   FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
   assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  assert_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  assert_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
   FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
   assert_success
   FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
@@ -424,12 +501,13 @@ EOF
   assert_success
   FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
   assert_success
-  assert_output --partial "sourcing hook.on-activate"
-  assert_output --partial "sourcing profile.common"
-  refute_output --partial "sourcing profile.bash"
-  assert_output --partial "sourcing profile.fish"
-  refute_output --partial "sourcing profile.tcsh"
-  refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate
+@test "fish: activation script can be run directly with --noprofile" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --noprofile.
   FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
@@ -440,6 +518,13 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate
+@test "fish: activation script can be run directly with --turbo" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --turbo.
   FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
@@ -453,7 +538,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:hook,activate:hook:tcsh
-@test "tcsh: activate runs profile scripts" {
+@test "tcsh: interactive activate runs profile scripts" {
   project_setup
   # calls init
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -467,6 +552,13 @@ EOF
   refute_output --partial "sourcing profile.fish"
   assert_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:tcsh
+@test "tcsh: command activate runs profile scripts" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
@@ -476,6 +568,13 @@ EOF
   refute_output --partial "sourcing profile.fish"
   assert_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:tcsh
+@test "tcsh: command activate skips profile scripts with FLOX_NOPROFILE" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_NOPROFILE=1 FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
@@ -485,10 +584,15 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:tcsh
+@test "tcsh: command activate skips profile scripts with FLOX_TURBO" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_TURBO=1 FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_success
-  FLOX_TURBO=1 FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -496,10 +600,25 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+  FLOX_TURBO=1 FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
+  assert_success
+}
+
+# bats test_tags=activate
+@test "tcsh: activation script can be run directly" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly in various forms.
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
   assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  assert_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  assert_output --partial "sourcing profile.tcsh"
+  refute_output --partial "sourcing profile.zsh"
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
   assert_success
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
@@ -514,12 +633,13 @@ EOF
   assert_success
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
   assert_success
-  assert_output --partial "sourcing hook.on-activate"
-  assert_output --partial "sourcing profile.common"
-  refute_output --partial "sourcing profile.bash"
-  refute_output --partial "sourcing profile.fish"
-  assert_output --partial "sourcing profile.tcsh"
-  refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate
+@test "tcsh: activation script can be run directly with --noprofile" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --noprofile.
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
@@ -530,6 +650,13 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate
+@test "tcsh: activation script can be run directly with --turbo" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --turbo.
   FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
@@ -543,7 +670,7 @@ EOF
 }
 
 # bats test_tags=activate,activate:hook,activate:hook:zsh
-@test "zsh: activate runs profile scripts" {
+@test "zsh: interactive activate runs profile scripts" {
   project_setup
   sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -560,6 +687,13 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   assert_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:zsh
+@test "zsh: command activate runs profile scripts" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
@@ -569,6 +703,13 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   assert_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:zsh
+@test "zsh: command activate skips profile scripts with FLOX_NOPROFILE" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_NOPROFILE=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
   assert_success
@@ -578,10 +719,15 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate,activate:hook,activate:hook:zsh
+@test "zsh: command activate skips profile scripts with FLOX_TURBO" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   FLOX_TURBO=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- :
-  assert_success
-  FLOX_TURBO=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -589,10 +735,25 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+  FLOX_TURBO=1 FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $FLOX_BIN activate --dir "$PROJECT_DIR" -- true
+  assert_success
+}
+
+# bats test_tags=activate
+@test "zsh: activation script can be run directly" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly in various forms.
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
   assert_success
+  assert_output --partial "sourcing hook.on-activate"
+  assert_output --partial "sourcing profile.common"
+  refute_output --partial "sourcing profile.bash"
+  refute_output --partial "sourcing profile.fish"
+  refute_output --partial "sourcing profile.tcsh"
+  assert_output --partial "sourcing profile.zsh"
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
   assert_success
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
@@ -607,12 +768,13 @@ EOF
   assert_success
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
   assert_success
-  assert_output --partial "sourcing hook.on-activate"
-  assert_output --partial "sourcing profile.common"
-  refute_output --partial "sourcing profile.bash"
-  refute_output --partial "sourcing profile.fish"
-  refute_output --partial "sourcing profile.tcsh"
-  assert_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate
+@test "zsh: activation script can be run directly with --noprofile" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --noprofile.
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
@@ -623,6 +785,13 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
+}
+
+# bats test_tags=activate
+@test "zsh: activation script can be run directly with --turbo" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --turbo.
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
@@ -842,35 +1011,49 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:once
-@test "activate runs hook and profile scripts only once" {
+@test "bash: activate command-mode runs hook and profile scripts only once" {
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
 
-  echo '# Testing non-interactive bash' >&2
   FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate -- :
   assert_success
   refute_output --partial "ERROR"
   assert_output --partial "sourcing hook.on-activate for first time"
   assert_output --partial "sourcing profile.bash for first time"
   refute_output --partial "sourcing profile.zsh for first time"
+}
 
-  echo '# Testing interactive bash' >&2
+# bats test_tags=activate,activate:once
+@test "bash: interactive activate runs hook and profile scripts only once" {
+  project_setup
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+
   FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
   assert_success
   refute_output --partial "ERROR"
   assert_output --partial "sourcing hook.on-activate for first time"
   assert_output --partial "sourcing profile.bash for first time"
   refute_output --partial "sourcing profile.zsh for first time"
+}
 
-  echo '# Testing non-interactive zsh' >&2
+# bats test_tags=activate,activate:once
+@test "zsh: activate command-mode runs hook and profile scripts only once" {
+  project_setup
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+
   FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate -- :
   assert_success
   refute_output --partial "ERROR"
   assert_output --partial "sourcing hook.on-activate for first time"
   refute_output --partial "sourcing profile.bash for first time"
   assert_output --partial "sourcing profile.zsh for first time"
+}
 
-  echo '# Testing interactive zsh' >&2
+# bats test_tags=activate,activate:once
+@test "zsh: interactive activate runs hook and profile scripts only once" {
+  project_setup
+  "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/only-once.toml"
+
   FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
   assert_success
   refute_output --partial "ERROR"
@@ -1082,7 +1265,7 @@ EOF
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:envVar-before-hook
-@test "{bash,fish,tcsh,zsh}: activate sets env var before hook" {
+@test "bash: activate sets env var before hook" {
   project_setup
   sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
@@ -1093,12 +1276,38 @@ EOF
   FLOX_SHELL="bash" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
   assert_success
   assert_output --partial "baz"
+}
+
+# bats test_tags=activate,activate:envVar-before-hook
+@test "fish: activate sets env var before hook" {
+  project_setup
+  sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
   FLOX_SHELL="fish" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
   assert_success
   assert_output --partial "baz"
+}
+
+
+# bats test_tags=activate,activate:envVar-before-hook
+@test "tcsh: activate sets env var before hook" {
+  project_setup
+  sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
   FLOX_SHELL="tcsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
   assert_success
   assert_output --partial "baz"
+}
+
+
+# bats test_tags=activate,activate:envVar-before-hook
+@test "zsh: activate sets env var before hook" {
+  project_setup
+  sed -i -e "s/^\[vars\]/${VARS//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT_ECHO_FOO//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
   FLOX_SHELL="zsh" NO_COLOR=1 run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- exit
   assert_success
   assert_output --partial "baz"
@@ -2227,9 +2436,13 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=activate,activate:nested_flox_activate_tracelevel
-@test "{bash,fish,tcsh,zsh}: confirm _flox_activate_tracelevel set in nested activation" {
-  project_setup
+# test function run for each shell to confirm _flox_activate_tracelevel set in
+# nested activation
+confirm_tracelevel() {
+  shell="${1?}"
+  # dotfile that performs an in-place activation, see longer description below
+  extra_config_path="${2?}"
+  extra_config_content="${3?}"
 
   # The shell-specific flox init scripts finish by unsetting the
   # _flox_activate_tracelevel environment variable, and this can
@@ -2246,38 +2459,74 @@ EOF
   # environment, so we also assert that this warning is not present
   # in any of the activation output.
 
-  # Start by adding logic to create semaphore files for all shells.
-  for i in "$HOME/.bashrc.extra" "$HOME/.config/fish/config.fish.extra" "$HOME/.tcshrc.extra" "$HOME/.zshrc.extra"; do
-    cat >"$i" <<EOF
+  # Start by adding logic to create a semaphore file
+  echo "$extra_config_content" > "$extra_config_path"
+
+  # Activate the test environment, which will launch an interactive shell that
+  # sources the relevant dotfile.
+
+  FLOX_SHELL="$shell" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/activate.exp" "$PROJECT_DIR"
+  refute_output --partial "_flox_activate_tracelevel not defined"
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+  assert_success
+  run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+  assert_failure
+}
+
+# bats test_tags=activate,activate:nested_flox_activate_tracelevel
+@test "bash: confirm _flox_activate_tracelevel set in nested activation" {
+  project_setup
+
+  bashrc_content="$(cat <<EOF
 touch "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
 test -n "\$_flox_activate_tracelevel" || touch "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+eval "\$($FLOX_BIN activate --dir $PROJECT_DIR)"
 EOF
-  done
+  )"
 
-  # Finish by appending shell-specific flox activation syntax.
-  for i in "$HOME/.bashrc.extra" "$HOME/.config/fish/config.fish.extra" "$HOME/.zshrc.extra"; do
-    echo "eval \"\$($FLOX_BIN activate --dir $PROJECT_DIR)\"" >>"$i"
-  done
-  echo "eval \"\`$FLOX_BIN activate --dir $PROJECT_DIR\`\"" >>"$HOME/.tcshrc.extra"
+  confirm_tracelevel bash "$HOME/.bashrc.extra" "$bashrc_content"
+}
 
-  # Create a test environment.
-  _temp_env="$(mktemp -d)"
-  "$FLOX_BIN" init -d "$_temp_env"
+# bats test_tags=activate,activate:nested_flox_activate_tracelevel
+@test "fish: confirm _flox_activate_tracelevel set in nested activation" {
+  project_setup
 
-  # Activate the test environment from each shell, each of which will
-  # launch an interactive shell that sources the relevant dotfile.
-  for target_shell in bash fish tcsh zsh; do
-    echo "Testing $target_shell"
-    FLOX_SHELL="$target_shell" USER="$REAL_USER" NO_COLOR=1 run -0 expect "$TESTS_DIR/activate/activate.exp" "$_temp_env"
-    refute_output --partial "_flox_activate_tracelevel not defined"
-    run rm "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
-    assert_success
-    run rm "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
-    assert_failure
-    echo # leave a line between test outputs
-  done
+  config_fish_content="$(cat <<EOF
+touch "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+test -n "\$_flox_activate_tracelevel" || touch "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+eval "\$($FLOX_BIN activate --dir $PROJECT_DIR)"
+EOF
+  )"
 
-  rm -rf "$_temp_env"
+  confirm_tracelevel fish "$HOME/.config/fish/config.fish.extra" "$config_fish_content"
+}
+
+# bats test_tags=activate,activate:nested_flox_activate_tracelevel
+@test "tcsh: confirm _flox_activate_tracelevel set in nested activation" {
+  project_setup
+
+  tcshrc_content="$(cat <<EOF
+touch "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+test -n "\$_flox_activate_tracelevel" || touch "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+eval "\`$FLOX_BIN activate --dir $PROJECT_DIR\`"
+EOF
+  )"
+
+  confirm_tracelevel tcsh "$HOME/.tcshrc.extra" "$tcshrc_content"
+}
+
+# bats test_tags=activate,activate:nested_flox_activate_tracelevel
+@test "zsh: confirm _flox_activate_tracelevel set in nested activation" {
+  project_setup
+
+  zshrc_content="$(cat <<EOF
+touch "$PROJECT_DIR/_flox_activate_tracelevel.in_test"
+test -n "\$_flox_activate_tracelevel" || touch "$PROJECT_DIR/_flox_activate_tracelevel.not_defined"
+eval "\$($FLOX_BIN activate --dir $PROJECT_DIR)"
+EOF
+  )"
+
+  confirm_tracelevel zsh "$HOME/.zshrc.extra" "$zshrc_content"
 }
 
 # ---------------------------------------------------------------------------- #
