@@ -90,17 +90,6 @@ project_setup() {
   "$FLOX_BIN" init -d "$PROJECT_DIR"
 }
 
-# project setup with pkgdb
-project_setup_pkgdb() {
-  project_setup_common
-  mkdir -p "$PROJECT_DIR/.flox/env"
-  cp --no-preserve=mode "$MANUALLY_GENERATED"/hello_v0/* "$PROJECT_DIR/.flox/env"
-  echo '{
-    "name": "'$PROJECT_NAME'",
-    "version": 1
-  }' >>"$PROJECT_DIR/.flox/env.json"
-}
-
 project_teardown() {
   popd >/dev/null || return
   rm -rf "${PROJECT_DIR?}"

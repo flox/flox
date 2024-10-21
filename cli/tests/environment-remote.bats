@@ -65,25 +65,6 @@ function make_empty_remote_env() {
   rm -rf local
 }
 
-# create remote a pkgdb environment with hello installed
-# from pre-generated lock
-make_remote_pkgdb_env_with_hello() {
-  mkdir local
-  pushd local
-
-  # init path environment and push to remote
-  mkdir -p .flox/env
-  cp "$MANUALLY_GENERATED"/hello_v0/* .flox/env
-  echo '{
-    "name": "test",
-    "version": 1
-  }' >.flox/env.json
-  "$FLOX_BIN" push --owner "$OWNER"
-  "$FLOX_BIN" delete -f
-  popd
-  rm -rf local
-}
-
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=hermetic,remote,remote:hermetic
