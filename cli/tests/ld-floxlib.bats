@@ -49,15 +49,6 @@ project_setup_common() {
   pushd "$PROJECT_DIR" > /dev/null || return
 }
 
-project_setup_pkgdb() {
-  mkdir -p "$PROJECT_DIR/.flox/env"
-  cp "$MANUALLY_GENERATED"/ld_floxlib_test_deps_v0/* "$PROJECT_DIR/.flox/env"
-  echo '{
-    "name": "env",
-    "version": 1
-  }' >>"$PROJECT_DIR/.flox/env.json"
-}
-
 project_setup_catalog() {
   $FLOX_BIN init
 

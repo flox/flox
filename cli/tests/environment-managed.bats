@@ -58,17 +58,6 @@ function make_empty_remote_env() {
   "$FLOX_BIN" push --owner "$OWNER"
 }
 
-# create path env from pre-generated locked manifest v0
-function make_remote_env_with_hello() {
-  mkdir -p "$PROJECT_DIR/.flox/env"
-  cp "$GENERATED_DATA"/envs/hello/* "$PROJECT_DIR/.flox/env"
-  echo '{
-    "name": "'$PROJECT_NAME'",
-    "version": 1
-  }' >>"$PROJECT_DIR/.flox/env.json"
-  "$FLOX_BIN" push --owner "$OWNER"
-}
-
 # ---------------------------------------------------------------------------- #
 
 dot_flox_exists() {
