@@ -73,7 +73,7 @@ tracing-log = { version = "0.2", features = [] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = { version = "2.5", features = ["serde"] }
 url-escape = "0.1.1"
-uuid = { version = "1.10", features = ["serde", "v4"] }
+uuid = { version = "1.11", features = ["serde", "v4"] }
 walkdir = "2"
 xdg = "2.4"
 
