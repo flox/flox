@@ -114,9 +114,7 @@
 
           # Package Database Utilities: scrape, search, and resolve.
           flox-pkgdb = callPackage ./pkgs/flox-pkgdb { };
-          flox-buildenv = callPackage ./pkgs/flox-buildenv {
-            nixpkgsClone = inputs.nixpkgs.outPath;
-          };
+          flox-buildenv = callPackage ./pkgs/flox-buildenv { nixpkgsClone = inputs.nixpkgs.outPath; };
           flox-watchdog = callPackage ./pkgs/flox-watchdog { }; # Flox Command Line Interface ( development build ).
           flox-activations = callPackage ./pkgs/flox-activations { };
           flox-cli = callPackage ./pkgs/flox-cli { };

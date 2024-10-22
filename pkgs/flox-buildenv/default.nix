@@ -15,20 +15,18 @@
   stdenv,
   writers,
   writeText,
-}: let
+}:
+let
   pname = "flox-buildenv";
   version = "0.0.1";
   nixpkgsBuildenvRoot = nixpkgsClone + "/pkgs/build-support/buildenv";
-  buildenv = (
-    writers.writeBash "buildenv" (
-      builtins.readFile ./buildenv.bash
-    )
-  );
+  buildenv = (writers.writeBash "buildenv" (builtins.readFile ./buildenv.bash));
   buildenv_nix = ./buildenv.nix;
   builder_pl = ./builder.pl;
   builder_pl_patch = ./builder.pl.patch;
   activationScripts = flox-activation-scripts;
-  defaultEnvrc = writeText "default.envrc" (''
+  defaultEnvrc = writeText "default.envrc" (
+    ''
       # Default environment variables
       export SSL_CERT_FILE="''${SSL_CERT_FILE:-${cacert}/etc/ssl/certs/ca-bundle.crt}"
       export NIX_SSL_CERT_FILE="''${NIX_SSL_CERT_FILE:-''${SSL_CERT_FILE}}"
@@ -42,10 +40,10 @@
     ''
     + ''
       # Static environment variables
-    '');
+    ''
+  );
 in
-  runCommandNoCC
-  "${pname}-${version}"
+runCommandNoCC "${pname}-${version}"
   {
     inherit
       coreutils
