@@ -287,6 +287,13 @@ EOF
   echo "$REGISTRY_CONTENT"
 }
 
+cat_teardown_fifo() {
+  if [ -n "${TEARDOWN_FIFO:-}" ]; then
+    timeout 1 cat "$TEARDOWN_FIFO"
+  fi
+
+}
+
 # ---------------------------------------------------------------------------- #
 #
 #

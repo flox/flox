@@ -107,6 +107,10 @@ setup() {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/empty.json"
 }
 teardown() {
+  # fifo is in PROJECT_DIR and keeps watchdog running,
+  # so cat_teardown_fifo must be run before wait_for_watchdogs and
+  # project_teardown
+  cat_teardown_fifo
   # Cleaning up the `BATS_TEST_TMPDIR` occasionally fails,
   # because of an 'env-registry.json' that gets concurrently written
   # by the watchdog as the activation terminates.
@@ -2676,3 +2680,500 @@ EOF
   assert_failure
   assert_output --partial "Environment '$PROJECT_NAME' is already active"
 }
+
+# ---------------------------------------------------------------------------- #
+# Test that attach does not run hooks a second time after they've already been
+# run by the initial activation
+# Run test for each of 3 activation modes
+# Don't test for every shell since hooks are run in our activation scripts
+# before starting the user's shell
+# ---------------------------------------------------------------------------- #
+
+attach_runs_hooks_once() {
+  mode="${1?}"
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [hook]
+    on-activate = """
+      if [ -n "$_already_ran_hook_on_activate" ]; then
+        echo "ERROR: hook section sourced twice"
+        exit 1
+      else
+        echo "sourcing hook.on-activate for first time"
+      fi
+      export _already_ran_hook_on_activate=1
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  mkfifo activate_finished
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > \"$TEARDOWN_FIFO\"" 2> output &
+
+  cat activate_finished
+  run cat output
+  assert_output --partial "sourcing hook.on-activate for first time"
+  assert_output --partial "hook.on-activate"
+
+  case "$mode" in
+    interactive)
+      FLOX_SHELL=bash NO_COLOR=1 run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
+      ;;
+    command)
+      FLOX_SHELL=bash run "$FLOX_BIN" activate -- true
+      ;;
+    in-place)
+      run bash -c 'eval "$("$FLOX_BIN" activate)"'
+      ;;
+  esac
+  assert_success
+
+  refute_output --partial "sourcing hook.on-activate for first time"
+}
+
+# bats test_tags=activate,activate:attach
+@test "interactive: attach runs hook once" {
+  project_setup
+  attach_runs_hooks_once interactive
+}
+
+# bats test_tags=activate,activate:attach
+@test "command-mode: attach runs hook once" {
+  project_setup
+  attach_runs_hooks_once command
+}
+
+# bats test_tags=activate,activate:attach
+@test "in-place: attach runs hook once" {
+  project_setup
+  attach_runs_hooks_once in-place
+}
+
+# ---------------------------------------------------------------------------- #
+
+# ---------------------------------------------------------------------------- #
+# Test that attach runs profile scripts even though they have already been run
+# by the initial activation
+# Run test for 4 shells in each of 3 modes
+# ---------------------------------------------------------------------------- #
+
+attach_runs_profile_twice() {
+  shell="${1?}"
+  mode="${2?}"
+
+  "$FLOX_BIN" edit -f "$TESTS_DIR/activate/attach_runs_profile_twice.toml"
+
+  mkfifo activate_finished
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" >> output 2>&1 &
+
+  cat activate_finished
+  run cat output
+  assert_output --partial "sourcing profile.common"
+  assert_output --partial "sourcing profile.$shell"
+
+  case "$mode" in
+    interactive)
+      FLOX_SHELL="$shell" NO_COLOR=1 run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" true
+      ;;
+    command)
+      FLOX_SHELL="$shell" run "$FLOX_BIN" activate -- true
+      ;;
+    in-place)
+      if [ "$shell" == "tcsh" ]; then
+        run "$shell" -c 'eval "`"$FLOX_BIN" activate`"'
+      else
+        run "$shell" -c 'eval "$("$FLOX_BIN" activate)"'
+      fi
+      ;;
+  esac
+
+  assert_success
+  assert_output --partial "sourcing profile.common"
+  assert_output --partial "sourcing profile.$shell"
+}
+
+# bats test_tags=activate,activate:attach
+@test "bash: interactive: attach runs profile twice" {
+  project_setup
+  attach_runs_profile_twice bash interactive
+}
+
+# bats test_tags=activate,activate:attach
+@test "bash: command-mode: attach runs profile twice" {
+  project_setup
+  attach_runs_profile_twice bash command
+}
+
+# bats test_tags=activate,activate:attach
+@test "bash: in-place: attach runs profile twice" {
+  project_setup
+  attach_runs_profile_twice bash in-place
+}
+
+# bats test_tags=activate,activate:attach
+@test "fish: interactive: attach runs profile twice" {
+  project_setup
+  attach_runs_profile_twice fish interactive
+}
+
+# bats test_tags=activate,activate:attach
+@test "fish: command-mode: attach runs profile twice" {
+  project_setup
+  attach_runs_profile_twice fish command
+}
+
+# bats test_tags=activate,activate:attach
+@test "fish: in-place: attach runs profile twice" {
+  project_setup
+  attach_runs_profile_twice fish in-place
+}
+
+# bats test_tags=activate,activate:attach
+@test "tcsh: interactive: attach runs profile twice" {
+  project_setup
+  attach_runs_profile_twice tcsh interactive
+}
+
+# bats test_tags=activate,activate:attach
+@test "tcsh: command-mode: attach runs profile twice" {
+  project_setup
+  attach_runs_profile_twice tcsh command
+}
+
+# bats test_tags=activate,activate:attach
+@test "tcsh: in-place: attach runs profile twice" {
+  project_setup
+  attach_runs_profile_twice tcsh in-place
+}
+
+# bats test_tags=activate,activate:attach
+@test "zsh: interactive: attach runs profile twice" {
+  project_setup
+  attach_runs_profile_twice zsh interactive
+}
+
+# bats test_tags=activate,activate:attach
+@test "zsh: command-mode: attach runs profile twice" {
+  project_setup
+  attach_runs_profile_twice zsh command
+}
+
+# bats test_tags=activate,activate:attach
+@test "zsh: in-place: attach runs profile twice" {
+  project_setup
+  attach_runs_profile_twice zsh in-place
+}
+
+# ---------------------------------------------------------------------------- #
+
+# ---------------------------------------------------------------------------- #
+# Test that attach sets vars exported in hooks
+# Run test for 4 shells in each of 3 modes
+# ---------------------------------------------------------------------------- #
+
+attach_sets_hook_vars() {
+  shell="${1?}"
+  mode="${2?}"
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [hook]
+    on-activate = """
+      export HOOK_ON_ACTIVATE="hook.on-activate var"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  mkfifo activate_finished
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" >> output 2>&1 &
+
+  cat activate_finished
+
+  case "$mode" in
+    interactive)
+      FLOX_SHELL="$shell" NO_COLOR=1 run expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" "echo \$HOOK_ON_ACTIVATE"
+      ;;
+    command)
+      FLOX_SHELL="$shell" run "$FLOX_BIN" activate -- echo \$HOOK_ON_ACTIVATE
+      ;;
+    in-place)
+      if [ "$shell" == "tcsh" ]; then
+        run "$shell" -c 'eval "`"$FLOX_BIN" activate`" && echo "$HOOK_ON_ACTIVATE"'
+      else
+        run "$shell" -c 'eval "$("$FLOX_BIN" activate)" && echo "$HOOK_ON_ACTIVATE"'
+      fi
+      ;;
+  esac
+
+  assert_success
+  assert_output --partial "hook.on-activate var"
+}
+
+# bats test_tags=activate,activate:attach
+@test "bash: interactive: attach sets vars from hook" {
+  project_setup
+  attach_sets_hook_vars bash interactive
+}
+
+# bats test_tags=activate,activate:attach
+@test "bash: command-mode: attach sets vars from hook" {
+  project_setup
+  attach_sets_hook_vars bash command
+}
+
+# bats test_tags=activate,activate:attach
+@test "bash: in-place: attach sets vars from hook" {
+  project_setup
+  attach_sets_hook_vars bash in-place
+}
+
+# bats test_tags=activate,activate:attach
+@test "fish: interactive: attach sets vars from hook" {
+  project_setup
+  attach_sets_hook_vars fish interactive
+}
+
+# bats test_tags=activate,activate:attach
+@test "fish: command-mode: attach sets vars from hook" {
+  project_setup
+  attach_sets_hook_vars fish command
+}
+
+# bats test_tags=activate,activate:attach
+@test "fish: in-place: attach sets vars from hook" {
+  project_setup
+  attach_sets_hook_vars fish in-place
+}
+
+# bats test_tags=activate,activate:attach
+@test "tcsh: interactive: attach sets vars from hook" {
+  project_setup
+  attach_sets_hook_vars tcsh interactive
+}
+
+# bats test_tags=activate,activate:attach
+@test "tcsh: command-mode: attach sets vars from hook" {
+  project_setup
+  attach_sets_hook_vars tcsh command
+}
+
+# bats test_tags=activate,activate:attach
+@test "tcsh: in-place: attach sets vars from hook" {
+  project_setup
+  attach_sets_hook_vars tcsh in-place
+}
+
+# bats test_tags=activate,activate:attach
+@test "zsh: interactive: attach sets vars from hook" {
+  project_setup
+  attach_sets_hook_vars zsh interactive
+}
+
+# bats test_tags=activate,activate:attach
+@test "zsh: command-mode: attach sets vars from hook" {
+  project_setup
+  attach_sets_hook_vars zsh command
+}
+
+# bats test_tags=activate,activate:attach
+@test "zsh: in-place: attach sets vars from hook" {
+  project_setup
+  attach_sets_hook_vars zsh in-place
+}
+
+# ---------------------------------------------------------------------------- #
+
+# ---------------------------------------------------------------------------- #
+# Test that attach sets vars set in profile scripts
+# Run test for 4 shells in each of 3 modes
+# ---------------------------------------------------------------------------- #
+
+attach_sets_profile_vars() {
+  shell="${1?}"
+  mode="${2?}"
+  MANIFEST_CONTENTS="${3?}"
+
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  mkfifo activate_finished
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # Our tcsh quoting appears to be broken so don't quote $TEARDOWN_FIFO
+  FLOX_SHELL="$shell" "$FLOX_BIN" activate -- bash -c "echo > activate_finished && echo > $TEARDOWN_FIFO" &
+
+  cat activate_finished
+
+  case "$mode" in
+    interactive)
+      # using assert_line with expect is racey so just direct the output we need to a file
+      FLOX_SHELL="$shell" NO_COLOR=1 expect "$TESTS_DIR/activate/attach.exp" "$PROJECT_DIR" "echo \$PROFILE_COMMON > output && echo \$PROFILE_$shell >> output"
+      run cat output
+      ;;
+    command)
+      FLOX_SHELL="$shell" run "$FLOX_BIN" activate -- echo \$PROFILE_COMMON \&\& echo "\$PROFILE_$shell"
+      ;;
+    in-place)
+      if [ "$shell" == "tcsh" ]; then
+        # Single quote what we don't want expanded
+        # Double quote $shell
+        run "$shell" -c 'eval "`"$FLOX_BIN" activate`" && echo $PROFILE_COMMON && echo $PROFILE_'"$shell"
+      else
+        # Single quote what we don't want expanded
+        # Double quote $shell
+        run "$shell" -c 'eval "$("$FLOX_BIN" activate)" && echo $PROFILE_COMMON && echo $PROFILE_'"$shell"
+      fi
+      ;;
+  esac
+
+  assert_success
+  # use assert_line rather than --partial since fish will print errors like
+  # Unsupported use of '='. In fish, please use 'set PROFILE_COMMON "profile.common var"'.
+  assert_line "profile.common var"
+  assert_line "profile.$shell var"
+}
+
+BASH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS="$(cat << "EOF"
+  version = 1
+
+  [profile]
+  common = """
+    PROFILE_COMMON="profile.common var"
+  """
+  bash = """
+    PROFILE_bash="profile.bash var"
+  """
+EOF
+)"
+
+# bats test_tags=activate,activate:attach
+@test "bash: interactive: attach sets vars from profile" {
+  project_setup
+  attach_sets_profile_vars bash interactive "$BASH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS"
+}
+
+# bats test_tags=activate,activate:attach
+@test "bash: command-mode: attach sets vars from profile" {
+  project_setup
+  attach_sets_profile_vars bash command "$BASH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS"
+}
+
+# bats test_tags=activate,activate:attach
+@test "bash: in-place: attach sets vars from profile" {
+  project_setup
+  attach_sets_profile_vars bash in-place "$BASH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS"
+}
+
+FISH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS="$(cat << "EOF"
+  version = 1
+
+  [profile]
+  common = """
+    set PROFILE_COMMON "profile.common var"
+  """
+  fish = """
+    set PROFILE_fish "profile.fish var"
+  """
+EOF
+)"
+
+# bats test_tags=activate,activate:attach
+@test "fish: interactive: attach sets vars from profile" {
+  project_setup
+  attach_sets_profile_vars fish interactive "$FISH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS"
+}
+
+# bats test_tags=activate,activate:attach
+@test "fish: command-mode: attach sets vars from profile" {
+  project_setup
+  attach_sets_profile_vars fish command "$FISH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS"
+}
+
+# bats test_tags=activate,activate:attach
+@test "fish: in-place: attach sets vars from profile" {
+  project_setup
+  attach_sets_profile_vars fish in-place "$FISH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS"
+}
+
+TCSH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS="$(cat << "EOF"
+  version = 1
+
+  [profile]
+  common = """
+    set PROFILE_COMMON="profile.common var"
+  """
+  tcsh = """
+    set PROFILE_tcsh="profile.tcsh var"
+  """
+EOF
+)"
+
+# bats test_tags=activate,activate:attach
+@test "tcsh: interactive: attach sets vars from profile" {
+  project_setup
+  attach_sets_profile_vars tcsh interactive "$TCSH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS"
+}
+
+# bats test_tags=activate,activate:attach
+@test "tcsh: command-mode: attach sets vars from profile" {
+  project_setup
+  attach_sets_profile_vars tcsh command "$TCSH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS"
+}
+
+# bats test_tags=activate,activate:attach
+@test "tcsh: in-place: attach sets vars from profile" {
+  project_setup
+  attach_sets_profile_vars tcsh in-place "$TCSH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS"
+}
+
+ZSH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS="$(cat << "EOF"
+  version = 1
+
+  [profile]
+  common = """
+    PROFILE_COMMON="profile.common var"
+  """
+  zsh = """
+    PROFILE_zsh="profile.zsh var"
+  """
+EOF
+)"
+
+# bats test_tags=activate,activate:attach
+@test "zsh: interactive: attach sets vars from profile" {
+  project_setup
+  attach_sets_profile_vars zsh interactive "$ZSH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS"
+}
+
+# bats test_tags=activate,activate:attach
+@test "zsh: command-mode: attach sets vars from profile" {
+  project_setup
+  attach_sets_profile_vars zsh command "$ZSH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS"
+}
+
+# bats test_tags=activate,activate:attach
+@test "zsh: in-place: attach sets vars from profile" {
+  project_setup
+  attach_sets_profile_vars zsh in-place "$ZSH_ATTACH_SETS_PROFILE_VARS_MANIFEST_CONTENTS"
+}
+
+# ---------------------------------------------------------------------------- #
