@@ -1,0 +1,19 @@
+# Attach to a project environment that has already been activated using --dir
+# This expects different output than what activate.exp expects
+
+set dir [lindex $argv 0]
+set command [lindex $argv 1]
+set flox $env(FLOX_BIN)
+set timeout 10
+spawn $flox activate --dir $dir
+expect_after {
+  timeout { exit 1 }
+  eof { exit 2 }
+  "*\n" { exp_continue }
+  "*\r" { exp_continue }
+}
+
+expect "Attached to existing activation"
+
+send "$command && exit\n"
+expect eof

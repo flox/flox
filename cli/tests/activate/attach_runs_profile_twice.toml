@@ -1,0 +1,18 @@
+version = 1
+
+[profile]
+common = """
+  echo "sourcing profile.common";
+"""
+bash = """
+  echo "sourcing profile.bash";
+"""
+fish = """
+  echo "sourcing profile.fish";
+"""
+tcsh = """
+  echo "sourcing profile.tcsh";
+"""
+zsh = """
+  echo "sourcing profile.zsh";
+"""
