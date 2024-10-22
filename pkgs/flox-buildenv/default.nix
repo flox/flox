@@ -3,12 +3,10 @@
   cacert,
   darwin,
   coreutils,
-  findutils,
   flox-activation-scripts,
   flox-pkgdb,
   getopt,
   glibcLocalesUtf8,
-  jq,
   lib,
   nix,
   nixpkgsClone,
@@ -27,14 +25,8 @@
     )
   );
   buildenv_nix = ./buildenv.nix;
-  pkgdb = (
-    writers.writeBash "pkgdb" (
-      builtins.readFile ./pkgdb.bash
-    )
-  );
   builder_pl = ./builder.pl;
   builder_pl_patch = ./builder.pl.patch;
-  build_packages_jq = ./build-packages.jq;
   activationScripts = flox-activation-scripts;
   defaultEnvrc = writeText "default.envrc" (''
       # Default environment variables
@@ -57,9 +49,7 @@ in
   {
     inherit
       coreutils
-      findutils
       getopt
-      jq
       nix
       pname
       version
@@ -75,8 +65,6 @@ in
     mkdir -p "$out/bin" "$out/lib"
     cp ${buildenv} "$out/bin/buildenv"
     substituteAllInPlace "$out/bin/buildenv"
-    cp ${pkgdb} "$out/bin/pkgdb"
-    substituteAllInPlace "$out/bin/pkgdb"
 
     # Uncomment these lines to generate builder.pl from the Nixpkgs source.
     # cp --no-preserve=mode ${nixpkgsBuildenvRoot}/builder.pl "$out/lib/builder.pl"
@@ -90,6 +78,4 @@ in
 
     cp ${buildenv_nix} "$out/lib/buildenv.nix"
     substituteAllInPlace "$out/lib/buildenv.nix"
-
-    cp ${build_packages_jq} "$out/lib/build-packages.jq"
   ''
