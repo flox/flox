@@ -970,6 +970,8 @@ pub struct ManifestBuildDescriptor {
     pub command: String,
     /// Files to explicitly include in the build result
     pub files: Option<Vec<String>>,
+    /// Packages from the 'toplevel' group to include in the closure of the build result
+    pub runtime_packages: Option<Vec<String>>,
     /// Systems to allow running the build
     pub systems: Option<Vec<System>>,
     /// Sandbox mode for the build
@@ -1486,7 +1488,7 @@ pub(super) mod test {
 
     const DUMMY_MANIFEST: &str = indoc! {r#"
         version = 1
-        
+
         [install]
         hello.pkg-path = "hello"
 
@@ -1499,7 +1501,7 @@ pub(super) mod test {
     // This is an array of tables called `install` rather than a table called `install`.
     const BAD_MANIFEST: &str = indoc! {r#"
         version = 1
-        
+
         [[install]]
         python = {}
 
@@ -2243,6 +2245,7 @@ pub(super) mod test {
             ManifestBuild(
                 [("test".to_string(), ManifestBuildDescriptor {
                     command: "hello".to_string(),
+                    runtime_packages: None,
                     files: None,
                     systems: None,
                     sandbox: None
