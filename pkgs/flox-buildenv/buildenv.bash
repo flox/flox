@@ -5,31 +5,20 @@
 # renders an extra tree of symbolic links to the ".develop" subdirectory
 # containing the deep recursively-linked propagaged-user-env-packages
 # of all packages contained within the environment.
-#
-# Usage:
-#   buildenv \
-#     [ -n <name> ] \
-#     [ -a <activation-scripts-pkg> ] \
-#     [ -m (nix|pkgdb) ] \
-#     <path/to/manifest.lock>
-#   -n <name> : The name of the flox environment to render.
-#   -a <activation-scripts-pkg> : The store path of the activation scripts package.
 
 set -eu
 
 declare usage
 usage="Usage: $0 [-x] \
   [-n <name>] \
-  [-a <activation-scripts-pkg>] \
   [-s <path/to/service-config.yaml>] \
   <path/to/manifest.lock>
 -x : Enable debugging output.
 -n <name> : The name of the flox environment to render.
--a <path> : Path to the activation scripts package.
 -s <path> : Path to the service configuration file.
 "
 
-OPTSTRING="m:n:a:s:x"
+OPTSTRING="n:s:x"
 
 declare name="${FLOX_BUILDENV_BUILD_NAME:-environment}"
 declare serviceConfigYaml=""
