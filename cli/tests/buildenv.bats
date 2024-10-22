@@ -20,10 +20,11 @@ load test_support.bash
 # --------------------------------------------------------------------------- #
 
 setup_file() {
-  : "${CAT:=cat}"
-  : "${TEST:=test}"
-  : "${MKDIR:=mkdir}"
-  export CAT TEST MKDIR
+  common_file_setup
+}
+
+teardown_file() {
+  common_file_teardown
 }
 
 # ---------------------------------------------------------------------------- #
@@ -55,8 +56,8 @@ setup_file() {
   assert_equal "${#lines[@]}" 1 # 1 result
   out_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.out')
   develop_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.develop')
-  assert "$TEST" -x "${out_outPath}/bin/hello"
-  assert "$TEST" -x "${develop_outPath}/bin/hello"
+  assert test -x "${out_outPath}/bin/hello"
+  assert test -x "${develop_outPath}/bin/hello"
 }
 
 
@@ -70,8 +71,8 @@ setup_file() {
   assert_equal "${#lines[@]}" 1 # 1 result
   out_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.out')
   develop_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.develop')
-  assert "$TEST" -x "${out_outPath}/bin/hello"
-  assert "$TEST" -x "${develop_outPath}/bin/hello"
+  assert test -x "${out_outPath}/bin/hello"
+  assert test -x "${develop_outPath}/bin/hello"
 }
 
 
@@ -85,12 +86,12 @@ setup_file() {
   assert_equal "${#lines[@]}" 1 # 1 result
   out_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.out')
   develop_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.develop')
-  assert "$TEST" -f "${out_outPath}/activate.d/bash"
-  assert "$TEST" -f "${out_outPath}/activate.d/zsh"
-  assert "$TEST" -d "${out_outPath}/etc/profile.d"
-  assert "$TEST" -f "${develop_outPath}/activate.d/bash"
-  assert "$TEST" -f "${develop_outPath}/activate.d/zsh"
-  assert "$TEST" -d "${develop_outPath}/etc/profile.d"
+  assert test -f "${out_outPath}/activate.d/bash"
+  assert test -f "${out_outPath}/activate.d/zsh"
+  assert test -d "${out_outPath}/etc/profile.d"
+  assert test -f "${develop_outPath}/activate.d/bash"
+  assert test -f "${develop_outPath}/activate.d/zsh"
+  assert test -d "${develop_outPath}/etc/profile.d"
 }
 
 # --------------------------------------------------------------------------- #
@@ -107,8 +108,8 @@ setup_file() {
   assert_equal "${#lines[@]}" 1 # 1 result
   out_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.out')
   develop_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.develop')
-  assert "$TEST" -f "${out_outPath}/activate.d/hook-on-activate"
-  assert "$TEST" -f "${develop_outPath}/activate.d/hook-on-activate"
+  assert test -f "${out_outPath}/activate.d/hook-on-activate"
+  assert test -f "${develop_outPath}/activate.d/hook-on-activate"
 }
 
 # --------------------------------------------------------------------------- #
@@ -145,10 +146,10 @@ setup_file() {
   assert_equal "${#lines[@]}" 1 # 1 result
   out_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.out')
   develop_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.develop')
-  assert "$TEST" -f "${out_outPath}/activate.d/envrc"
-  assert "$TEST" -f "${develop_outPath}/activate.d/envrc"
+  assert test -f "${out_outPath}/activate.d/envrc"
+  assert test -f "${develop_outPath}/activate.d/envrc"
   for i in "${out_outPath}/activate.d/envrc" "${develop_outPath}/activate.d/envrc"; do
-    run "$CAT" "$i"
+    run cat "$i"
     assert_line "export singlequotes=\"'bar'\""
     assert_line "export singlequoteescaped=\"\\'baz\""
   done
@@ -163,9 +164,9 @@ setup_file() {
   out_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.out')
   develop_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.develop')
   build_hello_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs."build-hello"')
-  assert "$TEST" -f "${out_outPath}/package-builds.d/hello"
-  assert "$TEST" -f "${develop_outPath}/package-builds.d/hello"
-  assert "$TEST" -f "${build_hello_outPath}/package-builds.d/hello"
+  assert test -f "${out_outPath}/package-builds.d/hello"
+  assert test -f "${develop_outPath}/package-builds.d/hello"
+  assert test -f "${build_hello_outPath}/package-builds.d/hello"
 }
 
 # bats test_tags=buildenv:include-lockfile
@@ -177,8 +178,8 @@ setup_file() {
   assert_equal "${#lines[@]}" 1 # 1 result
   out_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.out')
   develop_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.develop')
-  assert "$TEST" -f "${out_outPath}/manifest.lock"
-  assert "$TEST" -f "${develop_outPath}/manifest.lock"
+  assert test -f "${out_outPath}/manifest.lock"
+  assert test -f "${develop_outPath}/manifest.lock"
   assert cmp "${out_outPath}/manifest.lock" "${originalLockfile}"
   assert cmp "${develop_outPath}/manifest.lock" "${originalLockfile}"
 }
@@ -198,7 +199,7 @@ setup_file() {
     # XXX the contents of requisites.txt is known to be incomplete with
     # this version of buildenv, but the closure represented by the contents
     # of this file should match the closure of the environment itself.
-    assert "$TEST" -f "$i/requisites.txt"
+    assert test -f "$i/requisites.txt"
     run diff -u "$i/requisites.txt" <(nix-store -qR "$i/." | sort -u)
     assert_success
   done
