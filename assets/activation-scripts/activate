@@ -107,7 +107,7 @@ fi
 #       container invocations, and it would have the incorrect value for
 #       nested flox activations.
 _FLOX_ENV="$($_coreutils/bin/dirname -- "${BASH_SOURCE[0]}")"
-if [ -n "$FLOX_ENV" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
+if [ -n "${FLOX_ENV:-}" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
   echo "WARN: detected change in FLOX_ENV: $FLOX_ENV -> $_FLOX_ENV" >&2
 fi
 export FLOX_ENV="$_FLOX_ENV"
