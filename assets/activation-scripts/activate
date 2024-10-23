@@ -157,7 +157,7 @@ else
 fi
 
 # Start services before the shell or command is invoked
-if [ "$FLOX_ACTIVATE_START_SERVICES" == "true" ]; then
+if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/start-services.bash"
 fi
