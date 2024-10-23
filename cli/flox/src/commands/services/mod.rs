@@ -304,6 +304,7 @@ pub async fn start_with_new_process_compose(
         trust: false,
         print_script: false,
         start_services: true,
+        use_old_interpreter: false,
         run_args: vec!["true".to_string()],
     }
     .activate(

@@ -104,10 +104,7 @@ fi
 #       container invocations, and it would have the incorrect value for
 #       nested flox activations.
 _FLOX_ENV="$($_coreutils/bin/dirname -- "${BASH_SOURCE[0]}")"
-if [ -n "$FLOX_ENV" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
-  echo "WARN: detected change in FLOX_ENV: $FLOX_ENV -> $_FLOX_ENV" >&2
-fi
-export FLOX_ENV="$_FLOX_ENV"
+export FLOX_ENV="${FLOX_ENV:-$_FLOX_ENV}"
 
 # The rust CLI contains sophisticated logic to set $FLOX_SHELL based on the
 # process listening on STDOUT, but that won't happen when activating from

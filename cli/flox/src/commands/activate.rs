@@ -56,6 +56,9 @@ pub static INTERACTIVE_BASH_BIN: Lazy<PathBuf> = Lazy::new(|| {
         env::var("INTERACTIVE_BASH_BIN").unwrap_or(env!("INTERACTIVE_BASH_BIN").to_string()),
     )
 });
+pub static FLOX_INTERPRETER: Lazy<PathBuf> = Lazy::new(|| {
+    PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
+});
 pub const FLOX_ACTIVATE_START_SERVICES_VAR: &str = "FLOX_ACTIVATE_START_SERVICES";
 pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
 pub static WATCHDOG_BIN: Lazy<PathBuf> = Lazy::new(|| {
@@ -78,6 +81,10 @@ pub struct Activate {
     /// Whether to start services when activating the environment
     #[bpaf(long, short)]
     pub start_services: bool,
+
+    /// Whether to use the (older) interpreter originally installed to the environment
+    #[bpaf(long, short)]
+    pub use_old_interpreter: bool,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
@@ -399,6 +406,12 @@ impl Activate {
             )?;
         }
 
+        let interpreter = if self.use_old_interpreter {
+            FLOX_INTERPRETER.clone()
+        } else {
+            activation_path
+        };
+
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
         //
@@ -408,7 +421,7 @@ impl Activate {
         //    eval "$(flox activate)"
         if in_place {
             let shell = Self::detect_shell_for_in_place()?;
-            Self::activate_in_place(&shell, &exports, &activation_path);
+            Self::activate_in_place(&shell, &exports, &interpreter);
 
             return Ok(());
         }
@@ -416,9 +429,9 @@ impl Activate {
         let shell = Self::detect_shell_for_subshell();
         // These functions will only return if exec fails
         if interactive {
-            Self::activate_interactive(shell, exports, activation_path, now_active)
+            Self::activate_interactive(shell, exports, interpreter, now_active)
         } else {
-            Self::activate_command(self.run_args, shell, exports, activation_path, is_ephemeral)
+            Self::activate_command(self.run_args, shell, exports, interpreter, is_ephemeral)
         }
     }
 
