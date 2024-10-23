@@ -414,24 +414,31 @@ if ($manifest) {
         my @developPackages = ( @outPackages, @floxEnvironmentPackages );
 
         # Filter only packages included in the "toplevel" group for use in builds.
-        my @toplevelPackages = grep { $_->{"group"} eq "toplevel" } @developPackages;
+        my @toplevelPackages = grep { $_->{"group"} eq "toplevel" } @outPackages;
 
         my %buildPackagesHash = ();
         if (scalar @buildNames) {
             # Each build gets its own output closure including packages
-            # selected from the @toplevelPackages set. If the "packages"
+            # selected from the @toplevelPackages set. If the "runtime-packages"
             # attribute is not defined then the build will use all of
             # @toplevelPackages.
             foreach my $build (@buildNames) {
                 # Come up with the list of candidate package installation names
                 # to be installed.
-                if (defined $builds->{$build}{"packages"}) {
-                    my @buildPackageNames = @{$builds->{$build}{"packages"}};
+                if (defined $builds->{$build}{"runtime-packages"}) {
+                    my @buildPackageNames = @{$builds->{$build}{"runtime-packages"}};
                     # Derive the corresponding package attr-paths.
                     my @buildPackageAttrPaths;
                     foreach my $name (@buildPackageNames) {
                         if (exists $install->{$name}) {
-                            push @buildPackageAttrPaths, $install->{$name}{"pkg-path"};
+                            # First confirm that the pkg-path can be found in @toplevelPackages
+                            if (grep { $_->{"attr_path"} eq $install->{$name}{"pkg-path"} } @toplevelPackages) {
+                                push @buildPackageAttrPaths, $install->{$name}{"pkg-path"};
+                            } else {
+                                die "package '$name' is not in 'toplevel' pkg-group\n";
+                            }
+                        } else {
+                            die "package '$name' not found in '[install]' section of manifest\n";
                         }
                     }
                     # Filter packages found in the "toplevel" pkg-group to include only
@@ -445,7 +452,7 @@ if ($manifest) {
                     # Represent the result as a hash keyed by the build name.
                     $buildPackagesHash{$build} = [ @buildPackages, @floxEnvironmentPackages ];
                 } else {
-                    $buildPackagesHash{$build} = \@toplevelPackages;
+                    $buildPackagesHash{$build} = [ @toplevelPackages, @floxEnvironmentPackages ];
                 }
             }
         }

@@ -31,7 +31,6 @@ teardown_file() {
 
 # bats test_tags=single,smoke
 @test "Simple environment builds successfully" {
-  echo "$BUILDENV_BIN" "$INPUT_DATA/buildenv/lockfiles/single-package/manifest.lock"
   run "$BUILDENV_BIN" "$INPUT_DATA/buildenv/lockfiles/single-package/manifest.lock"
   assert_success
 }
@@ -172,7 +171,7 @@ teardown_file() {
 # bats test_tags=buildenv:include-lockfile
 @test "Built environment contains lockfile" {
   originalLockfile="$GENERATED_DATA/envs/hello/manifest.lock"
-  run --separate-stderr "$BUILDENV_BIN" -x \
+  run --separate-stderr "$BUILDENV_BIN" \
     "${originalLockfile}"
   assert_success
   assert_equal "${#lines[@]}" 1 # 1 result
@@ -189,7 +188,7 @@ teardown_file() {
 
 # bats test_tags=requisites
 @test "Verify contents of requisites.txt" {
-  run --separate-stderr "$BUILDENV_BIN" -x \
+  run --separate-stderr "$BUILDENV_BIN" \
     "$INPUT_DATA/buildenv/lockfiles/single-package/manifest.lock"
   assert_success
   assert_equal "${#lines[@]}" 1 # 1 result
@@ -203,6 +202,64 @@ teardown_file() {
     run diff -u "$i/requisites.txt" <(nix-store -qR "$i/." | sort -u)
     assert_success
   done
+}
+
+# ---------------------------------------------------------------------------- #
+
+# bats test_tags=buildenv:runtime
+@test "Verify build closure contains only toplevel packages" {
+  run --separate-stderr "$BUILDENV_BIN" \
+    "$INPUT_DATA/buildenv/lockfiles/build/manifest.lock"
+  assert_success
+  assert_equal "${#lines[@]}" 1 # 1 result
+  out_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.out')
+  develop_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.develop')
+  build_myhello_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs."build-myhello"')
+  assert test -x "${out_outPath}/bin/hello"
+  assert test -x "${develop_outPath}/bin/hello"
+  assert test -x "${build_myhello_outPath}/bin/hello"
+  assert test -x "${out_outPath}/bin/coreutils"
+  assert test -x "${develop_outPath}/bin/coreutils"
+  assert test -x "${build_myhello_outPath}/bin/coreutils"
+  assert test -x "${out_outPath}/bin/vim"
+  assert test -x "${develop_outPath}/bin/vim"
+  assert test ! -e "${build_myhello_outPath}/bin/vim"
+}
+
+# bats test_tags=buildenv:runtime,buildenv:runtime-packages-only-hello
+@test "Verify build closure contains only hello with runtime-packages attribute" {
+  run --separate-stderr "$BUILDENV_BIN" \
+    "$INPUT_DATA/buildenv/lockfiles/build-runtime-packages-only-hello/manifest.lock"
+  assert_success
+  assert_equal "${#lines[@]}" 1 # 1 result
+  out_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.out')
+  develop_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs.develop')
+  build_myhello_outPath=$(echo "${lines[0]}" | jq -er '.[0] | .outputs."build-myhello"')
+  assert test -x "${out_outPath}/bin/hello"
+  assert test -x "${develop_outPath}/bin/hello"
+  assert test -x "${build_myhello_outPath}/bin/hello"
+  assert test -x "${out_outPath}/bin/coreutils"
+  assert test -x "${develop_outPath}/bin/coreutils"
+  assert test ! -e "${build_myhello_outPath}/bin/coreutils"
+  assert test -x "${out_outPath}/bin/vim"
+  assert test -x "${develop_outPath}/bin/vim"
+  assert test ! -e "${build_myhello_outPath}/bin/vim"
+}
+
+# bats test_tags=buildenv:runtime,buildenv:runtime-packages-not-toplevel
+@test "Verify build closure can only select toplevel packages from runtime-packages attribute" {
+  run "$BUILDENV_BIN" \
+    "$INPUT_DATA/buildenv/lockfiles/build-runtime-packages-not-toplevel/manifest.lock"
+  assert_failure
+  assert_output --regexp "error: package 'vim' is not in 'toplevel' pkg-group"
+}
+
+# bats test_tags=buildenv:runtime,buildenv:runtime-packages-not-found
+@test "Verify build closure cannot select nonexistent packages in runtime-packages attribute" {
+  run "$BUILDENV_BIN" \
+    "$INPUT_DATA/buildenv/lockfiles/build-runtime-packages-not-found/manifest.lock"
+  assert_failure
+  assert_output --regexp "error: package 'goodbye' not found in '\[install\]' section of manifest"
 }
 
 # ---------------------------------------------------------------------------- #
