@@ -11,9 +11,11 @@
   bats,
   coreutils,
   curl,
+  diffutils,
   entr,
   expect,
   findutils,
+  flox-buildenv,
   flox-pkgdb,
   flox-watchdog,
   flox-cli,
@@ -40,6 +42,7 @@
   PROJECT_NAME ? "flox-cli-tests",
   PROJECT_TESTS_DIR ? ./../../cli/tests,
   NIX_BIN ? "${nix}/bin/nix",
+  BUILDENV_BIN ? "${flox-buildenv}/bin/buildenv",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   FLOX_BIN ? "${flox-cli}/bin/flox",
   WATCHDOG_BIN ? "${flox-watchdog}/bin/flox-watchdog",
@@ -61,6 +64,7 @@ let
       batsWith
       coreutils
       curl
+      diffutils
       entr
       expect
       findutils
@@ -71,6 +75,7 @@ let
       gnused
       gnutar
       jq
+      nix
       openssh
       parallel
       unixtools.util-linux
@@ -145,6 +150,12 @@ writeShellScriptBin PROJECT_NAME ''
   # Declare project specific dependencies
   ${if NIX_BIN == null then "export NIX_BIN='nix';" else "export NIX_BIN='${NIX_BIN}';"}
   ${
+    if BUILDENV_BIN == null then
+      ''export BUILDENV_BIN="$(command -v buildenv)";''
+    else
+      "export BUILDENV_BIN='${BUILDENV_BIN}';"
+  }
+  ${
     if PKGDB_BIN == null then
       ''export PKGDB_BIN="$(command -v pkgdb)";''
     else
@@ -174,6 +185,7 @@ writeShellScriptBin PROJECT_NAME ''
   Available options:
       -F, --flox           Path to flox binary (Default: $FLOX_BIN)
       -K, --watchdog       Path to the watchdog binary (Default: $WATCHDOG_BIN)
+      -B, --buildenv       Path to buildenv binary (Default: $BUILDENV_BIN)
       -P, --pkgdb          Path to pkgdb binary (Default: $PKGDB_BIN)
       -N, --nix            Path to nix binary (Default: $NIX_BIN)
       -I, --input-data     Path to the input data directory (Default: $INPUT_DATA)
@@ -192,6 +204,7 @@ writeShellScriptBin PROJECT_NAME ''
     case "$1" in
       -[fF]|--flox)           export FLOX_BIN="''${2?}"; shift; ;;
       -[kK]|--watchdog)       export WATCHDOG_BIN="''${2?}"; shift; ;;
+      -[bB]|--buildenv)       export BUILDENV_BIN="''${2?}"; shift; ;;
       -[pP]|--pkgdb)          export PKGDB_BIN="''${2?}"; shift; ;;
       -[nN]|--nix)            export NIX_BIN="''${2?}"; shift; ;;
       -[iI]|--input-data)     export INPUT_DATA="''${2?}"; shift; ;;
@@ -246,6 +259,7 @@ writeShellScriptBin PROJECT_NAME ''
     echo "''${0##*/}: Running test suite with:";
     echo "  FLOX_BIN:                 $FLOX_BIN";
     echo "  WATCHDOG_BIN:             $WATCHDOG_BIN";
+    echo "  BUILDENV_BIN:             $BUILDENV_BIN";
     echo "  PKGDB_BIN:                $PKGDB_BIN";
     echo "  NIX_BIN:                  $NIX_BIN";
     echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
@@ -258,7 +272,7 @@ writeShellScriptBin PROJECT_NAME ''
 
   # Run basts either via entr or just a single run
   if [[ -n "''${WATCH:-}" ]]; then
-    find "$TESTS_DIR" "$NIX_BIN" "$PKGDB_BIN" "$WATCHDOG_BIN" "$FLOX_BIN"    \
+    find "$TESTS_DIR" "$NIX_BIN" "$BUILDENV_BIN" "$PKGDB_BIN" "$WATCHDOG_BIN" "$FLOX_BIN"    \
       |${entr}/bin/entr -s "bats ''${_BATS_ARGS[*]} ''${_FLOX_TESTS[*]}";
   else
     ${batsWith}/bin/bats "''${_BATS_ARGS[@]}"    \
