@@ -8,7 +8,7 @@ use super::git::GitCommandProvider;
 use crate::flox::FloxhubToken;
 use crate::models::environment::managed_environment::ManagedEnvironment;
 use crate::models::environment::path_environment::PathEnvironment;
-use crate::models::lockfile::LockedManifestCatalog;
+use crate::models::lockfile::Lockfile;
 
 pub enum PublishEnvironment {
     Path(PathEnvironment),
@@ -33,7 +33,7 @@ pub trait Publish {
 pub struct CheckedEnvironmentMetadata {
     pub git_metadata: GitCommandProvider,
     pub environment_root_relative: PathBuf, // RelativePath
-    pub lockfile: LockedManifestCatalog,
+    pub lockfile: Lockfile,
 
     // This field isn't "pub", so no one outside this module can construct this struct. That helps
     // ensure that we can only make this struct as a result of doing the "right thing."
