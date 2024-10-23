@@ -13,18 +13,6 @@ fi
 _start_env="$_FLOX_ACTIVATION_STATE_DIR/bare.env"
 export | $_coreutils/bin/sort > "$_start_env"
 
-# Set environment variables which represent the cumulative layering
-# of flox environments. For the most part this involves prepending
-# to the existing variables of the same name.
-# TODO: reconcile with CLI which should be setting these. Setting
-#       "*_activate" variables to indicate the ones we've seen and
-#       processed on the activate script side, and ultimately also
-#       for testing/comparison against the CLI-maintained equivalents.
-FLOX_ENV_DIRS_activate="$FLOX_ENV${FLOX_ENV_DIRS_activate:+:$FLOX_ENV_DIRS_activate}"
-FLOX_ENV_LIB_DIRS_activate="$FLOX_ENV/lib${FLOX_ENV_LIB_DIRS_activate:+:$FLOX_ENV_LIB_DIRS_activate}"
-FLOX_PROMPT_ENVIRONMENTS_activate="$FLOX_ENV_DESCRIPTION${FLOX_PROMPT_ENVIRONMENTS_activate:+ $FLOX_PROMPT_ENVIRONMENTS_activate}"
-export FLOX_ENV_DIRS_activate FLOX_ENV_LIB_DIRS_activate FLOX_PROMPT_ENVIRONMENTS_activate
-
 # Process the flox environment customizations, which includes (amongst
 # other things) prepending this environment's bin directory to the PATH.
 if [ -d "$FLOX_ENV/etc/profile.d" ]; then
