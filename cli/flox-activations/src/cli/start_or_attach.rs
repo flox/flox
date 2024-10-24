@@ -7,6 +7,7 @@ use anyhow::Context;
 use clap::Args;
 use fslock::LockFile;
 use indoc::indoc;
+use log::debug;
 use time::{Duration, OffsetDateTime};
 
 use crate::activations::{self, Activations};
@@ -70,6 +71,7 @@ impl StartOrAttachArgs {
         let activations_json_path =
             activations::activations_json_path(runtime_dir, &self.flox_env)?;
 
+        debug!("Reading activations from {:?}", activations_json_path);
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
         let activations = activations.unwrap_or_default();
 
