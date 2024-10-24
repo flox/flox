@@ -20,7 +20,7 @@ fn main() -> Result<(), Error> {
             let dirs = BaseDirectories::with_prefix("flox")?;
             match dirs.get_runtime_directory() {
                 Ok(runtime_dir) => runtime_dir.to_path_buf(),
-                Err(_) => dirs.get_cache_home(),
+                Err(_) => dirs.get_cache_home().join("run"),
             }
         },
     };
