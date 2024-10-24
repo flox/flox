@@ -1124,7 +1124,6 @@ dependencies = [
  "temp-env",
  "tempfile",
  "time",
- "tracing",
  "uuid",
  "xdg",
 ]

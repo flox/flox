@@ -14,7 +14,6 @@ nix.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
-tracing.workspace = true
 uuid.workspace = true
 xdg.workspace = true
 indoc.workspace = true

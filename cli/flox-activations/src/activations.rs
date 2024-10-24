@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use flox_core::{path_hash, traceable_path, Version};
+use flox_core::{path_hash, Version};
 use fslock::LockFile;
 use nix::errno::Errno;
 use nix::sys::signal::kill;
@@ -9,7 +9,6 @@ use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::{Duration, OffsetDateTime};
-use tracing::debug;
 
 type Error = anyhow::Error;
 
@@ -276,10 +275,6 @@ pub fn read_activations_json(
     let lock_file = acquire_activations_json_lock(path).context("failed to acquire lockfile")?;
 
     if !path.exists() {
-        debug!(
-            path = traceable_path(&path),
-            "environment registry not found"
-        );
         return Ok((None, lock_file));
     }
 
