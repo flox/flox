@@ -112,9 +112,10 @@ if [ -n "${FLOX_ENV:-}" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
 fi
 export FLOX_ENV="$_FLOX_ENV"
 
-# Set a default for _FLOX_ACTIVATE_STORE_PATH for container invocations
+# Set a default for _FLOX_ACTIVATE_STORE_PATH for container and build
+# invocations
 if [ -z "${_FLOX_ACTIVATE_STORE_PATH:-}" ]; then
-  _FLOX_ACTIVATE_STORE_PATH="$("$_coreutils/bin/readlink" "$FLOX_ENV")"
+  _FLOX_ACTIVATE_STORE_PATH="$("$_coreutils/bin/readlink" -f "$FLOX_ENV")"
 fi
 
 
