@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
+
+set -euo pipefail
+
 export _activate_d="@out@/activate.d"
 export _bash="@bash@"
 export _coreutils="@coreutils@"
@@ -104,10 +107,17 @@ fi
 #       container invocations, and it would have the incorrect value for
 #       nested flox activations.
 _FLOX_ENV="$($_coreutils/bin/dirname -- "${BASH_SOURCE[0]}")"
-if [ -n "$FLOX_ENV" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
+if [ -n "${FLOX_ENV:-}" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
   echo "WARN: detected change in FLOX_ENV: $FLOX_ENV -> $_FLOX_ENV" >&2
 fi
 export FLOX_ENV="$_FLOX_ENV"
+
+# Set a default for _FLOX_ACTIVATE_STORE_PATH for container and build
+# invocations
+if [ -z "${_FLOX_ACTIVATE_STORE_PATH:-}" ]; then
+  _FLOX_ACTIVATE_STORE_PATH="$("$_coreutils/bin/readlink" -f "$FLOX_ENV")"
+fi
+
 
 # The rust CLI contains sophisticated logic to set $FLOX_SHELL based on the
 # process listening on STDOUT, but that won't happen when activating from
@@ -128,35 +138,31 @@ case "$_flox_shell" in
     ;;
 esac
 
-# Set all other variables derived from FLOX_ENV. We previously did this
-# from within the rust CLI but we've moved it to this top-level activation
-# script so that it can be invoked without using the flox CLI, e.g. as
-# required when invoking the environment from a container entrypoint.
+# The CLI is responsible for erroring if the environment is already active.
+# We can start-or-attach no matter what
 
-# Identify if this environment has been activated before. If it has,
-# then it will appear as an element in the colon-separated FLOX_ENV_DIRS
-# variable, and if it hasn't then we'll prepend it to the list and set
-# all the other related env variables.
-declare -a flox_env_dirs
-IFS=: read -ra flox_env_dirs <<< "${FLOX_ENV_DIRS_activate}"
-declare -i flox_env_found=0
-for d in "${flox_env_dirs[@]}"; do
-  if [ "$d" = "$FLOX_ENV" ]; then
-    flox_env_found=1
-    break
-  fi
-done
+# TODO: we could restore _start_env from the prior activation when performing an ephemeral activation
 
-if [ $flox_env_found -eq 0 ] || [ "$_FLOX_ACTIVATE_FORCE_REACTIVATE" == true ]; then
-  # shellcheck source-path=SCRIPTDIR/activate.d
-  source "${_activate_d}/start.bash"
+# sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
+# Don't eval on one line so that we exit if flox-activations fails
+if [ -n "${FLOX_RUNTIME_DIR:-}" ]; then
+  to_eval="$($_flox_activations --runtime-dir "$FLOX_RUNTIME_DIR" start-or-attach --pid "$$" --flox-env "$_FLOX_ENV" --store-path "$_FLOX_ACTIVATE_STORE_PATH")"
 else
+  to_eval="$($_flox_activations start-or-attach --pid "$$" --flox-env "$_FLOX_ENV" --store-path "$_FLOX_ACTIVATE_STORE_PATH")"
+fi
+eval "$to_eval"
+export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
+
+if [ "$_FLOX_ATTACH" == true ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/attach.bash"
+else
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/start.bash"
 fi
 
 # Start services before the shell or command is invoked
-if [ "$FLOX_ACTIVATE_START_SERVICES" == "true" ]; then
+if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/start-services.bash"
 fi
@@ -165,7 +171,7 @@ fi
 if [ $# -gt 0 ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/attach-command.bash"
-elif [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
+elif [ -t 1 ] || [ -n "${_FLOX_FORCE_INTERACTIVE:-}" ]; then
   # shellcheck source-path=SCRIPTDIR/activate.d
   source "${_activate_d}/attach-interactive.bash"
 else

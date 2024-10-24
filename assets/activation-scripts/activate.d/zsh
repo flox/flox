@@ -11,12 +11,6 @@ if [ "$_flox_activate_tracelevel" -ge 2 ]; then
   set -x
 fi
 
-# Assert that the expected _{add,del}_env variables are present.
-[ -n "$_add_env" -a -n "$_del_env" ] || {
-  echo 'ERROR (zsh): $_add_env and $_del_env not found in environment' >&2;
-  exit 1;
-}
-
 # This is the final script to be called in the zsh startup sequence so start
 # by restoring the original value of ZDOTDIR if it was set previously.
 if [ -n "${FLOX_ORIG_ZDOTDIR:-}" ]
@@ -65,8 +59,8 @@ fi
 unset fpath_prepend
 
 # Restore environment variables set in the previous bash initialization.
-eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' $_del_env)"
-eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' $_add_env)"
+eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/del.env")"
+eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_DIR/add.env")"
 
 # Set the prompt if we're in an interactive shell.
 if [[ -o interactive ]]; then
