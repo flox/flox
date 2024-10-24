@@ -104,7 +104,11 @@ pkgs.runCommandNoCC name
             if buildCache == null then
               ''
                      # When not preserving a cache we just run the build normally.
-                     FLOX_SRC_DIR=$(pwd) ${flox-env-package}/activate --turbo -- \
+
+                     # flox-activations needs runtime dir for activation state dir
+                     # TMP will be set to something like
+                     # /private/tmp/nix-build-file-0.0.0.drv-0
+                     FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" ${flox-env-package}/activate --turbo -- \
                 bash -e ${buildScript-contents}
               ''
             else
@@ -112,7 +116,11 @@ pkgs.runCommandNoCC name
                      # If the build fails we still want to preserve the build cache, so we
                      # remove $out on failure and allow the Nix build to proceed to write
                      # the result symlink.
-                     FLOX_SRC_DIR=$(pwd) ${flox-env-package}/activate --turbo -- \
+
+                     # flox-activations needs runtime dir for activation state dir
+                     # TMP will be set to something like
+                     # /private/tmp/nix-build-file-0.0.0.drv-0
+                     FLOX_SRC_DIR=$(pwd) FLOX_RUNTIME_DIR="$TMP" ${flox-env-package}/activate --turbo -- \
                 bash -e ${buildScript-contents} || \
                        ( rm -rf $out && echo "flox build failed (caching build dir)" | tee $out 1>&2 )
               ''
