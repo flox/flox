@@ -44,6 +44,9 @@ let
 
       FLOX_ZDOTDIR = flox-activation-scripts + "/activate.d/zdotdir";
 
+      # Path to the flox interpreter package.
+      FLOX_INTERPRETER = flox-activation-scripts;
+
       # [sic] nix handles `BASH_` variables specially,
       # so we need to use a different name.
       INTERACTIVE_BASH_BIN = "${bashInteractive}/bin/bash";
