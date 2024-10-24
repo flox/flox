@@ -1,5 +1,6 @@
 use clap::Parser;
 use cli::Cli;
+use log::debug;
 use xdg::BaseDirectories;
 
 mod activations;
@@ -8,8 +9,10 @@ mod cli;
 pub type Error = anyhow::Error;
 
 fn main() -> Result<(), Error> {
+    env_logger::init();
+
     let args = Cli::parse();
-    eprintln!("{args:?}");
+    debug!("{args:?}");
 
     let runtime_dir = match args.runtime_dir {
         Some(runtime_dir) => runtime_dir,

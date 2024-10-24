@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use flox_core::{path_hash, Version};
 use fslock::LockFile;
+use log::debug;
 use nix::errno::Errno;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
@@ -275,6 +276,10 @@ pub fn read_activations_json(
     let lock_file = acquire_activations_json_lock(path).context("failed to acquire lockfile")?;
 
     if !path.exists() {
+        debug!(
+            "environment registry not found at {}",
+            path.to_string_lossy()
+        );
         return Ok((None, lock_file));
     }
 
