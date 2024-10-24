@@ -79,4 +79,8 @@ $_coreutils/bin/comm -13 "$_start_env" "$_end_env" \
 $_coreutils/bin/comm -23 "$_start_env" "$_end_env" \
   | $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
 
-"$_flox_activations" set-ready --flox-env "$FLOX_ENV" --id "$_FLOX_ACTIVATION_ID"
+if [ -n "${FLOX_RUNTIME_DIR:-}" ]; then
+  "$_flox_activations" --runtime-dir "$FLOX_RUNTIME_DIR" set-ready --flox-env "$FLOX_ENV" --id "$_FLOX_ACTIVATION_ID"
+else
+  "$_flox_activations" set-ready --flox-env "$FLOX_ENV" --id "$_FLOX_ACTIVATION_ID"
+fi
