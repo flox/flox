@@ -2375,8 +2375,7 @@ EOF
   sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
 
   # This test doesn't just confirm that the right things are sourced,
-  # but that they are sourced in the correct order and exactly once,
-  # for all supported shells.
+  # but that they are sourced in the correct order and exactly once.
 
   echo "Testing bash"
   run bash -l -c 'eval "$("$FLOX_BIN" activate)"'
@@ -2389,9 +2388,17 @@ EOF
   assert_equal "${lines[4]}" "Setting PATH from .bashrc"
   assert_equal "${lines[5]}" "sourcing profile.common"
   assert_equal "${lines[6]}" "sourcing profile.bash"
-  echo # leave a line between test outputs
+}
 
-  echo "Testing fish"
+# bats test_tags=activate,activate:validate_hook_and_dotfile_sourcing
+@test "fish: confirm hooks and dotfiles sourced correctly" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
+  # This test doesn't just confirm that the right things are sourced,
+  # but that they are sourced in the correct order and exactly once.
+
   run fish -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
   assert_equal "${#lines[@]}" 5
@@ -2400,9 +2407,17 @@ EOF
   assert_equal "${lines[2]}" "sourcing hook.on-activate"
   assert_equal "${lines[3]}" "sourcing profile.common"
   assert_equal "${lines[4]}" "sourcing profile.fish"
-  echo # leave a line between test outputs
+}
 
-  echo "Testing tcsh"
+# bats test_tags=activate,activate:validate_hook_and_dotfile_sourcing
+@test "tcsh: confirm hooks and dotfiles sourced correctly" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
+  # This test doesn't just confirm that the right things are sourced,
+  # but that they are sourced in the correct order and exactly once.
+
   run tcsh -c 'eval "`$FLOX_BIN activate`"'
   assert_success
   assert_equal "${#lines[@]}" 5
@@ -2411,9 +2426,17 @@ EOF
   assert_equal "${lines[2]}" "sourcing hook.on-activate"
   assert_equal "${lines[3]}" "sourcing profile.common"
   assert_equal "${lines[4]}" "sourcing profile.tcsh"
-  echo # leave a line between test outputs
+}
 
-  echo "Testing zsh"
+# bats test_tags=activate,activate:validate_hook_and_dotfile_sourcing
+@test "zsh: confirm hooks and dotfiles sourced correctly" {
+  project_setup
+  sed -i -e "s/^\[profile\]/${HELLO_PROFILE_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+  sed -i -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml"
+
+  # This test doesn't just confirm that the right things are sourced,
+  # but that they are sourced in the correct order and exactly once.
+
   run zsh -i -l -c 'eval "$("$FLOX_BIN" activate)"'
   assert_success
   assert_equal "${#lines[@]}" 13
@@ -2430,8 +2453,6 @@ EOF
   assert_equal "${lines[10]}" "sourcing profile.zsh"
   assert_equal "${lines[11]}" "Sourcing .zlogout"
   assert_equal "${lines[12]}" "Setting PATH from .zlogout"
-  echo # leave a line between test outputs
-
 }
 
 # ---------------------------------------------------------------------------- #
