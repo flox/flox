@@ -58,7 +58,6 @@ enum ProcStatus {
 
 #[derive(Debug)]
 pub struct PidWatcher {
-    pub original_pid: ActivationPid,
     pub pids_watching: HashSet<ActivationPid>,
     pub reg_path: PathBuf,
     pub hash: String,
@@ -70,14 +69,12 @@ impl PidWatcher {
     /// Creates a new watcher that uses platform-specific mechanisms to wait
     /// for activation processes to terminate.
     pub fn new(
-        pid: ActivationPid,
         reg_path: impl AsRef<Path>,
         hash: impl AsRef<str>,
         should_terminate_flag: Arc<AtomicBool>,
         should_clean_up_flag: Arc<AtomicBool>,
     ) -> Self {
         Self {
-            original_pid: pid,
             pids_watching: HashSet::new(),
             reg_path: PathBuf::from(reg_path.as_ref()),
             hash: String::from(hash.as_ref()),
@@ -188,7 +185,6 @@ impl PidWatcher {
 
 impl Watcher for PidWatcher {
     fn wait_for_termination(&mut self) -> Result<WaitResult, Error> {
-        self.pids_watching.insert(self.original_pid);
         loop {
             self.update_watchlist()?;
             if self.should_clean_up()? {
@@ -326,8 +322,7 @@ mod test {
         let path_hash = "abc";
         let reg_path = path_for_registry_with_entry(&path_hash);
         register_activation(&reg_path, &path_hash, pid1).unwrap();
-        let mut watcher =
-            PidWatcher::new(pid1, &reg_path, &path_hash, terminate_flag, cleanup_flag);
+        let mut watcher = PidWatcher::new(&reg_path, &path_hash, terminate_flag, cleanup_flag);
         let barrier = Arc::new(std::sync::Barrier::new(2));
         let wait_result = std::thread::scope(move |s| {
             let b_clone = barrier.clone();
@@ -354,7 +349,6 @@ mod test {
         let reg_path = path_for_registry_with_entry(&path_hash);
         register_activation(&reg_path, &path_hash, pid).unwrap();
         let mut watcher = PidWatcher::new(
-            pid,
             &reg_path,
             &path_hash,
             terminate_flag.clone(),
@@ -386,7 +380,6 @@ mod test {
         let reg_path = path_for_registry_with_entry(&path_hash);
         register_activation(&reg_path, &path_hash, pid).unwrap();
         let mut watcher = PidWatcher::new(
-            pid,
             &reg_path,
             &path_hash,
             terminate_flag.clone(),

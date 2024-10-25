@@ -447,12 +447,8 @@ impl Activate {
             cmd.arg("--disable-metrics");
         }
 
-        // This process may terminate before the watchdog installs its signal handler,
-        // so we pass it the PID of this process unconditionally (note that on Linux passing this
-        // PID doesn't change which process the watchdog waits on to terminate) so that the watchdog
-        // can check that it still exists before installing its signal handler. There's still a
-        // TOCTOU race condition between checking that this process is still running and installing
-        // the signal handler, but doing the PID checking should mitigate it to a degree.
+        // This process may terminate before the watchdog registers the activation in the environment
+        // registry so we pass it the PID of this process unconditionally.
         cmd.arg("--pid");
         cmd.arg(getpid().as_raw().to_string());
 

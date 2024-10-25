@@ -42,7 +42,8 @@ be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
 #[command(version = Lazy::get(&FLOX_VERSION).map(|v| v.as_str()).unwrap_or("0.0.0"))]
 #[command(about = SHORT_HELP, long_about = LONG_HELP)]
 pub struct Cli {
-    /// The PID of the process to monitor.
+    /// The PID of the initial activation to store in the environment registry
+    // TODO: This can be removed in: https://github.com/flox/flox/issues/2206
     #[arg(short, long, value_name = "PID")]
     pub pid: i32,
 
@@ -134,7 +135,6 @@ fn run(args: Cli) -> Result<(), Error> {
     }
     drop(lock);
     let mut watcher = process::PidWatcher::new(
-        args.pid.into(),
         &args.registry_path,
         &args.dot_flox_hash,
         should_terminate,
