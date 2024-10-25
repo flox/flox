@@ -1162,7 +1162,8 @@ pub mod test_helpers {
 mod tests {
     use std::os::unix::fs::PermissionsExt;
 
-    use catalog::{Client, GENERATED_DATA, MANUALLY_GENERATED};
+    use catalog::test_helpers::reset_mocks_from_file;
+    use catalog::{GENERATED_DATA, MANUALLY_GENERATED};
     use catalog_api_v1::types::{ResolvedPackageDescriptor, SystemEnum};
     use chrono::{DateTime, Utc};
     use flox_core::Version;
@@ -1207,12 +1208,7 @@ mod tests {
         hello.pkg-path = "hello"
         "#;
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            client.clear_and_load_responses_from_file("resolve/hello.json");
-        } else {
-            panic!("expected Mock client")
-        };
-
+        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
         assert_eq!(env_view.manifest_contents().unwrap(), new_env_str);
@@ -1283,12 +1279,7 @@ mod tests {
         hello.pkg-path = "hello"
         "#;
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            client.clear_and_load_responses_from_file("resolve/hello.json");
-        } else {
-            panic!("expected Mock client")
-        };
-
+        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         let result = env_view.edit(&flox, new_env_str.to_string()).unwrap();
 
         assert!(matches!(result, EditResult::Success { store_path: _ }));
@@ -1446,12 +1437,7 @@ mod tests {
 
         let mut env_view = CoreEnvironment::new(&env_path);
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            client.clear_and_load_responses_from_file("resolve/hello.json");
-        } else {
-            panic!("expected Mock client")
-        };
-
+        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         env_view.lock(&flox).expect("locking should succeed");
         let store_path = env_view.build(&flox).expect("build should succeed");
         CoreEnvironment::link(env_path.path().with_extension("out-link"), store_path)
