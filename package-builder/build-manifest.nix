@@ -22,7 +22,7 @@ let
   buildScript-contents = /. + buildScript;
   buildCache-tar-contents = if (buildCache == null) then null else (/. + buildCache);
   dollar_out_error_and_exit = ''
-    echo "ERROR: Build command did not copy outputs to '\$out'." 1>&2
+    echo "❌ ERROR: Build command did not copy outputs to '\$out'." 1>&2
     echo "- copy a single file with 'cp bin \$out'" 1>&2
     echo "- copy multiple files with 'mkdir -p \$out && cp bin/* \$out/'" 1>&2
     echo "- copy files from an Autotools project with 'make install PREFIX=\$out'" 1>&2
