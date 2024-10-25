@@ -38,7 +38,7 @@ impl StartOrAttachArgs {
             };
 
             if let Some(restartable_failure) = err.downcast_ref::<RestartableFailure>() {
-                eprintln!("{}", restartable_failure);
+                eprintln!("{restartable_failure}");
                 retries -= 1;
                 if retries == 0 {
                     return Err(err);
@@ -282,7 +282,7 @@ mod tests {
                 .unwrap()
                 .display()
         )));
-        assert!(output.contains(&format!("_FLOX_ACTIVATION_ID={}", id)));
+        assert!(output.contains(&format!("_FLOX_ACTIVATION_ID={id}")));
     }
 
     #[test]
@@ -321,7 +321,7 @@ mod tests {
                 .unwrap()
                 .display()
         )));
-        assert!(output.contains(&format!("_FLOX_ACTIVATION_ID={}", id)));
+        assert!(output.contains(&format!("_FLOX_ACTIVATION_ID={id}")));
     }
 
     #[test]

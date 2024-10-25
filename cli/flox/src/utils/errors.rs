@@ -698,7 +698,7 @@ pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
         EnvironmentSelectError::Anyhow(err) => err
             .chain()
             .skip(1)
-            .fold(err.to_string(), |acc, cause| format!("{}: {}", acc, cause)),
+            .fold(err.to_string(), |acc, cause| format!("{acc}: {cause}")),
     }
 }
 
@@ -815,7 +815,7 @@ fn format_pkgdb_error(
 pub fn display_chain(mut err: &dyn std::error::Error) -> String {
     let mut fmt = err.to_string();
     while let Some(source) = err.source() {
-        fmt = format!("{}: {}", fmt, source);
+        fmt = format!("{fmt}: {source}");
         err = source;
     }
 

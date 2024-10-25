@@ -129,7 +129,7 @@ impl PidWatcher {
     /// is interpreted as an indication that the process is no longer running.
     #[allow(dead_code)]
     fn read_pid_status_linux(pid: ActivationPid) -> ProcStatus {
-        let path = format!("/proc/{}/stat", pid);
+        let path = format!("/proc/{pid}/stat");
         let pid_raw: i32 = pid.into();
         let stat = match read_to_string(path) {
             Ok(stat) => stat,

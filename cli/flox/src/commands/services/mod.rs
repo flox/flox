@@ -444,9 +444,7 @@ mod tests {
         assert_eq!(
             err.to_string(),
             expected.to_string(),
-            "{:?} != {:?}",
-            err,
-            expected
+            "{err:?} != {expected:?}"
         );
     }
 
@@ -477,9 +475,7 @@ mod tests {
         assert_eq!(
             err.to_string(),
             expected.to_string(),
-            "{:?} != {:?}",
-            err,
-            expected
+            "{err:?} != {expected:?}"
         );
     }
 }

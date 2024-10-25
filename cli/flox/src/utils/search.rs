@@ -174,7 +174,7 @@ impl Display for DisplaySearchResults {
             let name = format_name(&d.to_string());
 
             // The two spaces here provide visual breathing room.
-            write!(f, "{name:<column_width$}  {desc}", name = name)?;
+            write!(f, "{name:<column_width$}  {desc}")?;
             // Only print a newline if there are more items to print
             if items.peek().is_some() {
                 writeln!(f)?;

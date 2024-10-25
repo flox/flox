@@ -66,7 +66,7 @@ impl List {
 
         let manifest_contents = env.manifest_contents(&flox)?;
         if self.list_mode == ListMode::Config {
-            println!("{}", manifest_contents);
+            println!("{manifest_contents}");
             return Ok(());
         }
 
@@ -213,7 +213,7 @@ impl List {
                     });
 
                     // Add parenthesis and a space to pname if it's not None
-                    let formatted_pname = pname.as_ref().map(|pname| format!(" ({})", pname));
+                    let formatted_pname = pname.as_ref().map(|pname| format!(" ({pname})"));
 
                     formatdoc! {"
                     {install_id}:{formatted_pname}

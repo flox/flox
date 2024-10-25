@@ -1481,8 +1481,7 @@ fn activated_environments() -> ActiveEnvironments {
         Ok(active_environments) => active_environments,
         Err(e) => {
             message::error(format!(
-                "Could not parse _FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
-                e
+                "Could not parse _FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {e}"
             ));
             ActiveEnvironments::default()
         },
@@ -1570,7 +1569,7 @@ pub(super) async fn ensure_environment_trust(
     }
 
     loop {
-        let message = format!("Do you trust {env_ref}?", env_ref = env_ref);
+        let message = format!("Do you trust {env_ref}?");
         let choice = Dialog {
             message: &message,
             help_message: None,
@@ -1594,7 +1593,7 @@ pub(super) async fn ensure_environment_trust(
                 update_config(
                     &flox.config_dir,
                     &flox.temp_dir,
-                    format!("trusted_environments.'{}'", env_ref),
+                    format!("trusted_environments.'{env_ref}'"),
                     Some(EnvironmentTrust::Trust),
                 )
                 .context("Could not write token to config")?;
@@ -1606,7 +1605,7 @@ pub(super) async fn ensure_environment_trust(
                 update_config(
                     &flox.config_dir,
                     &flox.temp_dir,
-                    format!("trusted_environments.'{}'", env_ref),
+                    format!("trusted_environments.'{env_ref}'"),
                     Some(EnvironmentTrust::Deny),
                 )
                 .context("Could not write token to config")?;

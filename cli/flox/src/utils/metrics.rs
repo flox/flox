@@ -59,7 +59,7 @@ impl<'a> tracing::field::Visit for MetricVisitor<'a> {
     }
 
     fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-        self.record_str(field, &format!("{:?}", value))
+        self.record_str(field, &format!("{value:?}"))
     }
 }
 

@@ -46,8 +46,7 @@ impl Browser {
             unsupported => {
                 debug!("Unsupported OS '{unsupported}' cannot open a browser");
                 return Err(format!(
-                    "Unsupported OS '{unsupported}'",
-                    unsupported = unsupported
+                    "Unsupported OS '{unsupported}'"
                 ));
             },
         };
