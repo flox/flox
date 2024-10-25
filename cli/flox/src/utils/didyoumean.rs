@@ -111,10 +111,7 @@ impl<'a> DidYouMean<'a, InstallSuggestion> {
 impl Display for DidYouMean<'_, InstallSuggestion> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(curated) = self.curated {
-            writeln!(
-                f,
-                "Try 'flox install {curated}' instead."
-            )?;
+            writeln!(f, "Try 'flox install {curated}' instead.")?;
         }
 
         if self.search_results.results.is_empty() {
