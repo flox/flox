@@ -272,7 +272,8 @@ mod tests {
     };
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::Environment;
-    use crate::providers::catalog::{Client, GENERATED_DATA};
+    use crate::providers::catalog::test_helpers::reset_mocks_from_file;
+    use crate::providers::catalog::GENERATED_DATA;
 
     fn result_dir(parent: &Path, package: &str) -> PathBuf {
         parent.join(format!("result-{package}"))
@@ -704,12 +705,7 @@ mod tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            client.clear_and_load_responses_from_file("resolve/hello.json");
-        } else {
-            panic!("expected Mock client")
-        };
-
+        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         assert_build_status(&flox, &mut env, &package_name, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
     }
@@ -740,12 +736,7 @@ mod tests {
         let mut env = new_path_environment(&flox, &manifest);
         let env_path = env.parent_path().unwrap();
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            client.clear_and_load_responses_from_file("resolve/hello.json");
-        } else {
-            panic!("expected Mock client")
-        };
-
+        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
         assert_build_status(&flox, &mut env, &package_name, true);
 
         let result_path = result_dir(&env_path, &package_name)
@@ -930,12 +921,7 @@ mod tests {
         "#};
         fs::write(env_path.join("main.go"), arg0_code).unwrap();
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            client.clear_and_load_responses_from_file("resolve/go.json");
-        } else {
-            panic!("expected Mock client")
-        };
-
+        reset_mocks_from_file(&mut flox.catalog_client, "resolve/go.json");
         assert_build_status(&flox, &mut env, &package_name, true);
         let result_path = result_dir(&env_path, &package_name)
             .join("bin")
@@ -1042,12 +1028,7 @@ mod tests {
         "#};
         fs::write(env_path.join("main.go"), exe_code).unwrap();
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            client.clear_and_load_responses_from_file("resolve/go.json");
-        } else {
-            panic!("expected Mock client")
-        };
-
+        reset_mocks_from_file(&mut flox.catalog_client, "resolve/go.json");
         assert_build_status(&flox, &mut env, &package_name, true);
         let result_path = result_dir(&env_path, &package_name)
             .join("bin")
@@ -1119,12 +1100,7 @@ mod tests {
         "#};
         fs::write(env_path.join(source_name), source_code).unwrap();
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            client.clear_and_load_responses_from_file("envs/go_gcc.json");
-        } else {
-            panic!("expected Mock client")
-        };
-
+        reset_mocks_from_file(&mut flox.catalog_client, "envs/go_gcc.json");
         assert_build_status(&flox, &mut env, &package_name, true);
 
         let result_path = result_dir(&env_path, &package_name)
