@@ -237,20 +237,6 @@ impl MockClient {
         })
     }
 
-    /// Clear mock responses and then load responses from a file into the list
-    /// of mock responses
-    pub fn clear_and_load_responses_from_file(&mut self, relative_path: &str) {
-        let data_path = (*GENERATED_DATA).join(relative_path);
-        eprintln!("data path: {}", data_path.display());
-        let responses = read_mock_responses(data_path).expect("couldn't read mock responses");
-        let mut locked_mock_responses = self
-            .mock_responses
-            .lock()
-            .expect("couldn't acquire mock lock");
-        locked_mock_responses.clear();
-        locked_mock_responses.extend(responses);
-    }
-
     /// Push a new response into the list of mock responses
     pub fn push_resolve_response(&mut self, resp: ResolvedGroups) {
         self.mock_responses
@@ -1088,12 +1074,30 @@ impl SearchTerm {
     }
 }
 
+// These functions should really be a #[cfg(test)] method on their
+// respective types, but you can't import test features across crates
 pub mod test_helpers {
     use super::*;
     use crate::data::System;
 
-    // This function should really be a #[cfg(test)] method on ResolvedPackageGroup,
-    // but you can't import test features across crates
+    /// Clear mock responses and then load responses from a file into the list
+    /// of mock responses
+    pub fn reset_mocks_from_file(client: &mut Client, relative_path: &str) {
+        let Client::Mock(ref mut client) = client else {
+            panic!("mocks can only be used with a MockClient");
+        };
+
+        let data_path = (*GENERATED_DATA).join(relative_path);
+        eprintln!("data path: {}", data_path.display());
+        let responses = read_mock_responses(data_path).expect("couldn't read mock responses");
+        let mut locked_mock_responses = client
+            .mock_responses
+            .lock()
+            .expect("couldn't acquire mock lock");
+        locked_mock_responses.clear();
+        locked_mock_responses.extend(responses);
+    }
+
     pub fn resolved_pkg_group_with_dummy_package(
         group_name: &str,
         system: &System,

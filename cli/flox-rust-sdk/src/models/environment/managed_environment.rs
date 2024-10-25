@@ -1658,7 +1658,8 @@ mod test {
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
     use crate::models::lockfile::Lockfile;
     use crate::models::manifest::{Manifest, ManifestPackageDescriptorCatalog};
-    use crate::providers::catalog::{Client, MockClient, GENERATED_DATA};
+    use crate::providers::catalog::test_helpers::reset_mocks_from_file;
+    use crate::providers::catalog::{MockClient, GENERATED_DATA};
     use crate::providers::git::tests::commit_file;
     use crate::providers::git::GitCommandProvider;
 
@@ -2410,11 +2411,7 @@ mod test {
             .local_env_or_copy_current_generation(&flox)
             .unwrap();
 
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            client.clear_and_load_responses_from_file("resolve/hello.json");
-        } else {
-            panic!("Expected a MockClient");
-        }
+        reset_mocks_from_file(&mut flox.catalog_client, "resolve/hello.json");
 
         let mut new_manifest = Manifest::default();
         new_manifest.install.insert(
