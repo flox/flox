@@ -221,7 +221,7 @@ mod tests {
         let keep_days = 2;
         let dir = tempdir().unwrap();
         let files: Vec<PathBuf> = (1..=keep_days * 2)
-            .map(|i| create_log_file(dir.path(), &format!("services.{}.log", i), None))
+            .map(|i| create_log_file(dir.path(), &format!("services.{i}.log"), None))
             .collect();
 
         gc_logs_services(dir.path(), keep_days).unwrap();

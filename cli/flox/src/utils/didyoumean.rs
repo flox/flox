@@ -113,8 +113,7 @@ impl Display for DidYouMean<'_, InstallSuggestion> {
         if let Some(curated) = self.curated {
             writeln!(
                 f,
-                "Try 'flox install {curated}' instead.",
-                curated = curated
+                "Try 'flox install {curated}' instead."
             )?;
         }
 

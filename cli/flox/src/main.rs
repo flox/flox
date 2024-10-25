@@ -173,7 +173,7 @@ fn main() -> ExitCode {
             let err_str = e
                 .chain()
                 .skip(1)
-                .fold(e.to_string(), |acc, cause| format!("{}: {}", acc, cause));
+                .fold(e.to_string(), |acc, cause| format!("{acc}: {cause}"));
 
             message::error(err_str);
 

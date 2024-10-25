@@ -252,8 +252,7 @@ impl Pull {
                     },
                     Err(_) => {
                         fs::remove_dir_all(&dot_flox_path).context(format!(
-                            "Failed to remove existing .flox directory at {:?}",
-                            dot_flox_path
+                            "Failed to remove existing .flox directory at {dot_flox_path:?}"
                         ))?;
                     },
                 }

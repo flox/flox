@@ -149,6 +149,6 @@ impl Search {
 
 fn render_search_results_json(search_results: SearchResults) -> Result<()> {
     let json = serde_json::to_string(&search_results.results)?;
-    println!("{}", json);
+    println!("{json}");
     Ok(())
 }

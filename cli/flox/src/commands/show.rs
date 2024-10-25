@@ -158,7 +158,7 @@ mod test {
 
         assert_eq!(
             err.to_string(),
-            format!("no packages matched this pkg-path: '{}'", search_term)
+            format!("no packages matched this pkg-path: '{search_term}'")
         );
     }
 }

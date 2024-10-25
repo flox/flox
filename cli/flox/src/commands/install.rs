@@ -263,8 +263,7 @@ impl Install {
 
                     *systems = Some(valid_systems.clone());
                     message::warning(format!(
-                        "Installing '{install_id}' for the following systems: {:?}",
-                        valid_systems
+                        "Installing '{install_id}' for the following systems: {valid_systems:?}"
                     ));
                 }
 
@@ -420,8 +419,7 @@ mod tests {
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
             vec![format!(
-                "The package '{}' has an unfree license, please verify the licensing terms of use",
-                foo_iid
+                "The package '{foo_iid}' has an unfree license, please verify the licensing terms of use"
             )]
         );
     }
@@ -449,8 +447,7 @@ mod tests {
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
             vec![format!(
-                "The package '{}' has an unfree license, please verify the licensing terms of use",
-                foo_iid
+                "The package '{foo_iid}' has an unfree license, please verify the licensing terms of use"
             )]
         );
     }
@@ -470,8 +467,7 @@ mod tests {
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
             vec![format!(
-                "The package '{}' is marked as broken, it may not behave as expected during runtime.",
-                foo_iid
+                "The package '{foo_iid}' is marked as broken, it may not behave as expected during runtime."
             )]
         );
     }
@@ -499,8 +495,7 @@ mod tests {
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
             vec![format!(
-                "The package '{}' is marked as broken, it may not behave as expected during runtime.",
-                foo_iid
+                "The package '{foo_iid}' is marked as broken, it may not behave as expected during runtime."
             )]
         );
     }
