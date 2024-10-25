@@ -416,7 +416,7 @@ mod tests {
         // Weird string formatting because indoc strips leading whitespace
         assert!(output.stdout.contains(
             r#"
-       > ERROR: Build command did not copy outputs to '$out'.
+       > ❌ ERROR: Build command did not copy outputs to '$out'.
        > - copy a single file with 'cp bin $out'
        > - copy multiple files with 'mkdir -p $out && cp bin/* $out/'
        > - copy files from an Autotools project with 'make install PREFIX=$out'"#
@@ -442,7 +442,7 @@ mod tests {
         // Weird string formatting because indoc strips leading whitespace
         assert!(output.stdout.contains(
             r#"
-       > ERROR: Build command did not copy outputs to '$out'.
+       > ❌ ERROR: Build command did not copy outputs to '$out'.
        > - copy a single file with 'cp bin $out'
        > - copy multiple files with 'mkdir -p $out && cp bin/* $out/'
        > - copy files from an Autotools project with 'make install PREFIX=$out'"#
