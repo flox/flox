@@ -1011,6 +1011,32 @@ impl GitProvider for GitCommandProvider {
     fn path(&self) -> &Path {
         self.path.as_ref()
     }
+
+    fn rev_count(&self, rev: &str) -> Result<u64, Self::RevListError> {
+        let mut command = self.new_command();
+        command.arg("rev-list");
+        command.arg("--count");
+        command.arg(rev);
+
+        let out = GitCommandProvider::run_command(&mut command)?;
+        if let Some(output) = out.to_str() {
+            if let Ok(count) = output.trim().parse::<u64>() {
+                Ok(count)
+            } else {
+                Err(GitCommandError::BadExit(
+                    1,
+                    out.into_string().unwrap(),
+                    "Unable to parse rev-list output".to_string(),
+                ))
+            }
+        } else {
+            Err(GitCommandError::BadExit(
+                1,
+                out.into_string().unwrap(),
+                "Unable to parse rev-list output".to_string(),
+            ))
+        }
+    }
 }
 
 pub mod test_helpers {
@@ -1205,6 +1231,27 @@ pub mod tests {
         commit_file(&repo, "dummy");
 
         assert!(!repo.branch_contains_commit("XXX", "branch_1").unwrap());
+    }
+
+    #[test]
+    fn test_rev_count() {
+        let (_, tempdir_handle) = init_temp_repo(false);
+        let path = tempdir_handle.path().canonicalize().unwrap();
+        let repo = GitCommandProvider::discover(&path).unwrap();
+        let ct = repo.rev_count("HEAD");
+        assert!(ct.is_err());
+
+        commit_file(&repo, "dummy");
+        let hash_1 = repo.branch_hash("master").unwrap();
+        let ct = repo.rev_count("HEAD").unwrap();
+        assert_eq!(ct, 1);
+
+        commit_file(&repo, "dummy2");
+        let ct = repo.rev_count("HEAD").unwrap();
+        assert_eq!(ct, 2);
+
+        let ct = repo.rev_count(&hash_1).unwrap();
+        assert_eq!(ct, 1);
     }
 
     #[test]

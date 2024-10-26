@@ -1,0 +1,11 @@
+
+version = 1
+[install]
+hello.pkg-path = "hello"
+
+[build]
+mypkg.command = """
+    mkdir $out
+    echo -n "Happy Floxing!" > $out/mypkg
+"""
+
