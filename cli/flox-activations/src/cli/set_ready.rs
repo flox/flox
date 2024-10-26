@@ -2,8 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use clap::Args;
-
-use crate::activations;
+use flox_core::activations;
 
 type Error = anyhow::Error;
 

@@ -3,7 +3,6 @@ use cli::Cli;
 use log::debug;
 use xdg::BaseDirectories;
 
-mod activations;
 mod cli;
 
 pub type Error = anyhow::Error;

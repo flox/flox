@@ -1,3 +1,4 @@
+pub mod activations;
 pub mod canonical_path;
 mod version;
 

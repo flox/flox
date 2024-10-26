@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use clap::Args;
+use flox_core::activations::{self, Activations};
 use fslock::LockFile;
 use indoc::indoc;
 use log::debug;
 use time::{Duration, OffsetDateTime};
 
-use crate::activations::{self, Activations};
 use crate::Error;
 
 #[derive(Debug, Args)]
