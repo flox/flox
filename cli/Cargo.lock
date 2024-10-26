@@ -1139,7 +1139,6 @@ dependencies = [
  "fslock",
  "indoc",
  "log",
- "nix",
  "serde",
  "serde_json",
  "temp-env",
@@ -1153,15 +1152,19 @@ dependencies = [
 name = "flox-core"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "blake3",
  "derive_more",
  "fslock",
+ "log",
+ "nix",
  "proptest",
  "proptest-derive",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
+ "time",
  "tracing",
 ]
 

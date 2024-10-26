@@ -44,8 +44,9 @@ pub enum Command {
 mod test {
     use std::path::Path;
 
+    use flox_core::activations::{self, Activations};
+
     use super::*;
-    use crate::activations::{self, Activations};
 
     pub(crate) fn write_activations<T>(
         runtime_dir: impl AsRef<Path>,

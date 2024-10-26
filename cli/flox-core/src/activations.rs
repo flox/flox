@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use flox_core::{path_hash, Version};
 use fslock::LockFile;
 use log::debug;
 use nix::errno::Errno;
@@ -10,6 +9,8 @@ use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::{Duration, OffsetDateTime};
+
+use crate::{path_hash, Version};
 
 type Error = anyhow::Error;
 
@@ -139,6 +140,10 @@ impl Activation {
         self.ready
     }
 
+    pub fn attached_pids(&self) -> &Vec<AttachedPid> {
+        &self.attached_pids
+    }
+
     /// Set the activation as ready to be attached to.
     pub fn set_ready(&mut self) {
         self.ready = true;
@@ -181,16 +186,9 @@ impl Activation {
     }
 }
 
-#[cfg(test)]
-impl Activation {
-    pub(crate) fn attached_pids(&self) -> &[AttachedPid] {
-        &self.attached_pids
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub(crate) struct AttachedPid {
-    pub(crate) pid: u32,
+pub struct AttachedPid {
+    pub pid: u32,
     /// If Some, the time after which the activation can be cleaned up
     ///
     /// Even if the PID has exited, the activation should not be cleaned up
@@ -201,7 +199,7 @@ pub(crate) struct AttachedPid {
     /// time to evaluate the script.
     /// In that case, `flox activate` sets an expiration so that the shell has
     /// some time before the activation is cleaned up.
-    pub(crate) expiration: Option<OffsetDateTime>,
+    pub expiration: Option<OffsetDateTime>,
 }
 
 impl AttachedPid {
@@ -300,7 +298,7 @@ pub fn write_activations_json(
     path: impl AsRef<Path>,
     lock: LockFile,
 ) -> Result<(), Error> {
-    flox_core::serialize_atomically(&json!(activations), &path, lock)?;
+    crate::serialize_atomically(&json!(activations), &path, lock)?;
     Ok(())
 }
 

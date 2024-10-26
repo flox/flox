@@ -2,9 +2,10 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use clap::Args;
+use flox_core::activations;
 use time::Duration;
 
-use crate::{activations, Error};
+use crate::Error;
 
 #[derive(Debug, Args)]
 pub struct AttachArgs {
@@ -82,10 +83,10 @@ impl AttachArgs {
 mod test {
     use std::path::PathBuf;
 
+    use flox_core::activations::AttachedPid;
     use tempfile::TempDir;
 
     use super::{AttachArgs, AttachExclusiveArgs};
-    use crate::activations::AttachedPid;
     use crate::cli::test::{read_activations, write_activations};
 
     #[test]
