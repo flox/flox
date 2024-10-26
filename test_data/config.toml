@@ -482,3 +482,27 @@ post_cmd = '''
     cp .flox/env/manifest.toml "$env_dir/manifest.toml"
     cp .flox/env/manifest.lock "$env_dir/manifest.lock"
 '''
+
+[envs.publish-simple]
+skip_if_output_exists = "envs/publish-simple"
+pre_cmd = "flox init"
+cmd = '''
+echo '
+version = 1
+[install]
+hello.pkg-path = "hello"
+
+[build]
+mypkg.command = """
+    mkdir $out
+    echo -n "Happy Floxing!" > $out/mypkg
+"""
+' | flox edit -f -
+'''
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/publish-simple"
+    mkdir -p "$env_dir"
+    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+'''
