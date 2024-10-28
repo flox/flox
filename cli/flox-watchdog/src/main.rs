@@ -1,18 +1,17 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use anyhow::{bail, Context};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
-use flox_rust_sdk::flox::FLOX_VERSION;
-use flox_rust_sdk::models::env_registry::{
-    acquire_env_registry_lock,
-    read_environment_registry,
-    register_activation,
-    ActivationPid,
-    EnvRegistry,
+use flox_core::activations::{
+    activation_state_dir_path,
+    activations_json_path,
+    read_activations_json,
 };
+use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::providers::services::process_compose_down;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
 use logger::{init_logger, spawn_gc_logs, spawn_heartbeat_log};
@@ -42,18 +41,21 @@ be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
 #[command(version = Lazy::get(&FLOX_VERSION).map(|v| v.as_str()).unwrap_or("0.0.0"))]
 #[command(about = SHORT_HELP, long_about = LONG_HELP)]
 pub struct Cli {
-    /// The PID of the initial activation to store in the environment registry
-    // TODO: This can be removed in: https://github.com/flox/flox/issues/2206
-    #[arg(short, long, value_name = "PID")]
-    pub pid: i32,
+    #[arg(short, long, value_name = "PATH")]
+    pub flox_env: PathBuf,
 
-    /// The path to the environment registry
-    #[arg(short, long = "registry", value_name = "PATH")]
-    pub registry_path: PathBuf,
+    #[arg(
+        short,
+        long,
+        value_name = "PATH",
+        help = "The path to the runtime directory keeping activation data.\n\
+                Defaults to XDG_RUNTIME_DIR/flox or XDG_CACHE_HOME/flox if not provided."
+    )]
+    pub runtime_dir: PathBuf,
 
-    /// The hash of the environment's .flox path
-    #[arg(short, long = "hash", value_name = "DOT_FLOX_HASH")]
-    pub dot_flox_hash: String,
+    /// The activation ID to monitor
+    #[arg(short, long = "activation-id", value_name = "ID")]
+    pub activation_id: String,
 
     /// The path to the process-compose socket
     #[arg(short, long = "socket", value_name = "PATH")]
@@ -75,7 +77,7 @@ fn main() -> ExitCode {
     let log_file = &args
         .log_dir
         .as_ref()
-        .map(|dir| dir.join(format!("watchdog.{}.log", args.pid)));
+        .map(|dir| dir.join(format!("watchdog.{}.log", args.activation_id)));
 
     init_logger(log_file)
         .context("failed to initialize logger")
@@ -99,9 +101,9 @@ fn main() -> ExitCode {
         log_dir = tracing::field::Empty))]
 fn run(args: Cli) -> Result<(), Error> {
     let span = tracing::Span::current();
-    span.record("pid", args.pid);
-    span.record("registry", traceable_path(&args.registry_path));
-    span.record("dot_flox_hash", &args.dot_flox_hash);
+    span.record("flox_env", traceable_path(&args.flox_env));
+    span.record("runtime_dir", traceable_path(&args.runtime_dir));
+    span.record("id", &args.activation_id);
     span.record("socket", traceable_path(&args.socket_path));
     span.record("log_dir", maybe_traceable_path(&args.log_dir));
     debug!("starting");
@@ -120,23 +122,11 @@ fn run(args: Cli) -> Result<(), Error> {
     signal_hook::flag::register(SIGQUIT, Arc::clone(&should_terminate))
         .context("failed to set SIGQUIT signal handler")?;
 
-    // Before doing anything major, check whether there's already a watchdog
-    // monitoring this activation. If there is then this watchdog should just
-    // exit.
-    let lock = acquire_env_registry_lock(&args.registry_path)
-        .context("failed while acquiring registry lock")?;
-    if let Some(reg) = read_environment_registry(&args.registry_path)
-        .context("failed to open environment registry")?
-    {
-        if should_bail_at_startup(&reg, &args.dot_flox_hash) {
-            info!("another watchdog exists, exiting");
-            return Ok(());
-        }
-    }
-    drop(lock);
-    let mut watcher = process::PidWatcher::new(
-        &args.registry_path,
-        &args.dot_flox_hash,
+    let activations_json_path = activations_json_path(&args.runtime_dir, &args.flox_env);
+
+    let mut watcher = PidWatcher::new(
+        activations_json_path.clone(),
+        args.activation_id.clone(),
         should_terminate,
         should_clean_up,
     );
@@ -147,13 +137,9 @@ fn run(args: Cli) -> Result<(), Error> {
         "checked socket"
     );
 
-    // Register this activation PID
-    let activation = ActivationPid::from(args.pid);
-    register_activation(&args.registry_path, &args.dot_flox_hash, activation)?;
-
     info!(
         this_pid = nix::unistd::getpid().as_raw(),
-        target_pid = args.pid,
+        target_activation_id = args.activation_id,
         "watchdog is on duty"
     );
     spawn_heartbeat_log();
@@ -163,11 +149,20 @@ fn run(args: Cli) -> Result<(), Error> {
 
     debug!("waiting for termination");
 
+    let activation_state_dir =
+        activation_state_dir_path(&args.runtime_dir, &args.flox_env, &args.activation_id)?;
+
     match watcher.wait_for_termination() {
         Ok(WaitResult::CleanUp) => {
             // Exit
             info!("exiting");
-            cleanup(&args.socket_path);
+            cleanup(
+                &args.socket_path,
+                &activations_json_path,
+                &activation_state_dir,
+                &args.activation_id,
+            )
+            .context("cleanup failed")?;
         },
         Ok(WaitResult::Terminate) => {
             // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
@@ -176,8 +171,13 @@ fn run(args: Cli) -> Result<(), Error> {
             bail!("received stop signal, exiting without cleanup");
         },
         Err(err) => {
-            cleanup(&args.socket_path);
-            bail!("failed while waiting for termination: {err}");
+            let _ = cleanup(
+                &args.socket_path,
+                &activations_json_path,
+                &activation_state_dir,
+                &args.activation_id,
+            );
+            bail!(err.context("failed while waiting for termination"))
         },
     }
 
@@ -187,16 +187,42 @@ fn run(args: Cli) -> Result<(), Error> {
 // If the activation for a watchdog gets removed from the registry as stale by a different watchdog,
 // multiple watchdogs could perform cleanup.
 // The following can be run multiple times without issue.
-fn cleanup(socket_path: impl AsRef<Path>) {
+fn cleanup(
+    socket_path: impl AsRef<Path>,
+    activations_json_path: impl AsRef<Path>,
+    activation_state_dir_path: impl AsRef<Path>,
+    activation_id: impl AsRef<str>,
+) -> Result<()> {
     debug!("running cleanup");
-    let socket_path = socket_path.as_ref();
-    if socket_path.exists() {
-        if let Err(err) = process_compose_down(socket_path) {
-            error!(%err, "failed to run process-compose shutdown command");
+
+    let (activations_json, _lock) = read_activations_json(activations_json_path)?;
+    let Some(mut activations_json) = activations_json else {
+        bail!("watchdog shouldn't be running when activations.json doesn't exist");
+    };
+    activations_json.remove_activation(activation_id);
+
+    // Even if this activation has no more attached PIDs, there may be other
+    // activations for a different build of the same environment
+    if activations_json.is_empty() {
+        let socket_path = socket_path.as_ref();
+        if socket_path.exists() {
+            if let Err(err) = process_compose_down(socket_path) {
+                error!(%err, "failed to run process-compose shutdown command");
+            }
+        } else {
+            debug!(reason = "no socket", "did not shut down process-compose");
         }
-    } else {
-        debug!(reason = "no socket", "did not shut down process-compose");
     }
+
+    // We want to hold the lock until services are cleaned up
+    drop(_lock);
+
+    fs::remove_dir_all(activation_state_dir_path)
+        .context("couldn't remove activations state dir")?;
+
+    debug!("finished cleanup");
+
+    Ok(())
 }
 
 /// We want to make sure that the watchdog is detached from the terminal in case it sends
@@ -219,23 +245,4 @@ fn ensure_process_group_leader() -> Result<(), Error> {
         setsid().context("failed to create new session")?;
     }
     Ok(())
-}
-
-/// Returns whether this watchdog has been started without a need for it
-/// e.g. another watchdog is already monitoring this activation.
-pub fn should_bail_at_startup(reg: &EnvRegistry, path_hash: &str) -> bool {
-    reg.entry_for_hash(path_hash)
-        .map(|entry| {
-            let mut activations = entry.activations.clone();
-
-            // If we don't prune the terminated processes from the list of
-            // activations, then we could get into a state where the watchdog
-            // dies, leaving PIDs in the registry that prevent another watchdog
-            // from ever starting.
-
-            activations.retain(|&pid| PidWatcher::pid_is_running(pid));
-
-            !activations.is_empty()
-        })
-        .unwrap_or(false)
 }

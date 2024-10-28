@@ -424,20 +424,6 @@ pub fn deregister_activation(
     Ok(current_activations)
 }
 
-/// Returns the list of all activation PIDs for a given activation.
-pub fn activation_pids(
-    reg_path: impl AsRef<Path>,
-    path_hash: impl AsRef<str>,
-) -> Result<HashSet<ActivationPid>, EnvRegistryError> {
-    let _lock = acquire_env_registry_lock(&reg_path)?;
-    let mut reg = read_environment_registry(&reg_path)?.ok_or(EnvRegistryError::NoEnvRegistry)?;
-    let entry = reg
-        .entry_for_hash_mut(path_hash.as_ref())
-        .ok_or(EnvRegistryError::EnvNotRegistered)?;
-    let remaining_pids = entry.activations.clone();
-    Ok(remaining_pids)
-}
-
 #[cfg(test)]
 mod test {
     use std::fs::OpenOptions;

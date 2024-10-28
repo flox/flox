@@ -96,9 +96,9 @@ if [ -n "${_FLOX_WATCHDOG_BIN:-}" ]; then
     ${FLOX_DISABLE_METRICS:+--disable-metrics} \
     --log-dir "$_FLOX_ENV_LOG_DIR" \
     --socket "$_FLOX_SERVICES_SOCKET" \
-    --pid "$$" \
-    --registry "$_FLOX_REGISTRY_PATH" \
-    --hash "$_FLOX_DOTFLOX_HASH"
+    --flox-env "$FLOX_ENV" \
+    --activation-id "$_FLOX_ACTIVATION_ID" \
+    --runtime-dir "$FLOX_RUNTIME_DIR"
 fi
 
 # Finally mark the environment as ready to use for attachments.
