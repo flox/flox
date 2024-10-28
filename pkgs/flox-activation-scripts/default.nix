@@ -16,6 +16,7 @@
   fd,
   flox-activations,
   shfmt,
+  daemonize,
 }:
 let
   ld-floxlib_so = if stdenv.isLinux then "${ld-floxlib}/lib/ld-floxlib.so" else "__LINUX_ONLY__";
@@ -32,6 +33,7 @@ runCommand "flox-activation-scripts"
       bash
       coreutils
       gnused
+      daemonize
     ];
   }
   ''
@@ -47,6 +49,7 @@ runCommand "flox-activation-scripts"
       --replace "@out@" "$out" \
       --replace "@process-compose@" "${process-compose}/bin/process-compose" \
       --replace "@setsid@" "${util-linux}/bin/setsid" \
+      --replace "@daemonize@" "${daemonize}/bin/daemonize" \
       --replace "/usr/bin/env bash" "${bash}/bin/bash"
 
     substituteInPlace $out/activate.d/bash \
