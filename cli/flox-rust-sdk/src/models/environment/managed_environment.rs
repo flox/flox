@@ -380,7 +380,7 @@ impl Environment for ManagedEnvironment {
     }
 
     /// This will lock if there is an out of sync local checkout
-    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+    fn rendered_env_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         let mut local_checkout = self.local_env_or_copy_current_generation(flox)?;
 
         self.ensure_locked(flox, &mut local_checkout)?;
@@ -1542,7 +1542,7 @@ impl ManagedEnvironment {
 
         // trigger creation of an environment link
         // todo: should we rather expose build/link methods for `PathEnv`?
-        let _ = path_env.activation_path(flox)?;
+        let _ = path_env.rendered_env_path(flox)?;
 
         Ok(path_env)
     }

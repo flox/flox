@@ -64,7 +64,7 @@ eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_
 
 # Set the prompt if we're in an interactive shell.
 if [[ -o interactive ]]; then
-  source "$FLOX_ENV/activate.d/set-prompt.zsh"
+  source "$_activate_d/set-prompt.zsh"
 fi
 
 # Source user-specified profile scripts if they exist.

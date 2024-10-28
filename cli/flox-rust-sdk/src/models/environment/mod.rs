@@ -145,12 +145,12 @@ pub trait Environment: Send {
     /// Return the deserialized manifest
     fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError>;
 
-    /// Return a path containing the built environment and its activation script.
+    /// Return the path to rendered environment in the Nix store.
     ///
     /// This should be a link to a store path so that it can be swapped
     /// dynamically, i.e. so that install/edit can modify the environment
     /// without requiring reactivation.
-    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
+    fn rendered_env_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError>;
 
     /// Return a path that environment hooks should use to store transient data.
     ///

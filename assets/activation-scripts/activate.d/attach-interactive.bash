@@ -7,7 +7,7 @@ case "$_flox_shell" in
       exec "$_flox_shell" --noprofile --norc
     else
       if [ -t 1 ]; then
-        exec "$_flox_shell" --noprofile --rcfile "$FLOX_ENV/activate.d/bash"
+        exec "$_flox_shell" --noprofile --rcfile "$_activate_d/bash"
       else
         # The bash --rcfile option only works for interactive shells
         # so we need to cobble together our own means of sourcing our
@@ -15,7 +15,7 @@ case "$_flox_shell" in
         # XXX Is this case even a thing? What's the point of activating with
         #     no command to be invoked and no controlling terminal from which
         #     to issue commands?!? A broken docker experience maybe?!?
-        exec "$_flox_shell" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash"
+        exec "$_flox_shell" --noprofile --norc -s <<< "source $_activate_d/bash"
       fi
     fi
     ;;
@@ -23,7 +23,7 @@ case "$_flox_shell" in
     if [ -n "$FLOX_NOPROFILE" ]; then
       exec "$_flox_shell"
     else
-      exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $FLOX_ENV/activate.d/fish"
+      exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $_activate_d/fish"
     fi
     ;;
   *tcsh)
@@ -32,7 +32,7 @@ case "$_flox_shell" in
     else
       export FLOX_ORIG_HOME="$HOME"
       export HOME="$_tcsh_home"
-      export FLOX_TCSH_INIT_SCRIPT="$FLOX_ENV/activate.d/tcsh"
+      export FLOX_TCSH_INIT_SCRIPT="$_activate_d/tcsh"
       # The -m option is required for tcsh to source a .tcshrc file that
       # the effective user does not own.
       exec "$_flox_shell" -m
@@ -46,7 +46,7 @@ case "$_flox_shell" in
         export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
       fi
       export ZDOTDIR="$_zdotdir"
-      export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
+      export FLOX_ZSH_INIT_SCRIPT="$_activate_d/zsh"
       # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
       # automatically sourcing /etc/zshrc et al.
       exec "$_flox_shell" -o NO_GLOBAL_RCS

@@ -10,6 +10,7 @@ _save_FLOX_ACTIVATION_STATE_DIR="$_FLOX_ACTIVATION_STATE_DIR"
 _save_FLOX_ENV="$FLOX_ENV"
 _save_FLOX_ORIG_ZDOTDIR="$FLOX_ORIG_ZDOTDIR"
 _save_ZDOTDIR="$ZDOTDIR"
+_save_activate_d="$_activate_d"
 _save_FLOX_ZSH_INIT_SCRIPT="$FLOX_ZSH_INIT_SCRIPT"
 
 restore_saved_vars() {
@@ -17,6 +18,7 @@ restore_saved_vars() {
     export FLOX_ENV="$_save_FLOX_ENV"
     export FLOX_ORIG_ZDOTDIR="$_save_FLOX_ORIG_ZDOTDIR"
     export ZDOTDIR="$_save_ZDOTDIR"
+    export _activate_d="$_save_activate_d"
     export FLOX_ZSH_INIT_SCRIPT="$_save_FLOX_ZSH_INIT_SCRIPT"
     export _FLOX_ACTIVATION_STATE_DIR="$_save_FLOX_ACTIVATION_STATE_DIR"
 }

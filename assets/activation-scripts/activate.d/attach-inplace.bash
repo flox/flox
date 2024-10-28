@@ -8,19 +8,22 @@ case "$_flox_shell" in
     echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
     echo "export FLOX_ENV=\"$FLOX_ENV\";"
     echo "export _FLOX_ACTIVATION_STATE_DIR=\"$_FLOX_ACTIVATION_STATE_DIR\";"
-    echo "source '$FLOX_ENV/activate.d/bash';"
+    echo "export _activate_d=\"$_activate_d\";"
+    echo "source '$_activate_d/bash';"
     ;;
   *fish)
     echo "set -gx _flox_activate_tracelevel \"$_flox_activate_tracelevel\";"
     echo "set -gx FLOX_ENV \"$FLOX_ENV\";"
     echo "set -gx _FLOX_ACTIVATION_STATE_DIR \"$_FLOX_ACTIVATION_STATE_DIR\";"
-    echo "source '$FLOX_ENV/activate.d/fish';"
+    echo "set -gx _activate_d \"$_activate_d\";"
+    echo "source '$_activate_d/fish';"
     ;;
   *tcsh)
     echo "setenv _flox_activate_tracelevel \"$_flox_activate_tracelevel\";"
     echo "setenv FLOX_ENV \"$FLOX_ENV\";"
     echo "setenv _FLOX_ACTIVATION_STATE_DIR \"$_FLOX_ACTIVATION_STATE_DIR\";"
-    echo "source '$FLOX_ENV/activate.d/tcsh';"
+    echo "setenv _activate_d \"$_activate_d\";"
+    echo "source '$_activate_d/tcsh';"
     ;;
   # Any additions should probably be restored in zdotdir/* scripts
   *zsh)
@@ -30,9 +33,10 @@ case "$_flox_shell" in
       echo "export FLOX_ORIG_ZDOTDIR=\"$ZDOTDIR\";"
     fi
     echo "export ZDOTDIR=\"$_zdotdir\";"
-    echo "export FLOX_ZSH_INIT_SCRIPT=\"$FLOX_ENV/activate.d/zsh\";"
     echo "export _FLOX_ACTIVATION_STATE_DIR=\"$_FLOX_ACTIVATION_STATE_DIR\";"
-    echo "source '$FLOX_ENV/activate.d/zsh';"
+    echo "export FLOX_ZSH_INIT_SCRIPT=\"$_activate_d/zsh\";"
+    echo "export _activate_d=\"$_activate_d\";"
+    echo "source '$_activate_d/zsh';"
     ;;
   *)
     echo "Unsupported shell: $_flox_shell" >&2

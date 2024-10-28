@@ -17,7 +17,7 @@ use tracing::{debug, instrument};
 use crate::commands::services::{
     guard_is_within_activation,
     guard_service_commands_available,
-    start_with_new_process_compose,
+    start_services_with_new_process_compose,
     ServicesEnvironment,
 };
 use crate::commands::{environment_select, EnvironmentSelect};
@@ -67,7 +67,7 @@ impl Restart {
                 process_compose_down(socket)?;
             }
             debug!("restarting services in new process-compose instance");
-            let names = start_with_new_process_compose(
+            let names = start_services_with_new_process_compose(
                 config,
                 flox,
                 self.environment,

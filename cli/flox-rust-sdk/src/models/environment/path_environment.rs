@@ -289,7 +289,7 @@ impl Environment for PathEnvironment {
     }
 
     /// This will lock the environment if it is not already locked.
-    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+    fn rendered_env_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         let out_link = self.out_link(&flox.system)?;
 
         if self.needs_rebuild(flox)? {

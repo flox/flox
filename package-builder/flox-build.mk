@@ -203,7 +203,7 @@ define BUILD_local_template =
   $(_pname)_local_build: $($(_pvarname)_buildScript)
 	@echo "Building $(_name) in local mode"
 	$(if $(_virtualSandbox),$(PRELOAD_ARGS) FLOX_SRC_DIR=$$$$($(_pwd)) FLOX_VIRTUAL_SANDBOX=$(_sandbox)) \
-	MAKEFLAGS= out=$(_out) $(FLOX_ENV)/activate --turbo -- $(_bash) -e $($(_pvarname)_buildScript)
+	MAKEFLAGS= out=$(_out) $(FLOX_INTERPRETER)/activate --turbo -- $(_bash) -e $($(_pvarname)_buildScript)
 	set -o pipefail && $(_nix) build -L --file $(_libexec_dir)/build-manifest.nix \
 	    --argstr name "$(_name)" \
 	    --argstr flox-env "$(FLOX_ENV)" \
@@ -289,6 +289,11 @@ define BUILD_nix_sandbox_template =
 endef
 
 define BUILD_template =
+  # Ensure the FLOX_INTERPRETER variable is set
+  ifeq (,$(FLOX_INTERPRETER))
+    $$(error FLOX_INTERPRETER not defined)
+  endif
+
   # build mode passed as $(1)
   $(eval _build_mode = $(1))
   # We want to create build-specific variables, and variable names cannot

@@ -35,7 +35,8 @@ eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_FLOX_ACTIVATION_STATE_
 # Set the prompt if we're in an interactive shell.
 if [ -t 1 ]; then
   # shellcheck disable=SC1091 # from rendered environment
-  source "$FLOX_ENV/activate.d/set-prompt.bash"
+  # shellcheck disable=SC2154 # set in the main `activate` script
+  source "$_activate_d/set-prompt.bash"
 fi
 
 # Source user-specified profile scripts if they exist.
