@@ -3177,3 +3177,16 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# Sub-commands like `flox-activations` and `flox-watchdog` depend on this.
+@test "activate: sets FLOX_DISABLE_METRICS from config" {
+  project_setup
+
+  # Set in isolated config.
+  "$FLOX_BIN" config --set-bool disable_metrics true
+  # Unset from test suite.
+  unset FLOX_DISABLE_METRICS
+
+  run "$FLOX_BIN" activate -- printenv FLOX_DISABLE_METRICS
+  assert_output "true"
+}
