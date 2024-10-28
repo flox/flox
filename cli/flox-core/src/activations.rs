@@ -240,14 +240,11 @@ fn activations_json_lock_path(activations_json_path: impl AsRef<Path>) -> PathBu
 }
 
 /// {flox_runtime_dir}/{path_hash(flox_env)}/activations.json
-pub fn activations_json_path(
-    runtime_dir: impl AsRef<Path>,
-    flox_env: impl AsRef<Path>,
-) -> Result<PathBuf, Error> {
-    Ok(runtime_dir
+pub fn activations_json_path(runtime_dir: impl AsRef<Path>, flox_env: impl AsRef<Path>) -> PathBuf {
+    runtime_dir
         .as_ref()
         .join(path_hash(flox_env))
-        .join("activations.json"))
+        .join("activations.json")
 }
 
 /// {flox_runtime_dir}/{path_hash(flox_env)}/{activation_id}

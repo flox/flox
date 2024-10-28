@@ -68,8 +68,7 @@ impl StartOrAttachArgs {
         ) -> Result<String, Error>,
         mut output: impl Write,
     ) -> Result<(), Error> {
-        let activations_json_path =
-            activations::activations_json_path(runtime_dir, &self.flox_env)?;
+        let activations_json_path = activations::activations_json_path(runtime_dir, &self.flox_env);
 
         debug!("Reading activations from {:?}", activations_json_path);
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
@@ -341,8 +340,7 @@ mod tests {
             activations.create_activation(store_path, pid).unwrap().id()
         });
 
-        let activations_json_path =
-            activations::activations_json_path(&runtime_dir, &flox_env).unwrap();
+        let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
 
         let ready = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
@@ -376,8 +374,7 @@ mod tests {
             activation.id()
         });
 
-        let activations_json_path =
-            activations::activations_json_path(&runtime_dir, &flox_env).unwrap();
+        let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
 
         let ready = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
@@ -422,8 +419,7 @@ mod tests {
             activation.id()
         });
 
-        let activations_json_path =
-            activations::activations_json_path(&runtime_dir, &flox_env).unwrap();
+        let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
 
         let result = check_for_activation_ready_and_attach_pid(
             &activations_json_path,
@@ -458,8 +454,7 @@ mod tests {
             activation.id()
         });
 
-        let activations_json_path =
-            activations::activations_json_path(&runtime_dir, &flox_env).unwrap();
+        let activations_json_path = activations::activations_json_path(&runtime_dir, &flox_env);
 
         let result = check_for_activation_ready_and_attach_pid(
             &activations_json_path,

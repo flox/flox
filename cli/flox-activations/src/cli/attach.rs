@@ -36,7 +36,7 @@ pub struct AttachExclusiveArgs {
 impl AttachArgs {
     pub(crate) fn handle(self, runtime_dir: PathBuf) -> Result<(), Error> {
         let activations_json_path =
-            activations::activations_json_path(&runtime_dir, &self.flox_env)?;
+            activations::activations_json_path(&runtime_dir, &self.flox_env);
 
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
         let Some(mut activations) = activations else {
