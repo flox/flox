@@ -436,7 +436,7 @@ pub fn deregister_activation(
     Ok(current_activations)
 }
 
-/// Returns the list of activation PIDs for a given activation.
+/// Returns the list of all activation PIDs for a given activation.
 pub fn activation_pids(
     reg_path: impl AsRef<Path>,
     path_hash: impl AsRef<str>,
@@ -446,7 +446,6 @@ pub fn activation_pids(
     let entry = reg
         .entry_for_hash_mut(path_hash.as_ref())
         .ok_or(EnvRegistryError::EnvNotRegistered)?;
-    entry.remove_stale_activations();
     let remaining_pids = entry.activations.clone();
     Ok(remaining_pids)
 }
