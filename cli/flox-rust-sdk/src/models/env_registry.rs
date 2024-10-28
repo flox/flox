@@ -242,17 +242,6 @@ pub struct RegisteredEnv {
 pub struct ActivationPid(pid_t);
 
 impl ActivationPid {
-    /// Construct a Pid from the current running process.
-    pub fn from_current_process() -> Self {
-        ActivationPid(nix::unistd::getpid().as_raw())
-    }
-
-    /// Check whether an activation is the parent of the current process.
-    pub fn is_current_process_parent(&self) -> bool {
-        let parent = nix::unistd::getppid();
-        NixPid::from(*self) == parent
-    }
-
     /// Check whether an activation is still running.
     pub fn is_running(&self) -> bool {
         // TODO: Compare name or check for watchdog child to see if it's a real activation?
