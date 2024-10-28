@@ -101,6 +101,15 @@ impl Activations {
 
         Ok(self.activations.last_mut().unwrap())
     }
+
+    pub fn remove_activation(&mut self, id: impl AsRef<str>) {
+        self.activations
+            .retain(|activation| activation.id != id.as_ref());
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.activations.is_empty()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -186,7 +195,7 @@ impl Activation {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Deserialize, Serialize)]
 pub struct AttachedPid {
     pub pid: i32,
     /// If Some, the time after which the activation can be cleaned up
