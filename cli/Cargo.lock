@@ -1194,6 +1194,7 @@ dependencies = [
  "clap",
  "clap_derive",
  "filetime",
+ "flox-core",
  "flox-rust-sdk",
  "glob",
  "kqueue",
@@ -1204,6 +1205,7 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "tempfile",
+ "time",
  "tracing",
  "tracing-subscriber",
 ]

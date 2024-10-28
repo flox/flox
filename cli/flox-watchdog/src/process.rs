@@ -16,7 +16,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
-use flox_rust_sdk::models::env_registry::{activation_pids, ActivationPid};
+use anyhow::{bail, Result};
+use flox_core::activations::{read_activations_json, AttachedPid};
+use time::OffsetDateTime;
 use tracing::{debug, warn};
 /// How long to wait between watcher updates.
 pub const WATCHER_SLEEP_INTERVAL: Duration = Duration::from_millis(100);
@@ -58,26 +60,26 @@ enum ProcStatus {
 
 #[derive(Debug)]
 pub struct PidWatcher {
-    pub pids_watching: HashSet<ActivationPid>,
-    pub reg_path: PathBuf,
-    pub hash: String,
-    pub should_terminate_flag: Arc<AtomicBool>,
-    pub should_clean_up_flag: Arc<AtomicBool>,
+    pids_watching: HashSet<AttachedPid>,
+    activation_id: String,
+    activations_json_path: PathBuf,
+    should_terminate_flag: Arc<AtomicBool>,
+    should_clean_up_flag: Arc<AtomicBool>,
 }
 
 impl PidWatcher {
     /// Creates a new watcher that uses platform-specific mechanisms to wait
     /// for activation processes to terminate.
     pub fn new(
-        reg_path: impl AsRef<Path>,
-        hash: impl AsRef<str>,
+        activations_json_path: PathBuf,
+        activation_id: String,
         should_terminate_flag: Arc<AtomicBool>,
         should_clean_up_flag: Arc<AtomicBool>,
     ) -> Self {
         Self {
             pids_watching: HashSet::new(),
-            reg_path: PathBuf::from(reg_path.as_ref()),
-            hash: String::from(hash.as_ref()),
+            activations_json_path,
+            activation_id,
             should_terminate_flag,
             should_clean_up_flag,
         }
@@ -87,9 +89,8 @@ impl PidWatcher {
     /// whether a process is a zombie. This is a stopgap until we someday use
     /// `libproc`. Any failure is interpreted as an indication that the process
     /// is no longer running.
-    #[allow(dead_code)]
-    fn read_pid_status_macos(pid: ActivationPid) -> ProcStatus {
-        let pid_raw: i32 = pid.into();
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    fn read_pid_status_macos(pid: i32) -> ProcStatus {
         let stdout = match Command::new("/bin/ps")
             .args(["-o", "state=", "-p"])
             .arg(format!("{pid}"))
@@ -99,7 +100,7 @@ impl PidWatcher {
             Err(err) => {
                 warn!(
                     %err,
-                    pid = pid_raw,
+                    pid,
                     "failed while calling /bin/ps, treating as not running"
                 );
                 return ProcStatus::Dead;
@@ -113,26 +114,22 @@ impl PidWatcher {
                 _ => ProcStatus::Running,
             }
         } else {
-            debug!(
-                pid = pid_raw,
-                "no output from /bin/ps, treating as not running"
-            );
+            debug!(pid, "no output from /bin/ps, treating as not running");
             ProcStatus::Dead
         }
     }
 
     /// Tries to read the state of a process on Linux via `/proc`. Any failure
     /// is interpreted as an indication that the process is no longer running.
-    #[allow(dead_code)]
-    fn read_pid_status_linux(pid: ActivationPid) -> ProcStatus {
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    fn read_pid_status_linux(pid: i32) -> ProcStatus {
         let path = format!("/proc/{pid}/stat");
-        let pid_raw: i32 = pid.into();
         let stat = match read_to_string(path) {
             Ok(stat) => stat,
             Err(err) => {
                 warn!(
                     %err,
-                    pid = pid_raw,
+                    pid,
                     "failed to parse /proc/<pid>/stat, treating as not running"
                 );
                 return ProcStatus::Dead;
@@ -152,7 +149,7 @@ impl PidWatcher {
             }
         } else {
             warn!(
-                pid = pid_raw,
+                pid,
                 "failed to parse /proc/<pid>/stat, treating as not running"
             );
             ProcStatus::Dead
@@ -160,7 +157,7 @@ impl PidWatcher {
     }
 
     /// Returns the status of the provided PID.
-    fn read_pid_status(pid: ActivationPid) -> ProcStatus {
+    fn read_pid_status(pid: i32) -> ProcStatus {
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         panic!("unsupported operating system");
 
@@ -174,12 +171,22 @@ impl PidWatcher {
     }
 
     /// Returns whether the process is considered running.
-    pub fn pid_is_running(pid: ActivationPid) -> bool {
+    pub fn pid_is_running(pid: i32) -> bool {
         Self::read_pid_status(pid) == ProcStatus::Running
     }
 
+    /// Removes any PIDs that are no longer running from the watchlist.
     fn prune_terminations(&mut self) {
-        self.pids_watching.retain(|&pid| Self::pid_is_running(pid));
+        let now = OffsetDateTime::now_utc();
+        self.pids_watching.retain(|attached_pid| {
+            if let Some(expiration) = attached_pid.expiration {
+                // If the PID has an unreached expiration, retain it even if it
+                // isn't running
+                now < expiration || Self::pid_is_running(attached_pid.pid)
+            } else {
+                Self::pid_is_running(attached_pid.pid)
+            }
+        })
     }
 }
 
@@ -208,9 +215,9 @@ impl Watcher for PidWatcher {
 
     /// Update the list of PIDs that are currently being watched.
     fn update_watchlist(&mut self) -> Result<(), Error> {
-        let all_registered_pids = activation_pids(&self.reg_path, &self.hash)?;
+        let all_attached_pids = attached_pids(&self.activations_json_path, &self.activation_id)?;
         // Add all PIDs, even if they're dead, but then immediately remove them
-        self.pids_watching.extend(all_registered_pids);
+        self.pids_watching.extend(all_attached_pids);
         self.prune_terminations();
         Ok(())
     }
@@ -218,6 +225,25 @@ impl Watcher for PidWatcher {
     fn should_clean_up(&self) -> Result<bool, super::Error> {
         Ok(self.pids_watching.is_empty())
     }
+}
+
+/// Returns the list of activation PIDs for a given activation.
+pub fn attached_pids(
+    activations_json_path: impl AsRef<Path>,
+    activation_id: impl AsRef<str>,
+) -> Result<HashSet<AttachedPid>> {
+    let (activations_json, _lock) = read_activations_json(activations_json_path)?;
+    let Some(activations_json) = activations_json else {
+        bail!("watchdog shouldn't be running when activations.json doesn't exist");
+    };
+    let Some(activation) = activations_json.activation_for_id_ref(activation_id) else {
+        bail!("watchdog shouldn't be running with ID that isn't in activations.json");
+    };
+    Ok(activation
+        .attached_pids()
+        .iter()
+        .map(AttachedPid::to_owned)
+        .collect())
 }
 
 #[cfg(test)]
@@ -279,7 +305,7 @@ mod test {
     }
 
     /// Wait some attempts for the process to reach the desired state
-    fn poll_until_state(state: ProcStatus, pid: ActivationPid) {
+    fn poll_until_state(state: ProcStatus, pid: i32) {
         for _ in 0..10 {
             if PidWatcher::read_pid_status(pid) == state {
                 return;
