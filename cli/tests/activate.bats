@@ -3177,3 +3177,24 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate:helpers,activate:helpers:flox_portgrab
+@test "helpers: flox_portgrab can be used in activate" {
+  project_setup
+
+  run "$FLOX_BIN" edit -f <(cat <<'EOF'
+    version = 1
+    [hook]
+    on-activate = """
+      export EPHEMERAL_PORT=$(flox_portgrab)
+    """
+EOF
+  )
+  assert_success
+
+  run "$FLOX_BIN" activate -- printenv EPHEMERAL_PORT
+  assert_success
+  assert_output --regexp '^[0-9]{5}$'
+}
+
+# ---------------------------------------------------------------------------- #

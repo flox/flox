@@ -99,6 +99,9 @@ if [ -n "$FLOX_CMD" ]; then
   set -- "$FLOX_CMD"
 fi
 
+# Source helper functions
+. "@out@/activate.d/helper-functions.bash"
+
 # Set FLOX_ENV as the path by which all flox scripts can make reference to
 # the environment to which they belong. Use this to define the path to the
 # activation scripts directory.
