@@ -1144,6 +1144,7 @@ dependencies = [
  "fslock",
  "indoc",
  "log",
+ "nix",
  "serde",
  "serde_json",
  "temp-env",

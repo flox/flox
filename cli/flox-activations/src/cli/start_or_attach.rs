@@ -17,7 +17,7 @@ use crate::Error;
 pub struct StartOrAttachArgs {
     #[arg(help = "The PID of the shell registering interest in the activation.")]
     #[arg(short, long, value_name = "PID")]
-    pub pid: u32,
+    pub pid: i32,
     #[arg(help = "The path to the .flox directory for the environment.")]
     #[arg(short, long, value_name = "PATH")]
     pub flox_env: PathBuf,
@@ -56,7 +56,7 @@ impl StartOrAttachArgs {
     fn handle_inner(
         &self,
         runtime_dir: &Path,
-        attach_fn: impl FnOnce(&Path, LockFile, &str, u32) -> Result<(), Error>,
+        attach_fn: impl FnOnce(&Path, LockFile, &str, i32) -> Result<(), Error>,
         start_fn: impl FnOnce(
             Activations,
             PathBuf,
@@ -64,7 +64,7 @@ impl StartOrAttachArgs {
             &PathBuf,
             fslock::LockFile,
             &str,
-            u32,
+            i32,
         ) -> Result<String, Error>,
         mut output: impl Write,
     ) -> Result<(), Error> {
@@ -112,7 +112,7 @@ fn attach(
     activations_json_path: &Path,
     lock: fslock::LockFile,
     store_path: &str,
-    pid: u32,
+    pid: i32,
 ) -> Result<(), Error> {
     // Drop the lock to allow the activation to be updated by other processes
     drop(lock);
@@ -138,7 +138,7 @@ fn start(
     flox_env: &PathBuf,
     lock: fslock::LockFile,
     store_path: &str,
-    pid: u32,
+    pid: i32,
 ) -> Result<String, anyhow::Error> {
     let activation_id = activations.create_activation(store_path, pid)?.id();
     // The activation script will assume this directory exists
@@ -163,7 +163,7 @@ fn wait_for_activation_ready_and_attach_pid(
     activations_json_path: &Path,
     store_path: &str,
     attach_expiration: OffsetDateTime,
-    attaching_pid: u32,
+    attaching_pid: i32,
 ) -> Result<(), anyhow::Error> {
     loop {
         let ready = check_for_activation_ready_and_attach_pid(
@@ -186,7 +186,7 @@ fn wait_for_activation_ready_and_attach_pid(
 fn check_for_activation_ready_and_attach_pid(
     activations_json_path: &Path,
     store_path: &str,
-    attaching_pid: u32,
+    attaching_pid: i32,
     attach_expiration: OffsetDateTime,
     now: OffsetDateTime,
 ) -> Result<bool, anyhow::Error> {
@@ -251,7 +251,7 @@ mod tests {
         let store_path = "/store/path";
 
         // The PID of the current process, guaranteed to be running
-        let pid = std::process::id();
+        let pid = nix::unistd::getpid().as_raw();
 
         let id = write_activations(&runtime_dir, &flox_env, |activations| {
             activations.create_activation(store_path, pid).unwrap().id()
@@ -292,7 +292,7 @@ mod tests {
         let store_path = "/store/path";
 
         // The PID of the current process, guaranteed to be running
-        let pid = std::process::id();
+        let pid = nix::unistd::getpid().as_raw();
 
         write_activations(&runtime_dir, &flox_env, |_| {});
 
@@ -331,7 +331,7 @@ mod tests {
         let store_path = "/store/path";
 
         // The PID of the current process, guaranteed to be running
-        let pid = std::process::id();
+        let pid = nix::unistd::getpid().as_raw();
         let attaching_pid = 5678;
 
         let now = OffsetDateTime::now_utc();
@@ -364,7 +364,7 @@ mod tests {
         let store_path = "/store/path";
 
         // The PID of the current process, guaranteed to be running
-        let pid = std::process::id();
+        let pid = nix::unistd::getpid().as_raw();
         let attaching_pid = 5678;
 
         let now = OffsetDateTime::now_utc();
@@ -400,8 +400,8 @@ mod tests {
         });
     }
 
-    fn make_unused_pid() -> u32 {
-        let pid = std::process::id();
+    fn make_unused_pid() -> i32 {
+        let pid = nix::unistd::getpid().as_raw();
         pid + 100
     }
 
@@ -446,7 +446,7 @@ mod tests {
         let store_path = "/store/path";
 
         // The PID of the current process, guaranteed to be running
-        let pid = std::process::id();
+        let pid = nix::unistd::getpid().as_raw();
         let attaching_pid = 5678;
 
         let now = OffsetDateTime::now_utc();

@@ -6,7 +6,6 @@ use std::time::SystemTime;
 use flox_core::{serialize_atomically, SerializeError, Version};
 use fslock::LockFile;
 use nix::errno::Errno;
-use nix::libc::pid_t;
 use nix::sys::signal::kill;
 use nix::unistd::Pid as NixPid;
 use serde::{Deserialize, Serialize};
@@ -239,7 +238,7 @@ pub struct RegisteredEnv {
 /// `nix::unistd::Pid`.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ActivationPid(pid_t);
+pub struct ActivationPid(i32);
 
 impl ActivationPid {
     /// Check whether an activation is still running.
@@ -262,7 +261,7 @@ impl From<i32> for ActivationPid {
     }
 }
 
-impl From<ActivationPid> for pid_t {
+impl From<ActivationPid> for i32 {
     fn from(value: ActivationPid) -> Self {
         value.0
     }
