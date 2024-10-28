@@ -53,8 +53,7 @@ mod test {
         flox_env: impl AsRef<Path>,
         f: impl FnOnce(&mut Activations) -> T,
     ) -> T {
-        let activations_json_path =
-            activations::activations_json_path(runtime_dir, flox_env).unwrap();
+        let activations_json_path = activations::activations_json_path(runtime_dir, flox_env);
         let (activations, lock) =
             activations::read_activations_json(&activations_json_path).unwrap();
         let mut activations = activations.unwrap_or_default();
@@ -70,8 +69,7 @@ mod test {
         flox_env: impl AsRef<Path>,
         f: impl FnOnce(&Activations) -> T,
     ) -> Option<T> {
-        let activations_json_path =
-            activations::activations_json_path(runtime_dir, flox_env).unwrap();
+        let activations_json_path = activations::activations_json_path(runtime_dir, flox_env);
         let (activations, _lock) =
             activations::read_activations_json(&activations_json_path).unwrap();
         activations.map(|activations| f(&activations))
