@@ -8,7 +8,7 @@ type Error = anyhow::Error;
 
 #[derive(Debug, Args)]
 pub struct SetReadyArgs {
-    #[arg(help = "The path to the .flox directory for the environment.")]
+    #[arg(help = "The path to the activation symlink for the environment.")]
     #[arg(short, long, value_name = "PATH")]
     flox_env: PathBuf,
     #[arg(help = "The ID for this particular activation of this environment.")]
