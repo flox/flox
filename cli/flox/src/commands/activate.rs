@@ -30,6 +30,7 @@ use flox_rust_sdk::models::environment::{
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
 use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
+use flox_rust_sdk::utils::traceable_path;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
@@ -61,6 +62,9 @@ pub const FLOX_SERVICES_TO_START_VAR: &str = "_FLOX_SERVICES_TO_START";
 pub static WATCHDOG_BIN: Lazy<PathBuf> = Lazy::new(|| {
     PathBuf::from(env::var("WATCHDOG_BIN").unwrap_or(env!("WATCHDOG_BIN").to_string()))
 });
+pub static FLOX_INTERPRETER: Lazy<PathBuf> = Lazy::new(|| {
+    PathBuf::from(env::var("FLOX_INTERPRETER").unwrap_or(env!("FLOX_INTERPRETER").to_string()))
+});
 
 #[derive(Bpaf, Clone)]
 pub struct Activate {
@@ -78,6 +82,11 @@ pub struct Activate {
     /// Whether to start services when activating the environment
     #[bpaf(long, short)]
     pub start_services: bool,
+
+    /// Use the interpreter bundled with the environment instead of the
+    /// interpreter bundled with the CLI.
+    #[bpaf(long, hide)]
+    pub use_fallback_interpreter: bool,
 
     /// Command to run interactively in the context of the environment
     #[bpaf(positional("cmd"), strict, many)]
@@ -136,9 +145,10 @@ impl Activate {
 
         let in_place = self.print_script || (!stdout().is_tty() && self.run_args.is_empty());
         let interactive = !in_place && self.run_args.is_empty();
+
         // Don't spin in bashrcs and similar contexts
-        let activation_path_result = if in_place {
-            environment.activation_path(&flox)
+        let rendered_env_path_result = if in_place {
+            environment.rendered_env_path(&flox)
         } else {
             Dialog {
                 message: &format!(
@@ -146,12 +156,12 @@ impl Activate {
                     now_active.message_description()?
                 ),
                 help_message: None,
-                typed: Spinner::new(|| environment.activation_path(&flox)),
+                typed: Spinner::new(|| environment.rendered_env_path(&flox)),
             }
             .spin()
         };
 
-        let activation_path = match activation_path_result {
+        let rendered_env_path = match rendered_env_path_result {
             Err(EnvironmentError::Core(CoreEnvironmentError::BuildEnv(
                 CallPkgDbError::PkgDbError(PkgDbError {
                     exit_code: error_codes::LOCKFILE_INCOMPATIBLE_SYSTEM,
@@ -176,12 +186,30 @@ impl Activate {
             other => other?,
         };
 
-        let store_path = fs::read_link(&activation_path).with_context(|| {
+        let store_path = fs::read_link(&rendered_env_path).with_context(|| {
             format!(
                 "a symlink at {} was just created and should still exist",
-                activation_path.display()
+                rendered_env_path.display()
             )
         })?;
+
+        let interpreter_path = if self.use_fallback_interpreter {
+            let path = rendered_env_path.clone();
+            tracing::debug!(
+                interpreter = "stored",
+                path = traceable_path(&path),
+                "setting interpreter"
+            );
+            path
+        } else {
+            let path = FLOX_INTERPRETER.clone();
+            tracing::debug!(
+                interpreter = "bundled",
+                path = traceable_path(&path),
+                "setting interpreter"
+            );
+            path
+        };
 
         // Must come after getting an activation path to prevent premature
         // locking or migration. It must also not be evaluated inline with the
@@ -196,7 +224,7 @@ impl Activate {
         let flox_env_install_prefixes: IndexSet<PathBuf> = {
             let mut set = IndexSet::new();
             if !flox_active_environments.is_active(&now_active) {
-                set.insert(activation_path.clone());
+                set.insert(interpreter_path.clone());
             }
             let active_set: IndexSet<PathBuf> = {
                 if let Ok(var) = env::var(FLOX_ENV_DIRS_VAR) {
@@ -280,7 +308,10 @@ impl Activate {
             .unwrap_or(utils::colors::INDIGO_300.to_ansi256().to_string());
 
         let mut exports = HashMap::from([
-            (FLOX_ENV_VAR, activation_path.to_string_lossy().to_string()),
+            (
+                FLOX_ENV_VAR,
+                rendered_env_path.to_string_lossy().to_string(),
+            ),
             (
                 FLOX_ACTIVE_ENVIRONMENTS_VAR,
                 flox_active_environments.to_string(),
@@ -427,7 +458,7 @@ impl Activate {
         //    eval "$(flox activate)"
         if in_place {
             let shell = Self::detect_shell_for_in_place()?;
-            Self::activate_in_place(&shell, &exports, &activation_path);
+            Self::activate_in_place(&shell, &exports, &interpreter_path);
 
             return Ok(());
         }
@@ -435,9 +466,15 @@ impl Activate {
         let shell = Self::detect_shell_for_subshell();
         // These functions will only return if exec fails
         if interactive {
-            Self::activate_interactive(shell, exports, activation_path, now_active)
+            Self::activate_interactive(shell, exports, interpreter_path, now_active)
         } else {
-            Self::activate_command(self.run_args, shell, exports, activation_path, is_ephemeral)
+            Self::activate_command(
+                self.run_args,
+                shell,
+                exports,
+                interpreter_path,
+                is_ephemeral,
+            )
         }
     }
 
@@ -446,7 +483,7 @@ impl Activate {
         run_args: Vec<String>,
         shell: Shell,
         exports: HashMap<&str, String>,
-        activation_path: PathBuf,
+        interpreter_path: PathBuf,
     ) -> Result<()> {
         let mut command = Command::new(shell.exe_path());
 
@@ -463,7 +500,7 @@ impl Activate {
 
                 {quoted_args}
         "#,
-            activation_path=shell_escape::escape(activation_path.to_string_lossy()),
+            activation_path=shell_escape::escape(interpreter_path.to_string_lossy()),
             quoted_args = Self::quote_run_args(&run_args)
         };
 
@@ -481,7 +518,7 @@ impl Activate {
         run_args: Vec<String>,
         shell: Shell,
         exports: HashMap<&str, String>,
-        activation_path: PathBuf,
+        interpreter_path: PathBuf,
         is_ephemeral: bool,
     ) -> Result<()> {
         // Previous versions of pkgdb rendered activation scripts into a
@@ -490,7 +527,7 @@ impl Activate {
         // subdirectory called "activate.d". If we find that the "activate"
         // path is a directory, we assume it's the old style and invoke the
         // old_activate_command function.
-        let activate_path = activation_path.join("activate");
+        let activate_path = interpreter_path.join("activate");
         if activate_path.is_dir() {
             // We'll warn the user with a debug message for now, and when we
             // are ready to start deprecating support for the old style we'll
@@ -501,7 +538,7 @@ impl Activate {
                  consider re-rendering environment: {}",
                 activate_path.display()
             );
-            return Self::old_activate_command(run_args, shell, exports, activation_path);
+            return Self::old_activate_command(run_args, shell, exports, interpreter_path);
         }
 
         let mut command = Command::new(activate_path);
@@ -541,7 +578,7 @@ impl Activate {
     fn old_activate_interactive(
         shell: Shell,
         exports: HashMap<&str, String>,
-        activation_path: PathBuf,
+        interpreter_path: PathBuf,
         now_active: UninitializedEnvironment,
     ) -> Result<()> {
         let mut command = Command::new(shell.exe_path());
@@ -551,7 +588,7 @@ impl Activate {
             Shell::Bash(_) => {
                 command
                     .arg("--rcfile")
-                    .arg(activation_path.join("activate").join("bash"));
+                    .arg(interpreter_path.join("activate").join("bash"));
             },
             Shell::Fish(_) => {
                 return Err(anyhow!("fish not supported with environments rendered before version 1.0.5; please update environment and try again"));
@@ -587,7 +624,7 @@ impl Activate {
                     .env("ZDOTDIR", env!("FLOX_ZDOTDIR"))
                     .env(
                         "FLOX_ZSH_INIT_SCRIPT",
-                        activation_path.join("activate").join("zsh"),
+                        interpreter_path.join("activate").join("zsh"),
                     )
                     .arg("--no-globalrcs");
             },
@@ -611,16 +648,19 @@ impl Activate {
     fn activate_interactive(
         shell: Shell,
         exports: HashMap<&str, String>,
-        activation_path: PathBuf,
+        interpreter_path: PathBuf,
         now_active: UninitializedEnvironment,
     ) -> Result<()> {
+        // TODO: we can delete this now that we've removed support for v0
+        //       and that was still available _after_ the changes mentioned
+        //       in the comment below.
         // Previous versions of pkgdb rendered activation scripts into a
         // subdirectory called "activate", but now that path is occupied by
         // the activation script itself. The new activation scripts are in a
         // subdirectory called "activate.d". If we find that the "activate"
         // path is a directory, we assume it's the old style and invoke the
         // old_activate_interactive function.
-        let activate_path = activation_path.join("activate");
+        let activate_path = interpreter_path.join("activate");
         if activate_path.is_dir() {
             // We'll warn the user with a debug message for now, and when we
             // are ready to start deprecating support for the old style we'll
@@ -631,7 +671,7 @@ impl Activate {
                  consider re-rendering environment: {}",
                 activate_path.display()
             );
-            return Self::old_activate_interactive(shell, exports, activation_path, now_active);
+            return Self::old_activate_interactive(shell, exports, interpreter_path, now_active);
         }
 
         let mut command = Command::new(activate_path);
@@ -648,7 +688,7 @@ impl Activate {
     fn old_activate_in_place(
         shell: &Shell,
         exports: &HashMap<&str, String>,
-        activation_path: &Path,
+        interpreter_path: &Path,
     ) {
         let exports_rendered = exports
             .iter()
@@ -667,7 +707,7 @@ impl Activate {
 
                 unset FLOX_SOURCED_FROM_SHELL_RC
             ",
-        activation_path=shell_escape::escape(activation_path.to_string_lossy()),
+        activation_path=shell_escape::escape(interpreter_path.to_string_lossy()),
         };
 
         println!("{script}");

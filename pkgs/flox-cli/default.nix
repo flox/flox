@@ -39,8 +39,10 @@ let
       NIX_BIN = "${nix}/bin/nix"; # only used for nix invocations in tests
       GIT_PKG = gitMinimal;
 
+      # Our own tools
       WATCHDOG_BIN =
         if flox-watchdog == null then "flox-watchdog" else "${flox-watchdog}/libexec/flox-watchdog";
+      FLOX_INTERPRETER = flox-activation-scripts;
 
       FLOX_ZDOTDIR = flox-activation-scripts + "/activate.d/zdotdir";
 

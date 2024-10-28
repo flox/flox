@@ -3190,3 +3190,54 @@ EOF
   run "$FLOX_BIN" activate -- printenv FLOX_DISABLE_METRICS
   assert_output "true"
 }
+
+# ---------------------------------------------------------------------------- #
+
+@test "can use fallback interpreter" {
+  project_setup
+  run "$FLOX_BIN" activate --use-fallback-interpreter -- true
+  assert_success
+}
+
+@test "fallback flag activates with rendered interpreter" {
+  project_setup
+
+  # Attempting to use the interpreter bundled with the CLI will fail because
+  # we're overriding the variable for the bundled interpreter store path, so
+  # we should only be able to activate if the fallback interpreter is used.
+  FLOX_INTERPRETER="/foo" run "$FLOX_BIN" activate --use-fallback-interpreter -- true
+  assert_success
+
+  FLOX_INTERPRETER="/foo" run "$FLOX_BIN" activate -- true
+  assert_failure
+}
+
+@test "can use bundled interpreter to mitigate broken bundled interpreter" {
+  project_setup
+
+  # Give the environment a stable name
+  "$FLOX_BIN" edit -n bad_interpreter
+
+  # Install something to the environment so the out-link exists
+  link_name="$NIX_SYSTEM.bad_interpreter"
+  _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" "$FLOX_BIN" install hello
+  hello_path="$(realpath ".flox/run/$link_name/bin/hello")"
+
+  # Delete the symlink to the environment
+  rm .flox/run/*
+
+  # We need a symlink, so we'll put stuff in here and link it into .flox/run
+  mkdir ./fake_env
+  mkdir ./fake_env/bin
+  echo "exit 1" > ./fake_env/activate # this is our dummy interpreter
+  chmod +x ./fake_env/activate
+  ln -s "$PWD/fake_env" ".flox/run/$link_name"
+
+  # Attempt activation with the bundled interpreter
+  run "$FLOX_BIN" activate -- true
+  assert_success
+
+  # Attempt activation with the broken interpreter
+  run "$FLOX_BIN" activate --use-fallback-interpreter -- true
+  assert_failure
+}

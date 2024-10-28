@@ -7,6 +7,7 @@ use indoc::indoc;
 use tracing::instrument;
 
 use super::{environment_select, EnvironmentSelect};
+use crate::commands::activate::FLOX_INTERPRETER;
 use crate::commands::ConcreteEnvironment;
 use crate::config::Config;
 use crate::subcommand_metric;
@@ -85,7 +86,7 @@ impl Build {
         let mut env = env.into_dyn_environment();
 
         let base_dir = env.parent_path()?;
-        let flox_env = env.activation_path(&flox)?;
+        let flox_env = env.rendered_env_path(&flox)?;
 
         let packages_to_clean = available_packages(&env.lockfile(&flox)?, packages)?;
 
@@ -108,12 +109,18 @@ impl Build {
         let mut env = env.into_dyn_environment();
 
         let base_dir = env.parent_path()?;
-        let flox_env = env.activation_path(&flox)?;
+        let flox_env = env.rendered_env_path(&flox)?;
 
         let packages_to_build = available_packages(&env.lockfile(&flox)?, packages)?;
 
         let builder = FloxBuildMk;
-        let output = builder.build(&flox, &base_dir, &flox_env, &packages_to_build)?;
+        let output = builder.build(
+            &flox,
+            &base_dir,
+            &flox_env,
+            &FLOX_INTERPRETER,
+            &packages_to_build,
+        )?;
 
         for message in output {
             match message {

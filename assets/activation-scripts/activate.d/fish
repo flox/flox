@@ -22,7 +22,7 @@ $_gnused/bin/sed -e 's/^/set -gx /' -e 's/=/ /' -e 's/$/;/' "$_FLOX_ACTIVATION_S
 
 # Set the prompt if we're in an interactive shell.
 if isatty 1
-  source "$FLOX_ENV/activate.d/set-prompt.fish"
+    source "$_activate_d/set-prompt.fish"
 end
 
 # Source user-specified profile scripts if they exist.

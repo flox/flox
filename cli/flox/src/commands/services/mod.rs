@@ -269,7 +269,7 @@ fn processes_by_name_or_default_to_all<'a>(
 
 /// Note that this must be called within an existing activation, otherwise it
 /// will leave behind a process-compose since it doesn't start a watchdog.
-pub async fn start_with_new_process_compose(
+pub async fn start_services_with_new_process_compose(
     config: Config,
     flox: Flox,
     environment_select: EnvironmentSelect,
@@ -304,6 +304,7 @@ pub async fn start_with_new_process_compose(
         trust: false,
         print_script: false,
         start_services: true,
+        use_fallback_interpreter: false,
         run_args: vec!["true".to_string()],
     }
     .activate(

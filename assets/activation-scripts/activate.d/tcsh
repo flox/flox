@@ -16,7 +16,7 @@ eval `$_gnused/bin/sed -e 's/^/setenv /' -e 's/=/ /' -e 's/$/;/' "$_FLOX_ACTIVAT
 
 # Set the prompt if we're in an interactive shell.
 if ( $?tty ) then
-  source "$FLOX_ENV/activate.d/set-prompt.tcsh"
+  source "$_activate_d/set-prompt.tcsh"
 endif
 
 # Source user-specified profile scripts if they exist.

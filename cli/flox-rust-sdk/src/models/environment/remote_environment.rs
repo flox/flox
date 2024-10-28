@@ -154,7 +154,7 @@ impl RemoteEnvironment {
         inner: &mut ManagedEnvironment,
     ) -> Result<(), EnvironmentError> {
         let new_link_path = inner
-            .activation_path(flox)?
+            .rendered_env_path(flox)?
             .read_link()
             .map_err(RemoteEnvironmentError::ReadInternalOutLink)?;
 
@@ -253,7 +253,7 @@ impl Environment for RemoteEnvironment {
         self.inner.manifest(flox)
     }
 
-    fn activation_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
+    fn rendered_env_path(&mut self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         Self::update_out_link(flox, &self.out_link, &mut self.inner)?;
         Ok(self.out_link.clone())
     }

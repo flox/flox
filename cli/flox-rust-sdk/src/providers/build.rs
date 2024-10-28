@@ -39,6 +39,7 @@ pub trait ManifestBuilder {
         flox: &Flox,
         base_dir: &Path,
         flox_env: &Path,
+        flox_interpreter: &Path,
         package: &[String],
     ) -> Result<BuildOutput, ManifestBuilderError>;
 
@@ -130,9 +131,11 @@ impl ManifestBuilder for FloxBuildMk {
         flox: &Flox,
         base_dir: &Path,
         flox_env: &Path,
+        flox_interpreter: &Path,
         packages: &[String],
     ) -> Result<BuildOutput, ManifestBuilderError> {
         let mut command = self.base_command(base_dir, flox_env);
+        command.arg(format!("FLOX_INTERPRETER={}", flox_interpreter.display()));
 
         // Add build target arguments by prefixing the package names with "build/".
         // If no packages are specified, build all packages.
@@ -300,7 +303,8 @@ pub mod test_helpers {
             .build(
                 flox,
                 &env.parent_path().unwrap(),
-                &env.activation_path(flox).unwrap(),
+                &env.rendered_env_path(flox).unwrap(),
+                &env.rendered_env_path(flox).unwrap(),
                 &[package_name.to_owned()],
             )
             .unwrap();
@@ -333,7 +337,7 @@ pub mod test_helpers {
         let err = builder
             .clean(
                 &env.parent_path().unwrap(),
-                &env.activation_path(flox).unwrap(),
+                &env.rendered_env_path(flox).unwrap(),
                 &package_names
                     .iter()
                     .map(|s| s.to_string())

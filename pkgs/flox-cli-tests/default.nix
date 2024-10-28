@@ -19,6 +19,7 @@
   flox-pkgdb,
   flox-watchdog,
   flox-cli,
+  flox-activation-scripts,
   gawk,
   git,
   gnugrep,
@@ -170,6 +171,7 @@ writeShellScriptBin PROJECT_NAME ''
   }
   ${if FLOX_BIN == null then "export FLOX_BIN='flox';" else "export FLOX_BIN='${FLOX_BIN}';"}
   export PROCESS_COMPOSE_BIN='${process-compose}/bin/process-compose';
+  export FLOX_INTERPRETER='${flox-activation-scripts}';
 
   usage() {
         cat << EOF
@@ -263,6 +265,7 @@ writeShellScriptBin PROJECT_NAME ''
     echo "  BUILDENV_BIN:             $BUILDENV_BIN";
     echo "  PKGDB_BIN:                $PKGDB_BIN";
     echo "  NIX_BIN:                  $NIX_BIN";
+    echo "  FLOX_INTERPRETER:         $FLOX_INTERPRETER";
     echo "  PROJECT_TESTS_DIR:        $PROJECT_TESTS_DIR";
     echo "  INPUT_DATA:               $INPUT_DATA";
     echo "  GENERATED_DATA:           $GENERATED_DATA";

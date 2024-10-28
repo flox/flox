@@ -15,19 +15,20 @@ export | LC_ALL=C $_coreutils/bin/sort > "$_start_env"
 
 # Process the flox environment customizations, which includes (amongst
 # other things) prepending this environment's bin directory to the PATH.
-if [ -d "$FLOX_ENV/etc/profile.d" ]; then
+# shellcheck disable=SC2154 # set in the main `activate` script
+if [ -d "$_profile_d" ]; then
   declare -a _profile_scripts
   # TODO: figure out why this is needed
   set +e
   read -r -d '' -a _profile_scripts < <(
-    cd "$FLOX_ENV/etc/profile.d" || exit
+    cd "$_profile_d" || exit
     shopt -s nullglob
     echo *.sh
   )
   set -e
   for profile_script in "${_profile_scripts[@]}"; do
     # shellcheck disable=SC1090 # from rendered environment
-    source "$FLOX_ENV/etc/profile.d/$profile_script"
+    source "$_profile_d/$profile_script"
   done
   unset _profile_scripts
 fi

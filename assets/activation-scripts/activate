@@ -3,7 +3,20 @@
 
 set -euo pipefail
 
+# Trace levels supported by activation scripts:
+#   1. (-v) top-level activate script
+#   2. (-vv) language-specific profile scripts
+#   3. (-vvv) zsh `autoload -U compinit` (very verbose)
+export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
+[ "$_flox_activate_tracelevel" -eq 0 ] || set -x
+
+# These all derive from the `flox-interpeter` package
 export _activate_d="@out@/activate.d"
+export _profile_d="@out@/etc/profile.d"
+export _tcsh_home="@out@/activate.d/tcsh_home"
+export _zdotdir="@out@/activate.d/zdotdir"
+
+# External tools
 export _bash="@bash@"
 export _coreutils="@coreutils@"
 export _daemonize="@daemonize@"
@@ -13,17 +26,8 @@ export _gnused="@gnused@"
 export _jq="@jq@"
 export _process_compose="@process-compose@"
 export _setsid="@setsid@"
-export _tcsh_home="@out@/activate.d/tcsh_home"
-export _zdotdir="@out@/activate.d/zdotdir"
 
 # Top-level Flox environment activation script.
-
-# Trace levels supported by activation scripts:
-#   1. (-v) top-level activate script
-#   2. (-vv) language-specific profile scripts
-#   3. (-vvv) zsh `autoload -U compinit` (very verbose)
-export _flox_activate_tracelevel="${_FLOX_PKGDB_VERBOSITY:-0}"
-[ "$_flox_activate_tracelevel" -eq 0 ] || set -x
 
 # Ensure mandatory environment variables are defined as required by
 # other scripts. For example, we provide defaults for the following
@@ -108,10 +112,7 @@ fi
 #       container invocations, and it would have the incorrect value for
 #       nested flox activations.
 _FLOX_ENV="$($_coreutils/bin/dirname -- "${BASH_SOURCE[0]}")"
-if [ -n "${FLOX_ENV:-}" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
-  echo "WARN: detected change in FLOX_ENV: $FLOX_ENV -> $_FLOX_ENV" >&2
-fi
-export FLOX_ENV="$_FLOX_ENV"
+export FLOX_ENV="${FLOX_ENV:-$_FLOX_ENV}"
 
 # Set a default for _FLOX_ACTIVATE_STORE_PATH for container and build
 # invocations
