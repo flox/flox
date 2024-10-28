@@ -64,6 +64,7 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     type FetchError: std::error::Error;
     type SetOriginError: std::error::Error;
     type GetOriginError: std::error::Error;
+    type RevListError: std::error::Error;
 
     fn discover<P: AsRef<Path>>(path: P) -> Result<Self, Self::DiscoverError>;
     fn init<P: AsRef<Path>>(path: P, bare: bool) -> Result<Self, Self::InitError>;
@@ -88,6 +89,7 @@ pub trait GitProvider: Sized + std::fmt::Debug {
     ) -> Result<(), Self::RmError>;
     fn add(&self, paths: &[&Path]) -> Result<(), Self::AddError>;
     fn commit(&self, message: &str) -> Result<(), Self::CommitError>;
+    fn rev_count(&self, rev: &str) -> Result<u64, Self::RevListError>;
 
     fn show(&self, object: &str) -> Result<OsString, Self::ShowError>;
 
@@ -687,6 +689,7 @@ impl GitProvider for GitCommandProvider {
     type MvError = GitCommandError;
     type PushError = GitRemoteCommandError;
     type RenameError = GitCommandError;
+    type RevListError = GitCommandError;
     type RmError = GitCommandError;
     type SetOriginError = GitCommandError;
     type ShowError = GitCommandError;
