@@ -6,6 +6,7 @@ set -euo pipefail
 export _activate_d="@out@/activate.d"
 export _bash="@bash@"
 export _coreutils="@coreutils@"
+export _daemonize="@daemonize@"
 export _flox_activations="@flox_activations@"
 export _getopt="@getopt@"
 export _gnused="@gnused@"

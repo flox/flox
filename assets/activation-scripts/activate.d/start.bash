@@ -79,6 +79,28 @@ LC_ALL=C $_coreutils/bin/comm -13 "$_start_env" "$_end_env" \
 LC_ALL=C $_coreutils/bin/comm -23 "$_start_env" "$_end_env" \
   | $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
 
+# Start the watchdog if invoked by `flox activate` but not when the
+# `${FLOX_ENV}/activate` is invoked directly such as:
+# - containers
+# - wrapped `flox build` binaries.
+#
+# This must come before sourcing the complete environment (in case the watchdog
+# later depends on vars and hooks) but before the activation is marked as ready
+# (to ensure that it gets cleaned up).
+if [ -n "${_FLOX_WATCHDOG_BIN:-}" ]; then
+  # TODO: Some of these args can be removed after https://github.com/flox/flox/issues/2206
+  "$_daemonize" \
+    -E _FLOX_WATCHDOG_LOG_LEVEL="debug" \
+    "$_FLOX_WATCHDOG_BIN" \
+    ${FLOX_DISABLE_METRICS:+--disable-metrics} \
+    --log-dir "$_FLOX_ENV_LOG_DIR" \
+    --socket "$_FLOX_SERVICES_SOCKET" \
+    --pid "$$" \
+    --registry "$_FLOX_REGISTRY_PATH" \
+    --hash "$_FLOX_DOTFLOX_HASH"
+fi
+
+# Finally mark the environment as ready to use for attachments.
 "$_flox_activations" \
   ${FLOX_RUNTIME_DIR:+--runtime-dir "$FLOX_RUNTIME_DIR"} \
   set-ready \

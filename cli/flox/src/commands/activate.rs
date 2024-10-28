@@ -33,7 +33,6 @@ use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::{debug, warn};
-use nix::unistd::getpid;
 use once_cell::sync::Lazy;
 
 use super::services::ServicesEnvironment;
@@ -324,6 +323,19 @@ impl Activate {
                 "_FLOX_ACTIVATE_STORE_PATH",
                 store_path.to_string_lossy().to_string(),
             ),
+            (
+                "_FLOX_WATCHDOG_BIN",
+                WATCHDOG_BIN.to_string_lossy().to_string(),
+            ),
+            // TODO: The following are no longer needed after https://github.com/flox/flox/issues/2206
+            (
+                "_FLOX_REGISTRY_PATH",
+                env_registry_path(&flox).to_string_lossy().to_string(),
+            ),
+            (
+                "_FLOX_DOTFLOX_HASH",
+                path_hash(environment.dot_flox_path()).to_string(),
+            ),
         ]);
 
         if is_ephemeral {
@@ -399,17 +411,6 @@ impl Activate {
 
         exports.extend(default_nix_env_vars());
 
-        // Launch the watchdog process
-        if !in_place && !is_ephemeral {
-            Activate::launch_watchdog(
-                &flox,
-                &environment.log_path()?,
-                &path_hash(environment.dot_flox_path()),
-                socket_path,
-                config.flox.disable_metrics,
-            )?;
-        }
-
         // when output is not a tty, and no command is provided
         // we just print an activation script to stdout
         //
@@ -431,53 +432,6 @@ impl Activate {
         } else {
             Self::activate_command(self.run_args, shell, exports, activation_path, is_ephemeral)
         }
-    }
-
-    /// Launch the watchdog process
-    fn launch_watchdog(
-        flox: &Flox,
-        log_dir: impl AsRef<Path>,
-        path_hash: &str,
-        socket_path: impl AsRef<Path>,
-        disable_metrics: bool,
-    ) -> Result<()> {
-        let log_dir = log_dir.as_ref();
-        let mut cmd = Command::new(&*WATCHDOG_BIN);
-        if disable_metrics {
-            cmd.arg("--disable-metrics");
-        }
-
-        // This process may terminate before the watchdog registers the activation in the environment
-        // registry so we pass it the PID of this process unconditionally.
-        cmd.arg("--pid");
-        cmd.arg(getpid().as_raw().to_string());
-
-        // Set the log path
-        cmd.arg("--log-dir");
-        cmd.arg(log_dir);
-        cmd.env("_FLOX_WATCHDOG_LOG_LEVEL", "debug"); // always write to log file
-
-        // Set the socket path
-        cmd.arg("--socket");
-        cmd.arg(socket_path.as_ref());
-
-        // Set the path hash so the watchdog doesn't need to compute it
-        cmd.arg("--hash");
-        cmd.arg(path_hash);
-
-        // Set the environment registry path
-        let reg_path = env_registry_path(flox);
-        cmd.arg("--registry");
-        cmd.arg(reg_path);
-
-        // Redirect the output streams so watchdog output doesn't appear in the shell
-        cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::null());
-
-        // Launch the watchdog
-        let _child = cmd.spawn().context("failed to spawn watchdog process")?;
-
-        Ok(())
     }
 
     /// Used for `flox activate -- run_args`
