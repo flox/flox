@@ -18,7 +18,7 @@ pub struct StartOrAttachArgs {
     #[arg(help = "The PID of the shell registering interest in the activation.")]
     #[arg(short, long, value_name = "PID")]
     pub pid: i32,
-    #[arg(help = "The path to the .flox directory for the environment.")]
+    #[arg(help = "The path to the activation symlink for the environment.")]
     #[arg(short, long, value_name = "PATH")]
     pub flox_env: PathBuf,
     #[arg(help = "The store path of the rendered environment for this activation.")]
