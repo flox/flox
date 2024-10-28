@@ -11,7 +11,7 @@ use crate::Error;
 pub struct AttachArgs {
     #[arg(help = "The PID of the shell registering interest in the activation.")]
     #[arg(short, long, value_name = "PID")]
-    pub pid: u32,
+    pub pid: i32,
     #[arg(help = "The path to the .flox directory for the environment.")]
     #[arg(short, long, value_name = "PATH")]
     pub flox_env: PathBuf,
@@ -30,7 +30,7 @@ pub struct AttachExclusiveArgs {
     pub timeout_ms: Option<u32>,
     #[arg(help = "Remove the specified PID when attaching to this activation.")]
     #[arg(short, long, value_name = "PID")]
-    pub remove_pid: Option<u32>,
+    pub remove_pid: Option<i32>,
 }
 
 impl AttachArgs {

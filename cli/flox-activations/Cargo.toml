@@ -21,5 +21,6 @@ indoc.workspace = true
 
 
 [dev-dependencies]
+nix.workspace = true
 tempfile.workspace = true
 temp-env.workspace = true

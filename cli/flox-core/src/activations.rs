@@ -77,7 +77,7 @@ impl Activations {
     pub fn create_activation(
         &mut self,
         store_path: &str,
-        pid: u32,
+        pid: i32,
     ) -> Result<&mut Activation, Error> {
         if self.activation_for_store_path(store_path).is_some() {
             anyhow::bail!("activation for store path '{store_path}' already exists");
@@ -165,7 +165,7 @@ impl Activation {
     /// Register another PID that runs the same activation of an environment.
     /// Registered PIDs are used by the watchdog,
     /// to determine when an activation can be cleaned up.
-    pub fn attach_pid(&mut self, pid: u32, timeout: Option<Duration>) {
+    pub fn attach_pid(&mut self, pid: i32, timeout: Option<Duration>) {
         let expiration = timeout.map(|timeout| OffsetDateTime::now_utc() + timeout);
         let attached_pid = AttachedPid { pid, expiration };
 
@@ -180,7 +180,7 @@ impl Activation {
     /// which PID is attached to an activation.
     /// I.e. in in-place activations, the process that started the activation will be flox,
     /// while the process that attaches to the activation will be the `eval`ing shell.
-    pub fn remove_pid(&mut self, pid: u32) {
+    pub fn remove_pid(&mut self, pid: i32) {
         self.attached_pids
             .retain(|attached_pid| attached_pid.pid != pid);
     }
@@ -188,7 +188,7 @@ impl Activation {
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct AttachedPid {
-    pub pid: u32,
+    pub pid: i32,
     /// If Some, the time after which the activation can be cleaned up
     ///
     /// Even if the PID has exited, the activation should not be cleaned up
@@ -204,7 +204,7 @@ pub struct AttachedPid {
 
 impl AttachedPid {
     fn is_running(&self) -> bool {
-        let pid = Pid::from_raw(self.pid as i32);
+        let pid = Pid::from_raw(self.pid);
         match kill(pid, None) {
             // These semantics come from kill(2).
             Ok(_) => true,              // Process received the signal and is running.
