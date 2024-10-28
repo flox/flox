@@ -16,7 +16,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::bail;
 use flox_rust_sdk::models::env_registry::{activation_pids, ActivationPid};
 use tracing::{debug, warn};
 /// How long to wait between watcher updates.
@@ -185,17 +184,6 @@ impl PidWatcher {
     fn prune_terminations(&mut self) {
         self.pids_watching.retain(|&pid| Self::pid_is_running(pid));
     }
-
-    fn watch_new_pids(&mut self, pids: impl Iterator<Item = ActivationPid>) -> Result<(), Error> {
-        for pid in pids {
-            if Self::pid_is_running(pid) && !self.pids_watching.insert(pid) {
-                // Only triggered if the insert reports that the PID was already
-                // being watched
-                bail!("tried to watch PID {pid}, which was already watched");
-            }
-        }
-        Ok(())
-    }
 }
 
 impl Watcher for PidWatcher {
@@ -225,13 +213,9 @@ impl Watcher for PidWatcher {
     /// Update the list of PIDs that are currently being watched.
     fn update_watchlist(&mut self) -> Result<(), Error> {
         let all_registered_pids = activation_pids(&self.reg_path, &self.hash)?;
+        // Add all PIDs, even if they're dead, but then immediately remove them
+        self.pids_watching.extend(all_registered_pids);
         self.prune_terminations();
-        let to_add = self
-            .pids_watching
-            .difference(&all_registered_pids)
-            .cloned()
-            .collect::<Vec<_>>();
-        self.watch_new_pids(to_add.into_iter())?;
         Ok(())
     }
 
