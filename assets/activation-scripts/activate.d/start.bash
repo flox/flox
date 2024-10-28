@@ -79,8 +79,7 @@ LC_ALL=C $_coreutils/bin/comm -13 "$_start_env" "$_end_env" \
 LC_ALL=C $_coreutils/bin/comm -23 "$_start_env" "$_end_env" \
   | $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
 
-if [ -n "${FLOX_RUNTIME_DIR:-}" ]; then
-  "$_flox_activations" --runtime-dir "$FLOX_RUNTIME_DIR" set-ready --flox-env "$FLOX_ENV" --id "$_FLOX_ACTIVATION_ID"
-else
-  "$_flox_activations" set-ready --flox-env "$FLOX_ENV" --id "$_FLOX_ACTIVATION_ID"
-fi
+"$_flox_activations" \
+  ${FLOX_RUNTIME_DIR:+--runtime-dir "$FLOX_RUNTIME_DIR"} \
+  set-ready \
+  --flox-env "$FLOX_ENV" --id "$_FLOX_ACTIVATION_ID"
