@@ -36,6 +36,13 @@ let
 
     PROCESS_COMPOSE_BIN = "${process-compose}/bin/process-compose";
 
+    # Used by `flox build' to access `stdenv` at a known version
+    # When utilities from nixpkgs are used by flox at runtime,
+    # they should be
+    # a) bundled at buildtime if possible (binaries/packages)
+    # b) use this version of nixpkgs i.e. (nix library utils such as `lib` and `runCommand`)
+    COMMON_NIXPKGS_URL = "path:${inputs.nixpkgs.outPath}";
+
     # The current version of flox being built
     inherit FLOX_VERSION;
 

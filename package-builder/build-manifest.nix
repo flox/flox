@@ -1,7 +1,8 @@
 {
-  pkgs ?
-    import (builtins.getFlake "github:flox/nixpkgs/dc14ed91132ee3a26255d01d8fd0c1f5bff27b2f")
-      { },
+  # nixpkgs providing `lib` and `stdenv` (`runCommand`)
+  # this is overridden to point to the nixpkgs used to build flox by the caller
+  nixpkgs-url ? "github:flox/nixpkgs/stable",
+  pkgs ? (builtins.getFlake nixpkgs-url).legacyPackages.${builtins.currentSystem},
   name,
   flox-env,
   install-prefix,

@@ -42,6 +42,7 @@
   massif-visualizer ? throw "`massif-visualizer' is required for memory profiling on Linux",
   substituteAll,
   symlinkJoin,
+  inputs,
 }:
 let
   batsWith = bats.withLibraries (p: [
@@ -75,14 +76,8 @@ let
     # they should be
     # a) bundled at buildtime if possible (binaries/packages)
     # b) use this version of nixpkgs i.e. (nix library utils such as `dockerTools`)
-    COMMON_NIXPKGS_URL =
-      let
-        lockfile = builtins.fromJSON (builtins.readFile ./../../flake.lock);
-        root = lockfile.nodes.${lockfile.root};
-        nixpkgs = lockfile.nodes.${root.inputs.nixpkgs}.locked;
-      in
-      # todo: use `builtins.flakerefToString` once flox ships with nix 2.18+
-      "github:NixOS/nixpkgs/${nixpkgs.rev}";
+    COMMON_NIXPKGS_URL = "path:${inputs.nixpkgs.outPath}";
+
   } // lib.optionalAttrs stdenv.isLinux { sentry_PREFIX = sentry-native.outPath; };
 in
 stdenv.mkDerivation (

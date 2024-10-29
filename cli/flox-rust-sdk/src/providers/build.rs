@@ -22,6 +22,10 @@ static GNUMAKE_BIN: LazyLock<PathBuf> = LazyLock::new(|| {
         .into()
 });
 
+static BUILDTIME_NIXPKGS_URL: LazyLock<String> = LazyLock::new(|| {
+    std::env::var("COMMON_NIXPKGS_URL").unwrap_or_else(|_| env!("COMMON_NIXPKGS_URL").to_string())
+});
+
 pub trait ManifestBuilder {
     /// Build the specified packages defined in the environment at `flox_env`.
     /// The build process will start in the background.
@@ -93,6 +97,7 @@ impl FloxBuildMk {
         command.arg("--file").arg(&*FLOX_BUILD_MK);
         command.arg("--directory").arg(base_dir); // Change dir before reading makefile.
         command.arg(format!("FLOX_ENV={}", flox_env.display()));
+        command.arg(format!("BUILDTIME_NIXPKGS_URL={}", &*BUILDTIME_NIXPKGS_URL));
 
         command
     }
