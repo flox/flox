@@ -71,6 +71,7 @@ pub struct FloxVersion {
     num_of_commits: Option<u32>,
     commit_vcs: Option<char>,
     commit_sha: Option<String>,
+    is_dirty: bool,
 }
 
 #[derive(Debug)]
@@ -95,6 +96,7 @@ impl FromStr for FloxVersion {
             (?:-(?P<pre>(?P<pre_name>[a-zA-Z]+)\.(?P<pre_number>\d+)))? # Optionally match pre-release name and number (e.g., rc.1)
             (?:-(?P<num_of_commits>\d+))?                          # Optionally match number of commits
             (?:-(?P<commit_vcs>[a-z])(?P<commit_sha>[a-f0-9]+))?   # Optionally match VCS and SHA
+            (?:-(?P<dirty>dirty))?                                 # Optionally match the dirty suffix
         $").unwrap(); // Unwrap is safe here because the regex is a constant
 
         // Apply the regex to the version string
@@ -134,6 +136,7 @@ impl FromStr for FloxVersion {
                 num_of_commits,
                 commit_vcs,
                 commit_sha,
+                is_dirty: captures.name("dirty").is_some(),
             })
         } else {
             Err(VersionParseError::InvalidFormat)
@@ -187,8 +190,13 @@ impl PartialOrd for FloxVersion {
         }
 
         // Skip commit comparison if there are pre-release fields
-        match (self.commit_vcs, other.commit_vcs) {
-            (None, None) => Some(Ordering::Equal),
+        match (
+            self.commit_vcs,
+            other.commit_vcs,
+            self.is_dirty,
+            other.is_dirty,
+        ) {
+            (None, None, false, false) => Some(Ordering::Equal),
             _ => None,
         }
     }
@@ -221,6 +229,10 @@ impl fmt::Display for FloxVersion {
             }
         }
 
+        // If version is dirty include it
+        if self.is_dirty {
+            version_str = format!("{}-dirty", version_str);
+        }
         // Write the formatted string to the formatter
         write!(f, "{}", version_str)
     }
@@ -243,9 +255,29 @@ mod tests {
             num_of_commits: None,
             commit_vcs: None,
             commit_sha: None,
+            is_dirty: false,
         });
         assert_eq!(version.to_string(), version_str);
         assert_eq!(version.partial_cmp(&version), Some(Ordering::Equal));
+    }
+
+    #[test]
+    fn test_parse_standard_version_dirty() {
+        let version_str = "1.2.3-dirty";
+        let version: FloxVersion = version_str.parse().unwrap();
+        assert_eq!(version, FloxVersion {
+            major: 1,
+            minor: 2,
+            patch: 3,
+            pre_name: None,
+            pre_number: None,
+            num_of_commits: None,
+            commit_vcs: None,
+            commit_sha: None,
+            is_dirty: true,
+        });
+        assert_eq!(version.to_string(), version_str);
+        assert_eq!(version.partial_cmp(&version), None);
     }
 
     #[test]
@@ -261,6 +293,7 @@ mod tests {
             num_of_commits: None,
             commit_vcs: None,
             commit_sha: None,
+            is_dirty: false,
         });
         assert_eq!(version.to_string(), version_str);
         assert_eq!(version.partial_cmp(&version), Some(Ordering::Equal));
@@ -279,6 +312,7 @@ mod tests {
             num_of_commits: Some(21),
             commit_vcs: Some('g'),
             commit_sha: Some("b91c3f1".to_string()),
+            is_dirty: false,
         });
         assert_eq!(version.to_string(), version_str);
         assert_eq!(version.partial_cmp(&version), Some(Ordering::Equal));
@@ -305,6 +339,7 @@ mod tests {
             num_of_commits: None,
             commit_vcs: Some('g'),
             commit_sha: Some("b91c3f1".to_string()),
+            is_dirty: false,
         });
         assert_eq!(version.to_string(), version_str);
         assert_eq!(version.partial_cmp(&version), None);
@@ -314,6 +349,14 @@ mod tests {
     fn test_parse_version_with_pre_release_and_commits() {
         assert!(matches!(
             "1.2.3-rc.1-10-gb91c3f1".parse::<FloxVersion>(),
+            Err(VersionParseError::InvalidFormat),
+        ));
+    }
+
+    #[test]
+    fn test_parse_version_with_commits_and_dirty() {
+        assert!(matches!(
+            "1.2.3-gb91c3f1-diry".parse::<FloxVersion>(),
             Err(VersionParseError::InvalidFormat),
         ));
     }
@@ -375,8 +418,13 @@ mod tests {
     fn test_version_ordering_with_flake_style_version() {
         let v1: FloxVersion = "1.2.2".parse().unwrap();
         let v2: FloxVersion = "1.2.2-gb91c3f1".parse().unwrap();
+        let v3: FloxVersion = "1.2.2-dirty".parse().unwrap();
 
         assert!(v1 != v2);
+        assert!(v1 != v3);
+        assert!(v2 != v3);
         assert_eq!(v1.partial_cmp(&v2), None);
+        assert_eq!(v1.partial_cmp(&v3), None);
+        assert_eq!(v2.partial_cmp(&v3), None);
     }
 }

@@ -12,13 +12,12 @@ use flox_core::activations::{
     read_activations_json,
     write_activations_json,
 };
-use flox_rust_sdk::flox::FLOX_VERSION;
+use flox_rust_sdk::flox::FLOX_VERSION_STRING;
 use flox_rust_sdk::providers::services::process_compose_down;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
 use logger::{init_logger, spawn_gc_logs, spawn_heartbeat_log};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
-use once_cell::sync::Lazy;
 use process::{LockedActivations, PidWatcher, WaitResult};
 use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
@@ -39,7 +38,7 @@ when the final activation of an environment has terminated. This cleanup can
 be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
 
 #[derive(Debug, Parser)]
-#[command(version = Lazy::get(&FLOX_VERSION).map(|v| v.as_str()).unwrap_or("0.0.0"))]
+#[command(version = &*FLOX_VERSION_STRING.as_str())]
 #[command(about = SHORT_HELP, long_about = LONG_HELP)]
 pub struct Cli {
     #[arg(short, long, value_name = "PATH")]

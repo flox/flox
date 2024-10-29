@@ -51,7 +51,11 @@ symlinkJoin {
       --set WATCHDOG_BIN        "${flox-watchdog}/libexec/flox-watchdog" \
       --set PROCESS_COMPOSE_BIN "${process-compose}/bin/process-compose" \
       --set FLOX_VERSION        "${version}"
+
+    # make sure that version can be parsed
+    $out/bin/flox --version
   '';
+
   passthru = {
     inherit pkgsFor;
   };

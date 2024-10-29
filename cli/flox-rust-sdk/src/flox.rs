@@ -8,12 +8,19 @@ use serde_with::DeserializeFromStr;
 use thiserror::Error;
 use url::Url;
 
+use crate::data::FloxVersion;
 pub use crate::models::environment_ref::{self, *};
 use crate::models::search::SearchStrategy;
 use crate::providers::{catalog, flox_cpp_utils};
 
-pub static FLOX_VERSION: Lazy<String> =
+pub static FLOX_VERSION_STRING: Lazy<String> =
     Lazy::new(|| std::env::var("FLOX_VERSION").unwrap_or(env!("FLOX_VERSION").to_string()));
+pub static FLOX_VERSION: Lazy<FloxVersion> = Lazy::new(|| {
+    (*FLOX_VERSION_STRING)
+        .parse()
+        // Won't panic since we run flox --version in pkgs/flox/default.nix
+        .expect("Version '{version}' can not be parsed.")
+});
 pub static FLOX_SENTRY_ENV: Lazy<Option<String>> =
     Lazy::new(|| std::env::var("FLOX_SENTRY_ENV").ok());
 
