@@ -199,8 +199,6 @@ wait_for_watchdogs() {
     #  >&3
 
     if [ -n "${pids?}" ]; then
-      echo "Waiting for pids: $pids" >&3
-
       tries=0
       while true; do
         tries=$((tries + 1))
