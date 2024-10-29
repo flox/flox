@@ -23,6 +23,10 @@ MANIFEST_LOCK := $(FLOX_ENV)/manifest.lock
 ifeq (,$(wildcard $(MANIFEST_LOCK)))
   $(error $(MANIFEST_LOCK) not found)
 endif
+# Check that the BUILDTIME_NIXPKGS_URL is defined
+ifeq (,$(BUILDTIME_NIXPKGS_URL))
+  $(error BUILDTIME_NIXPKGS_URL not defined)
+endif
 
 # Substitute Nix store paths for packages required by this Makefile.
 __bashInteractive := @bashInteractive@
@@ -204,6 +208,7 @@ define BUILD_local_template =
 	    --argstr name "$(_name)" \
 	    --argstr flox-env "$(FLOX_ENV)" \
 	    --argstr install-prefix "$(_out)" \
+	    --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	    --out-link "result-$(_pname)" \
 	    2>&1 | $(_tee) $($(_pvarname)_logfile)
 
@@ -260,6 +265,7 @@ define BUILD_nix_sandbox_template =
 	    --argstr name "$(_name)" \
 	    --argstr srcTarball "$($(_pvarname)_src_tar)" \
 	    --argstr flox-env "$(FLOX_ENV)" \
+	    --argstr nixpkgs-url "$(BUILDTIME_NIXPKGS_URL)" \
 	    --argstr install-prefix "$(_out)" \
 	    $(if $($(_pvarname)_buildDeps),--arg buildDeps $($(_pvarname)_buildDeps_arg)) \
 	    --argstr buildScript "$($(_pvarname)_buildScript)" \
