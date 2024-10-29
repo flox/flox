@@ -144,10 +144,11 @@ impl CatalogClient {
         }
 
         let client = {
-            let timeout = std::time::Duration::from_secs(15);
+            let conn_timeout = std::time::Duration::from_secs(15);
+            let req_timeout = std::time::Duration::from_secs(60);
             reqwest::ClientBuilder::new()
-                .connect_timeout(timeout)
-                .timeout(timeout)
+                .connect_timeout(conn_timeout)
+                .timeout(req_timeout)
                 .user_agent(format!("flox-cli/{}", &*FLOX_VERSION))
                 .default_headers(header_map)
         };
