@@ -42,7 +42,7 @@
   NIX_BIN ? "${nix}/bin/nix",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   FLOX_BIN ? "${flox-cli}/bin/flox",
-  WATCHDOG_BIN ? "${flox-watchdog}/bin/flox-watchdog",
+  WATCHDOG_BIN ? "${flox-watchdog}/libexec/flox-watchdog",
 }:
 let
   batsWith = bats.withLibraries (p: [

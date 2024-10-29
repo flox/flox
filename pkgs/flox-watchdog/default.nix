@@ -53,12 +53,15 @@ craneLib.buildPackage (
 
     # bundle manpages and completion scripts
     #
+    # mv: Moves to libexec to prevent it leaking onto PATH.
+    #
     # sed: Removes rust-toolchain from binary. Likely due to toolchain overriding.
     #   unclear about the root cause, so this is a hotfix.
     postInstall = ''
-      rm -f $out/bin/crane-*
+      mv $out/bin $out/libexec
+      rm -f $out/libexec/crane-*
       for target in "$(basename ${rust-toolchain.rust.outPath} | cut -f1 -d- )" ; do
-        sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/bin/flox-watchdog
+        sed -i -e "s|$target|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee|g" $out/libexec/flox-watchdog
       done
     '';
 
