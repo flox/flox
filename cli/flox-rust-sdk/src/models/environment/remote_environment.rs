@@ -16,7 +16,6 @@ use super::{
     EnvironmentError,
     InstallationAttempt,
     ManagedPointer,
-    MigrationInfo,
     UninstallationAttempt,
     DOT_FLOX,
     ENVIRONMENT_POINTER_FILENAME,
@@ -26,8 +25,8 @@ use crate::flox::{EnvironmentOwner, EnvironmentRef, Flox};
 use crate::models::container_builder::ContainerBuilder;
 use crate::models::environment_ref::EnvironmentName;
 use crate::models::floxmeta::{FloxMeta, FloxMetaError};
-use crate::models::lockfile::LockedManifest;
-use crate::models::manifest::{PackageToInstall, TypedManifest};
+use crate::models::lockfile::Lockfile;
+use crate::models::manifest::{Manifest, PackageToInstall};
 
 const REMOTE_ENVIRONMENT_BASE_DIR: &str = "remote";
 
@@ -173,12 +172,16 @@ impl RemoteEnvironment {
 impl Environment for RemoteEnvironment {
     /// Return the lockfile content,
     /// or error if the lockfile doesn't exist.
-    fn lockfile(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
+    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
         self.inner.lockfile(flox)
     }
 
-    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError> {
-        self.inner.build_container(flox)
+    fn build_container(
+        &mut self,
+        flox: &Flox,
+        tag: &str,
+    ) -> Result<ContainerBuilder, EnvironmentError> {
+        self.inner.build_container(flox, tag)
     }
 
     /// Install packages to the environment atomically
@@ -246,7 +249,7 @@ impl Environment for RemoteEnvironment {
     }
 
     /// Return the deserialized manifest
-    fn manifest(&self, flox: &Flox) -> Result<TypedManifest, EnvironmentError> {
+    fn manifest(&self, flox: &Flox) -> Result<Manifest, EnvironmentError> {
         self.inner.manifest(flox)
     }
 
@@ -303,20 +306,6 @@ impl Environment for RemoteEnvironment {
     /// When extended to delete upstream environments, this will be more useful.
     fn delete(self, flox: &Flox) -> Result<(), EnvironmentError> {
         self.inner.delete(flox)
-    }
-
-    fn migrate_to_v1(
-        &mut self,
-        flox: &Flox,
-        migration_info: MigrationInfo,
-    ) -> Result<(), EnvironmentError> {
-        self.inner.migrate_to_v1(flox, migration_info)?;
-        self.inner
-            .push(flox, false)
-            .map_err(|e| RemoteEnvironmentError::UpdateUpstream(e).into())
-            .and_then(|_| Self::update_out_link(flox, &self.out_link, &mut self.inner))?;
-
-        Ok(())
     }
 
     fn services_socket_path(&self, flox: &Flox) -> Result<PathBuf, EnvironmentError> {

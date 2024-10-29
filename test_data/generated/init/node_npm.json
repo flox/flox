@@ -10,12 +10,12 @@
           {
             "attr_path": "nodejs",
             "broken": false,
-            "derivation": "/nix/store/9chh5w9kiak9lp1fjaspiyfbp3gajcwj-nodejs-20.17.0.drv",
+            "derivation": "/nix/store/ynhixqy7ih4sjpww3y7ra64fn3s92y6j-nodejs-20.17.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "nodejs-20.17.0",
             "outputs": [
               {
@@ -31,10 +31,10 @@
               "out"
             ],
             "pname": "nodejs",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -50,7 +50,7 @@
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "nodejs-20.17.0",
             "outputs": [
               {
@@ -66,10 +66,10 @@
               "out"
             ],
             "pname": "nodejs",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -80,12 +80,12 @@
           {
             "attr_path": "nodejs",
             "broken": false,
-            "derivation": "/nix/store/7xkky8lwc350zs9qk7gm8368qzvsaj8v-nodejs-20.17.0.drv",
+            "derivation": "/nix/store/pmw8kl5dckr1zfb4ny27v6gjk9aa9nrp-nodejs-20.17.0.drv",
             "description": "Event-driven I/O framework for the V8 JavaScript engine",
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "nodejs-20.17.0",
             "outputs": [
               {
@@ -101,10 +101,10 @@
               "out"
             ],
             "pname": "nodejs",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -120,7 +120,7 @@
             "insecure": false,
             "install_id": "nodejs",
             "license": "MIT",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "nodejs-20.17.0",
             "outputs": [
               {
@@ -136,10 +136,10 @@
               "out"
             ],
             "pname": "nodejs",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -148,7 +148,7 @@
             "version": "20.17.0"
           }
         ],
-        "page": 679633,
+        "page": 687768,
         "url": ""
       }
     }

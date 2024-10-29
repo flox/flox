@@ -1,0 +1,9 @@
+# A lockfile can be generated for this manifest using `flox edit`
+# We could consider passing in the nixpkgs rev with some form of automation,
+# but for now it's manual.
+
+version = 1
+
+[install]
+hello.flake = "github:nixos/nixpkgs/ab5fd150146dcfe41fda501134e6503932cc8dfd#hello"
+hello.priority = 6

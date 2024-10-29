@@ -7,13 +7,13 @@ edition = "2021"
 
 [dependencies]
 async-stream.workspace = true
-blake3.workspace = true
 catalog-api-v1.workspace = true
 chrono.workspace = true
 derive_more.workspace = true
 enum_dispatch.workspace = true
 fslock.workspace = true
 futures.workspace = true
+flox-core.workspace = true
 indent.workspace = true
 indexmap.workspace = true
 indoc.workspace = true
@@ -42,6 +42,7 @@ url-escape.workspace = true
 uuid.workspace = true
 walkdir.workspace = true
 xdg.workspace = true
+serial_test = { workspace = true, features = ["file_locks"] }
 
 [dev-dependencies]
 anyhow.workspace = true

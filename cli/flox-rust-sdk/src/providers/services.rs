@@ -22,7 +22,7 @@ use tempfile::NamedTempFile;
 use tracing::debug;
 
 use crate::flox::Flox;
-use crate::models::lockfile::LockedManifestCatalog;
+use crate::models::lockfile::Lockfile;
 use crate::models::manifest::{ManifestServiceShutdown, ManifestServices};
 use crate::utils::{traceable_path, CommandExt};
 
@@ -58,6 +58,8 @@ pub enum ServiceError {
     ParseOutput(#[source] serde_json::Error),
     #[error("failed to read process log line")]
     ReadLogLine(#[source] std::io::Error),
+    #[error("failed to create pipe for log output")]
+    PipeCreation(#[source] nix::Error),
     #[error("{0}")] // just pass through whatever the message is
     InvalidConfig(String),
 }
@@ -272,9 +274,10 @@ pub fn service_config_write_location(temp_dir: impl AsRef<Path>) -> Result<PathB
     Ok(path)
 }
 
+/// Generate the YAML config file for services if the lockfile contains services.
 pub fn maybe_make_service_config_file(
     flox: &Flox,
-    lockfile: &LockedManifestCatalog,
+    lockfile: &Lockfile,
 ) -> Result<Option<PathBuf>, ServiceError> {
     let service_config_path = if !lockfile.manifest.services.is_empty() {
         let config_path = service_config_write_location(&flox.temp_dir)?;
@@ -711,35 +714,41 @@ impl ProcessComposeLogTail {
             "running process-compose logs --tail",
         );
 
-        cmd.stdout(Stdio::piped());
+        // Create a pipe to read combined stdout and stderr.
+        // Process-compose logs to stdout, but we want to capture stderr as well,
+        // as it prints an error message after the last line is read,
+        // which we use to stop reading early,
+        // as process-compose will block for about a second after printing the last line.
+        let (read_pipe, stdout_pipe_write) =
+            nix::unistd::pipe().map_err(ServiceError::PipeCreation)?;
+        let stderr_write_pipe = stdout_pipe_write
+            .try_clone()
+            .map_err(ServiceError::ReadLogLine)?;
+        cmd.stdout(Stdio::from(stdout_pipe_write));
+        cmd.stderr(Stdio::from(stderr_write_pipe));
 
         let mut child = cmd.spawn().map_err(ServiceError::ProcessComposeCmd)?;
 
-        let stdout = BufReader::new(child.stdout.take().unwrap());
+        let output = BufReader::new(std::fs::File::from(read_pipe));
 
         let mut lines = Vec::with_capacity(tail);
-        for line in stdout.lines() {
+        for line in output.lines() {
             let line = line.map_err(ServiceError::ReadLogLine)?;
 
-            // process-compose logs --tail will print an error message
+            // `process-compose logs --tail` will print an error message to stderr
             // after the last line is read.
+            //
             // ```
             // write close: write unix ->/tmp/.tmpnYlCZ2/S.process-compose: write: broken pipe
             // ```
-            // Unfortunately, this message is printed to stdout, not stderr,
-            // so we can't filter it out trivially.
-            // For now, assume it's the last line and break out of the loop.
-            // A change to print to stderr instead was proposed in
-            // <https://github.com/F1bonacc1/process-compose/pull/216>.
             //
             // Calling process-compose takes about ~1 second
             // even though process-compose will print the logs immediately,
             // it will block for around a second before exiting :)
-            // Hence we read from the output stream directly,
-            // and break once we see the last line.
+            // Hence, we read both stdout and stderr
+            // and break once we see the line "write close: [..]".
             // This relies on the assumption that the last line is always
-            // the aforementioned error message,
-            // and that this is printed to stdout, incorrectly as that may be.
+            // the aforementioned error message.
             if line.starts_with("write close: write unix") {
                 debug!("last line read, stopping log reader");
                 break;
@@ -1394,9 +1403,15 @@ mod tests {
                 })
                 .ok();
 
-            if states.is_some() {
-                break;
-            };
+            if let Some(ref states) = states {
+                // Even if `process-compose list` succeeded, the processes might
+                // be "Running"
+                if states.process("bar").unwrap().status == "Completed"
+                    && states.process("baz").unwrap().status == "Completed"
+                {
+                    break;
+                }
+            }
         }
         let states = states.expect("failed to read process states");
 

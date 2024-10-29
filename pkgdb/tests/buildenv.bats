@@ -189,6 +189,12 @@ setup_file() {
 # With '--container' produces a script that can be used to build a container.
 # bats test_tags=buildenv:container
 @test "Environment builds container" {
+  # 2024-10-22: fakeroot used in the creation of layers aborts ion macos with:
+  #
+  # dyld[25304]: symbol not found in flat namespace '_fstat$INODE64'
+  # /nix/store/52g78wj19d5bxal1znqgrgnrifhz6z15-fakeroot-1.32.2/bin/fakeroot: line 178: 25304 Abort trap: 6           FAKEROOTKEY=$FAKEROOTKEY DYLD_INSERT_LIBRARIES="$FAKEROOT_LIB" ${SHELL:-/bin/sh}
+  [ "${NIX_SYSTEM#*-}" = "darwin" ] && skip "Container builds are only supported on '*-linux'"
+
   run --separate-stderr \
     "$PKGDB_BIN" buildenv "$LOCKFILES/single-package/manifest.lock" \
     --container flox-env-container
@@ -208,6 +214,43 @@ setup_file() {
   assert_output --regexp '([a-z0-9]{64}\.json)'
   # Check that the container contains a manifest file.
   assert_line 'manifest.json'
+}
+
+# ---------------------------------------------------------------------------- #
+
+# With '--container-tag' produces a script that can be used to build a container
+# with a specific tag.
+# bats test_tags=buildenv:container-tag
+@test "Environment builds container with tag" {
+  # 2024-10-22: fakeroot used in the creation of layers aborts ion macos with:
+  #
+  # dyld[25304]: symbol not found in flat namespace '_fstat$INODE64'
+  # /nix/store/52g78wj19d5bxal1znqgrgnrifhz6z15-fakeroot-1.32.2/bin/fakeroot: line 178: 25304 Abort trap: 6           FAKEROOTKEY=$FAKEROOTKEY DYLD_INSERT_LIBRARIES="$FAKEROOT_LIB" ${SHELL:-/bin/sh}
+  [ "${NIX_SYSTEM#*-}" = "darwin" ] && skip "Container builds are only supported on '*-linux'"
+
+  container_name='flox-env-container-tag-test'
+  container_tag='somereallyhardtoguesstag'
+
+  run --separate-stderr \
+    "$PKGDB_BIN" buildenv "$LOCKFILES/single-package/manifest.lock" \
+    --container "$container_name" \
+    --container-tag "$container_tag"
+  assert_success
+  store_path=$(echo "$output" | jq -er '.store_path')
+
+  # Run the container builder script.
+  export store_path
+  run bash -c '"$store_path" > "$BATS_TEST_TMPDIR/container.tar"'
+  assert_success
+
+  # Fetch the manifest.json from the tarball.
+  tar xf "$BATS_TEST_TMPDIR/container.tar" --wildcards 'manifest.json'
+  assert_success
+
+  # Check that the tag is present in the manifest.
+  want="$container_name:$container_tag"
+  got="$(cat manifest.json | jq -r '.[].RepoTags[0]')"
+  assert [ "$want" == "$got" ]
 }
 
 # --------------------------------------------------------------------------- #

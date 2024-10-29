@@ -350,7 +350,7 @@
         "operationId": "create_catalog_api_v1_catalog_catalogs__post",
         "security": [
           {
-            "HTTPBasic": []
+            "HTTPBearer": []
           }
         ],
         "parameters": [
@@ -409,7 +409,7 @@
         "operationId": "get_catalog_api_v1_catalog_catalogs__catalog_name__get",
         "security": [
           {
-            "HTTPBasic": []
+            "HTTPBearer": []
           }
         ],
         "parameters": [
@@ -466,7 +466,7 @@
         "operationId": "delete_catalog_api_v1_catalog_catalogs__catalog_name__delete",
         "security": [
           {
-            "HTTPBasic": []
+            "HTTPBearer": []
           }
         ],
         "parameters": [
@@ -501,7 +501,7 @@
             }
           },
           "422": {
-            "description": "The search terms given could not be processed",
+            "description": "The catalog name is invalid",
             "content": {
               "application/json": {
                 "schema": {
@@ -513,59 +513,141 @@
         }
       }
     },
-    "/api/v1/status/catalog": {
-      "get": {
+    "/api/v1/catalog/catalogs/{catalog_name}/packages": {
+      "post": {
         "tags": [
-          "status"
+          "user_catalogs"
         ],
-        "summary": "Get basic catalog database status",
-        "description": "Gather some basic status values from the database.\n\nReturns:\n- **CatalogStatus**: A dictionary of various status values.",
-        "operationId": "get_catalog_status_api_v1_status_catalog_get",
+        "summary": "Create a new package in a user catalog",
+        "description": "Creates a catalog package\n\nPath Parameters:\n- **catalog_name**: The name of catalog to place the package into\n\nRequired Query Parameters:\n- **name**: The name of package (attr_path) to create\n\nReturns:\n- **UserPackage**",
+        "operationId": "post_catalog_package_api_v1_catalog_catalogs__catalog_name__packages_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}",
+              "title": "Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPackageCreate"
+              }
+            }
+          }
+        },
         "responses": {
-          "200": {
-            "description": "Catalog Status",
+          "201": {
+            "description": "The new package was created",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CatalogStatus"
+                  "$ref": "#/components/schemas/UserPackage"
                 }
               }
             }
           },
-          "500": {
-            "description": "Internal Server Erorr",
+          "404": {
+            "description": "The catalog could not be found.",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/status/service": {
-      "get": {
-        "tags": [
-          "status"
-        ],
-        "summary": "Get basic service status",
-        "description": "Returns basic service status\n\nReturns:\n- **ServiceStatus**: A dictionary of various status values.",
-        "operationId": "get_service_status_api_v1_status_service_get",
-        "responses": {
-          "200": {
-            "description": "Service Status",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServiceStatus-Input"
                 }
               }
             }
           },
-          "500": {
-            "description": "Internal Server Erorr",
+          "409": {
+            "description": "The package already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request parameters are invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "user_catalogs"
+        ],
+        "summary": "List packages available in a catalog",
+        "description": "Lists available packages in a catalog\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n\nReturns:\n- **UserPackageList**",
+        "operationId": "get_catalog_packages_api_v1_catalog_catalogs__catalog_name__packages_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The list of packages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPackageList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog could not be found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request parameters are invalid",
             "content": {
               "application/json": {
                 "schema": {
@@ -577,19 +659,225 @@
         }
       }
     },
-    "/api/v1/status/sentry-debug": {
+    "/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}": {
       "get": {
         "tags": [
-          "status"
+          "user_catalogs"
         ],
-        "summary": "Trigger Error",
-        "operationId": "trigger_error_api_v1_status_sentry_debug_get",
+        "summary": "Get package info",
+        "description": "Get package info\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nReturns:\n- **UserPackage**",
+        "operationId": "get_catalog_package_api_v1_catalog_catalogs__catalog_name__packages__package_name__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          },
+          {
+            "name": "package_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}",
+              "title": "Package Name"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "The list of packages",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/UserPackage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog or package could not be found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request parameters are invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/catalog/catalogs/{catalog_name}/packages/{package_name}/builds": {
+      "post": {
+        "tags": [
+          "user_catalogs"
+        ],
+        "summary": "Submit a build of a particular package",
+        "description": "Create a build of a package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\nBody Content:\n- **UserBuild**: The build info to submit\n\nReturns:\n- **UserBuildCreationResponse**",
+        "operationId": "create_package_build_api_v1_catalog_catalogs__catalog_name__packages__package_name__builds_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          },
+          {
+            "name": "package_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}",
+              "title": "Package Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserBuild-Input"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The build was submitted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserBuildCreationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The build cannot be published as requested",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog or package could not be found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request parameters are invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "user_catalogs"
+        ],
+        "summary": "Get a list of builds for a given package",
+        "description": "Get the list of builds for a given package\n\nPath Parameters:\n- **catalog_name**: The name of the catalog\n- **package_name**: The name of the package\n\nReturns:\n- **UserBuildList**",
+        "operationId": "get_package_builds_api_v1_catalog_catalogs__catalog_name__packages__package_name__builds_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "catalog_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\-_]{3,64}",
+              "title": "Catalog Name"
+            }
+          },
+          {
+            "name": "package_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "[a-zA-Z0-9\\.\\-_]{3,128}",
+              "title": "Package Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The list of builds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserBuildList-Input"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The catalog or package could not be found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request parameters are invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -869,6 +1157,13 @@
           "store_path"
         ],
         "title": "Output"
+      },
+      "Outputs": {
+        "items": {
+          "$ref": "#/components/schemas/Output"
+        },
+        "type": "array",
+        "title": "Outputs"
       },
       "PackageDescriptor": {
         "properties": {
@@ -1649,15 +1944,160 @@
         ],
         "title": "ServiceStatus"
       },
+      "StoreInfo": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "auth_token": {
+            "type": "string",
+            "title": "Auth Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "auth_token"
+        ],
+        "title": "StoreInfo"
+      },
       "SystemEnum": {
         "type": "string",
         "enum": [
           "aarch64-darwin",
           "aarch64-linux",
           "x86_64-darwin",
-          "x86_64-linux"
+          "x86_64-linux",
+          "invalid"
         ],
         "title": "SystemEnum"
+      },
+      "UserBuild-Input": {
+        "properties": {
+          "locked_url": {
+            "type": "string",
+            "title": "Locked Url"
+          },
+          "locked_base_catalog_url": {
+            "type": "string",
+            "title": "Locked Base Catalog Url"
+          },
+          "derivation": {
+            "$ref": "#/components/schemas/UserDerivation-Input"
+          }
+        },
+        "type": "object",
+        "required": [
+          "locked_url",
+          "locked_base_catalog_url",
+          "derivation"
+        ],
+        "title": "UserBuild",
+        "example": {
+          "derivation": {
+            "description": "A very nice derivation",
+            "drv_path": "foo.bar.curl",
+            "license": "GnuFoo",
+            "name": "mydrv",
+            "outputs": {
+              "bin": "/nix/store/foo"
+            },
+            "outputs_to_install": [
+              "bin"
+            ],
+            "pname": "mydrv",
+            "system": "x86_64-linux",
+            "version": "1.0"
+          },
+          "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+          "locked_url": "http://example.com?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172"
+        }
+      },
+      "UserBuild-Output": {
+        "properties": {
+          "locked_url": {
+            "type": "string",
+            "title": "Locked Url"
+          },
+          "locked_base_catalog_url": {
+            "type": "string",
+            "title": "Locked Base Catalog Url"
+          },
+          "derivation": {
+            "$ref": "#/components/schemas/UserDerivation-Output"
+          }
+        },
+        "type": "object",
+        "required": [
+          "locked_url",
+          "locked_base_catalog_url",
+          "derivation"
+        ],
+        "title": "UserBuild",
+        "example": {
+          "derivation": {
+            "description": "A very nice derivation",
+            "drv_path": "foo.bar.curl",
+            "license": "GnuFoo",
+            "name": "mydrv",
+            "outputs": {
+              "bin": "/nix/store/foo"
+            },
+            "outputs_to_install": [
+              "bin"
+            ],
+            "pname": "mydrv",
+            "system": "x86_64-linux",
+            "version": "1.0"
+          },
+          "locked_base_catalog_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+          "locked_url": "http://example.com?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172"
+        }
+      },
+      "UserBuildCreationResponse": {
+        "properties": {
+          "store": {
+            "$ref": "#/components/schemas/StoreInfo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "store"
+        ],
+        "title": "UserBuildCreationResponse"
+      },
+      "UserBuildList-Input": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserBuild-Input"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "UserBuildList"
+      },
+      "UserBuildList-Output": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserBuild-Output"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "UserBuildList"
       },
       "UserCatalog": {
         "properties": {
@@ -1673,6 +2113,11 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "owner_handle": {
+            "title": "Owner Handle",
+            "nullable": true,
+            "type": "string"
           }
         },
         "type": "object",
@@ -1682,12 +2127,222 @@
           "created_at"
         ],
         "title": "UserCatalog"
+      },
+      "UserDerivation-Input": {
+        "properties": {
+          "drv_path": {
+            "type": "string",
+            "title": "Drv Path"
+          },
+          "system": {
+            "$ref": "#/components/schemas/SystemEnum"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "outputs": {
+            "$ref": "#/components/schemas/Outputs"
+          },
+          "outputs_to_install": {
+            "title": "Outputs To Install",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pname": {
+            "title": "Pname",
+            "nullable": true,
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "nullable": true,
+            "type": "string"
+          },
+          "license": {
+            "title": "License",
+            "nullable": true,
+            "type": "string"
+          },
+          "broken": {
+            "title": "Broken",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "unfree": {
+            "title": "Unfree",
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drv_path",
+          "system",
+          "name",
+          "description",
+          "outputs"
+        ],
+        "title": "UserDerivation",
+        "example": {
+          "description": "A very nice derivation",
+          "drv_path": "foo.bar.curl",
+          "license": "GnuFoo",
+          "name": "mydrv",
+          "outputs": {
+            "bin": "/nix/store/foo"
+          },
+          "outputs_to_install": [
+            "bin"
+          ],
+          "pname": "mydrv",
+          "system": "x86_64-linux",
+          "version": "1.0"
+        }
+      },
+      "UserDerivation-Output": {
+        "properties": {
+          "drv_path": {
+            "type": "string",
+            "title": "Drv Path"
+          },
+          "system": {
+            "$ref": "#/components/schemas/SystemEnum"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "outputs": {
+            "$ref": "#/components/schemas/Outputs"
+          },
+          "outputs_to_install": {
+            "title": "Outputs To Install",
+            "nullable": true,
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pname": {
+            "title": "Pname",
+            "nullable": true,
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "nullable": true,
+            "type": "string"
+          },
+          "license": {
+            "title": "License",
+            "nullable": true,
+            "type": "string"
+          },
+          "broken": {
+            "title": "Broken",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "unfree": {
+            "title": "Unfree",
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "type": "object",
+        "required": [
+          "drv_path",
+          "system",
+          "name",
+          "description",
+          "outputs"
+        ],
+        "title": "UserDerivation",
+        "example": {
+          "description": "A very nice derivation",
+          "drv_path": "foo.bar.curl",
+          "license": "GnuFoo",
+          "name": "mydrv",
+          "outputs": {
+            "bin": "/nix/store/foo"
+          },
+          "outputs_to_install": [
+            "bin"
+          ],
+          "pname": "mydrv",
+          "system": "x86_64-linux",
+          "version": "1.0"
+        }
+      },
+      "UserPackage": {
+        "properties": {
+          "catalog": {
+            "type": "string",
+            "title": "Catalog"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "original_url": {
+            "type": "string",
+            "title": "Original Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "catalog",
+          "name",
+          "original_url"
+        ],
+        "title": "UserPackage"
+      },
+      "UserPackageCreate": {
+        "properties": {
+          "original_url": {
+            "type": "string",
+            "title": "Original Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "original_url"
+        ],
+        "title": "UserPackageCreate"
+      },
+      "UserPackageList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserPackage"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "UserPackageList"
       }
     },
     "securitySchemes": {
-      "HTTPBasic": {
+      "HTTPBearer": {
         "type": "http",
-        "scheme": "basic"
+        "scheme": "bearer"
       }
     }
   }

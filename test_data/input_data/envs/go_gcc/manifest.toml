@@ -1,0 +1,9 @@
+version = 1
+
+[install]
+go.pkg-path = "go"
+# CGO builds will fail on Darwin if the environment brings its own `gcc` or `clang`
+# https://go-review.googlesource.com/c/go/+/205457
+# https://go-review.googlesource.com/c/go/+/368634
+gcc.pkg-path = "gcc"
+gcc.systems = ["aarch64-linux", "x86_64-linux"]

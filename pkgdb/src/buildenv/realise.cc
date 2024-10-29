@@ -177,8 +177,18 @@ maybeGetCursor( nix::ref<nix::EvalState> &              state,
 {
   debugLog(
     nix::fmt( "getting attr cursor '%s.%s", cursor->getAttrPathStr(), attr ) );
-  auto symbol      = state->symbols.create( attr );
-  auto maybeCursor = cursor->maybeGetAttr( symbol, true );
+  auto        symbol = state->symbols.create( attr );
+  MaybeCursor maybeCursor;
+  try
+    {
+      maybeCursor = cursor->maybeGetAttr( symbol );
+    }
+  catch ( nix::eval_cache::CachedEvalError & e )
+    {
+      /* Force re-evaluating a cached error so we show the original error to the
+       * user */
+      e.force();
+    }
   if ( maybeCursor == nullptr ) { return std::nullopt; }
   auto newCursor
     = static_cast<nix::ref<nix::eval_cache::AttrCursor>>( maybeCursor );
@@ -955,10 +965,11 @@ createFloxEnv( nix::ref<nix::EvalState> &         state,
 
 
 nix::StorePath
-createContainerBuilder( nix::EvalState &       state,
-                        const nix::StorePath & environmentStorePath,
-                        const System &         system,
-                        const std::string &    containerName )
+createContainerBuilder( nix::EvalState &         state,
+                        const nix::StorePath &   environmentStorePath,
+                        const System &           system,
+                        const std::string_view & containerName,
+                        const std::string_view & containerTag )
 {
   static const nix::FlakeRef nixpkgsRef
     = nix::parseFlakeRef( COMMON_NIXPKGS_URL );
@@ -990,8 +1001,11 @@ createContainerBuilder( nix::EvalState &       state,
   nix::Value vContainerName {};
   vContainerName.mkString( containerName );
 
+  nix::Value vContainerTag {};
+  vContainerTag.mkString( containerTag );
+
   nix::Value vBindings {};
-  auto       bindings = state.buildBindings( 5 );
+  auto       bindings = state.buildBindings( 6 );
   bindings.push_back(
     { state.symbols.create( "nixpkgsFlake" ), &vNixpkgsFlake } );
   bindings.push_back(
@@ -1001,6 +1015,8 @@ createContainerBuilder( nix::EvalState &       state,
     { state.symbols.create( "containerSystem" ), &vContainerSystem } );
   bindings.push_back(
     { state.symbols.create( "containerName" ), &vContainerName } );
+  bindings.push_back(
+    { state.symbols.create( "containerTag" ), &vContainerTag } );
 
   vBindings.mkAttrs( bindings );
 

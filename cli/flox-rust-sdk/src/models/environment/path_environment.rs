@@ -31,7 +31,6 @@ use super::{
     EnvironmentError,
     EnvironmentPointer,
     InstallationAttempt,
-    MigrationInfo,
     PathPointer,
     UninstallationAttempt,
     CACHE_DIR_NAME,
@@ -48,8 +47,8 @@ use crate::models::container_builder::ContainerBuilder;
 use crate::models::env_registry::{deregister, ensure_registered};
 use crate::models::environment::{ENV_DIR_NAME, MANIFEST_FILENAME};
 use crate::models::environment_ref::EnvironmentName;
-use crate::models::lockfile::LockedManifest;
-use crate::models::manifest::{CatalogPackage, PackageToInstall, RawManifest, TypedManifest};
+use crate::models::lockfile::Lockfile;
+use crate::models::manifest::{CatalogPackage, Manifest, PackageToInstall, RawManifest};
 use crate::utils::mtime_of;
 
 /// Struct representing a local environment
@@ -172,19 +171,23 @@ impl PathEnvironment {
 
 impl Environment for PathEnvironment {
     /// This will lock the environment if it is not already locked.
-    fn lockfile(&mut self, flox: &Flox) -> Result<LockedManifest, EnvironmentError> {
+    fn lockfile(&mut self, flox: &Flox) -> Result<Lockfile, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         Ok(env_view.ensure_locked(flox)?)
     }
 
     /// This will lock the environment if it is not already locked.
-    fn build_container(&mut self, flox: &Flox) -> Result<ContainerBuilder, EnvironmentError> {
+    fn build_container(
+        &mut self,
+        flox: &Flox,
+        tag: &str,
+    ) -> Result<ContainerBuilder, EnvironmentError> {
         let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         env_view.ensure_locked(flox)?;
         let lockfile_path = CanonicalPath::new(env_view.lockfile_path())
             .expect("a locked environment must have a lockfile");
 
-        let builder = CoreEnvironment::build_container(lockfile_path, self.name().as_ref())?;
+        let builder = CoreEnvironment::build_container(lockfile_path, self.name().as_ref(), tag)?;
         Ok(builder)
     }
 
@@ -263,7 +266,7 @@ impl Environment for PathEnvironment {
     }
 
     /// Return the deserialized manifest
-    fn manifest(&self, _flox: &Flox) -> Result<TypedManifest, EnvironmentError> {
+    fn manifest(&self, _flox: &Flox) -> Result<Manifest, EnvironmentError> {
         let env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
         env_view.manifest().map_err(EnvironmentError::Core)
     }
@@ -345,17 +348,6 @@ impl Environment for PathEnvironment {
     /// Path to the lockfile. The path may not exist.
     fn lockfile_path(&self, _flox: &Flox) -> Result<PathBuf, EnvironmentError> {
         Ok(self.path.join(ENV_DIR_NAME).join(LOCKFILE_FILENAME))
-    }
-
-    fn migrate_to_v1(
-        &mut self,
-        flox: &Flox,
-        migration_info: MigrationInfo,
-    ) -> Result<(), EnvironmentError> {
-        let mut env_view = CoreEnvironment::new(self.path.join(ENV_DIR_NAME));
-        let store_path = env_view.migrate_to_v1(flox, migration_info)?;
-        self.link(flox, store_path)?;
-        Ok(())
     }
 
     /// Return the path where the process compose socket for an environment
@@ -568,13 +560,9 @@ pub mod test_helpers {
 #[cfg(test)]
 mod tests {
 
-    use test_helpers::{new_path_environment, new_path_environment_from_env_files};
-
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::models::env_registry::{env_registry_path, read_environment_registry};
-    use crate::models::environment::CoreEnvironmentError;
-    use crate::providers::catalog::MANUALLY_GENERATED;
 
     #[test]
     fn create_env() {
@@ -703,59 +691,5 @@ mod tests {
         assert!(reg_path.exists());
         let reg = read_environment_registry(&reg_path).unwrap().unwrap();
         assert!(reg.entries.is_empty());
-    }
-    /// It should be possible to build a container for a v0 environment
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn build_container_for_v0_environment() {
-        // We want a catalog client so we know we aren't calling pkgdb lock
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        let mut environment =
-            new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
-        environment.build_container(&flox).unwrap();
-    }
-
-    /// Attempting to build a container for a v0 environment without a lockfile should fail
-    #[test]
-    fn build_container_for_v0_environment_fails_without_lockfile() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        let manifest_contents =
-            std::fs::read_to_string(MANUALLY_GENERATED.join("hello_v0").join(MANIFEST_FILENAME))
-                .unwrap();
-        let mut environment = new_path_environment(&flox, &manifest_contents);
-        let err = environment.build_container(&flox).unwrap_err();
-        assert!(matches!(
-            err,
-            EnvironmentError::Core(CoreEnvironmentError::LockingVersion0NotSupported)
-        ));
-    }
-
-    /// It should be possible to build a v0 environment
-    #[test]
-    fn activation_path_for_v0_environment() {
-        // We want a catalog client so we know we aren't calling pkgdb lock
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        let mut environment =
-            new_path_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
-        environment.activation_path(&flox).unwrap();
-    }
-
-    /// Attempting to build a v0 environment without a lockfile should fail
-    #[test]
-    fn activation_path_for_v0_environment_fails_without_lockfile() {
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        let manifest_contents =
-            std::fs::read_to_string(MANUALLY_GENERATED.join("hello_v0").join(MANIFEST_FILENAME))
-                .unwrap();
-        let mut environment = new_path_environment(&flox, &manifest_contents);
-        let err = environment.activation_path(&flox).unwrap_err();
-        assert!(matches!(
-            err,
-            EnvironmentError::Core(CoreEnvironmentError::LockingVersion0NotSupported)
-        ));
     }
 }

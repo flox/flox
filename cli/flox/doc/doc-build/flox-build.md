@@ -8,10 +8,11 @@ header: "Flox User Manuals"
 ./include/experimental-warning.md
 ```
 > Feature flag: `build`
-q
+
 # NAME
 
-flox-build - build packages
+flox-build - Build packages for Flox
+
 
 # SYNOPSIS
 

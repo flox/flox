@@ -113,7 +113,7 @@ impl Init {
             self.run_language_hooks(&flox, &dir)
                 .await
                 .unwrap_or_else(|e| {
-                    message::warning(format!("Failed to generate init suggestions: {}", e));
+                    message::warning(format!("Failed to generate init suggestions: {e}"));
                     InitCustomization::default()
                 })
         } else {

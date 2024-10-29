@@ -2,17 +2,16 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::Duration;
 
-use anyhow::{anyhow, Context};
+use anyhow::{bail, Context};
 use clap::Parser;
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::env_registry::{
-    deregister_activation,
+    acquire_env_registry_lock,
     read_environment_registry,
     register_activation,
     ActivationPid,
-    EnvRegistryError,
+    EnvRegistry,
 };
 use flox_rust_sdk::providers::services::process_compose_down;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
@@ -20,10 +19,14 @@ use logger::{init_logger, spawn_gc_logs, spawn_heartbeat_log};
 use nix::libc::{SIGINT, SIGQUIT, SIGTERM, SIGUSR1};
 use nix::unistd::{getpgid, getpid, setsid};
 use once_cell::sync::Lazy;
+use process::{PidWatcher, WaitResult};
 use sentry::init_sentry;
 use tracing::{debug, error, info, instrument};
 
+use crate::process::Watcher;
+
 mod logger;
+mod process;
 mod sentry;
 
 type Error = anyhow::Error;
@@ -34,7 +37,6 @@ const LONG_HELP: &str = "Monitors activation lifecycle to perform cleanup.
 The watchdog (fka. klaus) is spawned during activation to aid in service cleanup
 when the final activation of an environment has terminated. This cleanup can
 be manually triggered via signal (SIGUSR1), but otherwise runs automatically.";
-const CHECK_INTERVAL: Duration = Duration::from_millis(10);
 
 #[derive(Debug, Parser)]
 #[command(version = Lazy::get(&FLOX_VERSION).map(|v| v.as_str()).unwrap_or("0.0.0"))]
@@ -117,29 +119,27 @@ fn run(args: Cli) -> Result<(), Error> {
     signal_hook::flag::register(SIGQUIT, Arc::clone(&should_terminate))
         .context("failed to set SIGQUIT signal handler")?;
 
-    // Ensure that we'll get sent SIGUSR1 on Linux when the parent terminates
-    #[cfg(target_os = "linux")]
-    nix::sys::prctl::set_pdeathsig(Some(nix::sys::signal::Signal::SIGUSR1))
-        .context("set_pdeathsig failed")?;
-
-    #[cfg(target_os = "macos")]
-    let watcher = {
-        let mut watcher = kqueue::Watcher::new()?;
-        watcher.add_pid(
-            args.pid,
-            kqueue::EventFilter::EVFILT_PROC,
-            kqueue::FilterFlag::NOTE_EXIT,
-        )?;
-        match watcher.watch() {
-            Ok(_) => Ok(watcher),
-            Err(err) => {
-                cleanup(&args.socket_path);
-                error!(%err, "failed to register watcher");
-                Err(err)
-            },
+    // Before doing anything major, check whether there's already a watchdog
+    // monitoring this activation. If there is then this watchdog should just
+    // exit.
+    let lock = acquire_env_registry_lock(&args.registry_path)
+        .context("failed while acquiring registry lock")?;
+    if let Some(reg) = read_environment_registry(&args.registry_path)
+        .context("failed to open environment registry")?
+    {
+        if should_bail_at_startup(&reg, &args.dot_flox_hash) {
+            info!("another watchdog exists, exiting");
+            return Ok(());
         }
-    }?;
-    debug!("registered termination interest");
+    }
+    drop(lock);
+    let mut watcher = process::PidWatcher::new(
+        args.pid.into(),
+        &args.registry_path,
+        &args.dot_flox_hash,
+        should_terminate,
+        should_clean_up,
+    );
 
     debug!(
         path = traceable_path(&args.socket_path),
@@ -147,23 +147,8 @@ fn run(args: Cli) -> Result<(), Error> {
         "checked socket"
     );
 
-    // Register activation PID so that we can track last one out
+    // Register this activation PID
     let activation = ActivationPid::from(args.pid);
-    // Check if our original parent has already exited.
-    // If it has, we can go ahead and cleanup.
-    // Note that this check should come after we call prctl or kqueue so that
-    // there isn't a race between checking ppid and calling prctl or kqueue.
-    if !activation.is_current_process_parent() {
-        debug!("parent has already exited");
-        let reg = read_environment_registry(&args.registry_path)?.unwrap_or_default();
-        let entry = reg
-            .entry_for_hash(&args.dot_flox_hash)
-            .ok_or(EnvRegistryError::UnknownKey(args.dot_flox_hash))?;
-        if entry.activations.is_empty() {
-            cleanup(args.socket_path);
-        }
-        return Ok(());
-    }
     register_activation(&args.registry_path, &args.dot_flox_hash, activation)?;
 
     info!(
@@ -176,36 +161,26 @@ fn run(args: Cli) -> Result<(), Error> {
         spawn_gc_logs(log_dir);
     }
 
-    // Listen for a notification, getting an error if we should terminate
-    #[cfg(target_os = "macos")]
-    let res = wait_for_termination(watcher, should_clean_up, should_terminate);
+    debug!("waiting for termination");
 
-    #[cfg(target_os = "linux")]
-    let res = wait_for_termination(should_clean_up, should_terminate);
-
-    // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
-    // but there's not much we can do about that because we don't know who sent us one of those
-    // signals or why.
-    res.context("received stop signal, exiting without cleanup")?;
-
-    // Now we proceed with cleanup assuming we've gotten a notification that the target process
-    // has terminated.
-
-    let remaining_activations =
-        deregister_activation(&args.registry_path, &args.dot_flox_hash, activation)
-            .context("failed to deregister activation")?;
-    debug!(n = remaining_activations, "remaining activations");
-    if remaining_activations == 0 {
-        cleanup(args.socket_path);
-    } else {
-        debug!(
-            reason = "remaining activations",
-            "did not shut down process-compose"
-        );
+    match watcher.wait_for_termination() {
+        Ok(WaitResult::CleanUp) => {
+            // Exit
+            info!("exiting");
+            cleanup(&args.socket_path);
+        },
+        Ok(WaitResult::Terminate) => {
+            // If we get a SIGINT/SIGTERM/SIGQUIT/SIGKILL we leave behind the activation in the registry,
+            // but there's not much we can do about that because we don't know who sent us one of those
+            // signals or why.
+            bail!("received stop signal, exiting without cleanup");
+        },
+        Err(err) => {
+            cleanup(&args.socket_path);
+            bail!("failed while waiting for termination: {err}");
+        },
     }
 
-    // Exit
-    info!("exiting");
     Ok(())
 }
 
@@ -246,41 +221,21 @@ fn ensure_process_group_leader() -> Result<(), Error> {
     Ok(())
 }
 
-#[cfg(target_os = "macos")]
-fn wait_for_termination(
-    watcher: kqueue::Watcher,
-    proceed_flag: Arc<AtomicBool>,
-    stop_flag: Arc<AtomicBool>,
-) -> Result<(), Error> {
-    loop {
-        if proceed_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            debug!("observed proceed flag");
-            break Ok(());
-        }
-        if stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            break Err(anyhow!("received stop signal"));
-        }
-        if let Some(_event) = watcher.poll(None) {
-            debug!("received termination event, will proceed");
-            break Ok(());
-        }
-        std::thread::sleep(CHECK_INTERVAL);
-    }
-}
+/// Returns whether this watchdog has been started without a need for it
+/// e.g. another watchdog is already monitoring this activation.
+pub fn should_bail_at_startup(reg: &EnvRegistry, path_hash: &str) -> bool {
+    reg.entry_for_hash(path_hash)
+        .map(|entry| {
+            let mut activations = entry.activations.clone();
 
-#[cfg(target_os = "linux")]
-fn wait_for_termination(
-    proceed_flag: Arc<AtomicBool>,
-    stop_flag: Arc<AtomicBool>,
-) -> Result<(), Error> {
-    loop {
-        if proceed_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            debug!("observed flag, will proceed");
-            break Ok(());
-        }
-        if stop_flag.load(std::sync::atomic::Ordering::SeqCst) {
-            break Err(anyhow!("received stop signal"));
-        }
-        std::thread::sleep(CHECK_INTERVAL);
-    }
+            // If we don't prune the terminated processes from the list of
+            // activations, then we could get into a state where the watchdog
+            // dies, leaving PIDs in the registry that prevent another watchdog
+            // from ever starting.
+
+            activations.retain(|&pid| PidWatcher::pid_is_running(pid));
+
+            !activations.is_empty()
+        })
+        .unwrap_or(false)
 }

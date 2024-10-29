@@ -159,8 +159,8 @@ Flox must be buildable using `flox` or `nix`.
   A pre-commit hook is set up to check rust file formatting.
 - format nix code
   ```console
-  $ alejandra .
-  $ alejandra . --check # just check
+  $ treefmt -f nix .
+  $ treefmt -f nix . --fail-on-change # just check
   ```
   A pre-commit hook is set up to check nix file formatting.
 - lint rust
@@ -357,6 +357,37 @@ You can use boolean logic and specify the flag multiple times to run specific
 subsets of tests.
 See the [bats usage documentation](https://bats-core.readthedocs.io/en/stable/usage.html)
 for details.
+
+##### Running tests in a Linux container
+
+It's possible to shorten the feedback loop when developing Linux dependent
+features on a MacOS system by running the tests from a container.
+
+Start a container with the code mounted in so that you can continue to use your normal editor:
+
+    docker run \
+        --rm --interactive --tty \
+        --volume $(pwd):/mnt --workdir /mnt \
+        --name flox-dev \
+        nixos/nix
+
+Within the container:
+
+    echo 'experimental-features = nix-command flakes' >> /etc/nix/nix.conf
+    nix develop
+
+Outside the container, snapshot the store so that you don't have to download the world next time:
+
+    docker commit flox-dev flox:dev
+
+Within the container, remove any existing MacOS binaries and rebuild for Linux:
+
+    just clean
+    just build
+
+Within the container, to avoid `variable $src or $srcs should point to the source` errors per [NixOS/nix#8355](https://github.com/NixOS/nix/issues/8355):
+
+    unset TMPDIR
 
 ## Man Pages
 

@@ -10,12 +10,12 @@
           {
             "attr_path": "go",
             "broken": false,
-            "derivation": "/nix/store/d85dmxvvh1mnfymgnya9ckv7jmbdcm01-go-1.22.7.drv",
+            "derivation": "/nix/store/x1p2gf1jcqn29l4agdqrb0w09rib7w3m-go-1.22.7.drv",
             "description": "Go Programming language",
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "go-1.22.7",
             "outputs": [
               {
@@ -27,10 +27,10 @@
               "out"
             ],
             "pname": "go",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -39,7 +39,7 @@
             "version": "1.22.7"
           }
         ],
-        "page": 679633,
+        "page": 687768,
         "url": ""
       }
     }
@@ -55,12 +55,12 @@
           {
             "attr_path": "go",
             "broken": false,
-            "derivation": "/nix/store/d85dmxvvh1mnfymgnya9ckv7jmbdcm01-go-1.22.7.drv",
+            "derivation": "/nix/store/x1p2gf1jcqn29l4agdqrb0w09rib7w3m-go-1.22.7.drv",
             "description": "Go Programming language",
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "go-1.22.7",
             "outputs": [
               {
@@ -72,10 +72,10 @@
               "out"
             ],
             "pname": "go",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -91,7 +91,7 @@
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "go-1.22.7",
             "outputs": [
               {
@@ -103,10 +103,10 @@
               "out"
             ],
             "pname": "go",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -117,12 +117,12 @@
           {
             "attr_path": "go",
             "broken": false,
-            "derivation": "/nix/store/yisxl9x3mgrfd9i3zdrxhni8z31nhy4n-go-1.22.7.drv",
+            "derivation": "/nix/store/4bjrs6k4a0xjyy5zanbc8igv0cffsi0a-go-1.22.7.drv",
             "description": "Go Programming language",
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "go-1.22.7",
             "outputs": [
               {
@@ -134,10 +134,10 @@
               "out"
             ],
             "pname": "go",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -153,7 +153,7 @@
             "insecure": false,
             "install_id": "go",
             "license": "BSD-3-Clause",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "go-1.22.7",
             "outputs": [
               {
@@ -165,10 +165,10 @@
               "out"
             ],
             "pname": "go",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -177,7 +177,7 @@
             "version": "1.22.7"
           }
         ],
-        "page": 679633,
+        "page": 687768,
         "url": ""
       }
     }

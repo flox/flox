@@ -106,7 +106,7 @@ function skip_if_linux() {
 }
 
 # bats test_tags=containerize:default-to-file
-@test "catalog: container is written to a file by default" {
+@test "container is written to a file by default" {
   skip_if_not_linux
 
   env_setup_catalog
@@ -120,11 +120,29 @@ function skip_if_linux() {
 
   run podman load -i test-container.tar
   assert_success
-  assert_line --partial "Loaded image: localhost/test"
+  assert_line --partial "Loaded image: localhost/test:latest"
+}
+
+# bats test_tags=containerize:container-tag
+@test "container is tagged with specified tag" {
+  skip_if_not_linux
+
+  env_setup_catalog
+
+  run "$FLOX_BIN" containerize --tag 'sometag'
+  assert_success
+
+  assert [ -f "test-container.tar" ] # <env-name>-container.tar by default
+
+  run which podman
+
+  run podman load -i test-container.tar
+  assert_success
+  assert_line --partial "Loaded image: localhost/test:sometag"
 }
 
 # bats test_tags=containerize:piped-to-stdout
-@test "catalog: container is written to stdout when '-o -' is passed" {
+@test "container is written to stdout when '-o -' is passed" {
   skip "duplicate of next test"
   skip_if_not_linux
 
@@ -136,7 +154,7 @@ function skip_if_linux() {
 }
 
 # bats test_tags=containerize:run-container-i
-@test "catalog: container can be run with 'podman/docker run' with/without -i'" {
+@test "container can be run with 'podman/docker run' with/without -i'" {
   skip_if_not_linux
 
   env_setup_catalog

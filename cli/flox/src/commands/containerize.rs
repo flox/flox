@@ -22,6 +22,10 @@ pub struct Containerize {
     /// Path to write the container to (pass '-' to write to stdout)
     #[bpaf(short, long, argument("path"))]
     output: Option<PathBuf>,
+
+    /// Tag to apply to the container, defaults to 'latest'
+    #[bpaf(short, long, argument("tag"))]
+    tag: Option<String>,
 }
 impl Containerize {
     #[instrument(name = "containerize", skip_all)]
@@ -38,6 +42,11 @@ impl Containerize {
             None => std::env::current_dir()
                 .context("Could not get current directory")?
                 .join(format!("{}-container.tar", env.name())),
+        };
+
+        let output_tag: &str = match self.tag {
+            Some(tag) => &tag.to_string(),
+            None => "latest",
         };
 
         let (output, output_name): (Box<dyn Write + Send>, String) =
@@ -61,7 +70,7 @@ impl Containerize {
         let builder = Dialog {
             message: &format!("Building container for environment {}...", env.name()),
             help_message: None,
-            typed: Spinner::new(|| env.build_container(&flox)),
+            typed: Spinner::new(|| env.build_container(&flox, output_tag)),
         }
         .spin()?;
 

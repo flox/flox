@@ -38,7 +38,7 @@ runs:
         authkey: "${{ inputs.TAILSCALE_AUTH_KEY }}"
 
     - name: "Install newer Nix"
-      uses: "cachix/install-nix-action@v24"
+      uses: "cachix/install-nix-action@V28"
 
     - name: "Configure Nix"
       uses: "flox/configure-nix-action@main"

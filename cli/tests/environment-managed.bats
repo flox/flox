@@ -45,6 +45,7 @@ setup() {
 }
 
 teardown() {
+  wait_for_watchdogs
   project_teardown
   common_test_teardown
 }
@@ -54,17 +55,6 @@ teardown() {
 # init path environment and push to remote
 function make_empty_remote_env() {
   "$FLOX_BIN" init
-  "$FLOX_BIN" push --owner "$OWNER"
-}
-
-# create path env from pre-generated locked manifest v0
-function make_remote_env_with_hello() {
-  mkdir -p "$PROJECT_DIR/.flox/env"
-  cp "$MANUALLY_GENERATED"/hello_v0/* "$PROJECT_DIR/.flox/env"
-  echo '{
-    "name": "'$PROJECT_NAME'",
-    "version": 1
-  }' >>"$PROJECT_DIR/.flox/env.json"
   "$FLOX_BIN" push --owner "$OWNER"
 }
 
@@ -286,18 +276,8 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-# Make sure we haven't activate
 # bats test_tags=managed,activate,managed:activate
 @test "m9: activate works in managed environment" {
-  make_remote_env_with_hello
-
-  run "$FLOX_BIN" activate --dir "$PROJECT_DIR" -- command -v hello
-  assert_success
-  assert_output --regexp "${FLOX_CACHE_DIR}/run/owner/${PROJECT_NAME}\..+/bin/hello"
-}
-
-# bats test_tags=managed,activate,managed:activate
-@test "catalog: m9: activate works in managed environment" {
   make_empty_remote_env
   _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json" \
     "$FLOX_BIN" install hello

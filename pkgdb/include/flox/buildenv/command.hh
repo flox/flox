@@ -41,6 +41,7 @@ private:
   std::optional<std::string> serviceConfigPath;
   bool                       buildContainer = false;
   std::optional<std::string> containerName;
+  std::optional<std::string> containerTag;
 
 
 public:

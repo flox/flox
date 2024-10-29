@@ -42,6 +42,7 @@ setup() {
 
 teardown() {
   unset _FLOX_FLOXHUB_GIT_URL
+  wait_for_watchdogs
   project_teardown
   common_test_teardown
 }
@@ -215,122 +216,6 @@ function add_incompatible_package() {
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=pull:unsupported:warning
-# An environment that is not compatible with the current ssystem
-# due to the current system missing <system> in `option.systems`
-# AND a package that is indeed not able to be built for the current system
-# should show a warning, but otherwise succeed to pull
-@test "pull v0 unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
-  make_dummy_env "owner" "name"
-  update_dummy_env "owner" "name"
-  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
-    ENV_FILES_DIR="$MANUALLY_GENERATED/ps_v0_aarch64-darwin"
-    # This response might not be precisely correct if we regenerate because it's
-    # for x86_64-darwin and aarch64-linux, but currently it's the same
-    CATALOG_RESPONSE="$GENERATED_DATA/resolve/darwin_ps_incompatible.json"
-    # TODO: flox uses attr path in errors, while pkgdb uses install ID
-    PACKAGE="darwin.ps"
-  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
-    ENV_FILES_DIR="$MANUALLY_GENERATED/glibc_v0_x86_64-linux"
-    # This response might not be precisely correct if we regenerate because it's
-    # for x86_64-linux and aarch64-darwin, but currently it's the same
-    CATALOG_RESPONSE="$GENERATED_DATA/resolve/glibc_incompatible.json"
-    PACKAGE="glibc"
-  else
-    echo "unknown system: '$NIX_SYSTEM'"
-    exit 1
-  fi
-
-  copy_manifest_and_lockfile_to_remote "owner" "name" "$ENV_FILES_DIR"
-
-  _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSE" \
-    run "$FLOX_BIN" pull --remote owner/name --force
-  assert_success
-  assert_line --partial "resolution failed: package '$PACKAGE' not available for"
-  assert_line --partial "Migrated the environment to version 1 and included your system"
-
-  run "$FLOX_BIN" list
-  assert_success
-}
-
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=activate:remote:incompatible
-# activating an incompatible environment should fail gracefully
-@test "activate incompatible environment fails gracefully" {
-  make_dummy_env "owner" "name"
-  update_dummy_env "owner" "name"
-
-  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
-    ENV_FILES_DIR="$MANUALLY_GENERATED/ps_v0_aarch64-darwin"
-  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
-    ENV_FILES_DIR="$MANUALLY_GENERATED/glibc_v0_x86_64-linux"
-  else
-    echo "unknown system: '$NIX_SYSTEM'"
-    exit 1
-  fi
-
-  copy_manifest_and_lockfile_to_remote "owner" "name" "$ENV_FILES_DIR"
-
-  run "$FLOX_BIN" activate --remote owner/name --trust
-  assert_failure
-  assert_output --partial "This environment is not yet compatible with your system ($NIX_SYSTEM)"
-}
-
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=pull:unsupported-package
-# pulling an environment with a package that is not available for the current platform
-# should fail with an error
-@test "pull v0 environment with package not available for the current platform fails" {
-  make_dummy_env "owner" "name"
-  update_dummy_env "owner" "name"
-
-  if [ -z "${NIX_SYSTEM##*-linux}" ]; then
-    ENV_FILES_DIR="$MANUALLY_GENERATED/ps_incompatible_v0_both_linux"
-    # This response might not be precisely correct if we regenerate because it's
-    # for x86_64-darwin and aarch64-linux, but currently it's the same
-    CATALOG_RESPONSE="$GENERATED_DATA/resolve/darwin_ps_incompatible.json"
-    # TODO: pkgdb uses install ID in errors, while flox uses attr path
-    PACKAGE="ps"
-  elif [ -z "${NIX_SYSTEM#*-darwin}" ]; then
-    ENV_FILES_DIR="$MANUALLY_GENERATED/glibc_incompatible_v0_both_darwin"
-    # This response might not be precisely correct if we regenerate because it's
-    # for x86_64-linux and aarch64-darwin, but currently it's the same
-    CATALOG_RESPONSE="$GENERATED_DATA/resolve/glibc_incompatible.json"
-    PACKAGE="glibc"
-  else
-    echo "unknown system: '$NIX_SYSTEM'"
-    exit 1
-  fi
-
-  copy_manifest_and_lockfile_to_remote "owner" "name" "$ENV_FILES_DIR"
-
-  _FLOX_USE_CATALOG_MOCK="$CATALOG_RESPONSE" \
-    run "$FLOX_BIN" pull --remote owner/name
-
-  assert_failure
-  assert_line --partial "package '$PACKAGE' is not available for this system ('$NIX_SYSTEM')"
-}
-
-# ---------------------------------------------------------------------------- #
-
-# bats test_tags=pull:eval-failure
-# pulling an environment with a package that fails to evaluate
-# should fail with an error
-@test "pull v0 environment with insecure package fails to evaluate" {
-  make_dummy_env "owner" "name"
-  update_dummy_env "owner" "name"
-  copy_manifest_and_lockfile_to_remote "owner" "name" "$MANUALLY_GENERATED/python2_insecure_v0"
-
-  run "$FLOX_BIN" pull --remote owner/name
-
-  assert_failure
-  assert_line --partial "package 'python2' failed to evaluate:"
-}
-
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=pull:up-to-date
 # updating an up-to-date environment should return with an info message
 @test "pull up-to-date env returns info message" {
@@ -347,35 +232,8 @@ function add_incompatible_package() {
   assert_line --partial "already up to date."
 }
 
-# pull a pkgdb based environment to ensure we didn't break compatibility
-# bats test_tags=pull:deprecated-pkgdb
-@test "flox pull of deprecated pkgdb based environment succeeds" {
-  # single test for pulling pkgdb based environments, so do the setup inline once
-  mkdir -p "$PROJECT_DIR/.flox/env"
-  cp -r "$MANUALLY_GENERATED"/hello_v0/* "$PROJECT_DIR/.flox/env"
-  echo '{
-    "name": "name",
-    "version": 1
-  }' >>"$PROJECT_DIR/.flox/env.json"
-  "$FLOX_BIN" push --owner owner
-  "$FLOX_BIN" delete --force
-
-  run "$FLOX_BIN" pull --remote owner/name
-  assert_success
-  assert [ -e ".flox/env.json" ]
-  assert [ -e ".flox/env.lock" ]
-  assert [ $(cat .flox/env.json | jq -r '.name') == "name" ]
-  assert [ $(cat .flox/env.json | jq -r '.owner') == "owner" ]
-
-  # v0 manifest does not have a version field
-  assert [ $(cat .flox/env/manifest.toml | tomlq -r '.version') == "null" ]
-}
-
-# ----------------------------- Catalog Tests -------------------------------- #
-# ---------------------------------------------------------------------------- #
-
 # bats test_tags=pull:l2,pull:l2:a,pull:l4
-@test "catalog: l2.a/l4: flox pull accepts a floxhub namespace/environment, creates .flox if it does not exist" {
+@test "l2.a/l4: flox pull accepts a floxhub namespace/environment, creates .flox if it does not exist" {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
@@ -391,7 +249,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:l2,pull:l2:b
-@test "catalog: l2.b: flox pull with --remote fails if an env is already present" {
+@test "l2.b: flox pull with --remote fails if an env is already present" {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
@@ -404,7 +262,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:l2,pull:l2:c
-@test "catalog: l2.c: flox pull with --remote and --dir pulls into the specified directory" {
+@test "l2.c: flox pull with --remote and --dir pulls into the specified directory" {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
@@ -419,7 +277,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:l3,pull:l3:a
-@test "catalog: l3.a: pulling without namespace/environment" {
+@test "l3.a: pulling without namespace/environment" {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
@@ -441,7 +299,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:l3,pull:l3:b
-@test "catalog: l3.b: pulling without namespace/environment respects --dir" {
+@test "l3.b: pulling without namespace/environment respects --dir" {
   make_dummy_env "owner" "name"
 
   # dummy environment has no packages to resolve
@@ -462,7 +320,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:l6,pull:l6:a
-@test "catalog: l6.a: pulling the same remote environment in multiple directories creates unique copies of the environment" {
+@test "l6.a: pulling the same remote environment in multiple directories creates unique copies of the environment" {
   make_dummy_env "owner" "name"
 
   mkdir first second
@@ -494,7 +352,7 @@ function add_incompatible_package() {
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=pull:twice:no-force
-@test "catalog: pull environment inside the same environment without the '--force' flag" {
+@test "pull environment inside the same environment without the '--force' flag" {
   make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
 
@@ -508,7 +366,7 @@ function add_incompatible_package() {
 }
 
 # bats test_tags=pull:twice:force
-@test "catalog: pull environment inside the same environment with '--force' flag" {
+@test "pull environment inside the same environment with '--force' flag" {
   make_dummy_env "owner" "name"
   update_dummy_env "owner" "name"
 
@@ -524,11 +382,11 @@ function add_incompatible_package() {
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=pull:catalog:unsupported:warning
-# An environment that is not compatible with the current ssystem
+# An environment that is not compatible with the current system
 # due to the current system missing <system> in `option.systems`
 # AND a package that is indeed not able to be built for the current system
 # should show a warning, but otherwise succeed to pull
-@test "catalog: pull unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
+@test "pull unsupported environment succeeds with '--force' flag but shows warning if unable to build still" {
   make_dummy_env "owner" "name"
   remove_extra_systems "owner" "name"
   update_dummy_env "owner" "name"
@@ -627,7 +485,7 @@ function add_incompatible_package() {
 
 # bats test_tags=activate:remote:incompatible
 # activating an incompatible environment should fail gracefully
-@test "catalog: activate incompatible environment fails gracefully" {
+@test "activate incompatible environment fails gracefully" {
 
   make_dummy_env "owner" "name"
   remove_extra_systems "owner" "name"

@@ -45,10 +45,7 @@ impl Browser {
             "macos" => Self(PathBuf::from("/usr/bin/open")),
             unsupported => {
                 debug!("Unsupported OS '{unsupported}' cannot open a browser");
-                return Err(format!(
-                    "Unsupported OS '{unsupported}'",
-                    unsupported = unsupported
-                ));
+                return Err(format!("Unsupported OS '{unsupported}'"));
             },
         };
 

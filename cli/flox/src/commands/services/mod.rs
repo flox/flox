@@ -4,9 +4,8 @@ use anyhow::Result;
 use bpaf::Bpaf;
 use flox_rust_sdk::data::System;
 use flox_rust_sdk::flox::Flox;
-use flox_rust_sdk::models::environment::{CoreEnvironmentError, Environment};
-use flox_rust_sdk::models::lockfile::LockedManifest;
-use flox_rust_sdk::models::manifest::{ManifestServices, TypedManifest, TypedManifestCatalog};
+use flox_rust_sdk::models::environment::Environment;
+use flox_rust_sdk::models::manifest::{Manifest, ManifestServices};
 use flox_rust_sdk::providers::services::{new_services_to_start, ProcessState, ProcessStates};
 use tracing::{debug, instrument};
 
@@ -99,7 +98,7 @@ impl ServicesCommands {
 pub struct ServicesEnvironment {
     environment: ConcreteEnvironment,
     socket: PathBuf,
-    manifest: TypedManifestCatalog,
+    manifest: Manifest,
 }
 
 impl ServicesEnvironment {
@@ -114,12 +113,7 @@ impl ServicesEnvironment {
             .dyn_environment_ref()
             .services_socket_path(flox)?;
 
-        let TypedManifest::Catalog(manifest) = environment.dyn_environment_ref().manifest(flox)?
-        else {
-            return Err(CoreEnvironmentError::ServicesWithV0.into());
-        };
-
-        let manifest = *manifest;
+        let manifest = environment.dyn_environment_ref().manifest(flox)?;
 
         Ok(Self {
             environment,
@@ -284,11 +278,6 @@ pub async fn start_with_new_process_compose(
 ) -> Result<Vec<String>> {
     let environment = concrete_environment.dyn_environment_ref_mut();
     let lockfile = environment.lockfile(&flox)?;
-    let LockedManifest::Catalog(lockfile) = lockfile else {
-        // Checks for supported environments within the commands should prevent
-        // us ever getting here, but just in case.
-        return Err(CoreEnvironmentError::ServicesWithV0.into());
-    };
     let system = flox.system.clone();
 
     for name in names {
@@ -455,9 +444,7 @@ mod tests {
         assert_eq!(
             err.to_string(),
             expected.to_string(),
-            "{:?} != {:?}",
-            err,
-            expected
+            "{err:?} != {expected:?}"
         );
     }
 
@@ -488,9 +475,7 @@ mod tests {
         assert_eq!(
             err.to_string(),
             expected.to_string(),
-            "{:?} != {:?}",
-            err,
-            expected
+            "{err:?} != {expected:?}"
         );
     }
 }

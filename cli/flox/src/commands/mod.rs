@@ -26,7 +26,7 @@ use std::{env, fmt, fs, io, mem};
 
 use anyhow::{anyhow, bail, Context, Result};
 use bpaf::{Args, Bpaf, ParseFailure, Parser};
-use flox_rust_sdk::data::CanonicalPath;
+use flox_rust_sdk::data::{CanonicalPath, FloxVersion};
 use flox_rust_sdk::flox::{
     EnvironmentName,
     EnvironmentOwner,
@@ -41,10 +41,7 @@ use flox_rust_sdk::flox::{
     FLOX_VERSION,
 };
 use flox_rust_sdk::models::env_registry::{EnvRegistry, ENV_REGISTRY_FILENAME};
-use flox_rust_sdk::models::environment::managed_environment::{
-    ManagedEnvironment,
-    ManagedEnvironmentError,
-};
+use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironment;
 use flox_rust_sdk::models::environment::path_environment::PathEnvironment;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironment;
 use flox_rust_sdk::models::environment::{
@@ -72,7 +69,7 @@ use url::Url;
 use self::envs::DisplayEnvironments;
 use crate::commands::general::update_config;
 use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
-use crate::utils::dialog::{Confirm, Dialog, Select, Spinner};
+use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::init::{
     init_catalog_client,
@@ -246,7 +243,9 @@ impl FloxArgs {
             Hub::global().set_client(client);
         } else {
             debug!("Metrics collection disabled");
-            env::set_var("FLOX_DISABLE_METRICS", "true");
+            unsafe {
+                env::set_var("FLOX_DISABLE_METRICS", "true");
+            }
         }
 
         let git_url_override = {
@@ -516,25 +515,35 @@ impl UpdateNotification {
             Err(e) => Err(UpdateNotificationError::Io(e))?,
         };
 
-        let new_version = get_latest_version_future.await?;
-
-        // Sanity check we got a version back
-        if let Err(e) = semver::Version::parse(&new_version) {
+        let Ok(current_version) = FLOX_VERSION.parse::<FloxVersion>() else {
             return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
-                "version is invalid: {e}"
+                "version '{}' is invalid.",
+                *FLOX_VERSION
             )));
-        }
-
-        if *FLOX_VERSION == new_version {
-            return Ok(UpdateCheckResult::RefreshNotificationFile(
-                notification_file,
-            ));
         };
 
-        Ok(UpdateCheckResult::UpdateAvailable(UpdateNotification {
-            new_version,
-            notification_file,
-        }))
+        let new_version_str = get_latest_version_future.await?;
+        let Ok(new_version) = new_version_str.parse::<FloxVersion>() else {
+            return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
+                "version '{new_version_str}' is invalid."
+            )));
+        };
+
+        match current_version.partial_cmp(&new_version) {
+            None => Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
+                "Cannot compare the current version {current_version} to {new_version}"
+            ))),
+            Some(std::cmp::Ordering::Less) => {
+                Ok(UpdateCheckResult::UpdateAvailable(UpdateNotification {
+                    new_version: new_version.to_string(),
+                    notification_file,
+                }))
+            },
+            // current_version is Equal or Greater than new_version
+            _ => Ok(UpdateCheckResult::RefreshNotificationFile(
+                notification_file,
+            )),
+        }
     }
 
     /// Print if there's a new version available,
@@ -886,7 +895,7 @@ enum InternalCommands {
     /// FloxHub authentication commands
     #[bpaf(command, footer("Run 'man flox-auth' for more details."))]
     Auth(#[bpaf(external(auth::auth))] auth::Auth),
-    /// Build packages for flox
+    /// Build packages for Flox
     #[bpaf(command, hide, footer("Run 'man flox-build' for more details."))]
     Build(#[bpaf(external(build::build))] build::Build),
 }
@@ -1332,6 +1341,8 @@ impl UninitializedEnvironment {
     }
 
     /// The environment description when displayed in a prompt
+    // TODO: we use this for activate errors in Bash since it doesn't have
+    // quotes whereas we use message_description for activate errors in Rust.
     pub fn bare_description(&self) -> Result<String> {
         if self.is_remote() {
             Ok(format!(
@@ -1353,6 +1364,8 @@ impl UninitializedEnvironment {
     }
 
     /// The environment description when displayed in messages
+    // TODO: we use this for activate errors in Rust whereas we use
+    // bare_description for activate errors in Bash since it doesn't add quotes.
     pub fn message_description(&self) -> Result<String> {
         if self.is_remote() {
             Ok(format!(
@@ -1468,8 +1481,7 @@ fn activated_environments() -> ActiveEnvironments {
         Ok(active_environments) => active_environments,
         Err(e) => {
             message::error(format!(
-                "Could not parse _FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {}",
-                e
+                "Could not parse _FLOX_ACTIVE_ENVIRONMENTS -- using defaults: {e}"
             ));
             ActiveEnvironments::default()
         },
@@ -1557,7 +1569,7 @@ pub(super) async fn ensure_environment_trust(
     }
 
     loop {
-        let message = format!("Do you trust {env_ref}?", env_ref = env_ref);
+        let message = format!("Do you trust {env_ref}?");
         let choice = Dialog {
             message: &message,
             help_message: None,
@@ -1581,7 +1593,7 @@ pub(super) async fn ensure_environment_trust(
                 update_config(
                     &flox.config_dir,
                     &flox.temp_dir,
-                    format!("trusted_environments.'{}'", env_ref),
+                    format!("trusted_environments.'{env_ref}'"),
                     Some(EnvironmentTrust::Trust),
                 )
                 .context("Could not write token to config")?;
@@ -1593,7 +1605,7 @@ pub(super) async fn ensure_environment_trust(
                 update_config(
                     &flox.config_dir,
                     &flox.temp_dir,
-                    format!("trusted_environments.'{}'", env_ref),
+                    format!("trusted_environments.'{env_ref}'"),
                     Some(EnvironmentTrust::Deny),
                 )
                 .context("Could not write token to config")?;
@@ -1648,137 +1660,12 @@ pub fn environment_description(environment: &ConcreteEnvironment) -> Result<Stri
     UninitializedEnvironment::from_concrete_environment(environment)?.message_description()
 }
 
-#[derive(Debug, Error)]
-pub enum MigrationError {
-    #[error("Migration cancelled. Run 'flox upgrade' to migrate the environment.")]
-    MigrationCancelled,
-    #[error("upgrade failed")]
-    ConfirmedUpgradeFailed(#[source] EnvironmentError),
-    #[error(transparent)]
-    Environment(#[from] EnvironmentError),
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
-}
-
 /// Check if the environment needs to be migrated to version 1.
-/// If doing so requires an upgrade, prompt the user for whether to proceed.
-async fn maybe_migrate_environment_to_v1(
-    flox: &Flox,
-    environment: &mut ConcreteEnvironment,
-) -> Result<(), MigrationError> {
-    maybe_migrate_environment_to_v1_inner(
-        flox,
-        environment,
-        Dialog::can_prompt().then_some(confirm_migration_upgrade(&environment_description(
-            environment,
-        )?)),
-    )
-    .await
-}
-/// Check if the environment needs to be migrated to version 1.
-/// If doing so requires an upgrade, prompt the user for whether to proceed.
-///
-/// If confirm_upgrade_future is None, the user can't be prompted to confirm an upgrade.
-async fn maybe_migrate_environment_to_v1_inner(
-    flox: &Flox,
-    concrete_environment: &mut ConcreteEnvironment,
-    confirm_upgrade_future: Option<impl Future<Output = Result<bool>>>,
-) -> Result<(), MigrationError> {
-    let description = environment_description(concrete_environment)?;
-
-    // The user answered the prompt to upgrade the environment
-    let mut confirmed_upgrade = false;
-    if let Some(migration_info) = concrete_environment
-        .dyn_environment_ref_mut()
-        .needs_migration_to_v1(flox)?
-    {
-        // If the migration requires changes to a manifest, check if the environment is in sync
-        // before asking whether to migrate
-        // (which would subsequently fail due to changes in the manifest).
-        if migration_info.needs_manifest_migration {
-            if let ConcreteEnvironment::Managed(ref environment) = concrete_environment {
-                if environment
-                    .has_local_changes(flox)
-                    .map_err(EnvironmentError::ManagedEnvironment)?
-                {
-                    Err(EnvironmentError::ManagedEnvironment(
-                        ManagedEnvironmentError::CheckoutOutOfSync,
-                    ))?;
-                }
-            }
-        }
-
-        if migration_info.needs_upgrade {
-            // We could be a bit more sophisticated and check if there are packages installed.
-            // But we'll be re-writing the lock, so call it an upgrade.
-            match confirm_upgrade_future {
-                None => {
-                    Err(anyhow!(formatdoc! {"
-                    To edit environment {description}, you must upgrade to environment version 1.
-                    Run 'flox upgrade' to migrate the environment."
-                    }))?;
-                },
-                Some(confirm_upgrade_future) => {
-                    if !confirm_upgrade_future.await? {
-                        Err(MigrationError::MigrationCancelled)?;
-                    }
-                    confirmed_upgrade = true;
-                },
-            };
-        } else {
-            message::warning("Detected an old environment manifest.")
-        }
-        let result = Dialog {
-            message: "Migrating to version 1.",
-            help_message: None,
-            typed: Spinner::new(|| {
-                concrete_environment
-                    .dyn_environment_ref_mut()
-                    .migrate_to_v1(flox, migration_info)
-            }),
-        }
-        .spin();
-
-        if confirmed_upgrade {
-            result.map_err(MigrationError::ConfirmedUpgradeFailed)?;
-        } else {
-            result?
-        }
-
-        message::plain(format!(
-            "⬆️  Migrated environment {description} to version 1."
-        ));
-    }
-    Ok(())
-}
-
-async fn confirm_migration_upgrade(description: &str) -> Result<bool> {
-    Ok(Dialog {
-        message: &formatdoc! {"
-                    To edit environment {description}, you must upgrade to environment version 1.
-                    Do you want to upgrade now?"},
-        help_message: None,
-        typed: Confirm {
-            default: Some(false),
-        },
-    }
-    .prompt()
-    .await?)
-}
-
 #[cfg(test)]
 mod tests {
 
-    use flox_rust_sdk::flox::test_helpers::flox_instance_with_optional_floxhub;
     use flox_rust_sdk::flox::EnvironmentName;
-    use flox_rust_sdk::models::environment::managed_environment::test_helpers::{
-        mock_managed_environment,
-        mock_managed_environment_from_env_files,
-    };
-    use flox_rust_sdk::models::environment::test_helpers::MANIFEST_V0_FIELDS;
-    use flox_rust_sdk::models::environment::{CoreEnvironmentError, PathPointer};
-    use flox_rust_sdk::models::lockfile::LockedManifest;
-    use flox_rust_sdk::providers::catalog::MANUALLY_GENERATED;
+    use flox_rust_sdk::models::environment::PathPointer;
     use sentry::test::with_captured_events;
     use tempfile::tempdir;
 
@@ -1962,9 +1849,11 @@ mod tests {
         )
         .unwrap();
 
+        let latest_version: String = "1000.0.0".to_string();
+
         let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
-            async { Ok("0.0.0".to_string()) },
+            async { Ok(latest_version.clone()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await;
@@ -1973,7 +1862,7 @@ mod tests {
             result.unwrap(),
             UpdateCheckResult::UpdateAvailable(UpdateNotification {
                 notification_file,
-                new_version: "0.0.0".to_string()
+                new_version: latest_version.clone(),
             })
         );
     }
@@ -1987,7 +1876,7 @@ mod tests {
 
         let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
-            async { Ok("0.0.0".to_string()) },
+            async { Ok("1000.0.0".to_string()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await;
@@ -1996,7 +1885,7 @@ mod tests {
             result.unwrap(),
             UpdateCheckResult::UpdateAvailable(UpdateNotification {
                 notification_file,
-                new_version: "0.0.0".to_string()
+                new_version: "1000.0.0".to_string()
             })
         );
     }
@@ -2017,7 +1906,7 @@ mod tests {
 
         match result {
             Err(UpdateNotificationError::WeMayHaveMessedUp(e)) => {
-                assert!(e.to_string().contains("version is invalid"))
+                assert!(e.to_string().contains("version 'bad' is invalid"))
             },
             _ => panic!(),
         }
@@ -2084,252 +1973,5 @@ mod tests {
         let message =
             UpdateNotification::update_instructions(update_instructions_file.to_str().unwrap());
         assert!(message.contains(custom_message));
-    }
-
-    /// maybe_migrate_environment_to_v1_inner migrates a v0 manifest without
-    /// prompting
-    ///
-    /// This also gives some coverage for managed environments
-    #[tokio::test]
-    async fn maybe_migrate_managed_environment_manifest() {
-        let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-
-        let mut environment =
-            ConcreteEnvironment::Managed(mock_managed_environment(&flox, "", owner));
-
-        // TODO: use None::<???> instead of false.then
-        maybe_migrate_environment_to_v1_inner(
-            &flox,
-            &mut environment,
-            false.then(|| confirm_migration_upgrade("")),
-        )
-        .await
-        .unwrap();
-
-        assert!(environment
-            .dyn_environment_ref_mut()
-            .manifest_contents(&flox)
-            .unwrap()
-            .contains("version = 1"));
-    }
-
-    /// maybe_migrate_environment_to_v1_inner bails if the environment has a
-    /// lock and the prompt function returns false
-    ///
-    /// This also gives some coverage for managed environments
-    #[tokio::test]
-    async fn maybe_migrate_managed_environment_bails() {
-        let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-
-        let mut environment =
-            ConcreteEnvironment::Managed(mock_managed_environment_from_env_files(
-                &flox,
-                MANUALLY_GENERATED.join("empty_v0"),
-                owner,
-            ));
-
-        let err = maybe_migrate_environment_to_v1_inner(
-            &flox,
-            &mut environment,
-            Some(async { Ok(false) }),
-        )
-        .await
-        .unwrap_err();
-        assert!(err.to_string().contains("Migration cancelled"));
-
-        assert!(!environment
-            .dyn_environment_ref_mut()
-            .manifest_contents(&flox)
-            .unwrap()
-            .contains("version = 1"));
-    }
-
-    /// maybe_migrate_environment_to_v1_inner migrates the manifest and lock if
-    /// the environment has a lock and the prompt function returns true
-    ///
-    /// This also gives some coverage for managed environments
-    #[tokio::test]
-    async fn maybe_migrate_managed_environment_lock() {
-        let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-
-        let mut environment =
-            ConcreteEnvironment::Managed(mock_managed_environment_from_env_files(
-                &flox,
-                MANUALLY_GENERATED.join("empty_v0"),
-                owner,
-            ));
-
-        maybe_migrate_environment_to_v1_inner(&flox, &mut environment, Some(async { Ok(true) }))
-            .await
-            .unwrap();
-
-        assert!(environment
-            .dyn_environment_ref_mut()
-            .manifest_contents(&flox)
-            .unwrap()
-            .contains("version = 1"));
-
-        assert!(matches!(
-            LockedManifest::read_from_file(
-                &CanonicalPath::new(
-                    environment
-                        .dyn_environment_ref_mut()
-                        .lockfile_path(&flox)
-                        .unwrap()
-                )
-                .unwrap(),
-            )
-            .unwrap(),
-            LockedManifest::Catalog(_)
-        ));
-    }
-
-    /// maybe_migrate_environment_to_v1_inner returns MigrationCancelled if the
-    /// environment has a lock and the prompt function returns false
-    ///
-    /// This also gives some coverage for managed environments
-    #[tokio::test]
-    async fn maybe_migrate_managed_environment_migration_cancelled() {
-        let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-
-        let mut environment =
-            ConcreteEnvironment::Managed(mock_managed_environment_from_env_files(
-                &flox,
-                MANUALLY_GENERATED.join("empty_v0"),
-                owner,
-            ));
-
-        let err = maybe_migrate_environment_to_v1_inner(
-            &flox,
-            &mut environment,
-            Some(async { Ok(false) }),
-        )
-        .await
-        .unwrap_err();
-
-        assert!(matches!(err, MigrationError::MigrationCancelled));
-    }
-
-    /// maybe_migrate_environment_to_v1_inner returns ConfirmedUpgradeFailed if
-    /// the environment has a manifest with v0 only fields, a lock, and the
-    /// prompt function returns true
-    ///
-    /// This also gives some coverage for managed environments
-    #[tokio::test]
-    async fn maybe_migrate_managed_environment_failed_upgrade() {
-        let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-
-        let mut environment =
-            ConcreteEnvironment::Managed(mock_managed_environment_from_env_files(
-                &flox,
-                MANUALLY_GENERATED.join("v0_fields"),
-                owner,
-            ));
-
-        let err = maybe_migrate_environment_to_v1_inner(
-            &flox,
-            &mut environment,
-            Some(async { Ok(true) }),
-        )
-        .await
-        .unwrap_err();
-
-        assert!(matches!(
-            err,
-            MigrationError::ConfirmedUpgradeFailed(EnvironmentError::Core(
-                CoreEnvironmentError::MigrateManifest(_)
-            ))
-        ));
-    }
-
-    /// maybe_migrate_environment_to_v1 fails if a managed environment has local changes
-    #[tokio::test]
-    async fn maybe_migrate_managed_environment_blocked() {
-        let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-
-        let mut environment = ConcreteEnvironment::Managed(mock_managed_environment(
-            &flox,
-            &formatdoc! {"
-                # before
-                {MANIFEST_V0_FIELDS}
-            "},
-            owner,
-        ));
-
-        // modify the lockfile
-        {
-            let manifest_path = environment
-                .dyn_environment_ref_mut()
-                .manifest_path(&flox)
-                .unwrap();
-
-            fs::write(manifest_path, formatdoc! {"
-                # after
-                {MANIFEST_V0_FIELDS}
-            "})
-            .unwrap();
-        }
-
-        let err = maybe_migrate_environment_to_v1_inner(
-            &flox,
-            &mut environment,
-            Some(async { unreachable!() }),
-        )
-        .await
-        .unwrap_err();
-
-        assert!(matches!(
-            err,
-            MigrationError::Environment(EnvironmentError::ManagedEnvironment(
-                ManagedEnvironmentError::CheckoutOutOfSync
-            ))
-        ));
-    }
-
-    /// [maybe_migrate_environment_to_v1] succeeds
-    /// even if a managed environment has local changes when no migration is needed
-    #[tokio::test]
-    async fn maybe_migrate_managed_environment_blocked_only_if_migration_needed() {
-        let owner = "owner".parse().unwrap();
-        let (flox, _temp_dir_handle) = flox_instance_with_optional_floxhub(Some(&owner));
-
-        let mut environment = ConcreteEnvironment::Managed(mock_managed_environment(
-            &flox,
-            &formatdoc! {"
-                # before
-                version = 1
-            "},
-            owner,
-        ));
-
-        // modify the lockfile
-        {
-            let manifest_path = environment
-                .dyn_environment_ref_mut()
-                .manifest_path(&flox)
-                .unwrap();
-
-            fs::write(manifest_path, formatdoc! {"
-                # after
-                version = 1
-            "})
-            .unwrap();
-        }
-
-        maybe_migrate_environment_to_v1_inner(
-            &flox,
-            &mut environment,
-            Some(async { unreachable!() }),
-        )
-        .await
-        .expect(
-            "maybe_migrate_environment_to_v1_inner _should not_ fail, since no migration is needed",
-        );
     }
 }

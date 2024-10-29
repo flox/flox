@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
+use flox_core::Version;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use log::debug;
@@ -11,10 +12,11 @@ use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
 use toml_edit::{self, Array, DocumentMut, Formatted, InlineTable, Item, Key, Table, Value};
+use tracing::trace;
 use url::Url;
 
 use super::environment::path_environment::InitCustomization;
-use crate::data::{System, Version};
+use crate::data::System;
 use crate::providers::services::ServiceError;
 #[cfg(test)]
 use crate::utils::proptest_btree_map_alphanum_keys;
@@ -289,18 +291,14 @@ impl RawManifest {
     ///
     /// Discussion: using a string field as the version tag `version: "1"` vs `version: 1`
     /// could work today, but is still limited by the lack of an optional tag.
-    pub fn to_typed(&self) -> Result<TypedManifest, toml_edit::de::Error> {
+    pub fn to_typed(&self) -> Result<Manifest, toml_edit::de::Error> {
         match self.get_version() {
-            Some(1) => Ok(TypedManifest::Catalog(toml_edit::de::from_document(
-                self.0.clone(),
-            )?)),
-            None => Ok(TypedManifest::Pkgdb(toml_edit::de::from_document(
-                self.0.clone(),
-            )?)),
+            Some(1) => Ok(toml_edit::de::from_document(self.0.clone())?),
             Some(v) => {
                 let msg = format!("unsupported manifest version: {v}");
                 Err(toml_edit::de::Error::custom(msg))
             },
+            None => Err(toml_edit::de::Error::custom("unsupported manifest version")),
         }
     }
 }
@@ -335,34 +333,33 @@ impl DerefMut for RawManifest {
     }
 }
 
-/// Represents the Manifest data schema for reading/processing of the manifest.
-/// Writing a [`TypedManifest`] will drop comments and formatting.
-/// Hence, this should only be used in cases where these can safely be severed.
-/// Edits to the user facing manifest.toml file should be made using [`RawManifest`] instead.
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-#[serde(untagged)]
-pub enum TypedManifest {
-    /// v1 manifest, processed by flox and resolved using the catalog service
-    Catalog(Box<TypedManifestCatalog>),
-    /// deprecated ~v0~ manifest, processed entirely by `pkgdb`
-    #[cfg_attr(test, proptest(skip))]
-    Pkgdb(TypedManifestPkgdb),
-}
-
 /// Not meant for writing manifest files, only for reading them.
 /// Modifications should be made using the the raw functions in this module.
+
+// We use skip_serializing_if throughout to reduce the size of the lockfile and
+// improve backwards compatibility when we introduce fields.
+// We don't use Option and skip_serializing_none because an empty table gets
+// treated as Some,
+// but we don't care about distinguishing between a table not being present and
+// a table being present but empty.
+// In both cases, we can just skip serializing.
+// It would be better if we could deny_unknown_fields when we're deserializing
+// the user provided manifest but allow unknown fields when deserializing the
+// lockfile,
+// but that doesn't seem worth the effort at the moment.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[serde(deny_unknown_fields)]
-pub struct TypedManifestCatalog {
+pub struct Manifest {
     pub version: Version<1>,
     /// The packages to install in the form of a map from install_id
     /// to package descriptor.
     #[serde(default)]
+    #[serde(skip_serializing_if = "ManifestInstall::skip_serializing")]
     pub install: ManifestInstall,
     /// Variables that are exported to the shell environment upon activation.
     #[serde(default)]
+    #[serde(skip_serializing_if = "ManifestVariables::skip_serializing")]
     pub vars: ManifestVariables,
     /// Hooks that are run at various times during the lifecycle of the manifest
     /// in a known shell environment.
@@ -376,13 +373,15 @@ pub struct TypedManifestCatalog {
     pub options: ManifestOptions,
     /// Service definitions
     #[serde(default)]
+    #[serde(skip_serializing_if = "ManifestServices::skip_serializing")]
     pub services: ManifestServices,
     /// Package build definitions
     #[serde(default)]
+    #[serde(skip_serializing_if = "ManifestBuild::skip_serializing")]
     pub build: ManifestBuild,
 }
 
-impl TypedManifestCatalog {
+impl Manifest {
     /// Get the package descriptor with the specified install_id.
     pub fn pkg_descriptor_with_id(&self, id: impl AsRef<str>) -> Option<ManifestPackageDescriptor> {
         self.install.0.get(id.as_ref()).cloned()
@@ -571,6 +570,12 @@ pub struct ManifestInstall(
     BTreeMap<String, ManifestPackageDescriptor>,
 );
 
+impl ManifestInstall {
+    fn skip_serializing(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 // todo: this can make the error messages less clear and might call for a custom (de)serialize impl
@@ -739,6 +744,12 @@ pub struct ManifestVariables(
     pub(crate) BTreeMap<String, String>,
 );
 
+impl ManifestVariables {
+    fn skip_serializing(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 #[skip_serializing_none]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -838,9 +849,14 @@ pub struct ManifestServices(
             strategy = "proptest_btree_map_alphanum_keys::<ManifestServiceDescriptor>(10, 3)"
         )
     )]
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) BTreeMap<String, ManifestServiceDescriptor>,
 );
+
+impl ManifestServices {
+    fn skip_serializing(&self) -> bool {
+        self.0.is_empty()
+    }
+}
 
 /// The definition of a service in a manifest
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -935,9 +951,14 @@ pub struct ManifestBuild(
         test,
         proptest(strategy = "proptest_btree_map_alphanum_keys::<ManifestBuildDescriptor>(10, 3)")
     )]
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub(crate) BTreeMap<String, ManifestBuildDescriptor>,
 );
+
+impl ManifestBuild {
+    fn skip_serializing(&self) -> bool {
+        self.0.is_empty()
+    }
+}
 
 /// The definition of a package built from within the environment
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -949,6 +970,8 @@ pub struct ManifestBuildDescriptor {
     pub command: String,
     /// Files to explicitly include in the build result
     pub files: Option<Vec<String>>,
+    /// Packages from the 'toplevel' group to include in the closure of the build result
+    pub runtime_packages: Option<Vec<String>>,
     /// Systems to allow running the build
     pub systems: Option<Vec<System>>,
     /// Sandbox mode for the build
@@ -962,25 +985,6 @@ pub struct ManifestBuildDescriptor {
 pub enum ManifestBuildSandbox {
     Off,
     Pure,
-}
-
-/// Deserialize the manifest as a [serde_json::Value],
-/// then convert it to a [RawManifest] that can then be converted to a [TypedManifest].
-/// This provides more precise errors based on the version of the manifest.
-///
-/// See the comment on [`RawManifest::to_typed`] for more information.
-impl<'de> Deserialize<'de> for TypedManifest {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let document = toml_edit::ser::to_document(&value)
-            .map_err(|err| serde::de::Error::custom(err.to_string()))?;
-        RawManifest(document)
-            .to_typed()
-            .map_err(serde::de::Error::custom)
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -1169,27 +1173,63 @@ impl FromStr for CatalogPackage {
     ///
     ///     attribute_path ::= <install_id> | <attribute_path_rest>.<install_id>
     ///     attribute_path_rest ::= <identifier> | <attribute_path_rest>.<identifier>
-    ///     install_id ::= <identifier>
+    ///     install_id ::= <identifier> | @<identifier>
     ///
     ///     version ::= <string> # interpreted as semver or plain version by the resolver
     /// ```
-    /// Todo: this does currently _not_ handle any more pathological cases like
-    ///  - `@` in the version string (the last `@` is the delimiter)
     fn from_str(descriptor: &str) -> Result<Self, ManifestError> {
-        let (attr_path, version) = match descriptor.split_once('@') {
-            Some((attr_path, version)) if !version.is_empty() => {
-                (attr_path.to_string(), Some(version.to_string()))
-            },
-            Some(_) => {
+        fn split_version(haystack: &str) -> (usize, Option<&str>) {
+            let mut version_at = None;
+            let mut start = 0;
+
+            loop {
+                trace!(descriptor = haystack, start, substring = &haystack[start..]);
+                match haystack[start..].find('@') {
+                    // Found "@" at the beginning of the descriptor,
+                    // interpreted the "@" as part of the first attribute.
+                    Some(next_version_at) if start + next_version_at == 0 => {
+                        start += 1;
+                        continue;
+                    },
+                    // Found ".@", interpreted the "@" as part of the attribute,
+                    // as it would otherwise be unclear what is being versioned.
+                    // An example of this is `nodePackages.@angular/cli`
+                    Some(next_version_at)
+                        if &haystack[start + next_version_at - 1..start + next_version_at]
+                            == "." =>
+                    {
+                        start = start + next_version_at + 1;
+                        continue;
+                    },
+                    // Found a version delimiting "@"
+                    Some(next_version_at) => {
+                        version_at = Some(start + next_version_at);
+                        break;
+                    },
+                    // No version delimiting "@" found
+                    None => break,
+                }
+            }
+
+            let version = version_at.map(|at| &haystack[at + 1..]);
+            (version_at.unwrap_or(haystack.len()), version)
+        }
+
+        let (attr_path_len, version) = split_version(descriptor);
+        let attr_path = descriptor[..attr_path_len].to_string();
+        let version = if let Some(version) = version {
+            if version.is_empty() {
                 return Err(ManifestError::MalformedStringDescriptor {
                     msg: indoc! {"
-                        Expected version requrement after '@'.
+                        Expected version requirement after '@'.
                         Try adding quotes around the argument."}
                     .to_string(),
                     desc: descriptor.to_string(),
-                })
-            },
-            None => (descriptor.to_string(), None),
+                });
+            }
+            Some(version.to_string())
+        } else {
+            None
         };
 
         let install_id = install_id_from_attr_path(&attr_path, descriptor)?;
@@ -1447,15 +1487,21 @@ pub(super) mod test {
     use super::*;
 
     const DUMMY_MANIFEST: &str = indoc! {r#"
+        version = 1
+
         [install]
-        hello = {}
+        hello.pkg-path = "hello"
 
         [install.ripgrep]
+        pkg-path = "ripgrep"
         [install.bat]
+        pkg-path = "bat"
     "#};
 
     // This is an array of tables called `install` rather than a table called `install`.
     const BAD_MANIFEST: &str = indoc! {r#"
+        version = 1
+
         [[install]]
         python = {}
 
@@ -1467,19 +1513,6 @@ pub(super) mod test {
         version = 1
     "#};
 
-    pub fn empty_catalog_manifest() -> TypedManifestCatalog {
-        TypedManifestCatalog {
-            version: Version,
-            install: ManifestInstall::default(),
-            vars: ManifestVariables::default(),
-            hook: ManifestHook::default(),
-            profile: ManifestProfile::default(),
-            options: ManifestOptions::default(),
-            services: ManifestServices::default(),
-            build: ManifestBuild::default(),
-        }
-    }
-
     #[test]
     fn catalog_manifest_rejects_unknown_fields() {
         let manifest = formatdoc! {"
@@ -1488,7 +1521,7 @@ pub(super) mod test {
             unknown = 'field'
         "};
 
-        let err = toml_edit::de::from_str::<TypedManifest>(&manifest)
+        let err = toml_edit::de::from_str::<Manifest>(&manifest)
             .expect_err("manifest.toml should be invalid");
 
         assert!(
@@ -1507,7 +1540,7 @@ pub(super) mod test {
             allow.unknown = true
         "};
 
-        let err = toml_edit::de::from_str::<TypedManifest>(&manifest)
+        let err = toml_edit::de::from_str::<Manifest>(&manifest)
             .expect_err("manifest.toml should be invalid");
 
         assert!(
@@ -1860,23 +1893,8 @@ pub(super) mod test {
     }
 
     #[test]
-    fn detect_pkgdb_manifest() {
-        const PKGDB_MANIFEST: &str = indoc! {r#"
-            # No version field, so it's a pkgdb manifest
-        "#};
-
-        assert!(matches!(
-            toml_edit::de::from_str(PKGDB_MANIFEST),
-            Ok(TypedManifest::Pkgdb(_))
-        ))
-    }
-
-    #[test]
     fn detect_catalog_manifest() {
-        assert!(matches!(
-            toml_edit::de::from_str(CATALOG_MANIFEST),
-            Ok(TypedManifest::Catalog(_))
-        ))
+        assert!(toml_edit::de::from_str::<Manifest>(CATALOG_MANIFEST).is_ok());
     }
 
     #[test]
@@ -1918,7 +1936,7 @@ pub(super) mod test {
         let test_packages = vec![PackageToInstall::Catalog(
             CatalogPackage::from_str("foo").unwrap(),
         )];
-        let insertion = insert_packages("", &test_packages).unwrap();
+        let insertion = insert_packages(CATALOG_MANIFEST, &test_packages).unwrap();
         assert!(
             contains_package(&insertion.new_toml.clone().unwrap(), test_packages[0].id()).unwrap()
         );
@@ -1940,7 +1958,7 @@ pub(super) mod test {
         let attempted_insertion = insert_packages(BAD_MANIFEST, &test_packages);
         assert!(matches!(
             attempted_insertion,
-            Err(TomlEditError::MalformedInstallTable(_))
+            Err(TomlEditError::ParseManifest(_))
         ))
     }
 
@@ -1950,14 +1968,14 @@ pub(super) mod test {
         let attempted_removal = remove_packages(BAD_MANIFEST, &test_packages);
         assert!(matches!(
             attempted_removal,
-            Err(TomlEditError::MalformedInstallTable(_))
+            Err(TomlEditError::ParseManifest(_))
         ))
     }
 
     #[test]
     fn error_when_install_table_missing() {
         let test_packages = vec!["hello".to_owned()];
-        let removal = remove_packages("", &test_packages);
+        let removal = remove_packages("version = 1", &test_packages);
         assert!(matches!(removal, Err(TomlEditError::PackageNotFound(_))));
     }
 
@@ -2036,17 +2054,46 @@ pub(super) mod test {
             systems: None,
         });
 
+        // Attributes starting with `@` are allowed, the @ is not delimting the version if following a '.'
+        let parsed: CatalogPackage = "nodePackages.@angular@1.2.3".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "@angular".to_string(),
+            pkg_path: "nodePackages.@angular".to_string(),
+            version: Some("1.2.3".to_string()),
+            systems: None,
+        });
+
+        // Attributes starting with `@` are allowed, the @ is not delimting the version
+        // if its the first character
+        let parsed: CatalogPackage = "@1.2.3".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "3".to_string(),
+            pkg_path: "@1.2.3".to_string(),
+            version: None,
+            systems: None,
+        });
+
+        // Attributes starting with `@` are allowed, the @ is not delimting the version
+        // if its the first character.
+        // Following `@` may delimit a version
+        let parsed: CatalogPackage = "@pkg@version".parse().unwrap();
+        assert_eq!(parsed, CatalogPackage {
+            id: "@pkg".to_string(),
+            pkg_path: "@pkg".to_string(),
+            version: Some("version".to_string()),
+            systems: None,
+        });
+
         CatalogPackage::from_str("foo.\"bar.baz.qux@1.2.3")
             .expect_err("missing closing quote should cause failure");
-        CatalogPackage::from_str("@1.2.3").expect_err("missing attrpath should cause failure");
         CatalogPackage::from_str("foo@").expect_err("missing version should cause failure");
     }
 
     proptest! {
         #[test]
-        fn manifest_round_trip(manifest in any::<TypedManifestCatalog>()) {
+        fn manifest_round_trip(manifest in any::<Manifest>()) {
             let toml = toml_edit::ser::to_string(&manifest).unwrap();
-            let parsed = toml_edit::de::from_str::<TypedManifestCatalog>(&toml).unwrap();
+            let parsed = toml_edit::de::from_str::<Manifest>(&toml).unwrap();
             prop_assert_eq!(manifest, parsed);
         }
     }
@@ -2204,13 +2251,14 @@ pub(super) mod test {
 
         "#};
 
-        let parsed = toml_edit::de::from_str::<TypedManifestCatalog>(build_manifest).unwrap();
+        let parsed = toml_edit::de::from_str::<Manifest>(build_manifest).unwrap();
 
         assert_eq!(
             parsed.build,
             ManifestBuild(
                 [("test".to_string(), ManifestBuildDescriptor {
                     command: "hello".to_string(),
+                    runtime_packages: None,
                     files: None,
                     systems: None,
                     sandbox: None
@@ -2232,7 +2280,7 @@ pub(super) mod test {
             redis.systems = ["aarch64-linux"]
         "#};
 
-        let parsed = toml_edit::de::from_str::<TypedManifestCatalog>(manifest).unwrap();
+        let parsed = toml_edit::de::from_str::<Manifest>(manifest).unwrap();
 
         assert_eq!(parsed.services.len(), 3, "{:?}", parsed.services);
 

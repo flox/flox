@@ -47,7 +47,7 @@
             "insecure": false,
             "install_id": "bpftrace",
             "license": "Apache-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "bpftrace-0.21.2",
             "outputs": [
               {
@@ -64,10 +64,10 @@
               "man"
             ],
             "pname": "bpftrace",
-            "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-            "rev_count": 681973,
-            "rev_date": "2024-09-16T05:08:36Z",
-            "scrape_date": "2024-09-18T03:14:07Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -83,7 +83,7 @@
             "insecure": false,
             "install_id": "bpftrace",
             "license": "Apache-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "bpftrace-0.21.2",
             "outputs": [
               {
@@ -100,10 +100,10 @@
               "man"
             ],
             "pname": "bpftrace",
-            "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-            "rev_count": 681973,
-            "rev_date": "2024-09-16T05:08:36Z",
-            "scrape_date": "2024-09-18T03:14:07Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -119,7 +119,7 @@
             "insecure": false,
             "install_id": "systemd",
             "license": "[ BSD-2-Clause, BSD-3-Clause, CC0-1.0, LGPL-2.1-or-later, LGPL-2.0-or-later, MIT, MIT-0, OFL-1.1, Public Domain ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "systemd-256.4",
             "outputs": [
               {
@@ -144,10 +144,10 @@
               "man"
             ],
             "pname": "systemd",
-            "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-            "rev_count": 681973,
-            "rev_date": "2024-09-16T05:08:36Z",
-            "scrape_date": "2024-09-18T03:14:07Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -163,7 +163,7 @@
             "insecure": false,
             "install_id": "systemd",
             "license": "[ BSD-2-Clause, BSD-3-Clause, CC0-1.0, LGPL-2.1-or-later, LGPL-2.0-or-later, MIT, MIT-0, OFL-1.1, Public Domain ]",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "systemd-256.4",
             "outputs": [
               {
@@ -188,10 +188,10 @@
               "man"
             ],
             "pname": "systemd",
-            "rev": "99dc8785f6a0adac95f5e2ab05cc2e1bf666d172",
-            "rev_count": 681973,
-            "rev_date": "2024-09-16T05:08:36Z",
-            "scrape_date": "2024-09-18T03:14:07Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -200,7 +200,7 @@
             "version": "256.4"
           }
         ],
-        "page": 681973,
+        "page": 687768,
         "url": ""
       }
     }

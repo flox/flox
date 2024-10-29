@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use bpaf::{Args, Parser};
-use commands::{EnvironmentSelectError, FloxArgs, FloxCli, MigrationError, Prefix, Version};
+use commands::{EnvironmentSelectError, FloxArgs, FloxCli, Prefix, Version};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::models::environment::managed_environment::ManagedEnvironmentError;
 use flox_rust_sdk::models::environment::remote_environment::RemoteEnvironmentError;
@@ -19,7 +19,6 @@ use crate::utils::errors::{
     format_environment_select_error,
     format_error,
     format_managed_error,
-    format_migration_error,
     format_remote_error,
 };
 use crate::utils::metrics::Hub;
@@ -95,10 +94,12 @@ fn main() -> ExitCode {
     let _metrics_guard = Hub::global().try_guard().ok();
 
     // Pass down the verbosity level to all pkgdb calls
-    std::env::set_var(
-        "_FLOX_PKGDB_VERBOSITY",
-        format!("{}", verbosity.to_pkgdb_verbosity_level()),
-    );
+    unsafe {
+        std::env::set_var(
+            "_FLOX_PKGDB_VERBOSITY",
+            format!("{}", verbosity.to_pkgdb_verbosity_level()),
+        );
+    }
     debug!(
         "set _FLOX_PKGDB_VERBOSITY={}",
         verbosity.to_pkgdb_verbosity_level()
@@ -161,10 +162,6 @@ fn main() -> ExitCode {
                     e.downcast_ref::<EnvironmentSelectError>()
                         .map(format_environment_select_error)
                 })
-                .or_else(|| {
-                    e.downcast_ref::<MigrationError>()
-                        .map(format_migration_error)
-                })
                 .or_else(|| e.downcast_ref::<ServiceError>().map(format_service_error));
 
             if let Some(message) = message {
@@ -176,7 +173,7 @@ fn main() -> ExitCode {
             let err_str = e
                 .chain()
                 .skip(1)
-                .fold(e.to_string(), |acc, cause| format!("{}: {}", acc, cause));
+                .fold(e.to_string(), |acc, cause| format!("{acc}: {cause}"));
 
             message::error(err_str);
 
@@ -211,8 +208,10 @@ fn set_user() -> Result<()> {
         if let Some(effective_user) = nix::unistd::User::from_uid(nix::unistd::geteuid())? {
             // TODO: warn if variable is empty?
             if env::var("USER").unwrap_or_default() != effective_user.name {
-                env::set_var("USER", effective_user.name);
-                env::set_var("HOME", effective_user.dir);
+                unsafe {
+                    env::set_var("USER", effective_user.name);
+                    env::set_var("HOME", effective_user.dir);
+                }
             }
         } else {
             // Corporate LDAP environments rely on finding nss_ldap in
@@ -239,7 +238,9 @@ fn set_user() -> Result<()> {
 /// keep running their chosen shell.
 fn set_parent_process_id() {
     let ppid = nix::unistd::getppid();
-    env::set_var("FLOX_PARENT_PID", ppid.to_string());
+    unsafe {
+        env::set_var("FLOX_PARENT_PID", ppid.to_string());
+    }
 }
 
 /// Avoid SIGPIPE from killing the process

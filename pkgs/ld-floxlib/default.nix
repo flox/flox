@@ -10,6 +10,6 @@ stdenv.mkDerivation {
     name = "ld-floxlib-src";
     path = "${./../../ld-floxlib}";
   };
-  makeFlags = ["PREFIX=$(out)"];
+  makeFlags = [ "PREFIX=$(out)" ];
   doCheck = true;
 }

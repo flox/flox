@@ -10,12 +10,12 @@
           {
             "attr_path": "python3",
             "broken": false,
-            "derivation": "/nix/store/v73245dy885mnhxlm54y557qkrr22gmm-python3-3.12.5.drv",
+            "derivation": "/nix/store/dzz3d11s5dqrnzfyhmq4fhf1q9ly3jlp-python3-3.12.5.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "python3-3.12.5",
             "outputs": [
               {
@@ -27,10 +27,10 @@
               "out"
             ],
             "pname": "python3",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -46,7 +46,7 @@
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "python3-3.12.5",
             "outputs": [
               {
@@ -62,10 +62,10 @@
               "out"
             ],
             "pname": "python3",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -76,12 +76,12 @@
           {
             "attr_path": "python3",
             "broken": false,
-            "derivation": "/nix/store/sg3y3nm5zdwz0xc1g14hxgidy98xahni-python3-3.12.5.drv",
+            "derivation": "/nix/store/dazm7qi0dvmjlf1kbjzq81ipbwqlmiij-python3-3.12.5.drv",
             "description": "High-level dynamically-typed programming language",
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "python3-3.12.5",
             "outputs": [
               {
@@ -93,10 +93,10 @@
               "out"
             ],
             "pname": "python3",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -112,7 +112,7 @@
             "insecure": false,
             "install_id": "python3",
             "license": "Python-2.0",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "python3-3.12.5",
             "outputs": [
               {
@@ -128,10 +128,10 @@
               "out"
             ],
             "pname": "python3",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -147,7 +147,7 @@
             "insecure": false,
             "install_id": "zlib",
             "license": "Zlib",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "zlib-1.3.1",
             "outputs": [
               {
@@ -167,10 +167,10 @@
               "out"
             ],
             "pname": "zlib",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -186,7 +186,7 @@
             "insecure": false,
             "install_id": "zlib",
             "license": "Zlib",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "zlib-1.3.1",
             "outputs": [
               {
@@ -206,10 +206,10 @@
               "out"
             ],
             "pname": "zlib",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -225,7 +225,7 @@
             "insecure": false,
             "install_id": "zlib",
             "license": "Zlib",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "zlib-1.3.1",
             "outputs": [
               {
@@ -245,10 +245,10 @@
               "out"
             ],
             "pname": "zlib",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -264,7 +264,7 @@
             "insecure": false,
             "install_id": "zlib",
             "license": "Zlib",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "zlib-1.3.1",
             "outputs": [
               {
@@ -284,10 +284,10 @@
               "out"
             ],
             "pname": "zlib",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -296,7 +296,7 @@
             "version": "1.3.1"
           }
         ],
-        "page": 679633,
+        "page": 687768,
         "url": ""
       }
     }

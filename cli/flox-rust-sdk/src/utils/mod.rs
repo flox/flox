@@ -8,6 +8,7 @@ use std::time::SystemTime;
 use std::{fs, io};
 
 use ::log::debug;
+pub use flox_core::traceable_path;
 #[cfg(any(test, feature = "tests"))]
 use proptest::prelude::*;
 use thiserror::Error;
@@ -159,12 +160,6 @@ impl Display for DisplayCommand<'_> {
 
         Ok(())
     }
-}
-
-/// Returns a `tracing`-compatible form of a [Path]
-pub fn traceable_path(p: impl AsRef<Path>) -> impl tracing::Value {
-    let path = p.as_ref();
-    path.display().to_string()
 }
 
 /// Returns a `tracing`-compatible form of an `Option<PathBuf>`

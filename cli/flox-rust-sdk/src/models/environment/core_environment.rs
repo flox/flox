@@ -3,7 +3,6 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::str::FromStr;
 
 use log::debug;
 use pollster::FutureExt;
@@ -13,7 +12,6 @@ use super::{
     copy_dir_recursive,
     CanonicalizeError,
     InstallationAttempt,
-    MigrationInfo,
     UninstallationAttempt,
     UpgradeError,
     LOCKFILE_FILENAME,
@@ -22,24 +20,15 @@ use super::{
 use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::models::container_builder::ContainerBuilder;
-use crate::models::lockfile::{
-    LockedManifest,
-    LockedManifestCatalog,
-    LockedManifestError,
-    LockedPackage,
-    ResolutionFailure,
-};
+use crate::models::lockfile::{LockedManifestError, LockedPackage, Lockfile, ResolutionFailure};
 use crate::models::manifest::{
     insert_packages,
     remove_packages,
+    Manifest,
     ManifestError,
     ManifestPackageDescriptor,
     PackageToInstall,
-    RawManifest,
     TomlEditError,
-    TypedManifest,
-    TypedManifestCatalog,
-    MANIFEST_VERSION_KEY,
 };
 use crate::models::pkgdb::{
     call_pkgdb,
@@ -110,11 +99,11 @@ impl<State> CoreEnvironment<State> {
 
     /// Return a [LockedManifest] if the lockfile exists,
     /// otherwise return None
-    pub fn existing_lockfile(&self) -> Result<Option<LockedManifest>, CoreEnvironmentError> {
+    pub fn existing_lockfile(&self) -> Result<Option<Lockfile>, CoreEnvironmentError> {
         let lockfile_path = self.lockfile_path();
         if let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) {
             Ok(Some(
-                LockedManifest::read_from_file(&lockfile_path)
+                Lockfile::read_from_file(&lockfile_path)
                     .map_err(CoreEnvironmentError::LockedManifest)?,
             ))
         } else {
@@ -122,73 +111,28 @@ impl<State> CoreEnvironment<State> {
         }
     }
 
-    pub fn manifest(&self) -> Result<TypedManifest, CoreEnvironmentError> {
+    pub fn manifest(&self) -> Result<Manifest, CoreEnvironmentError> {
         toml::from_str(&self.manifest_contents()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)
     }
 
     /// Return a [LockedManifest] if the environment is already locked and has
     /// the same manifest contents as the manifest, otherwise return None.
-    /// Error if there is a v0 manifest that needs to be locked, because
-    /// locking with pkgdb is no longer supported
-    fn lockfile_if_up_to_date(&self) -> Result<Option<LockedManifest>, CoreEnvironmentError> {
+    fn lockfile_if_up_to_date(&self) -> Result<Option<Lockfile>, CoreEnvironmentError> {
         let lockfile_path = self.lockfile_path();
 
         let Ok(lockfile_path) = CanonicalPath::new(lockfile_path) else {
             return Ok(None);
         };
 
-        let manifest_contents = self.manifest_contents()?;
-        let manifest: TypedManifest = toml::from_str(&self.manifest_contents()?)
+        let manifest: Manifest = toml::from_str(&self.manifest_contents()?)
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
-        let lockfile = LockedManifest::read_from_file(&lockfile_path)
+        let lockfile = Lockfile::read_from_file(&lockfile_path)
             .map_err(CoreEnvironmentError::LockedManifest)?;
 
         // Check if the manifest embedded in the lockfile and the manifest
         // itself have the same contents
-        let already_locked = match (manifest, &lockfile) {
-            (TypedManifest::Catalog(manifest), LockedManifest::Catalog(lock)) => {
-                *manifest == lock.manifest
-            },
-            (TypedManifest::Pkgdb(_), LockedManifest::Catalog(_)) => {
-                return Err(CoreEnvironmentError::LockingVersion0NotSupported);
-            },
-            (TypedManifest::Catalog(_), LockedManifest::Pkgdb(_)) => false,
-            (TypedManifest::Pkgdb(_), LockedManifest::Pkgdb(locked)) => {
-                // Try to deserialize TOML content into a JSON value
-                let manifest_value = toml::from_str::<serde_json::Value>(&manifest_contents).ok();
-                let manifest_object = manifest_value
-                    .as_ref()
-                    .and_then(|manifest_value| manifest_value.as_object());
-                match manifest_object {
-                    None => {
-                        // If we can't deserialize the manifest content as an
-                        // object, the lockfile is invalid and we can't relock,
-                        // so error.
-                        return Err(CoreEnvironmentError::LockingVersion0NotSupported);
-                    },
-                    Some(manifest_object) => {
-                        let lockfile_manifest = (*locked)
-                            .get("manifest")
-                            .and_then(|lockfile_manifest| lockfile_manifest.as_object());
-                        if let Some(lockfile_manifest) = lockfile_manifest {
-                            // pkgdb lock inserts the GA registry into the
-                            // manifest in the lockfile,
-                            // but the actual manifest won't have it
-                            let mut lockfile_manifest = lockfile_manifest.clone();
-                            lockfile_manifest.remove("registry");
-                            if manifest_object == &lockfile_manifest {
-                                true
-                            } else {
-                                return Err(CoreEnvironmentError::LockingVersion0NotSupported);
-                            }
-                        } else {
-                            return Err(CoreEnvironmentError::LockingVersion0NotSupported);
-                        }
-                    },
-                }
-            },
-        };
+        let already_locked = manifest == lockfile.manifest;
 
         if already_locked {
             Ok(Some(lockfile))
@@ -198,8 +142,6 @@ impl<State> CoreEnvironment<State> {
     }
 
     /// Lock the environment if it isn't already locked.
-    /// Error if there is a v0 manifest that needs to be locked, because
-    /// locking with pkgdb is no longer supported
     ///
     /// This might be a slight optimization as compared to calling [Self::lock],
     /// but [Self::lock] skips re-locking already locked packages,
@@ -207,7 +149,7 @@ impl<State> CoreEnvironment<State> {
     /// The real point of this method is letting us skip locking for an already
     /// locked pkgdb manifest,
     /// since pkgdb manifests can no longer be locked.
-    pub fn ensure_locked(&mut self, flox: &Flox) -> Result<LockedManifest, CoreEnvironmentError> {
+    pub fn ensure_locked(&mut self, flox: &Flox) -> Result<Lockfile, CoreEnvironmentError> {
         match self.lockfile_if_up_to_date()? {
             Some(lock) => Ok(lock),
             None => self.lock(flox),
@@ -218,7 +160,6 @@ impl<State> CoreEnvironment<State> {
     ///
     /// When a catalog client is provided, the catalog will be used to lock any
     /// "V1" manifest.
-    /// Without a catalog client, only "V0" manifests can be locked using the pkgdb.
     /// If a "V1" manifest is locked without a catalog client, an error will be returned.
     ///
     /// This re-writes the lock if it exists.
@@ -230,23 +171,14 @@ impl<State> CoreEnvironment<State> {
     /// The caller is responsible for skipping calls to lock when an environment
     /// is already locked.
     /// For that reason, this always writes the lockfile to disk.
-    pub fn lock(&mut self, flox: &Flox) -> Result<LockedManifest, CoreEnvironmentError> {
+    pub fn lock(&mut self, flox: &Flox) -> Result<Lockfile, CoreEnvironmentError> {
         let manifest = self.manifest()?;
 
-        let lockfile = match manifest {
-            TypedManifest::Pkgdb(_) => {
-                return Err(CoreEnvironmentError::LockingVersion0NotSupported);
-            },
-            TypedManifest::Catalog(manifest) => {
-                tracing::debug!("using catalog client to lock");
-                LockedManifest::Catalog(self.lock_with_catalog_client(
-                    &flox.catalog_client,
-                    &flox.installable_locker,
-                    *manifest,
-                )?)
-            },
-        };
-
+        let lockfile = self.lock_with_catalog_client(
+            &flox.catalog_client,
+            &flox.installable_locker,
+            manifest,
+        )?;
         let environment_lockfile_path = self.lockfile_path();
 
         // Write the lockfile to disk
@@ -272,27 +204,19 @@ impl<State> CoreEnvironment<State> {
         &self,
         client: &catalog::Client,
         installable_locker: &impl InstallableLocker,
-        manifest: TypedManifestCatalog,
-    ) -> Result<LockedManifestCatalog, CoreEnvironmentError> {
+        manifest: Manifest,
+    ) -> Result<Lockfile, CoreEnvironmentError> {
         let existing_lockfile = 'lockfile: {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
                 break 'lockfile None;
             };
-            let lockfile = LockedManifest::read_from_file(&lockfile_path)
-                .map_err(CoreEnvironmentError::LockedManifest)?;
-            match lockfile {
-                LockedManifest::Catalog(lockfile) => Some(lockfile),
-                _ => {
-                    // This will be the case when performing a migration
-                    debug!(
-                        "Found version 1 manifest, but lockfile doesn't match: Ignoring lockfile."
-                    );
-                    None
-                },
-            }
+            Some(
+                Lockfile::read_from_file(&lockfile_path)
+                    .map_err(CoreEnvironmentError::LockedManifest)?,
+            )
         };
 
-        LockedManifestCatalog::lock_manifest(
+        Lockfile::lock_manifest(
             &manifest,
             existing_lockfile.as_ref(),
             client,
@@ -328,17 +252,13 @@ impl<State> CoreEnvironment<State> {
     pub fn build(&mut self, flox: &Flox) -> Result<PathBuf, CoreEnvironmentError> {
         let lockfile_path = CanonicalPath::new(self.lockfile_path())
             .map_err(CoreEnvironmentError::BadLockfilePath)?;
-        let lockfile = LockedManifest::read_from_file(&lockfile_path)
+        let lockfile = Lockfile::read_from_file(&lockfile_path)
             .map_err(CoreEnvironmentError::LockedManifest)?;
 
         let mut pkgdb_cmd = Command::new(Path::new(&*PKGDB_BIN));
         pkgdb_cmd.arg("buildenv").arg(lockfile_path);
 
-        let service_config_path = if let LockedManifest::Catalog(ref lockfile) = lockfile {
-            maybe_make_service_config_file(flox, lockfile)?
-        } else {
-            None
-        };
+        let service_config_path = maybe_make_service_config_file(flox, &lockfile)?;
         if let Some(service_config_path) = &service_config_path {
             pkgdb_cmd.args(["--service-config", &service_config_path.to_string_lossy()]);
         }
@@ -385,6 +305,7 @@ impl CoreEnvironment<()> {
     pub fn build_container(
         lockfile_path: CanonicalPath,
         name: &str,
+        tag: &str,
     ) -> Result<ContainerBuilder, CoreEnvironmentError> {
         if std::env::consts::OS != "linux" {
             return Err(CoreEnvironmentError::ContainerizeUnsupportedSystem(
@@ -397,6 +318,8 @@ impl CoreEnvironment<()> {
             .arg("buildenv")
             .arg("--container")
             .arg(name)
+            .arg("--container-tag")
+            .arg(tag)
             .arg(lockfile_path);
 
         // Locking flakes may require using `ssh` for private flakes,
@@ -499,70 +422,65 @@ impl CoreEnvironment<ReadOnly> {
     }
 
     fn get_install_ids_to_uninstall(
-        manifest: &TypedManifest,
+        manifest: &Manifest,
         packages: Vec<String>,
     ) -> Result<Vec<String>, CoreEnvironmentError> {
-        let iids = if let TypedManifest::Catalog(manifest) = manifest {
-            let mut install_ids = Vec::new();
-            for pkg in packages {
-                // User passed an install id directly
-                if manifest.install.contains_key(&pkg) {
-                    install_ids.push(pkg);
-                    continue;
-                }
-
-                // User passed a package path to uninstall
-                // To support version constraints, we match the provided value against
-                // `<pkg-path>` and `<pkg-path>@<version>`.
-                let matching_iids_by_pkg_path = manifest
-                    .install
-                    .iter()
-                    .filter(|(_iid, descriptor)| {
-                        // Find matching pkg-paths and select for uninstall
-
-                        // If the descriptor is not a catalog descriptor, skip.
-                        // flakes descriptors are only matched by install_id.
-                        let ManifestPackageDescriptor::Catalog(des) = descriptor else {
-                            return false;
-                        };
-
-                        // Select if the descriptor's pkg_path matches the user's input
-                        if des.pkg_path == pkg {
-                            return true;
-                        }
-
-                        // Select if the descriptor matches the user's input when the version is included
-                        // Future: if we want to allow uninstalling a specific outputs as well,
-                        //         parsing of uninstall specs will need to be more sophisticated.
-                        //         For now going with a simple check for pkg-path@version.
-                        if let Some(version) = &des.version {
-                            format!("{}@{}", des.pkg_path, version) == pkg
-                        } else {
-                            false
-                        }
-                    })
-                    .map(|(iid, _)| iid.to_owned())
-                    .collect::<Vec<String>>();
-
-                // Extend the install_ids with the matching install id from pkg-path
-                match matching_iids_by_pkg_path.len() {
-                    0 => return Err(CoreEnvironmentError::PackageNotFound(pkg)),
-                    // if there is only one package with the given pkg-path, uninstall it
-                    1 => install_ids.extend(matching_iids_by_pkg_path),
-                    // if there are multiple packages with the given pkg-path, ask for a specific install id
-                    _ => {
-                        return Err(CoreEnvironmentError::MultiplePackagesMatch(
-                            pkg,
-                            matching_iids_by_pkg_path,
-                        ))
-                    },
-                }
+        let mut install_ids = Vec::new();
+        for pkg in packages {
+            // User passed an install id directly
+            if manifest.install.contains_key(&pkg) {
+                install_ids.push(pkg);
+                continue;
             }
-            install_ids
-        } else {
-            packages
-        };
-        Ok(iids)
+
+            // User passed a package path to uninstall
+            // To support version constraints, we match the provided value against
+            // `<pkg-path>` and `<pkg-path>@<version>`.
+            let matching_iids_by_pkg_path = manifest
+                .install
+                .iter()
+                .filter(|(_iid, descriptor)| {
+                    // Find matching pkg-paths and select for uninstall
+
+                    // If the descriptor is not a catalog descriptor, skip.
+                    // flakes descriptors are only matched by install_id.
+                    let ManifestPackageDescriptor::Catalog(des) = descriptor else {
+                        return false;
+                    };
+
+                    // Select if the descriptor's pkg_path matches the user's input
+                    if des.pkg_path == pkg {
+                        return true;
+                    }
+
+                    // Select if the descriptor matches the user's input when the version is included
+                    // Future: if we want to allow uninstalling a specific outputs as well,
+                    //         parsing of uninstall specs will need to be more sophisticated.
+                    //         For now going with a simple check for pkg-path@version.
+                    if let Some(version) = &des.version {
+                        format!("{}@{}", des.pkg_path, version) == pkg
+                    } else {
+                        false
+                    }
+                })
+                .map(|(iid, _)| iid.to_owned())
+                .collect::<Vec<String>>();
+
+            // Extend the install_ids with the matching install id from pkg-path
+            match matching_iids_by_pkg_path.len() {
+                0 => return Err(CoreEnvironmentError::PackageNotFound(pkg)),
+                // if there is only one package with the given pkg-path, uninstall it
+                1 => install_ids.extend(matching_iids_by_pkg_path),
+                // if there are multiple packages with the given pkg-path, ask for a specific install id
+                _ => {
+                    return Err(CoreEnvironmentError::MultiplePackagesMatch(
+                        pkg,
+                        matching_iids_by_pkg_path,
+                    ))
+                },
+            }
+        }
+        Ok(install_ids)
     }
 
     /// Atomically edit this environment, ensuring that it still builds
@@ -649,35 +567,29 @@ impl CoreEnvironment<ReadOnly> {
     ) -> Result<UpgradeResult, CoreEnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let manifest = self.manifest()?;
+        let (lockfile, upgraded) = {
+            Self::ensure_valid_upgrade(groups_or_iids, &manifest)?;
+            tracing::debug!("using catalog client to upgrade");
 
-        let (lockfile, upgraded) = match manifest {
-            TypedManifest::Pkgdb(_) => {
-                return Err(CoreEnvironmentError::LockingVersion0NotSupported);
-            },
-            TypedManifest::Catalog(catalog) => {
-                Self::ensure_valid_upgrade(groups_or_iids, &catalog)?;
-                tracing::debug!("using catalog client to upgrade");
+            let (lockfile, upgraded) = self.upgrade_with_catalog_client(
+                &flox.catalog_client,
+                &flox.installable_locker,
+                groups_or_iids,
+                &manifest,
+            )?;
 
-                let (lockfile, upgraded) = self.upgrade_with_catalog_client(
-                    &flox.catalog_client,
-                    &flox.installable_locker,
-                    groups_or_iids,
-                    &catalog,
-                )?;
+            let upgraded = {
+                let mut install_ids = upgraded
+                    .into_iter()
+                    .map(|(_, pkg)| pkg.install_id().to_owned())
+                    .collect::<HashSet<_>>()
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                install_ids.sort();
+                install_ids
+            };
 
-                let upgraded = {
-                    let mut install_ids = upgraded
-                        .into_iter()
-                        .map(|(_, pkg)| pkg.install_id().to_owned())
-                        .collect::<HashSet<_>>()
-                        .into_iter()
-                        .collect::<Vec<_>>();
-                    install_ids.sort();
-                    install_ids
-                };
-
-                (LockedManifest::Catalog(lockfile), upgraded)
-            },
+            (lockfile, upgraded)
         };
 
         let store_path =
@@ -691,7 +603,7 @@ impl CoreEnvironment<ReadOnly> {
 
     fn ensure_valid_upgrade(
         groups_or_iids: &[&str],
-        manifest: &TypedManifestCatalog,
+        manifest: &Manifest,
     ) -> Result<(), CoreEnvironmentError> {
         for id in groups_or_iids {
             tracing::debug!(id, "checking that id is a package or group");
@@ -748,26 +660,17 @@ impl CoreEnvironment<ReadOnly> {
         client: &impl ClientTrait,
         flake_locking: &impl InstallableLocker,
         groups_or_iids: &[&str],
-        manifest: &TypedManifestCatalog,
-    ) -> Result<(LockedManifestCatalog, Vec<(LockedPackage, LockedPackage)>), CoreEnvironmentError>
-    {
+        manifest: &Manifest,
+    ) -> Result<(Lockfile, Vec<(LockedPackage, LockedPackage)>), CoreEnvironmentError> {
         tracing::debug!(to_upgrade = groups_or_iids.join(","), "upgrading");
         let existing_lockfile = 'lockfile: {
             let Ok(lockfile_path) = CanonicalPath::new(self.lockfile_path()) else {
                 break 'lockfile None;
             };
-            let lockfile = LockedManifest::read_from_file(&lockfile_path)
-                .map_err(CoreEnvironmentError::LockedManifest)?;
-            match lockfile {
-                LockedManifest::Catalog(lockfile) => Some(lockfile),
-                _ => {
-                    // This will be the case when performing a migration
-                    debug!(
-                        "Found version 1 manifest, but lockfile doesn't match: Ignoring lockfile."
-                    );
-                    None
-                },
-            }
+            Some(
+                Lockfile::read_from_file(&lockfile_path)
+                    .map_err(CoreEnvironmentError::LockedManifest)?,
+            )
         };
 
         // Record a nested map where you retrieve the locked package
@@ -798,14 +701,10 @@ impl CoreEnvironment<ReadOnly> {
             })
         };
 
-        let upgraded_lockfile = LockedManifestCatalog::lock_manifest(
-            manifest,
-            seed_lockfile.as_ref(),
-            client,
-            flake_locking,
-        )
-        .block_on()
-        .map_err(CoreEnvironmentError::LockedManifest)?;
+        let upgraded_lockfile =
+            Lockfile::lock_manifest(manifest, seed_lockfile.as_ref(), client, flake_locking)
+                .block_on()
+                .map_err(CoreEnvironmentError::LockedManifest)?;
 
         let pkgs_after_upgrade = {
             let mut pkgs_by_id = BTreeMap::new();
@@ -920,18 +819,9 @@ impl CoreEnvironment<ReadOnly> {
         manifest_contents: impl AsRef<str>,
         flox: &Flox,
     ) -> Result<PathBuf, CoreEnvironmentError> {
-        // Return an error for deprecated modifications of v0 manifests
-
-        let manifest: TypedManifest = toml::from_str(manifest_contents.as_ref())
+        let manifest: Manifest = toml::from_str(manifest_contents.as_ref())
             .map_err(CoreEnvironmentError::DeserializeManifest)?;
-        match manifest {
-            TypedManifest::Catalog(manifest) => {
-                manifest.services.validate()?;
-            },
-            TypedManifest::Pkgdb(_) => {
-                Err(CoreEnvironmentError::Version0NotSupported)?;
-            },
-        }
+        manifest.services.validate()?;
 
         let tempdir = tempfile::tempdir_in(&flox.temp_dir)
             .map_err(CoreEnvironmentError::MakeSandbox)?
@@ -992,146 +882,6 @@ impl CoreEnvironment<ReadOnly> {
         self.replace_with(temp_env)?;
         Ok(store_path)
     }
-
-    /// Should not be called with
-    /// !migration_info.needs_manifest_migration && !migration_info.needs_upgrade
-    pub fn migrate_to_v1(
-        &mut self,
-        flox: &Flox,
-        mut migration_info: MigrationInfo,
-    ) -> Result<PathBuf, CoreEnvironmentError> {
-        let tempdir = tempfile::tempdir_in(&flox.temp_dir)
-            .map_err(CoreEnvironmentError::MakeSandbox)?
-            .into_path();
-
-        debug!(
-            "migration transaction: making temporary environment in {}",
-            tempdir.display()
-        );
-        let mut temp_env = self.writable(&tempdir)?;
-
-        if migration_info.needs_manifest_migration {
-            Self::migrate_manifest_contents_to_v1(&mut migration_info.raw_manifest)?;
-
-            debug!("migration transaction: updating manifest");
-            temp_env.update_manifest(migration_info.raw_manifest.to_string())?;
-        }
-
-        // Lock if there's a v0 manifest, regardless of whether there's a
-        // lockfile or what version it is.
-        // This could lock an environment that isn't already locked,
-        // but particularly for managed and remote environments, we want to keep
-        // the lock in sync with the manifest,
-        // so we don't want to perform a transaction without locking.
-        debug!("migration transaction: locking environment");
-        temp_env
-            .lock(flox)
-            .map_err(|e| CoreEnvironmentError::LockForMigration(Box::new(e)))?;
-
-        debug!("migration transaction: building environment");
-        let store_path = temp_env.build(flox)?;
-
-        debug!("migration transaction: replacing environment");
-        self.replace_with(temp_env)?;
-        Ok(store_path)
-    }
-
-    /// Migrate a v0 [RawManifest] to a v1 [RawManifest] by inserting
-    /// `version = 1` and moving `hook.script` to `hook.on-activate` if
-    /// `hook.on-activate` doesn't already exist.
-    ///
-    /// `raw_manifest` is expected to be a v0 manifest.
-    /// Return an error if the resulting manifest is not a valid v1 manifest.
-    /// Note that the modifications are still made even if an error is returned to allow
-    /// [Self::migrate_and_edit_unsafe] to use the invalid manifest.
-    fn migrate_manifest_contents_to_v1(
-        raw_manifest: &mut RawManifest,
-    ) -> Result<(), CoreEnvironmentError> {
-        // // Insert `version = 1`
-        raw_manifest.insert(MANIFEST_VERSION_KEY, toml_edit::value(1));
-
-        // Migrate `hook.script` to `hook.on-activate`
-        let hook = raw_manifest.get_mut("hook").and_then(|s| s.as_table_mut());
-        if let Some(hook) = hook {
-            if hook.get("on-activate").is_none() {
-                // Rename `hook.script` to `hook.on-activate`, preserving
-                // comments and formatting
-                if let Some((script_key, script_item)) = hook.remove_entry("script") {
-                    // Unit tests cover this is safe to unwrap
-                    let mut on_activate = toml_edit::Key::from_str("on-activate").unwrap();
-                    let mut on_activate_key = on_activate.as_mut();
-                    let decor = on_activate_key.leaf_decor_mut();
-                    *decor = script_key.leaf_decor().clone();
-                    let dotted_decor = on_activate_key.dotted_decor_mut();
-                    *dotted_decor = script_key.dotted_decor().clone();
-                    // Does not preserve order of hooks,
-                    // but we only have one field in the hook section.
-                    hook.insert_formatted(&on_activate, script_item);
-                }
-            }
-        }
-
-        // Make sure it parses
-        raw_manifest
-            .to_typed()
-            .map_err(CoreEnvironmentError::MigrateManifest)?;
-        Ok(())
-    }
-
-    /// Replace manifest with provided `contents` and perform migration in a
-    /// single transaction
-    pub fn migrate_and_edit_unsafe(
-        &mut self,
-        flox: &Flox,
-        contents: String,
-    ) -> Result<Result<PathBuf, CoreEnvironmentError>, CoreEnvironmentError> {
-        let tempdir = tempfile::tempdir_in(&flox.temp_dir)
-            .map_err(CoreEnvironmentError::MakeSandbox)?
-            .into_path();
-
-        debug!(
-            "migration transaction: making temporary environment in {}",
-            tempdir.display()
-        );
-        let mut temp_env = self.writable(&tempdir)?;
-
-        let mut raw_manifest = RawManifest::from_str(&contents)
-            .map_err(|e| CoreEnvironmentError::ModifyToml(TomlEditError::ParseManifest(e)))?;
-
-        let migrate_result = Self::migrate_manifest_contents_to_v1(&mut raw_manifest);
-
-        debug!("migration transaction: updating manifest");
-        temp_env.update_manifest(raw_manifest.to_string())?;
-
-        // Check if the manifest is valid after updating it, because we want to
-        // update it no matter what.
-        if let Err(migrate_error) = migrate_result {
-            debug!(
-                "migration transaction: migration failed: {:?}",
-                migrate_error
-            );
-            debug!("migration transaction: replacing environment");
-            self.replace_with(temp_env)?;
-            return Ok(Err(migrate_error));
-        }
-
-        if let Err(lock_err) = temp_env.lock(flox) {
-            debug!("migration transaction: lock failed: {:?}", lock_err);
-            debug!("migration transaction: replacing environment");
-            self.replace_with(temp_env)?;
-            return Ok(Err(lock_err));
-        };
-
-        let build_attempt = temp_env.build(flox);
-
-        debug!("migration transaction: replacing environment");
-        self.replace_with(temp_env)?;
-
-        match build_attempt {
-            Ok(store_path) => Ok(Ok(store_path)),
-            Err(err) => Ok(Err(err)),
-        }
-    }
 }
 
 /// A writable view of an environment directory
@@ -1174,49 +924,28 @@ pub enum EditResult {
 
 impl EditResult {
     pub fn new(
-        old_manifest: &str,
-        new_manifest: &str,
+        old_manifest_contents: &str,
+        new_manifest_contents: &str,
         store_path: Option<PathBuf>,
     ) -> Result<Self, CoreEnvironmentError> {
-        if old_manifest == new_manifest {
+        if old_manifest_contents == new_manifest_contents {
             Ok(Self::Unchanged)
         } else {
-            // todo: use a single toml crate (toml_edit already implements serde traits)
+            // TODO: use a single toml crate (toml_edit already implements serde traits)
             // TODO: use different error variants, users _can_ fix errors in the _new_ manifest
             //       but they _can't_ fix errors in the _old_ manifest
-            let old_manifest: TypedManifest =
-                toml::from_str(old_manifest).map_err(CoreEnvironmentError::DeserializeManifest)?;
-            let new_manifest: TypedManifest =
-                toml::from_str(new_manifest).map_err(CoreEnvironmentError::DeserializeManifest)?;
+            let old_manifest: Manifest = toml::from_str(old_manifest_contents)
+                .map_err(CoreEnvironmentError::DeserializeManifest)?;
+            let new_manifest: Manifest = toml::from_str(new_manifest_contents)
+                .map_err(CoreEnvironmentError::DeserializeManifest)?;
 
-            match (&old_manifest, &new_manifest) {
-                (TypedManifest::Pkgdb(old), TypedManifest::Pkgdb(new)) => {
-                    if old.hook != new.hook || old.vars != new.vars || old.profile != new.profile {
-                        Ok(Self::ReActivateRequired { store_path })
-                    } else {
-                        Ok(Self::Success { store_path })
-                    }
-                },
-                (TypedManifest::Catalog(old), TypedManifest::Catalog(new)) => {
-                    if old.hook != new.hook || old.vars != new.vars || old.profile != new.profile {
-                        Ok(Self::ReActivateRequired { store_path })
-                    } else {
-                        Ok(Self::Success { store_path })
-                    }
-                },
-                (TypedManifest::Catalog(catalog), TypedManifest::Pkgdb(pkgdb))
-                | (TypedManifest::Pkgdb(pkgdb), TypedManifest::Catalog(catalog)) => {
-                    if toml::Value::try_from(&pkgdb.hook) != toml::Value::try_from(&catalog.hook)
-                        || toml::Value::try_from(&pkgdb.vars)
-                            != toml::Value::try_from(&catalog.vars)
-                        || toml::Value::try_from(&pkgdb.profile)
-                            != toml::Value::try_from(&catalog.profile)
-                    {
-                        Ok(Self::ReActivateRequired { store_path })
-                    } else {
-                        Ok(Self::Success { store_path })
-                    }
-                },
+            if old_manifest.hook != new_manifest.hook
+                || old_manifest.vars != new_manifest.vars
+                || old_manifest.profile != new_manifest.profile
+            {
+                Ok(Self::ReActivateRequired { store_path })
+            } else {
+                Ok(Self::Success { store_path })
             }
         }
     }
@@ -1318,19 +1047,8 @@ pub enum CoreEnvironmentError {
     #[error("failed to create version 1 lock")]
     LockForMigration(#[source] Box<CoreEnvironmentError>),
 
-    #[error(
-        "Modifying version 0 manifests is no longer supported.\nSet 'version = 1' in the manifest."
-    )]
-    Version0NotSupported,
-    #[error(
-        "Locking version 0 manifests is no longer supported.\nSet 'version = 1' in the manifest."
-    )]
-    LockingVersion0NotSupported,
-
     #[error(transparent)]
     Services(#[from] ServiceError),
-    #[error("cannot use services with v0 manifests")]
-    ServicesWithV0,
 }
 
 impl CoreEnvironmentError {
@@ -1385,26 +1103,11 @@ pub mod test_helpers {
     use super::*;
     use crate::flox::Flox;
 
-    pub const MANIFEST_V0_FIELDS: &str = indoc! {r#"
-        [options]
-        semver.prefer-pre-releases = true
-        "#};
     #[cfg(target_os = "macos")]
     pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
         version = 1
         [options]
         systems = ["x86_64-linux"]
-        "#};
-    #[cfg(target_os = "macos")]
-    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V0: &str = indoc! {r#"
-        [options]
-        systems = ["x86_64-linux"]
-        "#};
-    #[cfg(target_os = "macos")]
-    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V0_FIELDS: &str = indoc! {r#"
-        [options]
-        systems = ["x86_64-linux"]
-        semver.prefer-pre-releases = true
         "#};
     #[cfg(target_os = "macos")]
     pub const MANIFEST_INCOMPATIBLE_SYSTEM_V1: &str = indoc! {r#"
@@ -1412,23 +1115,11 @@ pub mod test_helpers {
         [options]
         systems = ["x86_64-linux"]
         "#};
-
     #[cfg(target_os = "linux")]
     pub const MANIFEST_INCOMPATIBLE_SYSTEM: &str = indoc! {r#"
         version = 1
         [options]
         systems = ["aarch64-darwin"]
-        "#};
-    #[cfg(target_os = "linux")]
-    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V0: &str = indoc! {r#"
-        [options]
-        systems = ["aarch64-darwin"]
-        "#};
-    #[cfg(target_os = "linux")]
-    pub const MANIFEST_INCOMPATIBLE_SYSTEM_V0_FIELDS: &str = indoc! {r#"
-        [options]
-        systems = ["aarch64-darwin"]
-        semver.prefer-pre-releases = true
         "#};
     #[cfg(target_os = "linux")]
     pub const MANIFEST_INCOMPATIBLE_SYSTEM_V1: &str = indoc! {r#"
@@ -1470,19 +1161,13 @@ pub mod test_helpers {
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
-    use std::str::FromStr;
 
-    use catalog::{
-        Client,
-        MsgAttrPathNotFoundNotFoundForAllSystems,
-        GENERATED_DATA,
-        MANUALLY_GENERATED,
-    };
-    use catalog_api_v1::types::{MessageLevel, ResolvedPackageDescriptor, SystemEnum};
+    use catalog::{Client, GENERATED_DATA, MANUALLY_GENERATED};
+    use catalog_api_v1::types::{ResolvedPackageDescriptor, SystemEnum};
     use chrono::{DateTime, Utc};
-    use indoc::{formatdoc, indoc};
+    use flox_core::Version;
+    use indoc::indoc;
     use pretty_assertions::assert_eq;
-    use serial_test::serial;
     use tempfile::{tempdir_in, TempDir};
     use test_helpers::{new_core_environment_from_env_files, new_core_environment_with_lockfile};
     use tests::test_helpers::MANIFEST_INCOMPATIBLE_SYSTEM;
@@ -1490,16 +1175,10 @@ mod tests {
     use self::catalog::{CatalogPage, MockClient, ResolvedPackageGroup};
     use self::test_helpers::new_core_environment;
     use super::*;
-    use crate::data::Version;
     use crate::flox::test_helpers::flox_instance;
+    use crate::models::lockfile;
     use crate::models::lockfile::test_helpers::fake_catalog_package_lock;
-    use crate::models::lockfile::ResolutionFailures;
-    use crate::models::manifest::{
-        ManifestPackageDescriptorCatalog,
-        RawManifest,
-        DEFAULT_GROUP_NAME,
-    };
-    use crate::models::{lockfile, manifest};
+    use crate::models::manifest::{ManifestPackageDescriptorCatalog, DEFAULT_GROUP_NAME};
     use crate::providers::flox_cpp_utils::InstallableLockerMock;
     use crate::providers::services::SERVICE_CONFIG_FILENAME;
 
@@ -1512,13 +1191,12 @@ mod tests {
 
     /// Check that `edit` updates the manifest and creates a lockfile
     #[test]
-    #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn edit_env_creates_manifest_and_lockfile() {
         let (mut flox, tempdir) = flox_instance();
 
         let env_path = tempfile::tempdir_in(&tempdir).unwrap();
-        fs::write(env_path.path().join(MANIFEST_FILENAME), "").unwrap();
+        fs::write(env_path.path().join(MANIFEST_FILENAME), "version = 1").unwrap();
 
         let mut env_view = CoreEnvironment::new(&env_path);
 
@@ -1543,7 +1221,6 @@ mod tests {
 
     /// A no-op with edit returns EditResult::Unchanged
     #[test]
-    #[serial]
     fn edit_no_op_returns_unchanged() {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env_view = new_core_environment(&flox, "version = 1");
@@ -1556,7 +1233,6 @@ mod tests {
     /// Trying to build a manifest with a system other than the current one
     /// results in an error that is_incompatible_system_error()
     #[test]
-    #[serial]
     fn build_incompatible_system() {
         let (flox, _temp_dir_handle) = flox_instance();
         let mut env_view = new_core_environment(&flox, "");
@@ -1572,43 +1248,6 @@ mod tests {
         let result = env_view.build(&flox).unwrap_err();
 
         assert!(result.is_incompatible_system_error());
-    }
-
-    /// Trying to build a manifest with a package that is incompatible with the current system
-    /// results in an error that is_incompatible_package_error()
-    #[test]
-    #[serial]
-    fn build_incompatible_package() {
-        #[cfg(target_os = "macos")]
-        let env_files_dirname = "glibc_incompatible_v0_both_darwin";
-
-        #[cfg(target_os = "linux")]
-        let env_files_dirname = "ps_incompatible_v0_both_linux";
-
-        let (flox, _temp_dir_handle) = flox_instance();
-
-        let mut env_view =
-            new_core_environment_from_env_files(&flox, MANUALLY_GENERATED.join(env_files_dirname));
-
-        let result = env_view.build(&flox).unwrap_err();
-
-        assert!(result.is_incompatible_package_error());
-    }
-
-    /// Trying to build a manifest with an insecure package results in an error
-    /// that is_incompatible_package_error()
-    #[test]
-    #[serial]
-    fn build_insecure_package() {
-        let (flox, _temp_dir_handle) = flox_instance();
-        let mut env_view = new_core_environment_from_env_files(
-            &flox,
-            MANUALLY_GENERATED.join("python2_insecure_v0"),
-        );
-
-        let result = env_view.build(&flox).unwrap_err();
-
-        assert!(result.is_incompatible_package_error());
     }
 
     #[test]
@@ -1634,7 +1273,6 @@ mod tests {
 
     /// Installing hello with edit returns EditResult::Success
     #[test]
-    #[serial]
     fn edit_adding_package_returns_success() {
         let (mut env_view, mut flox, _temp_dir_handle) = empty_core_environment();
 
@@ -1658,7 +1296,6 @@ mod tests {
 
     /// Adding a hook with edit returns EditResult::ReActivateRequired
     #[test]
-    #[serial]
     fn edit_adding_hook_returns_re_activate_required() {
         let (mut env_view, flox, _temp_dir_handle) = empty_core_environment();
 
@@ -1682,10 +1319,10 @@ mod tests {
     fn upgrade_with_empty_list_upgrades_all() {
         let (mut env_view, _flox, _temp_dir_handle) = empty_core_environment();
 
-        let mut manifest = manifest::test::empty_catalog_manifest();
+        let mut manifest = Manifest::default();
         let (foo_iid, foo_descriptor, foo_locked) = fake_catalog_package_lock("foo", None);
         manifest.install.insert(foo_iid.clone(), foo_descriptor);
-        let lockfile = lockfile::LockedManifestCatalog {
+        let lockfile = lockfile::Lockfile {
             version: Version,
             packages: vec![foo_locked.into()],
             manifest: manifest.clone(),
@@ -1791,7 +1428,6 @@ mod tests {
 
     /// linking an environment should set a gc-root
     #[test]
-    #[serial]
     #[cfg(feature = "impure-unit-tests")]
     fn build_flox_environment_and_links() {
         let (mut flox, tempdir) = flox_instance();
@@ -1831,229 +1467,6 @@ mod tests {
     }
 
     #[test]
-    fn migrate_to_v1_error_for_dropped_field() {
-        let (flox, _temp_dir_handle) = flox_instance();
-        let contents = indoc! {r#"
-            [options]
-            semver.prefer-pre-releases = true
-            "#};
-
-        let mut environment = new_core_environment(&flox, contents);
-
-        let raw_manifest = RawManifest::from_str(contents).unwrap();
-
-        let err = environment
-            .migrate_to_v1(&flox, MigrationInfo {
-                raw_manifest,
-                needs_manifest_migration: true,
-                needs_upgrade: false,
-            })
-            .unwrap_err();
-
-        if let CoreEnvironmentError::MigrateManifest(e) = err {
-            assert!(e.message().contains("unknown field `prefer-pre-releases`"));
-        } else {
-            panic!("expected MigrateManifest error");
-        }
-    }
-
-    #[test]
-    fn migrate_to_v1_error_for_locking() {
-        let (mut flox, _temp_dir_handle) = flox_instance();
-        // The v0 lockfile should get ignored,
-        // but create it just to keep this more realistic
-        let mut environment = new_core_environment_from_env_files(
-            &flox,
-            MANUALLY_GENERATED.join("glibc_incompatible_v0"),
-        );
-
-        if let Client::Mock(ref mut client) = flox.catalog_client {
-            client.clear_and_load_responses_from_file("resolve/glibc_incompatible.json");
-        } else {
-            panic!("expected Mock client")
-        };
-
-        let manifest_contents = fs::read_to_string(
-            MANUALLY_GENERATED
-                .join("glibc_incompatible_v0")
-                .join(MANIFEST_FILENAME),
-        )
-        .unwrap();
-
-        let raw_manifest = RawManifest::from_str(&manifest_contents).unwrap();
-
-        let err = environment
-            .migrate_to_v1(&flox, MigrationInfo {
-                raw_manifest,
-                needs_manifest_migration: true,
-                needs_upgrade: true,
-            })
-            .unwrap_err();
-
-        if let CoreEnvironmentError::LockForMigration(e) = err {
-            if let CoreEnvironmentError::LockedManifest(LockedManifestError::ResolutionFailed(
-                ResolutionFailures(failures),
-            )) = *e
-            {
-                assert!(failures.len() == 1);
-                assert_eq!(
-                    failures[0],
-                    ResolutionFailure::PackageUnavailableOnSomeSystems {
-                        catalog_message: MsgAttrPathNotFoundNotFoundForAllSystems {
-                            level: MessageLevel::Error,
-                            msg: "The attr_path glibc is not found for all the requested systems, suggest limiting systems to (aarch64-linux,x86_64-linux).".to_string(),
-                            install_id: "glibc".to_string(),
-                            valid_systems: vec![
-                                "aarch64-linux".to_string(),
-                                "x86_64-linux".to_string()
-                            ],
-                            attr_path: "glibc".to_string(),
-                        },
-                        invalid_systems: vec!["aarch64-darwin".to_string()],
-                    }
-                );
-            } else {
-                panic!("expected ResolutionFailures")
-            }
-        } else {
-            panic!("expected LockForMigration error");
-        }
-    }
-
-    /// [CoreEnvironment::migrate_manifest_contents_to_v1] migrates a manifest
-    /// with `script` in a `[hook]` table correctly, maintaining comments and
-    /// formatting.
-    #[test]
-    fn migrate_script_hook_table() {
-        let contents = formatdoc! {r#"
-            [vars]
-            foo = "bar"
-
-            # comment 1
-            [hook] # comment 2
-            # comment 3
-             script = "echo hello" # comment 4
-            # comment 5
-
-            [options]
-            "#};
-        let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
-        CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap();
-        assert_eq!(raw_manifest.to_string(), formatdoc! {r#"
-                version = 1
-                [vars]
-                foo = "bar"
-
-                # comment 1
-                [hook] # comment 2
-                # comment 3
-                 on-activate = "echo hello" # comment 4
-                # comment 5
-
-                [options]
-                "#
-        });
-    }
-
-    /// [CoreEnvironment::migrate_manifest_contents_to_v1] migrates a manifest
-    /// with hook.script as a dotted key correctly, maintaining comments and
-    /// formatting.
-    #[test]
-    fn migrate_script_hook_dotted_decor() {
-        let contents = formatdoc! {r#"
-            vars.foo = "bar"
-
-            # comment 1
-            hook . script = "echo hello" # comment 2
-            # comment 3
-
-            options.allow.unfree = false
-            "#};
-        let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
-        CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap();
-        assert_eq!(raw_manifest.to_string(), formatdoc! {r#"
-                vars.foo = "bar"
-
-                # comment 1
-                hook . on-activate = "echo hello" # comment 2
-                # comment 3
-
-                options.allow.unfree = false
-                version = 1
-                "#
-        });
-    }
-
-    /// If a manifest contains both `hook.script` and `hook.on-activate`,
-    /// [CoreEnvironment::migrate_manifest_contents_to_v1] returns an error.
-    #[test]
-    fn migrate_script_skip_for_on_activate() {
-        let contents = formatdoc! {r#"
-            [hook]
-            script = "echo foo"
-            on-activate = "echo bar"
-            "#};
-        let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
-        let err = CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap_err();
-        assert_eq!(raw_manifest.to_string(), formatdoc! {r#"
-                version = 1
-                [hook]
-                script = "echo foo"
-                on-activate = "echo bar"
-                "#
-        });
-        if let CoreEnvironmentError::MigrateManifest(e) = err {
-            assert!(e.message().contains("unknown field `script`"));
-        } else {
-            panic!("expected MigrateManifest error");
-        }
-    }
-
-    /// Even if a manifest fails validation, it is still modified by
-    /// [CoreEnvironment::migrate_manifest_contents_to_v1].
-    #[test]
-    fn migrate_script_modifies_on_error() {
-        let contents = formatdoc! {r#"
-            [hook]
-            script = "echo hello"
-            on-activate = "echo hello"
-            "#};
-        let mut raw_manifest = RawManifest::from_str(&contents).unwrap();
-        assert!(raw_manifest.get("version").is_none());
-        CoreEnvironment::migrate_manifest_contents_to_v1(&mut raw_manifest).unwrap_err();
-        assert_eq!(
-            raw_manifest.get("version").unwrap().as_integer().unwrap(),
-            1
-        );
-    }
-
-    #[test]
-    fn v0_does_not_need_relock() {
-        let (flox, _temp_dir_handle) = flox_instance();
-        let environment =
-            new_core_environment_from_env_files(&flox, MANUALLY_GENERATED.join("hello_v0"));
-        assert!(environment.lockfile_if_up_to_date().unwrap().is_some());
-    }
-
-    #[test]
-    fn modified_v0_errors() {
-        let (flox, _temp_dir_handle) = flox_instance();
-        let manifest_contents =
-            fs::read_to_string(MANUALLY_GENERATED.join("empty_v0").join(MANIFEST_FILENAME))
-                .unwrap();
-        let lockfile_contents =
-            fs::read_to_string(MANUALLY_GENERATED.join("hello_v0").join(LOCKFILE_FILENAME))
-                .unwrap();
-        let environment =
-            new_core_environment_with_lockfile(&flox, &manifest_contents, &lockfile_contents);
-        let err = environment.lockfile_if_up_to_date().unwrap_err();
-        assert!(matches!(
-            err,
-            CoreEnvironmentError::LockingVersion0NotSupported
-        ));
-    }
-
-    #[test]
     fn v1_does_not_need_relock() {
         let (flox, _temp_dir_handle) = flox_instance();
         let environment =
@@ -2087,8 +1500,8 @@ mod tests {
     /// # Returns
     ///
     /// * `TypedManifest` - A mock `TypedManifest` containing the provided entries.
-    fn generate_mock_manifest(entries: Vec<(&str, &str)>) -> TypedManifest {
-        let mut typed_manifest_mock = TypedManifestCatalog::default();
+    fn generate_mock_manifest(entries: Vec<(&str, &str)>) -> Manifest {
+        let mut typed_manifest_mock = Manifest::default();
 
         for (test_iid, dotted_package) in entries {
             typed_manifest_mock.install.insert(
@@ -2103,7 +1516,7 @@ mod tests {
             );
         }
 
-        TypedManifest::Catalog(Box::new(typed_manifest_mock))
+        typed_manifest_mock
     }
     /// Return the install ID if it matches the user input
     #[test]
@@ -2176,13 +1589,11 @@ mod tests {
     fn test_get_install_ids_to_uninstall_with_version() {
         let mut manifest_mock = generate_mock_manifest(vec![("testInstallID", "dotted.package")]);
 
-        if let TypedManifest::Catalog(ref mut catalog) = manifest_mock {
-            if let ManifestPackageDescriptor::Catalog(descriptor) =
-                catalog.install.get_mut("testInstallID").unwrap()
-            {
-                descriptor.version = Some("1.0".to_string());
-            };
-        }
+        if let ManifestPackageDescriptor::Catalog(descriptor) =
+            manifest_mock.install.get_mut("testInstallID").unwrap()
+        {
+            descriptor.version = Some("1.0".to_string());
+        };
 
         let result = CoreEnvironment::get_install_ids_to_uninstall(&manifest_mock, vec![
             "dotted.package@1.0".to_string(),

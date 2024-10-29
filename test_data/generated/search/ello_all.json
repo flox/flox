@@ -1,6 +1,6 @@
 [
   {
-    "count": 60,
+    "count": 61,
     "results": [
       {
         "description": "CLI tool to filter JSON and JSON Lines data with Python syntax",
@@ -31,6 +31,17 @@
         "pname": "libcello",
         "relPath": [
           "libcello"
+        ],
+        "system": "aarch64-darwin",
+        "version": null
+      },
+      {
+        "description": "Simple program printing hello world in Go",
+        "input": "nixpkgs",
+        "license": null,
+        "pname": "hello-go",
+        "relPath": [
+          "hello-go"
         ],
         "system": "aarch64-darwin",
         "version": null

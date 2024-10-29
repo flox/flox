@@ -1,20 +1,18 @@
 use std::collections::HashSet;
 use std::fmt;
-use std::fs::File;
-use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use flox_core::{serialize_atomically, SerializeError, Version};
 use fslock::LockFile;
 use nix::errno::Errno;
-use nix::libc::pid_t;
 use nix::sys::signal::kill;
 use nix::unistd::Pid as NixPid;
 use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use super::environment::{path_hash, EnvironmentPointer};
-use crate::data::{CanonicalPath, Version};
+use crate::data::CanonicalPath;
 use crate::flox::Flox;
 use crate::utils::traceable_path;
 
@@ -25,22 +23,18 @@ pub const ENV_REGISTRY_FILENAME: &str = "env-registry.json";
 pub enum EnvRegistryError {
     #[error("couldn't acquire environment registry file lock")]
     AcquireLock(#[source] fslock::Error),
-    #[error("couldn't open environment registry file")]
-    OpenRegistry(#[source] std::io::Error),
+    #[error("couldn't read environment registry file")]
+    ReadRegistry(#[source] std::io::Error),
     #[error("couldn't parse environment registry")]
     ParseRegistry(#[source] serde_json::Error),
-    #[error("failed to open temporary file for registry")]
-    OpenTmpRegistry(#[source] std::io::Error),
-    #[error("failed to write temporary environment registry file")]
-    WriteTmpRegistry(#[source] serde_json::Error),
-    #[error("failed to rename temporary registry file")]
-    RenameRegistry(#[source] tempfile::PersistError),
-    #[error("registry file stored in an invalid location: {0}")]
-    InvalidRegistryLocation(PathBuf),
     #[error("no environments registered with key: {0}")]
     UnknownKey(String),
     #[error("did not find environment in registry")]
     EnvNotRegistered,
+    #[error("failed to write environment registry file")]
+    WriteEnvironmentRegistry(#[source] SerializeError),
+    #[error("no registry found")]
+    NoEnvRegistry,
 }
 
 /// A local registry of environments on the system.
@@ -244,22 +238,11 @@ pub struct RegisteredEnv {
 /// `nix::unistd::Pid`.
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct ActivationPid(pid_t);
+pub struct ActivationPid(i32);
 
 impl ActivationPid {
-    /// Construct a Pid from the current running process.
-    pub fn from_current_process() -> Self {
-        ActivationPid(nix::unistd::getpid().as_raw())
-    }
-
-    /// Check whether an activation is the parent of the current process.
-    pub fn is_current_process_parent(&self) -> bool {
-        let parent = nix::unistd::getppid();
-        NixPid::from(*self) == parent
-    }
-
     /// Check whether an activation is still running.
-    fn is_running(&self) -> bool {
+    pub fn is_running(&self) -> bool {
         // TODO: Compare name or check for watchdog child to see if it's a real activation?
         let pid = NixPid::from(*self);
         match kill(pid, None) {
@@ -275,6 +258,12 @@ impl ActivationPid {
 impl From<i32> for ActivationPid {
     fn from(value: i32) -> Self {
         Self(value)
+    }
+}
+
+impl From<ActivationPid> for i32 {
+    fn from(value: ActivationPid) -> Self {
+        value.0
     }
 }
 
@@ -321,10 +310,9 @@ pub fn read_environment_registry(
         );
         return Ok(None);
     }
-    let f = File::open(path).map_err(EnvRegistryError::OpenRegistry)?;
-    let reader = BufReader::new(f);
+    let contents = std::fs::read_to_string(path).map_err(EnvRegistryError::ReadRegistry)?;
     let parsed: EnvRegistry =
-        serde_json::from_reader(reader).map_err(EnvRegistryError::ParseRegistry)?;
+        serde_json::from_str(&contents).map_err(EnvRegistryError::ParseRegistry)?;
     Ok(Some(parsed))
 }
 
@@ -336,33 +324,18 @@ pub fn read_environment_registry(
 /// environment registry, as that is essentially bypassing the lock.
 pub fn write_environment_registry(
     reg: &EnvRegistry,
-    reg_path: &impl AsRef<Path>,
+    reg_path: impl AsRef<Path>,
     _lock: LockFile,
 ) -> Result<(), EnvRegistryError> {
-    // We use a temporary directory here instead of a temporary file because it allows us to get the
-    // path, which we can't easily get from a temporary file.
-    let parent = reg_path.as_ref().parent().ok_or(
-        // This error is thrown in the unlikely scenario that `reg_path` is:
-        // - An empty string
-        // - `/`
-        // - `.`
-        EnvRegistryError::InvalidRegistryLocation(reg_path.as_ref().to_path_buf()),
-    )?;
-    let temp_file =
-        tempfile::NamedTempFile::new_in(parent).map_err(EnvRegistryError::OpenTmpRegistry)?;
-
-    let writer = BufWriter::new(&temp_file);
-    serde_json::to_writer_pretty(writer, reg).map_err(EnvRegistryError::WriteTmpRegistry)?;
-    temp_file
-        .persist(reg_path.as_ref())
-        .map_err(EnvRegistryError::RenameRegistry)?;
-    Ok(())
+    serialize_atomically(reg, &reg_path, _lock).map_err(EnvRegistryError::WriteEnvironmentRegistry)
 }
 
 /// Acquires the filesystem-based lock on the user's environment registry file
 pub fn acquire_env_registry_lock(reg_path: impl AsRef<Path>) -> Result<LockFile, EnvRegistryError> {
     let lock_path = env_registry_lock_path(reg_path);
-    LockFile::open(lock_path.as_os_str()).map_err(EnvRegistryError::AcquireLock)
+    let mut lock = LockFile::open(lock_path.as_os_str()).map_err(EnvRegistryError::AcquireLock)?;
+    lock.lock().map_err(EnvRegistryError::AcquireLock)?;
+    Ok(lock)
 }
 
 /// Ensures that the environment is registered. This is a no-op if it is already registered.
@@ -451,9 +424,24 @@ pub fn deregister_activation(
     Ok(current_activations)
 }
 
+/// Returns the list of all activation PIDs for a given activation.
+pub fn activation_pids(
+    reg_path: impl AsRef<Path>,
+    path_hash: impl AsRef<str>,
+) -> Result<HashSet<ActivationPid>, EnvRegistryError> {
+    let _lock = acquire_env_registry_lock(&reg_path)?;
+    let mut reg = read_environment_registry(&reg_path)?.ok_or(EnvRegistryError::NoEnvRegistry)?;
+    let entry = reg
+        .entry_for_hash_mut(path_hash.as_ref())
+        .ok_or(EnvRegistryError::EnvNotRegistered)?;
+    let remaining_pids = entry.activations.clone();
+    Ok(remaining_pids)
+}
+
 #[cfg(test)]
 mod test {
     use std::fs::OpenOptions;
+    use std::io::BufWriter;
     use std::process::{Child, Command};
 
     use proptest::arbitrary::{any, Arbitrary};

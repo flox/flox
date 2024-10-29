@@ -12,9 +12,9 @@ use flox_rust_sdk::models::environment::{
     InstallationAttempt,
 };
 use flox_rust_sdk::models::lockfile::{
-    LockedManifest,
     LockedManifestError,
     LockedPackage,
+    Lockfile,
     ResolutionFailure,
     ResolutionFailures,
 };
@@ -34,12 +34,7 @@ use tracing::{instrument, warn};
 
 use super::services::warn_manifest_changes_for_services;
 use super::{environment_select, EnvironmentSelect};
-use crate::commands::{
-    ensure_floxhub_token,
-    environment_description,
-    maybe_migrate_environment_to_v1,
-    EnvironmentSelectError,
-};
+use crate::commands::{ensure_floxhub_token, environment_description, EnvironmentSelectError};
 use crate::subcommand_metric;
 use crate::utils::dialog::{Dialog, Spinner};
 use crate::utils::didyoumean::{DidYouMean, InstallSuggestion};
@@ -96,7 +91,7 @@ impl Install {
             ensure_floxhub_token(&mut flox).await?;
         }
 
-        let mut concrete_environment = match self
+        let concrete_environment = match self
             .environment
             .detect_concrete_environment(&flox, "Install to")
         {
@@ -123,7 +118,6 @@ impl Install {
         };
         let description = environment_description(&concrete_environment)?;
 
-        maybe_migrate_environment_to_v1(&flox, &mut concrete_environment).await?;
         let mut environment = concrete_environment.into_dyn_environment();
 
         let mut packages_to_install = self
@@ -170,23 +164,15 @@ impl Install {
         let lockfile_content = std::fs::read_to_string(&lockfile_path)?;
 
         // Check for warnings in the lockfile
-        let lockfile: LockedManifest = serde_json::from_str(&lockfile_content)?;
-
-        match lockfile {
-            // TODO: move this behind the `installation.new_manifest.is_some()`
-            // check below so we don't warn when we don't even install anything
-            LockedManifest::Catalog(locked_manifest) => {
-                for warning in Self::generate_warnings(
-                    &locked_manifest.packages,
-                    &catalog_packages_to_install(&packages_to_install),
-                ) {
-                    message::warning(warning);
-                }
-            },
-            LockedManifest::Pkgdb(_) => {
-                unreachable!("We only support installing from the catalog now");
-            },
-        };
+        let lockfile: Lockfile = serde_json::from_str(&lockfile_content)?;
+        // TODO: move this behind the `installation.new_manifest.is_some()`
+        // check below so we don't warn when we don't even install anything
+        for warning in Self::generate_warnings(
+            &lockfile.packages,
+            &catalog_packages_to_install(&packages_to_install),
+        ) {
+            message::warning(warning);
+        }
 
         // Print which new packages were installed
         for pkg in packages_to_install.iter() {
@@ -277,8 +263,7 @@ impl Install {
 
                     *systems = Some(valid_systems.clone());
                     message::warning(format!(
-                        "Installing '{install_id}' for the following systems: {:?}",
-                        valid_systems
+                        "Installing '{install_id}' for the following systems: {valid_systems:?}"
                     ));
                 }
 
@@ -434,8 +419,7 @@ mod tests {
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
             vec![format!(
-                "The package '{}' has an unfree license, please verify the licensing terms of use",
-                foo_iid
+                "The package '{foo_iid}' has an unfree license, please verify the licensing terms of use"
             )]
         );
     }
@@ -463,8 +447,7 @@ mod tests {
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
             vec![format!(
-                "The package '{}' has an unfree license, please verify the licensing terms of use",
-                foo_iid
+                "The package '{foo_iid}' has an unfree license, please verify the licensing terms of use"
             )]
         );
     }
@@ -484,8 +467,7 @@ mod tests {
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
             vec![format!(
-                "The package '{}' is marked as broken, it may not behave as expected during runtime.",
-                foo_iid
+                "The package '{foo_iid}' is marked as broken, it may not behave as expected during runtime."
             )]
         );
     }
@@ -513,8 +495,7 @@ mod tests {
         assert_eq!(
             Install::generate_warnings(&locked_packages, &packages_to_install),
             vec![format!(
-                "The package '{}' is marked as broken, it may not behave as expected during runtime.",
-                foo_iid
+                "The package '{foo_iid}' is marked as broken, it may not behave as expected during runtime."
             )]
         );
     }

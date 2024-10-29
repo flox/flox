@@ -1,0 +1,144 @@
+[
+  [
+    {
+      "msgs": [],
+      "name": "toplevel",
+      "page": {
+        "complete": true,
+        "msgs": [],
+        "packages": [
+          {
+            "attr_path": "python2",
+            "broken": false,
+            "derivation": "/nix/store/14chck670ca005mxvml26sk46b3m7r2l-python-2.7.18.5.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "insecure": false,
+            "install_id": "python2",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+            "name": "python-2.7.18.5",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/cw29cg9jzgi6qz8c4zjxjmgc1dprj8il-python-2.7.18.5"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python2",
+            "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+            "rev_count": 439146,
+            "rev_date": "2023-01-02T00:06:23Z",
+            "scrape_date": "2024-08-16T02:13:46Z",
+            "stabilities": [
+              "staging",
+              "unstable"
+            ],
+            "system": "aarch64-darwin",
+            "unfree": false,
+            "version": "python-2.7.18.5"
+          },
+          {
+            "attr_path": "python2",
+            "broken": false,
+            "derivation": "/nix/store/caszjvk5h4lrg34n4j7xxlcska4c0ig5-python-2.7.18.5.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "insecure": false,
+            "install_id": "python2",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+            "name": "python-2.7.18.5",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/85xdnvslacp1x9kxwijn4kyp88s88696-python-2.7.18.5"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python2",
+            "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+            "rev_count": 439146,
+            "rev_date": "2023-01-02T00:06:23Z",
+            "scrape_date": "2024-08-16T02:13:46Z",
+            "stabilities": [
+              "staging",
+              "unstable"
+            ],
+            "system": "aarch64-linux",
+            "unfree": false,
+            "version": "python-2.7.18.5"
+          },
+          {
+            "attr_path": "python2",
+            "broken": false,
+            "derivation": "/nix/store/kv5zal9yx6s16mknixcscsss1drw75zg-python-2.7.18.5.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "insecure": false,
+            "install_id": "python2",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+            "name": "python-2.7.18.5",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/bv88b3gvqkzrwgflbnr463m608pmw1pq-python-2.7.18.5"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python2",
+            "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+            "rev_count": 439146,
+            "rev_date": "2023-01-02T00:06:23Z",
+            "scrape_date": "2024-08-16T02:13:46Z",
+            "stabilities": [
+              "staging",
+              "unstable"
+            ],
+            "system": "x86_64-darwin",
+            "unfree": false,
+            "version": "python-2.7.18.5"
+          },
+          {
+            "attr_path": "python2",
+            "broken": false,
+            "derivation": "/nix/store/9xv6pv3fqipca3ndw4g311mx4a23pnyr-python-2.7.18.5.drv",
+            "description": "A high-level dynamically-typed programming language",
+            "insecure": false,
+            "install_id": "python2",
+            "license": "Python-2.0",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+            "name": "python-2.7.18.5",
+            "outputs": [
+              {
+                "name": "out",
+                "store_path": "/nix/store/vyd0a3w8csnbwivm9hrcz49cvfhryjaa-python-2.7.18.5"
+              }
+            ],
+            "outputs_to_install": [
+              "out"
+            ],
+            "pname": "python2",
+            "rev": "0fc9fca9c8d43edd79d33fea0dd8409d7c4580f4",
+            "rev_count": 439146,
+            "rev_date": "2023-01-02T00:06:23Z",
+            "scrape_date": "2024-08-16T02:13:46Z",
+            "stabilities": [
+              "staging",
+              "unstable"
+            ],
+            "system": "x86_64-linux",
+            "unfree": false,
+            "version": "python-2.7.18.5"
+          }
+        ],
+        "page": 439146,
+        "url": ""
+      }
+    }
+  ]
+]

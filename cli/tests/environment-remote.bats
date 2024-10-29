@@ -47,6 +47,7 @@ setup() {
 }
 
 teardown() {
+  wait_for_watchdogs
   project_teardown
   common_test_teardown
 }
@@ -58,25 +59,6 @@ function make_empty_remote_env() {
   pushd local
   # init path environment and push to remote
   "$FLOX_BIN" init --name test
-  "$FLOX_BIN" push --owner "$OWNER"
-  "$FLOX_BIN" delete -f
-  popd
-  rm -rf local
-}
-
-# create remote a pkgdb environment with hello installed
-# from pre-generated lock
-make_remote_pkgdb_env_with_hello() {
-  mkdir local
-  pushd local
-
-  # init path environment and push to remote
-  mkdir -p .flox/env
-  cp "$MANUALLY_GENERATED"/hello_v0/* .flox/env
-  echo '{
-    "name": "test",
-    "version": 1
-  }' >.flox/env.json
   "$FLOX_BIN" push --owner "$OWNER"
   "$FLOX_BIN" delete -f
   popd
@@ -99,7 +81,7 @@ make_remote_pkgdb_env_with_hello() {
 }
 
 # bats test_tags=hermetic,remote,remote:outlink
-@test "catalog: r0: building a remote environment creates outlink" {
+@test "r0: building a remote environment creates outlink" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
 
@@ -139,7 +121,7 @@ make_remote_pkgdb_env_with_hello() {
 }
 
 # bats test_tags=edit,remote,remote:edit
-@test "catalog: m3: edit a package from a managed environment" {
+@test "m3: edit a package from a managed environment" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
 
@@ -165,15 +147,6 @@ EOF
 
 # bats test_tags=remote,activate,remote:activate
 @test "m9: activate works in remote environment" {
-  make_remote_pkgdb_env_with_hello
-
-  run "$FLOX_BIN" activate --trust --remote "$OWNER/test" -- command -v hello
-  assert_success
-  assert_output --partial "$FLOX_CACHE_DIR/remote/owner/test/.flox/run/bin/hello"
-}
-
-# bats test_tags=remote,activate,remote:activate
-@test "catalog: m9: activate works in remote environment" {
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/hello.json"
   make_empty_remote_env
   "$FLOX_BIN" install hello --remote "$OWNER/test"

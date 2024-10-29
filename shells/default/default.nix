@@ -1,5 +1,6 @@
 {
-  alejandra,
+  treefmt,
+  nixfmt-rfc-style,
   commitizen,
   hivemind,
   just,
@@ -17,11 +18,13 @@
   flox-watchdog,
   flox-pkgdb,
   flox-manpages,
+  flox-package-builder,
   stdenv,
   ci ? false,
   GENERATED_DATA ? ./../../test_data/generated,
   MANUALLY_GENERATED ? ./../../test_data/manually_generated,
-}: let
+}:
+let
   # For use in GitHub Actions and local development.
   ciPackages =
     flox-pkgdb.ciPackages
@@ -44,7 +47,8 @@
       just
       hivemind
       commitizen
-      alejandra
+      treefmt
+      nixfmt-rfc-style
       shfmt
       yq
       cargo-nextest
@@ -59,33 +63,34 @@
       mitmproxy
     ];
 in
-  mkShell (
-    {
-      name = "flox-dev";
+mkShell (
+  {
+    name = "flox-dev";
 
-      inputsFrom = [
-        flox-pkgdb
-        (flox-cli.override {
-          flox-pkgdb = null;
-          flox-watchdog = null;
-        })
-      ];
+    inputsFrom = [
+      flox-pkgdb
+      (flox-cli.override {
+        flox-pkgdb = null;
+        flox-watchdog = null;
+      })
+    ];
 
-      packages = ciPackages ++ lib.optionals (!ci) devPackages;
+    packages = ciPackages ++ lib.optionals (!ci) devPackages;
 
-      shellHook =
-        flox-pkgdb.devShellHook
-        + flox-watchdog.devShellHook
-        + flox-cli.devShellHook
-        + pre-commit-check.shellHook
-        + ''
-          export MANPATH=${flox-manpages}/share/man:$MANPATH
-        '';
+    shellHook =
+      flox-pkgdb.devShellHook
+      + flox-watchdog.devShellHook
+      + flox-cli.devShellHook
+      + pre-commit-check.shellHook
+      + flox-package-builder.devShellHook
+      + ''
+        export MANPATH=${flox-manpages}/share/man:$MANPATH
+      '';
 
-      inherit GENERATED_DATA;
-      inherit MANUALLY_GENERATED;
-    }
-    // flox-pkgdb.devEnvs
-    // flox-watchdog.devEnvs
-    // flox-cli.devEnvs
-  )
+    inherit GENERATED_DATA;
+    inherit MANUALLY_GENERATED;
+  }
+  // flox-pkgdb.devEnvs
+  // flox-watchdog.devEnvs
+  // flox-cli.devEnvs
+)

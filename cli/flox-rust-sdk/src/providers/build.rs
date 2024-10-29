@@ -33,12 +33,26 @@ pub trait ManifestBuilder {
         flox_env: &Path,
         package: &[String],
     ) -> Result<BuildOutput, ManifestBuilderError>;
+
+    fn clean(
+        &self,
+        base_dir: &Path,
+        flox_env: &Path,
+        package: &[String],
+    ) -> Result<(), ManifestBuilderError>;
 }
 
 #[derive(Debug, Error)]
 pub enum ManifestBuilderError {
     #[error("failed to call package builder: {0}")]
     CallBuilderError(#[source] std::io::Error),
+
+    #[error("failed to clean up build artifacts")]
+    RunClean {
+        stdout: String,
+        stderr: String,
+        status: ExitStatus,
+    },
 }
 
 pub enum Output {
@@ -71,6 +85,19 @@ impl Iterator for BuildOutput {
 /// A manifest builder that uses the [FLOX_BUILD_MK] makefile to build packages.
 pub struct FloxBuildMk;
 
+impl FloxBuildMk {
+    fn base_command(&self, base_dir: &Path, flox_env: &Path) -> Command {
+        // todo: extra makeflags, eventually
+        let mut command = Command::new(&*GNUMAKE_BIN);
+        command.env_remove("MAKEFLAGS");
+        command.arg("--file").arg(&*FLOX_BUILD_MK);
+        command.arg("--directory").arg(base_dir); // Change dir before reading makefile.
+        command.arg(format!("FLOX_ENV={}", flox_env.display()));
+
+        command
+    }
+}
+
 impl ManifestBuilder for FloxBuildMk {
     /// Build `packages` defined in the environment rendered at
     /// `flox_env` using the [FLOX_BUILD_MK] makefile.
@@ -95,20 +122,25 @@ impl ManifestBuilder for FloxBuildMk {
         flox_env: &Path,
         packages: &[String],
     ) -> Result<BuildOutput, ManifestBuilderError> {
-        let mut command = Command::new(&*GNUMAKE_BIN);
-        command.arg("-f").arg(&*FLOX_BUILD_MK);
-        command.arg("-C").arg(base_dir);
-        command.arg(format!("FLOX_ENV={}", flox_env.display()));
+        let mut command = self.base_command(base_dir, flox_env);
 
-        // todo: extra makeflags, eventually
-
-        // add packages
-        command.args(packages);
+        // Add build target arguments by prefixing the package names with "build/".
+        // If no packages are specified, build all packages.
+        // While the default target is "build", we explicitly specify it here
+        // to avoid unintentional changes in behvaior.
+        if packages.is_empty() {
+            let build_all_target = "build";
+            command.arg(build_all_target);
+        } else {
+            let build_targets = packages.iter().map(|p| format!("build/{p}"));
+            command.args(build_targets);
+        };
 
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
 
-        debug!("running manifest build builder: {}", command.display());
+        debug!(command = %command.display(), "running manifest build target");
+
         let mut child = command
             .spawn()
             .map_err(ManifestBuilderError::CallBuilderError)?;
@@ -136,6 +168,61 @@ impl ManifestBuilder for FloxBuildMk {
         });
 
         Ok(BuildOutput { receiver })
+    }
+
+    /// Clean build artifacts for `packages` defined in the environment
+    /// rendered at `flox_env` using the [FLOX_BUILD_MK] makefile.
+    ///
+    /// `packages` SHOULD be a list of package names defined in the
+    /// environment or an empty list to clean all packages.
+    ///
+    /// `packages` are converted to clean targets by prefixing them with "clean/".
+    /// If no packages are specified, all packages are cleaned by evaluating the "clean" target.
+    ///
+    /// Cleaning will remove the  following build artifacts for the specified packages:
+    ///
+    /// * the `result-<package>` and `result-<package>-buildCache` store links in `base_dir`
+    /// * the store paths linked to by the `result-<package>` links
+    /// * the temporary build directories for the specified packages
+    fn clean(
+        &self,
+        base_dir: &Path,
+        flox_env: &Path,
+        packages: &[String],
+    ) -> Result<(), ManifestBuilderError> {
+        let mut command = self.base_command(base_dir, flox_env);
+
+        // Add clean target arguments by prefixing the package names with "clean/".
+        // If no packages are specified, clean all packages.
+        if packages.is_empty() {
+            let clean_all_target = "clean";
+            command.arg(clean_all_target);
+        } else {
+            let clean_targets = packages.iter().map(|p| format!("clean/{p}"));
+            command.args(clean_targets);
+        };
+
+        debug!(command=%command.display(), "running manifest clean target");
+
+        let output = command
+            .output()
+            .map_err(ManifestBuilderError::CallBuilderError)?;
+        let status = output.status;
+
+        if !status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+
+            debug!(%status, %stderr, %stdout, "failed to clean build artifacts");
+
+            return Err(ManifestBuilderError::RunClean {
+                stdout,
+                stderr,
+                status,
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -167,18 +254,25 @@ fn read_output_to_channel(
 ///
 /// Currently, this is _the_ testsuite for the `flox-build.mk` builder.
 #[cfg(test)]
+// TODO: https://github.com/flox/flox/issues/2185
+// Serialise all build tests to workaround potential Nix bug.
+// Use file-based locking to be compatible with `nextest`.
+#[serial_test::file_serial(build)]
 mod tests {
     use std::fs::{self};
 
-    use indoc::formatdoc;
+    use indoc::{formatdoc, indoc};
 
     use super::*;
     use crate::flox::test_helpers::flox_instance;
     use crate::flox::Flox;
-    use crate::models::environment::path_environment::test_helpers::new_path_environment;
+    use crate::models::environment::path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_from_env_files,
+    };
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::Environment;
-    use crate::providers::catalog::Client;
+    use crate::providers::catalog::{Client, GENERATED_DATA};
 
     fn result_dir(parent: &Path, package: &str) -> PathBuf {
         parent.join(format!("result-{package}"))
@@ -233,6 +327,22 @@ mod tests {
         }
 
         output
+    }
+
+    fn assert_clean_success(flox: &Flox, env: &mut PathEnvironment, package_names: &[&str]) {
+        let builder = FloxBuildMk;
+        let err = builder
+            .clean(
+                &env.parent_path().unwrap(),
+                &env.activation_path(flox).unwrap(),
+                &package_names
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>(),
+            )
+            .err();
+
+        assert!(err.is_none(), "expected clean to succeed: {err:?}")
     }
 
     /// Asserts that `file_name` exists with `content` within the build result
@@ -309,7 +419,7 @@ mod tests {
         // Weird string formatting because indoc strips leading whitespace
         assert!(output.stdout.contains(
             r#"
-       > ERROR: Build command did not copy outputs to '$out'.
+       > ❌ ERROR: Build command did not copy outputs to '$out'.
        > - copy a single file with 'cp bin $out'
        > - copy multiple files with 'mkdir -p $out && cp bin/* $out/'
        > - copy files from an Autotools project with 'make install PREFIX=$out'"#
@@ -335,7 +445,7 @@ mod tests {
         // Weird string formatting because indoc strips leading whitespace
         assert!(output.stdout.contains(
             r#"
-       > ERROR: Build command did not copy outputs to '$out'.
+       > ❌ ERROR: Build command did not copy outputs to '$out'.
        > - copy a single file with 'cp bin $out'
        > - copy multiple files with 'mkdir -p $out && cp bin/* $out/'
        > - copy files from an Autotools project with 'make install PREFIX=$out'"#
@@ -605,6 +715,63 @@ mod tests {
     }
 
     #[test]
+    fn build_result_uses_package_from_environment() {
+        let package_name = String::from("foo");
+        let file_name = String::from("exec-hello-from-env.sh");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+            [install]
+            hello.pkg-path = "hello"
+
+            [build.{package_name}]
+            sandbox = "pure"
+            command = """
+                mkdir -p $out/bin
+                cat > $out/bin/{file_name} <<EOF
+                    #!/usr/bin/env bash
+                    exec hello
+            EOF
+                chmod +x $out/bin/{file_name}
+            """
+        "#};
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        if let Client::Mock(ref mut client) = flox.catalog_client {
+            client.clear_and_load_responses_from_file("resolve/hello.json");
+        } else {
+            panic!("expected Mock client")
+        };
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+
+        fs::write(env_path.join("hello"), indoc! {r#"
+            #!/usr/bin/env bash
+            echo "This should not be used because the environment's PATH takes precedence"
+            exit 1
+        "#})
+        .unwrap();
+
+        let output = Command::new(&result_path)
+            .env("PATH", env_path)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            "Hello, world!",
+            "should successfully execute hello from environment"
+        );
+    }
+
+    #[test]
     fn build_uses_var_from_manifest() {
         let package_name = String::from("foo");
         let file_name = String::from("bar");
@@ -688,5 +855,505 @@ mod tests {
 
         assert_build_status(&flox, &mut env, &package_name, true);
         assert_build_file(&env_path, &package_name, &file_name, &file_content);
+    }
+
+    #[test]
+    fn rebuild_with_modified_command() {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let content_before = "before";
+        let content_after = "after";
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = """
+                mkdir -p $out
+                echo -n "{content_before}" > $out/{file_name}
+            """
+        "#});
+        let env_path = env.parent_path().unwrap();
+        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_file(&env_path, &package_name, &file_name, content_before);
+
+        let _ = env
+            .edit(&flox, formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = """
+                mkdir -p $out
+                echo -n "{content_after}" > $out/{file_name}
+            """
+        "#})
+            .unwrap();
+        assert_build_status(&flox, &mut env, &package_name, true);
+        assert_build_file(&env_path, &package_name, &file_name, content_after);
+    }
+
+    #[test]
+    fn build_wraps_binaries_with_preserved_arg0() {
+        let package_name = String::from("foo");
+        let file_name = String::from("print_arg0");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            go.pkg-path = "go"
+
+            [build.{package_name}]
+            command = """
+                go build main.go
+                mkdir -p $out/bin
+                cp main $out/bin/{file_name}
+            """
+        "#};
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let arg0_code = indoc! {r#"
+            package main
+
+            import (
+                "fmt"
+                "os"
+            )
+
+            func main() {
+                fmt.Println(os.Args[0])
+            }
+        "#};
+        fs::write(env_path.join("main.go"), arg0_code).unwrap();
+
+        if let Client::Mock(ref mut client) = flox.catalog_client {
+            client.clear_and_load_responses_from_file("resolve/go.json");
+        } else {
+            panic!("expected Mock client")
+        };
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            result_path.to_string_lossy(),
+            "binaries should have the correct arg0"
+        );
+    }
+
+    #[test]
+    fn build_wraps_scripts_without_preserved_arg0() {
+        let package_name = String::from("foo");
+        let file_name = String::from("print_arg0");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            command = """
+                mkdir -p $out/bin
+                cp {file_name} $out/bin/{file_name}
+                chmod +x $out/bin/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        // Beware inlining this script and having $0 interpolated too early.
+        let arg0_code = indoc! {r#"
+            #!/usr/bin/env bash
+            echo "$0"
+        "#};
+        fs::write(env_path.join(&file_name), arg0_code).unwrap();
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+        let result_wrapped = result_dir(&env_path, &package_name)
+            .read_link() // store path
+            .unwrap()
+            .join("bin")
+            .join(format!(".{}-wrapped", &file_name));
+
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(output.status.success());
+
+        // This isn't possible for interpreted scripts as described in:
+        // https://github.com/NixOS/nixpkgs/issues/150841
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            result_wrapped.to_string_lossy(),
+            "intepreted scripts are known to have the wrong arg0"
+        );
+    }
+
+    #[test]
+    fn build_wraps_scripts_without_preserved_exe() {
+        let package_name = String::from("foo");
+        let file_name = String::from("print_exe");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [install]
+            go.pkg-path = "go"
+
+            [build.{package_name}]
+            command = """
+                go build main.go
+                mkdir -p $out/bin
+                cp main $out/bin/{file_name}
+            """
+        "#};
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let exe_code = indoc! {r#"
+            package main
+
+            import (
+                "fmt"
+                "os"
+            )
+
+            func main() {
+                exe, err := os.Executable()
+                if err != nil {
+                    fmt.Println(err)
+                    os.Exit(1)
+                }
+
+                fmt.Println(exe)
+            }
+        "#};
+        fs::write(env_path.join("main.go"), exe_code).unwrap();
+
+        if let Client::Mock(ref mut client) = flox.catalog_client {
+            client.clear_and_load_responses_from_file("resolve/go.json");
+        } else {
+            panic!("expected Mock client")
+        };
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&file_name);
+        let result_wrapped = result_dir(&env_path, &package_name)
+            .read_link() // store path
+            .unwrap()
+            .join("bin")
+            .join(format!(".{}-wrapped", &file_name));
+
+        let output = Command::new(&result_path).output().unwrap();
+        assert!(output.status.success());
+
+        // This isn't currently implemented. For ideas see:
+        // https://brioche.dev/docs/how-it-works/packed-executables/
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            result_wrapped.to_string_lossy(),
+            "binaries are known to have the wrong exe"
+        );
+    }
+
+    #[test]
+    fn build_impure_against_libc() {
+        let package_name = String::from("foo");
+        let bin_name = String::from("links-against-libc");
+        let source_name = String::from("main.go");
+
+        let (mut flox, _temp_dir_handle) = flox_instance();
+        let mut env =
+            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/go_gcc"));
+        let env_path = env.parent_path().unwrap();
+
+        let base_manifest = env.manifest_contents(&flox).unwrap();
+        let build_manifest = formatdoc! {r#"
+            {base_manifest}
+
+            [vars]
+            CGO_ENABLED = "1"
+
+            [build.{package_name}]
+            command = """
+                cat main.go
+                go build {source_name}
+                mkdir -p $out/bin
+                cp main $out/bin/{bin_name}
+            """
+        "#};
+        env.edit(&flox, build_manifest).unwrap();
+
+        let expected_message = "Hello from C!";
+        // Literal `{` and `}` are escaped as `{{` and `}}`.
+        let source_code = formatdoc! {r#"
+            package main
+
+            /*
+            #include <stdio.h>
+
+            void hello() {{
+                printf("{expected_message}\n");
+                fflush(stdout);
+            }}
+            */
+            import "C"
+
+            func main() {{
+                C.hello()
+            }}
+        "#};
+        fs::write(env_path.join(source_name), source_code).unwrap();
+
+        if let Client::Mock(ref mut client) = flox.catalog_client {
+            client.clear_and_load_responses_from_file("envs/go_gcc.json");
+        } else {
+            panic!("expected Mock client")
+        };
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+
+        let result_path = result_dir(&env_path, &package_name)
+            .join("bin")
+            .join(&bin_name);
+        let output = Command::new(&result_path).output().unwrap();
+
+        // The binary should execute successfully but we can't make any
+        // guarantees about the portability or reproducibility of impure builds
+        // which may link against system libraries.
+        //
+        // This also serves as a regression test against `autoPathelfHook`
+        // conflicting with `gcc` or `libc` from the Flox environment which will
+        // cause either binaries that hang or fail with:
+        //
+        // `*** stack smashing detected ***: terminated`
+        assert!(
+            output.status.success(),
+            "should execute successfully, stderr: {:?}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim_end(),
+            expected_message
+        );
+    }
+
+    #[test]
+    fn cleans_up_data_sandbox() {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let file_content = String::from("some content");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "pure"
+            command = """
+                mkdir $out
+                echo "{file_content}" > $out/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+        let result = result_dir(&env_path, &package_name);
+        let cache = cache_dir(&env_path, &package_name);
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+
+        assert!(result.exists());
+        assert!(cache.exists());
+
+        assert_clean_success(&flox, &mut env, &[&package_name]);
+        assert!(!result.exists());
+        assert!(!cache.exists());
+    }
+
+    #[test]
+    fn cleans_up_data_no_sandbox() {
+        let package_name = String::from("foo");
+        let file_name = String::from("bar");
+        let file_content = String::from("some content");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "off"
+            command = """
+                mkdir $out
+                echo "{file_content}" > $out/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+
+        let result = result_dir(&env_path, &package_name);
+
+        assert_build_status(&flox, &mut env, &package_name, true);
+
+        assert!(result.exists());
+
+        assert_clean_success(&flox, &mut env, &[&package_name]);
+        assert!(!result.exists());
+    }
+
+    #[test]
+    fn cleans_up_all() {
+        let package_foo = String::from("foo");
+        let package_bar = String::from("bar");
+
+        let file_name = String::from("file");
+        let file_content = String::from("some content");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_foo}]
+            sandbox = "pure"
+            command = """
+                mkdir $out
+                echo "{file_content}" > $out/{file_name}
+            """
+            [build.{package_bar}]
+            sandbox = "off"
+            command = """
+                mkdir $out
+                echo "{file_content}" > $out/{file_name}
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+        let env_path = env.parent_path().unwrap();
+        let result_foo = result_dir(&env_path, &package_foo);
+        let cache_foo = cache_dir(&env_path, &package_foo);
+        let result_bar = result_dir(&env_path, &package_bar);
+
+        assert_build_status(&flox, &mut env, &package_foo, true);
+        assert_build_status(&flox, &mut env, &package_bar, true);
+
+        assert!(result_foo.exists());
+        assert!(cache_foo.exists());
+        assert!(result_bar.exists());
+
+        assert_clean_success(&flox, &mut env, &[]);
+        assert!(!result_foo.exists());
+        assert!(!cache_foo.exists());
+        assert!(!result_bar.exists());
+    }
+
+    #[test]
+    fn dollar_out_persisted_no_sandbox() {
+        let package_name = String::from("foo");
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "off"
+            command = """
+                echo "Hello, World!" >> $out
+                exit 42
+            """
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        let output = assert_build_status(&flox, &mut env, &package_name, false);
+
+        let out_path_message_regex = regex::Regex::new("out=(.+?)\\s").unwrap();
+
+        let out_path = match out_path_message_regex.captures(&output.stdout) {
+            Some(captures) => Path::new(captures.get(1).unwrap().as_str()),
+            None => panic!("$out path not found in stdout"),
+        };
+
+        assert!(out_path.exists(), "out_path not found: {out_path:?}");
+
+        let out_content = fs::read_to_string(out_path).unwrap();
+        assert_eq!(out_content, "Hello, World!\n");
+    }
+
+    fn build_script_persisted(mode: &str, succeed: bool) {
+        let package_name = String::from("foo");
+
+        let command = if succeed {
+            r#"echo "Hello, World!" >> $out"#
+        } else {
+            "exit 42"
+        };
+
+        let manifest = formatdoc! {r#"
+            version = 1
+
+            [build.{package_name}]
+            sandbox = "{mode}"
+            command = '{command}'
+        "#};
+
+        let (flox, _temp_dir_handle) = flox_instance();
+        let mut env = new_path_environment(&flox, &manifest);
+
+        let output = assert_build_status(&flox, &mut env, &package_name, succeed);
+
+        let build_script_path_message_regex =
+            regex::Regex::new(r#"bash -e (.+-build.bash)|--argstr buildScript "(.+build.bash)""#)
+                .unwrap();
+
+        let build_script_path = match build_script_path_message_regex.captures(&output.stdout) {
+            Some(captures) => Path::new(
+                captures
+                    .get(1)
+                    .or_else(|| captures.get(2))
+                    .unwrap()
+                    .as_str(),
+            ),
+            None => panic!("$build_script_path not found in stdout"),
+        };
+
+        assert!(
+            build_script_path.exists(),
+            "build_script_path not found: {build_script_path:?}"
+        );
+    }
+
+    #[test]
+    fn build_script_persisted_pure_on_success() {
+        build_script_persisted("pure", true);
+    }
+
+    #[test]
+    fn build_script_persisted_pure_on_failure() {
+        build_script_persisted("pure", false);
+    }
+
+    #[test]
+    fn build_script_persisted_no_sandbox_on_success() {
+        build_script_persisted("off", true);
+    }
+
+    #[test]
+    fn build_script_persisted_no_sandbox_on_failure() {
+        build_script_persisted("off", false);
     }
 }

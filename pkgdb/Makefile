@@ -352,6 +352,7 @@ endif # ifeq (Linux,$(OS))
 # Save path for most recent build of flox-activation-scripts package
 # in a file, and automatically rebuild that file when assets change,
 # or overwrite it with the value from the environment if defined.
+CLEANFILES += .ACTIVATION_SCRIPTS_PACKAGE_DIR
 ifdef ACTIVATION_SCRIPTS_PACKAGE_DIR
   .ACTIVATION_SCRIPTS_PACKAGE_DIR: FORCE
 	@# Only update the file if the value has changed.
@@ -360,7 +361,8 @@ ifdef ACTIVATION_SCRIPTS_PACKAGE_DIR
 	( cmp $@ $@.new && rm $@.new ) || mv -f $@.new $@
 else
   _rebuild_paths = ../flake.nix ../flake.lock \
-    ../assets/activation-scripts ../pkgs/flox-activation-scripts
+    ../assets/activation-scripts ../pkgs/flox-activation-scripts \
+		../cli/flox-activations
   .ACTIVATION_SCRIPTS_PACKAGE_DIR: $(shell find $(_rebuild_paths) -type f)
 	$(NIX) build --print-out-paths .#flox-activation-scripts > $@
 endif

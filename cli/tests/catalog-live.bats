@@ -43,7 +43,6 @@ teardown_file() {
 
   run "$FLOX_BIN" install hello -vvv
   assert_success
-  assert_output --partial "using catalog client to lock"
 
   run "$FLOX_BIN" activate -- hello
   assert_success

@@ -1,0 +1,22 @@
+[package]
+name = "flox-core"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+blake3.workspace = true
+derive_more.workspace = true
+fslock.workspace = true
+log.workspace = true
+nix.workspace = true
+# should be a dev-dependency but test doesn't apply across crates
+proptest.workspace = true
+# should be a dev-dependency but test doesn't apply across crates
+proptest-derive.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tempfile.workspace = true
+time.workspace = true
+thiserror.workspace = true

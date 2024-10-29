@@ -285,15 +285,17 @@ on-activate = """
 """
 ```
 
-The `on-activate` script is not re-run when activations are nested.
-A nested activation can occur when an environment is already active and either
-`eval "$(flox activate)"` or `flox activate -- CMD` is run.
-In this scenario, `on-activate` is not re-run.
+The `on-activate` script is not re-run when multiple activations are run at the
+same time;
+for instance, if `flox activate` is run in two different shells, the first
+activation will run the hook,
+but the second will not.
+After all activations exit, the next `flox activate` will once again run the hook.
 Currently, environment variables set by the first run of the `on-activate`
-script are captured and then later set by the nested activation,
+script are captured and then set by activations that don't run `on-activate`,
 but this behavior may change.
 
-The `on-activate` script may be re-run by other commands;
+The `on-activate` script may be re-run by other `flox` commands;
 we may create ephemeral activations and thus run the script multiple times for
 commands such as `services start`.
 For this reason, it's best practice to make `on-activate` idempotent.

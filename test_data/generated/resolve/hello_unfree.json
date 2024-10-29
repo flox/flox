@@ -10,12 +10,12 @@
           {
             "attr_path": "hello-unfree",
             "broken": false,
-            "derivation": "/nix/store/ccyv5h563wfbarllk6fyzfb4k3y9gfaw-example-unfree-package-1.0.drv",
+            "derivation": "/nix/store/y36wsky0w68cr3yyhww9pf9pk2lgvvhj-example-unfree-package-1.0.drv",
             "description": "Example package with unfree license (for testing)",
             "insecure": false,
             "install_id": "hello-unfree",
             "license": "Unfree",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "example-unfree-package-1.0",
             "outputs": [
               {
@@ -27,10 +27,10 @@
               "out"
             ],
             "pname": "hello-unfree",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -46,7 +46,7 @@
             "insecure": false,
             "install_id": "hello-unfree",
             "license": "Unfree",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "example-unfree-package-1.0",
             "outputs": [
               {
@@ -58,10 +58,10 @@
               "out"
             ],
             "pname": "hello-unfree",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -72,12 +72,12 @@
           {
             "attr_path": "hello-unfree",
             "broken": false,
-            "derivation": "/nix/store/whppla48pcf1103vfwgbqkxw82diqkj4-example-unfree-package-1.0.drv",
+            "derivation": "/nix/store/nbl5gsg9gj0h1cd2xz5d2nidkqrsypk4-example-unfree-package-1.0.drv",
             "description": "Example package with unfree license (for testing)",
             "insecure": false,
             "install_id": "hello-unfree",
             "license": "Unfree",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "example-unfree-package-1.0",
             "outputs": [
               {
@@ -89,10 +89,10 @@
               "out"
             ],
             "pname": "hello-unfree",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -108,7 +108,7 @@
             "insecure": false,
             "install_id": "hello-unfree",
             "license": "Unfree",
-            "locked_url": "https://github.com/flox/nixpkgs?rev=1355a0cbfeac61d785b7183c0caaec1f97361b43",
+            "locked_url": "https://github.com/flox/nixpkgs?rev=27e30d177e57d912d614c88c622dcfdb2e6e6515",
             "name": "example-unfree-package-1.0",
             "outputs": [
               {
@@ -120,10 +120,10 @@
               "out"
             ],
             "pname": "hello-unfree",
-            "rev": "1355a0cbfeac61d785b7183c0caaec1f97361b43",
-            "rev_count": 679633,
-            "rev_date": "2024-09-10T15:58:18Z",
-            "scrape_date": "2024-09-12T03:12:46Z",
+            "rev": "27e30d177e57d912d614c88c622dcfdb2e6e6515",
+            "rev_count": 687768,
+            "rev_date": "2024-10-01T17:15:20Z",
+            "scrape_date": "2024-10-03T03:20:29Z",
             "stabilities": [
               "unstable"
             ],
@@ -132,7 +132,7 @@
             "version": "example-unfree-package-1.0"
           }
         ],
-        "page": 679633,
+        "page": 687768,
         "url": ""
       }
     }

@@ -182,13 +182,21 @@ wait_for_watchdogs() {
     # The `sed` removes any leading whitespace,
     # that is present in the output of `ps` on linux aparently?!.
     # The `cut` just extracts the PID.
+
     local pids
     pids="$(
-      ps -eo pid,args \
+      ps -Ao pid,args \
       | grep flox-watchdog \
       | grep ${FLOX_DATA_DIR?} \
       | sed 's/^[[:blank:]]*//' \
       | cut -d' ' -f1)"
+
+    # Uncomment to debug which watchdogs are running.
+    #
+    # echo "FLOX_DATA_DIR => ${FLOX_DATA_DIR?}" >&3
+    # ps -Ao pid,args \
+    #  | grep flox-watchdog \
+    #  >&3
 
     if [ -n "${pids?}" ]; then
       echo "Waiting for pids: $pids" >&3
@@ -209,6 +217,8 @@ wait_for_watchdogs() {
         fi
       done
     fi
+  else
+    echo "FLOX_DATA_DIR not set, cannot wait for watchdogs." >&3
   fi
 
 }
@@ -275,6 +285,13 @@ dummy_registry() {
 EOF
 )"
   echo "$REGISTRY_CONTENT"
+}
+
+cat_teardown_fifo() {
+  if [ -n "${TEARDOWN_FIFO:-}" ]; then
+    timeout 1 cat "$TEARDOWN_FIFO"
+  fi
+
 }
 
 # ---------------------------------------------------------------------------- #

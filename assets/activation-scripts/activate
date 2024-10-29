@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
-# shellcheck shell=bash disable=SC1090,SC1091
+# shellcheck shell=bash
+
+set -euo pipefail
+
+export _activate_d="@out@/activate.d"
 export _bash="@bash@"
 export _coreutils="@coreutils@"
-export _gnused="@gnused@"
-export _setsid="@setsid@"
+export _flox_activations="@flox_activations@"
 export _getopt="@getopt@"
-export _process_compose="@process-compose@"
+export _gnused="@gnused@"
 export _jq="@jq@"
-export _zdotdir="@out@/activate.d/zdotdir"
+export _process_compose="@process-compose@"
+export _setsid="@setsid@"
 export _tcsh_home="@out@/activate.d/tcsh_home"
+export _zdotdir="@out@/activate.d/zdotdir"
 
 # Top-level Flox environment activation script.
 
@@ -28,85 +33,7 @@ export _FLOX_SET_PROMPT="${_FLOX_SET_PROMPT:-true}"
 export FLOX_PROMPT_COLOR_1="${FLOX_PROMPT_COLOR_1:-99}"
 export FLOX_PROMPT_COLOR_2="${FLOX_PROMPT_COLOR_2:-141}"
 
-NOT_READY="SOCKET_NOT_READY"
-
-poll_services_status () {
-  local socket_file="$1"
-  local output
-  output=$($_process_compose process list -u "$socket_file" -o json 2>&1)
-  # Save whatever the current `pipefail` behavior is so it can be restored
-  local saved_options
-  saved_options=$(set +o)
-  # We don't want to exit on pipe failures here
-  set +o pipefail
-  local parsed_json
-  parsed_json=$(echo "$output" | "$_jq" -r -c '.[0].status' 2>/dev/null)
-  # Restore the previous shell settings
-  eval "$saved_options"
-  # `parsed_json` will be a null string if anything went wrong
-  echo "${parsed_json:-${NOT_READY}}"
-}
-
-wait_for_services_socket () {
-  local socket_file="$1"
-  local status
-  status=$(poll_services_status "$socket_file")
-  while [ "$status" == "$NOT_READY" ]; do
-    "$_coreutils/bin/sleep" 0.02
-    status=$(poll_services_status "$socket_file")
-  done
-}
-
-start_services_blocking () {
-  local config_file="$1"; shift
-  local socket_file="$1"; shift
-  local log_dir="$1"
-  local timestamp_ms
-  timestamp_ms=$("$_coreutils/bin/date" "+%Y%m%d%H%M%S%6N")
-  local log_file
-  log_file="${log_dir}/services.${timestamp_ms}.log"
-  # process-compose will vomit all over your log files unless you tell it otherwise
-  local previous_no_color="${NO_COLOR:-}"
-  export NO_COLOR=1
-  # [sic] within scripts setsid needs to be called twice to work properly:
-  # <https://stackoverflow.com/a/25398828>
-
-  # flox services start [service...] needs to be able to start some but not all
-  # services
-  if [ -n "$_FLOX_SERVICES_TO_START" ]; then
-    readarray -t services_to_start < <(echo "$_FLOX_SERVICES_TO_START" | "$_jq" -r '.[]')
-    COMPOSE_SHELL="$_bash" "$_setsid" "$_setsid" "$_process_compose" up "${services_to_start[@]}" -f "$config_file" -u "$socket_file" -L "$log_file" --tui=false >/dev/null 2>&1 &
-  else
-    COMPOSE_SHELL="$_bash" "$_setsid" "$_setsid" "$_process_compose" up -f "$config_file" -u "$socket_file" -L "$log_file" --tui=false >/dev/null 2>&1 &
-  fi
-  # Make these functions available in subshells so that `timeout` can call them
-  export -f wait_for_services_socket poll_services_status
-  local activation_timeout="${_FLOX_SERVICES_ACTIVATE_TIMEOUT:-1}"
-  local blocking_command="wait_for_services_socket \"$socket_file\""
-  if ! "$_coreutils/bin/timeout" "$activation_timeout" bash -c "$blocking_command"; then
-    if [ ! -e "$log_file" ]; then
-      # If something failed before process-compose could write to the log file,
-      # don't tell a user to look at the log file
-      echo "❌ Failed to start services" >&2
-      exit 1
-    else
-      echo "❌ Failed to start services:" >&2
-      "$_coreutils/bin/cat" "$log_file" >&2
-      exit 1
-    fi
-  fi
-  # Unset the helper functions so that they aren't passed to the user shell/command
-  unset wait_for_services_socket poll_services_status
-  if [ -z "$previous_no_color" ]; then
-    # It wasn't previously set
-    unset NO_COLOR
-  else
-    export NO_COLOR="$previous_no_color"
-  fi
-}
-
 # Parse command-line arguments.
-# shellcheck disable=SC1091
 OPTIONS=c:
 LONGOPTS=command:,noprofile,turbo
 USAGE="Usage: $0 [-c \"<cmd> <args>\"] [--turbo] [--noprofile]"
@@ -127,12 +54,12 @@ FLOX_TURBO="${FLOX_TURBO:-}"
 FLOX_NOPROFILE="${FLOX_NOPROFILE:-}"
 while true; do
   case "$1" in
-    -c|--command)
+    -c | --command)
       shift
       if [ -z "$1" ]; then
-	echo "Option -c requires an argument." >&2
-	echo "$USAGE" >&2
-	exit 1
+        echo "Option -c requires an argument." >&2
+        echo "$USAGE" >&2
+        exit 1
       fi
       FLOX_CMD="$1"
       shift
@@ -179,11 +106,18 @@ fi
 #       the value coming from the CLI for now because it won't be set for
 #       container invocations, and it would have the incorrect value for
 #       nested flox activations.
-_FLOX_ENV="$( $_coreutils/bin/dirname -- "${BASH_SOURCE[0]}" )"
-if [ -n "$FLOX_ENV" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
+_FLOX_ENV="$($_coreutils/bin/dirname -- "${BASH_SOURCE[0]}")"
+if [ -n "${FLOX_ENV:-}" ] && [ "$FLOX_ENV" != "$_FLOX_ENV" ]; then
   echo "WARN: detected change in FLOX_ENV: $FLOX_ENV -> $_FLOX_ENV" >&2
 fi
 export FLOX_ENV="$_FLOX_ENV"
+
+# Set a default for _FLOX_ACTIVATE_STORE_PATH for container and build
+# invocations
+if [ -z "${_FLOX_ACTIVATE_STORE_PATH:-}" ]; then
+  _FLOX_ACTIVATE_STORE_PATH="$("$_coreutils/bin/readlink" -f "$FLOX_ENV")"
+fi
+
 
 # The rust CLI contains sophisticated logic to set $FLOX_SHELL based on the
 # process listening on STDOUT, but that won't happen when activating from
@@ -194,339 +128,53 @@ unset FLOX_SHELL
 
 # Bail if the shell is unsupported.
 case "$_flox_shell" in
-  *bash)
-    ;;
-  *fish)
-    ;;
-  *tcsh)
-    ;;
-  *zsh)
-    ;;
+  *bash) ;;
+  *fish) ;;
+  *tcsh) ;;
+  *zsh) ;;
   *)
     echo "Unsupported shell: $_flox_shell" >&2
     exit 1
     ;;
 esac
 
-# Set all other variables derived from FLOX_ENV. We previously did this
-# from within the rust CLI but we've moved it to this top-level activation
-# script so that it can be invoked without using the flox CLI, e.g. as
-# required when invoking the environment from a container entrypoint.
+# The CLI is responsible for erroring if the environment is already active.
+# We can start-or-attach no matter what
 
-# Identify if this environment has been activated before. If it has,
-# then it will appear as an element in the colon-separated FLOX_ENV_DIRS
-# variable, and if it hasn't then we'll prepend it to the list and set
-# all the other related env variables.
-declare -a flox_env_dirs
-IFS=: read -ra flox_env_dirs <<< "${FLOX_ENV_DIRS_activate}"
-declare -i flox_env_found=0
-for d in "${flox_env_dirs[@]}"; do
-  if [ "$d" = "$FLOX_ENV" ]; then
-    flox_env_found=1
-    break
-  fi
-done
-if [ $flox_env_found -eq 0 ] || [ "$_FLOX_ACTIVATE_FORCE_REACTIVATE" == true ]; then
+# TODO: we could restore _start_env from the prior activation when performing an ephemeral activation
 
-  # If interactive and a command has not been passed, this is an interactive
-  # activate,
-  # and we print a message to the user
-  # TODO: should this be printed after scripts?
-  # Should it be in Rust using message::updated?
-  if [ -t 1 ] && [ $# -eq 0 ]; then
-    echo "✅ You are now using the environment '$FLOX_ENV_DESCRIPTION'." >&2
-    echo "To stop using this environment, type 'exit'" >&2
-    echo >&2
-  fi
-
-  if [ $flox_env_found -eq 0 ]; then
-    # First activation of this environment. Snapshot environment to start.
-    _start_env="$($_coreutils/bin/mktemp --suffix=.start-env)"
-    export | $_coreutils/bin/sort > "$_start_env"
-  else # we know "$_FLOX_ACTIVATE_FORCE_REACTIVATE" == true
-    # TODO: restore _start_env
-    :
-  fi
-
-  # Capture PID of this "first" activation. This provides the unique
-  # identifier with which to refer to environment variables associated
-  # with this environment activation.
-  FLOX_ENV_PID="$$"
-
-  # Set environment variables which represent the cumulative layering
-  # of flox environments. For the most part this involves prepending
-  # to the existing variables of the same name.
-  # TODO: reconcile with CLI which should be setting these. Setting
-  #       "*_activate" variables to indicate the ones we've seen and
-  #       processed on the activate script side, and ultimately also
-  #       for testing/comparison against the CLI-maintained equivalents.
-  FLOX_ENV_DIRS_activate="$FLOX_ENV${FLOX_ENV_DIRS_activate:+:$FLOX_ENV_DIRS_activate}"
-  FLOX_ENV_LIB_DIRS_activate="$FLOX_ENV/lib${FLOX_ENV_LIB_DIRS_activate:+:$FLOX_ENV_LIB_DIRS_activate}"
-  FLOX_PROMPT_ENVIRONMENTS_activate="$FLOX_ENV_DESCRIPTION${FLOX_PROMPT_ENVIRONMENTS_activate:+ $FLOX_PROMPT_ENVIRONMENTS_activate}"
-  export FLOX_ENV_DIRS_activate FLOX_ENV_LIB_DIRS_activate FLOX_PROMPT_ENVIRONMENTS_activate
-
-  # Process the flox environment customizations, which includes (amongst
-  # other things) prepending this environment's bin directory to the PATH.
-  if [ -d "$FLOX_ENV/etc/profile.d" ]; then
-    declare -a _prof_scripts;
-    read -r -d '' -a _prof_scripts < <(
-      cd "$FLOX_ENV/etc/profile.d" || exit;
-      shopt -s nullglob;
-      echo *.sh;
-    );
-    for p in "${_prof_scripts[@]}"; do . "$FLOX_ENV/etc/profile.d/$p"; done
-    unset _prof_scripts;
-  fi
-
-  # Set static environment variables from the manifest.
-  if [ -f "$FLOX_ENV/activate.d/envrc" ]; then
-    source "$FLOX_ENV/activate.d/envrc"
-  fi
-
-  # Source the hook-on-activate script if it exists.
-  if [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
-    # Nothing good can come from output printed to stdout in the
-    # user-provided hook scripts because these can get interpreted
-    # as configuration statements by the "in-place" activation
-    # mode. So, we'll redirect stdout to stderr.
-    source "$FLOX_ENV/activate.d/hook-on-activate" 1>&2
-  fi
-
-  # We only need to capture the ending environment when
-  # "$_FLOX_ACTIVATE_FORCE_REACTIVATE" isn't set
-  if [ $flox_env_found -eq 0 ]; then
-    # Capture ending environment.
-    _end_env="$($_coreutils/bin/mktemp --suffix=.$FLOX_ENV_PID.end-env)"
-    export | $_coreutils/bin/sort > "$_end_env"
-
-    # The userShell initialization scripts that follow have the potential to undo
-    # the environment modifications performed above, so we must first calculate
-    # all changes made to the environment so far so that we can restore them after
-    # the userShell initialization scripts have run. We use the `comm(1)` command
-    # to compare the starting and ending environment captures (think of it as a
-    # better diff for comparing sorted files), and `sed(1)` to format the output
-    # in the best format for use in each language-specific activation script.
-    _add_env="$($_coreutils/bin/mktemp --suffix=.$FLOX_ENV_PID.add-env)"
-    _del_env="$($_coreutils/bin/mktemp --suffix=.$FLOX_ENV_PID.del-env)"
-
-    # Export tempfile paths for use within shell-specific activation scripts.
-    export _add_env _del_env
-
-    # Capture environment variables to _set_ as "key=value" pairs.
-    # comm -13: only env declarations unique to `$_end_env` (new declarations)
-    $_coreutils/bin/comm -13 "$_start_env" "$_end_env" | \
-      $_gnused/bin/sed -e 's/^declare -x //' > "$_add_env"
-
-    # Capture environment variables to _unset_ as a list of keys.
-    # TODO: remove from $_del_env keys set in $_add_env
-    $_coreutils/bin/comm -23 "$_start_env" "$_end_env" | \
-      $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
-
-    # Don't need these anymore.
-    $_coreutils/bin/rm -f "$_start_env" "$_end_env"
-  fi
-
+# sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
+# Don't eval on one line so that we exit if flox-activations fails
+if [ -n "${FLOX_RUNTIME_DIR:-}" ]; then
+  to_eval="$($_flox_activations --runtime-dir "$FLOX_RUNTIME_DIR" start-or-attach --pid "$$" --flox-env "$FLOX_ENV" --store-path "$_FLOX_ACTIVATE_STORE_PATH")"
 else
+  to_eval="$($_flox_activations start-or-attach --pid "$$" --flox-env "$FLOX_ENV" --store-path "$_FLOX_ACTIVATE_STORE_PATH")"
+fi
+eval "$to_eval"
+export _FLOX_ACTIVATION_STATE_DIR _FLOX_ACTIVATION_ID
 
-  # "Reactivation" of this environment.
-
-  # If we're attempting to launch an interactive shell then just print a
-  # message to say that the environment has already been activated.
-  if [ -t 1 ] && [ $# -eq 0 ]; then
-    # TODO: should this be in Rust using message::error?
-    echo "❌ ERROR: Environment '$FLOX_ENV_DESCRIPTION' is already active." >&2
-    exit 1
-  fi
-
-  # Assert that the expected _{add,del}_env variables are present.
-  if [ -z "$_add_env" ] || [ -z "$_del_env" ]; then
-    echo "ERROR (activate): \$_add_env and \$_del_env not found in environment" >&2;
-    if [ -h "$FLOX_ENV" ]; then
-      echo "moving $FLOX_ENV link to $FLOX_ENV.$$ - please try again" >&2;
-      $_coreutils/bin/mv "$FLOX_ENV" "$FLOX_ENV.$$"
-    fi
-    exit 1;
-  fi
-
-  # Replay the environment for the benefit of this shell.
-  eval "$($_gnused/bin/sed -e 's/^/unset /' -e 's/$/;/' "$_del_env")"
-  eval "$($_gnused/bin/sed -e 's/^/export /' -e 's/$/;/' "$_add_env")"
-
+if [ "$_FLOX_ATTACH" == true ]; then
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/attach.bash"
+else
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/start.bash"
 fi
 
 # Start services before the shell or command is invoked
-if [ "$FLOX_ACTIVATE_START_SERVICES" == "true" ]; then
-  config_file="$FLOX_ENV/service-config.yaml"
-  start_services_blocking "$config_file" "$_FLOX_SERVICES_SOCKET" "$_FLOX_ENV_LOG_DIR"
+if [ "${FLOX_ACTIVATE_START_SERVICES:-}" == "true" ]; then
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/start-services.bash"
 fi
 
 # From this point on the activation process depends on the mode:
-
-# 1. "command" mode(s): invoke the user's shell with args that:
-#   a. defeat the shell's normal startup scripts
-#   b. source the relevant activation script
-#   c. invoke the command in one of "stdin" or "-c" modes
 if [ $# -gt 0 ]; then
-  if [ -n "$FLOX_TURBO" ]; then
-    # "turbo command" mode: simply invoke the provided command and args
-    # from *this shell* without paying the cost of invoking the userShell.
-    # We cannot exec this because we support bash shell internal commands.
-    "$@"
-    exit $?
-  fi
-  # "-c" command mode: pass both [2] arguments unaltered to shell invocation
-  case "$_flox_shell" in
-    *bash)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" --noprofile --norc -c "$*"
-      else
-        if [ -t 1 ]; then
-          exec "$_flox_shell" --noprofile --rcfile "$FLOX_ENV/activate.d/bash" -c "$*"
-        else
-          # The bash --rcfile option only works for interactive shells
-          # so we need to cobble together our own means of sourcing our
-          # startup script for non-interactive shells.
-          exec "$_flox_shell" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash && $*"
-        fi
-      fi
-      ;;
-    *fish)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" -c "$*"
-      else
-        exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $FLOX_ENV/activate.d/fish" -c "$*"
-      fi
-      ;;
-    *tcsh)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" -c "$*"
-      else
-        export FLOX_ORIG_HOME="$HOME"
-        export HOME="$_tcsh_home"
-        export FLOX_TCSH_INIT_SCRIPT="$FLOX_ENV/activate.d/tcsh"
-        exec "$_flox_shell" -m -c "$*"
-      fi
-      ;;
-    *zsh)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS -c "$*"
-      else
-        export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
-        export ZDOTDIR="$_zdotdir"
-        export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
-        # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
-        # automatically sourcing /etc/zshrc et al.
-        exec "$_flox_shell" -o NO_GLOBAL_RCS -c "$*"
-      fi
-      ;;
-    *)
-      echo "Unsupported shell: $_flox_shell" >&2
-      exit 1
-      ;;
-  esac
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/attach-command.bash"
+elif [ -t 1 ] || [ -n "${_FLOX_FORCE_INTERACTIVE:-}" ]; then
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/attach-interactive.bash"
+else
+  # shellcheck source-path=SCRIPTDIR/activate.d
+  source "${_activate_d}/attach-inplace.bash"
 fi
-
-# 2. "interactive" mode: invoke the user's shell with args that:
-#   a. defeat the shell's normal startup scripts
-#   b. source the relevant activation script
-if [ -t 1 ] || [ -n "$_FLOX_FORCE_INTERACTIVE" ]; then
-  case "$_flox_shell" in
-    *bash)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" --noprofile --norc
-      else
-        if [ -t 1 ]; then
-          exec "$_flox_shell" --noprofile --rcfile "$FLOX_ENV/activate.d/bash"
-        else
-          # The bash --rcfile option only works for interactive shells
-          # so we need to cobble together our own means of sourcing our
-          # startup script for non-interactive shells.
-          # XXX Is this case even a thing? What's the point of activating with
-          #     no command to be invoked and no controlling terminal from which
-          #     to issue commands?!? A broken docker experience maybe?!?
-          exec "$_flox_shell" --noprofile --norc -s <<< "source $FLOX_ENV/activate.d/bash"
-        fi
-      fi
-      ;;
-    *fish)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell"
-      else
-        exec "$_flox_shell" --init-command "set -gx _flox_activate_tracelevel $_flox_activate_tracelevel; source $FLOX_ENV/activate.d/fish"
-      fi
-      ;;
-    *tcsh)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" -f
-      else
-        export FLOX_ORIG_HOME="$HOME"
-        export HOME="$_tcsh_home"
-        export FLOX_TCSH_INIT_SCRIPT="$FLOX_ENV/activate.d/tcsh"
-        # The -m option is required for tcsh to source a .tcshrc file that
-        # the effective user does not own.
-        exec "$_flox_shell" -m
-      fi
-      ;;
-    *zsh)
-      if [ -n "$FLOX_NOPROFILE" ]; then
-        exec "$_flox_shell" -o NO_GLOBAL_RCS -o NO_RCS
-      else
-        export FLOX_ORIG_ZDOTDIR="$ZDOTDIR"
-        export ZDOTDIR="$_zdotdir"
-        export FLOX_ZSH_INIT_SCRIPT="$FLOX_ENV/activate.d/zsh"
-        # The "NO_GLOBAL_RCS" option is necessary to prevent zsh from
-        # automatically sourcing /etc/zshrc et al.
-        exec "$_flox_shell" -o NO_GLOBAL_RCS
-      fi
-      ;;
-    *)
-      echo "Unsupported shell: $_flox_shell" >&2
-      exit 1
-      ;;
-  esac
-fi
-
-# 3. "in-place" mode: emit activation commands in correct shell dialect
-
-# Finish by echoing the contents of the shell-specific activation script.
-# N.B. the output of these scripts may be eval'd with backticks which have
-# the effect of removing newlines from the output, so we must ensure that
-# the output is a valid shell script fragment when represented on a single
-# line.
-case "$_flox_shell" in
-  *bash)
-    echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
-    echo "export FLOX_ENV=\"$FLOX_ENV\";"
-    echo "export _add_env=\"$_add_env\";"
-    echo "export _del_env=\"$_del_env\";"
-    echo "source '$FLOX_ENV/activate.d/bash';"
-    ;;
-  *fish)
-    echo "set -gx _flox_activate_tracelevel \"$_flox_activate_tracelevel\";"
-    echo "set -gx FLOX_ENV \"$FLOX_ENV\";"
-    echo "set -gx _add_env \"$_add_env\";"
-    echo "set -gx _del_env \"$_del_env\";"
-    echo "source '$FLOX_ENV/activate.d/fish';"
-    ;;
-  *tcsh)
-    echo "setenv _flox_activate_tracelevel \"$_flox_activate_tracelevel\";"
-    echo "setenv FLOX_ENV \"$FLOX_ENV\";"
-    echo "setenv _add_env \"$_add_env\";"
-    echo "setenv _del_env \"$_del_env\";"
-    echo "source '$FLOX_ENV/activate.d/tcsh';"
-    ;;
-  *zsh)
-    echo "export _flox_activate_tracelevel=\"$_flox_activate_tracelevel\";"
-    echo "export FLOX_ENV=\"$FLOX_ENV\";"
-    echo "export FLOX_ORIG_ZDOTDIR=\"$ZDOTDIR\";"
-    echo "export ZDOTDIR=\"$_zdotdir\";"
-    echo "export FLOX_ZSH_INIT_SCRIPT=\"$FLOX_ENV/activate.d/zsh\";"
-    echo "export _add_env=\"$_add_env\";"
-    echo "export _del_env=\"$_del_env\";"
-    echo "source '$FLOX_ENV/activate.d/zsh';"
-    ;;
-  *)
-    echo "Unsupported shell: $_flox_shell" >&2
-    exit 1
-    ;;
-esac

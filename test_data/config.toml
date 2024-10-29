@@ -81,6 +81,10 @@ cmd = '''
 '''
 ignore_cmd_errors = true # build will fail on macos, thats fine
 
+[resolve.influxdb2]
+pre_cmd = "flox init"
+cmd = "flox install influxdb2"
+
 [resolve.darwin_ps]
 pre_cmd = '''
     flox init
@@ -110,6 +114,14 @@ cmd = "flox install hello"
 [resolve.hello_unfree]
 pre_cmd = "flox init"
 cmd = "flox install hello-unfree"
+
+[resolve.jupyter_with_extensions]
+pre_cmd = "flox init"
+cmd = "flox install jupyter python312Packages.jupyterlab-widgets python312Packages.jupyterlab-git"
+
+[resolve.go]
+pre_cmd = "flox init"
+cmd = "flox install go"
 
 [resolve.krb5_after_prereqs_installed]
 files = ["envs/krb5_prereqs/manifest.toml"]
@@ -156,6 +168,11 @@ cmd = "flox install overmind"
 pre_cmd = "flox init"
 cmd = "flox install package"
 ignore_cmd_errors = true
+
+# This is useful for testing insecure packages
+[resolve.python2]
+pre_cmd = "flox init"
+cmd = "flox install python2"
 
 [resolve.python3]
 pre_cmd = "flox init"
@@ -317,6 +334,19 @@ pre_cmd = '''
 '''
 cmd = "flox init --auto-setup"
 
+[envs.go_gcc]
+skip_if_output_exists = "envs/go_gcc"
+files = ["envs/go_gcc/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/go_gcc"
+    mkdir -p "$env_dir"
+    cp .flox/env/manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+'''
+
 [envs.kitchen_sink]
 skip_if_output_exists = "envs/kitchen_sink"
 files = ["envs/kitchen_sink/manifest.toml"]
@@ -339,6 +369,96 @@ cmd = "flox edit -f manifest.toml"
 post_cmd = '''
     envs_output_dir="$(dirname $RESPONSE_FILE)"
     env_dir="$envs_output_dir/krb5_prereqs"
+    mkdir -p "$env_dir"
+    cp manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
+'''
+
+# Used as an environment with a macOS-only package
+[envs.darwin_ps]
+skip_if_output_exists = "envs/darwin_ps"
+files = ["envs/darwin_ps/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/darwin_ps"
+    mkdir -p "$env_dir"
+    cp manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
+'''
+
+# Used as an environment with a Linux-only package
+[envs.bpftrace]
+skip_if_output_exists = "envs/bpftrace"
+files = ["envs/bpftrace/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/bpftrace"
+    mkdir -p "$env_dir"
+    cp manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
+'''
+
+# Used in list tests for packages whose install IDs != pkg-path
+[envs.hello_as_greeting]
+skip_if_output_exists = "envs/hello_as_greeting"
+files = ["envs/hello_as_greeting/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/hello_as_greeting"
+    mkdir -p "$env_dir"
+    cp manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
+'''
+
+# Used for list tests that only display packages for the current system
+[envs.hello_and_htop_for_no_system]
+skip_if_output_exists = "envs/hello_and_htop_for_no_system"
+files = ["envs/hello_and_htop_for_no_system/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/hello_and_htop_for_no_system"
+    mkdir -p "$env_dir"
+    cp manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
+'''
+
+# This is used as a package that doesn't have a version
+[envs.influxdb2]
+skip_if_output_exists = "envs/influxdb2"
+files = ["envs/influxdb2/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/influxdb2"
+    mkdir -p "$env_dir"
+    cp manifest.toml "$env_dir/manifest.toml"
+    cp .flox/env/manifest.lock "$env_dir/manifest.lock"
+    mv "$RESPONSE_FILE" "$env_dir/$(basename $RESPONSE_FILE)"
+'''
+
+# Used in list tests to show the full pkg-path (pip)
+[envs.pip]
+skip_if_output_exists = "envs/pip"
+files = ["envs/pip/manifest.toml"]
+pre_cmd = "flox init"
+cmd = "flox edit -f manifest.toml"
+post_cmd = '''
+    envs_output_dir="$(dirname $RESPONSE_FILE)"
+    env_dir="$envs_output_dir/pip"
     mkdir -p "$env_dir"
     cp manifest.toml "$env_dir/manifest.toml"
     cp .flox/env/manifest.lock "$env_dir/manifest.lock"

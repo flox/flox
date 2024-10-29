@@ -1,0 +1,208 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "version": 1,
+    "install": {
+      "gcc": {
+        "pkg-path": "gcc",
+        "systems": [
+          "aarch64-linux",
+          "x86_64-linux"
+        ]
+      },
+      "go": {
+        "pkg-path": "go"
+      }
+    },
+    "hook": {},
+    "profile": {},
+    "options": {
+      "allow": {
+        "licenses": []
+      },
+      "semver": {}
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "gcc",
+      "broken": false,
+      "derivation": "/nix/store/wb7cqg9c862zy0kglcapx2rq67fczvsk-gcc-wrapper-13.3.0.drv",
+      "description": "GNU Compiler Collection, version 13.3.0 (wrapper script)",
+      "install_id": "gcc",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2768c7d042a37de65bb1b5b3268fc987e534c49d",
+      "name": "gcc-wrapper-13.3.0",
+      "pname": "gcc",
+      "rev": "2768c7d042a37de65bb1b5b3268fc987e534c49d",
+      "rev_count": 696158,
+      "rev_date": "2024-10-23T06:41:50Z",
+      "scrape_date": "2024-10-25T03:59:03Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "wrapper-13.3.0",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "info": "/nix/store/01yyzggvfrw4f0a5izcysj6xnzfmblxh-gcc-wrapper-13.3.0-info",
+        "man": "/nix/store/1j6i8cp6m7r6p7hmkh9wwyv7drv1550l-gcc-wrapper-13.3.0-man",
+        "out": "/nix/store/z37lqx549cl99dzz12ghsww0zjrifa1y-gcc-wrapper-13.3.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gcc",
+      "broken": false,
+      "derivation": "/nix/store/izlcp4pxjhwab669sjq1iy8smp5a7b83-gcc-wrapper-13.3.0.drv",
+      "description": "GNU Compiler Collection, version 13.3.0 (wrapper script)",
+      "install_id": "gcc",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2768c7d042a37de65bb1b5b3268fc987e534c49d",
+      "name": "gcc-wrapper-13.3.0",
+      "pname": "gcc",
+      "rev": "2768c7d042a37de65bb1b5b3268fc987e534c49d",
+      "rev_count": 696158,
+      "rev_date": "2024-10-23T06:41:50Z",
+      "scrape_date": "2024-10-25T03:59:03Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "wrapper-13.3.0",
+      "outputs_to_install": [
+        "out",
+        "man"
+      ],
+      "outputs": {
+        "info": "/nix/store/rjhksxfbbrrchf3xsxc8mf7j0k0rwca8-gcc-wrapper-13.3.0-info",
+        "man": "/nix/store/78ikl7wnjyx1dw6lg1slflv0c60anrs7-gcc-wrapper-13.3.0-man",
+        "out": "/nix/store/vh9fsdhgxcnab2qk7vdp2palkkn6j3cp-gcc-wrapper-13.3.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "go",
+      "broken": false,
+      "derivation": "/nix/store/m82cyrgfqssf9aqfas6nhlrppiw21yhl-go-1.23.2.drv",
+      "description": "Go Programming language",
+      "install_id": "go",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2768c7d042a37de65bb1b5b3268fc987e534c49d",
+      "name": "go-1.23.2",
+      "pname": "go",
+      "rev": "2768c7d042a37de65bb1b5b3268fc987e534c49d",
+      "rev_count": 696158,
+      "rev_date": "2024-10-23T06:41:50Z",
+      "scrape_date": "2024-10-25T03:59:03Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.23.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/35jikx2wg5r0qj47sic0p99bqnmwi6cn-go-1.23.2"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "go",
+      "broken": false,
+      "derivation": "/nix/store/fvhf2xd1fis6ris4dviqzvnipc7p5gj0-go-1.23.2.drv",
+      "description": "Go Programming language",
+      "install_id": "go",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2768c7d042a37de65bb1b5b3268fc987e534c49d",
+      "name": "go-1.23.2",
+      "pname": "go",
+      "rev": "2768c7d042a37de65bb1b5b3268fc987e534c49d",
+      "rev_count": 696158,
+      "rev_date": "2024-10-23T06:41:50Z",
+      "scrape_date": "2024-10-25T03:59:03Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.23.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/6bx6d90kpy537yab22wja70ibpp4gkww-go-1.23.2"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "go",
+      "broken": false,
+      "derivation": "/nix/store/a9jji6d0ic7ix8vjw888kmpgcgbkck1a-go-1.23.2.drv",
+      "description": "Go Programming language",
+      "install_id": "go",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2768c7d042a37de65bb1b5b3268fc987e534c49d",
+      "name": "go-1.23.2",
+      "pname": "go",
+      "rev": "2768c7d042a37de65bb1b5b3268fc987e534c49d",
+      "rev_count": 696158,
+      "rev_date": "2024-10-23T06:41:50Z",
+      "scrape_date": "2024-10-25T03:59:03Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.23.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/yi89mimkmw48qhzrll1aaibxbvllpsjv-go-1.23.2"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "go",
+      "broken": false,
+      "derivation": "/nix/store/k4sd1nf7nl549wcyx4z3g59sxd2h8xim-go-1.23.2.drv",
+      "description": "Go Programming language",
+      "install_id": "go",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=2768c7d042a37de65bb1b5b3268fc987e534c49d",
+      "name": "go-1.23.2",
+      "pname": "go",
+      "rev": "2768c7d042a37de65bb1b5b3268fc987e534c49d",
+      "rev_count": 696158,
+      "rev_date": "2024-10-23T06:41:50Z",
+      "scrape_date": "2024-10-25T03:59:03Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.23.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/klw1ipjsqx1np7pkk833x7sad7f3ivv9-go-1.23.2"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ]
+}

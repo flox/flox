@@ -4,7 +4,7 @@
 #
 #
 # ---------------------------------------------------------------------------- #
-{nlohmann_json}:
+{ nlohmann_json }:
 nlohmann_json.overrideAttrs (prev: {
   postFixup = ''
     sed -i                                                                  \
@@ -17,4 +17,3 @@ nlohmann_json.overrideAttrs (prev: {
 #
 #
 # ============================================================================ #
-

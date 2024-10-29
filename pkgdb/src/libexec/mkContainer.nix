@@ -9,15 +9,28 @@
   system,
   containerSystem,
   containerName ? "flox-env-container",
-}: let
+  containerTag ? null,
+}:
+let
   environment = builtins.storePath environmentOutPath;
   pkgs = nixpkgsFlake.legacyPackages.${system};
   containerPkgs = nixpkgsFlake.legacyPackages.${containerSystem};
   lib = pkgs.lib;
-  lowPriority = pkg: pkg.overrideAttrs (old: old // {meta = (old.meta or {}) // {priority = 10000;};});
+  lowPriority =
+    pkg:
+    pkg.overrideAttrs (
+      old:
+      old
+      // {
+        meta = (old.meta or { }) // {
+          priority = 10000;
+        };
+      }
+    );
 
   buildLayeredImageArgs = {
     name = containerName;
+    tag = containerTag;
     # symlinkJoin fails when drv contains a symlinked bin directory, so wrap in an additional buildEnv
     contents = pkgs.buildEnv {
       name = "contents";
@@ -42,7 +55,7 @@
       #   podman run -i [SIC]
       #     -> launches crippled interactive shell with no controlling
       #        terminal .. kinda useless
-      Entrypoint = ["${environment}/activate"];
+      Entrypoint = [ "${environment}/activate" ];
 
       Env = lib.mapAttrsToList (name: value: "${name}=${value}") {
         "FLOX_ENV" = environment;
@@ -57,4 +70,4 @@
     };
   };
 in
-  pkgs.dockerTools.streamLayeredImage buildLayeredImageArgs
+pkgs.dockerTools.streamLayeredImage buildLayeredImageArgs
