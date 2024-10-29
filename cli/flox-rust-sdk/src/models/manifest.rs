@@ -1564,47 +1564,52 @@ pub(super) mod test {
         };
 
         let expected_string = indoc! {r#"
-            ## Flox Environment Manifest ------------------------------------------------
+            ## Flox Environment Manifest -----------------------------------------
             ##
-            ##   EVERYTHING you need to know about the MANIFEST is explained here:
+            ##   _Everything_ you need to know about the _manifest_ is here:
             ##
             ##               https://flox.dev/docs/concepts/manifest
             ##
-            ## --------------------------------------------------------------------------
-            version = 1  # Flox manifest version managed by Flox CLI
+            ## -------------------------------------------------------------------
+            # Flox manifest version managed by Flox CLI
+            version = 1
 
 
-            ## Install Packages ---------------------------------------------------------
+            ## Install Packages --------------------------------------------------
             ##  $ flox install gum  <- puts a package in [install] section below
             ##  $ flox search gum   <- search for a package
             ##  $ flox show gum     <- show all versions of a package
-            ## --------------------------------------------------------------------------
+            ## -------------------------------------------------------------------
             [install]
             # gum.pkg-path = "gum"
             # gum.version = "^0.14.5"
 
 
-            ## Environment Variables ----------------------------------------------------
+            ## Environment Variables ---------------------------------------------
             ##  ... available for use in the activated environment
-            ##      as well as [hook] and [profile] scripts below.
-            ## --------------------------------------------------------------------------
+            ##      as well as [hook], [profile] scripts and [services] below.
+            ## -------------------------------------------------------------------
             [vars]
             # INTRO_MESSAGE = "It's gettin' Flox in here"
 
 
-            ## Activation Hook ----------------------------------------------------------
+            ## Activation Hook ---------------------------------------------------
             ##  ... run by _bash_ shell when you run 'flox activate'.
-            ## --------------------------------------------------------------------------
+            ## -------------------------------------------------------------------
             [hook]
             # on-activate = '''
             #   # -> Set variables, create files and directories
             #   # -> Perform initialization steps, e.g. create a python venv
+            #   # -> Useful environment variables:
+            #   #      - FLOX_ENV_PROJECT=/home/user/example
+            #   #      - FLOX_ENV=/home/user/example/.flox/run
+            #   #      - FLOX_ENV_CACHE=/home/user/example/.flox/cache
             # '''
 
 
-            ## Profile script -----------------------------------------------------------
+            ## Profile script ----------------------------------------------------
             ## ... sourced by _your shell_ when you run 'flox activate'.
-            ## --------------------------------------------------------------------------
+            ## -------------------------------------------------------------------
             [profile]
             # common = '''
             #   gum style \
@@ -1618,23 +1623,26 @@ pub(super) mod test {
             # fish = ...
 
 
-            ## Services -----------------------------------------------------------------
-            ##  $ flox services start   <- Starts all services
-            ##  $ flox services status  <- Status of running services
-            ## --------------------------------------------------------------------------
+            ## Services ----------------------------------------------------------
+            ##  $ flox services start             <- Starts all services
+            ##  $ flox services status            <- Status of running services
+            ##  $ flox activate --start-services  <- Activates & starts all
+            ## -------------------------------------------------------------------
             [services]
             # serve.command = "python3 -m http.server"
 
 
-            ## Other Environment Options ------------------------------------------------
+            ## Other Environment Options -----------------------------------------
             [options]
-            systems = [ # Systems that environment is compatible with
+            # Systems that environment is compatible with
+            systems = [
               "aarch64-darwin",
               "aarch64-linux",
               "x86_64-darwin",
               "x86_64-linux",
             ]
-            # cuda-detection = false  # Uncomment to disable CUDA detection.
+            # Uncomment to disable CUDA detection.
+            #cuda-detection = false
         "#};
 
         let manifest = RawManifest::new_documented(systems.as_slice(), &customization);
