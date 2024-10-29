@@ -515,13 +515,6 @@ impl UpdateNotification {
             Err(e) => Err(UpdateNotificationError::Io(e))?,
         };
 
-        let Ok(current_version) = FLOX_VERSION.parse::<FloxVersion>() else {
-            return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
-                "version '{}' is invalid.",
-                *FLOX_VERSION
-            )));
-        };
-
         let new_version_str = get_latest_version_future.await?;
         let Ok(new_version) = new_version_str.parse::<FloxVersion>() else {
             return Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
@@ -529,10 +522,8 @@ impl UpdateNotification {
             )));
         };
 
-        match current_version.partial_cmp(&new_version) {
-            None => Err(UpdateNotificationError::WeMayHaveMessedUp(anyhow!(
-                "Cannot compare the current version {current_version} to {new_version}"
-            ))),
+        match FLOX_VERSION.partial_cmp(&new_version) {
+            None => Ok(UpdateCheckResult::Skipped),
             Some(std::cmp::Ordering::Less) => {
                 Ok(UpdateCheckResult::UpdateAvailable(UpdateNotification {
                     new_version: new_version.to_string(),
@@ -1942,7 +1933,7 @@ mod tests {
 
         let result = UpdateNotification::check_for_update_inner(
             notification_file.clone(),
-            async { Ok((*FLOX_VERSION).clone()) },
+            async { Ok((*FLOX_VERSION).to_string()) },
             UPDATE_NOTIFICATION_EXPIRY,
         )
         .await;
