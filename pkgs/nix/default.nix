@@ -15,11 +15,13 @@
 # nixVersions.stable upstream break our build.
 #
 # ---------------------------------------------------------------------------- #
-{ nixVersions, stdenv }:
+{
+  lib,
+  nixVersions,
+  stdenv,
+}:
 let
-  # Temporarily pinning nix at 2.18 while we work to port pkgdb to latest
-  # stable (2.24), or replace it altogether.
-  nixVersion = "nix_2_18"; # "stable";
+  nixVersion = "stable";
 in
 nixVersions."${nixVersion}".overrideAttrs (prev: {
   # Necessary for compiling with debug symbols
@@ -27,8 +29,7 @@ nixVersions."${nixVersion}".overrideAttrs (prev: {
 
   # Apply patch files.
   patches = prev.patches ++ [
-    (builtins.path { path = ./patches/nix-9147.patch; })
-    (builtins.path { path = ./patches/multiple-github-tokens.2.13.2.patch; })
+    (builtins.path { path = ./patches/multiple-github-tokens.2.24.9.patch; })
   ];
 
   postFixup = ''
