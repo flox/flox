@@ -45,7 +45,7 @@
   BUILDENV_BIN ? "${flox-buildenv}/bin/buildenv",
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   FLOX_BIN ? "${flox-cli}/bin/flox",
-  WATCHDOG_BIN ? "${flox-watchdog}/bin/flox-watchdog",
+  WATCHDOG_BIN ? "${flox-watchdog}/libexec/flox-watchdog",
 }:
 let
   batsWith = bats.withLibraries (p: [

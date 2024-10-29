@@ -40,7 +40,7 @@ let
       GIT_PKG = gitMinimal;
 
       WATCHDOG_BIN =
-        if flox-watchdog == null then "flox-watchdog" else "${flox-watchdog}/bin/flox-watchdog";
+        if flox-watchdog == null then "flox-watchdog" else "${flox-watchdog}/libexec/flox-watchdog";
 
       FLOX_ZDOTDIR = flox-activation-scripts + "/activate.d/zdotdir";
 
