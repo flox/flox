@@ -19,7 +19,7 @@ use url::Url;
 use xdg::BaseDirectories;
 
 /// Name of flox managed directories (config, data, cache)
-const FLOX_DIR_NAME: &str = "flox";
+pub const FLOX_DIR_NAME: &str = "flox";
 const FLOX_CONFIG_DIR_VAR: &str = "FLOX_CONFIG_DIR";
 pub const FLOX_CONFIG_FILE: &str = "flox.toml";
 

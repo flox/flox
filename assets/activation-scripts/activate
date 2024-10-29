@@ -147,7 +147,7 @@ esac
 # sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
 # Don't eval on one line so that we exit if flox-activations fails
 to_eval="$($_flox_activations \
-  ${FLOX_RUNTIME_DIR:+--runtime-dir "$FLOX_RUNTIME_DIR"} \
+  --runtime-dir "$FLOX_RUNTIME_DIR" \
   start-or-attach \
   --pid "$$" --flox-env "$FLOX_ENV" --store-path "$_FLOX_ACTIVATE_STORE_PATH")"
 eval "$to_eval"

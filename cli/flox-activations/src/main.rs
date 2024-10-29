@@ -1,7 +1,6 @@
 use clap::Parser;
 use cli::Cli;
 use log::debug;
-use xdg::BaseDirectories;
 
 mod cli;
 
@@ -13,16 +12,7 @@ fn main() -> Result<(), Error> {
     let args = Cli::parse();
     debug!("{args:?}");
 
-    let runtime_dir = match args.runtime_dir {
-        Some(runtime_dir) => runtime_dir,
-        None => {
-            let dirs = BaseDirectories::with_prefix("flox")?;
-            match dirs.get_runtime_directory() {
-                Ok(runtime_dir) => runtime_dir.to_path_buf(),
-                Err(_) => dirs.get_cache_home().join("run"),
-            }
-        },
-    };
+    let runtime_dir = &args.runtime_dir;
 
     match args.command {
         cli::Command::StartOrAttach(args) => args.handle(runtime_dir)?,

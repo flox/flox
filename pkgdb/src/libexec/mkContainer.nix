@@ -43,6 +43,7 @@ let
     # Activate script requires writable /tmp.
     extraCommands = ''
       mkdir -m 1777 tmp
+      mkdir -p -m 1777 tmp/flox/run
     '';
     config = {
       # Use activate script as the [one] entrypoint capable of
@@ -66,6 +67,7 @@ let
         "FLOX_SOURCED_FROM_SHELL_RC" = "1"; # don't source from shell rc (again)
         "_FLOX_FORCE_INTERACTIVE" = "1"; # Required when running podman without "-t"
         "FLOX_SHELL" = "${containerPkgs.bashInteractive}/bin/bash";
+        "FLOX_RUNTIME_DIR" = "/tmp/flox/run";
       };
     };
   };

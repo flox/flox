@@ -27,11 +27,11 @@ pub struct StartOrAttachArgs {
 }
 
 impl StartOrAttachArgs {
-    pub(crate) fn handle(self, runtime_dir: PathBuf) -> Result<(), anyhow::Error> {
+    pub(crate) fn handle(self, runtime_dir: &Path) -> Result<(), anyhow::Error> {
         let mut retries = 3;
 
         loop {
-            let result = self.handle_inner(&runtime_dir, attach, start, std::io::stdout());
+            let result = self.handle_inner(runtime_dir, attach, start, std::io::stdout());
 
             let Err(err) = result else {
                 break;

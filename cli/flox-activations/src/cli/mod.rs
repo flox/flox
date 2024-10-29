@@ -20,14 +20,9 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
 
-    #[arg(
-        short,
-        long,
-        value_name = "PATH",
-        help = "The path to the runtime directory keeping activation data.\n\
-                Defaults to XDG_RUNTIME_DIR/flox or XDG_CACHE_HOME/flox if not provided."
-    )]
-    pub runtime_dir: Option<PathBuf>,
+    /// The path to the runtime directory keeping activation data.
+    #[arg(short, long, value_name = "PATH")]
+    pub runtime_dir: PathBuf,
 }
 
 #[derive(Debug, Subcommand)]

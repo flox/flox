@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use clap::Args;
@@ -17,9 +17,8 @@ pub struct SetReadyArgs {
 }
 
 impl SetReadyArgs {
-    pub(crate) fn handle(self, runtime_dir: PathBuf) -> Result<(), Error> {
-        let activations_json_path =
-            activations::activations_json_path(&runtime_dir, &self.flox_env);
+    pub(crate) fn handle(self, runtime_dir: &Path) -> Result<(), Error> {
+        let activations_json_path = activations::activations_json_path(runtime_dir, &self.flox_env);
 
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
         let Some(mut activations) = activations else {
@@ -76,7 +75,7 @@ mod tests {
             id: id.clone(),
         };
 
-        args.handle(runtime_dir.path().to_path_buf()).unwrap();
+        args.handle(&runtime_dir.path().to_path_buf()).unwrap();
 
         let ready = read_activations(&runtime_dir, &flox_env, |activations| {
             activations.activation_for_id_ref(id).unwrap().ready()
