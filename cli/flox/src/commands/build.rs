@@ -113,7 +113,7 @@ impl Build {
         let packages_to_build = available_packages(&env.lockfile(&flox)?, packages)?;
 
         let builder = FloxBuildMk;
-        let output = builder.build(&base_dir, &flox_env, &packages_to_build)?;
+        let output = builder.build(&flox, &base_dir, &flox_env, &packages_to_build)?;
 
         for message in output {
             match message {

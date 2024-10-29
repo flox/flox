@@ -36,6 +36,7 @@ pub struct Flox {
     pub cache_dir: PathBuf,
     pub data_dir: PathBuf,
     pub temp_dir: PathBuf,
+    pub runtime_dir: PathBuf,
 
     pub system: String,
 
@@ -233,7 +234,7 @@ pub mod test_helpers {
     pub fn flox_instance_with_optional_floxhub(
         owner: Option<&EnvironmentOwner>,
     ) -> (Flox, TempDir) {
-        // Use /tmp instead of std::env::temp_dir since we store sockets in cache_dir,
+        // Use /tmp instead of std::env::temp_dir since we store sockets in runtime_dir,
         // and std::env::temp_dir may return a path that is too long.
         let tempdir_handle = tempfile::tempdir_in(PathBuf::from("/tmp")).unwrap();
 
@@ -241,11 +242,13 @@ pub mod test_helpers {
         let data_dir = tempdir_handle.path().join(".local/share/flox");
         let temp_dir = tempdir_handle.path().join("temp");
         let config_dir = tempdir_handle.path().join("config");
+        let runtime_dir = tempdir_handle.path().join("run");
 
         std::fs::create_dir_all(&cache_dir).unwrap();
         std::fs::create_dir_all(&data_dir).unwrap();
         std::fs::create_dir_all(&temp_dir).unwrap();
         std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::create_dir_all(&runtime_dir).unwrap();
 
         let git_url_override = owner.map(|owner| {
             let mock_floxhub_git_dir = tempdir_in(&temp_dir).unwrap().into_path();
@@ -261,6 +264,7 @@ pub mod test_helpers {
             data_dir,
             temp_dir,
             config_dir,
+            runtime_dir,
             uuid: Default::default(),
             floxhub: Floxhub::new(
                 Url::from_str("https://hub.flox.dev").unwrap(),

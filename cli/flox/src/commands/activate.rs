@@ -28,6 +28,7 @@ use flox_rust_sdk::models::environment::{
     FLOX_SERVICES_SOCKET_VAR,
 };
 use flox_rust_sdk::models::pkgdb::{error_codes, CallPkgDbError, PkgDbError};
+use flox_rust_sdk::providers::build::FLOX_RUNTIME_DIR_VAR;
 use flox_rust_sdk::providers::services::shutdown_process_compose_if_all_processes_stopped;
 use indexmap::IndexSet;
 use indoc::{formatdoc, indoc};
@@ -335,6 +336,12 @@ impl Activate {
             (
                 "_FLOX_DOTFLOX_HASH",
                 path_hash(environment.dot_flox_path()).to_string(),
+            ),
+            (
+                // TODO: we should probably figure out a more consistent way to
+                // pass this since it's also passed for `flox build`
+                FLOX_RUNTIME_DIR_VAR,
+                flox.runtime_dir.to_string_lossy().to_string(),
             ),
         ]);
 

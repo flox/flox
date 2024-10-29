@@ -350,7 +350,7 @@ EOF
   sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly in various forms.
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -358,19 +358,19 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
   assert_success
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
   assert_success
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command true
   assert_success
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate :
   assert_success
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- :
   assert_success
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate true
   assert_success
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
   assert_success
 }
 
@@ -381,7 +381,7 @@ EOF
   sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --noprofile.
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -398,7 +398,7 @@ EOF
   sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --turbo.
-  FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="bash" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -483,7 +483,7 @@ EOF
   sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly in various forms.
-  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -491,19 +491,19 @@ EOF
   assert_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
-  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
   assert_success
-  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
   assert_success
-  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command true
   assert_success
-  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate :
   assert_success
-  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- :
   assert_success
-  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate true
   assert_success
-  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
   assert_success
 }
 
@@ -514,7 +514,7 @@ EOF
   sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --noprofile.
-  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -531,7 +531,7 @@ EOF
   sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --turbo.
-  FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="fish" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -615,7 +615,7 @@ EOF
   sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly in various forms.
-  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -623,19 +623,19 @@ EOF
   refute_output --partial "sourcing profile.fish"
   assert_output --partial "sourcing profile.tcsh"
   refute_output --partial "sourcing profile.zsh"
-  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
   assert_success
-  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
   assert_success
-  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command true
   assert_success
-  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate :
   assert_success
-  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- :
   assert_success
-  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate true
   assert_success
-  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
   assert_success
 }
 
@@ -646,7 +646,7 @@ EOF
   sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --noprofile.
-  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -663,7 +663,7 @@ EOF
   sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --turbo.
-  FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="tcsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -750,7 +750,7 @@ EOF
   sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly in various forms.
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   assert_output --partial "sourcing profile.common"
@@ -758,19 +758,19 @@ EOF
   refute_output --partial "sourcing profile.fish"
   refute_output --partial "sourcing profile.tcsh"
   assert_output --partial "sourcing profile.zsh"
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command :
   assert_success
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -c true
   assert_success
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --command true
   assert_success
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate :
   assert_success
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- :
   assert_success
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate true
   assert_success
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate -- true
   assert_success
 }
 
@@ -781,7 +781,7 @@ EOF
   sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --noprofile.
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --noprofile :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"
@@ -798,7 +798,7 @@ EOF
   sed -e "s/^\[hook\]/${VARS_HOOK_SCRIPT//$'\n'/\\n}/" "$PROJECT_DIR/.flox/env/manifest.toml" | "$FLOX_BIN" edit -f -
 
   # Test running the activate script directly with --turbo.
-  FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
+  FLOX_RUNTIME_DIR="$FLOX_CACHE_DIR" FLOX_SHELL="zsh" USER="$REAL_USER" NO_COLOR=1 run $PROJECT_DIR/.flox/run/$NIX_SYSTEM.$PROJECT_NAME/activate --turbo :
   assert_success
   assert_output --partial "sourcing hook.on-activate"
   refute_output --partial "sourcing profile.common"

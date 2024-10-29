@@ -8,7 +8,10 @@ use std::thread;
 use thiserror::Error;
 use tracing::{debug, warn};
 
+use crate::flox::Flox;
 use crate::utils::CommandExt;
+
+pub const FLOX_RUNTIME_DIR_VAR: &str = "FLOX_RUNTIME_DIR";
 
 static FLOX_BUILD_MK: LazyLock<PathBuf> = LazyLock::new(|| {
     std::env::var("FLOX_BUILD_MK")
@@ -29,6 +32,7 @@ pub trait ManifestBuilder {
     /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
     fn build(
         &self,
+        flox: &Flox,
         base_dir: &Path,
         flox_env: &Path,
         package: &[String],
@@ -118,6 +122,7 @@ impl ManifestBuilder for FloxBuildMk {
     /// Once the process is complete, the [BuildOutput] will yield an [Output::Exit] message.
     fn build(
         &self,
+        flox: &Flox,
         base_dir: &Path,
         flox_env: &Path,
         packages: &[String],
@@ -135,6 +140,11 @@ impl ManifestBuilder for FloxBuildMk {
             let build_targets = packages.iter().map(|p| format!("build/{p}"));
             command.args(build_targets);
         };
+
+        // activate needs this var
+        // TODO: we should probably figure out a more consistent way to pass
+        // this since it's also passed for `flox activate`
+        command.env(FLOX_RUNTIME_DIR_VAR, &flox.runtime_dir);
 
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
@@ -301,6 +311,7 @@ mod tests {
         let builder = FloxBuildMk;
         let output_stream = builder
             .build(
+                &flox,
                 &env.parent_path().unwrap(),
                 &env.activation_path(flox).unwrap(),
                 &[package_name.to_owned()],

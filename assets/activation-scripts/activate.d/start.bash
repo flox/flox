@@ -102,6 +102,6 @@ fi
 
 # Finally mark the environment as ready to use for attachments.
 "$_flox_activations" \
-  ${FLOX_RUNTIME_DIR:+--runtime-dir "$FLOX_RUNTIME_DIR"} \
+  --runtime-dir "$FLOX_RUNTIME_DIR" \
   set-ready \
   --flox-env "$FLOX_ENV" --id "$_FLOX_ACTIVATION_ID"

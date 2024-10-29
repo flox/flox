@@ -65,10 +65,11 @@ use thiserror::Error;
 use time::{Duration, OffsetDateTime};
 use toml_edit::Key;
 use url::Url;
+use xdg::BaseDirectories;
 
 use self::envs::DisplayEnvironments;
 use crate::commands::general::update_config;
-use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE};
+use crate::config::{Config, EnvironmentTrust, FLOX_CONFIG_FILE, FLOX_DIR_NAME};
 use crate::utils::dialog::{Dialog, Select};
 use crate::utils::errors::display_chain;
 use crate::utils::init::{
@@ -186,6 +187,15 @@ impl FloxArgs {
         // ensure xdg dirs exist
         tokio::fs::create_dir_all(&config.flox.config_dir).await?;
         tokio::fs::create_dir_all(&config.flox.data_dir).await?;
+        let flox_dirs = BaseDirectories::with_prefix(FLOX_DIR_NAME)?;
+        // runtime_dir is used for socket paths,
+        // so we have to try to keep it short.
+        // See comment on services_socket_path for more
+        let runtime_dir = match flox_dirs.get_runtime_directory() {
+            Ok(runtime_dir) => runtime_dir.to_path_buf(),
+            Err(_) => config.flox.cache_dir.join("run"),
+        };
+        tokio::fs::create_dir_all(&runtime_dir).await?;
 
         // prepare a temp dir for the run:
         let process_dir = config.flox.cache_dir.join("process");
@@ -314,6 +324,7 @@ impl FloxArgs {
             cache_dir: config.flox.cache_dir.clone(),
             data_dir: config.flox.data_dir.clone(),
             config_dir: config.flox.config_dir.clone(),
+            runtime_dir,
             temp_dir: temp_dir_path.clone(),
             system: env!("NIX_TARGET_SYSTEM").to_string(),
             uuid: init_uuid(&config.flox.data_dir).await?,

@@ -146,10 +146,12 @@ pkgs.runCommandNoCC name
           assertExecutable "$prog"
           hidden="$(dirname "$prog")/.$(basename "$prog")"-wrapped
           mv "$prog" "$hidden"
+          # TODO: we shouldn't need to set FLOX_RUNTIME_DIR here
           makeShellWrapper "${flox-env-package}/activate" "$prog" \
             --inherit-argv0 \
             --set FLOX_ENV "${flox-env-package}" \
             --set FLOX_MANIFEST_BUILD_OUT "$out" \
+            --set FLOX_RUNTIME_DIR "/tmp" \
             --run 'export FLOX_SET_ARG0="$0"' \
             --add-flags --turbo \
             --add-flags -- \
