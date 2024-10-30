@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 
-set -euo pipefail
+# Disabled for now.
+# - The etc/profile.d/0800_cuda.sh script relies on a failure filling out
+#   SYSTEM_LIBS to provide a fallback behavior on NixOS. This meant that
+#   with this line enabled activation was broken on NixOS.
+# - This is a behavior change that was unexpected and not caught by CI,
+#   so it's possible that there are other behavior changes caused by this,
+#   so we've decided to disable it for now.
+# - Furthermore, this was breakage that affected a user that didn't need
+#   CUDA support, so it's unnecessary breakage.
+# set -euo pipefail
 
 # Trace levels supported by activation scripts:
 #   1. (-v) top-level activate script
