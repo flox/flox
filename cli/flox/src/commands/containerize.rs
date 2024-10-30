@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
@@ -59,8 +59,9 @@ impl Containerize {
             message: &format!("Writing container to {output}...",),
             help_message: None,
             typed: Spinner::new(|| {
-                let writer = output.to_writer()?;
-                builder.stream_container(writer)?;
+                let mut writer = output.to_writer()?;
+                builder.stream_container(&mut writer)?;
+                writer.wait()?;
                 anyhow::Ok(())
             }),
         }
@@ -100,8 +101,8 @@ impl OutputTarget {
         )))
     }
 
-    fn to_writer(&self) -> Result<impl Write> {
-        let writer: Box<dyn Write> = match self {
+    fn to_writer(&self) -> Result<Box<dyn ContainerSink>> {
+        let writer: Box<dyn ContainerSink> = match self {
             OutputTarget::File(path) => {
                 let path = match path {
                     path if path == Path::new("-") => Path::new("/dev/stdout"),
@@ -133,6 +134,55 @@ impl Display for OutputTarget {
     }
 }
 
+/// A sink for writing container tarballs
+///
+/// This trait extends the `Write` trait with a `wait` method,
+/// which blocks until all data has been written to the sink
+/// and returns any errors the sink may have encountered
+/// that are not strictly I/O errors (e.g. process exit status).
+///
+/// In case of sinks that are subprocesses,
+/// the `wait` method should also wait for the subprocess to exit,
+/// in order not to orphan the process.
+trait ContainerSink: Write + Send {
+    fn wait(&mut self) -> Result<()>;
+}
+
+impl ContainerSink for fs::File {
+    fn wait(&mut self) -> Result<()> {
+        self.sync_all()?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct RuntimeSink {
+    child: Child,
+}
+
+impl Write for RuntimeSink {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.child.stdin.as_mut().unwrap().write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.child.stdin.as_mut().unwrap().flush()
+    }
+}
+
+impl ContainerSink for RuntimeSink {
+    fn wait(&mut self) -> Result<()> {
+        self.flush()?;
+        drop(self.child.stdin.take());
+        let status = self.child.wait()?;
+        if !status.success() {
+            return Err(anyhow!("Writing to runtime was unsuccessful"));
+        }
+
+        Ok(())
+    }
+}
+
 /// The container registry to load the container into
 /// Currently only supports Docker and Podman
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -145,19 +195,19 @@ impl Runtime {
     /// Get a writer to the registry,
     /// Essentially spawns a `docker load` or `podman load` process
     /// and returns a handle to its stdin.
-    fn to_writer(&self) -> Result<impl Write> {
+    fn to_writer(&self) -> Result<impl ContainerSink> {
         let cmd = match self {
             Runtime::Docker => "docker",
             Runtime::Podman => "podman",
         };
 
-        let mut child = Command::new(cmd)
+        let child = Command::new(cmd)
             .arg("load")
             .stdin(Stdio::piped())
             .spawn()
             .context(format!("Failed to call runtime {cmd}"))?;
 
-        Ok(child.stdin.take().expect("stdin is piped"))
+        Ok(RuntimeSink { child })
     }
 }
 

@@ -32,13 +32,16 @@ impl ContainerBuilder {
         let mut container_builder_command = Command::new(&self.path);
         container_builder_command.stdout(Stdio::piped());
 
-        let handle = container_builder_command
+        let mut handle = container_builder_command
             .spawn()
             .map_err(ContainerBuilderError::CallContainerBuilder)?;
-        let mut stdout = handle.stdout.expect("stdout set to piped");
+        let mut stdout = handle.stdout.take().expect("stdout set to piped");
 
         io::copy(&mut stdout, &mut sink).map_err(ContainerBuilderError::StreamContainer)?;
 
+        handle
+            .wait()
+            .map_err(ContainerBuilderError::CallContainerBuilder)?;
         Ok(())
     }
 }
