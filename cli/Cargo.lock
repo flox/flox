@@ -1194,6 +1194,7 @@ dependencies = [
  "clap",
  "clap_derive",
  "filetime",
+ "flox-activations",
  "flox-core",
  "flox-rust-sdk",
  "glob",

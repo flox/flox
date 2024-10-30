@@ -134,22 +134,28 @@ EOF
 
 @test "watchdog: emits heartbeat log to prevent garbage collection while running" {
   target_pid="$$"
-  registry_file="$PWD/registry.json"
-  dummy_registry path/to/env abcde123 > "$registry_file"
+
+  # sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
+  to_eval="$("$FLOX_ACTIVATIONS_BIN" --runtime-dir "$BATS_TEST_TMPDIR" start-or-attach \
+    --pid "$target_pid" \
+    --flox-env "$BATS_TEST_TMPDIR" \
+    --store-path "$BATS_TEST_TMPDIR"
+  )"
+  eval "$to_eval"
 
   # Close fd3 in case we don't make it to the final `kill`. We don't care about
   # orphaned children for the purpose of this test; watchdog will cleanup after
   # itself when BATS exits.
   # https://bats-core.readthedocs.io/en/stable/writing-tests.html#file-descriptor-3-read-this-if-bats-hangs
   _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
-    --log-dir "$PWD" \
-    --pid "$target_pid" \
-    --registry "$registry_file" \
-    --hash abcde123 \
+    --log-dir "$BATS_TEST_TMPDIR" \
+    --flox-env "$BATS_TEST_TMPDIR" \
+    --runtime-dir "$BATS_TEST_TMPDIR" \
+    --activation-id "$_FLOX_ACTIVATION_ID" \
     --socket does_not_exist 3>&- &
 
   watchdog_pid="$!"
-  log_file="$PWD/watchdog.${target_pid}.log"
+  log_file="$BATS_TEST_TMPDIR/watchdog.${_FLOX_ACTIVATION_ID}.log"
 
   # Wait for initial log entry. Other entries will be printed later but we don't
   # want to wait that long.
@@ -165,15 +171,19 @@ EOF
 }
 
 @test "watchdog: exits on termination signal (SIGUSR1)" {
-  # Don't forget to export this so that it's set in the subshells
-  export registry_file="$PWD/registry.json"
+  # sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
+  to_eval="$("$FLOX_ACTIVATIONS_BIN" --runtime-dir "$BATS_TEST_TMPDIR" start-or-attach \
+    --pid "$$" \
+    --flox-env "$BATS_TEST_TMPDIR" \
+    --store-path "$BATS_TEST_TMPDIR"
+  )"
+  eval "$to_eval"
 
-  dummy_registry path/to/env abcde123 > "$registry_file"
   _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
-    --log-dir "$PWD" \
-    --pid $$ \
-    --registry "$registry_file" \
-    --hash abcde123 \
+    --log-dir "$BATS_TEST_TMPDIR" \
+    --flox-env "$BATS_TEST_TMPDIR" \
+    --runtime-dir "$BATS_TEST_TMPDIR" \
+    --activation-id "$_FLOX_ACTIVATION_ID" \
     --socket does_not_exist &
   watchdog_pid="$!"
 
@@ -183,7 +193,7 @@ EOF
   # Wait for start.
   run timeout 1s bash <(cat <<'EOF'
     while true; do
-      pid="$(watchdog_pids_called_with_arg "$registry_file")"
+      pid="$(watchdog_pids_called_with_arg "$BATS_TEST_TMPDIR")"
       if [ -n "${pid?}" ]; then
         break
       fi
@@ -204,7 +214,7 @@ EOF
   # Wait for exit.
   run timeout 1s bash <(cat <<'EOF'
     while true; do
-      pid="$(watchdog_pids_called_with_arg "$registry_file")"
+      pid="$(watchdog_pids_called_with_arg "$BATS_TEST_TMPDIR")"
       if [ -z "${pid?}" ]; then
         break
       fi
@@ -217,17 +227,24 @@ EOF
 
 @test "watchdog: exits on shutdown signal (SIGINT)" {
   target_pid="$$"
-  registry_file="$PWD/registry.json"
-  dummy_registry path/to/env abcde123 > "$registry_file"
-  _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
-    --log-dir "$PWD" \
+
+  # sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
+  to_eval="$("$FLOX_ACTIVATIONS_BIN" --runtime-dir "$BATS_TEST_TMPDIR" start-or-attach \
     --pid "$target_pid" \
-    --registry "$registry_file" \
-    --hash abcde123 \
+    --flox-env "$BATS_TEST_TMPDIR" \
+    --store-path "$BATS_TEST_TMPDIR"
+  )"
+  eval "$to_eval"
+
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
+    --log-dir "$BATS_TEST_TMPDIR" \
+    --flox-env "$BATS_TEST_TMPDIR" \
+    --runtime-dir "$BATS_TEST_TMPDIR" \
+    --activation-id "$_FLOX_ACTIVATION_ID" \
     --socket does_not_exist &
 
   watchdog_pid="$!"
-  log_file="$PWD/watchdog.${target_pid}.log"
+  log_file="$BATS_TEST_TMPDIR/watchdog.${_FLOX_ACTIVATION_ID}.log"
 
   # Wait for start.
   timeout 1s bash -c "
@@ -262,17 +279,23 @@ EOF
     skip "test PID is in use"
   fi
 
-  registry_file="$PWD/registry.json"
-  dummy_registry path/to/env abcde123 > "$registry_file"
-  _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
-    --log-dir "$PWD" \
+  # sets _FLOX_ATTACH, _FLOX_ACTIVATION_STATE_DIR, _FLOX_ACTIVATION_ID
+  to_eval="$("$FLOX_ACTIVATIONS_BIN" --runtime-dir "$BATS_TEST_TMPDIR" start-or-attach \
     --pid "$test_pid" \
-    --registry "$registry_file" \
-    --hash abcde123 \
+    --flox-env "$BATS_TEST_TMPDIR" \
+    --store-path "$BATS_TEST_TMPDIR"
+  )"
+  eval "$to_eval"
+
+  _FLOX_WATCHDOG_LOG_LEVEL=debug "$WATCHDOG_BIN" \
+    --log-dir "$BATS_TEST_TMPDIR" \
+    --flox-env "$BATS_TEST_TMPDIR" \
+    --runtime-dir "$BATS_TEST_TMPDIR" \
+    --activation-id "$_FLOX_ACTIVATION_ID" \
     --socket does_not_exist &
 
   watchdog_pid="$!"
-  log_file="$PWD/watchdog.${test_pid}.log"
+  log_file="$BATS_TEST_TMPDIR/watchdog.${_FLOX_ACTIVATION_ID}.log"
 
   # Wait for start.
   timeout 1s bash -c "

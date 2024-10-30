@@ -27,14 +27,15 @@ pub struct StartOrAttachArgs {
 }
 
 impl StartOrAttachArgs {
-    pub(crate) fn handle(self, runtime_dir: &Path) -> Result<(), anyhow::Error> {
+    // Returns activation_id for use in tests
+    pub fn handle(self, runtime_dir: &Path) -> Result<String, anyhow::Error> {
         let mut retries = 3;
 
         loop {
             let result = self.handle_inner(runtime_dir, attach, start, std::io::stdout());
 
             let Err(err) = result else {
-                break;
+                return result;
             };
 
             if let Some(restartable_failure) = err.downcast_ref::<RestartableFailure>() {
@@ -49,11 +50,10 @@ impl StartOrAttachArgs {
 
             return Err(err);
         }
-
-        Ok(())
     }
 
-    fn handle_inner(
+    // Returns activation_id for use in tests
+    pub fn handle_inner(
         &self,
         runtime_dir: &Path,
         attach_fn: impl FnOnce(&Path, LockFile, &str, i32) -> Result<(), Error>,
@@ -67,7 +67,7 @@ impl StartOrAttachArgs {
             i32,
         ) -> Result<String, Error>,
         mut output: impl Write,
-    ) -> Result<(), Error> {
+    ) -> Result<String, Error> {
         let activations_json_path = activations::activations_json_path(runtime_dir, &self.flox_env);
 
         debug!("Reading activations from {:?}", activations_json_path);
@@ -103,7 +103,7 @@ impl StartOrAttachArgs {
         )?;
         writeln!(&mut output, "_FLOX_ACTIVATION_ID={activation_id}")?;
 
-        Ok(())
+        Ok(activation_id)
     }
 }
 
