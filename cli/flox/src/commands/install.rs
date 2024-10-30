@@ -107,6 +107,7 @@ impl Install {
                 })
             },
             Err(e @ EnvironmentSelectError::EnvNotFoundInCurrentDirectory) => {
+                // TODO: prompt for initialization here
                 bail!(formatdoc! {"
                 {e}
 

@@ -359,7 +359,7 @@ impl DotFlox {
 #[derive(Debug, Error)]
 pub enum EnvironmentError {
     // todo: candidate for impl specific error
-    // * only path and managed env are defined in .Flox
+    // * only path and managed env are defined in .flox
     // region: path env open
     /// The `.flox` directory was not found
     /// This error is thrown by calling [DotFlox::open_default_in]
