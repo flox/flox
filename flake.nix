@@ -162,6 +162,7 @@
                 PKGDB_BIN = null;
                 FLOX_BIN = null;
                 WATCHDOG_BIN = null;
+                FLOX_ACTIVATIONS_BIN = null;
               };
               flox-cli = prev.flox-cli.override {
                 flox-pkgdb = null;
