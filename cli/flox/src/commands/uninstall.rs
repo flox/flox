@@ -48,7 +48,7 @@ impl Uninstall {
             .detect_concrete_environment(&flox, "Uninstall from")
         {
             Ok(concrete_environment) => concrete_environment,
-            Err(EnvironmentSelectError::Environment(
+            Err(EnvironmentSelectError::EnvironmentError(
                 ref e @ EnvironmentError::DotFloxNotFound(ref dir),
             )) => {
                 let parent = dir.parent().unwrap_or(dir).display();
