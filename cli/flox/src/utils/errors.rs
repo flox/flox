@@ -691,7 +691,7 @@ pub fn format_environment_select_error(err: &EnvironmentSelectError) -> String {
     trace!("formatting environment_select_error: {err:?}");
 
     match err {
-        EnvironmentSelectError::Environment(err) => format_error(err),
+        EnvironmentSelectError::EnvironmentError(err) => format_error(err),
         EnvironmentSelectError::EnvNotFoundInCurrentDirectory => formatdoc! {"
             Did not find an environment in the current directory.
         "},
