@@ -224,7 +224,7 @@ impl Activate {
         let flox_env_install_prefixes: IndexSet<PathBuf> = {
             let mut set = IndexSet::new();
             if !flox_active_environments.is_active(&now_active) {
-                set.insert(interpreter_path.clone());
+                set.insert(rendered_env_path.clone());
             }
             let active_set: IndexSet<PathBuf> = {
                 if let Ok(var) = env::var(FLOX_ENV_DIRS_VAR) {
