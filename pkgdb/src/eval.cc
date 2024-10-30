@@ -9,6 +9,7 @@
 
 #include <fstream>
 
+#include <nix/command.hh>
 #include <nix/eval-settings.hh>
 #include <nix/eval.hh>
 #include <nix/value-to-json.hh>
@@ -123,7 +124,7 @@ EvalCommand::run()
         }
       auto * expr = state->parseExprFromString(
         *this->expr,
-        state->rootPath( nix::CanonPath::fromCwd() ) );
+        state->rootPath( nix::Args().getCommandBaseDir() ) );
       state->eval( expr, *value );
     }
 

@@ -36,11 +36,14 @@ struct WrappedNixpkgsInputScheme : nix::fetchers::InputScheme
 
   /** @brief Convert raw attributes into an input. */
   [[nodiscard]] std::optional<nix::fetchers::Input>
-  inputFromAttrs( const nix::fetchers::Attrs & attrs ) const override;
+  inputFromAttrs( const nix::fetchers::Settings & settings,
+                  const nix::fetchers::Attrs &    attrs ) const override;
 
   /** @brief Convert a URL string into an input. */
   [[nodiscard]] std::optional<nix::fetchers::Input>
-  inputFromURL( const nix::ParsedURL & url, bool requireTree ) const override;
+  inputFromURL( const nix::fetchers::Settings & settings,
+                const nix::ParsedURL &          url,
+                bool                            requireTree ) const override;
 
   /** @brief Convert input to a URL representation. */
   [[nodiscard]] nix::ParsedURL

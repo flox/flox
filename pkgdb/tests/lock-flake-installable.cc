@@ -94,7 +94,8 @@ test_locksUrl( const nix::ref<nix::EvalState> & state,
   auto lockedInstallable
     = flox::lockFlakeInstallable( state, system, unlockedUrl );
 
-  EXPECT( nix::parseFlakeRef( lockedInstallable.lockedUrl ).input.isLocked() );
+  EXPECT( nix::parseFlakeRef( state.fetchSettings, lockedInstallable.lockedUrl )
+            .input.isLocked() );
 
   return true;
 }

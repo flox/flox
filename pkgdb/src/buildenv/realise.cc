@@ -972,7 +972,7 @@ createContainerBuilder( nix::EvalState &         state,
                         const std::string_view & containerTag )
 {
   static const nix::FlakeRef nixpkgsRef
-    = nix::parseFlakeRef( COMMON_NIXPKGS_URL );
+    = nix::parseFlakeRef( state.fetchSettings, COMMON_NIXPKGS_URL );
 
   auto lockedNixpkgs
     = nix::flake::lockFlake( state, nixpkgsRef, nix::flake::LockFlags() );

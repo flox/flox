@@ -20,7 +20,6 @@
 #include <nix/util.hh>
 #include <nlohmann/json.hpp>
 
-#include "flox/buildenv/command.hh"
 #include "flox/core/command.hh"
 #include "flox/core/exceptions.hh"
 #include "flox/eval.hh"

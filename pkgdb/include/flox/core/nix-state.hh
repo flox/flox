@@ -9,6 +9,9 @@
 
 #pragma once
 
+#define NIX_VERSION_MAJOR 2
+#define NIX_VERSION_MINOR 24
+
 #include <memory>
 
 #include <nix/eval.hh>
@@ -16,6 +19,9 @@
 #include <nix/repair-flag.hh>
 #include <nix/search-path.hh>
 #include <nix/store-api.hh>
+
+#include <nix/nix_api_expr.h>
+#include <nix/nix_api_value.h>
 
 
 /* -------------------------------------------------------------------------- */
@@ -155,9 +161,18 @@ public:
   {
     if ( this->state == nullptr )
       {
+#if NIX_VERSION_MAJOR >= 2 && NIX_VERSION_MINOR >= 24
+        nix::Settings settings;  // initialize somehow?
+        this->state = std::make_shared<nix::EvalState>( nix::LookupPath(),
+                                                        this->getStore(),
+                                                        settings,
+                                                        settings,
+                                                        this->getStore() );
+#else
         this->state = std::make_shared<nix::EvalState>( nix::SearchPath(),
                                                         this->getStore(),
                                                         this->getStore() );
+#endif
         this->state->repair = nix::NoRepair;
       }
     return static_cast<nix::ref<nix::EvalState>>( this->state );

@@ -9,12 +9,16 @@
 
 #include <cstddef>
 
+#include <nix/command.hh>
 #include <nix/config.hh>
+#include <nix/current-process.hh>
 #include <nix/error.hh>
+#include <nix/eval-gc.hh>
 #include <nix/eval-settings.hh>
 #include <nix/eval.hh>
 #include <nix/globals.hh>
 #include <nix/logging.hh>
+#include <nix/plugin.hh>
 #include <nix/shared.hh>
 #include <nix/util.hh>
 
