@@ -81,7 +81,7 @@ impl Install {
         subcommand_metric!("install");
 
         debug!(
-            "installing packages [{}] to {:?}",
+            "attempting to install packages [{}] to {:?}",
             self.packages.as_slice().join(", "),
             self.environment
         );
