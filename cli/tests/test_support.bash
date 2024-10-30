@@ -258,33 +258,6 @@ jq_edit() {
   mv "$_tmp" "$_file"
 }
 
-dummy_registry() {
-  local path="$1"; shift
-  local hash="$1"
-  REGISTRY_CONTENT="$(cat << EOF
-  {
-    "version": 1,
-    "entries": [
-      {
-        "hash": "$hash",
-        "path": "$path",
-        "envs": [
-          {
-            "created_at": 123,
-            "pointer": {
-              "name": "dummy_env",
-              "version": 1
-            }
-          }
-        ]
-      }
-    ]
-  }
-EOF
-)"
-  echo "$REGISTRY_CONTENT"
-}
-
 cat_teardown_fifo() {
   if [ -n "${TEARDOWN_FIFO:-}" ]; then
     timeout 1 cat "$TEARDOWN_FIFO"

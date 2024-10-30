@@ -248,14 +248,13 @@ pub fn attached_pids(
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
     use std::path::PathBuf;
     use std::process::{Child, Command};
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
 
-    use flox_rust_sdk::models::env_registry::{register_activation, EnvRegistry, RegistryEntry};
-    use tempfile::NamedTempFile;
+    use flox_activations::cli::{SetReadyArgs, StartOrAttachArgs};
+    use flox_core::activations::activations_json_path;
 
     use super::*;
 
@@ -287,23 +286,6 @@ mod test {
         )
     }
 
-    /// Writes a registry to a temporary file, adding an entry for the provided
-    /// path hash
-    pub fn path_for_registry_with_entry(path_hash: impl AsRef<str>) -> NamedTempFile {
-        let path = NamedTempFile::new().unwrap();
-        let mut reg = EnvRegistry::default();
-        let entry = RegistryEntry {
-            path_hash: String::from(path_hash.as_ref()),
-            path: PathBuf::from("foo"),
-            envs: vec![],
-            activations: HashSet::new(),
-        };
-        reg.entries.push(entry);
-        let string = serde_json::to_string(&reg).unwrap();
-        std::fs::write(&path, string).unwrap();
-        path
-    }
-
     /// Wait some attempts for the process to reach the desired state
     fn poll_until_state(state: ProcStatus, pid: i32) {
         for _ in 0..10 {
@@ -317,38 +299,66 @@ mod test {
 
     #[test]
     fn reports_that_pid1_is_running() {
-        assert!(PidWatcher::pid_is_running(1.into()));
+        assert!(PidWatcher::pid_is_running(1));
     }
 
     #[test]
     fn detects_running_or_not_running_process() {
         let proc = start_process();
         let pid = proc.id() as i32;
-        assert!(PidWatcher::pid_is_running(pid.into()));
+        assert!(PidWatcher::pid_is_running(pid));
         stop_process(proc);
-        assert!(!PidWatcher::pid_is_running(pid.into()));
+        assert!(!PidWatcher::pid_is_running(pid));
     }
 
     #[test]
     fn detects_zombie() {
         let mut proc = Command::new("true").spawn().unwrap();
         let pid = proc.id() as i32;
-        poll_until_state(ProcStatus::Zombie, pid.into());
-        assert!(!PidWatcher::pid_is_running(pid.into()));
-        assert_eq!(PidWatcher::read_pid_status(pid.into()), ProcStatus::Zombie);
+        poll_until_state(ProcStatus::Zombie, pid);
+        assert!(!PidWatcher::pid_is_running(pid));
+        assert_eq!(PidWatcher::read_pid_status(pid), ProcStatus::Zombie);
         proc.wait().unwrap();
     }
 
     #[test]
     fn terminates_when_all_pids_terminate() {
+        let runtime_dir = tempfile::tempdir().unwrap();
+        let flox_env = PathBuf::from("flox_env");
+        let store_path = "store_path".to_string();
+
         let proc1 = start_process();
-        let pid1 = ActivationPid::from(proc1.id() as i32);
+        let pid1 = proc1.id() as i32;
+        let start_or_attach_pid1 = StartOrAttachArgs {
+            pid: pid1,
+            flox_env: flox_env.clone(),
+            store_path: store_path.clone(),
+        };
+        let activation_id = start_or_attach_pid1.handle(runtime_dir.path()).unwrap();
+        let set_ready_pid1 = SetReadyArgs {
+            id: activation_id.clone(),
+            flox_env: flox_env.clone(),
+        };
+        set_ready_pid1.handle(runtime_dir.path()).unwrap();
+
         let proc2 = start_process();
+        let pid2 = proc2.id() as i32;
+        let start_or_attach_pid2 = StartOrAttachArgs {
+            pid: pid2,
+            flox_env: flox_env.clone(),
+            store_path: store_path.clone(),
+        };
+        let activation_id_2 = start_or_attach_pid2.handle(runtime_dir.path()).unwrap();
+        assert_eq!(activation_id, activation_id_2);
+
+        let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
         let (terminate_flag, cleanup_flag) = shutdown_flags();
-        let path_hash = "abc";
-        let reg_path = path_for_registry_with_entry(path_hash);
-        register_activation(&reg_path, path_hash, pid1).unwrap();
-        let mut watcher = PidWatcher::new(&reg_path, path_hash, terminate_flag, cleanup_flag);
+        let mut watcher = PidWatcher::new(
+            activations_json_path,
+            activation_id,
+            terminate_flag,
+            cleanup_flag,
+        );
         let barrier = Arc::new(std::sync::Barrier::new(2));
         let wait_result = std::thread::scope(move |s| {
             let b_clone = barrier.clone();
@@ -368,15 +378,29 @@ mod test {
 
     #[test]
     fn terminates_on_shutdown_flag() {
+        let runtime_dir = tempfile::tempdir().unwrap();
+        let flox_env = PathBuf::from("flox_env");
+        let store_path = "store_path".to_string();
+
         let proc = start_process();
-        let pid = ActivationPid::from(proc.id() as i32);
+        let pid = proc.id() as i32;
+        let start_or_attach = StartOrAttachArgs {
+            pid,
+            flox_env: flox_env.clone(),
+            store_path: store_path.clone(),
+        };
+        let activation_id = start_or_attach.handle(runtime_dir.path()).unwrap();
+        let set_ready = SetReadyArgs {
+            id: activation_id.clone(),
+            flox_env: flox_env.clone(),
+        };
+        set_ready.handle(runtime_dir.path()).unwrap();
+
+        let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
         let (terminate_flag, cleanup_flag) = shutdown_flags();
-        let path_hash = "abc";
-        let reg_path = path_for_registry_with_entry(path_hash);
-        register_activation(&reg_path, path_hash, pid).unwrap();
         let mut watcher = PidWatcher::new(
-            &reg_path,
-            path_hash,
+            activations_json_path,
+            activation_id,
             terminate_flag.clone(),
             cleanup_flag.clone(),
         );
@@ -399,15 +423,29 @@ mod test {
 
     #[test]
     fn terminates_on_signal_handler_flag() {
+        let runtime_dir = tempfile::tempdir().unwrap();
+        let flox_env = PathBuf::from("flox_env");
+        let store_path = "store_path".to_string();
+
         let proc = start_process();
-        let pid = ActivationPid::from(proc.id() as i32);
+        let pid = proc.id() as i32;
+        let start_or_attach = StartOrAttachArgs {
+            pid,
+            flox_env: flox_env.clone(),
+            store_path: store_path.clone(),
+        };
+        let activation_id = start_or_attach.handle(runtime_dir.path()).unwrap();
+        let set_ready = SetReadyArgs {
+            id: activation_id.clone(),
+            flox_env: flox_env.clone(),
+        };
+        set_ready.handle(runtime_dir.path()).unwrap();
+
+        let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
         let (terminate_flag, cleanup_flag) = shutdown_flags();
-        let path_hash = "abc";
-        let reg_path = path_for_registry_with_entry(path_hash);
-        register_activation(&reg_path, path_hash, pid).unwrap();
         let mut watcher = PidWatcher::new(
-            &reg_path,
-            path_hash,
+            activations_json_path,
+            activation_id,
             terminate_flag.clone(),
             cleanup_flag.clone(),
         );

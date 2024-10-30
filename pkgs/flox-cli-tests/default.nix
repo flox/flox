@@ -15,6 +15,7 @@
   entr,
   expect,
   findutils,
+  flox-activations,
   flox-buildenv,
   flox-pkgdb,
   flox-watchdog,
@@ -47,6 +48,7 @@
   PKGDB_BIN ? "${flox-pkgdb}/bin/pkgdb",
   FLOX_BIN ? "${flox-cli}/bin/flox",
   WATCHDOG_BIN ? "${flox-watchdog}/libexec/flox-watchdog",
+  FLOX_ACTIVATIONS_BIN ? "${flox-activations}/bin/flox-activations",
 }:
 let
   batsWith = bats.withLibraries (p: [
@@ -169,6 +171,12 @@ writeShellScriptBin PROJECT_NAME ''
     else
       "export WATCHDOG_BIN='${WATCHDOG_BIN}';"
   }
+  ${
+    if FLOX_ACTIVATIONS_BIN == null then
+      "export FLOX_ACTIVATIONS_BIN='flox-activations';"
+    else
+      "export FLOX_ACTIVATIONS_BIN='${FLOX_ACTIVATIONS_BIN}';"
+  }
   ${if FLOX_BIN == null then "export FLOX_BIN='flox';" else "export FLOX_BIN='${FLOX_BIN}';"}
   export PROCESS_COMPOSE_BIN='${process-compose}/bin/process-compose';
   export FLOX_INTERPRETER='${flox-activation-scripts}';
@@ -177,6 +185,7 @@ writeShellScriptBin PROJECT_NAME ''
         cat << EOF
   Usage: $0 [--flox <FLOX BINARY>| -F <FLOX BINARY>] \
             [--watchdog <WATCHDOG BINARY | -K <WATCHDOG BINARY>] \
+            [--flox-activations <FLOX ACTIVATIONS BINARY>] \
             [--pkgdb <PKGDB BINARY>| -P <PKGDB BINARY>] \
             [--nix <NIX BINARY>| -N <NIX BINARY>] \
             [--input-data <INPUT DATA> | -I <INPUT DATA>] \
@@ -208,6 +217,7 @@ writeShellScriptBin PROJECT_NAME ''
       -[fF]|--flox)           export FLOX_BIN="''${2?}"; shift; ;;
       -[kK]|--watchdog)       export WATCHDOG_BIN="''${2?}"; shift; ;;
       -[bB]|--buildenv)       export BUILDENV_BIN="''${2?}"; shift; ;;
+      --flox-activations)     export FLOX_ACTIVATIONS_BIN="''${2?}"; shift; ;;
       -[pP]|--pkgdb)          export PKGDB_BIN="''${2?}"; shift; ;;
       -[nN]|--nix)            export NIX_BIN="''${2?}"; shift; ;;
       -[iI]|--input-data)     export INPUT_DATA="''${2?}"; shift; ;;
@@ -263,6 +273,7 @@ writeShellScriptBin PROJECT_NAME ''
     echo "  FLOX_BIN:                 $FLOX_BIN";
     echo "  WATCHDOG_BIN:             $WATCHDOG_BIN";
     echo "  BUILDENV_BIN:             $BUILDENV_BIN";
+    echo "  FLOX_ACTIVATIONS_BIN:     $FLOX_ACTIVATIONS_BIN";
     echo "  PKGDB_BIN:                $PKGDB_BIN";
     echo "  NIX_BIN:                  $NIX_BIN";
     echo "  FLOX_INTERPRETER:         $FLOX_INTERPRETER";
