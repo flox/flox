@@ -18,11 +18,11 @@ project_setup() {
   export PROJECT_DIR="${BATS_TEST_TMPDIR?}/test"
   rm -rf "$PROJECT_DIR"
   mkdir -p "$PROJECT_DIR"
-  pushd "$PROJECT_DIR" >/dev/null || return
+  pushd "$PROJECT_DIR" > /dev/null || return
 }
 
 project_teardown() {
-  popd >/dev/null || return
+  popd > /dev/null || return
   rm -rf "${PROJECT_DIR?}"
   unset PROJECT_DIR
 }
@@ -39,7 +39,7 @@ env_setup_pkgdb() {
   echo '{
     "name": "test",
     "version": 1
-  }' >>"$PROJECT_DIR/.flox/env.json"
+  }' >> "$PROJECT_DIR/.flox/env.json"
 }
 
 # podman writes containers to ~/.local/share/containers/storage
@@ -60,7 +60,7 @@ setup() {
   project_setup
 
   mkdir -p $HOME/.config/containers
-  echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' >"$HOME/.config/containers/policy.json"
+  echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$HOME/.config/containers/policy.json"
 }
 
 teardown() {
@@ -137,6 +137,46 @@ function skip_if_linux() {
   USER=podman-test run podman load -i test-container.tar
   assert_success
   assert_line --partial "Loaded image: localhost/test:sometag"
+}
+
+# bats test_tags=containerize:piped-to-runtime
+@test "container is written to runtime when '--runtime <runtime>' is passed" {
+  skip_if_not_linux
+
+  # flox does not allow to set a $HOME
+  # that does not correspond to the effective user's,
+  # but podman requires the policy.json set in the **test user's** $HOME,
+  # or otherwise fails with
+  #
+  # Error: payload does not match any of the supported image formats:
+  #  * oci: open /etc/containers/policy.json: no such file or directory
+  #  * oci-archive: open /etc/containers/policy.json: no such file or directory
+  #  * docker-archive: open /etc/containers/policy.json: no such file or directory
+  #  * dir: open /etc/containers/policy.json: no such file or directory
+  #
+  # (The fact that podman _also_ looks in HOME/.config/containers/policy.json,
+  #  but refuses to mention it in the error message, notwithstanding.)
+  #
+  # To work around this wrap podman in a script that sets the HOME to the test user's.
+  # 一点傻傻地，但是有效。
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  ORIGINAL_PODMAN="$(command -v podman)"
+  cat > "$BATS_TEST_TMPDIR/bin/podman" << EOF
+#!/usr/bin/env bash
+HOME=$HOME exec $ORIGINAL_PODMAN "\$@"
+EOF
+
+  chmod +x "$BATS_TEST_TMPDIR/bin/podman"
+  export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+
+  env_setup_catalog
+
+  run bash -c '"$FLOX_BIN" containerize --tag "runtime" --runtime podman' 3>&-
+  assert_success
+  assert_line --partial "Loaded image:"
+
+  run --separate-stderr podman run -q -i "localhost/test:runtime" -c 'echo $foo'
+  assert_success
 }
 
 # bats test_tags=containerize:piped-to-stdout
