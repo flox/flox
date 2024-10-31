@@ -43,6 +43,26 @@ if [ -f "$FLOX_ENV/activate.d/envrc" ]; then
   source "$FLOX_ENV/activate.d/envrc"
 fi
 
+# Start the watchdog if invoked by `flox activate` but not when the
+# `${FLOX_ENV}/activate` is invoked directly such as:
+# - containers
+# - wrapped `flox build` binaries.
+#
+# hook.on-activate could exit, in which case we want to cleanup this activation
+# rather than leaving it forever marked as ready = false
+if [ -n "${_FLOX_WATCHDOG_BIN:-}" ]; then
+  # TODO: Some of these args can be removed after https://github.com/flox/flox/issues/2206
+  "$_daemonize" \
+    -E _FLOX_WATCHDOG_LOG_LEVEL="debug" \
+    "$_FLOX_WATCHDOG_BIN" \
+    ${FLOX_DISABLE_METRICS:+--disable-metrics} \
+    --log-dir "$_FLOX_ENV_LOG_DIR" \
+    --socket "$_FLOX_SERVICES_SOCKET" \
+    --flox-env "$FLOX_ENV" \
+    --activation-id "$_FLOX_ACTIVATION_ID" \
+    --runtime-dir "$FLOX_RUNTIME_DIR"
+fi
+
 # Source the hook-on-activate script if it exists.
 if [ -e "$FLOX_ENV/activate.d/hook-on-activate" ]; then
   # Nothing good can come from output printed to stdout in the
@@ -78,27 +98,6 @@ LC_ALL=C $_coreutils/bin/comm -13 "$_start_env" "$_end_env" \
 # TODO: remove from $_del_env keys set in $_add_env
 LC_ALL=C $_coreutils/bin/comm -23 "$_start_env" "$_end_env" \
   | $_gnused/bin/sed -e 's/^declare -x //' -e 's/=.*//' > "$_del_env"
-
-# Start the watchdog if invoked by `flox activate` but not when the
-# `${FLOX_ENV}/activate` is invoked directly such as:
-# - containers
-# - wrapped `flox build` binaries.
-#
-# This must come before sourcing the complete environment (in case the watchdog
-# later depends on vars and hooks) but before the activation is marked as ready
-# (to ensure that it gets cleaned up).
-if [ -n "${_FLOX_WATCHDOG_BIN:-}" ]; then
-  # TODO: Some of these args can be removed after https://github.com/flox/flox/issues/2206
-  "$_daemonize" \
-    -E _FLOX_WATCHDOG_LOG_LEVEL="debug" \
-    "$_FLOX_WATCHDOG_BIN" \
-    ${FLOX_DISABLE_METRICS:+--disable-metrics} \
-    --log-dir "$_FLOX_ENV_LOG_DIR" \
-    --socket "$_FLOX_SERVICES_SOCKET" \
-    --flox-env "$FLOX_ENV" \
-    --activation-id "$_FLOX_ACTIVATION_ID" \
-    --runtime-dir "$FLOX_RUNTIME_DIR"
-fi
 
 # Finally mark the environment as ready to use for attachments.
 "$_flox_activations" \
