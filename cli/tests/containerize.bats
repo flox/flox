@@ -179,6 +179,16 @@ EOF
   assert_success
 }
 
+# bats test_tags=containerize:runtime-not-in-path
+@test "error if runtime not in PATH" {
+  skip_if_not_linux
+  env_setup_catalog
+
+  run bash -c 'PATH= "$FLOX_BIN" containerize --runtime podman' 3>&-
+  assert_failure
+  assert_line --partial "Failed to call runtime"
+}
+
 # bats test_tags=containerize:piped-to-stdout
 @test "container is written to stdout when '-o -' is passed" {
   skip "duplicate of next test"
