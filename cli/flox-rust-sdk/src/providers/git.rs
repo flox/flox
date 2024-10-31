@@ -1238,14 +1238,13 @@ pub mod tests {
 
     #[test]
     fn test_rev_count() {
-        let (_, tempdir_handle) = init_temp_repo(false);
-        let path = tempdir_handle.path().canonicalize().unwrap();
-        let repo = GitCommandProvider::discover(&path).unwrap();
+        let (repo, _tempdir_handle) = init_temp_repo(false);
+        repo.checkout("branch_1", true).unwrap();
         let ct = repo.rev_count("HEAD");
         assert!(ct.is_err());
 
         commit_file(&repo, "dummy");
-        let hash_1 = repo.branch_hash("master").unwrap();
+        let hash_1 = repo.branch_hash("branch_1").unwrap();
         let ct = repo.rev_count("HEAD").unwrap();
         assert_eq!(ct, 1);
 
