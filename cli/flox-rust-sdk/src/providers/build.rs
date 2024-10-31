@@ -264,50 +264,32 @@ fn read_output_to_channel(
     }
 }
 
-/// Unit tests for the `flox-build.mk` "black box" builder, via
-/// the [`FloxBuildMk`] implementation of [`ManifestBuilder`].
-///
-/// Currently, this is _the_ testsuite for the `flox-build.mk` builder.
-#[cfg(test)]
-// TODO: https://github.com/flox/flox/issues/2185
-// Serialise all build tests to workaround potential Nix bug.
-// Use file-based locking to be compatible with `nextest`.
-#[serial_test::file_serial(build)]
-mod tests {
+pub mod test_helpers {
     use std::fs::{self};
 
-    use indoc::{formatdoc, indoc};
-
     use super::*;
-    use crate::flox::test_helpers::flox_instance;
     use crate::flox::Flox;
-    use crate::models::environment::path_environment::test_helpers::{
-        new_path_environment,
-        new_path_environment_from_env_files,
-    };
     use crate::models::environment::path_environment::PathEnvironment;
     use crate::models::environment::Environment;
-    use crate::providers::catalog::test_helpers::reset_mocks_from_file;
-    use crate::providers::catalog::GENERATED_DATA;
 
-    fn result_dir(parent: &Path, package: &str) -> PathBuf {
+    pub fn result_dir(parent: &Path, package: &str) -> PathBuf {
         parent.join(format!("result-{package}"))
     }
 
-    fn cache_dir(parent: &Path, package: &str) -> PathBuf {
+    pub fn cache_dir(parent: &Path, package: &str) -> PathBuf {
         parent.join(format!("result-{package}-buildCache"))
     }
 
     #[derive(Default, Debug, Clone, PartialEq)]
-    struct CollectedOutput {
-        stdout: String,
-        stderr: String,
+    pub struct CollectedOutput {
+        pub stdout: String,
+        pub stderr: String,
     }
 
     /// Runs a build and asserts that the `ExitStatus` matches `expect_status`.
     /// STDOUT and STDERR are returned if you wish to make additional
     /// assertions on the output of the build.
-    fn assert_build_status(
+    pub fn assert_build_status(
         flox: &Flox,
         env: &mut PathEnvironment,
         package_name: &str,
@@ -316,7 +298,7 @@ mod tests {
         let builder = FloxBuildMk;
         let output_stream = builder
             .build(
-                &flox,
+                flox,
                 &env.parent_path().unwrap(),
                 &env.activation_path(flox).unwrap(),
                 &[package_name.to_owned()],
@@ -346,7 +328,7 @@ mod tests {
         output
     }
 
-    fn assert_clean_success(flox: &Flox, env: &mut PathEnvironment, package_names: &[&str]) {
+    pub fn assert_clean_success(flox: &Flox, env: &mut PathEnvironment, package_names: &[&str]) {
         let builder = FloxBuildMk;
         let err = builder
             .clean(
@@ -365,7 +347,7 @@ mod tests {
     /// Asserts that `file_name` exists with `content` within the build result
     /// for `package_name`.
     /// Further, asserts that the result is a symlink into the nix store.
-    fn assert_build_file(parent: &Path, package_name: &str, file_name: &str, content: &str) {
+    pub fn assert_build_file(parent: &Path, package_name: &str, file_name: &str, content: &str) {
         let dir = result_dir(parent, package_name);
         assert!(dir.is_symlink());
         assert!(dir.read_link().unwrap().starts_with("/nix/store/"));
@@ -376,11 +358,37 @@ mod tests {
     }
 
     /// Reads the content of a file in the build result for `package_name`.
-    fn result_content(parent: &Path, package: &str, file_name: &str) -> String {
+    pub fn result_content(parent: &Path, package: &str, file_name: &str) -> String {
         let dir = result_dir(parent, package);
         let file = dir.join(file_name);
         fs::read_to_string(file).unwrap()
     }
+}
+
+/// Unit tests for the `flox-build.mk` "black box" builder, via
+/// the [`FloxBuildMk`] implementation of [`ManifestBuilder`].
+///
+/// Currently, this is _the_ testsuite for the `flox-build.mk` builder.
+#[cfg(test)]
+// TODO: https://github.com/flox/flox/issues/2185
+// Serialise all build tests to workaround potential Nix bug.
+// Use file-based locking to be compatible with `nextest`.
+#[serial_test::file_serial(build)]
+mod tests {
+    use std::fs::{self};
+
+    use indoc::{formatdoc, indoc};
+
+    use super::test_helpers::*;
+    use super::*;
+    use crate::flox::test_helpers::flox_instance;
+    use crate::models::environment::path_environment::test_helpers::{
+        new_path_environment,
+        new_path_environment_from_env_files,
+    };
+    use crate::models::environment::Environment;
+    use crate::providers::catalog::test_helpers::reset_mocks_from_file;
+    use crate::providers::catalog::GENERATED_DATA;
 
     #[test]
     fn build_returns_failure_when_package_not_defined() {
