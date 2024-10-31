@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
+use attach::AttachArgs;
 use clap::{Parser, Subcommand};
 
-mod attach;
+pub mod attach;
 mod set_ready;
 mod start_or_attach;
 
-pub use attach::AttachArgs;
 pub use set_ready::SetReadyArgs;
 pub use start_or_attach::StartOrAttachArgs;
 
