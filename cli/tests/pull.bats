@@ -42,7 +42,7 @@ setup() {
 
 teardown() {
   unset _FLOX_FLOXHUB_GIT_URL
-  wait_for_watchdogs
+  wait_for_watchdogs "$PROJECT_DIR"
   project_teardown
   common_test_teardown
 }
