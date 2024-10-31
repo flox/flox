@@ -25,11 +25,6 @@ project_setup() {
 
 }
 
-# tests should not share the same floxmeta repo
-floxmeta_setup() {
-  export FLOX_DATA_DIR="$BATS_TEST_TMPDIR/floxdata"
-}
-
 project_teardown() {
   popd > /dev/null || return
   rm -rf "${PROJECT_DIR?}"
@@ -45,6 +40,7 @@ setup() {
 }
 
 teardown() {
+  cat_teardown_fifo
   wait_for_watchdogs "$PROJECT_DIR"
   project_teardown
   common_test_teardown
@@ -492,4 +488,39 @@ EOF
 
   run tomlq '.install.hello' .flox/env/manifest.toml
   assert_output 'null'
+}
+
+# bats test_tags=activate,activate:attach
+@test "managed environments can attach" {
+  project_setup
+  export OWNER="owner"
+  floxhub_setup "$OWNER"
+
+  "$FLOX_BIN" init
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+    [hook]
+    on-activate = """
+      echo "sourcing hook.on-activate"
+    """
+EOF
+  )"
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+  "$FLOX_BIN" push --owner "$OWNER"
+
+  mkfifo started
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/finished"
+  mkfifo "$TEARDOWN_FIFO"
+
+  FLOX_SHELL=bash "$FLOX_BIN" activate -- bash -c "echo > started && echo > \"$TEARDOWN_FIFO\"" >> output 2>&1 &
+  timeout 2 cat started
+  run cat output
+  assert_success
+  assert_output --partial "sourcing hook.on-activate"
+
+
+  run "$FLOX_BIN" activate -- true
+  assert_success
+  refute_output --partial "sourcing hook.on-activate"
 }

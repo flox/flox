@@ -5,7 +5,11 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
-use flox_core::activations::{activations_json_path, read_activations_json};
+use flox_core::activations::{
+    activations_json_path,
+    read_activations_json,
+    write_activations_json,
+};
 use flox_rust_sdk::flox::FLOX_VERSION;
 use flox_rust_sdk::providers::services::process_compose_down;
 use flox_rust_sdk::utils::{maybe_traceable_path, traceable_path};
@@ -117,6 +121,15 @@ fn run(args: Cli) -> Result<(), Error> {
     signal_hook::flag::register(SIGQUIT, Arc::clone(&should_terminate))
         .context("failed to set SIGQUIT signal handler")?;
 
+    run_inner(args, should_terminate, should_clean_up)
+}
+
+// Function to be used for unit tests that doesn't do weird process stuff
+fn run_inner(
+    args: Cli,
+    should_terminate: Arc<AtomicBool>,
+    should_clean_up: Arc<AtomicBool>,
+) -> Result<(), Error> {
     let activations_json_path = activations_json_path(&args.runtime_dir, &args.flox_env);
 
     let mut watcher = PidWatcher::new(
@@ -147,7 +160,7 @@ fn run(args: Cli) -> Result<(), Error> {
     match watcher.wait_for_termination() {
         Ok(WaitResult::CleanUp) => {
             // Exit
-            info!("exiting");
+            info!("running cleanup after all PIDs terminated");
             cleanup(
                 &args.socket_path,
                 &activations_json_path,
@@ -162,6 +175,7 @@ fn run(args: Cli) -> Result<(), Error> {
             bail!("received stop signal, exiting without cleanup");
         },
         Err(err) => {
+            info!("running cleanup after error");
             let _ = cleanup(
                 &args.socket_path,
                 &activations_json_path,
@@ -184,7 +198,7 @@ fn cleanup(
 ) -> Result<()> {
     debug!("running cleanup");
 
-    let (activations_json, _lock) = read_activations_json(activations_json_path)?;
+    let (activations_json, lock) = read_activations_json(&activations_json_path)?;
     let Some(mut activations_json) = activations_json else {
         bail!("watchdog shouldn't be running when activations.json doesn't exist");
     };
@@ -204,9 +218,10 @@ fn cleanup(
     }
 
     // We want to hold the lock until services are cleaned up
-    drop(_lock);
+    write_activations_json(&activations_json, activations_json_path, lock)?;
 
     // TODO: remove activation state dir
+    debug!("finished cleanup");
 
     Ok(())
 }
@@ -231,4 +246,63 @@ fn ensure_process_group_leader() -> Result<(), Error> {
         setsid().context("failed to create new session")?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use flox_activations::cli::{SetReadyArgs, StartOrAttachArgs};
+    use process::test::{shutdown_flags, start_process, stop_process};
+
+    use super::*;
+
+    #[test]
+    fn cleanup_removes_activation() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let runtime_dir = temp_dir.path();
+        let log_dir = temp_dir.path();
+        let flox_env = PathBuf::from("flox_env");
+        let store_path = "store_path".to_string();
+
+        let proc = start_process();
+        let pid = proc.id() as i32;
+        let start_or_attach = StartOrAttachArgs {
+            pid,
+            flox_env: flox_env.clone(),
+            store_path: store_path.clone(),
+        };
+        let activation_id = start_or_attach.handle(runtime_dir).unwrap();
+        let set_ready = SetReadyArgs {
+            id: activation_id.clone(),
+            flox_env: flox_env.clone(),
+        };
+        set_ready.handle(runtime_dir).unwrap();
+
+        let activations_json_path = activations_json_path(runtime_dir, &flox_env);
+
+        let activations_json = read_activations_json(&activations_json_path)
+            .unwrap()
+            .0
+            .unwrap();
+        assert!(!activations_json.is_empty());
+
+        stop_process(proc);
+
+        let cli = Cli {
+            flox_env,
+            runtime_dir: runtime_dir.to_path_buf(),
+            activation_id,
+            socket_path: PathBuf::from("/does_not_exist"),
+            log_dir: Some(log_dir.to_path_buf()),
+            disable_metrics: true,
+        };
+
+        let (terminate_flag, cleanup_flag) = shutdown_flags();
+        run_inner(cli, terminate_flag, cleanup_flag).unwrap();
+
+        let activations_json = read_activations_json(&activations_json_path)
+            .unwrap()
+            .0
+            .unwrap();
+        assert!(activations_json.is_empty());
+    }
 }

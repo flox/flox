@@ -46,6 +46,19 @@ wait_for_file_content() {
   assert_success
 }
 
+# Wait, with a poll and timeout, for partial contents to appear in a file
+wait_for_partial_file_content() {
+  file="${1?}"
+  expected="${2?}"
+
+  export file expected
+  timeout 1s bash -c '
+    while ! grep -q "$expected" "$file"; do
+      sleep 0.1s
+    done
+  '
+}
+
 setup() {
   common_test_setup
   setup_isolated_flox
@@ -55,6 +68,7 @@ setup() {
 }
 
 teardown() {
+  cat_teardown_fifo
   # Wait for watchdogs before project teardown, otherwise some tests will hang
   # forever.
   #
@@ -1377,4 +1391,77 @@ EOF
   # Technically this should be a teardown step
   # The test will hang forever if it fails and doesn't get here
   timeout 2 cat fifo
+}
+
+@test "services stop after multiple activations of an environment exit" {
+  setup_sleeping_services
+
+  # Start a first activation
+  mkfifo started_1
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/finished_1"
+  mkfifo "$TEARDOWN_FIFO"
+  "$FLOX_BIN" activate --start-services -- bash -c "echo > started_1 && echo > $TEARDOWN_FIFO" &
+  timeout 2 cat started_1
+
+  # Check that services and watchdog are both running
+  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
+  watchdog_1_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log)"
+  run cat "$watchdog_1_log"
+  assert_success
+  assert_output --partial "woof"
+
+  # Start a second activation
+  MANIFEST_APPEND="$(cat << "EOF"
+[vars]
+dummy = "whatever"
+EOF
+  )"
+  NEW_MANIFEST_CONTENTS="$("$FLOX_BIN" list -c | cat - <(echo "$MANIFEST_APPEND"))"
+  echo "$NEW_MANIFEST_CONTENTS"
+  export NEW_MANIFEST_CONTENTS
+  run bash -c 'echo "$NEW_MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -'
+  assert_success
+  assert_output --partial "Environment successfully updated."
+
+  mkfifo started_2
+  mkfifo finished_2
+
+  "$FLOX_BIN" activate --start-services -- bash -c "echo > started_2 && echo > finished_2" 2>output &
+
+  timeout 2 cat started_2
+  # Swap out teardown fifo and immediately teardown first activation
+  # Wait for 2nd activation to start before tearing down the 1st
+  # otherwise services might get stopped
+  TEARDOWN_FIFO="$PROJECT_DIR/finished_2"
+  timeout 2 cat finished_1
+  run cat output
+  assert_output --partial "⚠️  Skipped starting services, services are already running"
+
+  # Check that watchdog 1 has finished cleanup
+  run cat "$watchdog_1_log"
+  assert_output --partial "woof"
+  wait_for_partial_file_content "$watchdog_1_log" "finished cleanup"
+  rm "$watchdog_1_log"
+
+  # Check that watchdog 2 is running
+  watchdog_2_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log)"
+  run cat "$watchdog_2_log"
+  assert_output --partial "woof"
+  refute_output "finished cleanup"
+
+  # Even though watchdog 1 cleaned up, services should still be running
+  "${TESTS_DIR}"/services/wait_for_service_status.sh one:Running
+
+  # Teardown 2nd activation and wait for watchdog to cleanup
+  cat finished_2
+  unset TEARDOWN_FIFO
+  wait_for_partial_file_content "$watchdog_2_log" "finished cleanup"
+
+  # Make sure services have stopped
+  timeout 1s bash -c '
+    while "$FLOX_BIN" services status; do
+      sleep .1
+    done
+  '
 }

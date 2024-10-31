@@ -170,6 +170,22 @@ on-activate = """
 EOF
 )
 
+HOOK_ONLY_ONCE="$(cat << "EOF"
+  version = 1
+
+  [hook]
+  on-activate = """
+    if [ -n "$_already_ran_hook_on_activate" ]; then
+      echo "ERROR: hook section sourced twice"
+      exit 1
+    else
+      echo "sourcing hook.on-activate for first time"
+    fi
+    export _already_ran_hook_on_activate=1
+  """
+EOF
+)"
+
 # ---------------------------------------------------------------------------- #
 
 # bats test_tags=activate,activate:flox_shell,activate:flox_shell:bash
@@ -2696,22 +2712,7 @@ EOF
 attach_runs_hooks_once() {
   mode="${1?}"
 
-  MANIFEST_CONTENTS="$(cat << "EOF"
-    version = 1
-
-    [hook]
-    on-activate = """
-      if [ -n "$_already_ran_hook_on_activate" ]; then
-        echo "ERROR: hook section sourced twice"
-        exit 1
-      else
-        echo "sourcing hook.on-activate for first time"
-      fi
-      export _already_ran_hook_on_activate=1
-    """
-EOF
-  )"
-  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+  echo "$HOOK_ONLY_ONCE" | "$FLOX_BIN" edit -f -
 
   mkfifo activate_finished
   # Will get cat'ed in teardown
@@ -3181,6 +3182,52 @@ EOF
 }
 
 # ---------------------------------------------------------------------------- #
+
+# bats test_tags=activate,activate:attach
+@test "activation gets cleaned up and subsequent activation starts" {
+  project_setup
+
+  MANIFEST_CONTENTS="$(cat << "EOF"
+    version = 1
+
+    [hook]
+    on-activate = """
+      export FOO="$injected"
+    """
+EOF
+  )"
+
+  echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
+
+  mkfifo activate_finished
+  # Will get cat'ed in teardown
+  TEARDOWN_FIFO="$PROJECT_DIR/teardown_activate"
+  mkfifo "$TEARDOWN_FIFO"
+
+  # Start a first_activation which sets FOO=first_activation
+  injected="first_activation" "$FLOX_BIN" activate -- bash -c "echo \$FOO > output && echo > activate_finished && echo > $TEARDOWN_FIFO" &
+  cat activate_finished
+
+  run cat output
+  assert_success
+  assert_output "first_activation"
+
+  # Run a second activation which should attach to the first,
+  # so FOO should still be first_activation
+  injected="second_activation" run "$FLOX_BIN" activate -- echo \$FOO
+  assert_success
+  assert_output "first_activation"
+
+  # Teardown the first activation and wait for the watchdog to clean it up
+  cat "$TEARDOWN_FIFO"
+  unset TEARDOWN_FIFO # otherwise teardown will hang
+  wait_for_watchdogs "$PROJECT_DIR"
+
+  # Verify that a third activation starts rather than attaching
+  injected="third_activation" run "$FLOX_BIN" activate -- echo \$FOO
+  assert_success
+  assert_output --partial "third_activation"
+}
 
 # Sub-commands like `flox-activations` and `flox-watchdog` depend on this.
 @test "activate: sets FLOX_DISABLE_METRICS from config" {
