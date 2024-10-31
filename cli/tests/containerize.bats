@@ -63,6 +63,21 @@ setup() {
   echo '{ "default": [ {"type": "insecureAcceptAnything"} ] }' > "$HOME/.config/containers/policy.json"
 }
 
+setup_file() {
+  common_file_setup
+  # There seems to be a deadlock when running tests in parallel
+  # either due to podman, or deleting the podman cache.
+  # Since this started with the addition of tests
+  # for loading containers into podman from flox,
+  # fd3 issues are possible as well.
+  # For the sake of getting the tests to pass, we'll disable parallelism.
+  # this slows down the tests, but since they already run in parallel
+  # with other groups this won't slow down the overall test suite.
+  # As a side effect the individual tests will run faster
+  # because podman does not need to serialize writes to the cache.
+  export BATS_NO_PARALLELIZE_WITHIN_FILE=true
+}
+
 teardown() {
   project_teardown
   common_test_teardown
