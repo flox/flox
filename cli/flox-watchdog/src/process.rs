@@ -226,7 +226,7 @@ impl Watcher for PidWatcher {
     fn should_clean_up(&self) -> Result<bool, super::Error> {
         let should_clean_up = self.pids_watching.is_empty();
         if !should_clean_up {
-            debug!("still watching {:?}", self.pids_watching);
+            debug!("still watching PIDs {:?}", self.pids_watching);
         }
         Ok(should_clean_up)
     }
