@@ -99,7 +99,7 @@ flox config --set 'trusted_environments."owner/name"' trust
 
 `hide_default_prompt`
 :   Hide environments named 'default' from the shell prompt,
-    and don't add environments named 'default' to `$FLOX_PROMPT_ENVIRONMENTS` (default: false).
+    and don't add environments named 'default' to `$FLOX_PROMPT_ENVIRONMENTS` (default: true).
 
 `search_limit`
 :   How many items `flox search` should show by default.
