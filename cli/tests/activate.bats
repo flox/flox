@@ -952,12 +952,12 @@ EOF
 
   # Don't use run or assert_output because we can't use them for
   # shells other than bash.
-  {
+  cat <<'EOF' | bash
     output="$(FLOX_SHELL="bash" eval "$("$FLOX_BIN" activate)")"
     [[ "$output" == *"sourcing profile.bash"* ]]
     output="$(FLOX_SHELL="bash" eval "$("$FLOX_BIN" activate)")"
     [[ "$output" == *"sourcing profile.bash"* ]]
-  }
+EOF
 }
 
 # bats test_tags=activate,activate:hook,activate:hook:fish
@@ -1760,13 +1760,13 @@ EOF
   project_setup
   "$FLOX_BIN" edit -f "$BATS_TEST_DIRNAME/activate/on-activate.toml"
 
-  {
+  cat <<'EOF' | bash
     eval "$("$FLOX_BIN" activate)"
     [[ "$foo" == baz ]]
     unset foo
     eval "$("$FLOX_BIN" activate)"
     [[ "$foo" == baz ]]
-  }
+EOF
 }
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:fish
@@ -1832,14 +1832,14 @@ EOF
 
   echo "$MANIFEST_CONTENTS" | "$FLOX_BIN" edit -f -
 
-  {
+  cat <<'EOF' | bash
     export foo=baz
     eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
     [[ -z "${foo:-}" ]]
     export foo=baz
     eval "$(FLOX_SHELL="bash" "$FLOX_BIN" activate)"
     [[ -z "${foo:-}" ]]
-  }
+EOF
 }
 
 # bats test_tags=activate:scripts:on-activate,activate:scripts:on-activate:fish
@@ -3186,9 +3186,13 @@ EOF
 
 # ---------------------------------------------------------------------------- #
 
-# bats test_tags=activate,activate:attach
-@test "activation gets cleaned up and subsequent activation starts" {
-  project_setup
+# ---------------------------------------------------------------------------- #
+# Test that attach sets vars set in profile scripts
+# Run test for 4 shells in each of 3 modes
+# ---------------------------------------------------------------------------- #
+
+activation_gets_cleaned_up() {
+  mode="${1?}"
 
   MANIFEST_CONTENTS="$(cat << "EOF"
     version = 1
@@ -3208,12 +3212,38 @@ EOF
   mkfifo "$TEARDOWN_FIFO"
 
   # Start a first_activation which sets FOO=first_activation
-  injected="first_activation" "$FLOX_BIN" activate -- bash -c "echo \$FOO > output && echo > activate_finished && echo > $TEARDOWN_FIFO" &
-  cat activate_finished
+  case "$mode" in
+    command)
+      injected="first_activation" "$FLOX_BIN" activate -- bash -c "echo \$FOO > output && echo > activate_finished && echo > $TEARDOWN_FIFO" &
+      ;;
+    in-place)
+      TEARDOWN_FIFO="$TEARDOWN_FIFO" injected="first_activation" bash -c 'eval "$("$FLOX_BIN" activate)" && echo $FOO > output && echo > activate_finished && echo > "$TEARDOWN_FIFO"' &
+      ;;
+  esac
+
+  timeout 2 cat activate_finished
 
   run cat output
   assert_success
   assert_output "first_activation"
+
+  # Wait for the watchdog to poll at least once so the test doesn't pass just
+  # because the 2nd activate beats the watchdog to poll
+
+  # First wait for the logfile to appear
+  timeout 1s bash -c '
+    while ! ls $PROJECT_DIR/.flox/log/watchdog.*.log; do
+      sleep .1
+    done
+  '
+  watchdog_1_log="$(echo $PROJECT_DIR/.flox/log/watchdog.*.log)"
+  initial_number_of_polls="$(cat "$watchdog_1_log" | grep "still watching PIDs" | wc -l)"
+  watchdog_1_log="$watchdog_1_log" initial_number_of_polls="$initial_number_of_polls" \
+    timeout 1s bash -c '
+      while [ "$(cat "$watchdog_1_log" | grep "still watching PIDs" | wc -l)" == "$initial_number_of_polls" ]; do
+        sleep .1
+      done
+    '
 
   # Run a second activation which should attach to the first,
   # so FOO should still be first_activation
@@ -3231,6 +3261,20 @@ EOF
   assert_success
   assert_output --partial "third_activation"
 }
+
+# bats test_tags=activate,activate:attach
+@test "command-mode: activation gets cleaned up and subsequent activation starts" {
+  project_setup
+  activation_gets_cleaned_up command
+}
+
+# bats test_tags=activate,activate:attach
+@test "in-place: activation gets cleaned up and subsequent activation starts" {
+  project_setup
+  activation_gets_cleaned_up in-place
+}
+
+# ---------------------------------------------------------------------------- #
 
 # Sub-commands like `flox-activations` and `flox-watchdog` depend on this.
 @test "activate: sets FLOX_DISABLE_METRICS from config" {
