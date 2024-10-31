@@ -280,7 +280,7 @@ pub mod tests {
     fn example_remote() -> (tempfile::TempDir, GitCommandProvider, String) {
         let tempdir_handle = tempfile::tempdir_in(std::env::temp_dir()).unwrap();
 
-        let repo = GitCommandProvider::init(tempdir_handle.path(), false).unwrap();
+        let repo = GitCommandProvider::init(tempdir_handle.path(), true).unwrap();
 
         let remote_uri = format!("file://{}", tempdir_handle.path().display());
 
@@ -307,17 +307,16 @@ pub mod tests {
         remote: Option<&String>,
     ) -> (PathEnvironment, GitCommandProvider) {
         let env =
-            new_path_environment_from_env_files(&flox, GENERATED_DATA.join("envs/publish-simple"));
+            new_path_environment_from_env_files(flox, GENERATED_DATA.join("envs/publish-simple"));
 
         let git = GitCommandProvider::init(
-            &env.parent_path().expect("Parent path must be accessible"),
+            env.parent_path().expect("Parent path must be accessible"),
             false,
         )
         .unwrap();
 
         git.checkout("main", true).expect("checkout main branch");
-        git.add(&[&env.dot_flox_path().to_path_buf()])
-            .expect("adding flox files");
+        git.add(&[&env.dot_flox_path()]).expect("adding flox files");
         git.commit("Initial commit").expect("be able to commit");
 
         if let Some(uri) = remote {
