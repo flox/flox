@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use clap::Args;
 use flox_core::activations;
-use time::Duration;
+use time::{Duration, OffsetDateTime};
 
 use crate::Error;
 
@@ -34,7 +34,11 @@ pub struct AttachExclusiveArgs {
 }
 
 impl AttachArgs {
-    pub(crate) fn handle(self, runtime_dir: &Path) -> Result<(), Error> {
+    pub fn handle(self, runtime_dir: &Path) -> Result<(), Error> {
+        self.handle_inner(runtime_dir, OffsetDateTime::now_utc())
+    }
+
+    pub fn handle_inner(self, runtime_dir: &Path, now: OffsetDateTime) -> Result<(), Error> {
         let activations_json_path = activations::activations_json_path(runtime_dir, &self.flox_env);
 
         let (activations, lock) = activations::read_activations_json(&activations_json_path)?;
@@ -57,7 +61,8 @@ impl AttachArgs {
                 timeout_ms: Some(timeout_ms),
                 remove_pid: None,
             } => {
-                activation.attach_pid(self.pid, Some(Duration::milliseconds(timeout_ms as i64)));
+                let expiration = now + Duration::milliseconds(timeout_ms as i64);
+                activation.attach_pid(self.pid, Some(expiration));
             },
             AttachExclusiveArgs {
                 timeout_ms: None,

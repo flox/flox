@@ -8,7 +8,7 @@ use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use time::{Duration, OffsetDateTime};
+use time::OffsetDateTime;
 
 use crate::{path_hash, Version};
 
@@ -165,8 +165,7 @@ impl Activation {
     /// Register another PID that runs the same activation of an environment.
     /// Registered PIDs are used by the watchdog,
     /// to determine when an activation can be cleaned up.
-    pub fn attach_pid(&mut self, pid: i32, timeout: Option<Duration>) {
-        let expiration = timeout.map(|timeout| OffsetDateTime::now_utc() + timeout);
+    pub fn attach_pid(&mut self, pid: i32, expiration: Option<OffsetDateTime>) {
         let attached_pid = AttachedPid { pid, expiration };
 
         self.attached_pids.push(attached_pid);

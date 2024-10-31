@@ -27,7 +27,7 @@ pub struct StartOrAttachArgs {
 }
 
 impl StartOrAttachArgs {
-    pub(crate) fn handle(self, runtime_dir: &Path) -> Result<(), anyhow::Error> {
+    pub fn handle(self, runtime_dir: &Path) -> Result<(), anyhow::Error> {
         let mut retries = 3;
 
         loop {
