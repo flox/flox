@@ -222,8 +222,13 @@ impl Watcher for PidWatcher {
         Ok(())
     }
 
+    /// Returns true if the watcher is not currently watching any PIDs.
     fn should_clean_up(&self) -> Result<bool, super::Error> {
-        Ok(self.pids_watching.is_empty())
+        let should_clean_up = self.pids_watching.is_empty();
+        if !should_clean_up {
+            debug!("still watching {:?}", self.pids_watching);
+        }
+        Ok(should_clean_up)
     }
 }
 
@@ -239,6 +244,7 @@ pub fn attached_pids(
     let Some(activation) = activations_json.activation_for_id_ref(activation_id) else {
         bail!("watchdog shouldn't be running with ID that isn't in activations.json");
     };
+
     Ok(activation
         .attached_pids()
         .iter()
@@ -247,12 +253,13 @@ pub fn attached_pids(
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use std::path::PathBuf;
     use std::process::{Child, Command};
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
 
+    use flox_activations::cli::attach::{AttachArgs, AttachExclusiveArgs};
     use flox_activations::cli::{SetReadyArgs, StartOrAttachArgs};
     use flox_core::activations::activations_json_path;
 
@@ -374,6 +381,169 @@ mod test {
             wait_result
         });
         assert_eq!(wait_result, WaitResult::CleanUp);
+    }
+
+    #[test]
+    fn pid_not_pruned_before_expiration() {
+        let runtime_dir = tempfile::tempdir().unwrap();
+        let flox_env = PathBuf::from("flox_env");
+        let store_path = "store_path".to_string();
+
+        let proc1 = start_process();
+        let pid1 = proc1.id() as i32;
+        let start_or_attach_pid1 = StartOrAttachArgs {
+            pid: pid1,
+            flox_env: flox_env.clone(),
+            store_path: store_path.clone(),
+        };
+        let activation_id = start_or_attach_pid1.handle(runtime_dir.path()).unwrap();
+        let set_ready_pid1 = SetReadyArgs {
+            id: activation_id.clone(),
+            flox_env: flox_env.clone(),
+        };
+        set_ready_pid1.handle(runtime_dir.path()).unwrap();
+
+        let proc2 = start_process();
+        let pid2 = proc2.id() as i32;
+        let start_or_attach_pid2 = StartOrAttachArgs {
+            pid: pid2,
+            flox_env: flox_env.clone(),
+            store_path: store_path.clone(),
+        };
+        let activation_id_2 = start_or_attach_pid2.handle(runtime_dir.path()).unwrap();
+        assert_eq!(activation_id, activation_id_2);
+        let timeout_ms = 9999;
+        let attach_2 = AttachArgs {
+            flox_env: flox_env.clone(),
+            id: activation_id.clone(),
+            pid: pid2,
+            exclusive: AttachExclusiveArgs {
+                timeout_ms: Some(timeout_ms),
+                remove_pid: None,
+            },
+        };
+        let now = OffsetDateTime::now_utc();
+        let expiration = Some(now + Duration::from_millis(timeout_ms as u64));
+        attach_2.handle_inner(runtime_dir.path(), now).unwrap();
+
+        let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
+        let (terminate_flag, cleanup_flag) = shutdown_flags();
+        let mut watcher = PidWatcher::new(
+            activations_json_path,
+            activation_id,
+            terminate_flag,
+            cleanup_flag,
+        );
+        watcher.update_watchlist().unwrap();
+
+        assert_eq!(
+            watcher.pids_watching,
+            HashSet::from([
+                AttachedPid {
+                    pid: pid1,
+                    expiration: None,
+                },
+                AttachedPid {
+                    pid: pid2,
+                    expiration: None,
+                },
+                AttachedPid {
+                    pid: pid2,
+                    expiration,
+                }
+            ])
+        );
+
+        stop_process(proc1);
+        stop_process(proc2);
+
+        watcher.update_watchlist().unwrap();
+
+        assert!(!watcher.should_clean_up().unwrap());
+        assert_eq!(
+            watcher.pids_watching,
+            HashSet::from([AttachedPid {
+                pid: pid2,
+                expiration,
+            }])
+        );
+    }
+
+    #[test]
+    fn pid_pruned_after_expiration() {
+        let runtime_dir = tempfile::tempdir().unwrap();
+        let flox_env = PathBuf::from("flox_env");
+        let store_path = "store_path".to_string();
+
+        let proc1 = start_process();
+        let pid1 = proc1.id() as i32;
+        let start_or_attach_pid1 = StartOrAttachArgs {
+            pid: pid1,
+            flox_env: flox_env.clone(),
+            store_path: store_path.clone(),
+        };
+        let activation_id = start_or_attach_pid1.handle(runtime_dir.path()).unwrap();
+        let set_ready_pid1 = SetReadyArgs {
+            id: activation_id.clone(),
+            flox_env: flox_env.clone(),
+        };
+        set_ready_pid1.handle(runtime_dir.path()).unwrap();
+
+        let proc2 = start_process();
+        let pid2 = proc2.id() as i32;
+        let start_or_attach_pid2 = StartOrAttachArgs {
+            pid: pid2,
+            flox_env: flox_env.clone(),
+            store_path: store_path.clone(),
+        };
+        let activation_id_2 = start_or_attach_pid2.handle(runtime_dir.path()).unwrap();
+        assert_eq!(activation_id, activation_id_2);
+        let attach_2 = AttachArgs {
+            flox_env: flox_env.clone(),
+            id: activation_id.clone(),
+            pid: pid2,
+            exclusive: AttachExclusiveArgs {
+                timeout_ms: Some(0),
+                remove_pid: None,
+            },
+        };
+        let the_past = OffsetDateTime::now_utc() - Duration::from_secs(9999);
+        attach_2.handle_inner(runtime_dir.path(), the_past).unwrap();
+
+        let activations_json_path = activations_json_path(&runtime_dir, &flox_env);
+        let (terminate_flag, cleanup_flag) = shutdown_flags();
+        let mut watcher = PidWatcher::new(
+            activations_json_path,
+            activation_id,
+            terminate_flag,
+            cleanup_flag,
+        );
+        watcher.update_watchlist().unwrap();
+
+        assert_eq!(
+            watcher.pids_watching,
+            HashSet::from([
+                AttachedPid {
+                    pid: pid1,
+                    expiration: None,
+                },
+                AttachedPid {
+                    pid: pid2,
+                    expiration: None,
+                },
+                AttachedPid {
+                    pid: pid2,
+                    expiration: Some(the_past),
+                }
+            ])
+        );
+
+        stop_process(proc1);
+        stop_process(proc2);
+
+        watcher.update_watchlist().unwrap();
+
+        assert!(watcher.should_clean_up().unwrap());
     }
 
     #[test]
