@@ -47,17 +47,23 @@ jobs:
         # prepend `refs/heads/` to match the format of
         # `github.event.merge_group.base_ref`.
         run: |
-          echo 'TARGET_BRANCH=refs/heads/${{ github.base_ref }}' >> "$GITHUB_ENV";
+          echo 'TARGET_REF=refs/heads/${{ github.base_ref }}' >> "$GITHUB_ENV";
+          echo 'HEAD_REF=refs/heads/${{ github.head_ref }}' >> "$GITHUB_ENV";
 
       - name: "Fetch target branch ( Merge Queue )"
         if: ${{ github.event_name == 'merge_group' }}
         run: |
-          echo 'TARGET_BRANCH=${{ github.event.merge_group.base_ref }}' >> "$GITHUB_ENV";
+          echo 'TARGET_REF=${{ github.event.merge_group.base_ref }}' >> "$GITHUB_ENV";
+          echo 'HEAD_REF=${{ github.event.merge_group.head_ref }}' >> "$GITHUB_ENV";
 
-      # Fetch the target branch and create a local reference to it.
-      - name: "Fetch target branch"
+      # Fetch the head and target branch and create a local reference to it.
+      # Apparently git does not like fetching into the current branch,
+      # so we fetch into temporary branches `target` and `head`.
+      - name: "Fetch branches"
         run: |
-          git fetch origin "$TARGET_BRANCH:$TARGET_BRANCH";
+          git fetch --atomic origin \
+            "$TARGET_REF:target" \
+            "$HEAD_REF:head";
 
       # avoid the next step being filled with nix substitution logs
       # and ensure that `pre-commit` can run cargo with the `--offline` flag
@@ -73,11 +79,14 @@ jobs:
       # `git rev-parse`.
       - name: "Run Nix Git Hooks"
         run: |
+          echo "TARGET_REF: $TARGET_REF ($( git rev-parse "target" ))"
+          echo "HEAD_REF: $HEAD_REF ($( git rev-parse "head" ))"
+
           nix develop -L --no-update-lock-file --command \
             pre-commit run \
               --hook-stage manual \
-              --from-ref "$( git rev-parse "$TARGET_BRANCH" )" \
-              --to-ref   "$( git rev-parse HEAD )";
+              --from-ref "$( git rev-parse "target" )" \
+              --to-ref   "$( git rev-parse "head" )";
 
 # ---------------------------------------------------------------------------- #
 #
