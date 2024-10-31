@@ -114,8 +114,11 @@ teardown() {
   # Cleaning up the `BATS_TEST_TMPDIR` occasionally fails,
   # because of an 'env-registry.json' that gets concurrently written
   # by the watchdog as the activation terminates.
-  wait_for_watchdogs
-  project_teardown
+  if [ -n "${PROJECT_DIR:-}" ]; then
+    # Not all tests call project_setup
+    wait_for_watchdogs "$PROJECT_DIR"
+    project_teardown
+  fi
   common_test_teardown
 }
 
@@ -2593,6 +2596,10 @@ EOF
 }
 
 @test "profile: JUPYTER_PATH is modified when Jupyter is installed" {
+  # Although we don't actually use the environment this creates, we need to call
+  # it so wait_for_watchdogs has a PROJECT_DIR to look for
+  project_setup
+
   # Mock contains both extensions but only one is used in each install.
   export _FLOX_USE_CATALOG_MOCK="$GENERATED_DATA/resolve/jupyter_with_extensions.json"
 

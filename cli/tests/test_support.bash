@@ -173,52 +173,53 @@ common_file_teardown() {
 
 teardown_file() { common_file_teardown; }
 
+# Wait for all watchdogs called with project_dir as part of one of their
+# arguments
 wait_for_watchdogs() {
-  # wait for any running flox-watchdog proceses to finish
-  if [[ -n "${FLOX_DATA_DIR:-}" ]]; then
-    # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
-    # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
-    # grep command itself doesn't get listed when we search for the data dir.
-    # The `sed` removes any leading whitespace,
-    # that is present in the output of `ps` on linux aparently?!.
-    # The `cut` just extracts the PID.
-
-    local pids
-    pids="$(
-      ps -Ao pid,args \
-      | grep flox-watchdog \
-      | grep ${FLOX_DATA_DIR?} \
-      | sed 's/^[[:blank:]]*//' \
-      | cut -d' ' -f1)"
-
-    # Uncomment to debug which watchdogs are running.
-    #
-    # echo "FLOX_DATA_DIR => ${FLOX_DATA_DIR?}" >&3
-    # ps -Ao pid,args \
-    #  | grep flox-watchdog \
-    #  >&3
-
-    if [ -n "${pids?}" ]; then
-      tries=0
-      while true; do
-        tries=$((tries + 1))
-        if ! kill -0 $pids > /dev/null 2>&1; then
-          break
-        else
-          if [[ $tries -gt 1000 ]]; then
-            echo "ERROR: flox-watchdog processes did not finish after 10 seconds." >&3
-            # This will fail the test giving us a better idea of which watchdog
-            # didn't get cleaned up
-            exit 1
-          fi
-          sleep 0.01;
-        fi
-      done
-    fi
-  else
-    echo "FLOX_DATA_DIR not set, cannot wait for watchdogs." >&3
+  project_dir="${1?}"
+  if [ -z "$project_dir" ]; then
+    echo "ERROR: cannot wait for watchdogs with empty project_dir" >&3
+    exit 1
   fi
+  # This is a hack to essentially do a `pgrep` without having access to `pgrep`.
+  # The `ps` prints `<pid> <cmd>`, then we use two separate `grep`s so that the
+  # grep command itself doesn't get listed when we search for the data dir.
+  # The `sed` removes any leading whitespace,
+  # that is present in the output of `ps` on linux aparently?!.
+  # The `cut` just extracts the PID.
 
+  local pids
+  pids="$(
+    ps -Ao pid,args \
+    | grep flox-watchdog \
+    | grep "$project_dir" \
+    | sed 's/^[[:blank:]]*//' \
+    | cut -d' ' -f1)"
+
+  # Uncomment to debug which watchdogs are running.
+  #
+  # echo "project_dir => ${project_dir}" >&3
+  # ps -Ao pid,args \
+  #  | grep flox-watchdog \
+  #  >&3
+
+  if [ -n "${pids?}" ]; then
+    tries=0
+    while true; do
+      tries=$((tries + 1))
+      if ! kill -0 $pids > /dev/null 2>&1; then
+        break
+      else
+        if [[ $tries -gt 1000 ]]; then
+          echo "ERROR: flox-watchdog processes did not finish after 10 seconds." >&3
+          # This will fail the test giving us a better idea of which watchdog
+          # didn't get cleaned up
+          exit 1
+        fi
+        sleep 0.01;
+      fi
+    done
+  fi
 }
 
 common_test_teardown() {
