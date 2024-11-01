@@ -53,7 +53,7 @@ pre-commit-hooks.lib.${system}.run {
     clippy = {
       enable = true;
       settings.denyWarnings = true;
-      extraArgs = "--tests";
+      extraArs = "--tests";
     };
     commitizen = {
       stages = [ "commit-msg" ];

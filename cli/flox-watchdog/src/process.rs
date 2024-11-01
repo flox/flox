@@ -345,7 +345,7 @@ mod test {
         let proc = start_process();
         let pid = ActivationPid::from(proc.id() as i32);
         let (terminate_flag, cleanup_flag) = shutdown_flags();
-        let path_hash = "abc";
+        let path_hash = "abcd";
         let reg_path = path_for_registry_with_entry(&path_hash);
         register_activation(&reg_path, &path_hash, pid).unwrap();
         let mut watcher = PidWatcher::new(
