@@ -33,15 +33,6 @@ env_setup_catalog() {
   "$FLOX_BIN" edit -f "$TESTS_DIR/container/manifest1.toml"
 }
 
-env_setup_pkgdb() {
-  mkdir -p "$PROJECT_DIR/.flox/env"
-  cp --no-preserve=mode "$MANUALLY_GENERATED"/hello_for_containerize_v0/* "$PROJECT_DIR/.flox/env"
-  echo '{
-    "name": "test",
-    "version": 1
-  }' >> "$PROJECT_DIR/.flox/env.json"
-}
-
 # podman writes containers to ~/.local/share/containers/storage
 # using an overlayfs.
 # However, that directory is not writable
