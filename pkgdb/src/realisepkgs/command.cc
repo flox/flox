@@ -54,11 +54,10 @@ RealisePkgsCommand::run()
 
   auto pkgs = realiseFloxEnvPackages( state, this->lockfileContent, system );
 
-  /* Print the store paths rendered a la `nix build --print-out-paths` */
-  for ( const auto & pkg : pkgs )
-    {
-      if ( pkg.active ) { std::cout << pkg.path << '\n'; }
-    }
+  std::vector<std::string> paths;
+  for ( const auto & pkg : pkgs ) { paths.push_back( pkg.path ); }
+
+  std::cout << nlohmann::json( paths ).dump( 2 ) << std::endl;
 
   return EXIT_SUCCESS;
 }
