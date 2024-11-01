@@ -6,12 +6,14 @@
   coreutils,
   lib,
   pkgsFor,
+  nix,
   process-compose,
   rust-toolchain,
   targetPlatform,
   rust-external-deps,
   flox-src,
   flox-package-builder,
+  flox-buildenv,
 }:
 let
   FLOX_VERSION = lib.fileContents ./../../VERSION;
@@ -25,10 +27,12 @@ let
     # we want to use our own binaries by absolute path
     # rather than relying on or modifying the user's `PATH` variable
     GIT_PKG = gitMinimal;
+    NIX_BIN = "${nix}/bin/nix";
     PKGDB_BIN = if flox-pkgdb == null then "pkgdb" else "${flox-pkgdb}/bin/pkgdb";
 
     # develop with `flox-package-builder.devShellHook`
     FLOX_BUILD_MK = "${flox-package-builder}/libexec/flox-build.mk";
+    FLOX_BUILDENV_NIX = "${flox-buildenv}/lib/buildenv.nix";
 
     GNUMAKE_BIN = "${gnumake}/bin/make";
 

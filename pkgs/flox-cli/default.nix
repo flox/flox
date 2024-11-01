@@ -36,7 +36,6 @@ let
       # 3rd party CLIs
       # we want to use our own binaries by absolute path
       # rather than relying on or modifying the user's `PATH` variable
-      NIX_BIN = "${nix}/bin/nix"; # only used for nix invocations in tests
       GIT_PKG = gitMinimal;
 
       WATCHDOG_BIN =
