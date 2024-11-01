@@ -16,7 +16,12 @@
 #
 # ---------------------------------------------------------------------------- #
 { nixVersions, stdenv }:
-nixVersions.stable.overrideAttrs (prev: {
+let
+  # Temporarily pinning nix at 2.18 while we work to port pkgdb to latest
+  # stable (2.24), or replace it altogether.
+  nixVersion = "nix_2_18"; # "stable";
+in
+nixVersions."${nixVersion}".overrideAttrs (prev: {
   # Necessary for compiling with debug symbols
   inherit stdenv;
 
@@ -53,7 +58,7 @@ nixVersions.stable.overrideAttrs (prev: {
 
     Name: Nix
     Description: Nix Package Manager
-    Version: stable
+    Version: ${prev.version}
     Requires: nix-store bdw-gc
     Libs: -L\''${libdir} -lnixfetchers
     Cflags: -isystem \''${includedir} -std=c++2a
