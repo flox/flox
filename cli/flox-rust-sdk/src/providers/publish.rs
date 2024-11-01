@@ -29,6 +29,9 @@ pub enum PublishError {
     #[error("The environment must be locked to publish")]
     UnlockedEnvironment,
 
+    #[error("The outputs from the build could not be identified")]
+    UnknownOutputs(#[source] Box<dyn error::Error>),
+
     #[error("The environment is in an unsupported state for publishing")]
     UnsupportEnvironmentState(#[source] Box<dyn error::Error>),
 
@@ -44,7 +47,6 @@ pub trait Publish {
         &self,
         flox: &Flox,
         environment: PublishEnvironment,
-        builder: impl ManifestBuilder,
         package: &str,
     ) -> Result<(), PublishError>;
 }
@@ -108,20 +110,16 @@ where
         &self,
         flox: &Flox,
         environment: PublishEnvironment,
-        builder: impl ManifestBuilder,
         package: &str,
     ) -> Result<(), PublishError> {
         // Get metadata from the environment, like locked URLs.
-        let _env_meta = match environment {
+        let (_env_meta, _build_meta) = match environment {
             PublishEnvironment::Managed(_env) => return Err(PublishError::UnsupportedEnvironment),
-            PublishEnvironment::Path(env) => check_environment_metadata(flox, &env),
+            PublishEnvironment::Path(env) => (
+                check_environment_metadata(flox, &env)?,
+                check_builder_metadata(&env, package)?,
+            ),
         };
-
-        // Need to grab outputs from the build
-        // let _build_meta = match environment {
-        //     PublishEnvironment::Managed(_env) => return Err(PublishError::UnsupportedEnvironment),
-        //     PublishEnvironment::Path(env) => check_builder_metadata(flox, &env, package),
-        // };
 
         let _package_name = package;
         let _catalog_name = match &flox.floxhub_token {
@@ -141,14 +139,40 @@ where
 }
 
 fn check_builder_metadata(
-    _flox: &Flox,
-    _env: &PathEnvironment,
-    _pkg: &str,
-) -> Result<CheckedBuildMetadata, String> {
+    env: &PathEnvironment,
+    pkg: &str,
+) -> Result<CheckedBuildMetadata, PublishError> {
     // For now assume the build is successful, and present.
-    // look for the outputs from the build at `results-<pkgname>` do the readlink thing
+    // look for the outputs from the build at `results-<pkgname>`
     // See tests in build.rs for examples
-    todo!()
+
+    let result_dir = env
+        .parent_path()
+        .map_err(|e| PublishError::UnsupportEnvironmentState(Box::new(e)))
+        .unwrap()
+        .join(format!("result-{pkg}"));
+    let store_dir = result_dir
+        .read_link()
+        .map_err(|e| PublishError::UnknownOutputs(Box::new(e)))?;
+
+    let mut outputs = Vec::<String>::new();
+    for dir_entry in store_dir
+        .read_dir()
+        .map_err(|e| PublishError::UnknownOutputs(Box::new(e)))?
+    {
+        outputs.push(
+            dir_entry
+                .map_err(|e| PublishError::UnknownOutputs(Box::new(e)))?
+                .path()
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
+
+    Ok(CheckedBuildMetadata {
+        outputs: Some(outputs),
+        _private: (),
+    })
 }
 
 fn gather_build_repo_meta(environment: &PathEnvironment) -> Result<LockedUrlInfo, PublishError> {
@@ -262,7 +286,6 @@ pub mod tests {
     use crate::flox::test_helpers::flox_instance;
     use crate::models::environment::path_environment::test_helpers::new_path_environment_from_env_files;
     use crate::providers::build::test_helpers::assert_build_status;
-    use crate::providers::build::FloxBuildMk;
     use crate::providers::catalog::GENERATED_DATA;
 
     fn example_remote() -> (tempfile::TempDir, GitCommandProvider, String) {
@@ -355,7 +378,9 @@ pub mod tests {
         // Do the build to ensure it's been run.  We just want to find the outputs
         assert_build_status(&flox, &mut env, EXAMPLE_PACKAGE_NAME, true);
 
-        let meta = check_builder_metadata(&flox, &env, EXAMPLE_PACKAGE_NAME).unwrap();
+        let meta = check_builder_metadata(&env, EXAMPLE_PACKAGE_NAME).unwrap();
+        assert_eq!(meta.outputs.is_some(), true);
+        assert_eq!(meta.outputs.unwrap()[0].starts_with("/nix/store/"), true);
     }
 
     // Template end to end test
